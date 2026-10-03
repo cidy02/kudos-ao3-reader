@@ -301,13 +301,19 @@ class SearchFilterHelpersTest {
 
 
     @Test
-    fun defaultSavedSearchNamePrefersQueryThenFandom() {
+    fun defaultSavedSearchNameUsesTheSearchSubject() {
+        // One tag field holding one name wins over the query.
         assertEquals(
-            "slow burn",
+            "Naruto",
             defaultSavedSearchName(AO3SearchFilters(query = "slow burn", fandom = "Naruto"))
         )
         assertEquals(
-            "Naruto",
+            "slow burn",
+            defaultSavedSearchName(AO3SearchFilters(query = "slow burn"))
+        )
+        // Two names in the only tag field are not a single subject.
+        assertEquals(
+            "Saved Search",
             defaultSavedSearchName(AO3SearchFilters(fandom = "Naruto, Boruto"))
         )
         assertEquals("Saved Search", defaultSavedSearchName(AO3SearchFilters()))

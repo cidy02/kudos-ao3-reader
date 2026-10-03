@@ -1,90 +1,110 @@
 package io.github.cidy02.kudos.search
 
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.BookmarkAdd
-import androidx.compose.material.icons.outlined.Checklist
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.outlined.MenuBook
+import androidx.compose.material.icons.filled.Cancel
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.outlined.CollectionsBookmark
 import androidx.compose.material.icons.outlined.Delete
-import androidx.compose.material.icons.outlined.FilterList
-import androidx.compose.material.icons.outlined.MoreVert
-import androidx.compose.material.icons.outlined.UnfoldLess
-import androidx.compose.material.icons.outlined.UnfoldMore
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Badge
-import androidx.compose.material3.BadgedBox
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Checkbox
+import androidx.compose.material.icons.outlined.Label
+import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.InputChip
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import io.github.cidy02.kudos.app.LocalSearchExit
+import io.github.cidy02.kudos.app.LocalShellOverlayState
 import io.github.cidy02.kudos.core.model.SavedSearch
-import io.github.cidy02.kudos.core.model.KudosSettings
+import io.github.cidy02.kudos.core.model.SavedWork
+import io.github.cidy02.kudos.core.model.WorkCollection
 import io.github.cidy02.kudos.data.preferences.SettingsRepository
+import io.github.cidy02.kudos.home.HomeFacts
+import io.github.cidy02.kudos.library.ReadingQueueRepository
+import io.github.cidy02.kudos.library.readingProgressFraction
 import io.github.cidy02.kudos.network.ao3.AO3Error
-import io.github.cidy02.kudos.network.ao3.AO3Result
+import io.github.cidy02.kudos.network.ao3.browse.FandomCatalogCache
+import io.github.cidy02.kudos.network.ao3.displayMessage
 import io.github.cidy02.kudos.network.ao3.search.AO3SearchFilters
 import io.github.cidy02.kudos.network.ao3.search.AO3SearchPage
 import io.github.cidy02.kudos.network.ao3.search.AO3SearchRepository
 import io.github.cidy02.kudos.network.ao3.search.AO3SearchSort
 import io.github.cidy02.kudos.network.ao3.search.AO3WorkSummary
-import io.github.cidy02.kudos.works.WorkRepository
 import io.github.cidy02.kudos.ui.components.AO3WorkCard
 import io.github.cidy02.kudos.ui.components.DestructiveConfirmation
-import io.github.cidy02.kudos.ui.components.EmptyStateCard
-import io.github.cidy02.kudos.ui.components.ErrorStateCard
-import io.github.cidy02.kudos.ui.components.KudosSectionHeader
-import io.github.cidy02.kudos.ui.components.KudosPaginationBar
-import io.github.cidy02.kudos.ui.components.LoadingStateCard
-import io.github.cidy02.kudos.ui.components.KudosRefreshBox
-import io.github.cidy02.kudos.ui.components.SelectableRemoteWorkRow
 import io.github.cidy02.kudos.ui.components.GlassFieldBar
-import kotlinx.coroutines.flow.emptyFlow
+import io.github.cidy02.kudos.ui.components.KudosPaginationBar
+import io.github.cidy02.kudos.ui.components.KudosRefreshBox
+import io.github.cidy02.kudos.ui.components.RemoteWorkSelectionBar
+import io.github.cidy02.kudos.ui.components.RemoteWorkBulkActions
+import io.github.cidy02.kudos.ui.components.SelectableRemoteWorkRow
+import io.github.cidy02.kudos.ui.components.WorkBulkActionBar
+import io.github.cidy02.kudos.ui.components.rememberRemoteWorkSelection
+import io.github.cidy02.kudos.ui.subject.FilterButton
+import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
+import io.github.cidy02.kudos.ui.subject.SectionRuleHeader
+import io.github.cidy02.kudos.ui.subject.SubjectMetrics
+import io.github.cidy02.kudos.ui.subject.SubjectPalette
+import io.github.cidy02.kudos.ui.subject.ToolbarCircleButton
+import io.github.cidy02.kudos.ui.subject.WorkLedgerRow
+import io.github.cidy02.kudos.ui.subject.compactCount
+import io.github.cidy02.kudos.ui.subject.defaultWorkSignals
+import io.github.cidy02.kudos.ui.subject.subjectPanel
+import io.github.cidy02.kudos.ui.subject.subjectScreenWash
+import io.github.cidy02.kudos.works.CanonicalWork
+import io.github.cidy02.kudos.works.DownloadQueue
+import io.github.cidy02.kudos.works.WorkImporter
+import io.github.cidy02.kudos.works.WorkRepository
+import io.github.cidy02.kudos.works.WorkTags
 import kotlinx.coroutines.launch
-import io.github.cidy02.kudos.network.ao3.displayMessage
+import androidx.compose.runtime.rememberCoroutineScope
 
 sealed interface SearchUiState {
     data object Idle : SearchUiState
     data object Loading : SearchUiState
-    data class Results(val page: AO3SearchPage, val works: List<io.github.cidy02.kudos.works.CanonicalWork>) : SearchUiState
-    data class Error(val error: AO3Error, val page: Int) : SearchUiState
+    data class Results(val page: AO3SearchPage, val works: List<CanonicalWork>) : SearchUiState
+    data class Error(
+        val error: AO3Error,
+        val page: Int,
+        val stale: Results? = null
+    ) : SearchUiState
 }
 
 @Composable
@@ -94,32 +114,59 @@ fun SearchScreen(
     savedSearchRepository: SavedSearchRepository? = null,
     workRepository: WorkRepository? = null,
     settingsRepository: SettingsRepository? = null,
-    onOpenUrl: ((String) -> Unit)? = null
+    onOpenUrl: ((String) -> Unit)? = null,
+    fandomCatalogCache: FandomCatalogCache? = null,
+    workImporter: WorkImporter? = null,
+    queueRepository: ReadingQueueRepository? = null,
+    downloadQueue: DownloadQueue? = null,
+    onOpenCollection: (String) -> Unit = {},
+    onFilterLibraryFandom: (String) -> Unit = {},
+    onFilterLibraryTag: (String) -> Unit = {}
 ) {
     val viewModel: SearchViewModel = viewModel(
         factory = SearchViewModel.factory(repository, savedSearchRepository, workRepository)
     )
-    val settingsState = settingsRepository?.settings?.collectAsState(initial = KudosSettings.Defaults)
-    val settings = settingsState?.value ?: KudosSettings.Defaults
     val filters by viewModel.filters.collectAsState()
     val state by viewModel.state.collectAsState()
     val savedSearches by viewModel.savedSearches.collectAsState()
     val localMatches by viewModel.localMatches.collectAsState()
-    val selectionMode by viewModel.selectionMode.collectAsState()
-    val selectedWorkIds by viewModel.selectedWorkIds.collectAsState()
+    val isPaging by viewModel.isPaging.collectAsState()
 
+    val remoteSelection = rememberRemoteWorkSelection()
+    var localSelecting by remember { mutableStateOf(false) }
+    var localSelection by remember { mutableStateOf<Set<String>>(emptySet()) }
     var showFilterSheet by remember { mutableStateOf(false) }
-    var showSaveDialog by remember { mutableStateOf(false) }
+    var showSaveSheet by remember { mutableStateOf(false) }
     var saveName by remember { mutableStateOf("") }
     var pendingDeleteSearch by remember { mutableStateOf<SavedSearch?>(null) }
-    
-    // Batch seed for result cards (Expand all / Collapse all). Individual cards
-    // keep their own local expand state after the seed — matching iOS.
     var expandAllCards by remember { mutableStateOf(false) }
+    var moreExpanded by remember { mutableStateOf(false) }
+    var bulkBusy by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+    val exitSearch = LocalSearchExit.current
+    val overlay = LocalShellOverlayState.current
     val activeFilters = remember(filters) { activeFilterCount(filters) }
+    val query = filters.query.trim()
+    val showsLocal = state is SearchUiState.Idle && query.isNotEmpty()
 
-    val savedWorks by (workRepository?.observeSavedWorks() ?: emptyFlow())
+    DisposableEffect(Unit) {
+        overlay.hidesTabBar = true
+        onDispose { overlay.hidesTabBar = false }
+    }
+
+    LaunchedEffect(fandomCatalogCache) {
+        val loaded = fandomCatalogCache?.load().orEmpty()
+        viewModel.setCatalogFandoms(loaded.values.flatMap { it.fandoms })
+    }
+    LaunchedEffect(showsLocal) {
+        if (!showsLocal) {
+            localSelecting = false
+            localSelection = emptySet()
+        }
+    }
+
+    val savedWorks by (workRepository?.observeSavedWorks()
+        ?: kotlinx.coroutines.flow.emptyFlow<List<SavedWork>>())
         .collectAsState(initial = emptyList())
     var userTagNames by remember { mutableStateOf<List<String>>(emptyList()) }
     LaunchedEffect(workRepository) {
@@ -129,26 +176,26 @@ fun SearchScreen(
         collectLocalTagSuggestions(savedWorks, userTagNames)
     }
 
-    fun commitSavedSearch() {
-        val name = saveName.trim()
-        if (name.isEmpty()) return
-        viewModel.saveCurrentSearch(name)
-        showSaveDialog = false
-        saveName = ""
+    fun leaveSelection() {
+        remoteSelection.exit()
+        localSelecting = false
+        localSelection = emptySet()
     }
 
-    DestructiveConfirmation(
-        show = pendingDeleteSearch != null,
-        title = "Delete saved search?",
-        text = "This will permanently remove “${pendingDeleteSearch?.name}” from your device.",
-        confirmBeforeDelete = true, // Always confirm for saved searches
-        onConfirm = {
-            val id = pendingDeleteSearch?.id ?: return@DestructiveConfirmation
-            pendingDeleteSearch = null
-            viewModel.deleteSavedSearch(id)
-        },
-        onDismissRequest = { pendingDeleteSearch = null }
-    )
+    fun goBack() {
+        if (remoteSelection.isSelecting) {
+            remoteSelection.exit()
+            return
+        }
+        if (localSelecting) {
+            localSelecting = false
+            localSelection = emptySet()
+            return
+        }
+        if (!viewModel.goBack()) exitSearch?.invoke()
+    }
+
+    BackHandler(enabled = !showFilterSheet && !showSaveSheet) { goBack() }
 
     fun submitQuery() {
         val url = SearchUrlEntry.normalize(filters.query)
@@ -157,147 +204,270 @@ fun SearchScreen(
             viewModel.updateFilters(filters.copy(query = ""))
             return
         }
-        if (state !is SearchUiState.Loading && filters.isSearchable) {
-            viewModel.runSearch()
-        }
+        leaveSelection()
+        viewModel.runSearch()
     }
+
+    fun commitSavedSearch() {
+        val name = saveName.trim()
+        if (name.isEmpty()) return
+        viewModel.saveCurrentSearch(name)
+        showSaveSheet = false
+        saveName = ""
+    }
+
+    DestructiveConfirmation(
+        show = pendingDeleteSearch != null,
+        title = "Delete saved search?",
+        text = "This will permanently remove “${pendingDeleteSearch?.name}” from your device.",
+        confirmBeforeDelete = true,
+        onConfirm = {
+            val id = pendingDeleteSearch?.id ?: return@DestructiveConfirmation
+            pendingDeleteSearch = null
+            viewModel.deleteSavedSearch(id)
+        },
+        onDismissRequest = { pendingDeleteSearch = null }
+    )
+
+    val errorState = state as? SearchUiState.Error
+    val resultsState = (state as? SearchUiState.Results) ?: errorState?.stale
+    val resultsPalette = resultsPalette(resultsState, filters)
+    val selectingRemote = remoteSelection.isSelecting && resultsState != null
+    val selectingLocal = localSelecting && showsLocal
 
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(horizontal = 20.dp, vertical = 18.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
-    ) {
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            GlassFieldBar(
-                text = filters.query,
-                onTextChange = { viewModel.updateFilters(filters.copy(query = it)) },
-                placeholder = "Query",
-                onSubmit = { submitQuery() },
-                modifier = Modifier.weight(1f)
+            .then(
+                if (resultsState != null && resultsPalette != null) {
+                    Modifier.subjectScreenWash(resultsPalette, 600.dp)
+                } else {
+                    Modifier
+                }
             )
-            if (savedSearchRepository != null) {
-                IconButton(
-                    enabled = filters.isSearchable,
-                    onClick = {
-                        saveName = defaultSavedSearchName(filters)
-                        showSaveDialog = true
+    ) {
+        SearchChrome(
+            filters = filters,
+            activeFilters = activeFilters,
+            query = filters.query,
+            onQueryChange = { viewModel.updateFilters(filters.copy(query = it)) },
+            onClearQuery = { viewModel.clearQuery() },
+            onSubmit = ::submitQuery,
+            onBack = ::goBack,
+            onOpenFilters = { showFilterSheet = true },
+            onClearFilters = {
+                leaveSelection()
+                viewModel.clearFilters()
+            },
+            showMore = (resultsState != null && resultsState.works.isNotEmpty()) ||
+                (showsLocal && localMatches.works.isNotEmpty()),
+            moreExpanded = moreExpanded,
+            onMoreExpanded = { moreExpanded = it },
+            expandAllCards = expandAllCards,
+            showExpand = resultsState != null && resultsState.works.isNotEmpty(),
+            onToggleExpand = { expandAllCards = !expandAllCards },
+            onSelect = {
+                if (resultsState != null && resultsState.works.isNotEmpty()) {
+                    remoteSelection.enter()
+                } else {
+                    localSelecting = true
+                    localSelection = emptySet()
+                }
+            },
+            selectionTitle = when {
+                selectingRemote -> selectionTitle(remoteSelection.count)
+                selectingLocal -> selectionTitle(localSelection.size)
+                else -> null
+            },
+            allSelected = when {
+                selectingRemote -> {
+                    val works = resultsState?.works.orEmpty()
+                    works.isNotEmpty() && remoteSelection.count == works.size
+                }
+                selectingLocal -> localMatches.works.isNotEmpty() &&
+                    localSelection.size == localMatches.works.size
+                else -> false
+            },
+            onToggleSelectAll = {
+                if (selectingRemote && resultsState != null) {
+                    remoteSelection.toggleSelectAll(resultsState.works.map { it.remote.id })
+                } else if (selectingLocal) {
+                    localSelection = if (localSelection.size == localMatches.works.size) {
+                        emptySet()
+                    } else {
+                        localMatches.works.mapTo(linkedSetOf()) { it.id }
                     }
-                ) {
-                    Icon(
-                        imageVector = Icons.Outlined.BookmarkAdd,
-                        contentDescription = "Save search"
-                    )
                 }
             }
-            Button(
-                enabled = state !is SearchUiState.Loading && filters.isSearchable,
-                onClick = { submitQuery() }
-            ) {
-                Text("Search")
-            }
-        }
-
-        SearchControlsRow(
-            filters = filters,
-            activeChipCount = activeFilters,
-            expandAllCards = expandAllCards,
-            selectionMode = selectionMode,
-            onToggleExpandAll = { expandAllCards = !expandAllCards },
-            onToggleSelectionMode = {
-                if (selectionMode) viewModel.exitSelectionMode() else viewModel.enterSelectionMode()
-            },
-            onSortSelected = {
-                viewModel.updateFilters(filters.copy(sort = it))
-                if (state !is SearchUiState.Idle) viewModel.runSearch()
-            },
-            onOpenFilters = { showFilterSheet = true },
-            onClearFilters = { viewModel.clearFilters() }
         )
 
-        // The standalone chip row is gone: `SearchResultsHero` carries the same
-        // chips at the top of the results, where they sit next to the count they
-        // explain instead of in a second, separate strip.
-
-        if (state is SearchUiState.Idle && filters.query.trim().length >= 2) {
-            LocalFirstResultsList(
-                localMatches = localMatches,
-                query = filters.query,
-                onOpenWork = onOpenWork,
-                onSearchAo3 = { viewModel.runSearch() },
-                onTagClick = { viewModel.searchTag(it) }
-            )
+        Box(Modifier.weight(1f).fillMaxWidth()) {
+            when {
+                showsLocal -> LocalMatchesList(
+                    query = query,
+                    matches = localMatches,
+                    selecting = localSelecting,
+                    selection = localSelection,
+                    onToggle = { id ->
+                        localSelection = if (id in localSelection) localSelection - id else localSelection + id
+                    },
+                    onSelect = { id ->
+                        localSelecting = true
+                        localSelection = setOf(id)
+                    },
+                    onOpenWork = { onOpenWork(it.toRemoteSummary()) },
+                    onSearchAo3 = {
+                        leaveSelection()
+                        viewModel.runSearch()
+                    },
+                    onSearchFandom = { name ->
+                        leaveSelection()
+                        viewModel.searchFandom(name)
+                    },
+                    onFilterLibraryFandom = onFilterLibraryFandom,
+                    onFilterLibraryTag = onFilterLibraryTag,
+                    onOpenCollection = onOpenCollection
+                )
+                state is SearchUiState.Loading -> SearchSkeletonList()
+                resultsState != null -> {
+                    Box(Modifier.fillMaxSize()) {
+                        if (resultsState.works.isEmpty()) {
+                            Column(Modifier.fillMaxSize()) {
+                                SearchResultsHeader(
+                                    filters = filters,
+                                    page = resultsState.page,
+                                    onPageCount = 0,
+                                    isPaging = isPaging,
+                                    onSortSelected = { sort ->
+                                        val next = filters.copy(sort = sort)
+                                        viewModel.updateFilters(next)
+                                        viewModel.runSearch(searchFilters = next)
+                                    },
+                                    onPage = { viewModel.loadPage(it) }
+                                )
+                                if (errorState == null) {
+                                    SearchEmpty(query = filters.query)
+                                } else {
+                                    SearchFailed(
+                                        message = errorState.error.displayMessage(),
+                                        onRetry = { viewModel.retry() }
+                                    )
+                                }
+                            }
+                        } else {
+                            SearchResultsList(
+                                works = resultsState.works,
+                                page = resultsState.page,
+                                filters = filters,
+                                expandAll = expandAllCards,
+                                isPaging = isPaging,
+                                selecting = remoteSelection.isSelecting,
+                                isSelected = { remoteSelection.isSelected(it) },
+                                onToggleSelection = { remoteSelection.toggle(it) },
+                                onOpenWork = onOpenWork,
+                                onPage = {
+                                    remoteSelection.exit()
+                                    viewModel.loadPage(it)
+                                },
+                                onTagClick = {
+                                    remoteSelection.exit()
+                                    viewModel.searchTag(it)
+                                },
+                                onSortSelected = { sort ->
+                                    remoteSelection.exit()
+                                    val next = filters.copy(sort = sort)
+                                    viewModel.updateFilters(next)
+                                    viewModel.runSearch(searchFilters = next)
+                                },
+                                onRefresh = { viewModel.refreshCurrentPage() }
+                            )
+                        }
+                        if (errorState != null && resultsState.works.isNotEmpty()) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .background(
+                                        LocalKudosTokens.current.background.copy(alpha = 0.92f)
+                                    )
+                                    .clickable(onClick = {}),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                SearchFailed(
+                                    message = errorState.error.displayMessage(),
+                                    onRetry = { viewModel.retry() }
+                                )
+                            }
+                        }
+                    }
+                }
+                errorState != null -> SearchFailed(
+                    message = errorState.error.displayMessage(),
+                    onRetry = { viewModel.retry() }
+                )
+                savedSearches.isNotEmpty() -> SavedSearchesList(
+                    savedSearches = savedSearches,
+                    subtitleFor = { saved ->
+                        savedSearchRepository?.filtersOf(saved)?.let(::savedSearchSubtitle)
+                    },
+                    onRun = {
+                        leaveSelection()
+                        viewModel.runSavedSearch(it)
+                    },
+                    onDelete = { pendingDeleteSearch = it }
+                )
+                else -> SearchPrompt()
+            }
         }
 
-        when (val current = state) {
-            SearchUiState.Idle -> {
-                if (savedSearches.isNotEmpty()) {
-                    SavedSearchesList(
-                        savedSearches = savedSearches,
-                        subtitleFor = { saved ->
-                            savedSearchRepository
-                                ?.filtersOf(saved)
-                                ?.let(::savedSearchSubtitle)
-                        },
-                        onRun = { viewModel.runSavedSearch(it) },
-                        onDelete = { pendingDeleteSearch = it },
-                        modifier = Modifier.weight(1f)
-                    )
-                } else {
-                    EmptyStateCard(
-                        title = "Search AO3 works",
-                        message = "Enter a title, tag, author, or phrase — or open Filters for rating, " +
-                            "warnings, tags, and more. Save a searchable filter set to re-run later."
-                    )
+        if (selectingLocal && workRepository != null) {
+            val selectedWorks = localMatches.works.filter { it.id in localSelection }
+            WorkBulkActionBar(
+                selectedWorks = selectedWorks,
+                workRepository = workRepository,
+                queueRepository = queueRepository,
+                downloadQueue = downloadQueue,
+                onDeleted = {
+                    localSelecting = false
+                    localSelection = emptySet()
+                },
+                onDone = {
+                    localSelecting = false
+                    localSelection = emptySet()
                 }
-            }
-            SearchUiState.Loading -> LoadingStateCard("Searching AO3")
-            is SearchUiState.Error -> {
-                ErrorStateCard(
-                    title = "AO3 search failed",
-                    message = current.error.displayMessage(),
-                    primaryActionLabel = "Retry",
-                    onPrimaryAction = { viewModel.retry() }
-                )
-            }
-            is SearchUiState.Results -> {
-                if (current.works.isEmpty()) {
-                    EmptyStateCard(
-                        title = "No works found",
-                        message = "AO3 returned no works for this query. Try broader terms or fewer filters."
-                    )
-                } else {
-                    SearchResultsList(
-                        onRefresh = { viewModel.refreshCurrentPage() },
-                        works = current.works,
-                        page = current.page.currentPage,
-                        totalPages = current.page.totalPages,
-                        expandAll = expandAllCards,
-                        selectionMode = selectionMode,
-                        selectedWorkIds = selectedWorkIds,
-                        onToggleSelection = { viewModel.toggleWorkSelection(it) },
-                        onOpenWork = onOpenWork,
-                        onPage = { viewModel.runSearch(it) },
-                        onTagClick = { viewModel.searchTag(it) },
-                        summary = current.page.summary,
-                        filterLabels = summaryLabels(filters),
-                        onEditFilters = { showFilterSheet = true },
-                        modifier = Modifier.weight(1f)
-                    )
+            )
+        }
+        if (selectingRemote && workImporter != null && resultsState != null) {
+            RemoteWorkSelectionBar(
+                state = remoteSelection,
+                busy = bulkBusy,
+                onSaveToLibrary = {
+                    val picked = remoteSelection.selectedIn(resultsState.works.map { it.remote })
+                    scope.launch {
+                        bulkBusy = true
+                        RemoteWorkBulkActions.saveToLibrary(picked, workImporter)
+                        bulkBusy = false
+                        remoteSelection.exit()
+                    }
+                },
+                onSaveForLater = {
+                    val queues = queueRepository ?: return@RemoteWorkSelectionBar
+                    val picked = remoteSelection.selectedIn(resultsState.works.map { it.remote })
+                    scope.launch {
+                        bulkBusy = true
+                        RemoteWorkBulkActions.saveForLater(picked, workImporter, queues)
+                        bulkBusy = false
+                        remoteSelection.exit()
+                    }
                 }
-            }
+            )
         }
     }
 
     val context = LocalContext.current
     val autocompleteRepository = remember {
-        (context.applicationContext as? io.github.cidy02.kudos.KudosApplication)?.container?.tagAutocompleteRepository
+        (context.applicationContext as? io.github.cidy02.kudos.KudosApplication)
+            ?.container?.tagAutocompleteRepository
     }
-
     if (showFilterSheet) {
         SearchFilterSheet(
             localTagSuggestions = localTagSuggestions,
@@ -305,6 +475,7 @@ fun SearchScreen(
             onFiltersChange = { viewModel.updateFilters(it) },
             onApply = {
                 showFilterSheet = false
+                leaveSelection()
                 viewModel.runSearch(page = 1, searchFilters = filters)
             },
             onClear = { viewModel.clearFilters() },
@@ -313,7 +484,7 @@ fun SearchScreen(
                 {
                     showFilterSheet = false
                     saveName = defaultSavedSearchName(filters)
-                    showSaveDialog = true
+                    showSaveSheet = true
                 }
             } else {
                 null
@@ -321,45 +492,263 @@ fun SearchScreen(
             autocompleteRepository = autocompleteRepository
         )
     }
-
-    if (showSaveDialog) {
-        AlertDialog(
-            onDismissRequest = {
-                showSaveDialog = false
+    if (showSaveSheet) {
+        SaveSearchSheet(
+            filters = filters,
+            name = saveName,
+            onNameChange = { saveName = it },
+            onSave = ::commitSavedSearch,
+            onDismiss = {
+                showSaveSheet = false
                 saveName = ""
-            },
-            title = { Text("Save Search") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Save the current search and its filters to re-run later.")
-                    OutlinedTextField(
-                        value = saveName,
-                        onValueChange = { saveName = it },
-                        label = { Text("Name") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-            },
-            confirmButton = {
-                TextButton(
-                    enabled = saveName.trim().isNotEmpty() && filters.isSearchable,
-                    onClick = ::commitSavedSearch
-                ) {
-                    Text("Save")
-                }
-            },
-            dismissButton = {
-                TextButton(
-                    onClick = {
-                        showSaveDialog = false
-                        saveName = ""
-                    }
-                ) {
-                    Text("Cancel")
-                }
             }
         )
+    }
+
+    // settingsRepository stays in the signature so the shell can pass it.
+    // Search does not read a setting of its own; mature reveal lives on Library.
+    if (settingsRepository == null) Unit
+}
+
+private fun selectionTitle(count: Int): String =
+    if (count == 0) "Select Works" else "$count Selected"
+
+@Composable
+private fun resultsPalette(results: SearchUiState.Results?, filters: AO3SearchFilters): SubjectPalette? {
+    if (results == null) return null
+    val tokens = LocalKudosTokens.current
+    val subject = results.page.summary
+        ?.completing(
+            subject = filters.searchSubject().text,
+            page = results.page.currentPage,
+            onPageCount = results.works.size
+        )
+        ?.subject
+    return if (subject.isNullOrBlank()) {
+        tokens.scopePalette
+    } else {
+        SubjectPalette.fromHue(HomeFacts.coverHue(subject), tokens.theme)
+    }
+}
+
+@Composable
+private fun SearchChrome(
+    filters: AO3SearchFilters,
+    activeFilters: Int,
+    query: String,
+    onQueryChange: (String) -> Unit,
+    onClearQuery: () -> Unit,
+    onSubmit: () -> Unit,
+    onBack: () -> Unit,
+    onOpenFilters: () -> Unit,
+    onClearFilters: () -> Unit,
+    showMore: Boolean,
+    moreExpanded: Boolean,
+    onMoreExpanded: (Boolean) -> Unit,
+    expandAllCards: Boolean,
+    showExpand: Boolean,
+    onToggleExpand: () -> Unit,
+    onSelect: () -> Unit,
+    selectionTitle: String?,
+    allSelected: Boolean,
+    onToggleSelectAll: () -> Unit
+) {
+    val tokens = LocalKudosTokens.current
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 8.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        ToolbarCircleButton(onClick = onBack, accessibilityName = "Back") {
+            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
+        }
+        if (selectionTitle != null) {
+            Text(
+                text = selectionTitle,
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(horizontal = 8.dp),
+                color = tokens.primaryInk,
+                fontSize = 17.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            TextButton(onClick = onToggleSelectAll) {
+                Text(if (allSelected) "Deselect All" else "Select All")
+            }
+        } else {
+            GlassFieldBar(
+                text = query,
+                onTextChange = onQueryChange,
+                placeholder = "Library and AO3",
+                onSubmit = onSubmit,
+                modifier = Modifier.weight(1f),
+                leading = {
+                    Icon(
+                        imageVector = Icons.Outlined.Search,
+                        contentDescription = null,
+                        tint = tokens.secondaryInk,
+                        modifier = Modifier.size(14.dp)
+                    )
+                },
+                trailing = {
+                    if (query.isNotEmpty()) {
+                        IconButton(onClick = onClearQuery, modifier = Modifier.size(28.dp)) {
+                            Icon(
+                                imageVector = Icons.Filled.Cancel,
+                                contentDescription = "Clear",
+                                tint = tokens.secondaryInk,
+                                modifier = Modifier.size(14.dp)
+                            )
+                        }
+                    }
+                }
+            )
+            FilterButton(
+                filtersActive = filters.hasActiveFilters,
+                onClick = onOpenFilters,
+                badgeCount = activeFilters,
+                onClearFilters = onClearFilters
+            )
+            if (showMore) {
+                Box {
+                    IconButton(onClick = { onMoreExpanded(true) }) {
+                        Icon(
+                            imageVector = Icons.Filled.MoreVert,
+                            contentDescription = "More",
+                            tint = tokens.primaryInk
+                        )
+                    }
+                    DropdownMenu(expanded = moreExpanded, onDismissRequest = { onMoreExpanded(false) }) {
+                        DropdownMenuItem(
+                            text = { Text("Select") },
+                            onClick = {
+                                onMoreExpanded(false)
+                                onSelect()
+                            }
+                        )
+                        if (showExpand) {
+                            DropdownMenuItem(
+                                text = { Text(if (expandAllCards) "Collapse All Cards" else "Expand All Cards") },
+                                onClick = {
+                                    onMoreExpanded(false)
+                                    onToggleExpand()
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SearchPrompt() {
+    val tokens = LocalKudosTokens.current
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 32.dp),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Icon(
+            imageVector = Icons.Outlined.Search,
+            contentDescription = null,
+            tint = tokens.secondaryInk,
+            modifier = Modifier.size(40.dp)
+        )
+        Text(
+            text = "Search Kudos",
+            color = tokens.primaryInk,
+            fontSize = 20.sp,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.padding(top = 8.dp)
+        )
+        Text(
+            text = "Search your Library or AO3 by title, author, or tag. " +
+                "You can browse fandoms and categories in the Browse tab.",
+            color = tokens.secondaryInk,
+            fontSize = 15.sp,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(top = 6.dp)
+        )
+    }
+}
+
+@Composable
+private fun SearchFailed(message: String, onRetry: () -> Unit) {
+    val tokens = LocalKudosTokens.current
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 32.dp),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(
+            text = "Search failed",
+            color = tokens.primaryInk,
+            fontSize = 20.sp,
+            fontWeight = FontWeight.SemiBold
+        )
+        Text(
+            text = message,
+            color = tokens.secondaryInk,
+            fontSize = 15.sp,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(top = 6.dp)
+        )
+        TextButton(onClick = onRetry, modifier = Modifier.padding(top = 8.dp)) {
+            Text("Try Again")
+        }
+    }
+}
+
+@Composable
+private fun SearchEmpty(query: String) {
+    val tokens = LocalKudosTokens.current
+    val detail = query.trim().let { text ->
+        if (text.isEmpty()) "No results." else "No results for “$text”."
+    }
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 32.dp, vertical = 48.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text("No Results", color = tokens.primaryInk, fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
+        Text(detail, color = tokens.secondaryInk, fontSize = 15.sp, textAlign = TextAlign.Center)
+    }
+}
+
+@Composable
+private fun SearchSkeletonList() {
+    val tokens = LocalKudosTokens.current
+    val bar = tokens.glassFill(0.18)
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        repeat(7) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .subjectPanel()
+                    .padding(horizontal = 14.dp, vertical = 14.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Box(Modifier.fillMaxWidth(0.72f).height(16.dp).background(bar, RoundedCornerShape(4.dp)))
+                Box(Modifier.fillMaxWidth(0.42f).height(12.dp).background(bar, RoundedCornerShape(4.dp)))
+                Box(Modifier.fillMaxWidth().height(12.dp).background(bar, RoundedCornerShape(4.dp)))
+            }
+        }
     }
 }
 
@@ -368,347 +757,318 @@ private fun SavedSearchesList(
     savedSearches: List<SavedSearch>,
     subtitleFor: (SavedSearch) -> String?,
     onRun: (SavedSearch) -> Unit,
-    onDelete: (SavedSearch) -> Unit,
-    modifier: Modifier = Modifier
+    onDelete: (SavedSearch) -> Unit
 ) {
+    val tokens = LocalKudosTokens.current
     LazyColumn(
-        verticalArrangement = Arrangement.spacedBy(10.dp),
-        modifier = modifier.fillMaxWidth()
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(bottom = 24.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         item {
-            KudosSectionHeader(
-                title = "Saved Searches",
-                subtitle = "Tap to re-run. Search AO3 above or open Filters."
-            )
+            SectionRuleHeader(title = "Saved Searches", modifier = Modifier.padding(top = 8.dp))
         }
         items(savedSearches, key = { it.id }) { saved ->
-            SavedSearchRow(
-                saved = saved,
-                subtitle = subtitleFor(saved),
-                onRun = { onRun(saved) },
-                onDelete = { onDelete(saved) }
+            val subtitle = subtitleFor(saved)
+            Row(
+                modifier = Modifier
+                    .padding(horizontal = 16.dp)
+                    .fillMaxWidth()
+                    .subjectPanel()
+                    .clickable { onRun(saved) }
+                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(saved.name, color = tokens.primaryInk, fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    if (!subtitle.isNullOrBlank()) {
+                        Text(
+                            subtitle,
+                            color = tokens.secondaryInk,
+                            fontSize = 12.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+                IconButton(onClick = { onDelete(saved) }) {
+                    Icon(Icons.Outlined.Delete, contentDescription = "Delete saved search", tint = tokens.secondaryInk)
+                }
+            }
+        }
+        item {
+            Text(
+                text = "Search above for works in your Library or on AO3. " +
+                    "To explore by fandom, use the Browse tab.",
+                color = tokens.secondaryInk,
+                fontSize = 12.sp,
+                modifier = Modifier.padding(horizontal = SubjectMetrics.gutter, vertical = 8.dp)
             )
         }
     }
 }
 
 @Composable
-private fun SavedSearchRow(
-    saved: SavedSearch,
-    subtitle: String?,
-    onRun: () -> Unit,
-    onDelete: () -> Unit
+private fun LocalMatchesList(
+    query: String,
+    matches: SearchLocalMatches,
+    selecting: Boolean,
+    selection: Set<String>,
+    onToggle: (String) -> Unit,
+    onSelect: (String) -> Unit,
+    onOpenWork: (SavedWork) -> Unit,
+    onSearchAo3: () -> Unit,
+    onSearchFandom: (String) -> Unit,
+    onFilterLibraryFandom: (String) -> Unit,
+    onFilterLibraryTag: (String) -> Unit,
+    onOpenCollection: (String) -> Unit
 ) {
-    Card(
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
-        ),
-        shape = MaterialTheme.shapes.medium,
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onRun)
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(bottom = 24.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(2.dp)
-            ) {
-                Text(
-                    text = saved.name,
-                    style = MaterialTheme.typography.titleMedium
+        item {
+            SectionRuleHeader(title = "Archive of Our Own", modifier = Modifier.padding(top = 8.dp))
+            MatchRow(
+                icon = Icons.Outlined.Search,
+                title = "Search AO3 for “$query”",
+                onClick = onSearchAo3
+            )
+        }
+        if (matches.works.isNotEmpty()) {
+            item { SectionRuleHeader(title = "In Your Library", modifier = Modifier.padding(top = 8.dp)) }
+            items(matches.works, key = { it.id }) { work ->
+                val selected = work.id in selection
+                WorkLedgerRow(
+                    title = work.title,
+                    author = work.author,
+                    fandoms = work.workFandoms,
+                    metadata = work.author.ifBlank { "Anonymous" },
+                    progress = work.readingProgressFraction() ?: 0.0,
+                    progressState = when {
+                        work.isFinished -> "Finished"
+                        (work.readingProgressFraction() ?: 0.0) > 0 -> "Reading"
+                        else -> null
+                    },
+                    signals = defaultWorkSignals(work.rating, work.workCategories, work.workWarnings, work.isComplete),
+                    obscured = false,
+                    favorite = work.isFavorite,
+                    selected = selecting && selected,
+                    onClick = {
+                        if (selecting) onToggle(work.id) else onOpenWork(work)
+                    },
+                    onLongClick = { onSelect(work.id) },
+                    modifier = Modifier.padding(horizontal = 16.dp)
                 )
-                if (!subtitle.isNullOrBlank()) {
-                    Text(
-                        text = subtitle,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1
-                    )
+            }
+        }
+        if (matches.libraryFandoms.isNotEmpty()) {
+            item {
+                SectionRuleHeader(title = "Fandoms in Your Library", modifier = Modifier.padding(top = 8.dp))
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    matches.libraryFandoms.forEach { fandom ->
+                        MatchRow(
+                            icon = Icons.AutoMirrored.Outlined.MenuBook,
+                            title = fandom,
+                            onClick = { onFilterLibraryFandom(fandom) }
+                        )
+                    }
                 }
             }
-            IconButton(onClick = onDelete) {
-                Icon(
-                    imageVector = Icons.Outlined.Delete,
-                    contentDescription = "Delete saved search"
-                )
+        }
+        if (matches.ao3Fandoms.isNotEmpty()) {
+            item {
+                SectionRuleHeader(title = "Fandoms on AO3", modifier = Modifier.padding(top = 8.dp))
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    matches.ao3Fandoms.forEach { fandom ->
+                        MatchRow(
+                            icon = Icons.AutoMirrored.Outlined.MenuBook,
+                            title = fandom.name,
+                            trailing = fandom.workCount?.compactCount(),
+                            onClick = { onSearchFandom(fandom.name) }
+                        )
+                    }
+                }
+            }
+        }
+        if (matches.tags.isNotEmpty()) {
+            item {
+                SectionRuleHeader(title = "Your Tags", modifier = Modifier.padding(top = 8.dp))
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    matches.tags.forEach { tag ->
+                        MatchRow(
+                            icon = Icons.Outlined.Label,
+                            title = tag.name,
+                            onClick = { onFilterLibraryTag(tag.name) }
+                        )
+                    }
+                }
+            }
+        }
+        if (matches.collections.isNotEmpty()) {
+            item {
+                SectionRuleHeader(title = "Collections", modifier = Modifier.padding(top = 8.dp))
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    matches.collections.forEach { collection ->
+                        MatchRow(
+                            icon = Icons.Outlined.CollectionsBookmark,
+                            title = collection.name,
+                            onClick = { onOpenCollection(collection.id) }
+                        )
+                    }
+                }
             }
         }
     }
 }
 
 @Composable
-private fun SearchControlsRow(
-    filters: AO3SearchFilters,
-    activeChipCount: Int,
-    expandAllCards: Boolean,
-    selectionMode: Boolean,
-    onToggleExpandAll: () -> Unit,
-    onToggleSelectionMode: () -> Unit,
-    onSortSelected: (AO3SearchSort) -> Unit,
-    onOpenFilters: () -> Unit,
-    onClearFilters: () -> Unit
+private fun MatchRow(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    title: String,
+    onClick: () -> Unit,
+    trailing: String? = null
 ) {
-    var sortExpanded by remember { mutableStateOf(false) }
-    var moreExpanded by remember { mutableStateOf(false) }
-
+    val tokens = LocalKudosTokens.current
     Row(
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        modifier = Modifier
+            .padding(horizontal = 16.dp)
+            .fillMaxWidth()
+            .subjectPanel()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.fillMaxWidth()
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        OutlinedButton(onClick = onOpenFilters) {
-            BadgedBox(
-                badge = {
-                    if (activeChipCount > 0) {
-                        Badge { Text(activeChipCount.coerceAtMost(99).toString()) }
-                    }
-                }
-            ) {
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        imageVector = Icons.Outlined.FilterList,
-                        contentDescription = null
-                    )
-                    Text("Filters")
-                }
-            }
+        Icon(icon, contentDescription = null, tint = tokens.secondaryInk, modifier = Modifier.size(18.dp))
+        Text(
+            text = title,
+            color = tokens.primaryInk,
+            fontSize = 16.sp,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f)
+        )
+        if (trailing != null) {
+            Text(trailing, color = tokens.secondaryInk, fontSize = 12.sp)
         }
+    }
+}
 
-        OutlinedButton(onClick = { sortExpanded = true }) {
-            Text("Sort: ${filters.sort.title}")
+@Composable
+private fun SearchResultsHeader(
+    filters: AO3SearchFilters,
+    page: AO3SearchPage,
+    onPageCount: Int,
+    isPaging: Boolean,
+    onSortSelected: (AO3SearchSort) -> Unit,
+    onPage: (Int) -> Unit
+) {
+    val subject = filters.searchSubject()
+    Column(Modifier.fillMaxWidth().padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        page.summary?.let { summary ->
+            SearchResultsHero(
+                summary = summary.completing(
+                    subject = subject.text,
+                    page = page.currentPage,
+                    onPageCount = onPageCount
+                ),
+                filterLabels = summaryLabels(filters, excluding = subject.text),
+                presentation = SearchHeroPresentation.SubjectPage,
+                currentPage = page.currentPage,
+                totalPages = page.totalPages,
+                sort = filters.sort,
+                onSortSelected = onSortSelected
+            )
         }
-        DropdownMenu(
-            expanded = sortExpanded,
-            onDismissRequest = { sortExpanded = false }
-        ) {
-            AO3SearchSort.entries.forEach { sort ->
-                DropdownMenuItem(
-                    text = { Text(sort.title) },
-                    onClick = {
-                        onSortSelected(sort)
-                        sortExpanded = false
-                    }
-                )
-            }
-        }
-
-        if (filters.hasActiveFilters) {
-            TextButton(onClick = onClearFilters) {
-                Text("Clear")
-            }
-        }
-
-        Spacer(Modifier.weight(1f))
-
-        Box {
-            IconButton(onClick = { moreExpanded = true }) {
-                Icon(
-                    imageVector = Icons.Outlined.MoreVert,
-                    contentDescription = "More search options"
-                )
-            }
-            DropdownMenu(
-                expanded = moreExpanded,
-                onDismissRequest = { moreExpanded = false }
-            ) {
-                DropdownMenuItem(
-                    text = {
-                        Text(if (selectionMode) "Exit Selection" else "Select Works")
-                    },
-                    leadingIcon = {
-                        Icon(
-                            imageVector = Icons.Outlined.Checklist,
-                            contentDescription = null
-                        )
-                    },
-                    onClick = {
-                        moreExpanded = false
-                        onToggleSelectionMode()
-                    }
-                )
-                DropdownMenuItem(
-                    text = {
-                        Text(if (expandAllCards) "Collapse all" else "Expand all")
-                    },
-                    leadingIcon = {
-                        Icon(
-                            imageVector = if (expandAllCards) {
-                                Icons.Outlined.UnfoldLess
-                            } else {
-                                Icons.Outlined.UnfoldMore
-                            },
-                            contentDescription = null
-                        )
-                    },
-                    onClick = {
-                        moreExpanded = false
-                        onToggleExpandAll()
-                    }
-                )
-            }
+        if (page.totalPages > 1) {
+            KudosPaginationBar(
+                currentPage = page.currentPage,
+                totalPages = page.totalPages,
+                onPageChange = onPage,
+                enabled = !isPaging,
+                modifier = Modifier.padding(horizontal = 8.dp)
+            )
         }
     }
 }
 
 @Composable
 private fun SearchResultsList(
-    works: List<io.github.cidy02.kudos.works.CanonicalWork>,
-    page: Int,
-    totalPages: Int,
+    works: List<CanonicalWork>,
+    page: AO3SearchPage,
+    filters: AO3SearchFilters,
     expandAll: Boolean,
-    selectionMode: Boolean,
-    selectedWorkIds: Set<Long>,
+    isPaging: Boolean,
+    selecting: Boolean,
+    isSelected: (Long) -> Boolean,
     onToggleSelection: (Long) -> Unit,
     onOpenWork: (AO3WorkSummary) -> Unit,
     onPage: (Int) -> Unit,
     onTagClick: (String) -> Unit,
-    onRefresh: suspend () -> Unit,
-    /** AO3's own result-count heading for this page, when it sent one. */
-    summary: io.github.cidy02.kudos.network.ao3.search.AO3ResultSummary? = null,
-    /** No subject: a Search can have several fandoms and tags active at once, so
-     *  there is no single thing these results are "in". */
-    filterLabels: List<SummaryLabel> = emptyList(),
-    onEditFilters: (() -> Unit)? = null,
-    modifier: Modifier = Modifier
+    onSortSelected: (AO3SearchSort) -> Unit,
+    onRefresh: suspend () -> Unit
 ) {
-    KudosRefreshBox(onRefresh = onRefresh, modifier = Modifier.fillMaxWidth()) {
-    LazyColumn(
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-        modifier = modifier.fillMaxWidth()
-    ) {
-        item {
-            summary?.let {
-                SearchResultsHero(
-                    summary = it.completing(subject = null, page = page, onPageCount = works.size),
-                    filterLabels = filterLabels,
-                    subjectCategory = it.subjectCategory(works.map { w -> w.remote }),
-                    onEditFilters = onEditFilters,
-                    modifier = Modifier.padding(bottom = 4.dp)
+    val listState = rememberLazyListState()
+    LaunchedEffect(page.currentPage) {
+        listState.animateScrollToItem(0)
+    }
+    KudosRefreshBox(onRefresh = onRefresh, modifier = Modifier.fillMaxSize()) {
+        LazyColumn(
+            state = listState,
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(bottom = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            item {
+                SearchResultsHeader(
+                    filters = filters,
+                    page = page,
+                    onPageCount = works.size,
+                    isPaging = isPaging,
+                    onSortSelected = onSortSelected,
+                    onPage = onPage
                 )
             }
-            KudosSectionHeader(
-                title = "Results",
-                subtitle = "Page $page of $totalPages"
-            )
-            // Above the results as well as below, matching Apple: the pager was
-            // reachable only after scrolling the whole page, so changing page
-            // meant reading to the bottom of one you had already decided to leave.
-            KudosPaginationBar(
-                currentPage = page,
-                totalPages = totalPages,
-                onPageChange = onPage
-            )
-        }
-        items(works, key = { it.id }) { work ->
-            if (selectionMode) {
-                SelectableRemoteWorkRow(
-                    work = work.remote,
-                    selected = work.remote.id in selectedWorkIds,
-                    onToggle = { onToggleSelection(work.remote.id) }
-                )
-            } else if (work.local != null) {
-                io.github.cidy02.kudos.library.LibraryCarouselCard(
-                    display = io.github.cidy02.kudos.library.LibraryDisplayItem(
-                        item = io.github.cidy02.kudos.library.LibraryWorkListItem(
-                            work = work.local,
-                            userTags = emptyList(),
-                            collections = emptyList()
-                        )
-                    ),
-                    showProgress = true,
-                    footerOverride = null,
-                    actions = io.github.cidy02.kudos.library.LibraryCardActions(
-                        onOpenWork = { onOpenWork(work.remote) },
-                        onOpenReader = { onOpenWork(work.remote) },
-                        onToggleFavorite = { },
-                        onToggleFinished = { },
-                        onRemove = { },
-                        onDownloadAction = { _, _ -> },
-                        onSelect = { },
-                        onReveal = { },
-                        onAddToQueue = { },
-                        onAddToCollection = { },
-                        onOpenComments = { }
+            items(works, key = { it.id }) { work ->
+                if (selecting) {
+                    SelectableRemoteWorkRow(
+                        work = work.remote,
+                        selected = isSelected(work.remote.id),
+                        onToggle = { onToggleSelection(work.remote.id) },
+                        modifier = Modifier.padding(horizontal = 16.dp)
                     )
-                )
-            } else {
-                AO3WorkCard(
-                    work = work.remote,
-                    onOpenWork = onOpenWork,
-                    expandAll = expandAll,
-                    onTagClick = onTagClick
-                )
+                } else {
+                    AO3WorkCard(
+                        work = work.remote,
+                        onOpenWork = onOpenWork,
+                        expandAll = expandAll,
+                        onTagClick = onTagClick,
+                        modifier = Modifier.padding(horizontal = 16.dp)
+                    )
+                }
             }
-        }
-        item {
-            KudosPaginationBar(
-                currentPage = page,
-                totalPages = totalPages,
-                onPageChange = onPage,
-                enabled = true
-            )
-        }
-    }
-    }
-}
-
-
-@Composable
-private fun LocalFirstResultsList(
-    localMatches: List<io.github.cidy02.kudos.works.CanonicalWork>,
-    query: String,
-    onOpenWork: (AO3WorkSummary) -> Unit,
-    onSearchAo3: () -> Unit,
-    onTagClick: (String) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    LazyColumn(
-        modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        if (localMatches.isNotEmpty()) {
-            item {
-                KudosSectionHeader(
-                    title = "Library matches",
-                    subtitle = if (localMatches.size == 1) "1 work" else "${localMatches.size} works"
-                )
-            }
-            items(localMatches, key = { it.local!!.id }) { match ->
-                AO3WorkCard(
-                    work = match.remote,
-                    onOpenWork = onOpenWork,
-                    onTagClick = onTagClick
-                )
-            }
-            item {
-                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-            }
-        }
-        item {
-            Button(
-                onClick = onSearchAo3,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("Search AO3 for \"$query\"")
+            if (page.totalPages > 1) {
+                item {
+                    KudosPaginationBar(
+                        currentPage = page.currentPage,
+                        totalPages = page.totalPages,
+                        onPageChange = onPage,
+                        enabled = !isPaging,
+                        modifier = Modifier.padding(horizontal = 8.dp)
+                    )
+                }
             }
         }
     }
 }
 
-private fun io.github.cidy02.kudos.core.model.SavedWork.toRemoteSummary(): AO3WorkSummary {
+private fun SavedWork.toRemoteSummary(): AO3WorkSummary {
     return AO3WorkSummary(
-        id = io.github.cidy02.kudos.works.WorkTags.ao3WorkIdFromUrl(sourceUrl) ?: 0,
+        id = WorkTags.ao3WorkIdFromUrl(sourceUrl) ?: 0,
         title = title,
-        authors = author.split(",").map { it.trim() },
+        authors = author.split(",").map { it.trim() }.filter { it.isNotEmpty() },
         fandoms = workFandoms,
         rating = rating,
         warnings = workWarnings,

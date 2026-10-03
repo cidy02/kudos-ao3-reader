@@ -244,13 +244,13 @@ object Routes {
 
     /**
      * Large inline title for a shell root. Account has none (its gear floats).
-     * Home matches iOS `navigationTitle("Home")`.
+     * Home matches iOS `navigationTitle("Home")`. Search replaces the large title
+     * with the field in its own chrome.
      */
     fun shellTitle(route: String?): String? = when (route) {
         Home -> "Home"
         Library -> "Library"
         Browse -> "Browse"
-        Search -> "Search"
         else -> null
     }
 

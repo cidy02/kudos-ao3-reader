@@ -44,6 +44,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -95,6 +96,12 @@ class ShellOverlayState {
 
 val LocalShellOverlayState = staticCompositionLocalOf { ShellOverlayState() }
 
+/**
+ * Search's Back, once filter history and the results screen are exhausted.
+ * The shell returns to the last non-Search tab.
+ */
+val LocalSearchExit = staticCompositionLocalOf<(() -> Unit)?> { null }
+
 // Chrome policy: Search is its own shell root, in a circle beside the four tabs.
 // Theme cycling stays on Account and Settings. Pushed screens hide the floating bar.
 
@@ -124,6 +131,10 @@ fun MainScaffold(
     val homeSelecting = onHome && homeChrome.hideTabBar
     val librarySelecting = onLibrary && libraryChrome.hideTabBar
     val overlay = remember { ShellOverlayState() }
+    var searchReturnTab by remember { mutableStateOf(Routes.Home) }
+    SideEffect {
+        if (Routes.isTopLevel(currentRoute)) searchReturnTab = currentRoute ?: Routes.Home
+    }
     val pushedSelecting = pushedChrome.mounted && pushedChrome.hideTabBar
     val selectionHidesBar = homeSelecting || librarySelecting || overlay.hidesTabBar || pushedSelecting
     val showTabBar = !Routes.hidesTabBar(currentRoute) && !selectionHidesBar
@@ -202,7 +213,8 @@ fun MainScaffold(
             ) {
                 CompositionLocalProvider(
                     LocalShellOverlayState provides overlay,
-                    LocalPushedShellChrome provides pushedChrome
+                    LocalPushedShellChrome provides pushedChrome,
+                    LocalSearchExit provides { navController.navigateShellRoot(searchReturnTab) }
                 ) {
                     AppNavHost(
                         container = container,
@@ -561,7 +573,7 @@ private class ShellScrollBridge {
     var density: Float = 1f
 }
 
-private fun NavHostController.navigateShellRoot(route: String) {
+internal fun NavHostController.navigateShellRoot(route: String) {
     navigate(route) {
         popUpTo(graph.findStartDestination().id) {
             saveState = true
