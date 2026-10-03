@@ -481,6 +481,7 @@ fun AppNavHost(
                 onOpenWeb = { url ->
                     when (url) {
                         "native:preferences" -> navController.navigate(Routes.AO3Preferences)
+                        "native:more-on-ao3" -> navController.navigate(Routes.AccountMoreOnAO3)
                         "native:profile" -> {
                             val auth = (container.authRepository.state.value as? AO3AuthState.SignedIn)
                             val username = auth?.username
@@ -866,9 +867,18 @@ fun AppNavHost(
                     onSaved = { navController.popBackStack() },
                     onOpenHelp = { url ->
                         navController.navigate(Routes.webFallback(url))
+                    },
+                    onOpenWeb = { url ->
+                        navController.navigate(Routes.webFallback(url))
                     }
                 )
             }
+        }
+
+        sharedComposable(Routes.AccountMoreOnAO3) {
+            io.github.cidy02.kudos.account.AccountMoreOnAO3Screen(
+                onOpenWeb = { url -> navController.navigate(Routes.webFallback(url)) }
+            )
         }
 
         sharedComposable(Routes.NativeLogin) {
