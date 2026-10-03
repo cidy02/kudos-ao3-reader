@@ -78,3 +78,26 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   Settings > Appearance. The quick-cycle button was an Android-only testing aid in the shell. The
   gear is now an accent-tinted glass circle, as on iOS. Reverse: `MainScaffold.kt` (Account
   chrome).
+- **2026-10-03 · Shut down the five idle iOS simulators.** The machine was at load 550 with swap
+  at 32.6 of 33.8 GB and 80 MB of RAM free. All five simulators (Kudos Debug and Lanes C, D, E
+  and F, booted 5–8 days earlier, none running a build) were killing and respawning their daemons,
+  and adb hung. `simctl shutdown` keeps every simulator's data, and load fell to about 6.
+  Reverse: `xcrun simctl boot <udid>`.
+- **2026-10-03 · Prepared for the owner's Mac wipe.** The owner: "prepare this mac to be wiped.
+  move everything related to this project to iCloud Drive … create a resume prompt … push to
+  github also, so we don't loose progress".
+  - Committed the outstanding work:
+    - the Inbox route on the lane (`a3f099a2`);
+    - the three agents' unreviewed work, as WIP commits on their own branches;
+    - the iOS polish loop's uncommitted docs on integrate (`1aa3cd9a`).
+  - Pushed the smallest set of branch tips that contains every local commit: 34 tips, which
+    with origin's existing branches leave 0 commits uncovered, checked with `git rev-list`.
+    Agent branches already contained in another pushed branch weren't pushed by name. Before
+    pushing, scanned every added line for signing identities, non-placeholder team IDs and API
+    keys.
+  - **Did not push the separate security-fixes repo.** Its local-only history must stay private,
+    and this GitHub repo is public. It went to iCloud Drive as a private git bundle instead, with
+    its worktrees' uncommitted files.
+  - The handoff folder is iCloud Drive › `Kudos Handoff 2026-10-03`. It holds the resume prompt
+    and the gitignored `*prompt*.md` files, the Living Prompt among them.
+  Reverse: n/a (nothing deleted).
