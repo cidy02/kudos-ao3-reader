@@ -247,15 +247,21 @@ fun SwipeActionRow(
             .fillMaxWidth()
             .clip(RoundedCornerShape(14.dp))
     ) {
+        // Only the side being revealed is drawn: a glass card is translucent, so
+        // actions drawn at rest would show through it.
         Row(Modifier.matchParentSize(), horizontalArrangement = Arrangement.SpaceBetween) {
-            ActionButtons(leading, actionWidth) { action ->
-                action.onClick()
-                scope.launch { offset.animateTo(0f, tween(160)) }
+            if (offset.value > 0f) {
+                ActionButtons(leading, actionWidth) { action ->
+                    action.onClick()
+                    scope.launch { offset.animateTo(0f, tween(160)) }
+                }
             }
             Spacer(Modifier.weight(1f))
-            ActionButtons(trailing, actionWidth) { action ->
-                action.onClick()
-                scope.launch { offset.animateTo(0f, tween(160)) }
+            if (offset.value < 0f) {
+                ActionButtons(trailing, actionWidth) { action ->
+                    action.onClick()
+                    scope.launch { offset.animateTo(0f, tween(160)) }
+                }
             }
         }
         Box(
