@@ -68,8 +68,28 @@ class AO3AuthorParser(
             pseuds = pseuds,
             fandoms = fandoms,
             subscriptionForm = subscription,
-            actions = actions
+            actions = actions,
+            recentWorks = parseDashboardGroup(doc, "#user-works") { group ->
+                group.select("li.work.blurb").mapNotNull { item ->
+                    runCatching { searchParser.parseWorkSummary(item) }.getOrNull()
+                }
+            },
+            recentSeries = parseDashboardGroup(doc, "#user-series") { group ->
+                group.select("li.series").mapNotNull(::parseSeriesBlurb)
+            },
+            recentBookmarks = parseDashboardGroup(doc, "#user-bookmarks") { group ->
+                group.select("li.bookmark.blurb").mapNotNull(::parseBookmark)
+            }
         )
+    }
+
+    private fun <T> parseDashboardGroup(
+        doc: Document,
+        selector: String,
+        parse: (Element) -> List<T>
+    ): List<T>? {
+        val group = doc.selectFirst(selector) ?: return null
+        return parse(group)
     }
 
     fun parseAbout(html: String, route: AO3AuthorRoute): AO3AuthorAbout {

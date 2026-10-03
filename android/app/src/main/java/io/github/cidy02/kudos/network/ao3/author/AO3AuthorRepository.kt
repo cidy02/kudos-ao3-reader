@@ -25,9 +25,24 @@ class AO3AuthorRepository(
         return getHtml(url).mapParse { parser.parseAbout(it, route) }
     }
 
-    suspend fun loadWorks(route: AO3AuthorRoute, page: Int = 1): AO3Result<AO3SearchPage> {
-        val url = AO3AuthorUrls.userWorksUrl(route.username, page, route.pseud)
+    suspend fun loadWorks(
+        route: AO3AuthorRoute,
+        page: Int = 1,
+        scope: AO3AuthorWorksScope = AO3AuthorWorksScope.Works,
+        sort: AO3AuthorWorksSort = AO3AuthorWorksSort()
+    ): AO3Result<AO3SearchPage> {
+        val url = AO3AuthorUrls.userWorksUrl(route.username, page, route.pseud, scope, sort)
             ?: return AO3Result.Failure(AO3Error.Validation("No author selected."))
+        return getHtml(url).mapParse { parser.parseWorksPage(it, page) }
+    }
+
+    suspend fun loadFandomWorks(
+        fandom: AO3AuthorFandom,
+        page: Int = 1,
+        sort: AO3AuthorWorksSort = AO3AuthorWorksSort()
+    ): AO3Result<AO3SearchPage> {
+        val url = AO3AuthorUrls.fandomWorksUrl(fandom.url, page, sort)
+            ?: return AO3Result.Failure(AO3Error.Validation("No fandom selected."))
         return getHtml(url).mapParse { parser.parseWorksPage(it, page) }
     }
 

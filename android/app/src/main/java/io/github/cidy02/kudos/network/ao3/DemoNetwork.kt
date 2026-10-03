@@ -122,6 +122,7 @@ internal object DemoNetworkRoutes {
         "^/tags/[^/]+/works" to "ao3_tag_works",
         "^/works/search" to "ao3_tag_works",
         "^/users/[^/]+/(pseuds/[^/]+/)?works" to "ao3_author_works",
+        "^/users/[^/]+/(pseuds/[^/]+/)?gifts" to "ao3_author_works",
         "^/users/[^/]+/(pseuds/[^/]+/)?series" to "ao3_author_series",
         "^/users/[^/]+/(pseuds/[^/]+/)?bookmarks" to "ao3_author_bookmarks",
         "^/users/[^/]+/readings" to "ao3_readings",

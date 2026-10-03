@@ -68,8 +68,64 @@ data class AO3AuthorHeader(
     val pseuds: List<AO3AuthorPseud>,
     val fandoms: List<AO3AuthorFandom>,
     val subscriptionForm: AO3AuthorSubscriptionForm?,
-    val actions: List<AO3AuthorWebAction>
+    val actions: List<AO3AuthorWebAction>,
+    /** Null means the dashboard group was absent or unreadable; empty means AO3 showed an empty group. */
+    val recentWorks: List<AO3WorkSummary>? = null,
+    val recentSeries: List<AO3AuthorSeriesSummary>? = null,
+    val recentBookmarks: List<AO3AuthorBookmark>? = null
 )
+
+enum class AO3AuthorWorksScope(val label: String, val pathSegments: List<String>) {
+    Works("Works", listOf("works")),
+    Collected("In collections", listOf("works", "collected")),
+    Gifts("Gifts", listOf("gifts"));
+
+    val acceptsWorkSearch: Boolean
+        get() = this != Gifts
+}
+
+enum class AO3AuthorWorksSortColumn(val label: String, val ao3Value: String) {
+    Creator("Creator", "authors_to_sort_on"),
+    Title("Title", "title_to_sort_on"),
+    DatePosted("Date Posted", "created_at"),
+    DateUpdated("Date Updated", "revised_at"),
+    WordCount("Word Count", "word_count"),
+    Hits("Hits", "hits"),
+    Kudos("Kudos", "kudos_count"),
+    Comments("Comments", "comments_count"),
+    Bookmarks("Bookmarks", "bookmarks_count");
+
+    val defaultDirection: AO3AuthorWorksSortDirection
+        get() = if (this == Creator || this == Title) {
+            AO3AuthorWorksSortDirection.Ascending
+        } else {
+            AO3AuthorWorksSortDirection.Descending
+        }
+}
+
+enum class AO3AuthorWorksSortDirection(val label: String, val ao3Value: String) {
+    Ascending("Ascending", "asc"),
+    Descending("Descending", "desc")
+}
+
+enum class AO3AuthorWorksCompletion(val label: String, val ao3Value: String?) {
+    Any("Any", null),
+    Complete("Complete", "T"),
+    InProgress("In progress", "F")
+}
+
+data class AO3AuthorWorksSort(
+    val column: AO3AuthorWorksSortColumn = AO3AuthorWorksSortColumn.DateUpdated,
+    val direction: AO3AuthorWorksSortDirection = AO3AuthorWorksSortDirection.Descending,
+    val completion: AO3AuthorWorksCompletion = AO3AuthorWorksCompletion.Any
+) {
+    val activeCount: Int
+        get() = listOf(
+            column != AO3AuthorWorksSortColumn.DateUpdated,
+            direction != column.defaultDirection,
+            completion != AO3AuthorWorksCompletion.Any
+        ).count { it }
+}
 
 data class AO3AuthorAbout(
     val profileTitle: String,
