@@ -26,6 +26,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material3.DropdownMenu
@@ -41,6 +42,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -774,22 +776,80 @@ fun ToolbarCircleButton(
 }
 
 /**
- * 44dp "+" action button in the toolbar, tinted with the design token accent.
+ * Urgency amber matching iOS `Color.subjectAmber` (#FFA00A).
+ * Used when an item in Recently Deleted expires in under a week.
+ */
+val SubjectAmber = Color(0xFFFFA00A)
+
+/**
+ * 28dp selection bubble matching iOS `WorkSelectionBubble`.
+ * When selected: filled with [accent] and a white checkmark.
+ * When unselected: transparent glass fill with a subtle stroke.
+ */
+@Composable
+fun WorkSelectionBubble(
+    isSelected: Boolean,
+    modifier: Modifier = Modifier,
+    accent: Color = LocalKudosTokens.current.accent,
+    palette: SubjectPalette? = null
+) {
+    val tokens = LocalKudosTokens.current
+    val effectiveAccent = palette?.accent ?: accent
+    Box(
+        modifier = modifier
+            .size(28.dp)
+            .clip(CircleShape)
+            .then(
+                if (isSelected) {
+                    Modifier.background(effectiveAccent)
+                } else {
+                    Modifier
+                        .background(tokens.glassFill())
+                        .border(1.25.dp, tokens.secondaryInk.copy(alpha = 0.55f), CircleShape)
+                }
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        if (isSelected) {
+            Icon(
+                imageVector = Icons.Filled.Check,
+                contentDescription = null,
+                tint = Color.White,
+                modifier = Modifier.size(16.dp)
+            )
+        }
+    }
+}
+
+/**
+ * 44dp "+" action button in the toolbar: a filled accent circle with a white plus glyph.
  * Matches iOS Liquid Glass "+" toolbar item.
  */
 @Composable
 fun ToolbarAddButton(
     onClick: () -> Unit,
-    accessibilityName: String,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    accessibilityName: String = "Add",
+    palette: SubjectPalette? = null
 ) {
     val tokens = LocalKudosTokens.current
-    ToolbarCircleButton(
-        onClick = onClick,
-        accessibilityName = accessibilityName,
-        modifier = modifier
+    val accent = palette?.accent ?: tokens.accent
+    val glyph = 17.sp.asDp()
+    Box(
+        modifier
+            .size(SubjectMetrics.toolbarCircle)
+            .semantics { contentDescription = accessibilityName }
+            .clip(CircleShape)
+            .background(accent)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center
     ) {
-        Icon(Icons.Filled.Add, contentDescription = null, tint = tokens.accent)
+        Icon(
+            imageVector = Icons.Filled.Add,
+            contentDescription = null,
+            tint = Color.White,
+            modifier = Modifier.size(glyph)
+        )
     }
 }
 

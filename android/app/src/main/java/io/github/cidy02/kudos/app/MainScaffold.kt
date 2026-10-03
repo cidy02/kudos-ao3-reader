@@ -322,6 +322,15 @@ fun MainScaffold(
                     ) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
                     }
+                    if (pushedChrome.customTitle != null) {
+                        Text(
+                            text = pushedChrome.customTitle.orEmpty(),
+                            color = tokens.primaryInk,
+                            fontSize = 17.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.padding(start = 12.dp)
+                        )
+                    }
                     Spacer(modifier = Modifier.weight(1f))
                     if (pushedChrome.trailingContent != null) {
                         Row(

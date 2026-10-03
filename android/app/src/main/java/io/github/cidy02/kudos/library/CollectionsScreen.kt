@@ -15,18 +15,14 @@ import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import io.github.cidy02.kudos.app.ProvidePushedShellChrome
-import io.github.cidy02.kudos.ui.subject.ToolbarCircleButton
+import io.github.cidy02.kudos.ui.subject.ToolbarAddButton
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.outlined.Delete
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -65,24 +61,21 @@ fun CollectionsScreen(
     val tokens = LocalKudosTokens.current
     val reveal by privacyGate.state.collectAsState()
     var loading by remember { mutableStateOf(true) }
-    var working by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var collections by remember { mutableStateOf<List<WorkCollection>>(emptyList()) }
     var works by remember { mutableStateOf<List<SavedWork>>(emptyList()) }
     var showCreate by remember { mutableStateOf(false) }
-    var newName by remember { mutableStateOf("") }
     var deleteCandidate by remember { mutableStateOf<WorkCollection?>(null) }
     val scope = rememberCoroutineScope()
 
     ProvidePushedShellChrome(
         hasSubjectHeader = true,
         trailingContent = {
-            ToolbarCircleButton(
+            ToolbarAddButton(
                 onClick = { showCreate = true },
-                accessibilityName = "New Collection"
-            ) {
-                Icon(Icons.Filled.Add, contentDescription = null, tint = tokens.accent)
-            }
+                accessibilityName = "New Collection",
+                palette = tokens.scopePalette
+            )
         }
     )
 
@@ -111,60 +104,17 @@ fun CollectionsScreen(
 
     LaunchedEffect(reveal) { refresh() }
 
-    fun createCollection() {
-        val name = newName.trim()
-        if (name.isEmpty() || working) return
-        scope.launch {
-            working = true
-            error = null
-            runCatching { workRepository.createCollection(name) }
-                .onSuccess { created ->
-                    newName = ""
-                    showCreate = false
+    if (showCreate) {
+        CollectionEditorSheet(
+            workRepository = workRepository,
+            existing = null,
+            onDismiss = { showCreate = false },
+            onSaved = { created ->
+                showCreate = false
+                scope.launch {
                     refresh()
                     onOpenCollection(created.id)
                 }
-                .onFailure { error = it.message ?: "Could not create collection." }
-            working = false
-        }
-    }
-
-    if (showCreate) {
-        AlertDialog(
-            onDismissRequest = {
-                if (!working) {
-                    showCreate = false
-                    newName = ""
-                }
-            },
-            title = { Text("New Collection") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        "Name a shelf for grouping saved works. Add works later from Work Detail.",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    OutlinedTextField(
-                        value = newName,
-                        onValueChange = { newName = it },
-                        label = { Text("Collection name") },
-                        singleLine = true,
-                        enabled = !working,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-            },
-            confirmButton = {
-                TextButton(
-                    enabled = !working && newName.trim().isNotEmpty(),
-                    onClick = ::createCollection
-                ) { Text("Create") }
-            },
-            dismissButton = {
-                TextButton(
-                    enabled = !working,
-                    onClick = { showCreate = false; newName = "" }
-                ) { Text("Cancel") }
             }
         )
     }
