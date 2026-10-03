@@ -153,6 +153,10 @@ class SettingsRepository(
         dataStore.edit { it[Keys.ConfirmBeforeDelete] = confirm }
     }
 
+    suspend fun updateShowsZeroStats(shows: Boolean) {
+        dataStore.edit { it[Keys.ShowsZeroStats] = shows }
+    }
+
     suspend fun updateKeepsWorksYouRead(keep: Boolean) {
         dataStore.edit { it[Keys.KeepsWorksYouRead] = keep }
     }
@@ -423,6 +427,8 @@ class SettingsRepository(
             app = AppSettings(
                 confirmBeforeDelete = preferences[Keys.ConfirmBeforeDelete]
                     ?: defaults.app.confirmBeforeDelete,
+                showsZeroStats = preferences[Keys.ShowsZeroStats]
+                    ?: defaults.app.showsZeroStats,
                 keepsWorksYouRead = preferences[Keys.KeepsWorksYouRead]
                     ?: defaults.app.keepsWorksYouRead,
                 downloadOnSubscribe = preferences[Keys.DownloadOnSubscribe]
@@ -468,6 +474,7 @@ class SettingsRepository(
         val KeepScreenAwake = booleanPreferencesKey("keepScreenAwake")
         val DownloadOnSubscribe = booleanPreferencesKey("downloadOnSubscribe")
         val ConfirmBeforeDelete = booleanPreferencesKey("confirmBeforeDelete")
+        val ShowsZeroStats = booleanPreferencesKey("showsZeroStats")
         val KeepsWorksYouRead = booleanPreferencesKey("keepsWorksYouRead")
         val HideMatureContent = booleanPreferencesKey("hideMatureContent")
         val MatureContentMode = stringPreferencesKey("matureContentMode")

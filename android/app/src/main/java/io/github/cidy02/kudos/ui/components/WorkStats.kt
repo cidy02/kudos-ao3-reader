@@ -14,6 +14,10 @@ import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.RadioButtonUnchecked
 import androidx.compose.material.icons.outlined.Shield
 import androidx.compose.material.icons.outlined.TextFields
+import androidx.compose.material.icons.outlined.ChatBubbleOutline
+import androidx.compose.material.icons.outlined.BookmarkBorder
+import androidx.compose.material.icons.outlined.Visibility
+import androidx.compose.material.icons.outlined.Public
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -32,6 +36,10 @@ import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material3.Surface
 import androidx.compose.foundation.layout.padding
+
+import androidx.compose.runtime.staticCompositionLocalOf
+
+val LocalShowsZeroStats = staticCompositionLocalOf { true }
 
 /**
  * Compact work metadata expressed with Material 3 color/type roles.
@@ -72,10 +80,18 @@ fun WorkListStatsRow(
     if (stats.isEmpty()) return
     FlowRow(
         modifier = modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(16.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp)
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(5.dp)
     ) {
-        stats.forEach { stat ->
+        stats.forEachIndexed { index, stat ->
+            if (index > 0) {
+                Text(
+                    text = "•",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.align(Alignment.CenterVertically)
+                )
+            }
             WorkStatLabel(item = stat)
         }
     }
@@ -171,6 +187,10 @@ object WorkStatIcons {
     val inProgress: ImageVector get() = Icons.Outlined.RadioButtonUnchecked
     val words: ImageVector get() = Icons.Outlined.TextFields
     val kudos: ImageVector get() = Icons.Outlined.FavoriteBorder
+    val comments: ImageVector get() = Icons.Outlined.ChatBubbleOutline
+    val bookmarks: ImageVector get() = Icons.Outlined.BookmarkBorder
+    val hits: ImageVector get() = Icons.Outlined.Visibility
+    val language: ImageVector get() = Icons.Outlined.Public
 }
 
 /** AO3 rating → short readable name for cover-card density (not single letters). */
@@ -265,37 +285,55 @@ fun coverCardStats(
 
 /** List-row stats: full rating name, compact numbers (Apple WorkListStatsRow fields). */
 fun listRowStats(
-    rating: String,
+    language: String?,
     wordCount: Int?,
     chapters: String,
-    kudos: Int?
+    comments: Int?,
+    kudos: Int?,
+    bookmarks: Int?,
+    hits: Int?,
+    showsZeroStats: Boolean
 ): List<WorkStatItem> {
-    return listOfNotNull(
-        rating.takeIf { it.isNotBlank() }?.let {
-            WorkStatItem(text = it, icon = WorkStatIcons.rating)
-        },
-        wordCount?.takeIf { it > 0 }?.let {
-            WorkStatItem(
-                text = "%,d".format(it),
-                accessibilityLabel = "%,d words".format(it),
-                icon = WorkStatIcons.words
-            )
-        },
-        chapters.takeIf { it.isNotBlank() }?.let {
-            WorkStatItem(
-                text = it,
-                accessibilityLabel = "Chapters $it",
-                icon = WorkStatIcons.chapters
-            )
-        },
-        kudos?.takeIf { it > 0 }?.let {
-            WorkStatItem(
-                text = "%,d".format(it),
-                accessibilityLabel = "%,d kudos".format(it),
-                icon = WorkStatIcons.kudos
-            )
-        }
-    )
+    val unknownText = "—"
+    val result = mutableListOf<WorkStatItem>()
+    // iOS WorkStatLabel.secondaryItems: only an empty value is unknown ("English", "1/1" show).
+    val lang = language?.takeIf { it.isNotBlank() }
+    val chaps = chapters.takeIf { it.isNotBlank() }
+
+    if (lang != null || showsZeroStats) {
+        result += WorkStatItem(
+            text = lang ?: unknownText,
+            accessibilityLabel = lang?.let { "Language: $it" } ?: "Language unknown",
+            icon = WorkStatIcons.language
+        )
+    }
+
+    fun count(value: Int?, noun: String, icon: ImageVector): WorkStatItem? {
+        if (value == null) return null
+        if (value == 0 && !showsZeroStats) return null
+        return WorkStatItem(
+            text = "%,d".format(value),
+            accessibilityLabel = "%,d $noun".format(value),
+            icon = icon
+        )
+    }
+
+    count(wordCount, "words", WorkStatIcons.words)?.let { result += it }
+
+    if (chaps != null || showsZeroStats) {
+        result += WorkStatItem(
+            text = chaps ?: unknownText,
+            accessibilityLabel = chaps?.let { "Chapters $it" } ?: "Chapter count unknown",
+            icon = WorkStatIcons.chapters
+        )
+    }
+
+    count(comments, "comments", WorkStatIcons.comments)?.let { result += it }
+    count(kudos, "kudos", WorkStatIcons.kudos)?.let { result += it }
+    count(bookmarks, "bookmarks", WorkStatIcons.bookmarks)?.let { result += it }
+    count(hits, "hits", WorkStatIcons.hits)?.let { result += it }
+
+    return result
 }
 
 /**

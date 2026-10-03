@@ -65,7 +65,8 @@ class LibraryRepository(
             userTags = index.userTags,
             collections = index.collections,
             privacy = settings.privacy,
-            confirmBeforeDelete = settings.app.confirmBeforeDelete
+            confirmBeforeDelete = settings.app.confirmBeforeDelete,
+            showsZeroStats = settings.app.showsZeroStats
         )
     }.distinctUntilChanged().flowOn(Dispatchers.Default).onEach { emitted ->
         latestSnapshotState.value = emitted

@@ -70,6 +70,7 @@ data class ReaderSettings(
 
 data class AppSettings(
     val confirmBeforeDelete: Boolean = true,
+    val showsZeroStats: Boolean = true,
     val keepsWorksYouRead: Boolean = false,
     /** iOS "downloadOnSubscribe": subscribing to a Library work without a copy downloads it. */
     val downloadOnSubscribe: Boolean = false,

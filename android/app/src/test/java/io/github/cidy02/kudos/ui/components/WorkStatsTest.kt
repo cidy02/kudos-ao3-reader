@@ -38,4 +38,48 @@ class WorkStatsTest {
         assertEquals("In Progress", completionStatText(false))
         assertNull(completionStatText(null))
     }
+
+    @Test
+    fun listRowStats_honoursShowsZeroStats() {
+        // When showsZeroStats is false, zeroes and unknowns are omitted (iOS WorkStatLabel)
+        val hidden = listRowStats(
+            language = null,
+            wordCount = 0,
+            chapters = "",
+            comments = 0,
+            kudos = 0,
+            bookmarks = 0,
+            hits = 0,
+            showsZeroStats = false
+        )
+        assertEquals(0, hidden.size)
+
+        // When showsZeroStats is true, zeroes and unknowns are included
+        val shown = listRowStats(
+            language = null,
+            wordCount = 0,
+            chapters = "",
+            comments = 0,
+            kudos = 0,
+            bookmarks = 0,
+            hits = 0,
+            showsZeroStats = true
+        )
+        assertEquals(7, shown.size)
+        // Language
+        assertEquals("—", shown[0].text)
+        // Words
+        assertEquals("0", shown[1].text)
+        // Chapters
+        assertEquals("—", shown[2].text)
+        // Comments
+        assertEquals("0", shown[3].text)
+
+        // A known language and a one-chapter work show, as on iOS ("English", "1/1").
+        val known = listRowStats(
+            language = "English", wordCount = 100, chapters = "1/1",
+            comments = null, kudos = null, bookmarks = null, hits = null, showsZeroStats = false
+        )
+        assertEquals(listOf("English", "100", "1/1"), known.map { it.text })
+    }
 }

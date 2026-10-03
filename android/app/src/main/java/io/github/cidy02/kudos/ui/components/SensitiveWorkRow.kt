@@ -40,6 +40,7 @@ import io.github.cidy02.kudos.network.ao3.search.AO3WorkSummary
 
 import io.github.cidy02.kudos.core.model.SavedWork
 import io.github.cidy02.kudos.works.CanonicalWork
+import androidx.compose.foundation.background
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -48,6 +49,9 @@ import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.ui.graphics.Color
 import kotlin.math.absoluteValue
+import io.github.cidy02.kudos.home.HomeFacts
+import io.github.cidy02.kudos.ui.subject.SubjectPalette
+import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
 import androidx.compose.material3.Checkbox
 
 
@@ -96,6 +100,7 @@ fun SensitiveWorkRow(
     wordCount: Int?,
     chapters: String,
     kudos: Int?,
+    comments: Int? = null,
     bookmarks: Int? = null,
     hits: Int? = null,
     language: String? = null,
@@ -104,6 +109,7 @@ fun SensitiveWorkRow(
     selected: Boolean = false,
     selecting: Boolean = false,
     expandAll: Boolean = false,
+    showsZeroStats: Boolean = LocalShowsZeroStats.current,
     onClick: () -> Unit,
     onReveal: (() -> Unit)? = null,
     onSelect: (() -> Unit)? = null,
@@ -116,30 +122,34 @@ fun SensitiveWorkRow(
     
     val expandable = summary.length > 120 || fandoms.size > 1 || discoveryTags.isNotEmpty() || warnings.any { it.isNotBlank() }
     
-    val containerColor = if (selected) MaterialTheme.colorScheme.primaryContainer else {
-        val base = MaterialTheme.colorScheme.surfaceContainerLow
-        val hue = coverHue(fandoms.firstOrNull() ?: title)
-        val wash = Color.hsl(hue = hue, saturation = 0.28f, lightness = 0.55f, alpha = 0.10f)
-        sensitiveRowBlendOver(base, wash)
-    }
+    val tokens = LocalKudosTokens.current
+    val palette = SubjectPalette.fromHue(HomeFacts.workHue(fandoms, title), tokens.theme)
 
     Box(modifier = modifier.workCardZoomSource(id.toLongOrNull() ?: 0L)) {
+        val cardMod = Modifier
+            .fillMaxWidth()
+            .then(
+                if (selected) Modifier.background(MaterialTheme.colorScheme.primaryContainer, MaterialTheme.shapes.medium)
+                else Modifier
+                    .background(tokens.cardFill, MaterialTheme.shapes.medium)
+                    .background(palette.cardWash, MaterialTheme.shapes.medium)
+            )
+            .semantics { contentDescription = "$title, by ${author.ifBlank { "Anonymous" }}" }
+            .combinedClickable(
+                onClick = {
+                    when {
+                        selecting -> onSelect?.invoke()
+                        obscured -> onReveal?.invoke()
+                        else -> onClick()
+                    }
+                },
+                onLongClick = onLongClick
+            )
+
         Card(
-            colors = CardDefaults.cardColors(containerColor = containerColor),
+            colors = CardDefaults.cardColors(containerColor = Color.Transparent),
             shape = MaterialTheme.shapes.medium,
-            modifier = Modifier
-                .fillMaxWidth()
-                .semantics { contentDescription = "$title, by ${author.ifBlank { "Anonymous" }}" }
-                .combinedClickable(
-                    onClick = {
-                        when {
-                            selecting -> onSelect?.invoke()
-                            obscured -> onReveal?.invoke()
-                            else -> onClick()
-                        }
-                    },
-                    onLongClick = onLongClick
-                )
+            modifier = cardMod
         ) {
             Box(modifier = Modifier.fillMaxWidth().clipToBounds()) {
                 Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -162,11 +172,9 @@ fun SensitiveWorkRow(
                             horizontalArrangement = Arrangement.spacedBy(4.dp),
                             verticalAlignment = Alignment.Top
                         ) {
-                            if (!selecting) {
+                            if (expandable) {
                                 IconButton(
-                                    onClick = { expanded = !expanded },
-                                    enabled = expandable,
-                                    modifier = Modifier.alpha(if (expandable) 1f else 0f)
+                                    onClick = { expanded = !expanded }
                                 ) {
                                     Icon(
                                         imageVector = if (expanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
@@ -197,7 +205,7 @@ fun SensitiveWorkRow(
                                 Icon(
                                     imageVector = Icons.Filled.Star,
                                     contentDescription = "Favorite",
-                                    tint = MaterialTheme.colorScheme.primary,
+                                    tint = Color(0xFFFFCC00),
                                     modifier = Modifier.padding(8.dp)
                                 )
                             }
@@ -248,10 +256,14 @@ fun SensitiveWorkRow(
 
                         WorkListStatsRow(
                             stats = listRowStats(
-                                rating = rating,
+                                language = language,
                                 wordCount = wordCount,
                                 chapters = chapters,
-                                kudos = kudos
+                                comments = comments,
+                                kudos = kudos,
+                                bookmarks = bookmarks,
+                                hits = hits,
+                                showsZeroStats = showsZeroStats
                             )
                         )
                     }
@@ -259,8 +271,8 @@ fun SensitiveWorkRow(
                 if (obscured) {
                     Surface(
                         shape = RoundedCornerShape(50),
-                        color = MaterialTheme.colorScheme.scrim.copy(alpha = 0.55f),
-                        contentColor = MaterialTheme.colorScheme.onPrimary,
+                        color = tokens.secondaryInk,
+                        contentColor = tokens.background,
                         modifier = Modifier.align(Alignment.Center)
                     ) {
                         Row(
@@ -313,6 +325,10 @@ fun SensitiveWorkRow(
             wordCount = work.wordCount,
             chapters = work.chapters,
             kudos = work.kudos,
+            comments = work.comments,
+            bookmarks = work.bookmarks,
+            hits = work.hits,
+            language = work.language,
             expandAll = expandAll,
             onClick = { onOpenWork(work) },
             onTagClick = onTagClick,
@@ -350,7 +366,8 @@ fun SensitiveWorkRow(
     onSelect: (() -> Unit)? = null,
     onReveal: (() -> Unit)? = null,
     onTagClick: ((String) -> Unit)? = null,
-    onLongClick: (() -> Unit)? = null
+    onLongClick: (() -> Unit)? = null,
+    showsZeroStats: Boolean = LocalShowsZeroStats.current
 ) {
     SensitiveWorkRow(
         id = work.id,
@@ -366,6 +383,7 @@ fun SensitiveWorkRow(
         wordCount = work.wordCount,
         chapters = work.chapters,
         kudos = work.kudos,
+        comments = work.comments,
         bookmarks = work.bookmarks,
         hits = work.hits,
         language = work.language,
@@ -379,6 +397,7 @@ fun SensitiveWorkRow(
         onReveal = onReveal,
         onTagClick = onTagClick,
         onLongClick = onLongClick,
+        showsZeroStats = showsZeroStats,
         modifier = modifier
     )
 }

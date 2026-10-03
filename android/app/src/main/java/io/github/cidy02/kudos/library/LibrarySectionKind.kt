@@ -37,6 +37,13 @@ enum class LibrarySectionKind(
         "To add a favorite, use a work's menu or tap the star on its page."
     );
 
+    /**
+     * The label over the rows (iOS `LibrarySectionKind.groupTitle`): Reading Now's list is headed
+     * "In progress"; the other sections keep their title.
+     */
+    val groupTitle: String
+        get() = if (this == ReadingNow) "In progress" else title
+
     fun items(state: LibraryUiState): List<LibraryDisplayItem> = when (this) {
         ReadingNow -> state.continueReading
         SavedForLater -> state.savedForLater

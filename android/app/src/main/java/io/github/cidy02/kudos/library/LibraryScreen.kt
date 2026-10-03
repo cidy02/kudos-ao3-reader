@@ -856,6 +856,7 @@ private fun LibraryContent(
                         items = state.continueReading,
                         layout = dashboardLayout,
                         collapsed = collapsed["readingNow"],
+                        showsZeroStats = state.showsZeroStats,
                         onToggleCollapsed = { collapsed.toggle("readingNow") },
                         onSeeAll = { onOpenSection(LibrarySectionKind.ReadingNow) },
                         actions = cardActions,
@@ -869,6 +870,7 @@ private fun LibraryContent(
                         items = state.savedForLater,
                         layout = dashboardLayout,
                         collapsed = collapsed["savedForLater"],
+                        showsZeroStats = state.showsZeroStats,
                         onToggleCollapsed = { collapsed.toggle("savedForLater") },
                         onSeeAll = { onOpenSection(LibrarySectionKind.SavedForLater) },
                         actions = cardActions,
@@ -882,6 +884,7 @@ private fun LibraryContent(
                         items = state.finished,
                         layout = dashboardLayout,
                         collapsed = collapsed["finished"],
+                        showsZeroStats = state.showsZeroStats,
                         onToggleCollapsed = { collapsed.toggle("finished") },
                         onSeeAll = { onOpenSection(LibrarySectionKind.Finished) },
                         actions = cardActions,
@@ -907,6 +910,7 @@ private fun LibraryContent(
                         items = state.downloaded,
                         layout = dashboardLayout,
                         collapsed = collapsed["downloaded"],
+                        showsZeroStats = state.showsZeroStats,
                         onToggleCollapsed = { collapsed.toggle("downloaded") },
                         onSeeAll = { onOpenSection(LibrarySectionKind.Downloaded) },
                         actions = cardActions,
@@ -920,6 +924,7 @@ private fun LibraryContent(
                         items = state.readingHistory,
                         layout = dashboardLayout,
                         collapsed = collapsed["history"],
+                        showsZeroStats = state.showsZeroStats,
                         onToggleCollapsed = { collapsed.toggle("history") },
                         onSeeAll = { onOpenSection(LibrarySectionKind.History) },
                         actions = cardActions,
@@ -933,6 +938,7 @@ private fun LibraryContent(
                         items = state.favorites,
                         layout = dashboardLayout,
                         collapsed = collapsed["favorites"],
+                        showsZeroStats = state.showsZeroStats,
                         onToggleCollapsed = { collapsed.toggle("favorites") },
                         onSeeAll = { onOpenSection(LibrarySectionKind.Favorites) },
                         actions = cardActions,
@@ -979,6 +985,7 @@ private fun LibraryDashboardWorkSection(
     items: List<LibraryDisplayItem>,
     layout: WorkSectionLayout,
     collapsed: Boolean,
+    showsZeroStats: Boolean,
     onToggleCollapsed: () -> Unit,
     onSeeAll: () -> Unit,
     actions: LibraryCardActions,
@@ -1009,7 +1016,8 @@ private fun LibraryDashboardWorkSection(
                         kind = kind,
                         actions = actions,
                         onRemoveFromHistory = onRemoveFromHistory,
-                        onRemoveFromAllQueues = onRemoveFromAllQueues
+                        onRemoveFromAllQueues = onRemoveFromAllQueues,
+                        showsZeroStats = showsZeroStats
                     )
                 }
             }
@@ -1066,7 +1074,8 @@ private fun LibrarySubjectLedgerRow(
     onRemoveFromHistory: (String) -> Unit,
     onRemoveFromAllQueues: (String) -> Unit,
     selected: Boolean = false,
-    selecting: Boolean = false
+    selecting: Boolean = false,
+    showsZeroStats: Boolean = true
 ) {
     val work = display.item.work
     val obscured = display.privacyVisibility == LibraryPrivacyVisibility.Obscured
@@ -1075,6 +1084,7 @@ private fun LibrarySubjectLedgerRow(
     val row: @Composable () -> Unit = {
         SensitiveWorkRow(
             work = work,
+            showsZeroStats = showsZeroStats,
             onOpenWork = {
                 if (work.hasEpub) actions.onOpenReader(work.id) else actions.onOpenWork(work.id)
             },
@@ -1361,7 +1371,13 @@ private fun LibrarySectionContent(
                         palette = tokens.scopePalette
                     )
                 }
-                item { SectionRuleHeader(kind.title.uppercase(), modifier = Modifier.padding(top = 8.dp)) }
+                item {
+                    SectionRuleHeader(
+                        kind.groupTitle.uppercase(),
+                        modifier = Modifier.padding(top = 8.dp),
+                        count = sectionItems.size
+                    )
+                }
                 when {
                     state.loading -> item { LoadingStateCard("Loading ${kind.title}", Modifier.padding(horizontal = 16.dp)) }
                     state.error != null -> item {
@@ -1378,7 +1394,8 @@ private fun LibrarySectionContent(
                             onRemoveFromHistory = onRemoveFromHistory,
                             onRemoveFromAllQueues = onRemoveFromAllQueues,
                             selected = display.item.work.id in state.selectedWorkIds,
-                            selecting = state.selectionMode
+                            selecting = state.selectionMode,
+                            showsZeroStats = state.showsZeroStats
                         )
                     }
                 }
@@ -1603,14 +1620,16 @@ private fun FandomFilterChips(
     ) {
         if (topFandoms.isNotEmpty()) {
             val allSelected = selectedFandom == null
+            val tokens = io.github.cidy02.kudos.ui.subject.LocalKudosTokens.current
+            val chipColors = FilterChipDefaults.filterChipColors(
+                selectedContainerColor = tokens.accent,
+                selectedLabelColor = tokens.background
+            )
             FilterChip(
                 selected = allSelected,
                 onClick = onSelectAll,
                 label = { Text("All") },
-                colors = FilterChipDefaults.filterChipColors(
-                    selectedContainerColor = MaterialTheme.colorScheme.primary,
-                    selectedLabelColor = MaterialTheme.colorScheme.onPrimary
-                )
+                colors = chipColors
             )
             topFandoms.forEach { fandom ->
                 FilterChip(
@@ -1624,7 +1643,8 @@ private fun FandomFilterChips(
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
-                    }
+                    },
+                    colors = chipColors
                 )
             }
         }

@@ -248,6 +248,11 @@ fun KudosApp(
                         }
                     )
                 } else {
+                    // Settings > Library > Show zero counts reaches every work card (iOS @AppStorage).
+                    androidx.compose.runtime.CompositionLocalProvider(
+                        io.github.cidy02.kudos.ui.components.LocalShowsZeroStats provides
+                            settings.app.showsZeroStats
+                    ) {
                     MainScaffold(
                         container = container,
                         themeMode = themeMode,
@@ -263,6 +268,7 @@ fun KudosApp(
                             }
                         }
                     )
+                    }
                 }
             }
         }
