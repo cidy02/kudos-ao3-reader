@@ -157,6 +157,14 @@ class SettingsRepository(
         dataStore.edit { it[Keys.KeepsWorksYouRead] = keep }
     }
 
+    suspend fun updateAutoPreserveSmallSeries(enabled: Boolean) {
+        dataStore.edit { it[Keys.AutoPreserveSmallSeries] = enabled }
+    }
+
+    suspend fun updateAutoPreserveSeriesThreshold(threshold: Int) {
+        dataStore.edit { it[Keys.AutoPreserveSeriesThreshold] = threshold.coerceIn(2, 25) }
+    }
+
     suspend fun updateReaderJustify(justify: Boolean) {
         dataStore.edit { it[Keys.ReaderJustify] = justify }
     }

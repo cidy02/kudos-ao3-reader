@@ -1,9 +1,11 @@
 package io.github.cidy02.kudos.settings
 
+import android.app.Activity
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
@@ -36,8 +38,10 @@ fun SettingsScreen(
 ) {
     val navController = rememberNavController()
     val settings by repository.settings.collectAsState(initial = KudosSettings.Defaults)
+    val requested = (LocalContext.current as? Activity)?.intent?.getStringExtra("kudosSettingsPage")
+    val start = requested?.takeIf { it in SettingsDebugPages } ?: "hub"
 
-    NavHost(navController = navController, startDestination = "hub") {
+    NavHost(navController = navController, startDestination = start) {
         composable("hub") {
             SettingsHubScreen(navController, settings, authRepository)
         }
@@ -72,7 +76,7 @@ fun SettingsScreen(
             SettingsImportPage(workImporter)
         }
         composable("reading_queues") {
-            SettingsReadingQueuesPageWrapper(onOpenQueueStorage, navController)
+            SettingsReadingQueuesPageWrapper(onOpenQueueStorage, navController, repository, settings)
         }
         composable("account") {
             SettingsAccountPage(authRepository, onLogin)
@@ -88,3 +92,9 @@ fun SettingsScreen(
         }
     }
 }
+
+private val SettingsDebugPages = setOf(
+    "hub", "appearance", "font", "reader", "listening", "downloads", "preservation",
+    "library", "backup", "folder_sync", "import_files", "reading_queues", "account",
+    "privacy_settings", "privacy", "about"
+)
