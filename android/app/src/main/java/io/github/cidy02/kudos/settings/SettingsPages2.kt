@@ -78,13 +78,35 @@ private val EpubOpenMimeTypes = arrayOf(
 @Composable
 fun SettingsLibraryPage(
     repository: SettingsRepository,
-    settings: KudosSettings,
-    workImporter: WorkImporter?,
-    workAvailabilitySweep: WorkAvailabilitySweep?,
-    onOpenAvailabilitySweep: () -> Unit
+    settings: KudosSettings
 ) {
     val chrome = LocalPushedShellChrome.current
     LaunchedEffect(Unit) { chrome.customTitle = "Library"; chrome.hasSubjectHeader = true }
+    val scope = rememberCoroutineScope()
+    val palette = LocalSubjectPalette.current
+    val tokens = LocalKudosTokens.current
+
+    LazyColumn(modifier = Modifier.fillMaxSize().subjectScreenWash(palette), contentPadding = PaddingValues(bottom = 20.dp)) {
+        item { SubjectHeaderBlock(kicker = "Settings", title = "Library", palette = palette, gutter = SubjectMetrics.accountGutter, modifier = Modifier.padding(top = 20.dp)) }
+        item {
+            Column(modifier = Modifier.padding(top = 18.dp)) {
+                Column(modifier = Modifier.padding(horizontal = SubjectMetrics.accountGutter).subjectPanel()) {
+                    SubjectFormRow("Confirm before deleting", trailing = {
+                        SubjectToggle(checked = settings.app.confirmBeforeDelete, onCheckedChange = { scope.launch { repository.updateConfirmBeforeDelete(it) } })
+                    })
+                }
+                Text("Ask before removing a work from your Library. Imported EPUBs appear as saved works without an AO3 link.", style = MaterialTheme.typography.bodySmall, color = tokens.secondaryInk, modifier = Modifier.padding(horizontal = SubjectMetrics.accountGutter).padding(top = 8.dp))
+            }
+        }
+    }
+}
+
+@Composable
+fun SettingsImportPage(
+    workImporter: WorkImporter?
+) {
+    val chrome = LocalPushedShellChrome.current
+    LaunchedEffect(Unit) { chrome.customTitle = "Import"; chrome.hasSubjectHeader = true }
     val scope = rememberCoroutineScope()
     val palette = LocalSubjectPalette.current
     val tokens = LocalKudosTokens.current
@@ -139,18 +161,8 @@ fun SettingsLibraryPage(
     }
 
     LazyColumn(modifier = Modifier.fillMaxSize().subjectScreenWash(palette), contentPadding = PaddingValues(bottom = 20.dp)) {
-        item { SubjectHeaderBlock(kicker = "Settings", title = "Library", palette = palette, gutter = SubjectMetrics.accountGutter, modifier = Modifier.padding(top = 20.dp)) }
-        item {
-            Column(modifier = Modifier.padding(top = 18.dp)) {
-                Column(modifier = Modifier.padding(horizontal = SubjectMetrics.accountGutter).subjectPanel()) {
-                    SubjectFormRow("Confirm before deleting", trailing = {
-                        SubjectToggle(checked = settings.app.confirmBeforeDelete, onCheckedChange = { scope.launch { repository.updateConfirmBeforeDelete(it) } })
-                    })
-                }
-                Text("Ask before removing a work from your Library. Imported EPUBs appear as saved works without an AO3 link.", style = MaterialTheme.typography.bodySmall, color = tokens.secondaryInk, modifier = Modifier.padding(horizontal = SubjectMetrics.accountGutter).padding(top = 8.dp))
-            }
-        }
-
+        item { SubjectHeaderBlock(kicker = "Settings", title = "Import", palette = palette, gutter = SubjectMetrics.accountGutter, modifier = Modifier.padding(top = 20.dp)) }
+        
         if (workImporter != null) {
             item {
                 Column(modifier = Modifier.padding(top = 18.dp)) {
@@ -165,6 +177,22 @@ fun SettingsLibraryPage(
                 }
             }
         }
+    }
+}
+
+@Composable
+fun SettingsPreservationPage(
+    workAvailabilitySweep: WorkAvailabilitySweep?,
+    onOpenAvailabilitySweep: () -> Unit
+) {
+    val chrome = LocalPushedShellChrome.current
+    LaunchedEffect(Unit) { chrome.customTitle = "Preservation"; chrome.hasSubjectHeader = true }
+    val scope = rememberCoroutineScope()
+    val palette = LocalSubjectPalette.current
+    val tokens = LocalKudosTokens.current
+
+    LazyColumn(modifier = Modifier.fillMaxSize().subjectScreenWash(palette), contentPadding = PaddingValues(bottom = 20.dp)) {
+        item { SubjectHeaderBlock(kicker = "Settings", title = "Preservation", palette = palette, gutter = SubjectMetrics.accountGutter, modifier = Modifier.padding(top = 20.dp)) }
 
         if (workAvailabilitySweep != null) {
             item {
@@ -196,6 +224,25 @@ fun SettingsLibraryPage(
                     } else {
                         Text("Check library for deleted/hidden works on AO3.", style = MaterialTheme.typography.bodySmall, color = tokens.secondaryInk, modifier = Modifier.padding(horizontal = SubjectMetrics.accountGutter).padding(top = 8.dp))
                     }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun SettingsListeningPage() {
+    val chrome = LocalPushedShellChrome.current
+    LaunchedEffect(Unit) { chrome.customTitle = "Listening"; chrome.hasSubjectHeader = true }
+    val palette = LocalSubjectPalette.current
+
+    LazyColumn(modifier = Modifier.fillMaxSize().subjectScreenWash(palette), contentPadding = PaddingValues(bottom = 20.dp)) {
+        item { SubjectHeaderBlock(kicker = "Settings", title = "Listening", palette = palette, gutter = SubjectMetrics.accountGutter, modifier = Modifier.padding(top = 20.dp)) }
+        item {
+            Column(modifier = Modifier.padding(top = 18.dp)) {
+                Column(modifier = Modifier.padding(horizontal = SubjectMetrics.accountGutter).subjectPanel()) {
+                    // ponytail: no voice/speed settings on Android yet (iOS SettingsListeningPage); add with the TTS settings port.
+                    SubjectFormRow("Start Read Aloud from the reader's More menu.")
                 }
             }
         }

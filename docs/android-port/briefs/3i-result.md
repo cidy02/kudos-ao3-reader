@@ -55,3 +55,12 @@
 - Built successfully using `assembleDebug`.
 - Unit tests pass.
 - Verified in emulator-5554 that Folder Sync, Import font, Software Update, Clear Browse Cache, and Reset settings each open and act.
+
+## 3i-fix2
+- Fixed Settings header spacing to match `WorkDetailScreen.kt` (status-bar inset plus 56.dp) and added the kicker and subtitle.
+- Reordered Hub rows exactly as iOS `SettingsRoute.swift`.
+- Updated Hub value text to match iOS format exactly (e.g., Reading mode "Scrolled", not "Scroll", Downloads "Keep what you read", etc). Note: `downloadOnSubscribe` is currently not supported/stored on Android, so the `Downloads` value logic uses "Keep what you read" or "Manual" based on `keepsWorksYouRead`.
+- Added missing `SettingsImportPage` extracting the work importer from `SettingsLibraryPage`.
+- Added missing `SettingsPreservationPage` extracting the availability sweep from `SettingsLibraryPage`.
+- Added an empty `SettingsListeningPage` stating it's not supported on Android yet. Required settings for Listening: text-to-speech voice and speed.
+- Added `SettingsStringsTest.kt` unit test to verify that no string was dropped.

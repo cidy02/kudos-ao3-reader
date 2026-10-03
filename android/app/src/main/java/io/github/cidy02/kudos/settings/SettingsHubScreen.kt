@@ -2,8 +2,13 @@ package io.github.cidy02.kudos.settings
 
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -16,6 +21,8 @@ import io.github.cidy02.kudos.auth.AO3AuthRepository
 import io.github.cidy02.kudos.auth.AO3AuthState
 import io.github.cidy02.kudos.core.model.AppThemeSetting
 import io.github.cidy02.kudos.core.model.KudosSettings
+import io.github.cidy02.kudos.core.model.ReaderMode
+import io.github.cidy02.kudos.core.model.MatureContentMode
 import io.github.cidy02.kudos.data.preferences.SettingsRepository
 import io.github.cidy02.kudos.app.LocalPushedShellChrome
 import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
@@ -48,17 +55,31 @@ fun SettingsHubScreen(
     val themeMatched = settings.reader.matchAppReaderTheme
     val appTheme = settings.app.appTheme.name
     val readerTheme = settings.reader.readerTheme.storageValue.replaceFirstChar { it.uppercase() }
-    val themeString = if (themeMatched) appTheme else "$appTheme, $readerTheme reader"
+    val themeString = if (themeMatched || settings.app.appTheme.storageValue == settings.reader.readerTheme.storageValue) appTheme else "$appTheme, $readerTheme reader"
     
-    val readingMode = settings.reader.readerMode.name
+    val readingMode = when (settings.reader.readerMode) {
+        ReaderMode.Scroll -> "Scrolled"
+        ReaderMode.Paged -> "Paged"
+    }
     
     val keepWorks = settings.app.keepsWorksYouRead
     val downloadsString = if (keepWorks) "Keep what you read" else "Manual"
+    val readingQueuesString = if (settings.app.autoPreserveSmallSeriesOnSaveForLater) "Auto up to ${settings.app.autoPreserveSeriesWorkThreshold} works" else "Ask first"
     
     val accountString = when (authState) {
         is AO3AuthState.SignedIn -> (authState as AO3AuthState.SignedIn).username
         AO3AuthState.Restoring -> "Checking…"
         else -> "Not signed in"
+    }
+
+    val privacyString = if (settings.privacy.hideMatureContent) {
+        val modeTitle = when (settings.privacy.matureContentMode) {
+            MatureContentMode.Obscure -> "Obscure"
+            MatureContentMode.Hide -> "Hide"
+        }
+        "$modeTitle mature works"
+    } else {
+        "Off"
     }
 
     LazyColumn(
@@ -68,13 +89,14 @@ fun SettingsHubScreen(
         contentPadding = PaddingValues(bottom = 20.dp)
     ) {
         item {
+            Spacer(Modifier.height(WindowInsets.systemBars.asPaddingValues().calculateTopPadding() + 56.dp))
             SubjectHeaderBlock(
-                kicker = "",
+                kicker = "AO3 ACCOUNT",
                 title = "Settings",
-                subtitle = null,
+                subtitle = "Changes here affect Kudos, not your AO3 account",
                 palette = palette,
                 gutter = SubjectMetrics.accountGutter,
-                modifier = Modifier.padding(top = 20.dp)
+                modifier = Modifier.padding(top = 0.dp)
             )
         }
 
@@ -92,6 +114,8 @@ fun SettingsHubScreen(
                     SubjectFormRow("Font", value = fontName, showsDisclosure = true, onClick = { navController.navigate("font") })
                     SubjectRowSeparator()
                     SubjectFormRow("Reader", value = readingMode, showsDisclosure = true, onClick = { navController.navigate("reader") })
+                    SubjectRowSeparator()
+                    SubjectFormRow("Listening", value = "", showsDisclosure = true, onClick = { navController.navigate("listening") })
                 }
             }
         }
@@ -107,7 +131,9 @@ fun SettingsHubScreen(
                 ) {
                     SubjectFormRow("Downloads", value = downloadsString, showsDisclosure = true, onClick = { navController.navigate("downloads") })
                     SubjectRowSeparator()
-                    SubjectFormRow("Reading Queues", value = "Ask first", showsDisclosure = true, onClick = { navController.navigate("reading_queues") })
+                    SubjectFormRow("Preservation", value = "", showsDisclosure = true, onClick = { navController.navigate("preservation") })
+                    SubjectRowSeparator()
+                    SubjectFormRow("Reading Queues", value = readingQueuesString, showsDisclosure = true, onClick = { navController.navigate("reading_queues") })
                 }
             }
         }
@@ -123,9 +149,11 @@ fun SettingsHubScreen(
                 ) {
                     SubjectFormRow("Library", showsDisclosure = true, onClick = { navController.navigate("library") })
                     SubjectRowSeparator()
-                    SubjectFormRow("Folder Sync", value = if (settings.sync.isEnabled) "On" else "Off", showsDisclosure = true, onClick = { navController.navigate("folder_sync") })
-                    SubjectRowSeparator()
                     SubjectFormRow("Backup", showsDisclosure = true, onClick = { navController.navigate("backup") })
+                    SubjectRowSeparator()
+                    SubjectFormRow("Sync Folder", value = if (settings.sync.isEnabled) "On" else "Off", showsDisclosure = true, onClick = { navController.navigate("folder_sync") })
+                    SubjectRowSeparator()
+                    SubjectFormRow("Import", showsDisclosure = true, onClick = { navController.navigate("import_files") })
                 }
             }
         }
@@ -141,7 +169,7 @@ fun SettingsHubScreen(
                 ) {
                     SubjectFormRow("AO3 Account", value = accountString, showsDisclosure = true, onClick = { navController.navigate("account") })
                     SubjectRowSeparator()
-                    SubjectFormRow("Privacy", value = "Off", showsDisclosure = true, onClick = { navController.navigate("privacy_settings") })
+                    SubjectFormRow("Privacy", value = privacyString, showsDisclosure = true, onClick = { navController.navigate("privacy_settings") })
                 }
             }
         }
