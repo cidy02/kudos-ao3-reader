@@ -115,6 +115,12 @@ class KudosAppContainer(
             sessionValidator = LiveAO3SessionValidator(client = ao3Client)
         )
     }
+    val collectionDetailRepository: io.github.cidy02.kudos.account.AO3CollectionDetailRepository by lazy {
+        io.github.cidy02.kudos.account.AO3CollectionDetailRepository(
+            ao3Client = networkClient,
+            authRepository = authRepository
+        )
+    }
 
     val accountListRepository: AccountListRepository by lazy {
         AccountListRepository(
