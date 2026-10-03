@@ -403,12 +403,19 @@ nonisolated struct KudosBackupContents {
 
     nonisolated func epubData(for id: UUID) -> Data? {
         if let data = epubFiles[id] { return data }
-        if let data = zipSource?.data(named: "Works/\(id.uuidString).epub") {
-            return data
+        let names = [id.uuidString, id.uuidString.lowercased()]
+        for name in names {
+            if let data = zipSource?.data(named: "Works/\(name).epub") {
+                return data
+            }
         }
         if let dir = directoryURL {
-            let file = dir.appendingPathComponent("Works/\(id.uuidString).epub")
-            return try? Data(contentsOf: file, options: .mappedIfSafe)
+            for name in names {
+                let file = dir.appendingPathComponent("Works/\(name).epub")
+                if let data = try? Data(contentsOf: file, options: .mappedIfSafe) {
+                    return data
+                }
+            }
         }
         return nil
     }
@@ -904,6 +911,10 @@ nonisolated struct KudosBackupWork: Codable, Equatable {
     let lastScrollFraction: Double
     let lastReadDate: Date?
     let progressModifiedAt: Date?
+    /// Android shares these update-detection fields with `SavedWork`; carrying
+    /// them keeps Android→iOS→Android from resetting its chapter baseline.
+    let knownChapterCount: Int?
+    let lastUpdateCheck: Date?
     let workTags: [String]
     let workFandoms: [String]
     let workCharacters: [String]
@@ -986,6 +997,8 @@ nonisolated struct KudosBackupWork: Codable, Equatable {
         lastScrollFraction = work.lastScrollFraction
         lastReadDate = work.lastReadDate
         progressModifiedAt = work.progressModifiedAt
+        knownChapterCount = work.knownChapterCount
+        lastUpdateCheck = work.lastUpdateCheck
         workTags = work.workTags
         workFandoms = work.workFandoms
         workCharacters = work.workCharacters
@@ -1052,6 +1065,8 @@ nonisolated struct KudosBackupWork: Codable, Equatable {
         case lastScrollFraction
         case lastReadDate
         case progressModifiedAt
+        case knownChapterCount
+        case lastUpdateCheck
         case workTags
         case workFandoms
         case workCharacters
@@ -1121,6 +1136,8 @@ nonisolated struct KudosBackupWork: Codable, Equatable {
         lastScrollFraction = try container.decodeIfPresent(Double.self, forKey: .lastScrollFraction) ?? 0
         lastReadDate = try container.decodeIfPresent(Date.self, forKey: .lastReadDate)
         progressModifiedAt = try container.decodeIfPresent(Date.self, forKey: .progressModifiedAt)
+        knownChapterCount = try container.decodeIfPresent(Int.self, forKey: .knownChapterCount)
+        lastUpdateCheck = try container.decodeIfPresent(Date.self, forKey: .lastUpdateCheck)
         workTags = try container.decodeIfPresent([String].self, forKey: .workTags) ?? []
         workFandoms = try container.decodeIfPresent([String].self, forKey: .workFandoms) ?? []
         workCharacters = try container.decodeIfPresent([String].self, forKey: .workCharacters) ?? []
@@ -4428,6 +4445,11 @@ enum KudosBackupService {
         }
         work.ao3SeriesID = work.ao3SeriesID ?? archived.ao3SeriesID
         work.ao3WorkID = work.ao3WorkID ?? archived.ao3WorkID ?? WorkTags.ao3WorkID(from: archived.sourceURL)
+        if let archivedChapterCount = archived.knownChapterCount,
+           incomingWins || work.knownChapterCount == 0 {
+            work.knownChapterCount = archivedChapterCount
+        }
+        work.lastUpdateCheck = newest(work.lastUpdateCheck, archived.lastUpdateCheck)
 
         work.workWarnings = TagMerge.merged(work.workWarnings, archived.workWarnings)
         work.workCategories = TagMerge.merged(work.workCategories, archived.workCategories)
