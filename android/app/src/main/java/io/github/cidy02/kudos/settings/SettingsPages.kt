@@ -234,6 +234,16 @@ fun SettingsReaderPage(repository: SettingsRepository, settings: KudosSettings) 
                         )
                     }
                 )
+                SubjectRowSeparator()
+                SubjectFormRow(
+                    "Keep screen awake",
+                    trailing = {
+                        SubjectToggle(
+                            checked = settings.reader.keepScreenAwake,
+                            onCheckedChange = { scope.launch { repository.updateKeepScreenAwake(it) } }
+                        )
+                    }
+                )
             }
         }
     }

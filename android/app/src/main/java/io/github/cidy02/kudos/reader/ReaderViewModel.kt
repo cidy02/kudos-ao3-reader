@@ -1,5 +1,7 @@
 package io.github.cidy02.kudos.reader
 
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.map
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -44,6 +46,11 @@ class ReaderViewModel(
 
     private var autoFinishedThisSession = false
     private var spineCountForEof = 0
+
+    /** iOS KeepScreenAwakeModifier: the screen stays lit while a book is open, if asked. */
+    val keepScreenAwake: kotlinx.coroutines.flow.StateFlow<Boolean> = settingsRepository.settings
+        .map { it.reader.keepScreenAwake }
+        .stateIn(viewModelScope, kotlinx.coroutines.flow.SharingStarted.WhileSubscribed(5_000), false)
 
     private val saver = ReaderProgressSaver(viewModelScope) { progress ->
         repository.persistLocation(workId, progress)

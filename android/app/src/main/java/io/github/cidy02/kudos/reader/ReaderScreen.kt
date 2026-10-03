@@ -181,6 +181,12 @@ private fun ReaderReading(
     // iOS ReadiumBook.chromeHidden starts true: the reader opens immersive; a tap shows the chrome.
     var chromeVisible by remember { mutableStateOf(false) }
     var dismissOffsetY by remember { mutableFloatStateOf(0f) }
+    val keepScreenAwake by viewModel.keepScreenAwake.collectAsState()
+    val readerView = androidx.compose.ui.platform.LocalView.current
+    androidx.compose.runtime.DisposableEffect(keepScreenAwake) {
+        readerView.keepScreenOn = keepScreenAwake
+        onDispose { readerView.keepScreenOn = false }
+    }
     var fanMenuOpen by remember { mutableStateOf(false) }
 
     // Sheets
