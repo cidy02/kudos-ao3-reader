@@ -135,7 +135,11 @@ class RecentlyDeletedViewModel(
     private val queueRepository: ReadingQueueRepository? = null
 ) : ViewModel() {
     private val queueTick = MutableStateFlow(0)
-    private val dateFormatter = DateTimeFormatter.ofPattern("d MMM", Locale.getDefault())
+    // iOS: .dateTime.day().month(.abbreviated) in the user's locale ("Oct 2" in en-US).
+    private val dateFormatter = DateTimeFormatter.ofPattern(
+        android.text.format.DateFormat.getBestDateTimePattern(Locale.getDefault(), "dMMM"),
+        Locale.getDefault()
+    )
 
     val state: StateFlow<RecentlyDeletedUiState> = combine(
         workRepository.observeRecentlyDeleted(),
@@ -961,9 +965,10 @@ internal fun daysRemainingUntil(scheduled: Instant, now: Instant = Instant.now()
 
 private fun isUrgent(daysRemaining: Int): Boolean = daysRemaining < 7
 
+// iOS SavedWork.readingState (Models.swift:580): finished wins, then no file means freed.
 private fun stateWord(work: SavedWork): String = when {
-    work.freedAt != null -> "read, file freed"
     work.isFinished -> "finished"
+    !work.hasEpub -> "read, file freed"
     work.hasStartedReading -> "part-read"
     else -> "unread"
 }
