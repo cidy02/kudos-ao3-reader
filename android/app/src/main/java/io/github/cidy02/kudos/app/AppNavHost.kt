@@ -512,7 +512,20 @@ fun AppNavHost(
                 countsCache = container.accountListCountsCache,
                 onOpenWorkComments = { workId, focusedId ->
                     navController.navigate(Routes.comments(workId, focusedId))
-                }
+                },
+                onOpenInbox = { navController.navigate(Routes.AccountInbox) }
+            )
+        }
+        sharedComposable(Routes.AccountInbox) {
+            val authState by container.authRepository.state.collectAsState()
+            io.github.cidy02.kudos.account.AccountInboxPane(
+                inboxRepository = container.inboxRepository,
+                commentRepository = container.commentRepository,
+                currentUsername = (authState as? AO3AuthState.SignedIn)?.username,
+                onOpenWorkComments = { workId, focusedId ->
+                    navController.navigate(Routes.comments(workId, focusedId))
+                },
+                settingsRepository = container.accountListRepository.settingsRepository
             )
         }
         sharedComposable(Routes.AO3Dashboard) {

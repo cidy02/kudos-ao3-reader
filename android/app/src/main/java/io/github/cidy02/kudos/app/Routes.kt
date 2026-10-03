@@ -56,6 +56,7 @@ object Routes {
     const val NativeLogin = "native-login"
     const val AO3Preferences = "ao3-preferences"
     const val AccountMoreOnAO3 = "account-more-on-ao3"
+    const val AccountInbox = "account-inbox"
     const val BugReport = "bug-report"
 
     // --- Routes carrying a per-back-stack-entry argument (T-90) ---
@@ -231,6 +232,7 @@ object Routes {
             NativeLogin -> "Sign In"
             AO3Preferences -> "AO3 Preferences"
             AccountMoreOnAO3 -> "More on AO3"
+            AccountInbox -> "Inbox"
             HomeSection -> "Section"
             LibrarySection -> "Library"
             BugReport -> "Report a Bug"
@@ -284,7 +286,7 @@ object Routes {
         WorkDetail, // WorkDetailView
         BrowseFandoms, BrowseWorks, TagWorks, // FandomListView, NativeBrowseView
         Settings, Backup, QueueStorage, AvailabilitySweep, About, BugReport, // SettingsPageForm
-        AO3Preferences, AO3Dashboard, AccountList, AccountMoreOnAO3, // Account screens and AO3 lists
+        AO3Preferences, AO3Dashboard, AccountList, AccountMoreOnAO3, AccountInbox, // Account screens and AO3 lists
         Collections, // LibraryEntityGridView
         QueueDetail, // ReadingQueueSettingsView
         ReadingStatistics // ReadingInsightsView
