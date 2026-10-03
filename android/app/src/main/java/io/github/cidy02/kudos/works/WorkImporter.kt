@@ -126,12 +126,7 @@ class WorkImporter(
         }
     }
 
-    /**
-     * Import a user-picked local `.epub` (SAF), not an AO3 download.
-     *
-     * Title comes from the file display name (minus extension) — no OPF metadata
-     * parse. [SavedWork.sourceUrl] is left blank so AO3-only affordances no-op.
-     */
+    /** Import a user-picked local file (SAF), including OPF/AO3 metadata for EPUBs. */
     suspend fun importLocalEpub(
         displayName: String?,
         bytes: ByteArray,
@@ -184,8 +179,13 @@ class WorkImporter(
             TextDecoding.decode(bytes)?.lineSequence()?.take(40)?.toList().orEmpty()
         }
         val exported = exportedLines.takeIf { it.isNotEmpty() }?.let(CalibreMetadata::parse)
+        val epubMetadata = if (format == ImportedFileFormat.EPUB) {
+            EpubImportMetadata.inspect(finalBytes)
+        } else {
+            null
+        }
 
-        val work = SavedWork(
+        var work = SavedWork(
             title = exported?.title?.takeIf { it.isNotBlank() } ?: title,
             author = exported?.author.orEmpty(),
             sourceUrl = exported?.sourceUrl.orEmpty(),
@@ -198,6 +198,40 @@ class WorkImporter(
             downloadedAt = downloadedAt,
             lastModifiedAt = workRepository.currentInstant()
         )
+        if (epubMetadata != null) {
+            val existing = WorkIdentityIndex.findExisting(
+                candidateSourceUrl = epubMetadata.sourceUrl,
+                byId = { workRepository.getWork(it) },
+                bySourceUrl = { workRepository.findBySourceUrl(it) }
+            )
+            if (existing != null) {
+                if (!existing.hasEpub) {
+                    when (val write = fileStore.writeWorkEpub(existing.id, finalBytes)) {
+                        is FileWriteResult.Failure -> return WorkImportResult.Failure(
+                            existing,
+                            AO3Error.Validation(write.message)
+                        )
+                        is FileWriteResult.Success -> Unit
+                    }
+                }
+                val restored = if (existing.isDeleted) {
+                    workRepository.restoreFromRecentlyDeleted(existing.id) ?: existing
+                } else {
+                    existing
+                }
+                work = epubMetadata.applyTo(
+                    restored.copy(
+                        isSaved = true,
+                        hasEpub = true,
+                        downloadedAt = restored.downloadedAt ?: downloadedAt,
+                        lastModifiedAt = workRepository.currentInstant()
+                    ),
+                    fillOnly = true
+                ).withImportedAo3Ids()
+                return WorkImportResult.Success(workRepository.upsert(work))
+            }
+            work = epubMetadata.applyTo(work, fillOnly = false).withImportedAo3Ids()
+        }
 
         // Converted imports keep their source so "Rebuild from Original" can re-run
         // a newer converter later. A plain EPUB import has nothing to rebuild from.
@@ -318,6 +352,18 @@ class WorkImporter(
             is AO3Result.Failure -> null
             is AO3Result.Success -> metadata.value.takeUnless { it.isEmpty }
         }
+    }
+
+    private fun SavedWork.withImportedAo3Ids(): SavedWork {
+        val workId = ao3WorkID ?: WorkTags.ao3WorkIdFromUrl(sourceUrl)
+            ?.takeIf { it in Int.MIN_VALUE.toLong()..Int.MAX_VALUE.toLong() }
+            ?.toInt()
+        val seriesId = ao3SeriesID ?: Regex("/series/(\\d+)")
+            .find(seriesUrl)
+            ?.groupValues
+            ?.getOrNull(1)
+            ?.toIntOrNull()
+        return copy(ao3WorkID = workId, ao3SeriesID = seriesId)
     }
 
     companion object {
