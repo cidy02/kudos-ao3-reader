@@ -1,5 +1,11 @@
 package io.github.cidy02.kudos.reader
 
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.layout.offset
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.unit.IntOffset
+import kotlin.math.roundToInt
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -9,11 +15,9 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.interaction.DragInteraction
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -24,30 +28,34 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.Bookmark
-import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.BookmarkBorder
+import androidx.compose.material.icons.filled.BorderColor
 import androidx.compose.material.icons.filled.ChatBubbleOutline
-import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
+import androidx.compose.material.icons.filled.ScreenLockRotation
+import androidx.compose.material.icons.filled.ScreenRotation
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.TextFields
 import androidx.compose.material3.AlertDialog
-import io.github.cidy02.kudos.ui.components.DestructiveConfirmation
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
@@ -60,11 +68,11 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
@@ -73,12 +81,11 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
@@ -97,17 +104,13 @@ import io.github.cidy02.kudos.reader.settings.ReaderSettingsMapper
 import io.github.cidy02.kudos.reader.settings.backgroundColor
 import io.github.cidy02.kudos.reader.speech.ReaderSpeechController
 import io.github.cidy02.kudos.reader.speech.SpeechStatus
+import io.github.cidy02.kudos.ui.components.DestructiveConfirmation
 import io.github.cidy02.kudos.ui.components.ReaderPageSkeleton
 import io.github.cidy02.kudos.ui.components.workCardZoomDestination
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Pause
-import androidx.compose.material.icons.filled.SkipNext
-import androidx.compose.material.icons.filled.SkipPrevious
-import androidx.compose.material.icons.filled.Stop
-import androidx.compose.material.icons.filled.VolumeUp
-import kotlin.math.roundToInt
+import io.github.cidy02.kudos.ui.subject.KudosTokens
+import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
+import io.github.cidy02.kudos.ui.subject.ReaderTheme
 import kotlinx.coroutines.launch
-import org.readium.r2.shared.publication.Locator
 
 /**
  * Real reader entry point. Resolves the work (via [ReaderViewModel]/repository),
@@ -115,13 +118,12 @@ import org.readium.r2.shared.publication.Locator
  * persists progress on close. Shows loading/error states; never crashes on a
  * missing/corrupt EPUB.
  *
- * Epic 3 chrome: immersive top/bottom bars (tap content to toggle), TOC sheet,
- * display sheet (font size + theme), and live progress label.
- *
- * Initial font/theme come from [ReaderUiState.Reading.preferences] (open →
- * DataStore snapshot). The display sheet only mutates that in-session state;
- * persistence of sheet changes is deferred 3a — until then, re-open reloads
- * whatever is already stored in settings (defaults or backup restore).
+ * Chrome redesigned to match iOS ReadiumReaderView:
+ * - Floating [ReaderChromeTopBar]: 44pt close button, centered title pill, clear spacer.
+ * - Floating [ReaderFanMenu]: 44pt more button fanning out into pills and round actions.
+ * - Floating [ReaderPositionCard]: 24dp continuous glass card, mini player strip,
+ *   page progress, time left, custom scrub slider with origin tick (`|`), and summary line.
+ * - [ReaderContentsSheet]: segmented into Contents, Bookmarks, and Highlights with swatches.
  */
 @Composable
 fun ReaderScreen(
@@ -135,17 +137,13 @@ fun ReaderScreen(
     val uiState by viewModel.state.collectAsState()
     val settingsState = settingsRepository?.settings?.collectAsState(initial = io.github.cidy02.kudos.core.model.KudosSettings.Defaults)
     val settings = settingsState?.value ?: io.github.cidy02.kudos.core.model.KudosSettings.Defaults
-    // Once reading, use the reader's own selected theme, not the app theme — the two
-    // can diverge (matchAppReaderTheme = false), and using the app's background here
-    // caused a visible flash against the Readium navigator's correctly-reader-themed
-    // content. Loading/Error have no reader preferences yet, so they keep the app
-    // background — a brief loading flash if the two differ, not fixed in this pass.
+
     val backgroundColor = (uiState as? ReaderUiState.Reading)
         ?.preferences?.theme?.backgroundColor()
         ?: MaterialTheme.colorScheme.background
+
     Surface(modifier = Modifier.fillMaxSize(), color = backgroundColor) {
         when (val state = uiState) {
-            // Skeleton-only open path (hig-review): no centered spinner flash.
             ReaderUiState.Loading -> ReaderPageSkeleton(message = "Opening…")
             is ReaderUiState.Error -> ReaderErrorView(
                 error = state.error,
@@ -178,27 +176,54 @@ private fun ReaderReading(
     val linkHandler = remember { ReaderLinkHandler() }
     val navigatorController = remember { ReadiumNavigatorController() }
     var attempt by remember { mutableIntStateOf(0) }
-    // Start visible so first-open controls are discoverable; tap content to hide.
-    var chromeVisible by remember { mutableStateOf(true) }
+
+    // Floating chrome visibility state
+    // iOS ReadiumBook.chromeHidden starts true: the reader opens immersive; a tap shows the chrome.
+    var chromeVisible by remember { mutableStateOf(false) }
+    var dismissOffsetY by remember { mutableFloatStateOf(0f) }
+    var fanMenuOpen by remember { mutableStateOf(false) }
+
+    // Sheets
     var showTocSheet by remember { mutableStateOf(false) }
+    var tocInitialTab by remember { mutableIntStateOf(0) }
     var showDisplaySheet by remember { mutableStateOf(false) }
-    var showTtsControls by remember { mutableStateOf(false) }
     var showSearchSheet by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
-    var dismissOffsetY by remember { mutableFloatStateOf(0f) }
     var annotateDialog by remember { mutableStateOf<AnnotateDialogState?>(null) }
     var noteEditor by remember { mutableStateOf<ReadingAnnotation?>(null) }
     var showDeleteNoteConfirm by remember { mutableStateOf<ReadingAnnotation?>(null) }
+    var isOrientationLocked by remember { mutableStateOf(false) }
+    var showTtsControls by remember { mutableStateOf(false) }
+
     val scope = rememberCoroutineScope()
 
     val speechController = remember(context) { ReaderSpeechController(context) }
     val speechStatus by speechController.status.collectAsState()
+    val spokenText by speechController.spokenText.collectAsState()
     val writeMessage by viewModel.writeMessage.collectAsState()
     val searchHits by viewModel.searchHits.collectAsState()
     val searchLoading by viewModel.searchLoading.collectAsState()
 
+    val readerTheme = when (state.preferences.theme) {
+        ReaderColorTheme.Light -> ReaderTheme.Light
+        ReaderColorTheme.Sepia -> ReaderTheme.Sepia
+        ReaderColorTheme.Dark -> ReaderTheme.Dark
+        ReaderColorTheme.Oled -> ReaderTheme.Oled
+    }
+    val currentAccent = LocalKudosTokens.current.accent
+    val tokens = KudosTokens.of(readerTheme, currentAccent)
+
     DisposableEffect(speechController) {
         onDispose { speechController.shutdown() }
+    }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            // Restore free rotation when leaving the reader (session-only lock).
+            val activity = context as? android.app.Activity
+            activity?.requestedOrientation =
+                android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+        }
     }
 
     LaunchedEffect(state.preferences, state.work.title) {
@@ -216,12 +241,10 @@ private fun ReaderReading(
         }
     }
 
-    // Persist any pending progress when leaving the reader (route change / activity destroy)…
+    // Persist any pending progress when leaving the reader…
     DisposableEffect(Unit) {
         onDispose { viewModel.close() }
     }
-    // …and when the app is merely backgrounded, so an OS process kill cannot drop
-    // the last debounce window of reading position.
     LifecycleEventEffect(Lifecycle.Event.ON_STOP) { viewModel.flushProgress() }
 
     val opening by produceState<ReadiumOpenResult?>(initialValue = null, state.epubPath, attempt) {
@@ -278,258 +301,469 @@ private fun ReaderReading(
                 progressLabel
             }
 
+            val currentProgress = state.liveProgress?.totalProgression?.toFloat()
+                ?: ReaderProgressDisplay.percent(
+                    state.liveProgress,
+                    publication.readingOrder.size
+                )?.div(100f) ?: 0f
+
+            val page = state.liveProgress?.spineIndex?.plus(1) ?: 1
+            val pageCount = publication.readingOrder.size.coerceAtLeast(1)
+
             LaunchedEffect(publication) {
                 viewModel.setSpineCount(publication.readingOrder.size)
             }
 
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    // Landing half of the work-card zoom (iOS
-                    // WorkCardZoomTransition). The source is on every work card;
-                    // without this the card animated into Work Detail but jump-cut
-                    // straight into the reader.
-                    .let { base ->
-                        val ao3Id = state.endOfWork.workId
-                        if (ao3Id != null) base.workCardZoomDestination(ao3Id) else base
-                    }
-                    .offset { IntOffset(0, dismissOffsetY.roundToInt()) }
-            ) {
-                ReadiumNavigatorHost(
-                    modifier = Modifier.fillMaxSize(),
-                    publication = publication,
-                    initialLocator = initialLocator,
-                    preferences = epubPreferences,
-                    controller = navigatorController,
-                    onContentTap = { chromeVisible = !chromeVisible },
-                    onLocatorChanged = { locator ->
-                        viewModel.onProgress(
-                            ReadiumProgressAdapter.toReaderProgress(publication, locator)
-                        )
-                    },
-                    onExternalLink = { url ->
-                        when (val destination = linkHandler.classify(url)) {
-                            // In-book AO3 work links open remote detail; title chrome uses local id.
-                            is ReaderLinkDestination.WorkDetail -> openExternal(
-                                context,
-                                "https://archiveofourown.org/works/${destination.workId}"
+            CompositionLocalProvider(LocalKudosTokens provides tokens) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .let { base ->
+                            val ao3Id = state.endOfWork.workId
+                            if (ao3Id != null) base.workCardZoomDestination(ao3Id) else base
+                        }
+                        .offset { IntOffset(0, dismissOffsetY.roundToInt()) }
+                ) {
+                    // EPUB Navigator
+                    ReadiumNavigatorHost(
+                        modifier = Modifier.fillMaxSize(),
+                        publication = publication,
+                        initialLocator = initialLocator,
+                        preferences = epubPreferences,
+                        controller = navigatorController,
+                        onContentTap = {
+                            if (fanMenuOpen) {
+                                fanMenuOpen = false
+                            } else {
+                                chromeVisible = !chromeVisible
+                            }
+                        },
+                        onLocatorChanged = { locator ->
+                            viewModel.onProgress(
+                                ReadiumProgressAdapter.toReaderProgress(publication, locator)
                             )
-                            is ReaderLinkDestination.External -> openExternal(context, destination.url)
-                            is ReaderLinkDestination.TagSearch -> openExternal(context, url)
-                            ReaderLinkDestination.Unhandled -> Unit
+                        },
+                        onExternalLink = { url ->
+                            when (val destination = linkHandler.classify(url)) {
+                                is ReaderLinkDestination.WorkDetail -> openExternal(
+                                    context,
+                                    "https://archiveofourown.org/works/${destination.workId}"
+                                )
+                                is ReaderLinkDestination.External -> openExternal(context, destination.url)
+                                is ReaderLinkDestination.TagSearch -> openExternal(context, url)
+                                ReaderLinkDestination.Unhandled -> Unit
+                            }
+                        },
+                        fontDeclarations = state.preferences.fontDeclarations,
+                        onNavigatorReady = {
+                            scope.launch {
+                                navigatorController.applyHighlightDecorations(state.highlights)
+                            }
                         }
-                    },
-                    fontDeclarations = state.preferences.fontDeclarations,
-                    onNavigatorReady = {
-                        scope.launch {
-                            navigatorController.applyHighlightDecorations(state.highlights)
-                        }
-                    }
-                )
+                    )
 
-                // Swipe-down-to-dismiss only on the top chrome edge so scroll-mode
-                // reading is not stolen by a full-screen drag detector.
-                if (chromeVisible) {
-                    Box(
+                    // Swipe down from the top edge to dismiss, as iOS's reader peel
+                    // (ReadiumReaderView dismissableReaderCard). Only the top edge, so
+                    // scroll-mode reading isn't stolen by a full-screen drag detector.
+                    if (chromeVisible && !fanMenuOpen) {
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.TopCenter)
+                                .fillMaxWidth()
+                                .height(72.dp)
+                                .pointerInput(Unit) {
+                                    detectVerticalDragGestures(
+                                        onDragEnd = {
+                                            if (dismissOffsetY > 180f) onBack() else dismissOffsetY = 0f
+                                        },
+                                        onDragCancel = { dismissOffsetY = 0f },
+                                        onVerticalDrag = { change, dragAmount ->
+                                            if (dragAmount > 0 || dismissOffsetY > 0) {
+                                                change.consume()
+                                                dismissOffsetY = (dismissOffsetY + dragAmount).coerceAtLeast(0f)
+                                            }
+                                        }
+                                    )
+                                }
+                        )
+                    }
+
+                    // Invisible backdrop that closes fan menu without hiding chrome
+                    ReaderFanMenuDismissBackdrop(
+                        isOpen = fanMenuOpen && chromeVisible,
+                        onDismiss = { fanMenuOpen = false }
+                    )
+
+                    // Floating Top Bar
+                    AnimatedVisibility(
+                        visible = chromeVisible,
+                        enter = fadeIn() + slideInVertically { -it },
+                        exit = fadeOut() + slideOutVertically { -it },
                         modifier = Modifier
                             .align(Alignment.TopCenter)
                             .fillMaxWidth()
-                            .height(72.dp)
-                            .pointerInput(Unit) {
-                                detectVerticalDragGestures(
-                                    onDragEnd = {
-                                        if (dismissOffsetY > 180f) onBack()
-                                        else dismissOffsetY = 0f
-                                    },
-                                    onDragCancel = { dismissOffsetY = 0f },
-                                    onVerticalDrag = { change, dragAmount ->
-                                        if (dragAmount > 0 || dismissOffsetY > 0) {
-                                            change.consume()
-                                            dismissOffsetY =
-                                                (dismissOffsetY + dragAmount).coerceAtLeast(0f)
+                    ) {
+                        ReaderChromeTopBar(
+                            title = state.work.title,
+                            author = state.work.author,
+                            titleHidden = fanMenuOpen,
+                            onClose = onBack,
+                            onOpenDetails = { onOpenWorkDetail(state.work.id) }
+                        )
+                    }
+
+                    // Floating Fan Menu (More button -> pills & round actions)
+                    AnimatedVisibility(
+                        visible = chromeVisible,
+                        enter = fadeIn(),
+                        exit = fadeOut(),
+                        modifier = Modifier.align(Alignment.TopEnd)
+                    ) {
+                        val ao3Id = state.endOfWork.workId
+                        val isBookmarked = state.bookmarks.any {
+                            it.spineIndex == (state.liveProgress?.spineIndex ?: -1)
+                        }
+
+                        // Pills
+                        val pills = buildList {
+                            val percent = (currentProgress * 100).toInt()
+                            add(
+                                ReaderFanMenuPill(
+                                    id = "contents",
+                                    title = if (percent > 0) "Contents · $percent%" else "Contents",
+                                    icon = Icons.AutoMirrored.Filled.List,
+                                    action = {
+                                        tocInitialTab = 0
+                                        showTocSheet = true
+                                    }
+                                )
+                            )
+                            add(
+                                ReaderFanMenuPill(
+                                    id = "bookmarks",
+                                    title = "Bookmarks & Highlights",
+                                    icon = Icons.Filled.Bookmark,
+                                    action = {
+                                        tocInitialTab = 1
+                                        showTocSheet = true
+                                    }
+                                )
+                            )
+                            add(
+                                ReaderFanMenuPill(
+                                    id = "find",
+                                    title = "Find in Work",
+                                    icon = Icons.Filled.Search,
+                                    action = { showSearchSheet = true }
+                                )
+                            )
+                            if (ao3Id != null && state.endOfWork.commentsAvailable) {
+                                add(
+                                    ReaderFanMenuPill(
+                                        id = "comments",
+                                        title = "Comments",
+                                        icon = Icons.Filled.ChatBubbleOutline,
+                                        action = {
+                                            onOpenComments(
+                                                ao3Id,
+                                                state.liveProgress?.spineIndex?.plus(1)
+                                            )
+                                        }
+                                    )
+                                )
+                            }
+                            add(
+                                ReaderFanMenuPill(
+                                    id = "settings",
+                                    title = "Themes & Settings",
+                                    icon = Icons.Filled.TextFields,
+                                    action = { showDisplaySheet = true }
+                                )
+                            )
+                            add(
+                                ReaderFanMenuPill(
+                                    id = "markFinished",
+                                    title = if (state.finished) "Finished" else "Mark finished",
+                                    icon = Icons.Filled.Check,
+                                    isEnabled = !state.finished,
+                                    action = { viewModel.markFinished() }
+                                )
+                            )
+                            add(
+                                ReaderFanMenuPill(
+                                    id = "highlightSelection",
+                                    title = "Highlight selection",
+                                    icon = Icons.Filled.BorderColor,
+                                    action = {
+                                        scope.launch {
+                                            val selection = navigatorController.currentSelection()
+                                            if (selection == null) {
+                                                viewModel.clearWriteMessage()
+                                                annotateDialog = null
+                                            } else {
+                                                val locator = selection.locator
+                                                val text = locator.text.highlight.orEmpty()
+                                                annotateDialog = AnnotateDialogState(
+                                                    locatorJson = locator.toJSON().toString(),
+                                                    selectedText = text,
+                                                    progression = locator.locations.totalProgression
+                                                        ?: locator.locations.progression
+                                                        ?: 0.0,
+                                                    spineIndex = state.liveProgress?.spineIndex ?: 0,
+                                                    asNote = false
+                                                )
+                                                navigatorController.clearSelection()
+                                            }
                                         }
                                     }
                                 )
-                            }
-                    )
-                }
-
-                AnimatedVisibility(
-                    visible = chromeVisible,
-                    enter = fadeIn() + slideInVertically { -it },
-                    exit = fadeOut() + slideOutVertically { -it },
-                    modifier = Modifier
-                        .align(Alignment.TopCenter)
-                        .fillMaxWidth()
-                ) {
-                    ReaderTopBar(
-                        title = state.work.title,
-                        author = state.work.author,
-                        finished = state.finished,
-                        localWorkId = state.work.id,
-                        commentsWorkId = state.endOfWork.workId.takeIf { state.endOfWork.commentsAvailable },
-                        // Spine index is 0-based; AO3 story chapters are 1-based.
-                        chapterPosition = state.liveProgress?.spineIndex?.plus(1),
-                        canKudos = state.endOfWork.workId != null,
-                        onBack = onBack,
-                        onOpenComments = onOpenComments,
-                        onMarkFinished = viewModel::markFinished,
-                        onOpenToc = { showTocSheet = true },
-                        onOpenDisplay = { showDisplaySheet = true },
-                        onOpenWorkDetail = onOpenWorkDetail,
-                        onToggleTts = { showTtsControls = !showTtsControls },
-                        onOpenSearch = { showSearchSheet = true },
-                        onGiveKudos = { viewModel.giveKudos() },
-                        onBookmarkPosition = {
-                            val progress = state.liveProgress ?: return@ReaderTopBar
-                            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                            viewModel.toggleBookmarkAtProgress(
-                                progress = progress,
-                                locatorString = progress.locatorJson.orEmpty(),
-                                chapterTitle = progressLabel
                             )
-                        },
-                        onHighlightSelection = {
-                            scope.launch {
-                                val selection = navigatorController.currentSelection()
-                                if (selection == null) {
-                                    viewModel.clearWriteMessage()
-                                    // Reuse write message channel for soft UI feedback.
-                                    annotateDialog = null
-                                } else {
-                                    val locator = selection.locator
-                                    val text = locator.text.highlight.orEmpty()
-                                    annotateDialog = AnnotateDialogState(
-                                        locatorJson = locator.toJSON().toString(),
-                                        selectedText = text,
-                                        progression = locator.locations.totalProgression
-                                            ?: locator.locations.progression
-                                            ?: 0.0,
-                                        spineIndex = state.liveProgress?.spineIndex ?: 0,
-                                        asNote = false
-                                    )
-                                    navigatorController.clearSelection()
-                                }
-                            }
-                        },
-                        onNoteSelection = {
-                            scope.launch {
-                                val selection = navigatorController.currentSelection()
-                                if (selection != null) {
-                                    val locator = selection.locator
-                                    annotateDialog = AnnotateDialogState(
-                                        locatorJson = locator.toJSON().toString(),
-                                        selectedText = locator.text.highlight.orEmpty(),
-                                        progression = locator.locations.totalProgression
-                                            ?: locator.locations.progression
-                                            ?: 0.0,
-                                        spineIndex = state.liveProgress?.spineIndex ?: 0,
-                                        asNote = true
-                                    )
-                                    navigatorController.clearSelection()
-                                }
-                            }
-                        }
-                    )
-                }
-
-                AnimatedVisibility(
-                    visible = chromeVisible && bottomLabel.isNotEmpty() && !showTtsControls,
-                    enter = fadeIn() + slideInVertically { it },
-                    exit = fadeOut() + slideOutVertically { it },
-                    modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .fillMaxWidth()
-                ) {
-                    val currentProgress = state.liveProgress?.totalProgression?.toFloat()
-                        ?: ReaderProgressDisplay.percent(
-                            state.liveProgress,
-                            publication.readingOrder.size
-                        )?.div(100f) ?: 0f
-                    ReaderBottomProgress(
-                        label = bottomLabel,
-                        progress = currentProgress.coerceIn(0f, 1f),
-                        onSeek = { progression ->
-                            haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                            val spineCount = publication.readingOrder.size
-                            if (spineCount > 0) {
-                                val targetIndex = (progression * spineCount).toInt()
-                                    .coerceIn(0, spineCount - 1)
-                                val fraction = (progression * spineCount) - targetIndex
-                                val target = ReaderRestoreTarget.Fallback(
-                                    targetIndex,
-                                    fraction.toDouble()
-                                )
-                                val loc = ReadiumProgressAdapter.initialLocator(target, publication)
-                                if (loc != null) {
-                                    navigatorController.go(loc, animated = false)
-                                }
-                            }
-                        }
-                    )
-                }
-
-                AnimatedVisibility(
-                    visible = chromeVisible && showTtsControls,
-                    enter = fadeIn() + slideInVertically { it },
-                    exit = fadeOut() + slideOutVertically { it },
-                    modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .fillMaxWidth()
-                ) {
-                    val downloadProgress by speechController.downloadProgress.collectAsState()
-                    ReaderTtsControls(
-                        status = speechStatus,
-                        downloadProgress = downloadProgress,
-                        onPlay = {
-                            if (speechStatus == SpeechStatus.PAUSED) {
-                                speechController.resume()
-                            } else {
-                                scope.launch {
-                                    val from = state.liveProgress?.locatorJson
-                                        ?.let { ReadiumNavigatorController.locatorFromJson(it) }
-                                    val paragraphs = ReaderContentText.paragraphs(publication, from)
-                                        .ifEmpty {
-                                            buildList {
-                                                if (state.work.title.isNotBlank()) add(state.work.title)
-                                                tocEntries.forEach { e ->
-                                                    if (e.title.isNotBlank()) add(e.title)
-                                                }
+                            add(
+                                ReaderFanMenuPill(
+                                    id = "noteSelection",
+                                    title = "Add note to selection",
+                                    icon = Icons.Filled.Edit,
+                                    action = {
+                                        scope.launch {
+                                            val selection = navigatorController.currentSelection()
+                                            if (selection != null) {
+                                                val locator = selection.locator
+                                                annotateDialog = AnnotateDialogState(
+                                                    locatorJson = locator.toJSON().toString(),
+                                                    selectedText = locator.text.highlight.orEmpty(),
+                                                    progression = locator.locations.totalProgression
+                                                        ?: locator.locations.progression
+                                                        ?: 0.0,
+                                                    spineIndex = state.liveProgress?.spineIndex ?: 0,
+                                                    asNote = true
+                                                )
+                                                navigatorController.clearSelection()
                                             }
                                         }
-                                        .ifEmpty {
-                                            listOf(state.work.title.ifBlank { "No text available." })
-                                        }
-                                    speechController.startReading(paragraphs)
-                                }
-                            }
-                        },
-                        onPause = { speechController.pause() },
-                        onStop = {
-                            speechController.stop()
-                            showTtsControls = false
-                        },
-                        onSkipNext = { speechController.skipForward() },
-                        onSkipPrevious = { speechController.skipBackward() },
-                        onDownloadStart = { speechController.enqueueDownload() }
-                    )
-                }
+                                    }
+                                )
+                            )
+                        }
 
-                writeMessage?.let { message ->
-                    Snackbar(
+                        // Round Actions
+                        val roundActions = buildList {
+                            // Share
+                            add(
+                                ReaderFanRoundAction(
+                                    id = "share",
+                                    icon = Icons.Filled.Share,
+                                    accessibilityLabel = "Share",
+                                    action = {
+                                        val shareUrl = if (ao3Id != null) {
+                                            "https://archiveofourown.org/works/$ao3Id"
+                                        } else {
+                                            state.work.title
+                                        }
+                                        val sendIntent = Intent(Intent.ACTION_SEND).apply {
+                                            putExtra(Intent.EXTRA_TEXT, shareUrl)
+                                            type = "text/plain"
+                                        }
+                                        context.startActivity(
+                                            Intent.createChooser(sendIntent, "Share work link")
+                                        )
+                                    }
+                                )
+                            )
+
+                            // Kudos
+                            if (ao3Id != null) {
+                                add(
+                                    ReaderFanRoundAction(
+                                        id = "kudos",
+                                        icon = if (state.work.hasGivenKudos) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
+                                        accessibilityLabel = if (state.work.hasGivenKudos) "Kudos given" else "Give kudos",
+                                        isEnabled = !state.work.hasGivenKudos,
+                                        isEmphasized = state.work.hasGivenKudos,
+                                        action = { viewModel.giveKudos() }
+                                    )
+                                )
+                            }
+
+                            // Read Aloud
+                            val speechActive = speechStatus == SpeechStatus.PLAYING || speechStatus == SpeechStatus.PAUSED
+                            add(
+                                ReaderFanRoundAction(
+                                    id = "readAloud",
+                                    icon = Icons.AutoMirrored.Filled.VolumeUp,
+                                    accessibilityLabel = if (speechActive) "Stop reading aloud" else "Read aloud",
+                                    isEnabled = true,
+                                    isEmphasized = speechActive,
+                                    action = {
+                                        if (speechActive) {
+                                            speechController.stop()
+                                            showTtsControls = false
+                                        } else if (speechStatus == SpeechStatus.MODEL_NOT_DOWNLOADED) {
+                                            showTtsControls = true
+                                        } else {
+                                            scope.launch {
+                                                val from = state.liveProgress?.locatorJson
+                                                    ?.let { ReadiumNavigatorController.locatorFromJson(it) }
+                                                val paragraphs = ReaderContentText.paragraphs(publication, from)
+                                                    .ifEmpty {
+                                                        buildList {
+                                                            if (state.work.title.isNotBlank()) add(state.work.title)
+                                                            tocEntries.forEach { e ->
+                                                                if (e.title.isNotBlank()) add(e.title)
+                                                            }
+                                                        }
+                                                    }
+                                                    .ifEmpty {
+                                                        listOf(state.work.title.ifBlank { "No text available." })
+                                                    }
+                                                speechController.startReading(paragraphs)
+                                            }
+                                        }
+                                    },
+                                    longPressAction = { showDisplaySheet = true }
+                                )
+                            )
+
+                            // Lock Rotation
+                            add(
+                                ReaderFanRoundAction(
+                                    id = "rotationLock",
+                                    icon = if (isOrientationLocked) Icons.Filled.ScreenLockRotation else Icons.Filled.ScreenRotation,
+                                    accessibilityLabel = if (isOrientationLocked) "Unlock rotation" else "Lock rotation",
+                                    isEmphasized = isOrientationLocked,
+                                    action = {
+                                        isOrientationLocked = !isOrientationLocked
+                                        val activity = context as? android.app.Activity
+                                        activity?.requestedOrientation = if (isOrientationLocked) {
+                                            android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LOCKED
+                                        } else {
+                                            android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+                                        }
+                                    }
+                                )
+                            )
+
+                            // Bookmark
+                            add(
+                                ReaderFanRoundAction(
+                                    id = "bookmark",
+                                    icon = if (isBookmarked) Icons.Filled.Bookmark else Icons.Filled.BookmarkBorder,
+                                    accessibilityLabel = if (isBookmarked) "Remove bookmark" else "Add bookmark",
+                                    isEmphasized = isBookmarked,
+                                    action = {
+                                        val progress = state.liveProgress ?: return@ReaderFanRoundAction
+                                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        viewModel.toggleBookmarkAtProgress(
+                                            progress = progress,
+                                            locatorString = progress.locatorJson.orEmpty(),
+                                            chapterTitle = progressLabel
+                                        )
+                                    }
+                                )
+                            )
+                        }
+
+                        ReaderFanMenu(
+                            isOpen = fanMenuOpen,
+                            onOpenChange = { fanMenuOpen = it },
+                            pills = pills,
+                            roundActions = roundActions
+                        )
+                    }
+
+                    // Floating Position Card
+                    AnimatedVisibility(
+                        visible = chromeVisible,
+                        enter = fadeIn() + slideInVertically { it },
+                        exit = fadeOut() + slideOutVertically { it },
                         modifier = Modifier
                             .align(Alignment.BottomCenter)
-                            .padding(16.dp)
-                            .navigationBarsPadding(),
-                        action = {
-                            TextButton(onClick = viewModel::clearWriteMessage) {
-                                Text("OK")
+                            .fillMaxWidth()
+                    ) {
+                        val downloadProgress by speechController.downloadProgress.collectAsState()
+                        val showsMiniPlayer = speechStatus == SpeechStatus.PLAYING ||
+                            speechStatus == SpeechStatus.PAUSED ||
+                            (showTtsControls && speechStatus == SpeechStatus.MODEL_NOT_DOWNLOADED)
+
+                        ReaderPositionCard(
+                            page = page,
+                            pageCount = pageCount,
+                            chapterRemainingMinutes = minutesRemaining,
+                            workLine = bottomLabel,
+                            sliderValue = currentProgress,
+                            sliderEnabled = publication.readingOrder.isNotEmpty(),
+                            onSeek = { progression ->
+                                haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                val spineCount = publication.readingOrder.size
+                                if (spineCount > 0) {
+                                    val targetIndex = (progression * spineCount).toInt()
+                                        .coerceIn(0, spineCount - 1)
+                                    val fraction = (progression * spineCount) - targetIndex
+                                    val target = ReaderRestoreTarget.Fallback(
+                                        targetIndex,
+                                        fraction.toDouble()
+                                    )
+                                    val loc = ReadiumProgressAdapter.initialLocator(target, publication)
+                                    if (loc != null) {
+                                        navigatorController.go(loc, animated = false)
+                                    }
+                                }
+                            },
+                            showsMiniPlayer = showsMiniPlayer,
+                            speechStatus = speechStatus,
+                            speechDownloadProgress = downloadProgress,
+                            spokenText = spokenText,
+                            onPlay = {
+                                if (speechStatus == SpeechStatus.PAUSED) {
+                                    speechController.resume()
+                                } else {
+                                    scope.launch {
+                                        val from = state.liveProgress?.locatorJson
+                                            ?.let { ReadiumNavigatorController.locatorFromJson(it) }
+                                        val paragraphs = ReaderContentText.paragraphs(publication, from)
+                                            .ifEmpty {
+                                                buildList {
+                                                    if (state.work.title.isNotBlank()) add(state.work.title)
+                                                    tocEntries.forEach { e ->
+                                                        if (e.title.isNotBlank()) add(e.title)
+                                                    }
+                                                }
+                                            }
+                                            .ifEmpty {
+                                                listOf(state.work.title.ifBlank { "No text available." })
+                                            }
+                                        speechController.startReading(paragraphs)
+                                    }
+                                }
+                            },
+                            onPause = { speechController.pause() },
+                            onStopSpeech = {
+                                speechController.stop()
+                                showTtsControls = false
+                            },
+                            onSkipNext = { speechController.skipForward() },
+                            onSkipPrevious = { speechController.skipBackward() },
+                            onDownloadVoiceModel = { speechController.enqueueDownload() }
+                        )
+                    }
+
+                    // Toast message
+                    writeMessage?.let { message ->
+                        Snackbar(
+                            modifier = Modifier
+                                .align(Alignment.BottomCenter)
+                                .padding(16.dp)
+                                .navigationBarsPadding(),
+                            action = {
+                                TextButton(onClick = viewModel::clearWriteMessage) {
+                                    Text("OK")
+                                }
                             }
-                        }
-                    ) { Text(message) }
+                        ) { Text(message) }
+                    }
                 }
             }
 
+            // Sheets & Dialogs
             if (showSearchSheet) {
                 val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
                 ModalBottomSheet(
@@ -628,10 +862,11 @@ private fun ReaderReading(
                     onDismissRequest = { showTocSheet = false },
                     sheetState = sheetState
                 ) {
-                    ReaderTocSheet(
+                    ReaderContentsSheet(
                         entries = tocEntries,
                         bookmarks = state.bookmarks,
                         highlights = state.highlights,
+                        initialTab = tocInitialTab,
                         onSelectEntry = { entry ->
                             val link = ReadiumTocAdapter.resolveLink(publication, entry)
                             if (link != null) {
@@ -694,7 +929,6 @@ private fun ReaderReading(
     }
 }
 
-
 @Composable
 private fun ReaderFontSection(
     currentFontId: String?,
@@ -717,393 +951,6 @@ private fun ReaderFontSection(
                     onClick = { onFontFamilyChange(if (option.id == "system") null else option.id) },
                     label = { Text(option.name) }
                 )
-            }
-        }
-    }
-}
-
-
-@Composable
-private fun ReaderTopBar(
-    title: String,
-    author: String,
-    finished: Boolean,
-    localWorkId: String,
-    commentsWorkId: Long?,
-    /** 1-based story chapter currently being read, or null if unknown. */
-    chapterPosition: Int?,
-    canKudos: Boolean,
-    onBack: () -> Unit,
-    onOpenComments: (Long, Int?) -> Unit,
-    onOpenWorkDetail: (String) -> Unit,
-    onMarkFinished: () -> Unit,
-    onOpenToc: () -> Unit,
-    onOpenDisplay: () -> Unit,
-    onToggleTts: () -> Unit,
-    onOpenSearch: () -> Unit,
-    onGiveKudos: () -> Unit,
-    onBookmarkPosition: () -> Unit = {},
-    onHighlightSelection: () -> Unit = {},
-    onNoteSelection: () -> Unit = {}
-) {
-    val context = LocalContext.current
-    var showOverflow by remember { mutableStateOf(false) }
-    var isOrientationLocked by remember { mutableStateOf(false) }
-
-    DisposableEffect(Unit) {
-        onDispose {
-            // Restore free rotation when leaving the reader (session-only lock).
-            val activity = context as? android.app.Activity
-            activity?.requestedOrientation =
-                android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
-        }
-    }
-
-    Surface(
-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
-        tonalElevation = 3.dp,
-        shadowElevation = 2.dp
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .statusBarsPadding()
-                .padding(horizontal = 4.dp, vertical = 4.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            IconButton(onClick = onBack) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-            }
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .clickable { onOpenWorkDetail(localWorkId) }
-            ) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleMedium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                if (author.isNotBlank()) {
-                    Text(
-                        text = author,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-            }
-            IconButton(onClick = onOpenSearch) {
-                Icon(Icons.Filled.Search, contentDescription = "Find in work")
-            }
-            IconButton(onClick = onOpenToc) {
-                Icon(Icons.AutoMirrored.Filled.List, contentDescription = "Contents")
-            }
-            IconButton(onClick = onOpenDisplay) {
-                Icon(Icons.Filled.TextFields, contentDescription = "Display")
-            }
-            IconButton(onClick = onToggleTts) {
-                Icon(Icons.Filled.VolumeUp, contentDescription = "Text to Speech")
-            }
-            Box {
-                IconButton(onClick = { showOverflow = true }) {
-                    Icon(Icons.Filled.MoreVert, contentDescription = "More actions")
-                }
-                androidx.compose.material3.DropdownMenu(
-                    expanded = showOverflow,
-                    onDismissRequest = { showOverflow = false }
-                ) {
-                    if (canKudos) {
-                        androidx.compose.material3.DropdownMenuItem(
-                            text = { Text("Give kudos") },
-                            onClick = {
-                                showOverflow = false
-                                onGiveKudos()
-                            }
-                        )
-                    }
-                    commentsWorkId?.let { workId ->
-                        androidx.compose.material3.DropdownMenuItem(
-                            text = { Text("Comments") },
-                            onClick = {
-                                showOverflow = false
-                                // 1-based story chapter, from the live spine
-                                // position — iOS sends the same and resolves it
-                                // against /navigate, falling back to All.
-                                onOpenComments(workId, chapterPosition)
-                            }
-                        )
-                        androidx.compose.material3.DropdownMenuItem(
-                            text = { Text("Share work") },
-                            onClick = {
-                                showOverflow = false
-                                val sendIntent = Intent(Intent.ACTION_SEND).apply {
-                                    putExtra(
-                                        Intent.EXTRA_TEXT,
-                                        "https://archiveofourown.org/works/$workId"
-                                    )
-                                    type = "text/plain"
-                                }
-                                context.startActivity(
-                                    Intent.createChooser(sendIntent, "Share work link")
-                                )
-                            }
-                        )
-                    }
-                    androidx.compose.material3.DropdownMenuItem(
-                        text = { Text("Toggle bookmark") },
-                        onClick = {
-                            showOverflow = false
-                            onBookmarkPosition()
-                        }
-                    )
-                    androidx.compose.material3.DropdownMenuItem(
-                        text = { Text("Highlight selection") },
-                        onClick = {
-                            showOverflow = false
-                            onHighlightSelection()
-                        }
-                    )
-                    androidx.compose.material3.DropdownMenuItem(
-                        text = { Text("Add note to selection") },
-                        onClick = {
-                            showOverflow = false
-                            onNoteSelection()
-                        }
-                    )
-                    androidx.compose.material3.DropdownMenuItem(
-                        text = { Text(if (finished) "Finished" else "Mark finished") },
-                        enabled = !finished,
-                        onClick = {
-                            showOverflow = false
-                            onMarkFinished()
-                        }
-                    )
-                    androidx.compose.material3.DropdownMenuItem(
-                        text = {
-                            Text(
-                                if (isOrientationLocked) "Unlock rotation" else "Lock rotation"
-                            )
-                        },
-                        onClick = {
-                            showOverflow = false
-                            isOrientationLocked = !isOrientationLocked
-                            val activity = context as? android.app.Activity
-                            // Lock to whatever is on screen *now*, matching iOS
-                            // ReaderOrientationLock.lock(to:), which reads the
-                            // scene's current interfaceOrientation. Forcing portrait
-                            // instead yanked a landscape reader upright the moment
-                            // the user asked to hold it still.
-                            activity?.requestedOrientation = if (isOrientationLocked) {
-                                android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LOCKED
-                            } else {
-                                android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
-                            }
-                        }
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun ReaderBottomProgress(
-    label: String,
-    progress: Float,
-    onSeek: (Float) -> Unit
-) {
-    // Marks where a scrub gesture started (Apple ReaderPositionCard's scrubOrigin
-    // tick), so cancelling a drag back to where it began reads as a clean no-op
-    // instead of a silent, unremarkable seek. Origin is captured from `progress`
-    // at drag-start via the Slider's own DragInteraction.
-    val interactionSource = remember { MutableInteractionSource() }
-    var scrubOrigin by remember { mutableStateOf<Float?>(null) }
-    LaunchedEffect(interactionSource) {
-        interactionSource.interactions.collect { interaction ->
-            when (interaction) {
-                is DragInteraction.Start -> scrubOrigin = progress
-                is DragInteraction.Stop, is DragInteraction.Cancel -> scrubOrigin = null
-                else -> Unit
-            }
-        }
-    }
-
-    Surface(
-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
-        tonalElevation = 3.dp,
-        shadowElevation = 2.dp
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .navigationBarsPadding()
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Box(
-                modifier = Modifier.fillMaxWidth(),
-                contentAlignment = Alignment.CenterStart
-            ) {
-                Slider(
-                    value = progress,
-                    onValueChange = onSeek,
-                    interactionSource = interactionSource,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                scrubOrigin?.let { origin ->
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth(origin.coerceIn(0.0001f, 1f))
-                            .align(Alignment.CenterStart),
-                        contentAlignment = Alignment.CenterEnd
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .width(2.dp)
-                                .height(14.dp)
-                                .background(
-                                    MaterialTheme.colorScheme.tertiary,
-                                    RoundedCornerShape(1.dp)
-                                )
-                        )
-                    }
-                }
-            }
-            Text(
-                text = label,
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-    }
-}
-
-@Composable
-private fun ReaderTocSheet(
-    entries: List<ReaderTocEntry>,
-    bookmarks: List<ReadingAnnotation>,
-    highlights: List<ReadingAnnotation>,
-    onSelectEntry: (ReaderTocEntry) -> Unit,
-    onSelectAnnotation: (ReadingAnnotation) -> Unit,
-    onDeleteAnnotation: (ReadingAnnotation) -> Unit = {}
-) {
-    var selectedTab by remember { mutableIntStateOf(0) }
-    val tabs = listOf("Contents", "Bookmarks", "Highlights")
-
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .navigationBarsPadding()
-            .padding(bottom = 16.dp)
-    ) {
-        androidx.compose.material3.TabRow(selectedTabIndex = selectedTab) {
-            tabs.forEachIndexed { index, title ->
-                androidx.compose.material3.Tab(
-                    selected = selectedTab == index,
-                    onClick = { selectedTab = index },
-                    text = { Text(title) }
-                )
-            }
-        }
-
-        when (selectedTab) {
-            0 -> {
-                if (entries.isEmpty()) {
-                    Text(
-                        text = "No chapters available.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp)
-                    )
-                } else {
-                    LazyColumn(contentPadding = PaddingValues(bottom = 8.dp)) {
-                        items(entries, key = { "${it.depth}:${it.href}:${it.title}" }) { entry ->
-                            Text(
-                                text = entry.title,
-                                style = MaterialTheme.typography.bodyLarge,
-                                maxLines = 2,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable { onSelectEntry(entry) }
-                                    .padding(
-                                        start = (24 + entry.depth * 16).dp,
-                                        end = 24.dp,
-                                        top = 12.dp,
-                                        bottom = 12.dp
-                                    )
-                            )
-                        }
-                    }
-                }
-            }
-            1 -> AnnotationList(
-                emptyMessage = "No bookmarks.",
-                items = bookmarks,
-                onSelect = onSelectAnnotation,
-                onDelete = onDeleteAnnotation
-            )
-            2 -> AnnotationList(
-                emptyMessage = "No highlights.",
-                items = highlights,
-                onSelect = onSelectAnnotation,
-                onDelete = onDeleteAnnotation
-            )
-        }
-    }
-}
-
-@Composable
-private fun AnnotationList(
-    emptyMessage: String,
-    items: List<ReadingAnnotation>,
-    onSelect: (ReadingAnnotation) -> Unit,
-    onDelete: (ReadingAnnotation) -> Unit
-) {
-    if (items.isEmpty()) {
-        Text(
-            text = emptyMessage,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp)
-        )
-    } else {
-        LazyColumn(contentPadding = PaddingValues(bottom = 8.dp)) {
-            items(items, key = { it.id }) { annotation ->
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { onSelect(annotation) }
-                        .padding(horizontal = 24.dp, vertical = 12.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        val title = annotation.chapterTitle.ifBlank {
-                            annotation.selectedText.ifBlank { "Annotation" }
-                        }
-                        Text(
-                            text = title,
-                            style = MaterialTheme.typography.bodyLarge,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        if (annotation.note.isNotBlank()) {
-                            Text(
-                                text = annotation.note,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 2,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
-                    }
-                    TextButton(onClick = { onDelete(annotation) }) {
-                        Text("Delete")
-                    }
-                }
             }
         }
     }
@@ -1332,14 +1179,14 @@ private fun AnnotateDialog(
     onDismiss: () -> Unit,
     onConfirm: (color: String, note: String) -> Unit
 ) {
-    var color by remember { mutableStateOf("yellow") }
+    var selectedColor by remember { mutableStateOf(ReadingAnnotationColor.YELLOW) }
     var note by remember { mutableStateOf("") }
-    val colors = listOf("yellow", "green", "pink", "purple", "blue")
+
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(if (state.asNote) "Add note" else "Highlight") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 if (state.selectedText.isNotBlank()) {
                     Text(
                         state.selectedText,
@@ -1348,16 +1195,39 @@ private fun AnnotateDialog(
                         overflow = TextOverflow.Ellipsis
                     )
                 }
+
                 Text("Color", style = MaterialTheme.typography.labelLarge)
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    colors.forEach { c ->
-                        FilterChip(
-                            selected = color == c,
-                            onClick = { color = c },
-                            label = { Text(c.replaceFirstChar { it.uppercase() }) }
-                        )
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    ReadingAnnotationColor.entries.forEach { swatch ->
+                        val isSelected = selectedColor == swatch
+                        Box(
+                            modifier = Modifier
+                                .size(32.dp)
+                                .clip(CircleShape)
+                                .background(swatch.color)
+                                .then(
+                                    if (isSelected) {
+                                        Modifier.border(2.dp, MaterialTheme.colorScheme.primary, CircleShape)
+                                    } else Modifier
+                                )
+                                .clickable { selectedColor = swatch },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (isSelected) {
+                                Icon(
+                                    imageVector = Icons.Filled.Check,
+                                    contentDescription = swatch.displayName,
+                                    tint = androidx.compose.ui.graphics.Color.Black,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                        }
                     }
                 }
+
                 if (state.asNote) {
                     OutlinedTextField(
                         value = note,
@@ -1370,7 +1240,7 @@ private fun AnnotateDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = { onConfirm(color, note) }) {
+            TextButton(onClick = { onConfirm(selectedColor.raw, note) }) {
                 Text(if (state.asNote) "Save note" else "Highlight")
             }
         },
@@ -1418,81 +1288,5 @@ private fun openExternal(context: Context, url: String) {
         context.startActivity(
             Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         )
-    }
-}
-
-@Composable
-private fun ReaderTtsControls(
-    status: SpeechStatus,
-    downloadProgress: Float?,
-    onPlay: () -> Unit,
-    onPause: () -> Unit,
-    onStop: () -> Unit,
-    onSkipNext: () -> Unit = {},
-    onSkipPrevious: () -> Unit = {},
-    onDownloadStart: () -> Unit = {}
-) {
-    Surface(
-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
-        tonalElevation = 3.dp,
-        shadowElevation = 2.dp
-    ) {
-        if (status == SpeechStatus.MODEL_NOT_DOWNLOADED) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .navigationBarsPadding()
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Text(
-                    text = "High-quality voice model needed (~45MB)",
-                    style = MaterialTheme.typography.bodyMedium
-                )
-                if (downloadProgress != null) {
-                    androidx.compose.material3.LinearProgressIndicator(
-                        progress = { downloadProgress },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    Text("${(downloadProgress * 100).toInt()}%", style = MaterialTheme.typography.bodySmall)
-                } else {
-                    Button(onClick = onDownloadStart) {
-                        Text("Download Model")
-                    }
-                }
-                TextButton(onClick = onStop) {
-                    Text("Close")
-                }
-            }
-        } else {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .navigationBarsPadding()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                IconButton(onClick = onSkipPrevious) {
-                    Icon(Icons.Filled.SkipPrevious, contentDescription = "Previous paragraph")
-                }
-                if (status == SpeechStatus.PLAYING) {
-                    IconButton(onClick = onPause) {
-                        Icon(Icons.Filled.Pause, contentDescription = "Pause TTS")
-                    }
-                } else {
-                    IconButton(onClick = onPlay) {
-                        Icon(Icons.Filled.PlayArrow, contentDescription = "Play TTS")
-                    }
-                }
-                IconButton(onClick = onStop) {
-                    Icon(Icons.Filled.Stop, contentDescription = "Stop TTS")
-                }
-                IconButton(onClick = onSkipNext) {
-                    Icon(Icons.Filled.SkipNext, contentDescription = "Next paragraph")
-                }
-            }
-        }
     }
 }
