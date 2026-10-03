@@ -74,7 +74,8 @@ object LibraryQuery {
             ),
             hideMatureContent = snapshot.privacy.hideMatureContent,
             matureWorkCount = matureCount,
-            confirmBeforeDelete = snapshot.confirmBeforeDelete
+            confirmBeforeDelete = snapshot.confirmBeforeDelete,
+            showsZeroStats = snapshot.showsZeroStats
         )
     }
 

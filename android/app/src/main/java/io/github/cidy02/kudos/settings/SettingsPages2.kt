@@ -122,6 +122,15 @@ fun SettingsLibraryPage(repository: SettingsRepository, settings: KudosSettings)
                         )
                     }
                 )
+                SubjectFormRow(
+                    "Show zero counts",
+                    trailing = {
+                        SubjectToggle(
+                            checked = settings.app.showsZeroStats,
+                            onCheckedChange = { scope.launch { repository.updateShowsZeroStats(it) } }
+                        )
+                    }
+                )
             }
         }
     }
