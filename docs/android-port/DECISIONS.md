@@ -27,3 +27,9 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   revert b02bf8ec.
 - **2026-10-03 · The Android demo must never reach AO3 (brief 1e).** Agents ran Browse against live AO3.
   Until the demo network block lands, agents may not open Browse or Search on the emulator.
+- **2026-10-03 · Tab bar visibility follows iOS's code, not brief 1d's list.** iOS hides the bar on
+  every `subjectScreenWash` / `SubjectScreenChrome` / `SettingsPageForm` screen; only the selectable
+  lists opt back in (`.toolbar(isSelecting ? .hidden : .automatic, for: .tabBar)`). Checked on the
+  simulator: Insights and the collections grid hide it, Recently Deleted and the queue page keep it.
+  Android now hides it on Work detail, settings pages, Collections, Queue details, Insights, browse
+  results and the account lists too. Reverse: `Routes.tabBarHiddenBases`.
