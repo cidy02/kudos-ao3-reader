@@ -18,7 +18,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -44,6 +43,7 @@ import io.github.cidy02.kudos.ui.subject.SubjectFormRow
 import io.github.cidy02.kudos.ui.subject.SubjectHeaderBlock
 import io.github.cidy02.kudos.ui.subject.SubjectHueSwatches
 import io.github.cidy02.kudos.ui.subject.SubjectRowSeparator
+import io.github.cidy02.kudos.ui.subject.SubjectToggle
 import io.github.cidy02.kudos.ui.subject.subjectPanel
 import io.github.cidy02.kudos.ui.subject.subjectScreenWash
 import kotlinx.coroutines.Dispatchers
@@ -218,14 +218,16 @@ fun QueueSettingsScreen(
             SubjectFormRow(
                 label = "Keep works offline",
                 trailing = {
-                    Switch(
+                    SubjectToggle(
                         checked = current.keepsWorksOffline != false,
                         onCheckedChange = { on ->
                             scope.launch {
                                 writeQueue(repository, current, tags, keep = on)
                                 reload += 1
                             }
-                        }
+                        },
+                        accent = palette.accent,
+                        contentDescription = "Keep works offline"
                     )
                 }
             )

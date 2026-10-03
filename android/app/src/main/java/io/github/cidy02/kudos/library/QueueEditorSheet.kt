@@ -19,7 +19,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -47,6 +46,7 @@ import io.github.cidy02.kudos.ui.subject.SubjectChipStyle
 import io.github.cidy02.kudos.ui.subject.SubjectFieldLabel
 import io.github.cidy02.kudos.ui.subject.SubjectHueSwatchRow
 import io.github.cidy02.kudos.ui.subject.SubjectPalette
+import io.github.cidy02.kudos.ui.subject.SubjectToggle
 import io.github.cidy02.kudos.ui.subject.parseStoredColor
 import io.github.cidy02.kudos.ui.subject.subjectPanel
 import io.github.cidy02.kudos.ui.subject.subjectScreenWash
@@ -234,7 +234,12 @@ fun QueueEditorSheet(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text("Keep works offline", modifier = Modifier.weight(1f), color = tokens.primaryInk, fontSize = 15.sp)
-                    Switch(checked = keep, onCheckedChange = { keep = it })
+                    SubjectToggle(
+                        checked = keep,
+                        onCheckedChange = { keep = it },
+                        accent = palette.accent,
+                        contentDescription = "Keep works offline"
+                    )
                 }
                 FormFootnote(
                     "When this is on, every work you add is downloaded for offline reading. " +

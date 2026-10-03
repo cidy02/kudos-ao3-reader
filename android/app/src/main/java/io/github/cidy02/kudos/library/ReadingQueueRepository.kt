@@ -11,6 +11,7 @@ import io.github.cidy02.kudos.backup.TombstoneSigning
 import io.github.cidy02.kudos.core.model.SyncTombstone
 import io.github.cidy02.kudos.core.model.SyncTombstoneRecordType
 import io.github.cidy02.kudos.data.local.KudosDatabase
+import io.github.cidy02.kudos.works.DownloadQueueItem
 import io.github.cidy02.kudos.works.WorkTags
 import io.github.cidy02.kudos.data.local.entity.QueueTagCrossRef
 import io.github.cidy02.kudos.data.local.entity.TagEntity
@@ -40,7 +41,11 @@ import java.util.UUID
 class ReadingQueueRepository(
     private val database: KudosDatabase,
     private val clock: () -> Instant = { Instant.now() },
-    private val uuidFactory: () -> String = { UUID.randomUUID().toString() }
+    private val uuidFactory: () -> String = { UUID.randomUUID().toString() },
+    /** The EPUB file, not the hasEpub flag. Missing files are what Keep fetches. */
+    private val epubOnDisk: suspend (String) -> Boolean = { false },
+    /** Serial [io.github.cidy02.kudos.works.DownloadQueue]. Empty means no network. */
+    private val enqueueDownloads: (List<DownloadQueueItem>) -> Unit = {}
 ) {
     private val queueDao = database.readingQueueDao()
     private val workDao = database.workDao()
@@ -122,6 +127,10 @@ class ReadingQueueRepository(
                     )
                 )
             }
+        }
+
+        if (KeepOffline.queueKeeps(queue.keepsWorksOffline)) {
+            workDao.getById(workId)?.toDomain()?.let { enqueueMissing(listOf(it)) }
         }
 
         return membership
@@ -325,7 +334,24 @@ class ReadingQueueRepository(
             )
         }
         replaceQueueTags(queueId, edit.tagNames)
-        return edit.keepsWorksOffline && !wasKept
+        val turnedOn = edit.keepsWorksOffline && !wasKept
+        if (turnedOn) {
+            enqueueMissing(listWorks(queueId).mapNotNull { it.work })
+        }
+        return turnedOn
+    }
+
+    /**
+     * Keep works offline just turned on, or a work was added to a queue that
+     * keeps. Fetches AO3 works whose EPUB is not on disk. Does not delete files,
+     * and a queue with Keep off never calls this.
+     */
+    private suspend fun enqueueMissing(works: List<SavedWork>) {
+        val onDisk = works.associate { work ->
+            work.id to runCatching { epubOnDisk(work.id) }.getOrDefault(false)
+        }
+        val items = KeepOffline.downloadItems(works) { work -> onDisk[work.id] == true }
+        if (items.isNotEmpty()) enqueueDownloads(items)
     }
 
     /** Pin, unless every selected queue already is. A queue already there is left alone. */

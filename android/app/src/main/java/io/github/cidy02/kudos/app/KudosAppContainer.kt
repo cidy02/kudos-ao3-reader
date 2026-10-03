@@ -228,7 +228,11 @@ class KudosAppContainer(context: Context) {
     }
 
     val readingQueueRepository: ReadingQueueRepository by lazy {
-        ReadingQueueRepository(database)
+        ReadingQueueRepository(
+            database,
+            epubOnDisk = { workFileStore.workEpubExists(it) },
+            enqueueDownloads = { items -> downloadQueue.enqueue(items) }
+        )
     }
 
     val readerRepository: ReaderRepository by lazy {

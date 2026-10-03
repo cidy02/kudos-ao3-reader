@@ -5,6 +5,7 @@ import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import io.github.cidy02.kudos.core.model.ReadingQueueKind
 import io.github.cidy02.kudos.core.model.SavedWork
+import io.github.cidy02.kudos.works.DownloadQueueItem
 import io.github.cidy02.kudos.data.local.KudosDatabase
 import io.github.cidy02.kudos.data.local.entity.WorkTagCrossRef
 import io.github.cidy02.kudos.data.local.entity.toDomain
@@ -384,6 +385,98 @@ class ReadingQueueRepositoryTest {
         assertTrue(database.tagDao().getTagsForWork(member.id).isEmpty())
         repository.renameUserTag(comfort.id, "Slow Burn")
         assertEquals("Slow Burn", repository.allTags().first { it.id == comfort.id }.name)
+    }
+
+    @Test
+    fun keepOfflineFetchesMissingAo3FilesOnlyWhenTurningOnOrAdding() = runTest {
+        val enqueued = mutableListOf<DownloadQueueItem>()
+        val onDisk = mutableSetOf<String>()
+        val repo = ReadingQueueRepository(
+            database = database,
+            clock = { now },
+            uuidFactory = { "id-${uuidSeq.incrementAndGet()}" },
+            epubOnDisk = { id -> id in onDisk },
+            enqueueDownloads = { enqueued += it }
+        )
+        val missing = ao3Work("missing", 11, hasEpub = false)
+        val present = ao3Work("present", 22, hasEpub = true)
+        val flagged = ao3Work("flagged", 33, hasEpub = true)
+        val local = SavedWork(
+            id = "local",
+            title = "Imported",
+            author = "Me",
+            sourceUrl = "file:///tmp/book.epub",
+            hasEpub = false,
+            dateAdded = fixedNow,
+            isSaved = true
+        )
+        val deleted = ao3Work("deleted", 44, hasEpub = false).copy(isDeleted = true)
+        onDisk += present.id
+        listOf(missing, present, flagged, local, deleted).forEach {
+            database.workDao().upsert(it.toEntity())
+        }
+
+        val direct = KeepOffline.downloadItems(
+            listOf(missing, present, flagged, local, deleted)
+        ) { it.id in onDisk }
+        assertEquals(setOf(11L, 33L), direct.map { it.ao3WorkId }.toSet())
+        assertFalse(direct.first { it.ao3WorkId == 11L }.force)
+        assertTrue(direct.first { it.ao3WorkId == 33L }.force)
+        assertEquals(
+            "https://archiveofourown.org/works/11",
+            direct.first { it.ao3WorkId == 11L }.sourceUrl
+        )
+
+        val loose = repo.createQueue("Loose", keepsWorksOffline = false)
+        repo.addWork(loose.id, missing.id)
+        assertTrue("Keep off does not fetch", enqueued.isEmpty())
+        assertTrue(
+            repo.updateQueue(
+                loose.id,
+                QueueEdit(name = "Loose", hue = null, colorHex = null, keepsWorksOffline = true)
+            )
+        )
+        assertEquals(listOf(11L), enqueued.map { it.ao3WorkId })
+
+        enqueued.clear()
+        repo.addWork(loose.id, present.id)
+        repo.addWork(loose.id, flagged.id)
+        repo.addWork(loose.id, local.id)
+        repo.addWork(loose.id, deleted.id)
+        assertEquals(setOf(33L), enqueued.map { it.ao3WorkId }.toSet())
+
+        val queuedBeforeOff = enqueued.toList()
+        assertFalse(
+            repo.updateQueue(
+                loose.id,
+                QueueEdit(name = "Loose", hue = null, colorHex = null, keepsWorksOffline = false)
+            )
+        )
+        assertEquals(queuedBeforeOff, enqueued)
+        assertTrue(present.id in onDisk)
+        assertTrue(database.workDao().getById(present.id)!!.hasEpub)
+        assertTrue(database.workDao().getById(flagged.id)!!.hasEpub)
+        assertFalse(database.workDao().getById(missing.id)!!.isDeleted)
+
+        enqueued.clear()
+        val kept = repo.createQueue("Kept", keepsWorksOffline = true)
+        repo.addWork(kept.id, missing.id)
+        assertEquals(listOf(11L), enqueued.map { it.ao3WorkId })
+        repo.addWork(kept.id, missing.id)
+        repo.addWork(kept.id, present.id)
+        assertEquals("a work already in the queue, or one with a file, is not fetched again", listOf(11L), enqueued.map { it.ao3WorkId })
+    }
+
+    private fun ao3Work(id: String, ao3Id: Long, hasEpub: Boolean): SavedWork {
+        return SavedWork(
+            id = id,
+            title = "Work $ao3Id",
+            author = "Author",
+            sourceUrl = "https://archiveofourown.org/works/$ao3Id",
+            hasEpub = hasEpub,
+            dateAdded = fixedNow,
+            isSaved = true
+        )
     }
 
     private fun savedWork(id: String, title: String): SavedWork {
