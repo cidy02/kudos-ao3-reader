@@ -209,6 +209,7 @@ fun AppNavHost(
                     workRepository = container.workRepository,
                     settingsRepository = container.settingsRepository,
                     privacyGate = container.privacyGate,
+                    downloadQueue = container.downloadQueue,
                     onOpenWork = { workId ->
                         navigateToWorkDetail(WorkDetailSource.LocalWork(workId))
                     },

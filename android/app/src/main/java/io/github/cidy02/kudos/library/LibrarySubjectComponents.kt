@@ -50,11 +50,8 @@ fun CollectionCard(
     modifier: Modifier = Modifier
 ) {
     val tokens = LocalKudosTokens.current
-    val palette = remember(collection.hue, collection.name, tokens.theme) {
-        SubjectPalette.fromHue(
-            collection.hue ?: coverHue(collection.name).toDouble() / 360.0,
-            tokens.theme
-        )
+    val palette = remember(collection.hue, collection.colorHex, collection.name, tokens.theme) {
+        collectionDraftPalette(collection.name, collection.hue, collection.colorHex, tokens.theme)
     }
     Column(
         modifier

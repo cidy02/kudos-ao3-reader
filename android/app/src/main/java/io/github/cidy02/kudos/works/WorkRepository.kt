@@ -444,6 +444,32 @@ class WorkRepository(
     /** Alias for [sweepExpiredSoftDeletes] — same 90-day permanent purge. */
     suspend fun purgeExpiredSoftDeletes(): Int = sweepExpiredSoftDeletes()
 
+    /**
+     * Hard-deletes all pending deleted works and collections, matching iOS
+     * `PreservedWorkService.hardDeleteAllPending`.
+     */
+    suspend fun hardDeleteAllPending(): Int {
+        val deletedWorks = workDao.getDeleted()
+        for (entity in deletedWorks) {
+            hardDelete(entity.id)
+        }
+        val deletedCollections = collectionDao.getDeleted()
+        for (entity in deletedCollections) {
+            hardDeleteCollection(entity.id)
+        }
+        return deletedWorks.size + deletedCollections.size
+    }
+
+    /**
+     * Returns the count of active (non-pending-deletion) highlights and bookmarks for [workId].
+     */
+    suspend fun getAnnotationCounts(workId: String): Pair<Int, Int> {
+        val annotations = annotationDao.getAllForWork(workId).filter { !it.isPendingDeletion }
+        val highlights = annotations.count { it.kindRaw.equals("highlight", ignoreCase = true) }
+        val bookmarks = annotations.count { it.kindRaw.equals("bookmark", ignoreCase = true) }
+        return highlights to bookmarks
+    }
+
     private suspend fun recordWorkTombstone(
         work: SavedWork,
         now: Instant,
@@ -616,7 +642,14 @@ class WorkRepository(
      * Creates an empty named shelf, or returns the existing case-insensitive match.
      * Does not attach a work — use [addToCollection] / [addWorkToCollection] for membership.
      */
-    suspend fun createCollection(name: String): WorkCollection {
+    suspend fun createCollection(
+        name: String,
+        hue: Double? = null,
+        colorHex: String? = null,
+        description: String? = null,
+        keepsWorksOffline: Boolean? = false,
+        showsOnHome: Boolean = false
+    ): WorkCollection {
         val trimmed = name.trim()
         require(trimmed.isNotEmpty()) { "Collection name must not be blank." }
         val existing = collectionDao.getAll().firstOrNull {
@@ -630,12 +663,72 @@ class WorkRepository(
             id = uuidFactory(),
             name = trimmed,
             dateAdded = now,
-            description = null,
+            description = description?.trim()?.ifBlank { null },
             sortOrder = null,
-            lastModifiedAt = now
+            lastModifiedAt = now,
+            hue = hue,
+            colorHex = colorHex,
+            keepsWorksOffline = keepsWorksOffline,
+            showsOnHome = showsOnHome
         )
         collectionDao.upsert(entity)
         return entity.toDomain(emptyList())
+    }
+
+    /**
+     * Updates an existing collection's properties, stamping [lastModifiedAt].
+     * If [clearColor] is true, resets both [hue] and [colorHex] to null.
+     */
+    suspend fun updateCollection(
+        collectionId: String,
+        name: String? = null,
+        description: String? = null,
+        hue: Double? = null,
+        colorHex: String? = null,
+        clearColor: Boolean = false,
+        keepsWorksOffline: Boolean? = null,
+        showsOnHome: Boolean? = null,
+        workOrderRaw: String? = null
+    ): WorkCollection? {
+        val entity = collectionDao.getById(collectionId) ?: return null
+        if (entity.isDeleted) return null
+        val now = clock()
+        val nextName = name?.trim()?.takeIf { it.isNotEmpty() } ?: entity.name
+        val nextDesc = if (description != null) description.trim().ifBlank { null } else entity.description
+        val nextHue = if (clearColor) null else (hue ?: entity.hue)
+        val nextColorHex = if (clearColor) null else (colorHex ?: entity.colorHex)
+        val nextKeeps = keepsWorksOffline ?: entity.keepsWorksOffline
+        val nextHome = showsOnHome ?: entity.showsOnHome
+        val nextOrder = workOrderRaw ?: entity.workOrderRaw
+        val updated = entity.copy(
+            name = nextName,
+            description = nextDesc,
+            hue = nextHue,
+            colorHex = nextColorHex,
+            keepsWorksOffline = nextKeeps,
+            showsOnHome = nextHome,
+            workOrderRaw = nextOrder,
+            lastModifiedAt = now
+        )
+        collectionDao.upsert(updated)
+        return updated.toDomain(collectionDao.getActiveWorkIdsForCollection(updated.id))
+    }
+
+    /**
+     * Updates a collection's reading order from an ordered list of work IDs,
+     * stamping [lastModifiedAt].
+     */
+    suspend fun setCollectionReadingOrder(collectionId: String, orderedWorkIds: List<String>): WorkCollection? {
+        val entity = collectionDao.getById(collectionId) ?: return null
+        if (entity.isDeleted) return null
+        val now = clock()
+        val raw = orderedWorkIds.joinToString(",")
+        val updated = entity.copy(
+            workOrderRaw = raw,
+            lastModifiedAt = now
+        )
+        collectionDao.upsert(updated)
+        return updated.toDomain(collectionDao.getActiveWorkIdsForCollection(updated.id))
     }
 
     /**

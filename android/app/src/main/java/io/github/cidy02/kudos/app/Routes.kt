@@ -265,6 +265,8 @@ object Routes {
         return base == ReadingQueues.substringBefore("?").substringBefore("/") ||
             base == QueueDetail.substringBefore("?").substringBefore("/") ||
             base == Collections.substringBefore("?").substringBefore("/") ||
+            base == CollectionDetail.substringBefore("?").substringBefore("/") ||
+            base == RecentlyDeleted.substringBefore("?").substringBefore("/") ||
             base == LibrarySection.substringBefore("?").substringBefore("/")
     }
 

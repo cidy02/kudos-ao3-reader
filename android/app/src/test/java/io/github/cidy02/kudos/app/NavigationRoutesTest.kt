@@ -62,6 +62,9 @@ class NavigationRoutesTest {
         assertTrue(Routes.hasSubjectHeader(Routes.QueueDetail))
         assertTrue(Routes.hasSubjectHeader(Routes.queueDetail("test-queue")))
         assertTrue(Routes.hasSubjectHeader(Routes.Collections))
+        assertTrue(Routes.hasSubjectHeader(Routes.CollectionDetail))
+        assertTrue(Routes.hasSubjectHeader(Routes.collectionDetail("test-collection")))
+        assertTrue(Routes.hasSubjectHeader(Routes.RecentlyDeleted))
         assertTrue(Routes.hasSubjectHeader(Routes.LibrarySection))
         assertTrue(Routes.hasSubjectHeader(Routes.librarySection("to-read")))
 
