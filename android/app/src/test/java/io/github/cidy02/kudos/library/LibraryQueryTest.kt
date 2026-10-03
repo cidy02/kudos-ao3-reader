@@ -167,11 +167,25 @@ class LibraryRepositorySortByDateDownloadedTest {
 class LibrarySortOptionsMatchIosTest {
     @Test
     fun sortOptionsAreIosLibrarySort() {
-        // iOS LibraryFilters.swift LibrarySort: natural, dateAdded, dateDownloaded, title, author, wordCount.
+        // iOS LibraryFilters.swift LibrarySort, in the same order on both apps.
         assertEquals(
-            listOf("Default", "Date Added", "Date Downloaded", "Title", "Author", "Word Count"),
+            listOf(
+                "Default", "Date Added", "Date Downloaded", "Last Read", "Title", "Author",
+                "Word Count", "Kudos"
+            ),
             LibrarySort.entries.map { it.label }
         )
+    }
+
+    @Test
+    fun lastReadSortsNullDatesLastAndKudosSortsHighestFirst() {
+        assertEquals(
+            listOf("alpha", "gamma", "delta", "beta"),
+            LibraryQuery.apply(sampleItems(), sort = LibrarySort.LastRead).ids()
+        )
+        val byKudos = LibraryQuery.apply(sampleItems(), sort = LibrarySort.Kudos)
+        val kudos = byKudos.map { it.item.work.kudos }
+        assertEquals(kudos.sortedDescending(), kudos)
     }
 }
 
