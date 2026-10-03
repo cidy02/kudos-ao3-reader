@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.app
 
+import androidx.compose.runtime.collectAsState
 import io.github.cidy02.kudos.ui.subject.subjectScreenWash
 import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
 import androidx.compose.animation.AnimatedVisibility
@@ -190,14 +191,21 @@ fun MainScaffold(
     }
 
     // Home and Library wash in their hero's colour (owner, 2026-10-03; iOS does the same).
+    // Account washes in the app accent while signed in (iOS AccountView, artboard 1m vs 1n).
     val washHue = when {
         onHome -> homeChrome.washHue
         onLibrary -> libraryChrome.washHue
         else -> null
     }
-    val washModifier = washHue?.let {
-        Modifier.subjectScreenWash(io.github.cidy02.kudos.ui.subject.SubjectPalette.fromHue(it, tokens.theme))
-    } ?: Modifier
+    val authState by container.authRepository.state.collectAsState()
+    val scopePalette = io.github.cidy02.kudos.ui.subject.LocalSubjectPalette.current
+    val washModifier = when {
+        washHue != null ->
+            Modifier.subjectScreenWash(io.github.cidy02.kudos.ui.subject.SubjectPalette.fromHue(washHue, tokens.theme))
+        currentRoute == Routes.Account && authState is io.github.cidy02.kudos.auth.AO3AuthState.SignedIn ->
+            Modifier.subjectScreenWash(scopePalette)
+        else -> Modifier
+    }
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -310,21 +318,14 @@ fun MainScaffold(
                 enter = fadeIn(ChromeMotion),
                 exit = fadeOut(ChromeMotion)
             ) {
-                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    ToolbarCircleButton(
-                        onClick = onCycleTheme,
-                        accessibilityName = "Theme: ${themeMode.label}"
-                    ) {
-                        Icon(Icons.Outlined.Palette, contentDescription = null)
-                    }
-                    ToolbarCircleButton(
-                        onClick = {
-                            navController.navigate(Routes.Settings) { launchSingleTop = true }
-                        },
-                        accessibilityName = "Settings"
-                    ) {
-                        Icon(Icons.Outlined.Settings, contentDescription = null)
-                    }
+                ToolbarCircleButton(
+                    onClick = {
+                        navController.navigate(Routes.Settings) { launchSingleTop = true }
+                    },
+                    accessibilityName = "Settings",
+                    isAccented = true
+                ) {
+                    Icon(Icons.Outlined.Settings, contentDescription = null)
                 }
             }
         }

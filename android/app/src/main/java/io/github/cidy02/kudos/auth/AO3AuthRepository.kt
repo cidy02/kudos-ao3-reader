@@ -58,7 +58,13 @@ class AO3AuthRepository(
             io.github.cidy02.kudos.network.ao3.DemoNetwork.signedIn
         ) {
             sessionMutex.withLock {
-                currentSession = AO3Session(username = "AO3_Reader", cookies = emptyList())
+                val demoCookie = AO3StoredCookie(
+                    name = AO3StoredCookie.SessionCookieName,
+                    value = "demo",
+                    domain = "archiveofourown.org",
+                    path = "/"
+                )
+                currentSession = AO3Session(username = "AO3_Reader", cookies = listOf(demoCookie))
                 mutableState.value = AO3AuthState.SignedIn("AO3_Reader")
             }
             return

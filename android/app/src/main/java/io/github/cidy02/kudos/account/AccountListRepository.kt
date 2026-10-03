@@ -35,7 +35,20 @@ class AccountListRepository(
                 if (result.error == AO3Error.AuthenticationRequired) authRepository.sessionDidExpire()
                 result
             }
-            is AO3Result.Success -> parse(type, result.value.body, result.value.url, result.value.statusCode, page)
+            is AO3Result.Success -> {
+                val parsed = parse(type, result.value.body, result.value.url, result.value.statusCode, page)
+                if (parsed is AO3Result.Success) {
+                    countsCache?.put(
+                        type,
+                        username,
+                        AO3AccountListCountsCache.Count(
+                            itemsOnPage = parsed.value.works.size,
+                            totalPages = parsed.value.totalPages
+                        )
+                    )
+                }
+                parsed
+            }
         }
     }
 

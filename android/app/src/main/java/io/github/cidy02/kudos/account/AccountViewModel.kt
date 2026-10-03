@@ -80,7 +80,8 @@ sealed interface AccountSeriesUiState {
 class AccountViewModel(
     private val authRepository: AO3AuthRepository,
     private val authorRepository: AO3AuthorRepository? = null,
-    private val countsCache: AO3AccountListCountsCache? = null
+    private val countsCache: AO3AccountListCountsCache? = null,
+    private val listRepository: AccountListRepository? = null
 ) : ViewModel() {
     private val headerFlow = MutableStateFlow<io.github.cidy02.kudos.network.ao3.author.AO3AuthorHeader?>(null)
     private val countsFlow = MutableStateFlow<Map<String, AO3AccountListCountsCache.Count>>(emptyMap())
@@ -106,11 +107,16 @@ class AccountViewModel(
     init {
         viewModelScope.launch {
             authRepository.restoreSession()
-            val auth = authRepository.state.first()
-            val username = auth.usernameOrNull
-            if (username != null) {
-                refreshHeader(username)
-                refreshCounts(username)
+            authRepository.state.collect { auth ->
+                val username = auth.usernameOrNull
+                if (username != null) {
+                    refreshHeader(username)
+                    refreshCounts(username)
+                    if (countsCache?.get(AccountListType.Subscriptions, username) == null && listRepository != null) {
+                        listRepository.load(AccountListType.Subscriptions, 1)
+                        refreshCounts(username)
+                    }
+                }
             }
         }
     }
@@ -151,12 +157,13 @@ class AccountViewModel(
         fun factory(
             authRepository: AO3AuthRepository,
             authorRepository: AO3AuthorRepository? = null,
-            countsCache: AO3AccountListCountsCache? = null
+            countsCache: AO3AccountListCountsCache? = null,
+            listRepository: AccountListRepository? = null
         ): ViewModelProvider.Factory {
             return object : ViewModelProvider.Factory {
                 @Suppress("UNCHECKED_CAST")
                 override fun <T : ViewModel> create(modelClass: Class<T>): T {
-                    return AccountViewModel(authRepository, authorRepository, countsCache) as T
+                    return AccountViewModel(authRepository, authorRepository, countsCache, listRepository) as T
                 }
             }
         }
