@@ -28,10 +28,22 @@ class AO3AccountParser(
         if (usernameParser.isLoginRequiredPage(html, finalUrl)) throw AO3AccountParseException.LoginRequired()
 
         return when (type) {
-            AccountListType.Bookmarks -> searchParser.parseWorksListPage(html, page, "li.bookmark.blurb")
+            AccountListType.Bookmarks -> {
+                val searchPage = searchParser.parseWorksListPage(html, page, "li.bookmark.blurb")
+                val authorBookmarks = runCatching {
+                    io.github.cidy02.kudos.network.ao3.author.AO3AuthorParser().parseBookmarksPage(html, page).bookmarks
+                }.getOrDefault(emptyList())
+                searchPage.copy(bookmarkDetails = authorBookmarks)
+            }
             AccountListType.Subscriptions -> parseSubscriptionsPage(html, page)
             AccountListType.MarkedForLater,
-            AccountListType.History,
+            AccountListType.History -> {
+                val searchPage = searchParser.parseSearchPage(html, page)
+                val doc = Jsoup.parse(html, AO3Constants.BASE_URL)
+                val readings = doc.select("ol.reading.work > li, ol.work > li, li.reading.work")
+                    .mapNotNull { AO3ReadingEntry.parseFromBlurb(it) }
+                searchPage.copy(readingEntries = readings)
+            }
             AccountListType.MyWorks,
             is AccountListType.Collection -> searchParser.parseSearchPage(html, page)
         }
