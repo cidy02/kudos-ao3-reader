@@ -935,3 +935,47 @@ fun FilterButton(
         }
     }
 }
+
+/**
+ * Horizontal segmented tab switcher.
+ */
+@Composable
+fun <T> SubjectSegmentedControl(
+    items: List<T>,
+    selectedItem: T,
+    onItemSelected: (T) -> Unit,
+    labelProvider: (T) -> String,
+    modifier: Modifier = Modifier
+) {
+    val tokens = LocalKudosTokens.current
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .background(tokens.glassFill(0.09), RoundedCornerShape(8.dp))
+            .padding(2.dp),
+        horizontalArrangement = Arrangement.spacedBy(2.dp)
+    ) {
+        items.forEach { item ->
+            val isSelected = item == selectedItem
+            val background = if (isSelected) tokens.secondaryInk.copy(alpha = 0.15f) else Color.Transparent
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(background)
+                    .clickable { onItemSelected(item) }
+                    .padding(vertical = 6.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = labelProvider(item),
+                    color = if (isSelected) tokens.primaryInk else tokens.secondaryInk,
+                    fontSize = 13.sp,
+                    fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+    }
+}

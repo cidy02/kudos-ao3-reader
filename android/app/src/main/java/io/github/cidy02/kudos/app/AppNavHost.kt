@@ -521,6 +521,10 @@ fun AppNavHost(
             )
             val username = (authState as? AO3AuthState.SignedIn)?.username
             AO3DashboardScreen(
+                authorRepository = container.authorRepository,
+                onOpenWork = { work -> navigateToWorkDetail(WorkDetailSource.RemoteSummary(work)) },
+                onOpenSeries = { seriesUrl -> navController.navigate(Routes.seriesWorks(seriesUrl)) },
+                onOpenWeb = { url -> navController.navigate(Routes.webFallback(url)) },
                 username = username,
                 onOpenList = { type ->
                     navController.navigate(Routes.accountList(NavArgCodecs.encodeAccountListType(type)))
