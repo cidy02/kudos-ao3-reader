@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<!-- Trimmed live AO3 work page (captured 2026-07-16): signed-in user is
+     NOT subscribed (new_subscription create form) and has NO bookmark
+     (create form: /works/<id>/bookmarks, no _method override). -->
+<html><head><meta name="csrf-token" content="fixture-token" /></head><body>
+<ul class="work navigation actions">
+<form class="ajax-create-destroy" id="new_subscription" data-create-value="Subscribe" data-destroy-value="Unsubscribe" action="/users/AddictedFicLover/subscriptions" accept-charset="UTF-8" method="post">
+<input autocomplete="off" type="hidden" value="61214008" name="subscription[subscribable_id]" id="subscription_subscribable_id" /><input autocomplete="off" type="hidden" value="Work" name="subscription[subscribable_type]" id="subscription_subscribable_type" /><input type="submit" name="commit" value="Subscribe" /></form>
+</ul>
+    <div id="bookmark_form_placement" class="wrapper toggled">
+        <div class="post bookmark" id="bookmark-form">
+  <h3 class="landmark heading">Bookmark</h3>
+
+
+
+
+  
+
+  <form action="/works/61214008/bookmarks" accept-charset="UTF-8" method="post"><input type="hidden" name="authenticity_token" value="fixture-token" autocomplete="off" />
+    <fieldset>
+      <legend>Bookmark</legend>
+        <p class="close actions">
+            <a class="bookmark_form_placement_close" href="#comments" aria-label="cancel">&times;</a>
+        </p>
+
+      <h4 class="heading">
+          <span class="byline">
+            AddictedFicLover, 
+            <input autocomplete="off" value="3515343" type="hidden" name="bookmark[pseud_id]" id="bookmark_pseud_id" />
+          </span>
+         save a bookmark!
+      </h4>
+
+
+      <fieldset>
+        <legend>Write Comments</legend>
+        <dl>
+          <dt><label for="bookmark_notes">Notes</label></dt>
+          <dd>
+              <p class="footnote" id="notes-field-description-summary">
+                The creator&#39;s summary is added automatically.
+              </p>
+            <p class="footnote" id="notes-field-description-html">
+              Plain text with limited HTML  <a class="help symbol question modal" aria-label="Html help" href="/help/html"><span class="symbol question"><span>?</span></span></a> Embedded images (&lt;img&gt; tags) will be displayed as HTML, including the image's source link and any alt text.
+            </p>
+            <textarea rows="4" id="bookmark_notes" class="observe_textlength" aria-describedby="notes-field-description-summary notes-field-description-html" name="bookmark[bookmarker_notes]">
+</textarea>
+            <p class="character_counter" tabindex="0"><span id="bookmark_notes_counter" class="value" data-maxlength="5000">5000</span> characters left</p>
+          </dd>
+
+          <dt><label for="bookmark_tag_string">Your tags</label></dt>
+          <dd>
+              <p class="footnote" id="tag-string-description">
+                The creator&#39;s tags are added automatically.
+              </p>
+            <input class="autocomplete" data-autocomplete-method="/autocomplete/tag?type=all" data-autocomplete-hint-text="Start typing for suggestions!" data-autocomplete-no-results-text="(No suggestions found)" data-autocomplete-min-chars="1" data-autocomplete-searching-text="Searching..." size="60" aria-describedby="tag-string-description" type="text" name="bookmark[tag_string]" id="bookmark_tag_string" />
+            <p class="character_counter">
+              Comma separated, 150 characters per tag
+            </p>
+          </dd>
+
+          <dt><label for="bookmark_collection_names">Add to collections</label></dt>
+          <dd>
+            <input class="autocomplete" data-autocomplete-method="/autocomplete/open_collection_names" data-autocomplete-hint-text="Start typing for suggestions!" data-autocomplete-no-results-text="(No suggestions found)" data-autocomplete-min-chars="1" data-autocomplete-searching-text="Searching..." size="60" type="text" name="bookmark[collection_names]" id="bookmark_collection_names" />
+          </dd>
+        </dl>
+      </fieldset>
+
+      <fieldset>
+        <legend>Choose Type and Post</legend>
+        <p> 
+          <input name="bookmark[private]" type="hidden" value="0" autocomplete="off" /><input type="checkbox" value="1" name="bookmark[private]" id="bookmark_private" /> <label for="bookmark_private">Private bookmark</label>
+          <input name="bookmark[rec]" type="hidden" value="0" autocomplete="off" /><input type="checkbox" value="1" name="bookmark[rec]" id="bookmark_rec" /> <label for="bookmark_rec">Rec</label>
+        </p>
+        <p class="submit actions">
+          <input type="submit" name="commit" value="Create" />
+        </p>
+      </fieldset>
+    </fieldset>
+</form></div>
+</body></html>

@@ -607,7 +607,8 @@ fun AppNavHost(
                 },
                 savedSearchRepository = container.savedSearchRepository,
                 workRepository = container.workRepository,
-                settingsRepository = container.settingsRepository
+                settingsRepository = container.settingsRepository,
+                onOpenUrl = { url -> navController.navigate(Routes.webFallback(url)) }
             )
         }
         sharedComposable(

@@ -8,6 +8,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.fragment.app.FragmentActivity
 import io.github.cidy02.kudos.app.DemoLibrary
 import io.github.cidy02.kudos.app.KudosApp
+import io.github.cidy02.kudos.network.ao3.DemoNetwork
 import io.github.cidy02.kudos.ui.subject.DebugRoutes
 import io.github.cidy02.kudos.ui.theme.KudosThemeMode
 import io.github.cidy02.kudos.works.ExternalFileImport
@@ -19,6 +20,12 @@ class MainActivity : FragmentActivity() {
     private val debugRoute = mutableStateOf<String?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        // Before super, and before the startup metadata refresh can leave the device.
+        if (BuildConfig.DEBUG && DemoNetwork.isRequested(intent)) {
+            DemoNetwork.activate(applicationContext.assets)
+        } else {
+            DemoNetwork.markNotDemo()
+        }
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         // "Open with Kudos" / "Share to Kudos" — the manifest advertises these
@@ -31,8 +38,7 @@ class MainActivity : FragmentActivity() {
         var skipOnboarding = false
 
         if (BuildConfig.DEBUG) {
-            val isDemoRequested = intent?.getBooleanExtra("kudosDemoLibrary", false) == true ||
-                intent?.getStringExtra("kudosDemoLibrary").equals("true", ignoreCase = true)
+            val isDemoRequested = DemoNetwork.isRequested(intent)
 
             val themeExtra = intent?.getStringExtra("kudosTheme")
             sessionTheme = when (themeExtra?.lowercase(Locale.ROOT)) {
@@ -87,10 +93,10 @@ class MainActivity : FragmentActivity() {
         ExternalFileImport.offer(intent)
         publishDebugRoute(intent)
         if (BuildConfig.DEBUG) {
-            val isDemoRequested = intent.getBooleanExtra("kudosDemoLibrary", false) ||
-                intent.getStringExtra("kudosDemoLibrary").equals("true", ignoreCase = true)
+            val isDemoRequested = DemoNetwork.isRequested(intent)
             val hasThemeExtra = intent.hasExtra("kudosTheme")
             if (isDemoRequested) {
+                DemoNetwork.activate(applicationContext.assets)
                 val container = (application as KudosApplication).container
                 (application as KudosApplication).launchIo {
                     DemoLibrary.seed(container)

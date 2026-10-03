@@ -8,10 +8,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Search
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -23,7 +19,6 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import io.github.cidy02.kudos.data.local.dao.ReadingLogDao
 import io.github.cidy02.kudos.data.local.entity.FandomReadWatermarkEntity
@@ -34,7 +29,6 @@ import io.github.cidy02.kudos.network.ao3.browse.AO3Fandom
 import io.github.cidy02.kudos.network.ao3.browse.AO3MediaCategory
 import io.github.cidy02.kudos.network.ao3.displayMessage
 import io.github.cidy02.kudos.ui.components.EmptyStateCard
-import io.github.cidy02.kudos.ui.components.GlassFieldBar
 import io.github.cidy02.kudos.ui.components.KudosRefreshBox
 import io.github.cidy02.kudos.ui.components.LoadingStateCard
 import io.github.cidy02.kudos.core.model.SavedWork
@@ -67,7 +61,6 @@ fun BrowseScreen(
 ) {
     var state by remember { mutableStateOf<BrowseCategoriesState>(BrowseCategoriesState.Loading) }
     var fandomLists by remember { mutableStateOf<Map<String, List<AO3Fandom>>>(emptyMap()) }
-    var addressQuery by remember { mutableStateOf("") }
     val scope = rememberCoroutineScope()
     val libraryFlow = remember(workRepository) {
         workRepository?.observeLibraryWorks() ?: flowOf(emptyList())
@@ -143,29 +136,6 @@ fun BrowseScreen(
 
     KudosRefreshBox(onRefresh = { loadNow() }, modifier = Modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize()) {
-            GlassFieldBar(
-                text = addressQuery,
-                onTextChange = { addressQuery = it },
-                placeholder = "Search AO3 or enter a URL",
-                imeAction = ImeAction.Go,
-                onSubmit = {
-                    if (addressQuery.isNotBlank()) {
-                        onOpenWebFallback(addressQuery)
-                        addressQuery = ""
-                    }
-                },
-                leading = {
-                    Icon(
-                        imageVector = Icons.Outlined.Search,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 12.dp)
-            )
-
             when (val current = state) {
                 BrowseCategoriesState.Loading -> LoadingStateCard("Loading AO3 media categories")
                 is BrowseCategoriesState.Error -> Column(

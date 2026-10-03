@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Edit Collection</title><meta name="csrf-token" content="csrf-form"></head>
+<body>
+<a href="/collections/fest/confirm_delete">Delete Collection</a>
+<form class="verbose post collection" action="/collections/fest" method="post">
+  <input type="hidden" name="_method" value="put">
+  <input type="hidden" name="authenticity_token" value="csrf-form">
+  <fieldset>
+    <legend>Header</legend>
+    <input name="collection[name]" value="fest">
+    <input name="collection[title]" value="Winter Fest">
+    <input name="collection[parent_name]" value="parent_fest">
+    <input name="collection[email]" value="mod@example.com">
+    <input name="collection[header_image_url]" value="https://example.com/header.png">
+    <input name="collection[icon_alt_text]" value="icon alt">
+    <input name="collection[icon_comment_text]" value="icon comment">
+    <textarea name="collection[description]">Coastal fic, all fandoms</textarea>
+  </fieldset>
+  <fieldset>
+    <legend>Preferences</legend>
+    <input type="hidden" name="collection[collection_preference_attributes][id]" value="7">
+    <input type="checkbox" name="collection[collection_preference_attributes][closed]" value="1" checked>
+    <input type="checkbox" name="collection[collection_preference_attributes][moderated]" value="1" checked>
+    <input type="checkbox" name="collection[collection_preference_attributes][unrevealed]" value="1" checked>
+    <input type="checkbox" name="collection[collection_preference_attributes][anonymous]" value="1" checked>
+    <input type="checkbox" name="collection[collection_preference_attributes][email_notify]" value="1" checked>
+  </fieldset>
+  <fieldset>
+    <legend>Challenge</legend>
+    <select name="challenge_type">
+      <option value="">None</option>
+      <option value="GiftExchange">Gift Exchange</option>
+      <option value="PromptMeme" selected>Prompt Meme</option>
+    </select>
+  </fieldset>
+  <fieldset class="profile">
+    <legend>Profile</legend>
+    <input type="hidden" name="collection[collection_profile_attributes][id]" value="8">
+    <textarea name="collection[collection_profile_attributes][intro]">Hello</textarea>
+    <textarea name="collection[collection_profile_attributes][faq]">FAQ</textarea>
+    <textarea name="collection[collection_profile_attributes][rules]">Be kind</textarea>
+  </fieldset>
+</form>
+</body>
+</html>

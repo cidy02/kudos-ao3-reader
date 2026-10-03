@@ -12,6 +12,7 @@ import java.nio.file.StandardCopyOption
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import io.github.cidy02.kudos.network.ao3.installDemoNetworkBlock
 import okhttp3.OkHttpClient
 import okhttp3.Request
 
@@ -34,6 +35,7 @@ class AppUpdateInstaller(
 ) {
     private val client: OkHttpClient by lazy {
         OkHttpClient.Builder()
+            .installDemoNetworkBlock()
             .callTimeout(5, TimeUnit.MINUTES)
             .build()
     }

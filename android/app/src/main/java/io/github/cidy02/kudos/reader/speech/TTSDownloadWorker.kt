@@ -14,6 +14,7 @@ import java.io.IOException
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import io.github.cidy02.kudos.network.ao3.installDemoNetworkBlock
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.apache.commons.compress.archivers.tar.TarArchiveEntry
@@ -68,6 +69,7 @@ class TTSDownloadWorker(
         }
 
         val client = OkHttpClient.Builder()
+            .installDemoNetworkBlock()
             .callTimeout(15, TimeUnit.MINUTES)
             .readTimeout(5, TimeUnit.MINUTES)
             .build()

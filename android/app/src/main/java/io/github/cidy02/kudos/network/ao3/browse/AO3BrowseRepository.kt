@@ -4,6 +4,7 @@ import io.github.cidy02.kudos.network.ao3.AO3Client
 import io.github.cidy02.kudos.network.ao3.AO3Clock
 import io.github.cidy02.kudos.network.ao3.AO3Error
 import io.github.cidy02.kudos.network.ao3.AO3Result
+import io.github.cidy02.kudos.network.ao3.DemoNetwork
 import io.github.cidy02.kudos.network.ao3.OkHttpAO3Client
 import io.github.cidy02.kudos.network.ao3.SystemAO3Clock
 import io.github.cidy02.kudos.network.ao3.search.AO3SearchFilters
@@ -30,7 +31,8 @@ class AO3BrowseRepository(
     private val authenticatedClient: AO3AuthenticatedClient? = null,
     private val searchRepository: AO3SearchRepository = AO3SearchRepository(client, authenticatedClient),
     private val cache: FandomCatalogCache? = null,
-    private val clock: AO3Clock = SystemAO3Clock
+    private val clock: AO3Clock = SystemAO3Clock,
+    private val demoActive: () -> Boolean = { DemoNetwork.isActive }
 ) {
     suspend fun categories(): AO3Result<List<AO3MediaCategory>> {
         return when (val result = client.get(AO3BrowseUrls.mediaIndexUrl())) {
@@ -42,7 +44,11 @@ class AO3BrowseRepository(
     }
 
     suspend fun fandoms(category: AO3MediaCategory): AO3Result<List<AO3Fandom>> {
-        val cached = cache?.load()
+        // Demo pages come from fixtures. A disk cache written by a live session
+        // would replay real AO3 lists, and writing the fixture list back would
+        // poison the next non-demo Browse open.
+        val demo = demoActive()
+        val cached = if (demo) null else cache?.load()
         val entry = cached?.get(category.name)
         val now = Instant.ofEpochMilli(clock.nowMillis())
         if (entry != null && !FandomCatalogCache.isStale(entry, now)) {
@@ -57,7 +63,7 @@ class AO3BrowseRepository(
             is AO3Result.Success -> runParse(result.value.statusCode) {
                 parser.parseFandomList(result.value.body)
             }.also { parsed ->
-                if (cache != null && parsed is AO3Result.Success) {
+                if (cache != null && !demo && parsed is AO3Result.Success) {
                     val newEntry = FandomCatalogCache.Entry(parsed.value, clock.nowMillis())
                     cache.save((cached ?: emptyMap()) + (category.name to newEntry))
                 }

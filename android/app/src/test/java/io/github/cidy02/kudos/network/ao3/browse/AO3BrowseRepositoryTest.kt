@@ -43,13 +43,18 @@ private fun ok(body: String): AO3Result<AO3HttpResponse> = AO3Result.Success(
 private fun repoWith(client: FakeAO3Client) =
     AO3BrowseRepository(client = client, searchRepository = AO3SearchRepository(client))
 
-private fun repoWithCache(client: FakeAO3Client, cache: FandomCatalogCache, nowMillis: Long) =
-    AO3BrowseRepository(
-        client = client,
-        searchRepository = AO3SearchRepository(client),
-        cache = cache,
-        clock = AO3Clock { nowMillis }
-    )
+private fun repoWithCache(
+    client: FakeAO3Client,
+    cache: FandomCatalogCache,
+    nowMillis: Long,
+    demoActive: () -> Boolean = { false }
+) = AO3BrowseRepository(
+    client = client,
+    searchRepository = AO3SearchRepository(client),
+    cache = cache,
+    clock = AO3Clock { nowMillis },
+    demoActive = demoActive
+)
 
 class AO3BrowseRepositoryTest {
     @Test
@@ -177,5 +182,23 @@ class AO3BrowseRepositoryTest {
         repoWithCache(client, cache, nowMillis = 1L).fandoms(category)
 
         assertEquals(setOf(existingCategory, category.name), cache.load().keys)
+    }
+
+    @Test
+    fun fandomsInDemoSkipTheCacheAndDoNotWriteIt() = runTest {
+        val cache = FandomCatalogCache(Files.createTempDirectory("kudos-fandom-cache"))
+        val category = AO3MediaCategory(name = "Anime & Manga", fandomsPath = "/media/Anime/fandoms")
+        cache.save(mapOf(category.name to FandomCatalogCache.Entry(listOf(AO3Fandom("Live Cache")), 0L)))
+        val client = FakeAO3Client { ok(browseFixture("ao3/browse/fandom_list.html")) }
+
+        val result = repoWithCache(client, cache, nowMillis = 0L, demoActive = { true }).fandoms(category)
+
+        assertTrue(result is AO3Result.Success)
+        assertEquals(
+            listOf("Naruto", "Bleach", "Example Fandom"),
+            (result as AO3Result.Success).value.map { it.name }
+        )
+        assertEquals(1, client.requestedUrls.size)
+        assertEquals(listOf("Live Cache"), cache.load()[category.name]?.fandoms?.map { it.name })
     }
 }
