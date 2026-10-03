@@ -102,6 +102,7 @@ import io.github.cidy02.kudos.core.model.SavedWork
 import io.github.cidy02.kudos.core.model.WorkDownloadAction
 import io.github.cidy02.kudos.core.model.WorkDownloadSemantics
 import io.github.cidy02.kudos.core.model.WorkCollection
+import io.github.cidy02.kudos.data.local.dao.ReadingLogDao
 import io.github.cidy02.kudos.data.preferences.SettingsRepository
 import io.github.cidy02.kudos.app.PrivacyGate
 import io.github.cidy02.kudos.app.LocalShellOverlayState
@@ -136,6 +137,8 @@ import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
 
 private const val ShelfLimit = 12
+private const val LibraryPreferences = "library-dashboard"
+private const val FavoriteQuickFilterPreference = "library.favorites.quickFilter"
 
 /**
  * Library dashboard — Material expression of Apple Library:
@@ -150,6 +153,7 @@ fun LibraryScreen(
     settingsRepository: SettingsRepository? = null,
     queueRepository: ReadingQueueRepository? = null,
     downloadQueue: DownloadQueue? = null,
+    readingLogDao: ReadingLogDao? = null,
     privacyGate: PrivacyGate = PrivacyGate(),
     onOpenWork: (String) -> Unit,
     onOpenReader: (String) -> Unit,
@@ -171,7 +175,8 @@ fun LibraryScreen(
             settingsRepository,
             queueRepository,
             downloadQueue,
-            privacyGate
+            privacyGate,
+            readingLogDao
         )
     )
     val state by viewModel.state.collectAsState()
@@ -206,7 +211,7 @@ fun LibraryScreen(
     var confirmRemoveFromHistory by remember { mutableStateOf<String?>(null) }
     var confirmDeleteCollection by remember { mutableStateOf<String?>(null) }
     val layoutPreferences = remember {
-        localContext.getSharedPreferences("library-dashboard", android.content.Context.MODE_PRIVATE)
+        localContext.getSharedPreferences(LibraryPreferences, android.content.Context.MODE_PRIVATE)
     }
     var dashboardLayout by remember {
         mutableStateOf(
@@ -617,6 +622,9 @@ fun LibraryScreen(
         onUpdateSearchQuery = viewModel::updateSearchQuery,
         onUpdateSort = viewModel::updateSort,
         onSetFandomFilter = viewModel::setFandomFilter,
+        onCompletionFilterChange = { completion ->
+            viewModel.updateFilters(state.filters.copy(completion = completion))
+        },
         onClearFilters = viewModel::clearFilters,
         onOpenWork = onOpenWork,
         onOpenReader = onOpenReader,
@@ -695,6 +703,7 @@ private fun LibraryContent(
     onUpdateSearchQuery: (String) -> Unit,
     onUpdateSort: (LibrarySort) -> Unit,
     onSetFandomFilter: (String?) -> Unit,
+    onCompletionFilterChange: (LibraryCompletionFilter) -> Unit,
     onClearFilters: () -> Unit,
     onOpenWork: (String) -> Unit,
     onOpenReader: (String) -> Unit,
@@ -768,6 +777,7 @@ private fun LibraryContent(
             state = state,
             cardActions = cardActions,
             onShowFilters = onShowFilters,
+            onCompletionFilterChange = onCompletionFilterChange,
             onTogglePrivacy = onTogglePrivacy,
             onEnterSelection = onEnterSelection,
             onExitSelection = onExitSelection,
@@ -1262,6 +1272,7 @@ private fun LibrarySectionContent(
     state: LibraryUiState,
     cardActions: LibraryCardActions,
     onShowFilters: () -> Unit,
+    onCompletionFilterChange: (LibraryCompletionFilter) -> Unit,
     onTogglePrivacy: () -> Unit,
     onEnterSelection: () -> Unit,
     onExitSelection: () -> Unit,
@@ -1284,7 +1295,55 @@ private fun LibrarySectionContent(
 ) {
     val tokens = LocalKudosTokens.current
     val baseItems = kind.items(state)
-    val sectionItems = baseItems.let {
+    val quickFilters = kind.quickFilters()
+    val context = LocalContext.current
+    val preferences = remember(context) {
+        context.getSharedPreferences(LibraryPreferences, android.content.Context.MODE_PRIVATE)
+    }
+    var favoriteQuickFilter by remember(kind) {
+        mutableStateOf(
+            if (kind == LibrarySectionKind.Favorites) {
+                LibrarySectionQuickFilter.fromId(
+                    preferences.getString(FavoriteQuickFilterPreference, null)
+                ) ?: LibrarySectionQuickFilter.All
+            } else {
+                LibrarySectionQuickFilter.All
+            }
+        )
+    }
+    val countSource = when (kind) {
+        LibrarySectionKind.ReadingNow -> LibraryQuery.continueReading(
+            LibraryQuery.filterOnly(
+                state.collectionMembers,
+                state.searchQuery,
+                state.filters.copy(completion = LibraryCompletionFilter.Any)
+            )
+        )
+        LibrarySectionKind.Favorites -> state.collectionMembers.filter { it.item.work.isFavorite }
+        else -> baseItems
+    }
+    val selectedQuickFilter = when (kind) {
+        LibrarySectionKind.ReadingNow -> when (state.filters.completion) {
+            LibraryCompletionFilter.Any -> LibrarySectionQuickFilter.All
+            LibraryCompletionFilter.InProgress -> LibrarySectionQuickFilter.Wip
+            LibraryCompletionFilter.Complete -> null
+        }
+        LibrarySectionKind.Favorites -> favoriteQuickFilter
+        else -> null
+    }
+    val quickFilteredItems = when {
+        kind == LibrarySectionKind.ReadingNow && selectedQuickFilter != null -> {
+            filterLibrarySectionItems(kind, selectedQuickFilter, countSource)
+        }
+        kind == LibrarySectionKind.Favorites -> filterLibrarySectionItems(
+            kind,
+            favoriteQuickFilter,
+            baseItems,
+            state.finishCounts
+        )
+        else -> baseItems
+    }
+    val sectionItems = quickFilteredItems.let {
         if (state.sort == LibrarySort.Natural) it else LibraryQuery.sortDisplayItems(it, state.sort)
     }
     val ids = sectionItems.mapTo(linkedSetOf()) { it.item.work.id }
@@ -1370,6 +1429,40 @@ private fun LibrarySectionContent(
                         },
                         palette = tokens.scopePalette
                     )
+                }
+                if (quickFilters.isNotEmpty()) {
+                    item {
+                        LazyRow(
+                            contentPadding = PaddingValues(horizontal = 16.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            items(quickFilters, key = { it.name }) { filter ->
+                                SubjectChip(
+                                    text = librarySectionQuickFilterLabel(kind, filter, countSource),
+                                    style = SubjectChipStyle.Pill(filter == selectedQuickFilter),
+                                    palette = tokens.scopePalette,
+                                    modifier = Modifier.clickable {
+                                        when (kind) {
+                                            LibrarySectionKind.ReadingNow -> onCompletionFilterChange(
+                                                if (filter == LibrarySectionQuickFilter.Wip) {
+                                                    LibraryCompletionFilter.InProgress
+                                                } else {
+                                                    LibraryCompletionFilter.Any
+                                                }
+                                            )
+                                            LibrarySectionKind.Favorites -> {
+                                                favoriteQuickFilter = filter
+                                                preferences.edit()
+                                                    .putString(FavoriteQuickFilterPreference, filter.name)
+                                                    .apply()
+                                            }
+                                            else -> Unit
+                                        }
+                                    }
+                                )
+                            }
+                        }
+                    }
                 }
                 item {
                     SectionRuleHeader(

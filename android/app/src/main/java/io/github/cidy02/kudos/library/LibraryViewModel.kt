@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import io.github.cidy02.kudos.app.PrivacyGate
+import io.github.cidy02.kudos.data.local.dao.ReadingLogDao
 import io.github.cidy02.kudos.data.preferences.SettingsRepository
 import io.github.cidy02.kudos.core.model.WorkDownloadAction
 import io.github.cidy02.kudos.core.model.WorkDownloadSemantics
@@ -18,6 +19,8 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -28,7 +31,8 @@ class LibraryViewModel(
     private val settingsRepository: SettingsRepository? = null,
     private val queueRepository: ReadingQueueRepository? = null,
     private val downloadQueue: DownloadQueue? = null,
-    private val privacyGate: PrivacyGate = PrivacyGate()
+    private val privacyGate: PrivacyGate = PrivacyGate(),
+    readingLogDao: ReadingLogDao? = null
 ) : ViewModel() {
     private val searchQuery = MutableStateFlow("")
     private val filters = MutableStateFlow(LibraryFilterState())
@@ -38,6 +42,12 @@ class LibraryViewModel(
     private val readingQueues = MutableStateFlow<List<LibraryQueuePreview>>(emptyList())
     private val deletedQueueCount = MutableStateFlow(0)
     private val queueRefreshTick = MutableStateFlow(0)
+    private val finishCounts = readingLogDao?.observeSessions()?.map { sessions ->
+        sessions.asSequence()
+            .filter { it.didFinish }
+            .groupingBy { it.workID }
+            .eachCount()
+    } ?: flowOf(emptyMap<String, Int>())
 
     // Same rule as Home: only a snapshot that already has works is a finished
     // load. The empty pre-seed emission must not become the first frame.
@@ -79,8 +89,11 @@ class LibraryViewModel(
     private val dashboardExtras = combine(
         readingQueues,
         repository.observeRecentlyDeletedCount(),
-        deletedQueueCount
-    ) { queues, deletedCount, queueCount -> Triple(queues, deletedCount, queueCount) }
+        deletedQueueCount,
+        finishCounts
+    ) { queues, deletedCount, queueCount, counts ->
+        LibraryDashboardExtras(queues, deletedCount + queueCount, counts)
+    }
 
     val state: StateFlow<LibraryUiState> = combine(
         libraryBase,
@@ -94,8 +107,9 @@ class LibraryViewModel(
             selectedWorkIds = if (selecting) ids else emptySet(),
             revealedWorkIds = revealed.revealedIds,
             revealAllActive = revealed.revealAll,
-            readingQueues = extras.first,
-            recentlyDeletedCount = extras.second + extras.third
+            readingQueues = extras.queues,
+            recentlyDeletedCount = extras.recentlyDeletedCount,
+            finishCounts = extras.finishCounts
             // Reveal is already folded into every shelf by LibraryQuery.buildState.
         )
     }.stateIn(
@@ -494,7 +508,8 @@ class LibraryViewModel(
             settingsRepository: SettingsRepository? = null,
             queueRepository: ReadingQueueRepository? = null,
             downloadQueue: DownloadQueue? = null,
-            privacyGate: PrivacyGate = PrivacyGate()
+            privacyGate: PrivacyGate = PrivacyGate(),
+            readingLogDao: ReadingLogDao? = null
         ): ViewModelProvider.Factory =
             viewModelFactory {
                 initializer {
@@ -504,12 +519,19 @@ class LibraryViewModel(
                         settingsRepository,
                         queueRepository,
                         downloadQueue,
-                        privacyGate
+                        privacyGate,
+                        readingLogDao
                     )
                 }
             }
     }
 }
+
+private data class LibraryDashboardExtras(
+    val queues: List<LibraryQueuePreview>,
+    val recentlyDeletedCount: Int,
+    val finishCounts: Map<String, Int>
+)
 
 private fun Set<String>.toggle(value: String): Set<String> {
     return if (value in this) this - value else this + value
