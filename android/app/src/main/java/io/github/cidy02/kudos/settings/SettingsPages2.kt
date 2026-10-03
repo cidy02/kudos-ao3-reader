@@ -129,62 +129,13 @@ fun SettingsLibraryPage(repository: SettingsRepository, settings: KudosSettings)
 
 @Composable
 fun SettingsImportPage(workImporter: WorkImporter?) {
-    val scope = rememberCoroutineScope()
-    val tokens = LocalKudosTokens.current
-    val context = LocalContext.current
-    var epubBusy by remember { mutableStateOf(false) }
-    var epubStatus by remember { mutableStateOf<String?>(null) }
-    var epubStatusIsError by remember { mutableStateOf(false) }
-
+    // T-353: imports go through the app's one import path (ExternalFileImport ->
+    // KudosApp), which confirms each file's detected download date, as iOS's
+    // SettingsImportPage does through DownloadDateImportConfirmation.
     val importEpubLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenMultipleDocuments()
     ) { uris: List<Uri> ->
-        if (uris.isEmpty() || workImporter == null) return@rememberLauncherForActivityResult
-        scope.launch {
-            epubBusy = true
-            epubStatus = null
-            try {
-                val successes = mutableListOf<String>()
-                val failures = mutableListOf<String>()
-                for (uri in uris) {
-                    val displayName = withContext(Dispatchers.IO) {
-                        io.github.cidy02.kudos.works.ExternalFileImport.displayNameFor(context, uri)
-                    }
-                    val label = displayName?.substringAfterLast('/')?.substringAfterLast('\\')?.ifBlank { null } ?: "file"
-                    try {
-                        val bytes = withContext(Dispatchers.IO) {
-                            context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
-                                ?: error("Could not read the selected file.")
-                        }
-                        when (val result = workImporter.importLocalEpub(displayName, bytes)) {
-                            is WorkImportResult.Success -> successes += "“${result.work.title}”"
-                            is WorkImportResult.Failure -> {
-                                val message = when (val err = result.error) {
-                                    is AO3Error.Validation -> err.message
-                                    else -> err.toString()
-                                }
-                                failures += "$label: $message"
-                            }
-                        }
-                    } catch (e: Exception) {
-                        failures += "$label: ${e.message ?: "Could not import."}"
-                    }
-                }
-                epubStatusIsError = failures.isNotEmpty() && successes.isEmpty()
-                epubStatus = if (successes.isNotEmpty()) {
-                    "Imported ${successes.size} files"
-                } else if (failures.isNotEmpty()) {
-                    failures.joinToString("\n")
-                } else {
-                    "Nothing imported."
-                }
-            } catch (error: Exception) {
-                epubStatusIsError = true
-                epubStatus = error.message ?: "Could not import EPUB."
-            } finally {
-                epubBusy = false
-            }
-        }
+        io.github.cidy02.kudos.works.ExternalFileImport.offer(uris)
     }
 
     SettingsPage(title = "Import") {
@@ -192,18 +143,10 @@ fun SettingsImportPage(workImporter: WorkImporter?) {
             Column(Modifier.padding(top = 22.dp)) {
                 SettingsPanel {
                     SettingsActionRow(
-                        label = if (epubBusy) "Importing…" else "Import Files",
+                        label = "Import Files",
                         icon = Icons.Outlined.NoteAdd,
-                        enabled = workImporter != null && !epubBusy,
+                        enabled = workImporter != null,
                         onClick = { importEpubLauncher.launch(EpubOpenMimeTypes) }
-                    )
-                }
-                if (epubStatus != null) {
-                    Text(
-                        text = epubStatus!!,
-                        color = if (epubStatusIsError) MaterialTheme.colorScheme.error else tokens.secondaryInk,
-                        fontSize = 13.sp,
-                        modifier = Modifier.padding(horizontal = SubjectMetrics.accountGutter).padding(top = 8.dp)
                     )
                 }
                 SettingsFootnote(

@@ -14,7 +14,8 @@ class SettingsStringsTest {
         "App Theme", "Reader Theme", "Accent color", "Apply accent", "Reset to AO3 Red",
         "Text size", "Line height", "Letter spacing", "Word spacing", "Margin", "Import font",
         "Could not import font.", "Could not delete font.",
-        "Could not import EPUB.", "Nothing imported.", "Check Now",
+        // Import results now come from the app-wide import path (KudosApp), not this page.
+        "Check Now",
         "Check library for deleted/hidden works on AO3.",
         "Enable folder sync", "Select sync folder", "Change sync folder", "Sync Now",
         "Require biometric to reveal", "Clear Reading History", "Clear Browse Cache",
