@@ -22,7 +22,10 @@ class MainActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         // Before super, and before the startup metadata refresh can leave the device.
         if (BuildConfig.DEBUG && DemoNetwork.isRequested(intent)) {
-            DemoNetwork.activate(applicationContext.assets)
+            DemoNetwork.activate(
+                applicationContext.assets,
+                signedIn = intent?.getBooleanExtra(DemoNetwork.SIGNED_IN_EXTRA, false) == true
+            )
         } else {
             DemoNetwork.markNotDemo()
         }

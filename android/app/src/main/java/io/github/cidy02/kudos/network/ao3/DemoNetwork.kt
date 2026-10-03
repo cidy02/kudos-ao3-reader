@@ -29,6 +29,13 @@ internal fun interface FixtureSource {
 
 internal object DemoNetwork {
     const val EXTRA = "kudosDemoLibrary"
+    /** `--ez kudosDemoSignedIn true` with the demo: a local session as iOS `-KudosDemoSignedIn YES`. */
+    const val SIGNED_IN_EXTRA = "kudosDemoSignedIn"
+
+    /** Design review only: a demo session answered by the fixtures. AO3 is never contacted. */
+    @Volatile
+    var signedIn: Boolean = false
+        private set
 
     @Volatile
     var isActive: Boolean = false
@@ -41,7 +48,8 @@ internal object DemoNetwork {
     private val launchDecision = CountDownLatch(1)
 
     /** Fixtures are published before [isActive], so a reader that sees active also sees them. */
-    fun activate(assets: AssetManager) {
+    fun activate(assets: AssetManager, signedIn: Boolean = false) {
+        this.signedIn = signedIn
         fixtures = AssetFixtureSource(assets)
         isActive = true
         launchDecision.countDown()
