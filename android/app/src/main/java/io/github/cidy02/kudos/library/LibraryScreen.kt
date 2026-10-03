@@ -127,7 +127,7 @@ import io.github.cidy02.kudos.ui.subject.SwipeAction
 import io.github.cidy02.kudos.ui.subject.SwipeActionRow
 import io.github.cidy02.kudos.ui.subject.WorkCardCarousel
 import io.github.cidy02.kudos.ui.subject.SubjectWorkCoverCard
-import io.github.cidy02.kudos.ui.subject.WorkLedgerRow as SubjectWorkLedgerRow
+import io.github.cidy02.kudos.ui.components.SensitiveWorkRow
 import io.github.cidy02.kudos.ui.subject.WorkSectionLayout
 import io.github.cidy02.kudos.ui.subject.defaultWorkSignals
 import io.github.cidy02.kudos.ui.subject.subjectPanel
@@ -1073,34 +1073,18 @@ private fun LibrarySubjectLedgerRow(
     var menuOpen by remember(work.id) { mutableStateOf(false) }
     val progress = work.readingProgressFraction() ?: 0.0
     val row: @Composable () -> Unit = {
-        SubjectWorkLedgerRow(
-            title = work.title,
-            author = work.author,
-            fandoms = work.workFandoms,
-            metadata = listOfNotNull(
-                work.author.ifBlank { null },
-                work.wordCount.takeIf { it > 0 }?.let(::compactWords),
-                work.chapters.takeIf { it.isNotBlank() }
-            ).joinToString(" · "),
-            progress = progress,
-            progressState = when {
-                work.isFinished -> "Finished"
-                progress > 0 -> "Reading"
-                else -> null
+        SensitiveWorkRow(
+            work = work,
+            onOpenWork = {
+                if (work.hasEpub) actions.onOpenReader(work.id) else actions.onOpenWork(work.id)
             },
-            signals = defaultWorkSignals(work.rating, work.workCategories, work.workWarnings, work.isComplete),
-            obscured = obscured,
-            favorite = kind == LibrarySectionKind.Favorites && work.isFavorite,
+            selecting = selecting,
             selected = selected,
-            onClick = {
-                when {
-                    selecting -> actions.onSelect(work.id)
-                    obscured -> actions.onReveal(work.id)
-                    work.hasEpub -> actions.onOpenReader(work.id)
-                    else -> actions.onOpenWork(work.id)
-                }
-            },
-            onLongClick = { if (!obscured && !selecting) menuOpen = true }
+            obscured = obscured,
+            onSelect = { actions.onSelect(work.id) },
+            onReveal = { actions.onReveal(work.id) },
+            onLongClick = { if (!obscured && !selecting) menuOpen = true },
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
         )
     }
     if (selecting || obscured) {
@@ -1289,14 +1273,16 @@ private fun LibrarySectionContent(
     onRefresh: suspend () -> Unit
 ) {
     val tokens = LocalKudosTokens.current
-    // iOS LibrarySectionListView: Default keeps the section's own order; any other sort applies.
-    val sectionItems = kind.items(state).let {
+    val baseItems = kind.items(state)
+    val sectionItems = baseItems.let {
         if (state.sort == LibrarySort.Natural) it else LibraryQuery.sortDisplayItems(it, state.sort)
     }
     val ids = sectionItems.mapTo(linkedSetOf()) { it.item.work.id }
     val allSelected = ids.isNotEmpty() && state.selectedWorkIds.containsAll(ids)
 
     BackHandler(enabled = state.selectionMode) { onExitSelection() }
+
+    var showMenu by remember { mutableStateOf(false) }
 
     ProvidePushedShellChrome(
         hasSubjectHeader = true,
@@ -1318,22 +1304,26 @@ private fun LibrarySectionContent(
                     badgeCount = state.filters.activeCount + if (state.searchQuery.isBlank()) 0 else 1,
                     onClick = onShowFilters
                 )
-                if (state.showPrivacyToggle) {
+                Box {
                     ToolbarCircleButton(
-                        onClick = onTogglePrivacy,
-                        accessibilityName = if (state.revealAllActive) "Hide mature works" else "Show mature works"
+                        onClick = { showMenu = true },
+                        accessibilityName = "More options"
                     ) {
-                        Icon(
-                            if (state.revealAllActive) Icons.Filled.Visibility else Icons.Filled.VisibilityOff,
-                            contentDescription = null
+                        Icon(Icons.Filled.MoreVert, contentDescription = null)
+                    }
+                    DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+                        if (state.showPrivacyToggle) {
+                            DropdownMenuItem(
+                                text = { Text(if (state.revealAllActive) "Hide mature works" else "Show mature works") },
+                                onClick = { showMenu = false; onTogglePrivacy() }
+                            )
+                        }
+                        DropdownMenuItem(
+                            text = { Text("Select") },
+                            onClick = { showMenu = false; onEnterSelection() },
+                            enabled = baseItems.isNotEmpty()
                         )
                     }
-                }
-                ToolbarCircleButton(
-                    onClick = onEnterSelection,
-                    accessibilityName = "Select"
-                ) {
-                    Icon(Icons.Outlined.Checklist, contentDescription = null)
                 }
             }
         }
@@ -1354,10 +1344,24 @@ private fun LibrarySectionContent(
                     SubjectHeaderBlock(
                         kicker = "Library",
                         title = kind.title,
-                        subtitle = "${sectionItems.size} ${if (sectionItems.size == 1) "work" else "works"}",
+                        subtitle = if (state.hasActiveQueryOrFilters && sectionItems.isEmpty()) {
+                            "${baseItems.size} ${if (baseItems.size == 1) "work" else "works"} · none match the current filters"
+                        } else {
+                            val sortLabel = if (state.hasActiveQueryOrFilters) null else {
+                                if (state.sort != LibrarySort.Natural) state.sort.label else when (kind) {
+                                    LibrarySectionKind.ReadingNow, LibrarySectionKind.History -> "most recently read first"
+                                    LibrarySectionKind.Finished -> "most recently finished first"
+                                    LibrarySectionKind.SavedForLater, LibrarySectionKind.Favorites -> "most recently added first"
+                                    LibrarySectionKind.Downloaded -> "most recently downloaded first"
+                                    else -> "default order"
+                                }
+                            }
+                            "${sectionItems.size} ${if (sectionItems.size == 1) "work" else "works"}" + (sortLabel?.let { " · $it" } ?: "")
+                        },
                         palette = tokens.scopePalette
                     )
                 }
+                item { SectionRuleHeader(kind.title.uppercase(), modifier = Modifier.padding(top = 8.dp)) }
                 when {
                     state.loading -> item { LoadingStateCard("Loading ${kind.title}", Modifier.padding(horizontal = 16.dp)) }
                     state.error != null -> item {

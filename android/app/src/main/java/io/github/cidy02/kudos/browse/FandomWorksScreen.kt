@@ -37,7 +37,7 @@ import io.github.cidy02.kudos.network.ao3.search.AO3WorkSummary
 import io.github.cidy02.kudos.search.SearchFilterSheet
 import io.github.cidy02.kudos.search.activeFilterCount
 import io.github.cidy02.kudos.search.collectLocalTagSuggestions
-import io.github.cidy02.kudos.ui.components.AO3WorkCard
+import io.github.cidy02.kudos.ui.components.SensitiveWorkRow
 import io.github.cidy02.kudos.ui.components.KudosPaginationBar
 import io.github.cidy02.kudos.ui.components.EmptyStateCard
 import io.github.cidy02.kudos.ui.components.KudosSectionHeader
@@ -233,7 +233,7 @@ fun FandomWorksScreen(
                             } else {
                                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                     LocalIndicatorRow(BrowseLocalIndicators.forWork(work, savedByUrl))
-                                    AO3WorkCard(
+                                    SensitiveWorkRow(
                                         work = work,
                                         onOpenWork = onOpenWork,
                                         expandAll = expandAllCards

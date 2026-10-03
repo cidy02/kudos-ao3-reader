@@ -67,7 +67,7 @@ import io.github.cidy02.kudos.network.ao3.search.AO3SearchPage
 import io.github.cidy02.kudos.network.ao3.search.AO3SearchRepository
 import io.github.cidy02.kudos.network.ao3.search.AO3SearchSort
 import io.github.cidy02.kudos.network.ao3.search.AO3WorkSummary
-import io.github.cidy02.kudos.ui.components.AO3WorkCard
+import io.github.cidy02.kudos.ui.components.SensitiveWorkRow
 import io.github.cidy02.kudos.ui.components.DestructiveConfirmation
 import io.github.cidy02.kudos.ui.components.GlassFieldBar
 import io.github.cidy02.kudos.ui.components.KudosPaginationBar
@@ -83,9 +83,7 @@ import io.github.cidy02.kudos.ui.subject.SectionRuleHeader
 import io.github.cidy02.kudos.ui.subject.SubjectMetrics
 import io.github.cidy02.kudos.ui.subject.SubjectPalette
 import io.github.cidy02.kudos.ui.subject.ToolbarCircleButton
-import io.github.cidy02.kudos.ui.subject.WorkLedgerRow
 import io.github.cidy02.kudos.ui.subject.compactCount
-import io.github.cidy02.kudos.ui.subject.defaultWorkSignals
 import io.github.cidy02.kudos.ui.subject.subjectPanel
 import io.github.cidy02.kudos.ui.subject.subjectScreenWash
 import io.github.cidy02.kudos.works.CanonicalWork
@@ -840,26 +838,14 @@ private fun LocalMatchesList(
             item { SectionRuleHeader(title = "In Your Library", modifier = Modifier.padding(top = 8.dp)) }
             items(matches.works, key = { it.id }) { work ->
                 val selected = work.id in selection
-                WorkLedgerRow(
-                    title = work.title,
-                    author = work.author,
-                    fandoms = work.workFandoms,
-                    metadata = work.author.ifBlank { "Anonymous" },
-                    progress = work.readingProgressFraction() ?: 0.0,
-                    progressState = when {
-                        work.isFinished -> "Finished"
-                        (work.readingProgressFraction() ?: 0.0) > 0 -> "Reading"
-                        else -> null
-                    },
-                    signals = defaultWorkSignals(work.rating, work.workCategories, work.workWarnings, work.isComplete),
-                    obscured = false,
-                    favorite = work.isFavorite,
+                SensitiveWorkRow(
+                    work = work,
+                    onOpenWork = { onOpenWork(work) },
                     selected = selecting && selected,
-                    onClick = {
-                        if (selecting) onToggle(work.id) else onOpenWork(work)
-                    },
+                    selecting = selecting,
+                    onSelect = { onToggle(work.id) },
                     onLongClick = { onSelect(work.id) },
-                    modifier = Modifier.padding(horizontal = 16.dp)
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
                 )
             }
         }
@@ -1040,7 +1026,7 @@ private fun SearchResultsList(
                         modifier = Modifier.padding(horizontal = 16.dp)
                     )
                 } else {
-                    AO3WorkCard(
+                    SensitiveWorkRow(
                         work = work.remote,
                         onOpenWork = onOpenWork,
                         expandAll = expandAll,

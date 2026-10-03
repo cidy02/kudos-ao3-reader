@@ -32,7 +32,7 @@ import io.github.cidy02.kudos.network.ao3.AO3Result
 import io.github.cidy02.kudos.network.ao3.author.AO3AuthorWorksRepository
 import io.github.cidy02.kudos.network.ao3.search.AO3SearchPage
 import io.github.cidy02.kudos.network.ao3.search.AO3WorkSummary
-import io.github.cidy02.kudos.ui.components.AO3WorkCard
+import io.github.cidy02.kudos.ui.components.SensitiveWorkRow
 import io.github.cidy02.kudos.ui.components.EmptyStateCard
 import io.github.cidy02.kudos.ui.components.ErrorStateCard
 import io.github.cidy02.kudos.ui.components.KudosScreenHeader
@@ -149,7 +149,7 @@ fun AuthorWorksScreen(
                             }
                             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                 LocalIndicatorRow(BrowseLocalIndicators.forWork(work, savedByUrl))
-                                AO3WorkCard(work = work, onOpenWork = onOpenWork)
+                                SensitiveWorkRow(work = work, onOpenWork = onOpenWork)
                             }
                         }
                         item {
