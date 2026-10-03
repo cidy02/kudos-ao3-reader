@@ -37,7 +37,8 @@ class AO3CommentParser(
             workAuthors = parseWorkAuthors(document),
             currentPage = currentPage,
             totalPages = parseTotalPages(document, currentPage),
-            totalComments = parseTotalComments(document)
+            totalComments = parseTotalComments(document),
+            workTitle = parseWorkTitle(document)
         )
     }
 
@@ -79,6 +80,21 @@ class AO3CommentParser(
             if (authors.isNotEmpty()) return authors
         }
         return emptyList()
+    }
+
+    private fun parseWorkTitle(document: Document): String? {
+        val selectors = listOf(
+            "#workskin > .preface h2.title",
+            "#workskin .preface h2.title",
+            "#main > .preface h2.title",
+            "h2.title.heading"
+        )
+        for (selector in selectors) {
+            val titleEl = document.selectFirst(selector) ?: continue
+            val text = titleEl.normalizedText()
+            if (text.isNotBlank()) return text
+        }
+        return null
     }
 
     /**

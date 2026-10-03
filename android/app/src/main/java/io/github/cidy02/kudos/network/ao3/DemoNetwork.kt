@@ -99,6 +99,7 @@ internal object DemoNetworkRoutes {
     private val routes: List<Pair<Regex, String>> = listOf(
         "^/works/new" to "ao3_work_new_draft",
         "^/works/\\d+/edit" to "ao3_work_edit",
+        "^/works/\\d+/navigate" to "ao3_chapter_navigate",
         "comments" to "ao3_comments_page",
         "^/works/\\d+" to "ao3_work_bookmarked_subscribed",
         "edit_multiple" to "ao3_edit_multiple",
@@ -159,7 +160,9 @@ internal class DemoNetworkInterceptor(
         if (!isActive()) return chain.proceed(chain.request())
         val url = chain.request().url
         if (!DemoNetworkRoutes.isAo3Host(url.host)) return chain.proceed(chain.request())
-        val name = DemoNetworkRoutes.fixtureName(DemoNetworkRoutes.decodedPath(url))
+        val path = DemoNetworkRoutes.decodedPath(url)
+        val matchTarget = if (url.queryParameter("show_comments") == "true") "$path/comments" else path
+        val name = DemoNetworkRoutes.fixtureName(matchTarget)
         val bytes = name?.let { fixtures().read(it) }
         val code = if (bytes == null) 404 else 200
         return Response.Builder()

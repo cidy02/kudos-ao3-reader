@@ -1,11 +1,11 @@
 package io.github.cidy02.kudos.comments
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.AnimatedVisibility
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -18,102 +18,116 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowDropDown
-import androidx.compose.material.icons.filled.ArrowRight
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.SwapVert
+import androidx.compose.material.icons.outlined.Book
+import androidx.compose.material.icons.outlined.ChatBubbleOutline
+import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.ErrorOutline
+import androidx.compose.material.icons.outlined.OpenInFull
+import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import io.github.cidy02.kudos.network.ao3.AO3Result
+import io.github.cidy02.kudos.app.ProvidePushedShellChrome
+import io.github.cidy02.kudos.core.model.KudosSettings
+import io.github.cidy02.kudos.data.preferences.SettingsRepository
+import io.github.cidy02.kudos.home.HomeFacts
+import io.github.cidy02.kudos.network.ao3.chapters.AO3ChapterIndexRepository
+import io.github.cidy02.kudos.network.ao3.chapters.AO3ChapterRef
 import io.github.cidy02.kudos.network.ao3.comments.AO3Comment
-import io.github.cidy02.kudos.network.ao3.comments.AO3CommentParticipantRole
 import io.github.cidy02.kudos.network.ao3.comments.AO3CommentRepository
 import io.github.cidy02.kudos.network.ao3.comments.AO3CommentTarget
 import io.github.cidy02.kudos.network.ao3.comments.AO3CommentThread
 import io.github.cidy02.kudos.network.ao3.comments.AO3CommentWorkAuthor
 import io.github.cidy02.kudos.network.ao3.comments.CommentDraftStore
-import io.github.cidy02.kudos.core.model.KudosSettings
-import io.github.cidy02.kudos.data.preferences.SettingsRepository
-import io.github.cidy02.kudos.ui.components.DestructiveConfirmation
-import io.github.cidy02.kudos.ui.components.CommentAvatar
-import io.github.cidy02.kudos.ui.components.CommentParticipantBadge
+import io.github.cidy02.kudos.network.ao3.writes.AO3WriteUrls
+import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
+import io.github.cidy02.kudos.ui.subject.SectionRuleHeader
+import io.github.cidy02.kudos.ui.subject.SubjectChip
+import io.github.cidy02.kudos.ui.subject.SubjectChipStyle
+import io.github.cidy02.kudos.ui.subject.SubjectHeaderBlock
+import io.github.cidy02.kudos.ui.subject.SubjectPalette
+import io.github.cidy02.kudos.ui.subject.SubjectStatCell
+import io.github.cidy02.kudos.ui.subject.SubjectStatStrip
+import io.github.cidy02.kudos.ui.subject.compactCount
+import io.github.cidy02.kudos.ui.subject.subjectScreenWash
 import kotlinx.coroutines.launch
 
-/** In-composer reply target (parent comment for a reply POST). */
-private data class ReplyTarget(
-    val commentId: Long,
-    val authorName: String
-)
-
+/**
+ * Comments screen matching iOS `CommentsView.swift` redesigned architecture and density.
+ */
 @Composable
 fun CommentsScreen(
     target: AO3CommentTarget?,
     repository: AO3CommentRepository,
     onLogin: () -> Unit,
     currentUsername: String? = null,
-    /** Opens the commenter's AO3 profile (username), same as a byline author tap. */
     onOpenAuthor: (String) -> Unit = {},
     draftStore: CommentDraftStore? = null,
     settingsRepository: SettingsRepository? = null,
     focusedCommentId: Long? = null,
-    /** 1-based AO3 story chapter to open on, from the reader's Comments button. */
     initialChapterPosition: Int? = null,
-    chapterIndexRepository:
-        io.github.cidy02.kudos.network.ao3.chapters.AO3ChapterIndexRepository? = null
+    chapterIndexRepository: AO3ChapterIndexRepository? = null,
+    isModal: Boolean = false,
+    onRequestExpand: (() -> Unit)? = null,
+    onBack: (() -> Unit)? = null
 ) {
     val viewModel: CommentsViewModel = viewModel(
         key = target?.workId?.toString(),
         factory = CommentsViewModel.factory(repository, target, draftStore, currentUsername)
     )
-    
-    // Initial focus from deep-link (Inbox tap)
+
+    // Deep link focus (e.g. Inbox notification)
     LaunchedEffect(focusedCommentId) {
         if (focusedCommentId != null) {
             viewModel.load(focusedId = focusedCommentId)
         }
     }
 
-    // Reader's chapter-aware Comments button: resolve the 1-based story chapter
-    // against the live /navigate index and open By Chapter on it. If the index is
-    // unavailable or the work is single-chapter, iOS falls back to work-level All
-    // comments, which show the same thread anyway — so do the same rather than
-    // surfacing an error the user can't act on.
+    // Reader's chapter-aware comments button
     LaunchedEffect(initialChapterPosition, target?.workId) {
         val workId = target?.workId ?: return@LaunchedEffect
         val position = initialChapterPosition ?: return@LaunchedEffect
@@ -125,760 +139,719 @@ fun CommentsScreen(
     }
 
     val state by viewModel.state.collectAsState()
-    val settingsState = settingsRepository?.settings?.collectAsState(initial = KudosSettings.Defaults)
-    val settings = settingsState?.value ?: KudosSettings.Defaults
+    val scopeMode by viewModel.scope.collectAsState()
+    val chapters by viewModel.chapters.collectAsState()
+    val selectedChapter by viewModel.selectedChapter.collectAsState()
+    val order by viewModel.order.collectAsState()
     val draft by viewModel.draft.collectAsState()
     val submitting by viewModel.submitting.collectAsState()
     val message by viewModel.message.collectAsState()
-    val currentTarget by viewModel.currentTarget.collectAsState()
-    val focusedCommentId by viewModel.focusedCommentId.collectAsState()
-    val order by viewModel.order.collectAsState()
-    val replyTarget by viewModel.replyTarget.collectAsState()
+    val composerPresented by viewModel.composerPresented.collectAsState()
+    val composerParent by viewModel.composerParent.collectAsState()
     val editTarget by viewModel.editTarget.collectAsState()
-    
-    val scope = rememberCoroutineScope()
-    val listState = rememberLazyListState()
-    var pendingDeleteComment by remember { mutableStateOf<AO3Comment?>(null) }
-    val collapsedIds = remember { mutableStateMapOf<String, Boolean>() }
-    val visibleReplyCounts = remember { mutableStateMapOf<String, Int>() }
+    val expandedRootIds by viewModel.expandedRootIds.collectAsState()
+    val visibleReplyCounts by viewModel.visibleReplyCounts.collectAsState()
+    val collapsedRootIds by viewModel.collapsedRootIds.collectAsState()
 
-    fun startReply(comment: AO3Comment) {
-        viewModel.startReply(comment)
-        scope.launch {
-            listState.animateScrollToItem(0)
-        }
+    val tokens = LocalKudosTokens.current
+    val clipboard = LocalClipboardManager.current
+    val coroutineScope = rememberCoroutineScope()
+    val listState = rememberLazyListState()
+    val configuration = LocalConfiguration.current
+    val screenWidth = configuration.screenWidthDp.dp
+
+    var showingChapterPicker by remember { mutableStateOf(false) }
+    var sortMenuOpen by remember { mutableStateOf(false) }
+    var pendingDeleteComment by remember { mutableStateOf<AO3Comment?>(null) }
+    var pushedThreadRootId by remember { mutableStateOf<Long?>(null) }
+
+    val swipeTracker = remember { CommentSwipeTracker() }
+
+    // Sourced work title & hue
+    val workTitle = (state as? CommentsUiState.Loaded)?.thread?.workTitle ?: "Comments"
+    val workHue = remember(workTitle) {
+        HomeFacts.workHue(emptyList(), workTitle)
+    }
+    val palette = remember(workHue, tokens.theme) {
+        SubjectPalette.fromHue(workHue, tokens.theme)
     }
 
-    DestructiveConfirmation(
-        show = pendingDeleteComment != null,
-        title = "Delete comment?",
-        text = "This will permanently remove your comment from AO3.",
-        confirmText = "Delete",
-        confirmBeforeDelete = settings.app.confirmBeforeDelete,
-        onConfirm = {
-            val comment = pendingDeleteComment ?: return@DestructiveConfirmation
-            pendingDeleteComment = null
-            viewModel.deleteComment(comment)
-        },
-        onDismissRequest = { pendingDeleteComment = null }
+    val handlers = remember(viewModel, onLogin, onOpenAuthor) {
+        CommentThreadHandlers(
+            onReply = { comment -> viewModel.openComposer(replyingTo = comment) },
+            onEdit = { comment -> viewModel.openComposer(editing = comment) },
+            onDelete = { comment -> pendingDeleteComment = comment },
+            onCopyLink = { comment ->
+                val path = comment.threadPath ?: "/comments/${comment.numericId ?: ""}"
+                val url = AO3WriteUrls.absoluteUrl(path) ?: "https://archiveofourown.org$path"
+                clipboard.setText(AnnotatedString(url))
+            },
+            onFocusThread = { commentId ->
+                pushedThreadRootId = commentId
+            },
+            onRequestLogin = onLogin,
+            onOpenAuthor = onOpenAuthor
+        )
+    }
+
+    // If an isolated thread is opened, render CommentThreadScreen
+    if (pushedThreadRootId != null) {
+        val rootComment = remember(pushedThreadRootId, state) {
+            pushedThreadRootId?.let { viewModel.findComment(it) }
+        }
+        val authors = (state as? CommentsUiState.Loaded)?.thread?.workAuthors ?: emptyList()
+        CommentThreadScreen(
+            root = rootComment,
+            workTitle = workTitle,
+            workAuthors = authors.map { it.displayName },
+            workAuthorUsernames = authors.mapNotNull { it.username },
+            palette = palette,
+            handlers = handlers,
+            onBack = { pushedThreadRootId = null }
+        )
+        return
+    }
+
+    // Pushed chrome registration
+    ProvidePushedShellChrome(
+        hasSubjectHeader = true,
+        hideTabBar = true,
+        onBack = onBack,
+        trailingContent = if (isModal) {
+            {
+                if (onRequestExpand != null) {
+                    IconButton(onClick = onRequestExpand) {
+                        Icon(
+                            imageVector = Icons.Outlined.OpenInFull,
+                            contentDescription = "Expand to full screen",
+                            tint = tokens.primaryInk
+                        )
+                    }
+                }
+                IconButton(onClick = { onBack?.invoke() }) {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = "Close",
+                        tint = tokens.primaryInk
+                    )
+                }
+            }
+        } else null
     )
 
-    when (val current = state) {
-        CommentsUiState.Loading -> {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(24.dp),
-                verticalArrangement = Arrangement.Center,
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                CircularProgressIndicator()
-                Text(
-                    text = "Loading comments…",
-                    modifier = Modifier.padding(top = 12.dp),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+    // Delete confirmation dialog
+    if (pendingDeleteComment != null) {
+        AlertDialog(
+            onDismissRequest = { pendingDeleteComment = null },
+            title = { Text("Delete this comment?") },
+            text = { Text("This removes the comment on AO3. It cannot be undone.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val toDelete = pendingDeleteComment
+                        pendingDeleteComment = null
+                        if (toDelete != null) viewModel.deleteComment(toDelete)
+                    }
+                ) {
+                    Text("Delete", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingDeleteComment = null }) {
+                    Text("Cancel")
+                }
             }
-        }
-        is CommentsUiState.AuthRequired -> {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(20.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Text(current.message, color = MaterialTheme.colorScheme.error)
-                Button(onClick = onLogin) { Text("Log in to AO3") }
-                OutlinedButton(onClick = { viewModel.load() }) { Text("Retry") }
+        )
+    }
+
+    // Action banner message dialog
+    if (message != null) {
+        AlertDialog(
+            onDismissRequest = { viewModel.clearMessage() },
+            title = { Text("AO3") },
+            text = { Text(message.orEmpty()) },
+            confirmButton = {
+                TextButton(onClick = { viewModel.clearMessage() }) {
+                    Text("OK")
+                }
             }
-        }
-        is CommentsUiState.Error -> {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(20.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Text(current.message, color = MaterialTheme.colorScheme.error)
-                OutlinedButton(onClick = { viewModel.load() }) { Text("Retry") }
-            }
-        }
-        is CommentsUiState.Loaded -> {
-            val thread = current.thread
-            LazyColumn(
-                state = listState,
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(horizontal = 20.dp, vertical = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                item {
-                    if (focusedCommentId != null) {
-                        Surface(
-                            color = MaterialTheme.colorScheme.secondaryContainer,
-                            shape = MaterialTheme.shapes.medium,
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(12.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    "Viewing focused thread",
-                                    style = MaterialTheme.typography.labelLarge
-                                )
-                                TextButton(onClick = { viewModel.load(1, null) }) {
-                                    Text("Show all")
+        )
+    }
+
+    // Chapter picker modal sheet
+    if (showingChapterPicker) {
+        ChapterPickerSheet(
+            chapters = chapters,
+            selectedChapter = selectedChapter,
+            isScopeAll = scopeMode == CommentScope.All,
+            totalComments = (state as? CommentsUiState.Loaded)?.thread?.totalComments,
+            onSelectAll = {
+                viewModel.setScope(CommentScope.All)
+                showingChapterPicker = false
+            },
+            onSelectChapter = { chapter ->
+                viewModel.selectChapter(chapter)
+                showingChapterPicker = false
+            },
+            onDismiss = { showingChapterPicker = false }
+        )
+    }
+
+    // Composer modal sheet
+    if (composerPresented) {
+        CommentComposerSheet(
+            replyTarget = composerParent,
+            editTarget = editTarget,
+            draft = draft,
+            onDraftChange = viewModel::updateDraft,
+            submitting = submitting,
+            currentUsername = currentUsername,
+            isScopeByChapter = scopeMode == CommentScope.ByChapter,
+            palette = palette,
+            onDismiss = viewModel::closeComposer,
+            onSubmit = viewModel::submitComment,
+            onOpenAuthor = onOpenAuthor
+        )
+    }
+
+    val loadedThread = (state as? CommentsUiState.Loaded)?.thread
+    val loadedFigures = remember(loadedThread) {
+        loadedThread?.let { calculateFigures(it) }
+    }
+    val allComments = remember(loadedThread) {
+        loadedThread?.let { flattenAll(it.comments) } ?: emptyList()
+    }
+    val repliesByRoot = remember(loadedThread) {
+        loadedThread?.comments?.associate { root ->
+            (root.numericId ?: 0L) to CommentThreadGeometry.flattenedReplies(root)
+        } ?: emptyMap()
+    }
+    val rows = remember(
+        loadedThread?.comments,
+        repliesByRoot,
+        expandedRootIds,
+        visibleReplyCounts,
+        collapsedRootIds
+    ) {
+        if (loadedThread != null) {
+            CommentConversationBuilder.rows(
+                roots = loadedThread.comments,
+                repliesByRoot = repliesByRoot,
+                expandedRootIds = expandedRootIds,
+                visibleReplyCounts = visibleReplyCounts,
+                collapsedRootIds = collapsedRootIds
+            )
+        } else emptyList()
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .subjectScreenWash(palette, 480.dp)
+    ) {
+        LazyColumn(
+            state = listState,
+            modifier = Modifier.fillMaxSize()
+        ) {
+            // Header kicker and work title
+            item {
+                val kicker = if (scopeMode == CommentScope.ByChapter && selectedChapter != null) {
+                    "Chapter ${selectedChapter?.position}"
+                } else {
+                    "Comments"
+                }
+
+                val authors = (state as? CommentsUiState.Loaded)?.thread?.workAuthors ?: emptyList()
+
+                SubjectHeaderBlock(
+                    kicker = kicker,
+                    title = workTitle,
+                    palette = palette,
+                    // Below the floating back circle, as every pushed subject screen.
+                    modifier = Modifier.padding(
+                        top = androidx.compose.foundation.layout.WindowInsets.systemBars
+                            .asPaddingValues().calculateTopPadding() + 56.dp
+                    ),
+                    trailing = if (authors.isNotEmpty()) {
+                        {
+                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                for (author in authors) {
+                                    Text(
+                                        text = author.displayName,
+                                        fontSize = 15.sp,
+                                        color = tokens.primaryInk,
+                                        modifier = Modifier.clickable {
+                                            author.username?.let(onOpenAuthor)
+                                        }
+                                    )
                                 }
                             }
                         }
-                    }
-                }
-                
-                // Chapter Picker + Sort (iOS parity)
-                item {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        ChapterScopePicker(
-                            currentTarget = currentTarget,
-                            initialTarget = viewModel.initialTarget,
-                            onSelectTarget = { viewModel.setTarget(it) },
-                            modifier = Modifier.weight(1f)
-                        )
-                        
-                        var sortMenuOpen by remember { mutableStateOf(false) }
-                        Box {
-                            TextButton(onClick = { sortMenuOpen = true }) {
-                                Text(if (order == CommentOrder.NewestFirst) "Newest First" else "Oldest First")
-                                Icon(Icons.Default.ArrowDropDown, null)
-                            }
-                            DropdownMenu(expanded = sortMenuOpen, onDismissRequest = { sortMenuOpen = false }) {
-                                DropdownMenuItem(
-                                    text = { Text("Oldest First") },
-                                    onClick = {
-                                        viewModel.setOrder(CommentOrder.OldestFirst)
-                                        sortMenuOpen = false
-                                    }
-                                )
-                                DropdownMenuItem(
-                                    text = { Text("Newest First") },
-                                    onClick = {
-                                        viewModel.setOrder(CommentOrder.NewestFirst)
-                                        sortMenuOpen = false
-                                    }
-                                )
-                            }
-                        }
-                    }
-                }
+                    } else null
+                )
+            }
+
+            // Stat strip & Signal scope note
+            if (loadedThread != null && loadedFigures != null) {
+                val thread = loadedThread
 
                 item {
-                    // Show target picker if multiple chapters available.
-                    // (Requires more data in thread model).
-                    
-                    CommentComposer(
-                        thread = thread,
-                        draft = draft,
-                        submitting = submitting,
-                        replyTarget = replyTarget?.let { ReplyTarget(it.commentId, it.authorName) },
-                        editTarget = editTarget,
-                        onDraft = viewModel::updateDraft,
-                        onCancelReply = viewModel::cancelReply,
-                        onCancelEdit = viewModel::cancelEdit,
-                        onLogin = onLogin,
-                        onSubmit = { viewModel.submitComment() }
+                    val cells = mutableListOf<SubjectStatCell>()
+                    if (thread.totalComments != null) {
+                        cells.add(
+                            SubjectStatCell(
+                                value = thread.totalComments.compactCount(),
+                                label = "Comments"
+                            )
+                        )
+                    }
+                    cells.add(
+                        SubjectStatCell(
+                            value = loadedFigures.threads.compactCount(),
+                            label = "Threads"
+                        )
                     )
-                }
-                message?.let { msg ->
-                    item {
-                        Text(msg, color = MaterialTheme.colorScheme.primary)
-                    }
-                }
-                if (thread.totalPages > 1) {
-                    item {
-                        PaginationControls(
-                            page = thread.currentPage,
-                            totalPages = thread.totalPages,
-                            onLoadPage = { page -> viewModel.load(page) }
+                    if (currentUsername != null) {
+                        cells.add(
+                            SubjectStatCell(
+                                value = loadedFigures.mine.compactCount(),
+                                label = "Yours",
+                                isHighlighted = loadedFigures.mine > 0
+                            )
                         )
                     }
-                }
-                item { HorizontalDivider() }
-                if (thread.comments.isEmpty()) {
-                    item {
+                    if (loadedFigures.latest != null) {
+                        cells.add(
+                            SubjectStatCell(
+                                value = loadedFigures.latest,
+                                label = "Latest"
+                            )
+                        )
+                    }
+
+                    if (cells.isNotEmpty()) {
+                        SubjectStatStrip(
+                            cells = cells,
+                            palette = palette,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)
+                        )
+                    }
+
+                    if (thread.totalPages > 1) {
                         Text(
-                            "No comments yet.",
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            text = "Threads, Yours and Latest count only this page. The comment total covers the whole work.",
+                            fontSize = 11.5.sp,
+                            color = tokens.secondaryInk.copy(alpha = 0.7f),
+                            modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
+                            lineHeight = 16.sp
                         )
                     }
+                }
+            }
+
+            // Filter rail: Chapter pill + Sort pill
+            item {
+                val chapterPillTitle = if (scopeMode == CommentScope.ByChapter) {
+                    selectedChapter?.let { "Chapter ${it.position}" } ?: "By chapter"
                 } else {
-                    items(
-                        items = thread.comments,
-                        key = { it.id ?: "${it.author.name}-${it.date}-${it.body.hashCode()}" }
-                    ) { comment ->
-                        CommentThreadRow(
-                            comment = comment,
-                            currentUsername = currentUsername,
-                            workAuthors = thread.workAuthors,
-                            onReply = ::startReply,
-                            onEdit = { viewModel.startEdit(it) },
-                            onDelete = { pendingDeleteComment = it },
-                            onLoadMore = { viewModel.load() },
-                            onViewThread = { commentId -> viewModel.load(focusedId = commentId) },
-                            onOpenAuthor = onOpenAuthor,
-                            collapsedIds = collapsedIds,
-                            visibleReplyCounts = visibleReplyCounts
-                        )
-                    }
-                }
-                if (thread.totalPages > 1) {
-                    item {
-                        PaginationControls(
-                            page = thread.currentPage,
-                            totalPages = thread.totalPages,
-                            onLoadPage = { page -> viewModel.load(page) }
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun CommentComposer(
-    thread: AO3CommentThread,
-    draft: String,
-    submitting: Boolean,
-    replyTarget: ReplyTarget?,
-    editTarget: AO3Comment? = null,
-    onDraft: (String) -> Unit,
-    onCancelReply: () -> Unit,
-    onCancelEdit: () -> Unit = {},
-    onLogin: () -> Unit,
-    onSubmit: () -> Unit
-) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        when {
-            // Prefer composer when form is present (signed-in).
-            thread.form != null -> {
-                if (replyTarget != null || editTarget != null) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = when {
-                                editTarget != null -> "Editing your comment"
-                                else -> "Replying to ${replyTarget?.authorName}"
-                            },
-                            style = MaterialTheme.typography.labelLarge,
-                            color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.weight(1f)
-                        )
-                        TextButton(onClick = {
-                            if (editTarget != null) onCancelEdit() else onCancelReply()
-                        }) {
-                            Text("Cancel")
-                        }
-                    }
-                }
-                OutlinedTextField(
-                    value = draft,
-                    onValueChange = onDraft,
-                    label = {
-                        Text(
-                            when {
-                                editTarget != null -> "Edit comment"
-                                replyTarget != null -> "Write a reply"
-                                else -> "Leave a comment"
-                            }
-                        )
-                    },
-                    minLines = 3,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Button(
-                    enabled = !submitting && draft.isNotBlank(),
-                    onClick = onSubmit
-                ) {
-                    Text(
-                        when {
-                            submitting && editTarget != null -> "Saving…"
-                            submitting && replyTarget != null -> "Posting reply…"
-                            submitting -> "Posting…"
-                            editTarget != null -> "Save Changes"
-                            replyTarget != null -> "Post Reply"
-                            else -> "Post Comment"
-                        }
-                    )
-                }
-            }
-            // True lock (not "log in to comment" — that is handled below).
-            thread.commentsLocked -> {
-                Text(
-                    "AO3 is not accepting comments on this work.",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            else -> {
-                Text(
-                    "Log in to AO3 to leave a comment.",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                OutlinedButton(onClick = onLogin) { Text("Log in") }
-            }
-        }
-    }
-}
-
-@Composable
-private fun CommentThreadRow(
-    comment: AO3Comment,
-    currentUsername: String?,
-    workAuthors: List<AO3CommentWorkAuthor>,
-    onReply: (AO3Comment) -> Unit,
-    onEdit: (AO3Comment) -> Unit,
-    onDelete: (AO3Comment) -> Unit,
-    onLoadMore: (String) -> Unit,
-    onViewThread: (Long) -> Unit,
-    onOpenAuthor: (String) -> Unit,
-    collapsedIds: MutableMap<String, Boolean>,
-    visibleReplyCounts: MutableMap<String, Int>,
-    depth: Int = 0
-) {
-    // Collapse is decided by thread SIZE, not nesting depth (iOS
-    // CommentThreadGeometry.autoExpandedMaxReplies). It counts every reply in the
-    // stack, not just direct children, because expanding renders the whole
-    // depth-first subtree — a root with three children each holding twenty
-    // replies is a wall of text however shallow it looks.
-    val rootId = comment.id.orEmpty()
-    val totalReplies = remember(comment) { comment.totalReplyCount() }
-    val isCollapsed = collapsedIds[rootId]
-        ?: (depth == 0 && totalReplies > AUTO_EXPANDED_MAX_REPLIES)
-    
-    fun toggle() {
-        comment.id?.let { id ->
-            collapsedIds[id] = !isCollapsed
-            // Collapsing drops "show more" progress for that root, matching iOS:
-            // reopening a long thread starts from the first chunk again.
-            if (!isCollapsed) visibleReplyCounts.remove(id)
-        }
-    }
-
-    Column(modifier = Modifier.fillMaxWidth()) {
-        if (comment.isThreadCutoff) {
-            CommentCutoffRow(comment = comment, onClick = { onLoadMore(comment.cutoffThreadPath!!) })
-        } else {
-            CommentRow(
-                comment = comment,
-                currentUsername = currentUsername,
-                workAuthors = workAuthors,
-                onReply = { onReply(comment) },
-                onEdit = { onEdit(comment) },
-                onDelete = { onDelete(comment) },
-                isExpanded = !isCollapsed,
-                onToggleExpand = ::toggle,
-                depth = depth,
-                onViewThread = onViewThread,
-                onOpenAuthor = onOpenAuthor
-            )
-        }
-
-        if (!isCollapsed && comment.replies.isNotEmpty()) {
-            // Once expanded, reveal a chunk at a time so a 200-reply thread doesn't
-            // build every row (and fire every avatar request) on one tap.
-            val shown = if (depth == 0) {
-                visibleReplyCounts[rootId] ?: REPLIES_CHUNK_SIZE
-            } else {
-                Int.MAX_VALUE
-            }
-            var rendered = 0
-            for (reply in comment.replies) {
-                if (rendered >= shown) break
-                CommentThreadRow(
-                    comment = reply,
-                    currentUsername = currentUsername,
-                    workAuthors = workAuthors,
-                    onReply = onReply,
-                    onEdit = onEdit,
-                    onDelete = onDelete,
-                    onLoadMore = onLoadMore,
-                    onViewThread = onViewThread,
-                    onOpenAuthor = onOpenAuthor,
-                    collapsedIds = collapsedIds,
-                    visibleReplyCounts = visibleReplyCounts,
-                    depth = depth + 1
-                )
-                rendered += 1 + reply.totalReplyCount()
-            }
-            val remaining = totalReplies - rendered
-            if (depth == 0 && remaining > 0) {
-                androidx.compose.material3.TextButton(
-                    onClick = {
-                        visibleReplyCounts[rootId] = shown + REPLIES_CHUNK_SIZE
-                    }
-                ) {
-                    Text("Show ${minOf(remaining, REPLIES_CHUNK_SIZE)} more replies")
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun CommentRow(
-    comment: AO3Comment,
-    currentUsername: String?,
-    workAuthors: List<AO3CommentWorkAuthor>,
-    onReply: () -> Unit,
-    onEdit: () -> Unit,
-    onDelete: () -> Unit,
-    isExpanded: Boolean,
-    onToggleExpand: () -> Unit,
-    onViewThread: (Long) -> Unit,
-    onOpenAuthor: (String) -> Unit,
-    depth: Int
-) {
-    val role = remember(comment, currentUsername, workAuthors) {
-        AO3CommentParticipantRole.resolve(
-            name = comment.author.name,
-            isGuest = comment.isGuest,
-            isAnonymousCreator = comment.isAnonymousCreator,
-            commenterUsername = comment.author.username,
-            currentUsername = currentUsername,
-            workAuthors = workAuthors.map { it.displayName },
-            workAuthorUsernames = workAuthors.mapNotNull { it.username }
-        )
-    }
-    val clipboard = LocalClipboardManager.current
-    var showMenu by remember { mutableStateOf(false) }
-    val profileUsername = comment.author.username?.takeIf { it.isNotBlank() }
-
-    Row(
-        modifier = Modifier
-            .padding(start = (depth * 12).coerceAtMost(60).dp)
-            .fillMaxWidth()
-            .padding(vertical = 4.dp),
-        horizontalArrangement = Arrangement.spacedBy(10.dp)
-    ) {
-        if (comment.replies.isNotEmpty()) {
-            IconButton(
-                onClick = onToggleExpand,
-                modifier = Modifier.size(24.dp)
-            ) {
-                Icon(
-                    imageVector = if (isExpanded) Icons.Default.ArrowDropDown else Icons.Default.ArrowRight,
-                    contentDescription = if (isExpanded) "Collapse" else "Expand"
-                )
-            }
-        } else {
-            Spacer(Modifier.size(24.dp))
-        }
-
-        CommentAvatar(
-            avatarUrl = comment.avatarUrl,
-            isGuest = comment.isGuest,
-            modifier = Modifier.size(32.dp)
-        )
-
-        Column(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(2.dp)
-        ) {
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = comment.author.name,
-                    style = MaterialTheme.typography.titleSmall,
-                    color = if (profileUsername != null) {
-                        MaterialTheme.colorScheme.primary
-                    } else {
-                        MaterialTheme.colorScheme.onSurface
-                    },
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier
-                        .weight(1f, fill = false)
-                        .then(
-                            if (profileUsername != null) {
-                                Modifier.clickable { onOpenAuthor(profileUsername) }
-                            } else {
-                                Modifier
-                            }
-                        )
-                )
-                CommentParticipantBadge(role = role)
-                if (comment.chapterLabel != null) {
-                    Surface(
-                        color = MaterialTheme.colorScheme.surfaceVariant,
-                        shape = MaterialTheme.shapes.extraSmall
-                    ) {
-                        Text(
-                            text = comment.chapterLabel!!,
-                            style = MaterialTheme.typography.labelSmall,
-                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
-                        )
-                    }
-                }
-            }
-            if (comment.date.isNotBlank()) {
-                Text(
-                    comment.date,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            
-            if (isExpanded) {
-                var isLongComment by remember { mutableStateOf(false) }
-                var showFullComment by remember { mutableStateOf(false) }
-                
-                if (comment.isDeletedOrHidden) {
-                    Surface(
-                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                        shape = MaterialTheme.shapes.small,
-                        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
-                    ) {
-                        Text(
-                            text = comment.body,
-                            style = MaterialTheme.typography.bodyMedium.copy(
-                                fontStyle = androidx.compose.ui.text.font.FontStyle.Italic
-                            ),
-                            modifier = Modifier.padding(12.dp),
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                } else {
-                    Text(
-                        text = comment.body,
-                        style = MaterialTheme.typography.bodyMedium,
-                        maxLines = if (showFullComment) Int.MAX_VALUE else 5,
-                        overflow = TextOverflow.Ellipsis,
-                        onTextLayout = { result -> isLongComment = result.hasVisualOverflow },
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                }
-                
-                if (isLongComment && !showFullComment) {
-                    TextButton(
-                        onClick = { showFullComment = true },
-                        contentPadding = PaddingValues(0.dp)
-                    ) {
-                        Text("Read more", style = MaterialTheme.typography.labelMedium)
-                    }
+                    "All comments"
                 }
 
                 Row(
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 10.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    if (comment.canReply && comment.numericId != null) {
-                        TextButton(
-                            onClick = onReply,
-                            contentPadding = PaddingValues(0.dp)
-                        ) {
-                            Text("Reply", style = MaterialTheme.typography.labelMedium)
-                        }
-                    }
-                    
+                    // Chapter pill
+                    SubjectChip(
+                        text = chapterPillTitle,
+                        modifier = Modifier
+                            .semantics {
+                                contentDescription = "Browse comments by chapter"
+                            }
+                            .clickable {
+                                viewModel.loadChaptersIfNeeded(chapterIndexRepository)
+                                showingChapterPicker = true
+                            },
+                        style = SubjectChipStyle.Pill(isSelected = scopeMode == CommentScope.ByChapter),
+                        leadingIcon = Icons.Outlined.Book,
+                        trailingIcon = Icons.Filled.KeyboardArrowDown,
+                        palette = palette
+                    )
+
+                    // Sort pill
                     Box {
-                        TextButton(
-                            onClick = { showMenu = true },
-                            contentPadding = PaddingValues(0.dp)
+                        SubjectChip(
+                            text = if (order == CommentOrder.NewestFirst) "Newest" else "Oldest",
+                            modifier = Modifier
+                                .semantics {
+                                    contentDescription = "Sort comments"
+                                }
+                                .clickable { sortMenuOpen = true },
+                            style = SubjectChipStyle.Pill(isSelected = false),
+                            leadingIcon = Icons.Default.SwapVert,
+                            trailingIcon = Icons.Filled.KeyboardArrowDown,
+                            palette = palette
+                        )
+
+                        DropdownMenu(
+                            expanded = sortMenuOpen,
+                            onDismissRequest = { sortMenuOpen = false }
                         ) {
-                            Text("More", style = MaterialTheme.typography.labelMedium)
-                        }
-                        DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
-                            if (comment.editPath != null) {
-                                DropdownMenuItem(
-                                    text = { Text("Edit") },
-                                    onClick = {
-                                        showMenu = false
-                                        onEdit()
-                                    }
-                                )
-                            }
-                            // Copy Link / Thread / Parent Thread, in iOS's order
-                            // (CommentThreadRow.swift:1417-1429). Copy Link copies the
-                            // comment's own thread URL, which is what AO3 links to.
-                            comment.threadPath?.let { path ->
-                                DropdownMenuItem(
-                                    text = { Text("Copy Link") },
-                                    onClick = {
-                                        showMenu = false
-                                        io.github.cidy02.kudos.network.ao3.writes.AO3WriteUrls
-                                            .absoluteUrl(path)
-                                            ?.let { url ->
-                                                clipboard.setText(
-                                                    androidx.compose.ui.text.AnnotatedString(url)
-                                                )
-                                            }
-                                    }
-                                )
-                                DropdownMenuItem(
-                                    text = { Text("Thread") },
-                                    onClick = {
-                                        showMenu = false
-                                        comment.id?.toLongOrNull()?.let(onViewThread)
-                                    }
-                                )
-                            }
-                            comment.parentCommentId?.let { parentId ->
-                                DropdownMenuItem(
-                                    text = { Text("Parent Thread") },
-                                    onClick = {
-                                        showMenu = false
-                                        onViewThread(parentId)
-                                    }
-                                )
-                            }
-                            if (comment.deletePath != null) {
-                                DropdownMenuItem(
-                                    text = { Text("Delete", color = MaterialTheme.colorScheme.error) },
-                                    onClick = {
-                                        showMenu = false
-                                        onDelete()
-                                    }
-                                )
-                            }
                             DropdownMenuItem(
-                                text = { Text("Copy Link") },
+                                text = { Text("Oldest First") },
+                                trailingIcon = if (order == CommentOrder.OldestFirst) {
+                                    { Icon(Icons.Default.Check, contentDescription = null) }
+                                } else null,
                                 onClick = {
-                                    showMenu = false
-                                    comment.threadPath?.let { 
-                                        clipboard.setText(AnnotatedString("https://archiveofourown.org$it"))
-                                    }
+                                    viewModel.setOrder(CommentOrder.OldestFirst)
+                                    sortMenuOpen = false
                                 }
                             )
-                            if (comment.threadPath != null) {
-                                DropdownMenuItem(
-                                    text = { Text("View Thread") },
-                                    onClick = {
-                                        showMenu = false
-                                        comment.numericId?.let { onViewThread(it) }
+                            DropdownMenuItem(
+                                text = { Text("Newest First") },
+                                trailingIcon = if (order == CommentOrder.NewestFirst) {
+                                    { Icon(Icons.Default.Check, contentDescription = null) }
+                                } else null,
+                                onClick = {
+                                    viewModel.setOrder(CommentOrder.NewestFirst)
+                                    sortMenuOpen = false
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Main Content Area
+            when (val current = state) {
+                is CommentsUiState.Loading -> {
+                    items(4) {
+                        CommentSkeletonRow()
+                    }
+                }
+                is CommentsUiState.Error -> {
+                    item {
+                        ContentUnavailableView(
+                            title = "Couldn't Load Comments",
+                            description = current.message,
+                            icon = Icons.Outlined.ErrorOutline,
+                            actionLabel = "Try Again",
+                            onAction = { viewModel.load() },
+                            palette = palette
+                        )
+                    }
+                }
+                is CommentsUiState.AuthRequired -> {
+                    item {
+                        ContentUnavailableView(
+                            title = "Couldn't Load Comments",
+                            description = current.message,
+                            icon = Icons.Outlined.ErrorOutline,
+                            actionLabel = "Log in to AO3",
+                            onAction = onLogin,
+                            palette = palette
+                        )
+                    }
+                }
+                is CommentsUiState.Loaded -> {
+                    val thread = current.thread
+                    if (thread.comments.isEmpty()) {
+                        item {
+                            ContentUnavailableView(
+                                title = "No Comments Yet",
+                                description = "You can be the first to comment on this work.",
+                                icon = Icons.Outlined.ChatBubbleOutline,
+                                palette = palette
+                            )
+                        }
+                    } else {
+                        // Section Rule Header
+                        item {
+                            SectionRuleHeader(
+                                title = "Comments",
+                                count = allComments.size,
+                                modifier = Modifier.padding(top = 8.dp)
+                            )
+                        }
+
+                        // Flattened lazy items
+                        items(
+                            items = rows,
+                            key = { it.id }
+                        ) { row ->
+                            CommentConversationRow(
+                                row = row,
+                                workAuthors = thread.workAuthors.map { it.displayName },
+                                workAuthorUsernames = thread.workAuthors.mapNotNull { it.username },
+                                palette = palette,
+                                handlers = handlers,
+                                swipeTracker = swipeTracker,
+                                onExpand = { viewModel.expandReplies(row.rootId) },
+                                onContinueThread = { pushedThreadRootId = row.rootId },
+                                onToggleCollapse = { viewModel.toggleCollapsed(row.rootId) },
+                                containerWidth = screenWidth
+                            )
+                        }
+
+                        // Pagination controls if multiple pages
+                        if (thread.totalPages > 1) {
+                            item {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 16.dp, vertical = 16.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    OutlinedButton(
+                                        enabled = thread.currentPage > 1,
+                                        onClick = { viewModel.load(page = thread.currentPage - 1) },
+                                        shape = RoundedCornerShape(percent = 50)
+                                    ) {
+                                        Text("Previous")
                                     }
-                                )
+
+                                    Text(
+                                        text = "Page ${thread.currentPage} of ${thread.totalPages}",
+                                        fontSize = 13.sp,
+                                        fontFamily = FontFamily.Monospace,
+                                        color = tokens.secondaryInk
+                                    )
+
+                                    OutlinedButton(
+                                        enabled = thread.currentPage < thread.totalPages,
+                                        onClick = { viewModel.load(page = thread.currentPage + 1) },
+                                        shape = RoundedCornerShape(percent = 50)
+                                    ) {
+                                        Text("Next")
+                                    }
+                                }
                             }
                         }
                     }
                 }
-            } else {
-                Text(
-                    text = "Thread collapsed",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
             }
-            HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-        }
-    }
-}
 
-@Composable
-private fun CommentCutoffRow(
-    comment: AO3Comment,
-    onClick: () -> Unit
-) {
-    Surface(
-        onClick = onClick,
-        modifier = Modifier
-            .padding(start = (comment.depth * 12).dp)
-            .fillMaxWidth()
-            .padding(vertical = 8.dp),
-        color = MaterialTheme.colorScheme.secondaryContainer,
-        shape = MaterialTheme.shapes.small
-    ) {
-        Row(
-            modifier = Modifier.padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.Center
-        ) {
-            Text(
-                text = comment.body, // "N more comments in this thread"
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onSecondaryContainer
-            )
+            // Bottom clearance for floating CTA pill
+            item {
+                Spacer(Modifier.height(84.dp))
+            }
+        }
+
+        // Floating "Write Comment" / "Log in to comment" pill at bottom
+        if (state is CommentsUiState.Loaded) {
+            val isLoggedIn = currentUsername != null
+            val title = if (isLoggedIn) "Write a comment" else "Log in to comment"
+            val icon = if (isLoggedIn) Icons.Outlined.Edit else Icons.Outlined.Person
+
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .padding(bottom = 16.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Surface(
+                    onClick = {
+                        if (isLoggedIn) {
+                            viewModel.openComposer()
+                        } else {
+                            onLogin()
+                        }
+                    },
+                    shape = RoundedCornerShape(percent = 50),
+                    color = palette.accent,
+                    shadowElevation = 6.dp,
+                    modifier = Modifier.height(44.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 20.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = icon,
+                            contentDescription = null,
+                            tint = palette.solidButtonLabel,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Text(
+                            text = title,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = palette.solidButtonLabel
+                        )
+                    }
+                }
+            }
         }
     }
 }
 
 /**
- * Previous / Page X of Y / Next — same visual pattern as AccountScreen's
- * private PaginationControls (replicated here so we don't touch that file).
+ * Chapter picker sheet matching iOS `chapterPicker` (CommentsView.swift:893).
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun PaginationControls(page: Int, totalPages: Int, onLoadPage: (Int) -> Unit) {
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-        OutlinedButton(
-            enabled = page > 1,
-            onClick = { onLoadPage(page - 1) },
-            modifier = Modifier.weight(1f)
-        ) {
-            Text("Previous")
-        }
-        Text(
-            text = "Page $page of $totalPages",
-            modifier = Modifier
-                .weight(1f)
-                .padding(top = 12.dp),
-            style = MaterialTheme.typography.labelLarge,
-            textAlign = TextAlign.Center
-        )
-        OutlinedButton(
-            enabled = page < totalPages,
-            onClick = { onLoadPage(page + 1) },
-            modifier = Modifier.weight(1f)
-        ) {
-            Text("Next")
-        }
-    }
-}
-
-@Composable
-private fun ChapterScopePicker(
-    currentTarget: AO3CommentTarget?,
-    initialTarget: AO3CommentTarget?,
-    onSelectTarget: (AO3CommentTarget) -> Unit,
-    modifier: Modifier = Modifier
+fun ChapterPickerSheet(
+    chapters: List<AO3ChapterRef>,
+    selectedChapter: AO3ChapterRef?,
+    isScopeAll: Boolean,
+    totalComments: Int?,
+    onSelectAll: () -> Unit,
+    onSelectChapter: (AO3ChapterRef) -> Unit,
+    onDismiss: () -> Unit
 ) {
-    if (currentTarget == null) return
-    val workId = currentTarget.workId
-    val chapterTarget = (initialTarget as? AO3CommentTarget.Chapter)
-        ?: (currentTarget as? AO3CommentTarget.Chapter)
-    
-    Row(
-        modifier = modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalAlignment = Alignment.CenterVertically
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)
+    val tokens = LocalKudosTokens.current
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        containerColor = tokens.background
     ) {
-        FilterChip(
-            selected = currentTarget is AO3CommentTarget.Work,
-            onClick = { onSelectTarget(AO3CommentTarget.Work(workId)) },
-            label = { Text("All Comments") }
-        )
-        if (chapterTarget != null) {
-            FilterChip(
-                selected = currentTarget is AO3CommentTarget.Chapter,
-                onClick = { onSelectTarget(chapterTarget) },
-                label = { Text("Chapter ${chapterTarget.chapterId}") }
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp, vertical = 8.dp)
+                .padding(bottom = 32.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text(
+                text = "Browse comments by chapter",
+                fontSize = 17.sp,
+                fontWeight = FontWeight.Bold,
+                color = tokens.primaryInk,
+                modifier = Modifier.padding(bottom = 4.dp)
+            )
+
+            // "All comments" option
+            Surface(
+                onClick = onSelectAll,
+                shape = RoundedCornerShape(10.dp),
+                color = if (isScopeAll) tokens.glassFill(0.16) else tokens.glassFill(0.06),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.ChatBubbleOutline,
+                            contentDescription = null,
+                            tint = if (isScopeAll) tokens.accent else tokens.secondaryInk,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Text(
+                            text = "All Comments",
+                            fontSize = 15.sp,
+                            fontWeight = if (isScopeAll) FontWeight.SemiBold else FontWeight.Normal,
+                            color = if (isScopeAll) tokens.accent else tokens.primaryInk
+                        )
+                    }
+                    if (totalComments != null) {
+                        Text(
+                            text = totalComments.toString(),
+                            fontSize = 13.sp,
+                            fontFamily = FontFamily.Monospace,
+                            color = tokens.secondaryInk
+                        )
+                    }
+                }
+            }
+
+            // Chapter list
+            for (chapter in chapters) {
+                val isSelected = !isScopeAll && selectedChapter?.chapterId == chapter.chapterId
+                Surface(
+                    onClick = { onSelectChapter(chapter) },
+                    shape = RoundedCornerShape(10.dp),
+                    color = if (isSelected) tokens.glassFill(0.16) else tokens.glassFill(0.06),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            modifier = Modifier.weight(1f, fill = false)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.Book,
+                                contentDescription = null,
+                                tint = if (isSelected) tokens.accent else tokens.secondaryInk,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Text(
+                                text = chapter.displayName,
+                                fontSize = 15.sp,
+                                fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+                                color = if (isSelected) tokens.accent else tokens.primaryInk,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                        if (isSelected) {
+                            Icon(
+                                imageVector = Icons.Default.Check,
+                                contentDescription = null,
+                                tint = tokens.accent,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    }
+                }
+            }
+
+            Text(
+                text = "AO3 doesn't show comment totals for each chapter. Choose a chapter to see its comments.",
+                fontSize = 12.sp,
+                color = tokens.secondaryInk,
+                lineHeight = 16.sp,
+                modifier = Modifier.padding(start = 4.dp, end = 4.dp, top = 4.dp)
             )
         }
     }
 }
 
-/** Reply stacks larger than this start collapsed (iOS `autoExpandedMaxReplies`). */
-private const val AUTO_EXPANDED_MAX_REPLIES = 8
+private data class LoadedFigures(
+    val threads: Int,
+    val comments: Int,
+    val mine: Int,
+    val latest: String?
+)
 
-/** Once expanded, reveal this many at a time (iOS `repliesChunkSize`). */
-private const val REPLIES_CHUNK_SIZE = 20
+private fun calculateFigures(thread: AO3CommentThread): LoadedFigures {
+    val all = flattenAll(thread.comments)
+    val mine = all.count { it.editPath != null }
+    val latestRaw = all.mapNotNull { it.date.takeIf { d -> d.isNotBlank() } }.firstOrNull()
+    val latestFormatted = latestRaw?.let { AO3CommentTimestamp.displayText(it) }
 
-/** Every reply beneath this comment, not just its direct children. */
-internal fun AO3Comment.totalReplyCount(): Int =
-    replies.sumOf { 1 + it.totalReplyCount() }
+    return LoadedFigures(
+        threads = thread.comments.size,
+        comments = all.size,
+        mine = mine,
+        latest = latestFormatted
+    )
+}
+
+private fun flattenAll(comments: List<AO3Comment>): List<AO3Comment> {
+    val result = mutableListOf<AO3Comment>()
+    fun walk(c: AO3Comment) {
+        result.add(c)
+        for (reply in c.replies) walk(reply)
+    }
+    for (c in comments) walk(c)
+    return result
+}
