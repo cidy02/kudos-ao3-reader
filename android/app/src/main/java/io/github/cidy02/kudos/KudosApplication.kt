@@ -4,15 +4,21 @@ import android.app.Activity
 import android.app.Application
 import android.os.Bundle
 import androidx.work.Configuration
+import coil3.ImageLoader
+import coil3.SingletonImageLoader
+import coil3.network.okhttp.OkHttpNetworkFetcherFactory
 import io.github.cidy02.kudos.app.KudosAppContainer
 import io.github.cidy02.kudos.backup.TombstoneLocalMigration
 import io.github.cidy02.kudos.backup.TombstoneSigning
+import io.github.cidy02.kudos.network.ao3.DemoNetwork
+import io.github.cidy02.kudos.network.ao3.installDemoNetworkBlock
 import io.github.cidy02.kudos.works.KudosWorkerFactory
 import io.github.cidy02.kudos.works.WorkAvailabilitySweep
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import okhttp3.OkHttpClient
 
 class KudosApplication : Application(), Configuration.Provider {
     lateinit var container: KudosAppContainer
@@ -47,6 +53,7 @@ class KudosApplication : Application(), Configuration.Provider {
 
     override fun onCreate() {
         super.onCreate()
+        installImageLoader()
         TombstoneSigning.initialize(this)
         container = KudosAppContainer(this, applicationScope)
         // Start the library snapshot before the first frame so Home does not
@@ -69,7 +76,12 @@ class KudosApplication : Application(), Configuration.Provider {
             // Paced rebuild of stale library searchText (schema bump / pre-index / restore).
             runCatching { container.workRepository.rebuildSearchIndexIfNeeded() }
             // Opportunistic background tag refresh (404 detection).
+            // Wait until the activity has said whether this is the demo. A
+            // WorkManager-only process never gets that signal and continues
+            // after a few seconds; it is not the demo.
             runCatching {
+                DemoNetwork.awaitLaunchDecision()
+                if (DemoNetwork.isActive) return@runCatching
                 val stale = container.workRepository.listSavedWorks()
                     .filter { it.lastUpdateCheck == null }
                     .take(5)
@@ -109,6 +121,25 @@ class KudosApplication : Application(), Configuration.Provider {
         })
 
         scheduleWorkManagerTasks()
+    }
+
+    /**
+     * Coil's default OkHttp stack has no demo block. Register ours first; Coil
+     * still appends its decoders after the user registry. WebView is left alone.
+     */
+    private fun installImageLoader() {
+        val client = OkHttpClient.Builder().installDemoNetworkBlock().build()
+        try {
+            SingletonImageLoader.setSafe { context ->
+                ImageLoader.Builder(context)
+                    .components {
+                        add(OkHttpNetworkFetcherFactory(client))
+                    }
+                    .build()
+            }
+        } catch (_: IllegalStateException) {
+            // Already installed in this process (a second Application in tests).
+        }
     }
 
     /**

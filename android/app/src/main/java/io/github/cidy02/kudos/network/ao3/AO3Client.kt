@@ -75,6 +75,7 @@ class OkHttpAO3Client(
          */
         fun defaultOkHttpClient(config: AO3NetworkConfig = AO3NetworkConfig()): OkHttpClient {
             return OkHttpClient.Builder()
+                .installDemoNetworkBlock()
                 .callTimeout(config.callTimeoutSeconds, TimeUnit.SECONDS)
                 .followRedirects(false)
                 .followSslRedirects(false)

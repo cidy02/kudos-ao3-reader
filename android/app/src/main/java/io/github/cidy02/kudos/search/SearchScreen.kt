@@ -93,7 +93,8 @@ fun SearchScreen(
     repository: AO3SearchRepository = remember { AO3SearchRepository() },
     savedSearchRepository: SavedSearchRepository? = null,
     workRepository: WorkRepository? = null,
-    settingsRepository: SettingsRepository? = null
+    settingsRepository: SettingsRepository? = null,
+    onOpenUrl: ((String) -> Unit)? = null
 ) {
     val viewModel: SearchViewModel = viewModel(
         factory = SearchViewModel.factory(repository, savedSearchRepository, workRepository)
@@ -149,6 +150,18 @@ fun SearchScreen(
         onDismissRequest = { pendingDeleteSearch = null }
     )
 
+    fun submitQuery() {
+        val url = SearchUrlEntry.normalize(filters.query)
+        if (url != null && onOpenUrl != null) {
+            onOpenUrl(url)
+            viewModel.updateFilters(filters.copy(query = ""))
+            return
+        }
+        if (state !is SearchUiState.Loading && filters.isSearchable) {
+            viewModel.runSearch()
+        }
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -164,11 +177,7 @@ fun SearchScreen(
                 text = filters.query,
                 onTextChange = { viewModel.updateFilters(filters.copy(query = it)) },
                 placeholder = "Query",
-                onSubmit = {
-                    if (state !is SearchUiState.Loading && filters.isSearchable) {
-                        viewModel.runSearch()
-                    }
-                },
+                onSubmit = { submitQuery() },
                 modifier = Modifier.weight(1f)
             )
             if (savedSearchRepository != null) {
@@ -187,7 +196,7 @@ fun SearchScreen(
             }
             Button(
                 enabled = state !is SearchUiState.Loading && filters.isSearchable,
-                onClick = { viewModel.runSearch() }
+                onClick = { submitQuery() }
             ) {
                 Text("Search")
             }

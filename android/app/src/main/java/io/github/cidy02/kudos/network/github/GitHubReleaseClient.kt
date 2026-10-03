@@ -5,6 +5,7 @@ import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
+import io.github.cidy02.kudos.network.ao3.installDemoNetworkBlock
 import okhttp3.OkHttpClient
 import okhttp3.Request
 
@@ -20,6 +21,7 @@ class GitHubReleaseClient(
 ) {
     private val client: OkHttpClient by lazy {
         OkHttpClient.Builder()
+            .installDemoNetworkBlock()
             .callTimeout(20, TimeUnit.SECONDS)
             .build()
     }
