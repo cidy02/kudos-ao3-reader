@@ -451,6 +451,11 @@ fun WorkDetailScreen(
                     AO3WriteActionKind.Unsubscribe -> false
                     else -> state.isSubscribed
                 }
+                // iOS downloadIfSubscribedWithoutEPUB: only a work already in the Library, and
+                // only with the setting on; preserveEpubForQueue skips one that has its file.
+                if (result.value.kind == AO3WriteActionKind.Subscribe && settings.app.downloadOnSubscribe) {
+                    state.local?.let(::preserveEpubForQueue)
+                }
                 state.copy(
                     ao3Message = result.value.message,
                     isSubscribed = subscribedAfter
