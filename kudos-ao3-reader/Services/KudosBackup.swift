@@ -874,6 +874,7 @@ nonisolated struct KudosBackupWork: Codable, Equatable {
     let summary: String
     let sourceURL: String
     let dateAdded: Date
+    let downloadedAt: Date?
     let createdAt: Date?
     let lastModifiedAt: Date?
     let deletedAt: Date?
@@ -959,6 +960,7 @@ nonisolated struct KudosBackupWork: Codable, Equatable {
         summary = work.summary
         sourceURL = work.sourceURL
         dateAdded = work.dateAdded
+        downloadedAt = work.downloadedAt
         createdAt = work.createdAt
         lastModifiedAt = work.lastModifiedAt
         deletedAt = work.deletedAt
@@ -1032,6 +1034,7 @@ nonisolated struct KudosBackupWork: Codable, Equatable {
         case summary
         case sourceURL
         case dateAdded
+        case downloadedAt
         case createdAt
         case lastModifiedAt
         case deletedAt
@@ -1096,6 +1099,7 @@ nonisolated struct KudosBackupWork: Codable, Equatable {
         summary = try container.decodeIfPresent(String.self, forKey: .summary) ?? ""
         sourceURL = try container.decodeIfPresent(String.self, forKey: .sourceURL) ?? ""
         dateAdded = try container.decodeIfPresent(Date.self, forKey: .dateAdded) ?? Date()
+        downloadedAt = try container.decodeIfPresent(Date.self, forKey: .downloadedAt)
         createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt)
         lastModifiedAt = try container.decodeIfPresent(Date.self, forKey: .lastModifiedAt)
         deletedAt = try container.decodeIfPresent(Date.self, forKey: .deletedAt)
@@ -4401,6 +4405,12 @@ enum KudosBackupService {
 
         work.createdAt = min(work.createdAt, archived.createdAt ?? archived.dateAdded)
         work.dateAdded = min(work.dateAdded, archived.dateAdded)
+        // Missing means an older client had no opinion; it must never erase a
+        // date already captured or edited on this device.
+        if let downloadedAt = archived.downloadedAt,
+           incomingWins || work.downloadedAt == nil {
+            work.downloadedAt = downloadedAt
+        }
         if let assetIdentifier = archived.assetIdentifier, !assetIdentifier.isEmpty {
             work.assetIdentifier = work.assetIdentifier.isEmpty ? assetIdentifier : work.assetIdentifier
         }

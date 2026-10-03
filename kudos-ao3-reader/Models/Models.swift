@@ -144,6 +144,10 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
     var summary: String = ""
     var sourceURL: String = ""
     var dateAdded: Date = Date()
+    /// When this copy was downloaded or imported. Optional for works created
+    /// before the field existed; once captured it changes only when the reader
+    /// edits it in My copy.
+    var downloadedAt: Date?
     var createdAt: Date = Date()
     var lastModifiedAt: Date = Date()
     var deletedAt: Date?

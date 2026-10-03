@@ -13,6 +13,30 @@ import SwiftData
 /// door means none of it changes.
 @MainActor
 enum UserDocumentImport {
+    /// Reads dates while the caller still holds access to the original picked
+    /// URL. Nothing here copies or mutates the file.
+    static func detectDownloadDate(
+        of url: URL,
+        now: Date = Date()
+    ) async throws -> DownloadDateDetection {
+        try await waitForUbiquitousDownload(of: url)
+        return await Task.detached(priority: .userInitiated) {
+            let values = try? url.resourceValues(forKeys: [.creationDateKey, .contentModificationDateKey])
+            let generatedAt: Date?
+            if url.pathExtension.localizedCaseInsensitiveCompare("epub") == .orderedSame {
+                generatedAt = try? EPUBDocument.metadata(ofEPUBAt: url).generatedAt
+            } else {
+                generatedAt = nil
+            }
+            return DownloadDateDetector.detect(
+                fileCreated: values?.creationDate,
+                fileModified: values?.contentModificationDate,
+                epubGeneratedAt: generatedAt,
+                now: now
+            )
+        }.value
+    }
+
     /// Imports the file at `url`, converting first when it is not already an EPUB.
     ///
     /// Returns the same outcome type as a plain EPUB import so callers show one
@@ -20,6 +44,7 @@ enum UserDocumentImport {
     /// it did ("Converted from HTML").
     static func perform(
         _ url: URL,
+        downloadedAt: Date = Date(),
         into context: ModelContext
     ) async throws -> (outcome: UserEPUBImportOutcome, convertedFrom: ImportedFileFormat?) {
         guard url.isFileURL else { throw UserEPUBImportError.notLocalFile }
@@ -36,9 +61,11 @@ enum UserDocumentImport {
 
         switch conversion {
         case .alreadyEPUB:
-            return (try await importUserEPUB(url, into: context), nil)
+            return (try await importUserEPUB(url, downloadedAt: downloadedAt, into: context), nil)
         case let .converted(data, format):
-            let outcome = try await importConverted(data, from: url, format: format, into: context)
+            let outcome = try await importConverted(
+                data, from: url, format: format, downloadedAt: downloadedAt, into: context
+            )
             return (outcome, format)
         }
     }
@@ -49,13 +76,14 @@ enum UserDocumentImport {
         _ epub: Data,
         from source: URL,
         format: ImportedFileFormat,
+        downloadedAt: Date,
         into context: ModelContext
     ) async throws -> UserEPUBImportOutcome {
         let staged = Storage.tempDownloadURL(suggestedName: "\(UUID().uuidString).epub")
         try epub.write(to: staged, options: .atomic)
         defer { try? FileManager.default.removeItem(at: staged) }
 
-        let outcome = try await importUserEPUB(staged, into: context)
+        let outcome = try await importUserEPUB(staged, downloadedAt: downloadedAt, into: context)
         preserveOriginal(at: source, for: outcome.work, format: format)
         Log.library.info(
             "Imported “\(outcome.work.title)” converted from \(format.rawValue, privacy: .public)"
