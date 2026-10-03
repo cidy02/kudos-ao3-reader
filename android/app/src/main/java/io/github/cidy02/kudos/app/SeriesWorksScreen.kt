@@ -24,7 +24,7 @@ import io.github.cidy02.kudos.network.ao3.displayMessage
 import io.github.cidy02.kudos.network.ao3.search.AO3SearchPage
 import io.github.cidy02.kudos.network.ao3.search.AO3WorkSummary
 import io.github.cidy02.kudos.network.ao3.series.AO3SeriesRepository
-import io.github.cidy02.kudos.ui.components.AO3WorkCard
+import io.github.cidy02.kudos.ui.components.SensitiveWorkRow
 import io.github.cidy02.kudos.ui.components.EmptyStateCard
 import io.github.cidy02.kudos.ui.components.ErrorStateCard
 import io.github.cidy02.kudos.ui.components.KudosPaginationBar
@@ -112,7 +112,7 @@ fun SeriesWorksScreen(
                             )
                         }
                         items(current.page.works, key = { it.id }) { work ->
-                            AO3WorkCard(work = work, onOpenWork = onOpenWork)
+                            SensitiveWorkRow(work = work, onOpenWork = onOpenWork)
                         }
                         item {
                             KudosPaginationBar(

@@ -124,7 +124,7 @@ import io.github.cidy02.kudos.auth.AO3AuthState
 import io.github.cidy02.kudos.auth.AO3SessionHealth
 import io.github.cidy02.kudos.network.ao3.account.AO3Collection
 import io.github.cidy02.kudos.network.ao3.search.AO3WorkSummary
-import io.github.cidy02.kudos.ui.components.AO3WorkCard
+import io.github.cidy02.kudos.ui.components.SensitiveWorkRow
 import io.github.cidy02.kudos.ui.components.EmptyStateCard
 import io.github.cidy02.kudos.ui.components.ErrorStateCard
 import io.github.cidy02.kudos.ui.components.KudosSectionHeader
@@ -1160,7 +1160,7 @@ private fun HubWorksPane(
                         KudosSectionHeader(title = sectionTitle)
                     }
                     items(works, key = { "${listType.listKey}-${it.id}" }) { work ->
-                        AO3WorkCard(
+                        SensitiveWorkRow(
                             work = work.remote,
                             onOpenWork = onOpenWork,
                             modifier = Modifier.fillMaxWidth()
@@ -1398,7 +1398,7 @@ private fun AccountListContent(
                     )
                 )
             } else {
-                EnrichingAO3WorkCard(work = work.remote, onOpenWork = onOpenWork)
+                EnrichingSensitiveWorkRow(work = work.remote, onOpenWork = onOpenWork)
             }
         }
         item {
@@ -1452,7 +1452,7 @@ private fun PaginationControls(page: Int, totalPages: Int, onLoadPage: (Int) -> 
  * `enrich` returns null immediately and this stays exactly [AO3WorkCard].
  */
 @Composable
-private fun EnrichingAO3WorkCard(
+private fun EnrichingSensitiveWorkRow(
     work: AO3WorkSummary,
     onOpenWork: (AO3WorkSummary) -> Unit
 ) {
@@ -1469,5 +1469,5 @@ private fun EnrichingAO3WorkCard(
         enriched = enricher?.enrich(work)
     }
 
-    AO3WorkCard(work = enriched ?: work, onOpenWork = onOpenWork)
+    SensitiveWorkRow(work = enriched ?: work, onOpenWork = onOpenWork)
 }

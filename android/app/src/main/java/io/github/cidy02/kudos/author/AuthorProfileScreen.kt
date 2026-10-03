@@ -50,7 +50,7 @@ import io.github.cidy02.kudos.network.ao3.author.AO3AuthorRoute
 import io.github.cidy02.kudos.network.ao3.author.AO3AuthorSeriesPage
 import io.github.cidy02.kudos.network.ao3.search.AO3SearchPage
 import io.github.cidy02.kudos.network.ao3.search.AO3WorkSummary
-import io.github.cidy02.kudos.ui.components.AO3WorkCard
+import io.github.cidy02.kudos.ui.components.SensitiveWorkRow
 import io.github.cidy02.kudos.ui.components.EmptyStateCard
 import io.github.cidy02.kudos.ui.components.ErrorStateCard
 import io.github.cidy02.kudos.ui.components.LoadingStateCard
@@ -276,7 +276,7 @@ fun AuthorProfileScreen(
                         modifier = Modifier.fillMaxSize()
                     ) {
                         items(pageData.works, key = { it.id }) { work ->
-                            AO3WorkCard(
+                            SensitiveWorkRow(
                                 work = work,
                                 onOpenWork = onOpenWork
                             )
@@ -361,7 +361,7 @@ fun AuthorProfileScreen(
                                     Spacer(Modifier.height(4.dp))
                                 }
                                 bm.work?.let { work ->
-                                    AO3WorkCard(
+                                    SensitiveWorkRow(
                                         work = work,
                                         onOpenWork = onOpenWork
                                     )

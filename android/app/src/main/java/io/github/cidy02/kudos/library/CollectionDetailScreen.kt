@@ -92,7 +92,7 @@ import io.github.cidy02.kudos.ui.subject.SwipeAction
 import io.github.cidy02.kudos.ui.subject.SwipeActionRow
 import io.github.cidy02.kudos.ui.subject.ToolbarAddButton
 import io.github.cidy02.kudos.ui.subject.ToolbarCircleButton
-import io.github.cidy02.kudos.ui.subject.WorkLedgerRow
+import io.github.cidy02.kudos.ui.components.SensitiveWorkRow
 import io.github.cidy02.kudos.ui.subject.WorkSelectionBubble
 import io.github.cidy02.kudos.ui.subject.defaultWorkSignals
 import io.github.cidy02.kudos.ui.subject.subjectScreenWash
@@ -814,32 +814,20 @@ private fun CollectionWorkListItem(
             Box(Modifier.weight(1f)) {
                 if (displayMode == CollectionDisplayMode.Ledger) {
                     val progress = work.readingProgressFraction() ?: 0.0
-                    WorkLedgerRow(
-                        title = work.title,
-                        author = work.author,
-                        fandoms = work.workFandoms,
-                        metadata = HomeFacts.localWorkMetadata(work.author, work.wordCount, work.chapters).joinToString(" · "),
-                        progress = progress,
-                        progressState = when {
-                            work.isFinished -> "Finished"
-                            progress > 0.0 -> "Reading"
-                            else -> null
+                    SensitiveWorkRow(
+                        work = work,
+                        onOpenWork = { 
+                            if (work.hasEpub) onOpenReader() else onOpenWork()
                         },
-                        signals = defaultWorkSignals(work.rating, work.workCategories, work.workWarnings, work.isComplete),
-                        obscured = obscured,
-                        favorite = work.isFavorite,
                         selected = isSelecting && isSelected,
-                        onClick = {
-                            when {
-                                isSelecting -> onToggleSelection()
-                                obscured -> onReveal()
-                                work.hasEpub -> onOpenReader()
-                                else -> onOpenWork()
-                            }
-                        },
+                        selecting = isSelecting,
+                        obscured = obscured,
+                        onReveal = onReveal,
+                        onSelect = onToggleSelection,
                         onLongClick = {
                             if (!isSelecting) menuOpen = true
-                        }
+                        },
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
                     )
                 } else {
                     DetailedCollectionWorkCard(
