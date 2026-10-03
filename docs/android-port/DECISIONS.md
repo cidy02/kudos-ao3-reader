@@ -67,3 +67,10 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   - Last Read: most recently read first, never-read works last.
   - Kudos: highest first; iOS keeps `SavedWork.kudos`, so its old comment saying kudos counts
     "aren't kept" was out of date.
+- **2026-10-03 · Freed about 6 GB of regenerable build caches to slow iCloud eviction.** With the disk at
+  97% (14 GB free), macOS offloaded the repo's iCloud files faster: evicted loose objects went from
+  970 to 2,428 in an hour, and active source files were evicted too. Deleted only caches that
+  nothing was using and that rebuild on demand: Xcode DerivedData `kudos-probe`, `kudos-t283` and
+  `kudos-t284`, and the idle Grok worktree's `android/app/build`. Kept `kudos-polish`,
+  `kudos-polish-mac`, `kudos-device` (iPhone builds) and the Gradle caches. Free space is now
+  23 GB. Not lossy: everything deleted is build output. Reverse: rebuild.
