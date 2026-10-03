@@ -76,7 +76,7 @@
       "workOrderRaw" : "10000000-0000-4000-8000-000000000002,10000000-0000-4000-8000-000000000001"
     }
   ],
-  "exportedAt" : "2026-10-03T05:10:15.449Z",
+  "exportedAt" : "2026-10-03T08:38:52.569Z",
   "fandomReadWatermarks" : [
     {
       "fandomName" : "Portable Fandom",
@@ -321,6 +321,7 @@
       "datePublished" : "2026-01-02",
       "dateUpdated" : "2026-02-03",
       "deletedAt" : "2023-11-14T22:15:20.000Z",
+      "downloadedAt" : "2023-11-14T22:17:20.000Z",
       "epubDigest" : "2be63c7aa2950b6b7bbda7be0eff723a9a2410fc71dac2bf5a9b9ab07061d644",
       "epubPreservationStatusRaw" : "preserved",
       "hasEPUB" : true,
