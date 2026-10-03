@@ -175,6 +175,15 @@ fun LibraryScreen(
         )
     )
     val state by viewModel.state.collectAsState()
+    val filterRequestTick by LibraryFilterRequest.tick.collectAsState()
+    LaunchedEffect(filterRequestTick, state.loading, state.userTags) {
+        if (filterRequestTick == 0 || state.loading) return@LaunchedEffect
+        LibraryFilterRequest.takeFandom()?.let(viewModel::setFandomFilter)
+        val tagName = LibraryFilterRequest.takeUserTag() ?: return@LaunchedEffect
+        val tag = state.userTags.firstOrNull { it.name.equals(tagName, ignoreCase = true) }
+            ?: return@LaunchedEffect
+        viewModel.toggleUserTag(tag.id)
+    }
     val shellOverlay = LocalShellOverlayState.current
     DisposableEffect(state.selectionMode, section) {
         shellOverlay.hidesTabBar = state.selectionMode

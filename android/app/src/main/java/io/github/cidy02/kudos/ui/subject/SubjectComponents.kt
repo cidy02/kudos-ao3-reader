@@ -890,20 +890,24 @@ fun FilterButton(
                     }
                 )
                 .semantics { contentDescription = label }
-                .padding(8.dp)
+                // A glass toolbar circle, as every iOS toolbar filter is.
+                .size(SubjectMetrics.toolbarCircle)
+                .background(tokens.glassFill(), CircleShape)
+                .border(0.5.dp, tokens.glassStroke(), CircleShape),
+            contentAlignment = Alignment.Center
         ) {
             Icon(
                 imageVector = Icons.Filled.FilterList,
                 contentDescription = null,
                 tint = tint,
-                modifier = Modifier.size(24.dp)
+                modifier = Modifier.size(17.sp.asDp())
             )
             if (badgeCount > 0) {
                 val badge = if (badgeCount > 99) "99+" else badgeCount.toString()
                 Box(
                     Modifier
                         .align(Alignment.TopEnd)
-                        .offset(x = 6.dp, y = (-6).dp)
+                        .offset(x = 2.dp, y = (-2).dp)
                         .defaultMinSize(minWidth = 15.dp, minHeight = 15.dp)
                         .background(tokens.accent, CircleShape)
                         .padding(horizontal = 3.dp),

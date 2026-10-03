@@ -53,6 +53,7 @@ import io.github.cidy02.kudos.network.ao3.search.AO3WorkSummary
 import io.github.cidy02.kudos.web.AO3WebViewFallbackScreen
 import io.github.cidy02.kudos.library.CollectionDetailScreen
 import io.github.cidy02.kudos.library.CollectionsScreen
+import io.github.cidy02.kudos.library.LibraryFilterRequest
 import io.github.cidy02.kudos.library.LibraryScreen
 import io.github.cidy02.kudos.library.RecentlyDeletedScreen
 import io.github.cidy02.kudos.library.QueueDetailScreen
@@ -608,7 +609,20 @@ fun AppNavHost(
                 savedSearchRepository = container.savedSearchRepository,
                 workRepository = container.workRepository,
                 settingsRepository = container.settingsRepository,
-                onOpenUrl = { url -> navController.navigate(Routes.webFallback(url)) }
+                onOpenUrl = { url -> navController.navigate(Routes.webFallback(url)) },
+                fandomCatalogCache = container.fandomCatalogCache,
+                workImporter = container.workImporter,
+                queueRepository = container.readingQueueRepository,
+                downloadQueue = container.downloadQueue,
+                onOpenCollection = { id -> navController.navigate(Routes.collectionDetail(id)) },
+                onFilterLibraryFandom = { name ->
+                    LibraryFilterRequest.requestFandom(name)
+                    navController.navigateShellRoot(Routes.Library)
+                },
+                onFilterLibraryTag = { name ->
+                    LibraryFilterRequest.requestUserTag(name)
+                    navController.navigateShellRoot(Routes.Library)
+                }
             )
         }
         sharedComposable(

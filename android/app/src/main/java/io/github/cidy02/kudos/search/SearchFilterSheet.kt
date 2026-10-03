@@ -74,7 +74,7 @@ fun SearchFilterSheet(
     localTagSuggestions: LocalTagSuggestions = LocalTagSuggestions(),
     autocompleteRepository: io.github.cidy02.kudos.network.ao3.search.AO3TagAutocompleteRepository? = null
 ) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -110,13 +110,8 @@ fun SearchFilterSheet(
                 }
             }
             Text(
-                text = "Search filters",
+                text = "Filters",
                 style = MaterialTheme.typography.titleLarge
-            )
-            Text(
-                text = "Narrow AO3 works. Apply runs the search; Reset keeps your query.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
 
             Column(
@@ -389,7 +384,7 @@ fun SearchFilterSheet(
                 }
                 if (onSave != null) {
                     OutlinedButton(onClick = onSave) {
-                        Text("Save")
+                        Text("Save Search…")
                     }
                 }
             }

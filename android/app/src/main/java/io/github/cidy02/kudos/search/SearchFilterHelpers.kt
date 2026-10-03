@@ -359,13 +359,8 @@ fun applyTagSuggestion(fieldValue: String, suggestion: String): String {
 }
 
 fun defaultSavedSearchName(filters: AO3SearchFilters): String {
-    val query = filters.query.trim()
-    if (query.isNotEmpty()) return query
-    val fandom = filters.fandom.trim()
-    if (fandom.isNotEmpty()) {
-        return AO3SearchFilters.commaSeparatedValues(fandom).firstOrNull() ?: fandom
-    }
-    return "Saved Search"
+    val subject = filters.searchSubject().text
+    return if (subject == SEARCH_RESULTS_FALLBACK) "Saved Search" else subject
 }
 
 fun savedSearchSubtitle(filters: AO3SearchFilters): String? {

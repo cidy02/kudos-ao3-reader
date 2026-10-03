@@ -68,6 +68,13 @@ class RemoteWorkSelectionState internal constructor(
         selected = if (workId in selected) selected - workId else selected + workId
     }
 
+    /** Select All, or Deselect All once every id in [workIds] is chosen. Stays in selection. */
+    fun toggleSelectAll(workIds: Collection<Long>) {
+        val ids = workIds.toSet()
+        val all = ids.isNotEmpty() && ids.all { it in selected }
+        selected = if (all) selected - ids else selected + ids
+    }
+
     /** The selected summaries, in the host's current display order. */
     fun selectedIn(results: List<AO3WorkSummary>): List<AO3WorkSummary> =
         results.filter { it.id in selected }
