@@ -169,6 +169,10 @@ class SettingsRepository(
         dataStore.edit { it[Keys.ReaderJustify] = justify }
     }
 
+    suspend fun updateDownloadOnSubscribe(enabled: Boolean) {
+        dataStore.edit { it[Keys.DownloadOnSubscribe] = enabled }
+    }
+
     suspend fun updateKeepScreenAwake(keep: Boolean) {
         dataStore.edit { it[Keys.KeepScreenAwake] = keep }
     }
@@ -421,6 +425,8 @@ class SettingsRepository(
                     ?: defaults.app.confirmBeforeDelete,
                 keepsWorksYouRead = preferences[Keys.KeepsWorksYouRead]
                     ?: defaults.app.keepsWorksYouRead,
+                downloadOnSubscribe = preferences[Keys.DownloadOnSubscribe]
+                    ?: defaults.app.downloadOnSubscribe,
                 appTheme = AppThemeSetting.fromStorage(preferences[Keys.AppTheme]),
                 accentColorHex = preferences[Keys.AccentColorHex]
                     ?: defaults.app.accentColorHex,
@@ -460,6 +466,7 @@ class SettingsRepository(
         val ReaderMargin = doublePreferencesKey("readerMargin")
         val ReaderJustify = booleanPreferencesKey("readerJustify")
         val KeepScreenAwake = booleanPreferencesKey("keepScreenAwake")
+        val DownloadOnSubscribe = booleanPreferencesKey("downloadOnSubscribe")
         val ConfirmBeforeDelete = booleanPreferencesKey("confirmBeforeDelete")
         val KeepsWorksYouRead = booleanPreferencesKey("keepsWorksYouRead")
         val HideMatureContent = booleanPreferencesKey("hideMatureContent")

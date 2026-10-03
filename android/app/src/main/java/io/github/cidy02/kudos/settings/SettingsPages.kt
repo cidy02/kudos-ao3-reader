@@ -285,6 +285,16 @@ fun SettingsDownloadsPage(repository: SettingsRepository, settings: KudosSetting
                     "if no copy is stored. Privacy and Local Data shows what uses space and " +
                     "lets you remove individual downloads."
             ) {
+                SubjectFormRow(
+                    "Download on subscribe",
+                    trailing = {
+                        SubjectToggle(
+                            checked = settings.app.downloadOnSubscribe,
+                            onCheckedChange = { scope.launch { repository.updateDownloadOnSubscribe(it) } }
+                        )
+                    }
+                )
+                SubjectRowSeparator()
                 SubjectFormRow("Storage used", value = storageUsed)
             }
         }

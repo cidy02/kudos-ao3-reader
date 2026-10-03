@@ -71,6 +71,8 @@ data class ReaderSettings(
 data class AppSettings(
     val confirmBeforeDelete: Boolean = true,
     val keepsWorksYouRead: Boolean = false,
+    /** iOS "downloadOnSubscribe": subscribing to a Library work without a copy downloads it. */
+    val downloadOnSubscribe: Boolean = false,
     val appTheme: AppThemeSetting = AppThemeSetting.Light,
     val accentColorHex: String = "#990000",
     /** iOS backup passthrough; Android has no UI for these queue defaults yet. */
