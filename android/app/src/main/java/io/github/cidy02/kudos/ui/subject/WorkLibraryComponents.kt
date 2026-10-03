@@ -51,7 +51,6 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.cidy02.kudos.home.HomeFacts
-import io.github.cidy02.kudos.ui.components.coverHue
 import kotlinx.coroutines.launch
 
 enum class WorkSectionLayout { Shelves, Ledger }
@@ -136,14 +135,18 @@ fun WorkLedgerRow(
     modifier: Modifier = Modifier
 ) {
     val tokens = LocalKudosTokens.current
-    val subject = fandoms.firstOrNull { it.isNotBlank() } ?: title
-    val palette = remember(subject, tokens.theme) {
-        SubjectPalette.fromHue(coverHue(subject).toDouble() / 360.0, tokens.theme)
+    // iOS CoverArt.workHue, as every other work surface uses.
+    val palette = remember(fandoms, title, tokens.theme) {
+        SubjectPalette.fromHue(HomeFacts.workHue(fandoms, title), tokens.theme)
     }
     val shape = RoundedCornerShape(14.dp)
+    // An obscured row is blurred under "Tap to reveal", as iOS's SensitiveWorkRow; the
+    // accessibility label alone hid nothing on screen.
+    Box(modifier.fillMaxWidth().clip(shape)) {
     Row(
-        modifier
+        Modifier
             .fillMaxWidth()
+            .then(if (obscured) Modifier.blur(10.dp) else Modifier)
             .clip(shape)
             .background(palette.rowWash)
             .border(if (selected) 2.dp else 0.5.dp, if (selected) tokens.accent else palette.rowBorder, shape)
@@ -185,6 +188,8 @@ fun WorkLedgerRow(
             )
         }
         LedgerSignalGrid(signals.take(4), palette)
+    }
+    if (obscured) RevealCapsule(Modifier.align(Alignment.Center))
     }
 }
 
