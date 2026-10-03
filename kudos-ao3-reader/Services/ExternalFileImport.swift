@@ -27,15 +27,17 @@ final class ExternalFileImport {
 
     private(set) var isImporting = false
     var notice: Notice?
+    private(set) var pendingImport: PendingDocumentImport?
 
-    /// Imports a file opened from outside the app.
+    /// Inspects a file opened from outside the app, then lets the root view ask
+    /// the reader to confirm or change the detected download date.
     ///
     /// Files arriving this way are usually already local (iOS copies them into
     /// `Documents/Inbox` for a document type the app claims), but an iCloud Drive
     /// URL can still be a placeholder, which `UserDocumentImport` waits out.
-    func handle(_ url: URL, in context: ModelContext) async {
+    func handle(_ url: URL) async {
         guard url.isFileURL else { return }
-        guard !isImporting else {
+        guard !isImporting, pendingImport == nil else {
             Log.library.notice("Ignoring an opened file while another import is in flight")
             return
         }
@@ -50,8 +52,8 @@ final class ExternalFileImport {
         defer { if scoped { url.stopAccessingSecurityScopedResource() } }
 
         do {
-            let result = try await UserDocumentImport.perform(url, into: context)
-            notice = successNotice(for: result, fileName: url.lastPathComponent)
+            let detection = try await UserDocumentImport.detectDownloadDate(of: url)
+            pendingImport = PendingDocumentImport(url: url, detection: detection)
         } catch {
             let fileName = url.lastPathComponent
             let reason = error.localizedDescription
@@ -61,11 +63,43 @@ final class ExternalFileImport {
                 message: error.localizedDescription,
                 workID: nil
             )
+            removeInboxCopy(at: url)
         }
-        // iOS copies an opened document into Documents/Inbox and leaves it there
-        // forever otherwise — the import already has its own copy, plus an
-        // archived original when it converted.
-        removeInboxCopy(at: url)
+    }
+
+    func confirm(_ selection: SelectedDocumentImport, in context: ModelContext) async {
+        guard pendingImport?.url == selection.url, !isImporting else { return }
+        pendingImport = nil
+        isImporting = true
+        defer {
+            isImporting = false
+            // iOS copies an opened document into Documents/Inbox and leaves it
+            // there forever otherwise; the importer now owns its durable copy.
+            removeInboxCopy(at: selection.url)
+        }
+
+        let scoped = selection.url.startAccessingSecurityScopedResource()
+        defer { if scoped { selection.url.stopAccessingSecurityScopedResource() } }
+        do {
+            let result = try await UserDocumentImport.perform(
+                selection.url, downloadedAt: selection.downloadedAt, into: context
+            )
+            notice = successNotice(for: result, fileName: selection.url.lastPathComponent)
+        } catch {
+            let fileName = selection.url.lastPathComponent
+            let reason = error.localizedDescription
+            Log.library.error("Opening \(fileName, privacy: .public) failed: \(reason, privacy: .public)")
+            notice = Notice(
+                title: "Couldn't Import This File",
+                message: error.localizedDescription,
+                workID: nil
+            )
+        }
+    }
+
+    func cancelPendingImport() {
+        if let url = pendingImport?.url { removeInboxCopy(at: url) }
+        pendingImport = nil
     }
 
     private func successNotice(
