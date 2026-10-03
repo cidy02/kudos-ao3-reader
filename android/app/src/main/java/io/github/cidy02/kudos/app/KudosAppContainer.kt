@@ -2,6 +2,7 @@ package io.github.cidy02.kudos.app
 
 import android.content.Context
 import androidx.room.Room
+import kotlinx.coroutines.CoroutineScope
 import io.github.cidy02.kudos.BuildConfig
 import io.github.cidy02.kudos.account.AO3AccountListCountsCache
 import io.github.cidy02.kudos.account.AccountListRepository
@@ -51,7 +52,10 @@ import io.github.cidy02.kudos.works.DownloadQueue
 import io.github.cidy02.kudos.works.WorkImporter
 import io.github.cidy02.kudos.works.WorkRepository
 
-class KudosAppContainer(context: Context) {
+class KudosAppContainer(
+    context: Context,
+    appScope: CoroutineScope? = null
+) {
     private val appContext = context.applicationContext
 
     val database: KudosDatabase by lazy {
@@ -224,7 +228,7 @@ class KudosAppContainer(context: Context) {
     }
 
     val libraryRepository: LibraryRepository by lazy {
-        LibraryRepository(workRepository, settingsRepository.settings)
+        LibraryRepository(workRepository, settingsRepository.settings, appScope)
     }
 
     val readingQueueRepository: ReadingQueueRepository by lazy {

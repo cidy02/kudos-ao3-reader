@@ -40,6 +40,19 @@ interface TagDao {
     )
     suspend fun getTagsForWork(workId: String): List<TagEntity>
 
+    @Query(
+        """
+        SELECT work_tag_cross_refs.workId AS workId,
+               user_tags.id AS id,
+               user_tags.name AS name,
+               user_tags.dateCreated AS dateCreated
+        FROM user_tags
+        INNER JOIN work_tag_cross_refs ON user_tags.id = work_tag_cross_refs.tagId
+        ORDER BY user_tags.name COLLATE NOCASE
+        """
+    )
+    fun observeAllWorkTagLinks(): kotlinx.coroutines.flow.Flow<List<WorkTagLink>>
+
     @Query("DELETE FROM work_tag_cross_refs WHERE workId = :workId AND tagId = :tagId")
     suspend fun removeFromWork(workId: String, tagId: String)
 }

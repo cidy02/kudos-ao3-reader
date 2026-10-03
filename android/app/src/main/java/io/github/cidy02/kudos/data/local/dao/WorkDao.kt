@@ -58,6 +58,30 @@ interface WorkDao {
     )
     suspend fun getKeptOfflineWorkIds(): List<String>
 
+    /**
+     * Same keep rule as [getKeptOfflineWorkIds], for one work.
+     * A deleted queue or collection still counts; the keeper *name* does not.
+     */
+    @Query(
+        """
+        SELECT CASE WHEN EXISTS(
+            SELECT 1 FROM reading_queue_memberships
+            INNER JOIN reading_queues
+                ON reading_queues.id = reading_queue_memberships.queueID
+            WHERE reading_queue_memberships.workID = :workId
+              AND (reading_queues.keepsWorksOffline IS NULL
+                   OR reading_queues.keepsWorksOffline = 1)
+            UNION ALL
+            SELECT 1 FROM collection_work_cross_refs
+            INNER JOIN collections
+                ON collections.id = collection_work_cross_refs.collectionId
+            WHERE collection_work_cross_refs.workId = :workId
+              AND collections.keepsWorksOffline = 1
+        ) THEN 1 ELSE 0 END
+        """
+    )
+    suspend fun isKeptOffline(workId: String): Boolean
+
     /** Soft-deleted works for Recently Deleted UI (newest deletion first). */
     @Query(
         """

@@ -12,8 +12,6 @@ import io.github.cidy02.kudos.ui.subject.DebugRoutes
 import io.github.cidy02.kudos.ui.theme.KudosThemeMode
 import io.github.cidy02.kudos.works.ExternalFileImport
 import java.util.Locale
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.runBlocking
 
 // FragmentActivity (not bare ComponentActivity) so Readium's Fragment-based EPUB
 // navigator can be hosted via supportFragmentManager (see ReadiumNavigatorHost).
@@ -57,18 +55,15 @@ class MainActivity : FragmentActivity() {
                 skipOnboarding = true
             }
 
-            if (isDemoRequested) {
-                runBlocking(Dispatchers.IO) {
-                    DemoLibrary.seed(container)
-                    container.settingsRepository.setHasCompletedOnboarding(true)
-                    container.settingsRepository.setHasPermanentlyDismissedSyncFolderOnboarding(true)
-                }
-            } else if (skipOnboarding) {
-                runBlocking(Dispatchers.IO) {
-                    if (onboardingExtra) {
+            if (isDemoRequested || onboardingExtra || syncOnboardingExtra) {
+                (application as KudosApplication).launchIo {
+                    if (isDemoRequested) {
+                        DemoLibrary.seed(container)
+                    }
+                    if (isDemoRequested || onboardingExtra) {
                         container.settingsRepository.setHasCompletedOnboarding(true)
                     }
-                    if (syncOnboardingExtra) {
+                    if (isDemoRequested || syncOnboardingExtra) {
                         container.settingsRepository.setHasPermanentlyDismissedSyncFolderOnboarding(true)
                     }
                 }
@@ -97,7 +92,7 @@ class MainActivity : FragmentActivity() {
             val hasThemeExtra = intent.hasExtra("kudosTheme")
             if (isDemoRequested) {
                 val container = (application as KudosApplication).container
-                runBlocking(Dispatchers.IO) {
+                (application as KudosApplication).launchIo {
                     DemoLibrary.seed(container)
                     container.settingsRepository.setHasCompletedOnboarding(true)
                     container.settingsRepository.setHasPermanentlyDismissedSyncFolderOnboarding(true)

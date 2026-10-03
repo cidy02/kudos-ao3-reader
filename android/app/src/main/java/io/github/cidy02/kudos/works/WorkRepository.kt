@@ -10,9 +10,13 @@ import io.github.cidy02.kudos.core.model.WorkCollection
 import io.github.cidy02.kudos.core.model.collectionMembershipRecordId
 import io.github.cidy02.kudos.core.model.legacyCollectionMembershipRecordId
 import io.github.cidy02.kudos.data.local.KudosDatabase
+import io.github.cidy02.kudos.data.local.dao.CollectionWorkLink
+import io.github.cidy02.kudos.data.local.dao.WorkKeeperName
+import io.github.cidy02.kudos.data.local.dao.WorkTagLink
 import io.github.cidy02.kudos.data.local.entity.CollectionEntity
 import io.github.cidy02.kudos.data.local.entity.CollectionWorkCrossRef
 import io.github.cidy02.kudos.data.local.entity.TagEntity
+import io.github.cidy02.kudos.data.local.entity.WorkEntity
 import io.github.cidy02.kudos.data.local.entity.WorkTagCrossRef
 import io.github.cidy02.kudos.data.local.entity.toDomain
 import io.github.cidy02.kudos.data.local.entity.toEntity
@@ -23,7 +27,12 @@ import java.util.UUID
 import io.github.cidy02.kudos.network.ao3.AO3Error
 import io.github.cidy02.kudos.network.ao3.AO3Result
 import io.github.cidy02.kudos.network.ao3.work.WorkTagsRepository
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.conflate
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 
 /**
@@ -46,17 +55,16 @@ class WorkRepository(
     private val annotationDao = database.annotationDao()
 
     fun observeSavedWorks(): Flow<List<SavedWork>> {
-        return workDao.observeAll()
-            .map { works -> decorate(works.map { it.toDomain() }).filter { it.isProtected && !it.isQueueOnlyWork } }
+        return workDao.observeAll().decorated().map { works ->
+            works.filter { it.isProtected && !it.isQueueOnlyWork }
+        }.distinctUntilChanged()
     }
 
     /**
      * All active library works (excludes soft-deleted). Used by Browse category
      * enrichment for saved counts and recently-read chips — not only `isSaved`.
      */
-    fun observeLibraryWorks(): Flow<List<SavedWork>> {
-        return workDao.observeAll().map { works -> decorate(works.map { it.toDomain() }) }
-    }
+    fun observeLibraryWorks(): Flow<List<SavedWork>> = workDao.observeAll().decorated()
 
     /** One-shot list of active saved library works (excludes soft-deleted). */
     suspend fun listSavedWorks(): List<SavedWork> {
@@ -68,6 +76,46 @@ class WorkRepository(
     suspend fun savedForLaterWorkIds(): Set<String> {
         val queue = queueDao.getActiveQueueByKind(ReadingQueueKind.SAVED_FOR_LATER) ?: return emptySet()
         return queueDao.getMembershipsForQueue(queue.id).mapTo(mutableSetOf()) { it.workID }
+    }
+
+    /** Re-emits when the Saved for Later queue or its memberships change. */
+    fun observeSavedForLaterWorkIds(): Flow<Set<String>> {
+        return combine(
+            queueDao.observeActiveQueues().conflate(),
+            queueDao.observeAllMemberships().conflate()
+        ) { queues, memberships ->
+            val queue = queues.firstOrNull { it.kindRaw == ReadingQueueKind.SAVED_FOR_LATER }
+            if (queue == null) {
+                emptySet()
+            } else {
+                memberships.mapNotNullTo(mutableSetOf()) { row ->
+                    row.workID.takeIf { row.queueID == queue.id }
+                }
+            }
+        }.distinctUntilChanged()
+    }
+
+    /**
+     * Tags, collection membership, and Saved for Later for the whole library,
+     * loaded with one query each instead of one query per work.
+     */
+    fun observeLibraryIndex(): Flow<WorkLibraryIndex> {
+        return combine(
+            tagDao.observeAllWorkTagLinks().conflate(),
+            collectionDao.observeAllActive().conflate(),
+            collectionDao.observeActiveMembershipLinks().conflate(),
+            tagDao.observeAll().conflate(),
+            observeSavedForLaterWorkIds()
+        ) { links, collections, memberships, tags, savedForLaterIds ->
+            val grouped = groupCollections(collections, memberships)
+            WorkLibraryIndex(
+                tagsByWork = groupTags(links),
+                collectionsByWork = grouped.byWork,
+                userTags = tags.map { it.toDomain() },
+                collections = grouped.all,
+                savedForLaterIds = savedForLaterIds
+            )
+        }.distinctUntilChanged().flowOn(Dispatchers.Default)
     }
 
     /** Active finished works in local reading history (excludes soft-deleted). */
@@ -94,16 +142,15 @@ class WorkRepository(
 
 
     /** Soft-deleted works in Recently Deleted (newest first). */
-    fun observeRecentlyDeleted(): Flow<List<SavedWork>> {
-        return workDao.observeDeleted().map { works -> decorate(works.map { it.toDomain() }) }
-    }
+    fun observeRecentlyDeleted(): Flow<List<SavedWork>> = workDao.observeDeleted().decorated()
 
     suspend fun listRecentlyDeleted(): List<SavedWork> {
         return decorate(workDao.getDeleted().map { it.toDomain() })
     }
 
-    fun observeHeldCopies(): Flow<List<SavedWork>> = workDao.observeHeldCopies()
-        .map { works -> decorate(works.map { it.toDomain() }).filter(::qualifiesForHold) }
+    fun observeHeldCopies(): Flow<List<SavedWork>> = workDao.observeHeldCopies().decorated()
+        .map { works -> works.filter(::qualifiesForHold) }
+        .distinctUntilChanged()
 
     /** Settings' iOS `LocalDataClearing.selectFreeableDownloads` rule. */
     fun observeFreeableCopies(): Flow<List<SavedWork>> = observeLibraryWorks()
@@ -489,15 +536,14 @@ class WorkRepository(
     }
 
     suspend fun collectionsForWork(workId: String): List<WorkCollection> {
-        return collectionDao.getCollectionsForWork(workId).map { entity ->
-            entity.toDomain(collectionDao.getActiveWorkIdsForCollection(entity.id))
-        }
+        val entities = collectionDao.getCollectionsForWork(workId)
+        if (entities.isEmpty()) return emptyList()
+        val workIds = activeWorkIdsByCollection()
+        return entities.map { it.toDomain(workIds[it.id].orEmpty()) }
     }
 
     suspend fun allCollections(): List<WorkCollection> {
-        return collectionDao.getAll().map { entity ->
-            entity.toDomain(collectionDao.getActiveWorkIdsForCollection(entity.id))
-        }
+        return groupCollections(collectionDao.getAll(), collectionDao.getActiveMembershipLinks()).all
     }
 
     suspend fun getCollection(collectionId: String): WorkCollection? {
@@ -507,8 +553,9 @@ class WorkRepository(
 
     /** Soft-deleted collections in Recently Deleted (newest deletion first). */
     suspend fun listRecentlyDeletedCollections(): List<WorkCollection> {
+        val workIds = activeWorkIdsByCollection()
         return collectionDao.getDeleted().map { entity ->
-            entity.toDomain(collectionDao.getActiveWorkIdsForCollection(entity.id))
+            entity.toDomain(workIds[entity.id].orEmpty())
         }
     }
 
@@ -758,14 +805,30 @@ class WorkRepository(
         val FREED_COPY_WINDOW: Duration = Duration.ofDays(60)
     }
 
-    private suspend fun decorate(works: List<SavedWork>): List<SavedWork> {
-        val keptIds = workDao.getKeptOfflineWorkIds().toSet()
-        return works.map { decorate(it, keptIds) }
+    private fun Flow<List<WorkEntity>>.decorated(): Flow<List<SavedWork>> {
+        return conflate()
+            .map { entities -> decorate(entities.map { it.toDomain() }) }
+            .distinctUntilChanged()
+            .flowOn(Dispatchers.IO)
     }
 
-    private suspend fun decorate(work: SavedWork, keptIds: Set<String>? = null): SavedWork {
-        val kept = keptIds?.contains(work.id)
-            ?: workDao.getKeptOfflineWorkIds().contains(work.id)
+    private suspend fun decorate(works: List<SavedWork>): List<SavedWork> {
+        if (works.isEmpty()) return emptyList()
+        val keptIds = workDao.getKeptOfflineWorkIds().toSet()
+        val queueKeepers = firstKeeperNames(queueDao.getActiveKeepingQueueNames())
+        val collectionKeepers = firstKeeperNames(collectionDao.getActiveKeepingCollectionNames())
+        return works.map { work ->
+            val kept = work.id in keptIds
+            work.copy(
+                isKeptOffline = kept,
+                keptOfflineBy = if (kept) queueKeepers[work.id] ?: collectionKeepers[work.id] else null,
+                hasAo3WorkId = WorkTags.ao3WorkIdFromUrl(work.sourceUrl) != null
+            )
+        }
+    }
+
+    private suspend fun decorate(work: SavedWork): SavedWork {
+        val kept = workDao.isKeptOffline(work.id)
         val keeper = if (kept) {
             queueDao.getActiveKeepingQueueName(work.id)
                 ?: collectionDao.getActiveKeepingCollectionName(work.id)
@@ -779,6 +842,69 @@ class WorkRepository(
         )
     }
 
+    private suspend fun activeWorkIdsByCollection(): Map<String, List<String>> {
+        return workIdsByCollection(collectionDao.getActiveMembershipLinks())
+    }
+
+    private fun groupTags(links: List<WorkTagLink>): Map<String, List<Tag>> {
+        val grouped = LinkedHashMap<String, MutableList<Tag>>()
+        for (link in links) {
+            grouped.getOrPut(link.workId) { mutableListOf() }.add(
+                Tag(id = link.id, name = link.name, dateCreated = link.dateCreated)
+            )
+        }
+        return grouped.mapValues { it.value.toList() }
+    }
+
+    private fun groupCollections(
+        entities: List<CollectionEntity>,
+        memberships: List<CollectionWorkLink>
+    ): GroupedCollections {
+        val workIds = workIdsByCollection(memberships)
+        val all = entities.map { it.toDomain(workIds[it.id].orEmpty()) }
+        val byWork = LinkedHashMap<String, MutableList<WorkCollection>>()
+        for (collection in all) {
+            for (workId in collection.workIds) {
+                byWork.getOrPut(workId) { mutableListOf() }.add(collection)
+            }
+        }
+        return GroupedCollections(
+            all = all,
+            byWork = byWork.mapValues { it.value.toList() }
+        )
+    }
+
+    private fun workIdsByCollection(links: List<CollectionWorkLink>): Map<String, List<String>> {
+        val grouped = LinkedHashMap<String, MutableList<String>>()
+        for (link in links) {
+            grouped.getOrPut(link.collectionId) { mutableListOf() }.add(link.workId)
+        }
+        return grouped.mapValues { it.value.toList() }
+    }
+
+    /** First row per work wins. Callers pass rows in the same order as the per-work LIMIT 1 query. */
+    private fun firstKeeperNames(rows: List<WorkKeeperName>): Map<String, String> {
+        val names = LinkedHashMap<String, String>(rows.size)
+        for (row in rows) {
+            if (row.workId !in names) names[row.workId] = row.name
+        }
+        return names
+    }
+
     private fun qualifiesForHold(work: SavedWork): Boolean =
         work.isFinished && !work.isProtected && !work.isDeleted && work.hasEpub
 }
+
+/** Batched library relations used to build a [io.github.cidy02.kudos.library.LibrarySnapshot]. */
+data class WorkLibraryIndex(
+    val tagsByWork: Map<String, List<Tag>> = emptyMap(),
+    val collectionsByWork: Map<String, List<WorkCollection>> = emptyMap(),
+    val userTags: List<Tag> = emptyList(),
+    val collections: List<WorkCollection> = emptyList(),
+    val savedForLaterIds: Set<String> = emptySet()
+)
+
+private data class GroupedCollections(
+    val all: List<WorkCollection>,
+    val byWork: Map<String, List<WorkCollection>>
+)

@@ -96,6 +96,23 @@ interface CollectionDao {
     )
     suspend fun getActiveKeepingCollectionName(workId: String): String?
 
+    /**
+     * Every active keep-offline collection name, ordered so the first row per
+     * work is the same row [getActiveKeepingCollectionName] would return.
+     */
+    @Query(
+        """
+        SELECT collection_work_cross_refs.workId AS workId, collections.name AS name
+        FROM collections
+        INNER JOIN collection_work_cross_refs
+            ON collections.id = collection_work_cross_refs.collectionId
+        WHERE collections.isDeleted = 0
+          AND collections.keepsWorksOffline = 1
+        ORDER BY collections.dateAdded DESC
+        """
+    )
+    suspend fun getActiveKeepingCollectionNames(): List<WorkKeeperName>
+
     @Query(
         """
         SELECT works.* FROM works
@@ -131,6 +148,31 @@ interface CollectionDao {
         """
     )
     suspend fun getActiveWorkIdsForCollection(collectionId: String): List<String>
+
+    /** Active memberships for every collection, ordered by work id (same order as the per-collection query). */
+    @Query(
+        """
+        SELECT collection_work_cross_refs.collectionId AS collectionId,
+               collection_work_cross_refs.workId AS workId
+        FROM collection_work_cross_refs
+        INNER JOIN works ON works.id = collection_work_cross_refs.workId
+        WHERE works.isDeleted = 0
+        ORDER BY collection_work_cross_refs.workId
+        """
+    )
+    suspend fun getActiveMembershipLinks(): List<CollectionWorkLink>
+
+    @Query(
+        """
+        SELECT collection_work_cross_refs.collectionId AS collectionId,
+               collection_work_cross_refs.workId AS workId
+        FROM collection_work_cross_refs
+        INNER JOIN works ON works.id = collection_work_cross_refs.workId
+        WHERE works.isDeleted = 0
+        ORDER BY collection_work_cross_refs.workId
+        """
+    )
+    fun observeActiveMembershipLinks(): Flow<List<CollectionWorkLink>>
 
     @Query("DELETE FROM collection_work_cross_refs WHERE collectionId = :collectionId AND workId = :workId")
     suspend fun removeWork(collectionId: String, workId: String)

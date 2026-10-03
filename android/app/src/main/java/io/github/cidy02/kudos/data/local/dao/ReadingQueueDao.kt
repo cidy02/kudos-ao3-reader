@@ -76,6 +76,34 @@ interface ReadingQueueDao {
     )
     suspend fun getActiveKeepingQueueName(workId: String): String?
 
+    /**
+     * Every active keep-offline queue name, ordered so the first row per work
+     * is the same row [getActiveKeepingQueueName] would return.
+     */
+    @Query(
+        """
+        SELECT m.workID AS workId, q.name AS name
+        FROM reading_queues q
+        INNER JOIN reading_queue_memberships m ON m.queueID = q.id
+        WHERE q.isDeleted = 0
+          AND (q.keepsWorksOffline IS NULL OR q.keepsWorksOffline = 1)
+        ORDER BY q.sortOrder ASC, q.name ASC
+        """
+    )
+    suspend fun getActiveKeepingQueueNames(): List<WorkKeeperName>
+
+    @Query(
+        """
+        SELECT * FROM reading_queues
+        WHERE isDeleted = 0
+        ORDER BY sortOrder ASC, name ASC
+        """
+    )
+    fun observeActiveQueues(): kotlinx.coroutines.flow.Flow<List<ReadingQueueEntity>>
+
+    @Query("SELECT * FROM reading_queue_memberships")
+    fun observeAllMemberships(): kotlinx.coroutines.flow.Flow<List<ReadingQueueMembershipEntity>>
+
 
     @Query("SELECT * FROM reading_queue_memberships WHERE id = :id")
     suspend fun getMembershipById(id: String): ReadingQueueMembershipEntity?
