@@ -12,3 +12,9 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   Reverse: n/a (iOS parity).
 - **2026-10-02 · Android backup dates use three fractional digits** (`2023-11-14T22:13:20.000Z`), the
   iOS format, so archives round-trip byte-for-byte. Reverse: `BackupValidator.formatInstant`.
+- **2026-10-03 · T-354 landed on iOS alone, before the full cross-platform suite was green.** Why: it is
+  a data-loss fix (every EPUB in an Android backup was dropped on iOS restore), it's small and
+  additive, and iOS's existing backup suites show only the two known pre-existing failures. Reverse:
+  revert b02bf8ec.
+- **2026-10-03 · The Android demo must never reach AO3 (brief 1e).** Agents ran Browse against live AO3.
+  Until the demo network block lands, agents may not open Browse or Search on the emulator.
