@@ -271,21 +271,23 @@ object Routes {
     }
 
     /**
-     * Screens that hide the floating tab bar, matching iOS `hidesFloatingTabBar()`.
-     * All other pushed screens keep the floating tab bar visible.
+     * Screens that hide the floating tab bar, as iOS does. On iOS `subjectScreenWash`,
+     * `SubjectScreenChrome` and `SettingsPageForm` all apply `hidesFloatingTabBar()`;
+     * only the selectable lists opt back in with `.toolbar(isSelecting ? .hidden :
+     * .automatic, for: .tabBar)` (queue page and organizer, Recently Deleted, a
+     * collection, Home and Library section lists), so those keep it.
      */
-    fun hidesTabBar(route: String?): Boolean {
-        if (route == null) return false
-        val base = route.substringBefore("?").substringBefore("/")
-        return base == AO3Collections.substringBefore("?").substringBefore("/") ||
-            base == SeriesWorks.substringBefore("?").substringBefore("/") ||
-            base == AuthorProfile.substringBefore("?").substringBefore("/") ||
-            base == Comments.substringBefore("?").substringBefore("/") ||
-            base == BrowseFandoms.substringBefore("?").substringBefore("/") ||
-            base == Settings.substringBefore("?").substringBefore("/") ||
-            base == Reader.substringBefore("?").substringBefore("/") ||
-            // iOS WorkDetailView uses subjectScreenWash, which hides the floating
-            // tab bar (SubjectScreen.swift); unlike the queue page it never opts back in.
-            base == WorkDetail.substringBefore("?").substringBefore("/")
-    }
+    private val tabBarHiddenBases: Set<String> = listOf(
+        AO3Collections, SeriesWorks, AuthorProfile, AuthorWorks, Comments, Reader,
+        WorkDetail, // WorkDetailView
+        BrowseFandoms, BrowseWorks, TagWorks, // FandomListView, NativeBrowseView
+        Settings, Backup, QueueStorage, AvailabilitySweep, About, BugReport, // SettingsPageForm
+        AO3Preferences, AO3Dashboard, AccountList, // Account screens and AO3 lists
+        Collections, // LibraryEntityGridView
+        QueueDetail, // ReadingQueueSettingsView
+        ReadingStatistics // ReadingInsightsView
+    ).map { it.substringBefore("?").substringBefore("/") }.toSet()
+
+    fun hidesTabBar(route: String?): Boolean =
+        route != null && route.substringBefore("?").substringBefore("/") in tabBarHiddenBases
 }
