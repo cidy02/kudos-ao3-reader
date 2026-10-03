@@ -47,6 +47,7 @@ object LibraryQuery {
             totalSaved = savedItems.size,
             hiddenByPrivacyCount = hiddenCount,
             items = filtered,
+            collectionMembers = visible,
             continueReading = continueReading(shelfSource),
             readingHistory = readingHistory(shelfSource),
             recentlyAdded = sortDisplayItems(

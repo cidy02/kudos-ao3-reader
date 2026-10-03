@@ -822,32 +822,40 @@ fun WorkSelectionBubble(
 }
 
 /**
- * 44dp "+" action button in the toolbar: a filled accent circle with a white plus glyph.
- * Matches iOS Liquid Glass "+" toolbar item.
+ * 44dp "+" in the toolbar. Glass with an accent glyph, as iOS's `ToolbarIconButton`; [prominent]
+ * fills it with the accent (iOS `.glassProminent`, which iOS uses only for the queue page's Add Works).
  */
 @Composable
 fun ToolbarAddButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     accessibilityName: String = "Add",
-    palette: SubjectPalette? = null
+    palette: SubjectPalette? = null,
+    prominent: Boolean = false
 ) {
     val tokens = LocalKudosTokens.current
     val accent = palette?.accent ?: tokens.accent
     val glyph = 17.sp.asDp()
+    if (!prominent) {
+        ToolbarCircleButton(onClick = onClick, accessibilityName = accessibilityName, modifier = modifier, palette = palette) {
+            Icon(Icons.Filled.Add, contentDescription = null, tint = accent, modifier = Modifier.size(glyph))
+        }
+        return
+    }
+    val fill = palette?.tint ?: tokens.accent // iOS .tint(subjectPalette.tint)
     Box(
         modifier
             .size(SubjectMetrics.toolbarCircle)
             .semantics { contentDescription = accessibilityName }
             .clip(CircleShape)
-            .background(accent)
+            .background(fill)
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
         Icon(
             imageVector = Icons.Filled.Add,
             contentDescription = null,
-            tint = Color.White,
+            tint = SubjectPalette.label(fill), // iOS .prominentLabel()
             modifier = Modifier.size(glyph)
         )
     }

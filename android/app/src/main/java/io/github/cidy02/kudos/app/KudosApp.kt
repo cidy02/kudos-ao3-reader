@@ -14,6 +14,7 @@ import androidx.compose.material3.MaterialTheme
 import io.github.cidy02.kudos.BuildConfig
 import io.github.cidy02.kudos.core.model.AppThemeSetting
 import io.github.cidy02.kudos.ui.subject.DebugDestination
+import io.github.cidy02.kudos.ui.subject.DebugRoutes
 import io.github.cidy02.kudos.core.model.KudosSettings
 import io.github.cidy02.kudos.onboarding.WelcomeScreen
 import io.github.cidy02.kudos.onboarding.SyncFolderOnboardingScreen
@@ -214,6 +215,8 @@ fun KudosApp(
                     MainScaffold(
                         container = container,
                         themeMode = themeMode,
+                        startRoute = debugRoute?.takeIf { it.startsWith(DebugRoutes.NAV_PREFIX) }
+                            ?.removePrefix(DebugRoutes.NAV_PREFIX),
                         onCycleTheme = {
                             if (sessionThemeState != null) {
                                 sessionThemeState = sessionThemeState?.next()

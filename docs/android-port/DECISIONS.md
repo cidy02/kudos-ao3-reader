@@ -33,3 +33,8 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   simulator: Insights and the collections grid hide it, Recently Deleted and the queue page keep it.
   Android now hides it on Work detail, settings pages, Collections, Queue details, Insights, browse
   results and the account lists too. Reverse: `Routes.tabBarHiddenBases`.
+- **2026-10-03 · The queue page's filled "+" picks its glyph colour against its own fill.** iOS's code
+  says the same (`.prominentLabel()` → `label(on: screenTint)`), but the simulator draws a white glyph
+  on Neon reread's light purple, probably because the toolbar sits outside the wash's `screenTint`
+  environment and the label is computed against the app's red. Android follows the code's intent
+  (black on a light fill). iOS follow-up queued in the Living Prompt §5. Reverse: `ToolbarAddButton`.

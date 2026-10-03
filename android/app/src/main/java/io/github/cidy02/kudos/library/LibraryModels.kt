@@ -49,6 +49,8 @@ data class LibraryUiState(
     val totalSaved: Int = 0,
     val hiddenByPrivacyCount: Int = 0,
     val items: List<LibraryDisplayItem> = emptyList(),
+    /** Collection previews: every active, not-hidden work, queue-only ones too (iOS CollectionCard). */
+    val collectionMembers: List<LibraryDisplayItem> = emptyList(),
     val continueReading: List<LibraryDisplayItem> = emptyList(),
     val readingHistory: List<LibraryDisplayItem> = emptyList(),
     val recentlyAdded: List<LibraryDisplayItem> = emptyList(),

@@ -608,5 +608,10 @@ class QueueOnlyWorkSemanticsTest {
 
         assertEquals(1, state.totalSaved)
         assertEquals(listOf("saved-1"), state.items.map { it.item.work.id })
+        // iOS CollectionCard / HomeCollectionShelves count a collection's queue-only works.
+        assertEquals(
+            setOf("saved-1", "queue-1"),
+            state.collectionMembers.map { it.item.work.id }.toSet()
+        )
     }
 }
