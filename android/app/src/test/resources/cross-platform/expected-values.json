@@ -1,0 +1,461 @@
+{
+  "annotations" : [
+    {
+      "chapterTitle" : "Five",
+      "colorRaw" : "yellow",
+      "createdAt" : "2023-11-14T22:17:20.000Z",
+      "id" : "50000000-0000-4000-8000-000000000001",
+      "isPendingDeletion" : false,
+      "kindRaw" : "bookmark",
+      "lastModifiedAt" : "2023-11-14T22:17:20.000Z",
+      "locatorString" : "{\"href\":\"chapter-5.xhtml\",\"locations\":{\"progression\":0.4,\"totalProgression\":0.57}}",
+      "note" : "",
+      "progression" : 0.57,
+      "selectedText" : "",
+      "spineIndex" : 4,
+      "workID" : "10000000-0000-4000-8000-000000000001"
+    },
+    {
+      "chapterTitle" : "Five",
+      "colorRaw" : "purple",
+      "createdAt" : "2023-11-14T22:18:20.000Z",
+      "id" : "50000000-0000-4000-8000-000000000002",
+      "isPendingDeletion" : false,
+      "kindRaw" : "highlight",
+      "lastModifiedAt" : "2023-11-14T22:18:20.000Z",
+      "locatorString" : "{\"href\":\"chapter-5.xhtml\",\"locations\":{\"progression\":0.4,\"totalProgression\":0.57}}",
+      "note" : "",
+      "progression" : 0.58,
+      "selectedText" : "Distinctive highlighted text",
+      "spineIndex" : 4,
+      "workID" : "10000000-0000-4000-8000-000000000001"
+    },
+    {
+      "chapterTitle" : "One",
+      "colorRaw" : "green",
+      "createdAt" : "2023-11-14T22:19:20.000Z",
+      "id" : "50000000-0000-4000-8000-000000000003",
+      "isPendingDeletion" : false,
+      "kindRaw" : "highlight",
+      "lastModifiedAt" : "2023-11-14T22:19:20.000Z",
+      "locatorString" : "{\"href\":\"chapter-1.xhtml\",\"locations\":{\"totalProgression\":0.12}}",
+      "note" : "Reader note",
+      "progression" : 0.12,
+      "selectedText" : "Text with a note",
+      "spineIndex" : 0,
+      "workID" : "10000000-0000-4000-8000-000000000002"
+    }
+  ],
+  "bookmarks" : [
+    {
+      "dateAdded" : "2023-11-14T22:18:20.000Z",
+      "id" : "A0000000-0000-4000-8000-000000000001",
+      "title" : "Portable Bookmark",
+      "urlString" : "https:\/\/archiveofourown.org\/works\/820001#comments"
+    }
+  ],
+  "collections" : [
+    {
+      "colorHex" : "#3456A8",
+      "createdAt" : "2023-11-14T22:14:20.000Z",
+      "dateAdded" : "2023-11-14T22:13:20.000Z",
+      "description" : "Collection description",
+      "hue" : 0.63,
+      "id" : "20000000-0000-4000-8000-000000000001",
+      "isDeleted" : false,
+      "keepsWorksOffline" : true,
+      "lastModifiedAt" : "2023-11-14T22:26:20.000Z",
+      "name" : "Portable Collection",
+      "showsOnHome" : true,
+      "sortOrder" : 7,
+      "syncStatusRaw" : "localOnly",
+      "workIDs" : [
+        "10000000-0000-4000-8000-000000000001",
+        "10000000-0000-4000-8000-000000000002"
+      ],
+      "workOrderRaw" : "10000000-0000-4000-8000-000000000002,10000000-0000-4000-8000-000000000001"
+    }
+  ],
+  "exportedAt" : "2026-10-03T05:10:15.449Z",
+  "fandomReadWatermarks" : [
+    {
+      "fandomName" : "Portable Fandom",
+      "id" : "80000000-0000-4000-8000-000000000001",
+      "lastModifiedAt" : "2023-11-14T22:28:20.000Z",
+      "lastVisitedAt" : "2023-11-14T22:27:20.000Z",
+      "newestWorkIDSeen" : 820002,
+      "newestWorkTitleSeen" : "Cross Platform Two"
+    }
+  ],
+  "fonts" : [
+
+  ],
+  "pronunciations" : {
+    "fandoms" : {
+
+    },
+    "global" : {
+
+    },
+    "works" : {
+
+    }
+  },
+  "readingFavorites" : [
+    {
+      "createdAt" : "2023-11-14T22:23:20.000Z",
+      "displayName" : "Work Favorite",
+      "id" : "70000000-0000-4000-8000-000000000001",
+      "kindRaw" : "work",
+      "lastModifiedAt" : "2023-11-14T22:23:20.000Z",
+      "targetKey" : "work-target"
+    },
+    {
+      "createdAt" : "2023-11-14T22:24:20.000Z",
+      "displayName" : "Author Favorite",
+      "id" : "70000000-0000-4000-8000-000000000002",
+      "kindRaw" : "author",
+      "lastModifiedAt" : "2023-11-14T22:24:20.000Z",
+      "targetKey" : "author-target"
+    },
+    {
+      "createdAt" : "2023-11-14T22:25:20.000Z",
+      "displayName" : "Fandom Favorite",
+      "id" : "70000000-0000-4000-8000-000000000003",
+      "kindRaw" : "fandom",
+      "lastModifiedAt" : "2023-11-14T22:25:20.000Z",
+      "targetKey" : "fandom-target"
+    },
+    {
+      "createdAt" : "2023-11-14T22:26:20.000Z",
+      "displayName" : "Tag Favorite",
+      "id" : "70000000-0000-4000-8000-000000000004",
+      "kindRaw" : "tag",
+      "lastModifiedAt" : "2023-11-14T22:26:20.000Z",
+      "targetKey" : "tag-target"
+    }
+  ],
+  "readingQueueMemberships" : [
+    {
+      "id" : "40000000-0000-4000-8000-000000000001",
+      "lastModifiedAt" : "2023-11-14T22:28:20.000Z",
+      "note" : "First in custom queue",
+      "queueID" : "30000000-0000-4000-8000-000000000001",
+      "queuedAt" : "2023-11-14T22:15:20.000Z",
+      "sortOrderInQueue" : 3,
+      "workID" : "10000000-0000-4000-8000-000000000001"
+    },
+    {
+      "id" : "40000000-0000-4000-8000-000000000002",
+      "lastModifiedAt" : "2023-11-14T22:29:20.000Z",
+      "note" : "Second in system queue",
+      "queueID" : "30000000-0000-4000-8000-000000000002",
+      "queuedAt" : "2023-11-14T22:16:20.000Z",
+      "sortOrderInQueue" : 5,
+      "workID" : "10000000-0000-4000-8000-000000000002"
+    }
+  ],
+  "readingQueues" : [
+    {
+      "colorHex" : "#739A22",
+      "dateCreated" : "2023-11-14T22:14:20.000Z",
+      "dateUpdated" : "2023-11-14T22:27:20.000Z",
+      "hue" : 0.21,
+      "id" : "30000000-0000-4000-8000-000000000001",
+      "isDeleted" : false,
+      "isPinned" : true,
+      "keepsWorksOffline" : false,
+      "kindRaw" : "custom",
+      "lastMembershipChangedAt" : "2023-11-14T22:28:20.000Z",
+      "name" : "Portable Queue",
+      "notes" : "Queue notes",
+      "sortOrder" : 4,
+      "tagNames" : [
+        "Queue Tag"
+      ]
+    },
+    {
+      "colorHex" : "#A92A78",
+      "dateCreated" : "2023-11-14T22:13:20.000Z",
+      "dateUpdated" : "2023-11-14T22:26:20.000Z",
+      "hue" : 0.84,
+      "id" : "30000000-0000-4000-8000-000000000002",
+      "isDeleted" : false,
+      "isPinned" : true,
+      "keepsWorksOffline" : true,
+      "kindRaw" : "savedForLater",
+      "lastMembershipChangedAt" : "2023-11-14T22:29:20.000Z",
+      "name" : "Saved for Later",
+      "notes" : "System queue notes",
+      "sortOrder" : -1000,
+      "tagNames" : [
+        "System Tag"
+      ]
+    }
+  ],
+  "readingSessions" : [
+    {
+      "ao3WorkID" : 820001,
+      "chapterCountAtVisit" : 7,
+      "chapterTitle" : "Five",
+      "didFinish" : true,
+      "durationSeconds" : 1234,
+      "endedAt" : "2023-11-14T22:21:20.000Z",
+      "endingProgress" : 0.58,
+      "id" : "60000000-0000-4000-8000-000000000001",
+      "lastModifiedAt" : "2023-11-14T22:22:20.000Z",
+      "lastSpineIndex" : 4,
+      "sourceURL" : "https:\/\/archiveofourown.org\/works\/820001",
+      "startedAt" : "2023-11-14T22:20:20.000Z",
+      "wordCount" : 82001,
+      "workID" : "10000000-0000-4000-8000-000000000001",
+      "workTitle" : "Cross Platform One"
+    }
+  ],
+  "savedSearches" : [
+    {
+      "dateAdded" : "2023-11-14T22:17:20.000Z",
+      "filters" : {
+        "additionalTags" : "Slow Burn",
+        "bookmarksFrom" : "2",
+        "bookmarksTo" : "200",
+        "categories" : [
+
+        ],
+        "chapterCount" : "any",
+        "characters" : "Alex",
+        "commentsFrom" : "1",
+        "commentsTo" : "100",
+        "completion" : "any",
+        "creators" : "Archive Author",
+        "crossover" : "any",
+        "dateFrom" : "2023-11-14T22:13:20.000Z",
+        "dateTo" : "2023-11-14T22:32:20.000Z",
+        "excludedAdditionalTags" : "Major Character Death",
+        "excludedCategories" : [
+
+        ],
+        "excludedCharacters" : "Villain",
+        "excludedFandoms" : "Excluded Fandom",
+        "excludedRelationships" : "NoTP",
+        "excludedWarnings" : [
+
+        ],
+        "fandom" : "Portable Fandom",
+        "hitsFrom" : "10",
+        "hitsTo" : "9000",
+        "includeNotRated" : true,
+        "kudosFrom" : "5",
+        "kudosTo" : "1000",
+        "language" : {
+          "id" : ""
+        },
+        "query" : "portable query",
+        "rating" : "any",
+        "ratingMatch" : "exact",
+        "relationships" : "Alex\/Sam",
+        "sort" : "relevance",
+        "sortDirection" : "descending",
+        "title" : "Exact title",
+        "updated" : "any",
+        "warnings" : [
+
+        ],
+        "wordsFrom" : "1000",
+        "wordsTo" : "90000"
+      },
+      "id" : "90000000-0000-4000-8000-000000000001",
+      "name" : "Portable Search"
+    }
+  ],
+  "settings" : {
+    "accentColorHex" : "#2468AC",
+    "appTheme" : "dark",
+    "autoPreserveSeriesWorkThreshold" : 9,
+    "autoPreserveSmallSeriesOnSaveForLater" : true,
+    "confirmBeforeDelete" : true,
+    "hideMatureContent" : true,
+    "matchAppReaderTheme" : false,
+    "matureContentMode" : "hide",
+    "readerBoldText" : true,
+    "readerCustomize" : true,
+    "readerFontID" : "system",
+    "readerFontPt" : 22.5,
+    "readerJustify" : true,
+    "readerLetterSpacing" : 0.04,
+    "readerLineHeight" : 1.91,
+    "readerMargin" : 33,
+    "readerMode" : "paged",
+    "readerTheme" : "sepia",
+    "readerTwoPage" : true,
+    "readerWordSpacing" : 0.08,
+    "requireBiometricToReveal" : true
+  },
+  "tombstones" : [
+    {
+      "createdAt" : "2023-11-14T22:29:20.000Z",
+      "deletedOnDeviceID" : "ios-golden-device",
+      "deletionReason" : "cross-platform golden",
+      "id" : "C0000000-0000-4000-8000-000000000001",
+      "lastModifiedAt" : "2023-11-14T22:29:20.000Z",
+      "recordID" : "B0000000-0000-4000-8000-000000000001",
+      "recordTypeRaw" : "savedSearch",
+      "signature" : "716fe0862b2769a5a06c558de57a7772de0877dd3ba527335ae0b9d405f46652e9f1cb6387a022ba4f067b8746fc0ac9da815c8ac5eb1caa0394fd1ad5deaa0a",
+      "signerPublicKey" : "03a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8",
+      "sourceURL" : "https:\/\/archiveofourown.org\/works\/829999"
+    }
+  ],
+  "version" : 8,
+  "works" : [
+    {
+      "ao3SeriesID" : 73001,
+      "ao3Unavailable" : true,
+      "ao3WorkID" : 820001,
+      "assetIdentifier" : "10000000-0000-4000-8000-000000000001.epub",
+      "author" : "Archive Author",
+      "bookmarks" : 71,
+      "chapters" : "7\/9",
+      "comments" : 81,
+      "createdAt" : "2023-11-14T22:14:20.000Z",
+      "dateAdded" : "2023-11-14T22:13:20.000Z",
+      "datePublished" : "2026-01-02",
+      "dateUpdated" : "2026-02-03",
+      "deletedAt" : "2023-11-14T22:15:20.000Z",
+      "epubDigest" : "2be63c7aa2950b6b7bbda7be0eff723a9a2410fc71dac2bf5a9b9ab07061d644",
+      "epubPreservationStatusRaw" : "preserved",
+      "hasEPUB" : true,
+      "hasGivenKudos" : true,
+      "hiddenFromHistoryAt" : "2023-11-14T22:21:20.000Z",
+      "hits" : 8201,
+      "id" : "10000000-0000-4000-8000-000000000001",
+      "isComplete" : true,
+      "isDeleted" : true,
+      "isFavorite" : true,
+      "isFinished" : true,
+      "isQueuedForLater" : true,
+      "isSaved" : true,
+      "keepInProgressOverride" : true,
+      "knownChapterCount" : 6,
+      "kudos" : 901,
+      "language" : "English",
+      "lastAvailabilityCheck" : "2023-11-14T22:24:20.000Z",
+      "lastModifiedAt" : "2023-11-14T22:22:20.000Z",
+      "lastPreservationAttemptAt" : "2023-11-14T22:19:20.000Z",
+      "lastReadDate" : "2023-11-14T22:20:20.000Z",
+      "lastScrollFraction" : 0.37,
+      "lastSpineIndex" : 4,
+      "lastUpdateCheck" : "2023-11-14T22:23:20.000Z",
+      "legacyReaderProgress" : 0.58,
+      "metadataSyncStatusRaw" : "complete",
+      "permanentDeletionScheduledAt" : "2023-11-14T22:32:20.000Z",
+      "preservedAt" : "2023-11-14T22:18:20.000Z",
+      "progressModifiedAt" : "2023-11-14T22:21:20.000Z",
+      "rating" : "Mature",
+      "readiumLocator" : "{\"href\":\"chapter-5.xhtml\",\"locations\":{\"progression\":0.4,\"totalProgression\":0.57}}",
+      "seriesPosition" : 2,
+      "seriesTitle" : "Portable Series",
+      "seriesURL" : "https:\/\/archiveofourown.org\/series\/73001",
+      "sourceURL" : "https:\/\/archiveofourown.org\/works\/820001",
+      "summary" : "Distinctive summary",
+      "title" : "Cross Platform One",
+      "userTags" : [
+        "Portable",
+        "Re-read"
+      ],
+      "wordCount" : 82001,
+      "workCategories" : [
+        "F\/F"
+      ],
+      "workCharacters" : [
+        "Alex"
+      ],
+      "workFandoms" : [
+        "Portable Fandom"
+      ],
+      "workFreeforms" : [
+        "Slow Burn"
+      ],
+      "workRelationships" : [
+        "Alex\/Sam"
+      ],
+      "workTags" : [
+        "Adventure",
+        "Found Family"
+      ],
+      "workTagsFetched" : true,
+      "workWarnings" : [
+        "Creator Chose Not To Use Archive Warnings"
+      ]
+    },
+    {
+      "ao3Unavailable" : false,
+      "ao3WorkID" : 820002,
+      "assetIdentifier" : "10000000-0000-4000-8000-000000000002.epub",
+      "author" : "Second Author",
+      "bookmarks" : 0,
+      "chapters" : "",
+      "comments" : 0,
+      "createdAt" : "2023-11-14T22:17:20.000Z",
+      "dateAdded" : "2023-11-14T22:16:20.000Z",
+      "datePublished" : "",
+      "dateUpdated" : "",
+      "epubDigest" : "2be63c7aa2950b6b7bbda7be0eff723a9a2410fc71dac2bf5a9b9ab07061d644",
+      "epubPreservationStatusRaw" : "preserved",
+      "hasEPUB" : true,
+      "hasGivenKudos" : false,
+      "hiddenFromHistoryAt" : null,
+      "hits" : 0,
+      "id" : "10000000-0000-4000-8000-000000000002",
+      "isComplete" : false,
+      "isDeleted" : false,
+      "isFavorite" : false,
+      "isFinished" : false,
+      "isQueuedForLater" : true,
+      "isSaved" : true,
+      "keepInProgressOverride" : false,
+      "knownChapterCount" : 0,
+      "kudos" : 0,
+      "language" : "",
+      "lastModifiedAt" : "2023-11-14T22:25:20.000Z",
+      "lastScrollFraction" : 0,
+      "lastSpineIndex" : 0,
+      "legacyReaderProgress" : null,
+      "metadataSyncStatusRaw" : "pending",
+      "preservedAt" : "2023-11-14T22:30:20.000Z",
+      "rating" : "",
+      "readiumLocator" : "{\"href\":\"chapter-1.xhtml\",\"locations\":{\"totalProgression\":0.12}}",
+      "seriesPosition" : 0,
+      "seriesTitle" : "",
+      "seriesURL" : "",
+      "sourceURL" : "https:\/\/archiveofourown.org\/works\/820002",
+      "summary" : "The explicit nil history marker case",
+      "title" : "Cross Platform Two",
+      "userTags" : [
+
+      ],
+      "wordCount" : 0,
+      "workCategories" : [
+
+      ],
+      "workCharacters" : [
+
+      ],
+      "workFandoms" : [
+
+      ],
+      "workFreeforms" : [
+
+      ],
+      "workRelationships" : [
+
+      ],
+      "workTags" : [
+
+      ],
+      "workTagsFetched" : false,
+      "workWarnings" : [
+
+      ]
+    }
+  ]
+}

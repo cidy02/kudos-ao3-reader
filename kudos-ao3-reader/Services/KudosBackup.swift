@@ -2345,6 +2345,11 @@ enum KudosBackupService {
         for archived in contents.manifest.works {
             let work: SavedWork
             let isNewRecord: Bool
+            // True only for a row this restore just inserted. Its `lastModifiedAt`
+            // is the placeholder "now" from `SavedWork.init`, which is not a local
+            // edit and must not win `max` against the archive. Replace of an
+            // existing row is not this case: that row already has a real clock.
+            var createdNewWork = false
             if let existing = workIndex.existingWork(for: archived) {
                 if mode == .merge {
                     if existing.isPendingDeletion {
@@ -2417,6 +2422,7 @@ enum KudosBackupService {
                 )
                 context.insert(work)
                 isNewRecord = true
+                createdNewWork = true
             }
             // Captured before `apply`, which raises `work.lastModifiedAt` to
             // the incoming value and would make every archive look current.
@@ -2426,7 +2432,13 @@ enum KudosBackupService {
                     localModifiedAt: work.lastModifiedAt,
                     incomingModifiedAt: archived.lastModifiedAt ?? archived.dateAdded
                 )
-            apply(archived, to: work, isNewRecord: isNewRecord, mode: mode)
+            apply(
+                archived,
+                to: work,
+                isNewRecord: isNewRecord,
+                mode: mode,
+                adoptsArchiveClock: createdNewWork
+            )
             restoredWorksByArchivedID[archived.id] = work
             workIndex.index(work)
 
@@ -2619,7 +2631,15 @@ enum KudosBackupService {
             if let archivedCreatedAt = archived.createdAt {
                 collection.createdAt = min(collection.createdAt, archivedCreatedAt)
             }
-            collection.lastModifiedAt = max(collection.lastModifiedAt, incomingModifiedAt)
+            // A brand-new collection's `lastModifiedAt` is the restore clock.
+            // `max` with that placeholder would make the restored shelf newer
+            // than the archive and win every later sync. New records adopt the
+            // archive clock (`DATA_AND_PERSISTENCE_INVARIANTS`: new records
+            // always adopt archive values). An existing shelf still keeps the
+            // newer of the two clocks.
+            collection.lastModifiedAt = isNewCollection
+                ? incomingModifiedAt
+                : max(collection.lastModifiedAt, incomingModifiedAt)
             collection.deletedAt = collection.deletedAt ?? archived.deletedAt
             // Gated the same way as SavedWork's isFavorite/isSaved/isFinished/isComplete
             // fix: an unconditional merge here would let an older, non-deleted snapshot
@@ -2726,6 +2746,8 @@ enum KudosBackupService {
             }
         }
 
+        let hadSavedForLaterQueue = ((try? context.fetch(FetchDescriptor<ReadingQueue>())) ?? [])
+            .contains { $0.kind == .savedForLater }
         let savedForLaterQueue = ReadingQueueService.ensureSavedForLaterQueue(in: context)
         let existingQueues = try context.fetch(FetchDescriptor<ReadingQueue>())
         var queuesByID = Dictionary(
@@ -2892,9 +2914,21 @@ enum KudosBackupService {
                 queue.tags.removeAll { !snapshot.contains($0.name) }
             }
             queue.dateCreated = min(queue.dateCreated, archived.dateCreated)
-            queue.dateUpdated = max(queue.dateUpdated, archived.dateUpdated)
-            if let archivedChangedAt = archived.lastMembershipChangedAt {
-                queue.lastMembershipChangedAt = max(queue.lastMembershipChangedAt, archivedChangedAt)
+            // `ensureSavedForLaterQueue` inserts the system queue at "now" when
+            // this library did not have one. `max` against that placeholder
+            // stamps `dateUpdated` / `lastMembershipChangedAt` to the restore
+            // clock. `WorkCollection.markMembershipChanged` is deliberately not
+            // stamped by a restore, for the same reason: a restored copy must
+            // not look freshly edited and win every later sync. A queue that
+            // already lived here still keeps the newer clock.
+            if kind == .savedForLater, !hadSavedForLaterQueue {
+                queue.dateUpdated = archived.dateUpdated
+                queue.lastMembershipChangedAt = archived.lastMembershipChangedAt ?? archived.dateUpdated
+            } else {
+                queue.dateUpdated = max(queue.dateUpdated, archived.dateUpdated)
+                if let archivedChangedAt = archived.lastMembershipChangedAt {
+                    queue.lastMembershipChangedAt = max(queue.lastMembershipChangedAt, archivedChangedAt)
+                }
             }
             queue.deletedAt = newest(queue.deletedAt, archived.deletedAt)
             // Same incomingWins gating as SavedWork/WorkCollection's isDeleted merge —
@@ -4351,7 +4385,8 @@ enum KudosBackupService {
         _ archived: KudosBackupWork,
         to work: SavedWork,
         isNewRecord: Bool,
-        mode: BackupImportMode
+        mode: BackupImportMode,
+        adoptsArchiveClock: Bool = false
     ) {
         let incomingModifiedAt = archived.lastModifiedAt ?? archived.dateAdded
         // A freshly-created placeholder's lastModifiedAt is "now" (restore time), which is
@@ -4507,7 +4542,14 @@ enum KudosBackupService {
             // when this device has read further since.
             force: mode == .replaceLibrary
         )
-        work.lastModifiedAt = max(work.lastModifiedAt, incomingModifiedAt)
+        // The placeholder "now" on a row this restore just inserted is not a
+        // local edit. Keeping it would make the restored work newer than the
+        // archive (`DATA_AND_PERSISTENCE_INVARIANTS`: new records adopt archive
+        // values) and it would win every later sync on recency. `incomingWins`
+        // is already forced for that row so the flags adopt; the clock must too.
+        work.lastModifiedAt = adoptsArchiveClock
+            ? incomingModifiedAt
+            : max(work.lastModifiedAt, incomingModifiedAt)
     }
 
     private static func mergedText(current: String, incoming: String, incomingWins: Bool) -> String {
