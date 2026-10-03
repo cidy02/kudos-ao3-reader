@@ -118,3 +118,109 @@ rail is All · Offline · WIP; Home and Library Reading Now show All · WIP only
   already-scaled size → `fixedSize:`).
 - L3-B1-7 → REJECTED: Reading Now only lists works with the EPUB on disk (`isInProgress` requires hasEPUB), so
   an Offline pill always equals All. Kept the existing note in LibraryFilters.swift. Candidate owner note only.
+
+## Codex task 10 — B8 challenge / collection-maintainer audit (verified 2026-09-30 ~15:00)
+34 rows. Claude checked each against code + artboard.
+- FIXED T-326 (87e9eb81): #5 prompt section label follows filter; #6 prompt pills 34/14/12.5 + 44pt tap;
+  #7 PromptTagsEditor List minimum; #13 redundant "Owner" subtitle dropped (no added-date data); #16 "Optional";
+  #17 Assignments + Defaults rows disclose (Minimum words: no data, left out); #24 Save tags 44pt;
+  #25 compact header count; #30 Collection items failed load → Try Again card.
+  Found while verifying: L3-B8-1 (P2) 1by/1ch values were 11pt mono, spec 15pt system → fixed.
+  L3-FORM-2 (P2, app-wide) SubjectFormRow split label/value 50/50, truncating values beside short labels
+  ("8 matched, 4 unmat…") → label keeps natural width, value takes the rest. Regression shots: Settings, Edit
+  collection, Preferences, Challenge Settings.
+- QUEUED Codex task 11: #4, #9 (radius/title only), #10 (1cd supersedes 1bx), #11 (grouping only), #23, #28, #29.
+- REJECTED: #1 spec copy "any chosen tag" would misdescribe AO3's any_relationship (code is truthful).
+  #15 date labels follow AO3's own fields (code comments cite otwarchive). #22 "moderator" kicker is a
+  documented choice: the collection owner is not necessarily the tag set's owner and the model has no owner field.
+  #26 28pt rail pills are the app-wide rail convention (10 call sites); a 44pt layout-free target would overlap
+  neighbours 8pt apart.
+- OWNER DECISION (#7, #8 below): #2, #3, #8, #12, #18, #32 (AO3 has no endpoint/data); #14, #20, #27, #31 (top
+  check-circle confirm vs bottom Save bar); #19, #21, #33, #34 (form structure).
+- T-327 (integrate ada6e2fc): Codex task 11 landed (#4, #9, #10, #11, #23, #28, #29) after review. Claude additions:
+  - L3-B8-2 (P1, FIXED): "Recently decided" (Moderation) and "Prompts" (Prompt Meme settings) were dead —
+    `SubjectFormRow(label:value:…) { EmptyView() }` binds the trailing closure to `action:`, making the row a
+    no-op Button over its navigation link. Found by AXe tap. Warning comment on the init.
+  - L3-TH-3 (P1 a11y, FIXED): 9 filled confirm buttons (challenge screens, Tag set, fandom filter "Show N tags")
+    used `accentOnFill` (for the 24%-alpha fill) on a SOLID accent — near-white on light cyan in Dark.
+    New `Palette.labelOnAccent` (WCAG crossover, as T-323).
+  - L3-B8-3 (P2, FIXED): 1s approval as a cramped 180pt 3-way segmented control → 1s status chip + Menu, 44pt tap.
+  - L3-B8-4 (P3, FIXED): assignment due line mono → 11.5pt system tabular (1cb).
+  - Tag-set editor sub-screen given the SubjectHeaderBlock chrome (Codex used a bare navigationTitle).
+  - Kicker variety across challenge screens (collection title vs "AO3 Account") matches each artboard → not a finding.
+- L3-FORM-3 (P2, FIXED 6cda4ea9): regression from T-326 — SubjectFormRow with no value (EmptyView trailing) hugged its
+  label (Tag set link panel shrank). Zero-minimum Spacer; re-shot Challenge Settings, Edit collection, Settings.
+- L3-B8-5 (P3, OPEN, unverifiable offline): Tag set counts parse from h3/h4 headings; the edit-page fixture has none,
+  so counts read 0 while the fields hold tags. Check against a real AO3 tag-set edit page before trusting the counts.
+- Tag set (1ch) + "Add tags" editor screenshotted via Challenge Settings → tag set (profile route) — match.
+
+## Codex task 12 — queue sheets, comments, fandom list, save search, AO3 History, author, series (verified ~16:20)
+27 rows.
+- FIXED T-328 (integrate eab554df): #20 (P1) author Works layout picker did nothing — Works, Series and Dashboard
+  cards now follow Ledger/Detailed; picker drops Compact on these List pages; default Ledger (#21). #15 Save Search
+  detents + grabber. #18 "Delete from history". #26 one "See all" per Dashboard section.
+- QUEUED Codex task 13: #3, #4, #5, #6, #7, #9, #12, #13, #16, #22, #24, #25 + verify unknown-stat zeros on the
+  Detailed card (seen on Dashboard, Detailed mode).
+- LATER (task 14 candidates): #10 fandom A–Z index, #11 fandom row star/download indicators (spec'd, need plumbing).
+- REJECTED: #2, #14, #19, #23 — 28pt rail/tag hit targets are a documented choice (MinimumHitTarget.swift:
+  "a smaller floor … for a control deliberately boxed tightly against other small controls"). #8 comments CTA
+  label is dark on the light accent in Dark (contrast fine; matches spec's #16192e on #A3B2EC).
+  #27 1az is the empty own-Series state, not series detail (INVENTORY mapping corrected).
+- OWNER DECISION: #1 add-to-queue/collection sheet chrome (→ OD #2 group); #17 History layout (→ OD #10).
+- Seen while verifying (P3, open): Detailed card's rating/warning pill row is centred, not leading.
+- T-329 (integrate 375fdd49): Codex task 13 landed after review (#4, #5, #6 partly, #7, #9, #12, #13, #16, #22, #24, #25,
+  Detailed-card unknown stats). Review reverted/kept: #3 Post capsule rejected (a `.confirmationAction` Button is
+  already the system's filled capsule; a hand-drawn one nests inside it); thread screen kept `hidesFloatingTabBar`
+  (Codex dropped it); tray kept semantic sizes for Dynamic Type (T-273; Codex hard-coded 10.5/9.5/8.5pt); empty
+  Series card de-nested (subjectPanel inside cardRow). Codex hit its usage limit at 20:32Z mid-verification.
+- L3-B4-5 (P3, UNVERIFIED — code already sets .accessibilityHidden on unfitted chips; AXe may list hidden elements): Browse category cards expose ~8 invisible overflow fandom chips to VoiceOver, all at one
+  29×14 frame (describe-ui on `browse`). Hide chips that aren't drawn.
+- L3-B4-6 (P3, OPEN): fandom family block draws an inner lighter panel inside its card (box in a box).
+- L3-FORM-1 CLOSED (4ebb9acf): AddChapterView, EditMultipleWorksView.
+- Claude batch (17:00, AXe): Account signed-out ✓ (prominent label black on salmon). New collection sheet: text
+  Cancel/Create ✓, rows ✓. L3-B1-9 (P3, OPEN): `SubjectHueSwatchRow.fallbackHue` is dead since it was added
+  (ac669892) — its doc promises a ring for "colour comes from the name", nothing draws it, so with no swatch chosen
+  the New collection row shows five unselected circles and no explanation (New queue has a footnote for this).
+  Options: add New queue's footnote to New collection; or ring the swatch nearest the name's hue. Login (1n) NOT
+  opened: its web view may reach AO3 outside DemoNetworkBlock — code-review only.
+
+## agy task 14 (Claude Opus 4.6 via agy, read-only) — reader chrome, writing, library sheets, utilities (verified ~17:15)
+24 rows.
+- FIXED T-330 (integrate ce771dff): #1 Availability Done → trailing; #3 Read Aloud Form themed; #4–7 Color.accentColor → theme
+  tint; #8 PrivacyDataView List minimum; #13 note editor detents + grabber. Found by Claude: "Zero KB" → "0 bytes" (shared
+  formatter, 3 call sites), keeping "KB" casing (format style would write "kB").
+- LATER (need screens reached first / screenshots): #2 Availability Form + .cardRow mix (visual check); #9–11 List minimum on
+  Drafts, Preview, 4 association pickers; #12 1bv editor toolbar glass bar; #24 1ac promise panel green gradient;
+  #23 BugReportView legacy Form.
+- REJECTED: #22 editor line height (1.35 × serif's ~1.2 natural = spec's 1.62; the code comment says so). #16 red destructive
+  rows are the app convention. #17–21 fixed sizes: the app's spec'd chrome uses fixed sizes app-wide (AX handled per screen
+  in T-311); #15 badge font (shared SubjectStateBadge, P3). #14 checkmark vs "Done" → OD #2/#8 group.
+- L3-B10-2 (P2, FIXED — see STATUS): Settings › Privacy sub-page is a system grouped Form with a "Privacy" section
+  header repeating the page title — not the subject form grammar the hub got in L3-B10-1. Other Settings sub-pages likely same.
+  L3-B10-2 resolution: sub-pages stay native Forms (documented choice in SettingsPageForm); the 10 headers that repeated the page title were removed.
+- T-331 (integrate 1962033b): agy task 15 landed — agy #9–11 (List minimum on Drafts/Preview/4 pickers), L3-B1-9 fixed
+  (dead fallbackHue removed; New collection footnote). Prompt Meme now offline (`ao3_challenge_requests`; note: `.gitignore`
+  line 45 `*_prompt*` silently ignores any fixture with "_prompt" in its name).
+- L3-B1-10 (P3, OPEN): Add Works sheet title truncates ("Add to Comfort…") — the Mature eye toggle shares the trailing
+  toolbar group with Add. Options: move the eye into a "…" menu (menu order rule: Mature first) or shorten the title.
+- FIRST PASS COMPLETE (17:45): all 68 INVENTORY rows audited at least once (Claude and/or Codex/agy/Grok).
+- L3-TH-4 (P1 a11y, FIXED ffdcc764 + test 9d8a2c00): Teen rating yellow on its own tint over light cards ~1.3:1 in
+  Light/Sepia (every work card, chip, Work Detail). Light appearances get a dark mustard; found on the second-pass theme
+  sheets. Process slip: the colour commit landed before its test update (gate piped through grep) — fixed forward.
+- Withdrawn: "Detailed card pill row centred" — documented choice in WorkStatLabel ("Centred. Justification stretched…").
+- L3-AX-5 (P1 a11y, FIXED 1e20fff9): every SubjectFormRow/SubjectFormValue form was a fixed 15pt — no Dynamic Type across
+  Settings, AO3 Preferences, challenge/collection forms. Now scaled; value rows stack at AX sizes; control labels wrap.
+  Also fixed: AO3 Preferences navigation-link pickers drew their label twice ("Your site skin | Your site skin Reversi")
+  at every size — `.labelsHidden()` doesn't apply to that style (pushed option list now has no title — acceptable).
+- AX5 second pass (16 routes) — FIXED by Claude in baec039b (agy hit quota before editing; Codex brief withdrawn):
+  L3-AX-6 Account gear overlaps kicker; L3-AX-7 "Subscriptio/ns" shortcut; L3-AX-8 single-word header titles split
+  ("AO3_Reade/r"); L3-AX-9 Inbox "Chapt/er 3" chip; L3-AX-10 Queue row chips overlap, title fixed; L3-AX-11 Recently
+  Deleted card mixed scaling; L3-AX-12 Home hero "Chap/ter 2". Also P3: .control text-field rows squeeze their value at AX5.
+- L3-AX-6…12 FIXED (baec039b): one-word titles/usernames shrink instead of splitting; Account kicker clears the gear;
+  Inbox chip never wraps; Home hero ring stacks at AX sizes; Queues/Recently Deleted rows scale consistently. Default size
+  pixel-checked unchanged (Home, Account, Inbox, Queues). 113 tests / 7 suites.
+- T-333 (owner, 2026-09-30): Browse → category → fandom/tag results were still the pre-redesign page (card hero, standard
+  rows) while the Search tab's were 1k — never redesigned, not a regression. Now share the 1k page. integrate 8067e790.
+- Gemini task 17: D ×3 fixed 317b0b96; A ×6 false positives (closures are real actions); E list → Codex task 16.
+- Second pass, challenge screens: Light ✓ (7 screens). AX5: card/row text fixed while headers scale → Codex task 16.
+  "Your sign-up" offline failure = missing fixture for a not-yet-signed-up user (not an app bug).

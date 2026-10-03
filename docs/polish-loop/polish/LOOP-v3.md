@@ -135,6 +135,12 @@ Most AO3 screens cannot be reached without the network. Extend the DEBUG-only ha
 `comments` route is the model): parse the test fixtures in `KudosTests/Fixtures` where they
 exist, or build values in code. Everything stays behind `#if DEBUG`.
 
+**Taps and scrolling (found 2026-09-30):** AXe ships inside XcodeBuildMCP's npx cache —
+`~/.npm/_npx/99336612077b7094/node_modules/xcodebuildmcp/bundled/axe` (run it in place; a copy loses its
+frameworks). `axe swipe --start-x 200 --start-y 780 --end-x 200 --end-y 200 --duration 0.4 --udid <sim>`
+scrolls; `axe tap -x … -y …` or by label; `axe describe-ui` lists elements. Scratchpad `scroll.sh <n> <name>`.
+`-KudosDebugManageRow <label>` with `acct:ao3collection:winter_exchange` opens a collection Manage row.
+
 ## 7. Lessons already paid for (do not repeat)
 
 - A geometry or other wrapper modifier placed between a List row's `.listRowInsets` and the
@@ -149,6 +155,10 @@ exist, or build values in code. Everything stays behind `#if DEBUG`.
   first; SwiftUI geometry reads "at rest" early (hence the 0.65s settle in `CommentRowChrome`).
 - A crowded HStack squeezes an unconstrained label into a vertical column — give pills
   `.lineLimit(1).fixedSize()`.
+- Never chain a commit after the gate with `;` or through a pipe: `gate.sh … | grep` exits with grep's status, so a
+  failing suite still reached `git commit` and the cherry-pick (ffdcc764 landed a red test; fixed forward in 9d8a2c00).
+  Read the ✔/✘ line, then commit in a separate step. `timeout` does not exist on macOS.
+- Grep test files for every constant you change before gating (`grep -rn "<symbol>" KudosTests`), without `| head`.
 - iCloud evicts files in ~/Documents: materialize before git/builds.
 - The demo harness blocks all AO3 traffic (`DemoNetworkBlock`, DEBUG, on with `-KudosDemoLibrary YES`).
   Never launch the app in the simulator without that flag. Screens that would fetch show their

@@ -18,3 +18,32 @@ Recommendation: (b), matching the queue grid's long-press remove (T-287).
 With the reader font on System, AO3 chapter headings still render in Readium's default serif ("Chapter 2:
 Nine Minutes") above sans body text. Options: (a) keep — a serif heading reads as a book title; (b) headings
 follow the chosen reader font. Low-stakes; verify on a real AO3 EPUB, whose own CSS may set the heading face.
+
+## 7. Challenge and moderation screens where the spec asks for data AO3 does not give us
+The artboards draw a "Send pinch-hit request" button (1cb), a required rejection reason that is emailed (1ce),
+an "unmatched pairs" view from potential matches (1cb), reveal dates (1cd), a host byline (1cf), owners and
+moderators on a tag set (1ch), and a collection icon upload plus byline (1bl). AO3 exposes no client endpoint
+or field for most of these; the app shows the truthful subset and sends people to AO3 for the rest.
+Options: (a) keep the truthful subset; (b) parse the few that AO3's pages do print (request dates, item word
+counts) and keep the rest at AO3. Recommendation: (a) now, (b) as a later task.
+
+## 8. Form confirm chrome: top check circle or bottom Save bar?
+1by / 1cf / 1s / 1bl draw a 34pt filled check circle top-right as the form's Save; the app's AO3 forms save with
+a full-width bottom "Save changes" bar (and Collection items with a text "Submit"). Same question as #2 for the
+creation sheets. Options: (a) keep bottom bars / text; (b) move every AO3 form to the top check circle.
+Recommendation: decide together with #2 — one convention app-wide. (b) matches the spec; (a) keeps a large
+target near the thumb.
+
+## 9. AO3 collection form structure (1bl / 1cg / 1cf)
+The spec hides the "Email new items" toggle, moves edit-only routes (maintainers, moderation, items, challenge,
+reveal, delete) into the edit sheet, draws a dedicated Collection settings screen (1cg), and collapses the
+challenge edit form's seven tag-type limits into compact summary rows. Each is a restructure; the first would
+hide a real AO3 setting. Options: (a) keep; (b) adopt 1cg + edit-sheet routes, keep Email new items visible.
+Recommendation: (b).
+
+## 10. AO3 History's first layout
+History shares the Account tab's layout preference (default Compact, a cover grid); 1t draws History as ledger
+rows with visit and progress lines, and the layout picker's own note says "History has no cover grid (1ah)".
+Marked for Later and Subscriptions already ignore the shared switch because their artboards draw one layout.
+Options: (a) keep the shared preference; (b) History ignores Compact and opens in Ledger (Detailed still
+offered). Recommendation: (b), matching the precedent of the two lists beside it.
