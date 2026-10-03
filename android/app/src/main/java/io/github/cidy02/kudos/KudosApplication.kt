@@ -32,6 +32,11 @@ class KudosApplication : Application(), Configuration.Provider {
     /** Process-scoped IO work that outlives any single Activity/composition. */
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
+    /** Debug seed and other startup work that must not block the first frame. */
+    fun launchIo(block: suspend () -> Unit) {
+        applicationScope.launch { block() }
+    }
+
     /**
      * Started-activity counter used as a ProcessLifecycleOwner stand-in: 0→1 is
      * foreground, 1→0 is background. lifecycle-process is only a transitive
@@ -43,7 +48,10 @@ class KudosApplication : Application(), Configuration.Provider {
     override fun onCreate() {
         super.onCreate()
         TombstoneSigning.initialize(this)
-        container = KudosAppContainer(this)
+        container = KudosAppContainer(this, applicationScope)
+        // Start the library snapshot before the first frame so Home does not
+        // open on an empty loading state and then recompute it.
+        container.libraryRepository
         container.databaseChangeTracker.start()
         // Apple PreservedWorkService launch sweep: permanently remove soft-deleted
         // works and collections past permanentDeletionScheduledAt (90-day window).

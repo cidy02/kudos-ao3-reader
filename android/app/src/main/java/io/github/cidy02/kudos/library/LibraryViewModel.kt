@@ -39,6 +39,19 @@ class LibraryViewModel(
     private val deletedQueueCount = MutableStateFlow(0)
     private val queueRefreshTick = MutableStateFlow(0)
 
+    // Same rule as Home: only a snapshot that already has works is a finished
+    // load. The empty pre-seed emission must not become the first frame.
+    private val preloadedLibrary: LibraryUiState? = repository.latestSnapshot()
+        ?.takeIf { it.items.isNotEmpty() }
+        ?.let { snapshot ->
+            LibraryQuery.buildState(
+                snapshot = snapshot,
+                searchQuery = "",
+                filters = LibraryFilterState(),
+                sort = LibrarySort.RecentlyAdded
+            )
+        }
+
     private val libraryBase: StateFlow<LibraryUiState> = combine(
         repository.observeSnapshot(),
         searchQuery,
@@ -60,7 +73,7 @@ class LibraryViewModel(
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5_000),
-        initialValue = LibraryUiState(loading = true)
+        initialValue = preloadedLibrary ?: LibraryUiState(loading = true)
     )
 
     private val dashboardExtras = combine(
@@ -88,7 +101,7 @@ class LibraryViewModel(
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5_000),
-        initialValue = LibraryUiState(loading = true)
+        initialValue = preloadedLibrary ?: LibraryUiState(loading = true)
     )
 
     init {

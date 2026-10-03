@@ -1,6 +1,7 @@
 package io.github.cidy02.kudos.app
 
 import android.content.Intent
+import androidx.room.withTransaction
 import io.github.cidy02.kudos.core.model.SavedWork
 import io.github.cidy02.kudos.data.local.KudosDatabase
 import io.github.cidy02.kudos.data.local.entity.QueueTagCrossRef
@@ -13,12 +14,16 @@ import io.github.cidy02.kudos.works.WorkTags
 import io.github.cidy02.kudos.works.converters.EpubBuilder
 import java.time.Instant
 import java.util.UUID
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 /**
  * Demo library seeder for screenshot testing and visual review.
  * Mirrors iOS DemoLibrary (kudos-ao3-reader/App/DemoLibrary.swift).
  */
 object DemoLibrary {
+    private val seedMutex = Mutex()
+
     private data class DemoQueue(
         val name: String,
         val hue: Double,
@@ -215,6 +220,20 @@ object DemoLibrary {
         readingQueueRepository: ReadingQueueRepository,
         fileStore: WorkFileStore? = null,
         clock: () -> Instant = { Instant.now() }
+    ) {
+        seedMutex.withLock {
+            database.withTransaction {
+                seedContents(database, workRepository, readingQueueRepository, fileStore, clock)
+            }
+        }
+    }
+
+    private suspend fun seedContents(
+        database: KudosDatabase,
+        workRepository: WorkRepository,
+        readingQueueRepository: ReadingQueueRepository,
+        fileStore: WorkFileStore?,
+        clock: () -> Instant
     ) {
         val allWorks = database.workDao().getAllIncludingDeleted()
         if (allWorks.any { it.title == SAMPLES[0].title }) {

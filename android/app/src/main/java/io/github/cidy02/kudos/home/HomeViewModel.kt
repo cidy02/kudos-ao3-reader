@@ -17,6 +17,7 @@ import io.github.cidy02.kudos.works.WorkMetadataRefresh
 import io.github.cidy02.kudos.works.WorkRepository
 import io.github.cidy02.kudos.works.WorkUpdateChecker
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -68,6 +69,15 @@ class HomeViewModel(
     private val subscriptionsExactCount = MutableStateFlow<Int?>(null)
     private val metadataRefresh = WorkMetadataRefresh(workRepository, metadataRepository)
 
+    // An empty snapshot is the pre-seed database, not a finished load. Using it as
+    // the first frame composes an empty Home and then the real one. A populated
+    // snapshot (normal launch) is shown immediately; otherwise the spinner stays
+    // until the shared flow emits.
+    private val preloadedDashboard: HomeDashboardState? =
+        libraryRepository.latestSnapshot()
+            ?.takeIf { it.items.isNotEmpty() }
+            ?.let { HomeDashboard.buildState(it) }
+
     private val dashboard: StateFlow<HomeDashboardState> = combine(
         libraryRepository.observeSnapshot(),
         privacyGate.state
@@ -75,7 +85,7 @@ class HomeViewModel(
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5_000),
-            initialValue = HomeDashboardState()
+            initialValue = preloadedDashboard ?: HomeDashboardState()
         )
 
     private val subscriptionShelf = combine(
@@ -103,11 +113,11 @@ class HomeViewModel(
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5_000),
-        initialValue = HomeUiState()
+        initialValue = HomeUiState(dashboard = preloadedDashboard ?: HomeDashboardState())
     )
 
     init {
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.IO) {
             runUpdateCheck()
         }
         viewModelScope.launch {

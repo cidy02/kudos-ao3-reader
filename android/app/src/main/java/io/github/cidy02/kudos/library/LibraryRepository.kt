@@ -3,14 +3,23 @@ package io.github.cidy02.kudos.library
 import io.github.cidy02.kudos.core.model.KudosSettings
 import io.github.cidy02.kudos.core.model.SavedWork
 import io.github.cidy02.kudos.works.WorkRepository
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.shareIn
 
 class LibraryRepository(
     private val workRepository: WorkRepository,
-    private val settings: Flow<KudosSettings> = flowOf(KudosSettings.Defaults)
+    private val settings: Flow<KudosSettings> = flowOf(KudosSettings.Defaults),
+    shareScope: CoroutineScope? = null
 ) {
     fun observeSavedWorks(): Flow<List<SavedWork>> = workRepository.observeSavedWorks()
 
@@ -31,26 +40,47 @@ class LibraryRepository(
         }
     }
 
-    fun observeSnapshot(): Flow<LibrarySnapshot> {
-        return combine(workRepository.observeLibraryWorks(), settings) { works, settings ->
-            val savedForLaterIds = workRepository.savedForLaterWorkIds()
-            val items = works.map { work ->
+    /**
+     * One shared pipeline. With a process scope this starts as soon as the
+     * repository is constructed (Home reads [latestSnapshot] for its first
+     * frame). Without one — unit tests — it stays cold and each collector
+     * runs the pipeline itself.
+     */
+    private val latestSnapshotState = MutableStateFlow<LibrarySnapshot?>(null)
+
+    private val snapshots: Flow<LibrarySnapshot> = combine(
+        workRepository.observeLibraryWorks(),
+        workRepository.observeLibraryIndex(),
+        settings
+    ) { works, index, settings ->
+        LibrarySnapshot(
+            items = works.map { work ->
                 LibraryWorkListItem(
                     work = work,
-                    userTags = workRepository.userTagsForWork(work.id),
-                    collections = workRepository.collectionsForWork(work.id),
-                    inSavedForLater = work.id in savedForLaterIds
+                    userTags = index.tagsByWork[work.id].orEmpty(),
+                    collections = index.collectionsByWork[work.id].orEmpty(),
+                    inSavedForLater = work.id in index.savedForLaterIds
                 )
-            }
-            LibrarySnapshot(
-                items = items,
-                userTags = workRepository.allUserTags(),
-                collections = workRepository.allCollections(),
-                privacy = settings.privacy,
-                confirmBeforeDelete = settings.app.confirmBeforeDelete
-            )
+            },
+            userTags = index.userTags,
+            collections = index.collections,
+            privacy = settings.privacy,
+            confirmBeforeDelete = settings.app.confirmBeforeDelete
+        )
+    }.distinctUntilChanged().flowOn(Dispatchers.Default).onEach { emitted ->
+        latestSnapshotState.value = emitted
+    }.let { upstream ->
+        if (shareScope == null) {
+            upstream
+        } else {
+            upstream.shareIn(shareScope, SharingStarted.Eagerly, replay = 1)
         }
     }
+
+    fun observeSnapshot(): Flow<LibrarySnapshot> = snapshots
+
+    /** Last snapshot, if the process-wide collector has already produced one. */
+    fun latestSnapshot(): LibrarySnapshot? = latestSnapshotState.value
 
     fun observeRecentlyDeletedCount(): Flow<Int> = combine(
         workRepository.observeRecentlyDeleted(),
