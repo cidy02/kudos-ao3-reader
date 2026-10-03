@@ -332,9 +332,17 @@ struct LibraryFilters: Equatable {
         case .dateAdded: first.dateAdded > second.dateAdded
         case .dateDownloaded:
             (first.downloadedAt ?? first.dateAdded) > (second.downloadedAt ?? second.dateAdded)
+        case .lastRead:
+            // Most recently read first; never-read works last.
+            switch (first.lastReadDate, second.lastReadDate) {
+            case let (lhs?, rhs?): lhs > rhs
+            case (_?, nil): true
+            default: false
+            }
         case .title: first.title.localizedCaseInsensitiveCompare(second.title) == .orderedAscending
         case .author: first.author.localizedCaseInsensitiveCompare(second.author) == .orderedAscending
         case .wordCount: first.wordCount > second.wordCount
+        case .kudos: first.kudos > second.kudos
         }
     }
 
@@ -347,10 +355,11 @@ struct LibraryFilters: Equatable {
     }
 }
 
-/// The Library's sort options — limited to fields stored locally for saved works
-/// (AO3's kudos/hits/comments counts aren't kept, so they aren't offered).
+/// The Library's sort options, the same on Android (`LibrarySort.kt`). Last Read
+/// and Kudos are the owner's additions (2026-10-03): the kudos count is kept on
+/// each saved work, refreshed with its metadata.
 enum LibrarySort: String, CaseIterable, Identifiable, Equatable {
-    case natural, dateAdded, dateDownloaded, title, author, wordCount
+    case natural, dateAdded, dateDownloaded, lastRead, title, author, wordCount, kudos
     var id: String {
         rawValue
     }
@@ -360,9 +369,11 @@ enum LibrarySort: String, CaseIterable, Identifiable, Equatable {
         case .natural: "Default"
         case .dateAdded: "Date Added"
         case .dateDownloaded: "Date Downloaded"
+        case .lastRead: "Last Read"
         case .title: "Title"
         case .author: "Author"
         case .wordCount: "Word Count"
+        case .kudos: "Kudos"
         }
     }
 }

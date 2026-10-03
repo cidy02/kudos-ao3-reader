@@ -128,6 +128,7 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
                 }
             }
             .scrollAwayTopChrome()
+            .heroWash(dashboardWorks(for: .readingNow).first)
             .background((themeManager.appTheme.appBaseBackground ?? Color.clear).ignoresSafeArea())
             .navigationTitle(isSelecting ? WorkSelectionTitle.text(selectedCount: selection.count) : "Library")
             #if os(iOS)
