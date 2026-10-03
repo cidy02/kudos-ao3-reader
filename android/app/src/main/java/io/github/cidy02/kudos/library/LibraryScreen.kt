@@ -1289,7 +1289,10 @@ private fun LibrarySectionContent(
     onRefresh: suspend () -> Unit
 ) {
     val tokens = LocalKudosTokens.current
-    val sectionItems = kind.items(state)
+    // iOS LibrarySectionListView: Default keeps the section's own order; any other sort applies.
+    val sectionItems = kind.items(state).let {
+        if (state.sort == LibrarySort.Natural) it else LibraryQuery.sortDisplayItems(it, state.sort)
+    }
     val ids = sectionItems.mapTo(linkedSetOf()) { it.item.work.id }
     val allSelected = ids.isNotEmpty() && state.selectedWorkIds.containsAll(ids)
 

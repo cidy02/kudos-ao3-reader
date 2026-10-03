@@ -32,7 +32,7 @@ class LibraryViewModel(
 ) : ViewModel() {
     private val searchQuery = MutableStateFlow("")
     private val filters = MutableStateFlow(LibraryFilterState())
-    private val sort = MutableStateFlow(LibrarySort.RecentlyAdded)
+    private val sort = MutableStateFlow(LibrarySort.Natural)
     private val selectionMode = MutableStateFlow(false)
     private val selectedWorkIds = MutableStateFlow<Set<String>>(emptySet())
     private val readingQueues = MutableStateFlow<List<LibraryQueuePreview>>(emptyList())

@@ -164,12 +164,14 @@ class LibraryRepositorySortByDateDownloadedTest {
     }
 }
 
-class LibraryRepositorySortByLastReadTest {
+class LibrarySortOptionsMatchIosTest {
     @Test
-    fun lastReadSortsNullDatesLast() {
-        val result = LibraryQuery.apply(sampleItems(), sort = LibrarySort.LastRead)
-
-        assertEquals(listOf("alpha", "gamma", "delta", "beta"), result.ids())
+    fun sortOptionsAreIosLibrarySort() {
+        // iOS LibraryFilters.swift LibrarySort: natural, dateAdded, dateDownloaded, title, author, wordCount.
+        assertEquals(
+            listOf("Default", "Date Added", "Date Downloaded", "Title", "Author", "Word Count"),
+            LibrarySort.entries.map { it.label }
+        )
     }
 }
 
