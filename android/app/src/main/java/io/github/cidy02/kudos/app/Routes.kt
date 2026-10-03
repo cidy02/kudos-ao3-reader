@@ -253,4 +253,34 @@ object Routes {
         Search -> "Search"
         else -> null
     }
+
+    /**
+     * Pushed screens that draw their own SubjectHeaderBlock (kicker, rule, large title).
+     * These screens drop the top title bar and float the back button and toolbar circles
+     * over the wash on a single row.
+     */
+    fun hasSubjectHeader(route: String?): Boolean {
+        if (route == null) return false
+        val base = route.substringBefore("?").substringBefore("/")
+        return base == ReadingQueues.substringBefore("?").substringBefore("/") ||
+            base == QueueDetail.substringBefore("?").substringBefore("/") ||
+            base == Collections.substringBefore("?").substringBefore("/") ||
+            base == LibrarySection.substringBefore("?").substringBefore("/")
+    }
+
+    /**
+     * Screens that hide the floating tab bar, matching iOS `hidesFloatingTabBar()`.
+     * All other pushed screens keep the floating tab bar visible.
+     */
+    fun hidesTabBar(route: String?): Boolean {
+        if (route == null) return false
+        val base = route.substringBefore("?").substringBefore("/")
+        return base == AO3Collections.substringBefore("?").substringBefore("/") ||
+            base == SeriesWorks.substringBefore("?").substringBefore("/") ||
+            base == AuthorProfile.substringBefore("?").substringBefore("/") ||
+            base == Comments.substringBefore("?").substringBefore("/") ||
+            base == BrowseFandoms.substringBefore("?").substringBefore("/") ||
+            base == Settings.substringBefore("?").substringBefore("/") ||
+            base == Reader.substringBefore("?").substringBefore("/")
+    }
 }

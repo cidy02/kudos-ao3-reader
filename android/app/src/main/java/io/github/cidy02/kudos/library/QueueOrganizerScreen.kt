@@ -1,18 +1,25 @@
 package io.github.cidy02.kudos.library
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -43,6 +50,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import io.github.cidy02.kudos.app.ProvidePushedShellChrome
 import io.github.cidy02.kudos.core.model.ReadingQueue
 import io.github.cidy02.kudos.core.model.ReadingQueueKind
 import io.github.cidy02.kudos.core.model.SavedWork
@@ -56,6 +64,7 @@ import io.github.cidy02.kudos.ui.subject.SubjectMetrics
 import io.github.cidy02.kudos.ui.subject.SubjectPalette
 import io.github.cidy02.kudos.ui.subject.SubjectStatCell
 import io.github.cidy02.kudos.ui.subject.SubjectStatStrip
+import io.github.cidy02.kudos.ui.subject.ToolbarCircleButton
 import io.github.cidy02.kudos.ui.subject.subjectScreenWash
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -110,32 +119,53 @@ fun QueueOrganizerScreen(
     val chosen = rows.map { it.queue }.filter { it.id in selected }
     val palette = tokens.scopePalette
 
+    BackHandler(enabled = selecting || reordering) {
+        selecting = false
+        reordering = false
+        selected = emptySet()
+    }
+
+    ProvidePushedShellChrome(
+        hasSubjectHeader = true,
+        hideTabBar = selecting,
+        onBack = if (selecting || reordering) {
+            {
+                selecting = false
+                reordering = false
+                selected = emptySet()
+            }
+        } else null,
+        trailingContent = {
+            OrganizerToolbarActions(
+                palette = palette,
+                selecting = selecting,
+                selectedCount = selected.size,
+                canPin = chosen.isNotEmpty(),
+                pinLabel = if (ReadingQueueFacts.pinTarget(chosen)) "Pin" else "Unpin",
+                canDelete = ReadingQueueFacts.deletable(chosen).isNotEmpty(),
+                onNew = { creating = true },
+                onMenu = { menu = true },
+                menuOpen = menu,
+                onDismissMenu = { menu = false },
+                canReorder = ReadingQueueFacts.canReorder(tagFilter.isNotEmpty(), search.isNotBlank()) && customCount > 1,
+                onSelect = { selecting = true; reordering = false },
+                onReorder = { reordering = true; selecting = false; selected = emptySet() },
+                onPin = {
+                    val pin = ReadingQueueFacts.pinTarget(chosen)
+                    scope.launch {
+                        repository.setQueuesPinned(chosen.map { it.id }, pin)
+                        reload += 1
+                    }
+                },
+                onTag = { tagging = true },
+                onDelete = { pendingDelete = ReadingQueueFacts.deletable(chosen) },
+                onDone = { selecting = false; selected = emptySet() }
+            )
+        }
+    )
+
     Column(modifier.fillMaxSize().subjectScreenWash(palette).verticalScroll(rememberScrollState())) {
-        OrganizerToolbar(
-            palette = palette,
-            selecting = selecting,
-            selectedCount = selected.size,
-            canPin = chosen.isNotEmpty(),
-            pinLabel = if (ReadingQueueFacts.pinTarget(chosen)) "Pin" else "Unpin",
-            canDelete = ReadingQueueFacts.deletable(chosen).isNotEmpty(),
-            onNew = { creating = true },
-            onMenu = { menu = true },
-            menuOpen = menu,
-            onDismissMenu = { menu = false },
-            canReorder = ReadingQueueFacts.canReorder(tagFilter.isNotEmpty(), search.isNotBlank()) && customCount > 1,
-            onSelect = { selecting = true; reordering = false },
-            onReorder = { reordering = true; selecting = false; selected = emptySet() },
-            onPin = {
-                val pin = ReadingQueueFacts.pinTarget(chosen)
-                scope.launch {
-                    repository.setQueuesPinned(chosen.map { it.id }, pin)
-                    reload += 1
-                }
-            },
-            onTag = { tagging = true },
-            onDelete = { pendingDelete = ReadingQueueFacts.deletable(chosen) },
-            onDone = { selecting = false; selected = emptySet() }
-        )
+        Spacer(Modifier.height(WindowInsets.systemBars.asPaddingValues().calculateTopPadding() + 56.dp))
         SubjectHeaderBlock(
             kicker = "Home",
             title = if (selecting) "${selected.size} selected" else "Queues",
@@ -286,7 +316,7 @@ fun QueueOrganizerScreen(
 }
 
 @Composable
-private fun OrganizerToolbar(
+private fun OrganizerToolbarActions(
     palette: SubjectPalette,
     selecting: Boolean,
     selectedCount: Int,
@@ -305,28 +335,22 @@ private fun OrganizerToolbar(
     onDelete: () -> Unit,
     onDone: () -> Unit
 ) {
-    Row(
-        Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
-        horizontalArrangement = Arrangement.End,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        if (selecting) {
-            TextButton(onClick = onPin, enabled = canPin) { Text(pinLabel, color = palette.accent) }
-            TextButton(onClick = onTag, enabled = selectedCount > 0) { Text("Tag", color = palette.accent) }
-            TextButton(onClick = onDelete, enabled = canDelete) { Text("Delete") }
-            TextButton(onClick = onDone) { Text("Done", color = palette.accent) }
-        } else {
-            GlassCircleButton(
-                onClick = onNew,
-                accessibilityName = "New Queue",
-                diameter = SubjectMetrics.toolbarCircle
-            ) {
-                Icon(Icons.Filled.Add, contentDescription = null, tint = palette.accent)
-            }
-            GlassCircleButton(
+    if (selecting) {
+        TextButton(onClick = onPin, enabled = canPin) { Text(pinLabel, color = palette.accent) }
+        TextButton(onClick = onTag, enabled = selectedCount > 0) { Text("Tag", color = palette.accent) }
+        TextButton(onClick = onDelete, enabled = canDelete) { Text("Delete") }
+        TextButton(onClick = onDone) { Text("Done", color = palette.accent) }
+    } else {
+        ToolbarCircleButton(
+            onClick = onNew,
+            accessibilityName = "New Queue"
+        ) {
+            Icon(Icons.Filled.Add, contentDescription = null, tint = palette.accent)
+        }
+        Box {
+            ToolbarCircleButton(
                 onClick = onMenu,
-                accessibilityName = "More",
-                diameter = SubjectMetrics.toolbarCircle
+                accessibilityName = "More"
             ) {
                 Icon(Icons.Filled.MoreHoriz, contentDescription = null)
             }

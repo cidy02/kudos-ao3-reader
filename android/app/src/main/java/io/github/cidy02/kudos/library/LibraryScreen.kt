@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.library
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -12,17 +13,22 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import io.github.cidy02.kudos.app.ProvidePushedShellChrome
+import io.github.cidy02.kudos.ui.subject.ToolbarCircleButton
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -1277,14 +1283,59 @@ private fun LibrarySectionContent(
     val sectionItems = kind.items(state)
     val ids = sectionItems.mapTo(linkedSetOf()) { it.item.work.id }
     val allSelected = ids.isNotEmpty() && state.selectedWorkIds.containsAll(ids)
+
+    BackHandler(enabled = state.selectionMode) { onExitSelection() }
+
+    ProvidePushedShellChrome(
+        hasSubjectHeader = true,
+        hideTabBar = state.selectionMode,
+        onBack = if (state.selectionMode) {
+            { onExitSelection() }
+        } else null,
+        trailingContent = {
+            if (state.selectionMode) {
+                TextButton(onClick = { onSetSelection(if (allSelected) emptySet() else ids) }) {
+                    Text(if (allSelected) "Deselect All" else "Select All", color = tokens.accent)
+                }
+                TextButton(onClick = onExitSelection) {
+                    Text("Done", color = tokens.accent)
+                }
+            } else {
+                FilterButton(
+                    filtersActive = state.hasActiveQueryOrFilters,
+                    badgeCount = state.filters.activeCount + if (state.searchQuery.isBlank()) 0 else 1,
+                    onClick = onShowFilters
+                )
+                if (state.showPrivacyToggle) {
+                    ToolbarCircleButton(
+                        onClick = onTogglePrivacy,
+                        accessibilityName = if (state.revealAllActive) "Hide mature works" else "Show mature works"
+                    ) {
+                        Icon(
+                            if (state.revealAllActive) Icons.Filled.Visibility else Icons.Filled.VisibilityOff,
+                            contentDescription = null
+                        )
+                    }
+                }
+                ToolbarCircleButton(
+                    onClick = onEnterSelection,
+                    accessibilityName = "Select"
+                ) {
+                    Icon(Icons.Outlined.Checklist, contentDescription = null)
+                }
+            }
+        }
+    )
+
     Box(
         Modifier
             .fillMaxSize()
             .subjectScreenWash(tokens.scopePalette)
     ) {
         KudosRefreshBox(onRefresh = onRefresh, modifier = Modifier.fillMaxSize()) {
+            val topInset = WindowInsets.systemBars.asPaddingValues().calculateTopPadding()
             LazyColumn(
-                contentPadding = PaddingValues(top = 12.dp, bottom = if (state.selectionMode) 94.dp else 18.dp),
+                contentPadding = PaddingValues(top = topInset + 56.dp, bottom = if (state.selectionMode) 94.dp else 18.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 item {
@@ -1294,36 +1345,6 @@ private fun LibrarySectionContent(
                         subtitle = "${sectionItems.size} ${if (sectionItems.size == 1) "work" else "works"}",
                         palette = tokens.scopePalette
                     )
-                }
-                item {
-                    Row(
-                        Modifier.fillMaxWidth().padding(horizontal = 12.dp),
-                        horizontalArrangement = Arrangement.End,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        if (state.selectionMode) {
-                            TextButton(onClick = { onSetSelection(if (allSelected) emptySet() else ids) }) {
-                                Text(if (allSelected) "Deselect All" else "Select All")
-                            }
-                        } else {
-                            FilterButton(
-                                filtersActive = state.hasActiveQueryOrFilters,
-                                badgeCount = state.filters.activeCount + if (state.searchQuery.isBlank()) 0 else 1,
-                                onClick = onShowFilters
-                            )
-                            if (state.showPrivacyToggle) {
-                                IconButton(onClick = onTogglePrivacy) {
-                                    Icon(
-                                        if (state.revealAllActive) Icons.Filled.Visibility else Icons.Filled.VisibilityOff,
-                                        contentDescription = if (state.revealAllActive) "Hide mature works" else "Show mature works"
-                                    )
-                                }
-                            }
-                            IconButton(onClick = onEnterSelection, enabled = sectionItems.isNotEmpty()) {
-                                Icon(Icons.Outlined.Checklist, contentDescription = "Select")
-                            }
-                        }
-                    }
                 }
                 when {
                     state.loading -> item { LoadingStateCard("Loading ${kind.title}", Modifier.padding(horizontal = 16.dp)) }
