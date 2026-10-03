@@ -4,8 +4,12 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -44,7 +48,7 @@ fun PrivacyDataScreen(
 ) {
     val chrome = LocalPushedShellChrome.current
     LaunchedEffect(Unit) {
-        chrome.customTitle = "Privacy"
+        chrome.customTitle = null
         chrome.hasSubjectHeader = true
     }
 
@@ -75,13 +79,13 @@ fun PrivacyDataScreen(
         contentPadding = PaddingValues(bottom = 20.dp)
     ) {
         item {
+            Spacer(Modifier.height(WindowInsets.systemBars.asPaddingValues().calculateTopPadding() + 56.dp))
             SubjectHeaderBlock(
                 kicker = "AO3 Account › Settings",
                 title = "Privacy",
                 subtitle = "Your reading data stays on this device",
                 palette = palette,
-                gutter = SubjectMetrics.accountGutter,
-                modifier = Modifier.padding(top = 20.dp)
+                gutter = SubjectMetrics.accountGutter
             )
         }
 

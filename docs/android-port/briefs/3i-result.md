@@ -64,3 +64,20 @@
 - Added missing `SettingsPreservationPage` extracting the availability sweep from `SettingsLibraryPage`.
 - Added an empty `SettingsListeningPage` stating it's not supported on Android yet. Required settings for Listening: text-to-speech voice and speed.
 - Added `SettingsStringsTest.kt` unit test to verify that no string was dropped.
+
+## 3i-fix3 (Grok, stopped by its usage balance; landed by Claude)
+Every Settings page now uses iOS's layout:
+- The kicker "SETTINGS" and the title sit below the back circle, and the title is drawn once.
+- `SubjectSegmentedControl` (new, `ui/subject/`) for Theme, Reader and Privacy.
+- The Accent Color row has a colour well and Reset; Customize Theme.
+- iOS's footnotes, verbatim.
+
+Android shots: `docs/android-port/shots/3i-fix3/`; iOS: `shots/ios/settings/`. Claude changed
+"Require Face ID to reveal" to "Require biometric to reveal" (Android).
+
+Still differs from iOS. These are feature gaps, not looks:
+- Library: no "Show zero counts".
+- Downloads: no "Download on subscribe" (not stored on Android).
+- Reader: no "Keep screen awake". Android keeps its own Bold and Justified toggles.
+- Listening: voice, speed and engine aren't settings on Android (they are chosen in the reader).
+- Settings > Import doesn't yet use T-353's date confirmation (Open/Share with Kudos does).
