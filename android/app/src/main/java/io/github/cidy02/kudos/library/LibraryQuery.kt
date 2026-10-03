@@ -200,6 +200,8 @@ object LibraryQuery {
                     .thenBy(String.CASE_INSENSITIVE_ORDER) { it.item.work.title }
                     .thenBy { it.item.work.id }
             )
+            // Most recently read first; never-read works last (iOS: nil dates last).
+            LibrarySort.LastRead -> items.sortedWith(lastReadComparator())
             LibrarySort.Title -> items.sortedWith(
                 compareBy<LibraryDisplayItem, String>(String.CASE_INSENSITIVE_ORDER) {
                     it.item.work.title
@@ -213,6 +215,11 @@ object LibraryQuery {
             )
             LibrarySort.WordCount -> items.sortedWith(
                 compareByDescending<LibraryDisplayItem> { it.item.work.wordCount }
+                    .thenBy(String.CASE_INSENSITIVE_ORDER) { it.item.work.title }
+                    .thenBy { it.item.work.id }
+            )
+            LibrarySort.Kudos -> items.sortedWith(
+                compareByDescending<LibraryDisplayItem> { it.item.work.kudos }
                     .thenBy(String.CASE_INSENSITIVE_ORDER) { it.item.work.title }
                     .thenBy { it.item.work.id }
             )

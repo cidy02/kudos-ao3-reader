@@ -60,3 +60,10 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   check the branch resolves to the new commit and that no `.lock` is left behind. Keep a
   `git bundle` of the lane's commits outside iCloud in `~/kudos-backups/` (§9).
   Reverse: n/a (repair).
+- **2026-10-03 · Owner override: Last Read and Kudos sorts are back on Android and added to iOS.**
+  The owner: "restore last read and kudos sorting to android, and port it to iOS. they seem like
+  useful features". This reverses the earlier entry that removed them; Manual stays removed. Both
+  apps now offer: Default, Date Added, Date Downloaded, Last Read, Title, Author, Word Count, Kudos.
+  - Last Read: most recently read first, never-read works last.
+  - Kudos: highest first; iOS keeps `SavedWork.kudos`, so its old comment saying kudos counts
+    "aren't kept" was out of date.
