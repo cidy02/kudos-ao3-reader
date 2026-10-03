@@ -283,6 +283,9 @@ object Routes {
             base == Comments.substringBefore("?").substringBefore("/") ||
             base == BrowseFandoms.substringBefore("?").substringBefore("/") ||
             base == Settings.substringBefore("?").substringBefore("/") ||
-            base == Reader.substringBefore("?").substringBefore("/")
+            base == Reader.substringBefore("?").substringBefore("/") ||
+            // iOS WorkDetailView uses subjectScreenWash, which hides the floating
+            // tab bar (SubjectScreen.swift); unlike the queue page it never opts back in.
+            base == WorkDetail.substringBefore("?").substringBefore("/")
     }
 }
