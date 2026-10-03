@@ -385,6 +385,7 @@ fun AppNavHost(
                     settingsRepository = container.settingsRepository,
                     queueRepository = container.readingQueueRepository,
                     downloadQueue = container.downloadQueue,
+                    readingLogDao = container.database.readingLogDao(),
                     privacyGate = container.privacyGate,
                     section = kind,
                     onOpenWork = { workId ->
