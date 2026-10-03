@@ -51,25 +51,21 @@ private fun KudosThemeMode.toAppTheme(): AppThemeSetting = when (this) {
  * doesn't sink the rest of a multi-file share.
  */
 private suspend fun importExternalFiles(
-    context: android.content.Context,
     container: KudosAppContainer,
-    uris: List<android.net.Uri>
+    selections: List<io.github.cidy02.kudos.works.SelectedDocumentImport>,
+    preparationFailures: List<String>
 ): String? {
-    if (uris.isEmpty()) return null
     val imported = mutableListOf<String>()
-    val failed = mutableListOf<String>()
+    val failed = preparationFailures.toMutableList()
     kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-        for (uri in uris) {
-            val displayName = io.github.cidy02.kudos.works.ExternalFileImport.displayNameFor(context, uri)
-            val label = displayName?.substringAfterLast('/')?.ifBlank { null } ?: "file"
-            val bytes = runCatching {
-                context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
-            }.getOrNull()
-            if (bytes == null) {
-                failed += "$label: couldn't be read"
-                continue
-            }
-            when (val result = container.workImporter.importLocalEpub(displayName, bytes)) {
+        for (selection in selections) {
+            val item = selection.pending
+            val label = item.displayName?.substringAfterLast('/')?.ifBlank { null } ?: "file"
+            when (val result = container.workImporter.importLocalEpub(
+                item.displayName,
+                item.bytes,
+                selection.downloadedAt
+            )) {
                 is io.github.cidy02.kudos.works.WorkImportResult.Success ->
                     imported += "“${result.work.title}”"
                 is io.github.cidy02.kudos.works.WorkImportResult.Failure -> {
@@ -139,28 +135,60 @@ fun KudosApp(
     // URIs, we import them and report the outcome. Held until onboarding is
     // done so a first-launch share isn't swallowed by the Welcome screen.
     val context = LocalContext.current
-    val pendingImports by io.github.cidy02.kudos.works.ExternalFileImport.pending.collectAsState()
-    var importStatus by remember { androidx.compose.runtime.mutableStateOf<String?>(null) }
-    androidx.compose.runtime.LaunchedEffect(pendingImports, effectiveCompletedOnboarding) {
-        if (pendingImports.isEmpty() || effectiveCompletedOnboarding != true) return@LaunchedEffect
-        val uris = io.github.cidy02.kudos.works.ExternalFileImport.consume()
-        importStatus = importExternalFiles(context, container, uris)
+    val offeredImports by io.github.cidy02.kudos.works.ExternalFileImport.pending.collectAsState()
+    var pendingImports by remember {
+        androidx.compose.runtime.mutableStateOf<List<io.github.cidy02.kudos.works.PendingDocumentImport>>(emptyList())
     }
-
-    if (importStatus != null) {
-        androidx.compose.material3.AlertDialog(
-            onDismissRequest = { importStatus = null },
-            title = { androidx.compose.material3.Text("Import") },
-            text = { androidx.compose.material3.Text(importStatus.orEmpty()) },
-            confirmButton = {
-                androidx.compose.material3.TextButton(onClick = { importStatus = null }) {
-                    androidx.compose.material3.Text("OK")
-                }
-            }
-        )
+    var importPreparationFailures by remember {
+        androidx.compose.runtime.mutableStateOf<List<String>>(emptyList())
+    }
+    var importStatus by remember { androidx.compose.runtime.mutableStateOf<String?>(null) }
+    androidx.compose.runtime.LaunchedEffect(offeredImports, effectiveCompletedOnboarding) {
+        if (offeredImports.isEmpty() || effectiveCompletedOnboarding != true) return@LaunchedEffect
+        val uris = io.github.cidy02.kudos.works.ExternalFileImport.consume()
+        val preparation = io.github.cidy02.kudos.works.prepareDocumentImports(context, uris)
+        pendingImports = preparation.imports
+        importPreparationFailures = preparation.failures
+        if (preparation.imports.isEmpty()) {
+            importStatus = preparation.failures.joinToString("\n").ifBlank { null }
+        }
     }
 
     KudosTheme(themeMode = themeMode, accentColorHex = settings.app.accentColorHex) {
+        if (pendingImports.isNotEmpty()) {
+            io.github.cidy02.kudos.works.DownloadDateImportConfirmation(
+                imports = pendingImports,
+                onCancel = {
+                    pendingImports = emptyList()
+                    importPreparationFailures = emptyList()
+                },
+                onImport = { selections ->
+                    pendingImports = emptyList()
+                    scope.launch {
+                        importStatus = importExternalFiles(
+                            container,
+                            selections,
+                            importPreparationFailures
+                        )
+                        importPreparationFailures = emptyList()
+                    }
+                }
+            )
+        }
+
+        if (importStatus != null) {
+            androidx.compose.material3.AlertDialog(
+                onDismissRequest = { importStatus = null },
+                title = { androidx.compose.material3.Text("Import") },
+                text = { androidx.compose.material3.Text(importStatus.orEmpty()) },
+                confirmButton = {
+                    androidx.compose.material3.TextButton(onClick = { importStatus = null }) {
+                        androidx.compose.material3.Text("OK")
+                    }
+                }
+            )
+        }
+
         // App-wide shake-to-report (iOS UIWindow.motionEnded parity). Sensor
         // listener is lifecycle-bound to this composition and unregistered on leave.
         ShakeToReportEffect { showBugReport = true }

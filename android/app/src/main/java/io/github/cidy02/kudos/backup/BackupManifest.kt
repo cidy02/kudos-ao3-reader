@@ -53,6 +53,7 @@ data class BackupWork(
     val summary: String = "",
     @SerialName("sourceURL") val sourceURL: String = "",
     val dateAdded: String = "",
+    val downloadedAt: String? = null,
     val isFavorite: Boolean = false,
     val hasGivenKudos: Boolean = false,
     val isSaved: Boolean = false,

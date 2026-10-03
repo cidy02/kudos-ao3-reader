@@ -146,6 +146,24 @@ class LibraryRepositorySortByDateAddedTest {
     }
 }
 
+class LibraryRepositorySortByDateDownloadedTest {
+    @Test
+    fun dateDownloadedFallsBackToDateAddedAndSortsNewestFirst() {
+        val items = sampleItems().map { item ->
+            if (item.item.work.id == "gamma") {
+                item.copy(item = item.item.copy(work = item.item.work.copy(downloadedAt = baseTime.plusSeconds(1_000))))
+            } else {
+                item
+            }
+        }
+
+        assertEquals(
+            listOf("gamma", "alpha", "beta", "delta"),
+            LibraryQuery.apply(items, sort = LibrarySort.DateDownloaded).ids()
+        )
+    }
+}
+
 class LibraryRepositorySortByLastReadTest {
     @Test
     fun lastReadSortsNullDatesLast() {

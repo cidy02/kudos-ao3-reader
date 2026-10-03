@@ -3,7 +3,9 @@ package io.github.cidy02.kudos.works
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.provider.DocumentsContract
 import android.provider.OpenableColumns
+import java.time.Instant
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -94,4 +96,20 @@ object ExternalFileImport {
         }.getOrNull()
         return fromResolver?.takeIf { it.isNotBlank() } ?: uri.lastPathSegment
     }
+
+    /** SAF usually exposes modification time but not creation time. */
+    fun lastModifiedFor(context: Context, uri: Uri): Instant? = runCatching {
+        context.contentResolver.query(
+            uri,
+            arrayOf(DocumentsContract.Document.COLUMN_LAST_MODIFIED),
+            null,
+            null,
+            null
+        )?.use { cursor ->
+            if (!cursor.moveToFirst()) return@use null
+            val index = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_LAST_MODIFIED)
+            if (index < 0 || cursor.isNull(index)) return@use null
+            cursor.getLong(index).takeIf { it > 0 }?.let(Instant::ofEpochMilli)
+        }
+    }.getOrNull()
 }

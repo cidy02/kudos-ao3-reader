@@ -235,6 +235,17 @@ class WorkLifecycleRepositoryTest {
     }
 
     @Test
+    fun editingDownloadedDateStampsLastModifiedAt() = runTest {
+        repository.upsert(sampleSavedWork())
+        val downloadedAt = clockNow.minusSeconds(86_400)
+
+        val updated = repository.updateDownloadedAt(workUuid, downloadedAt)!!
+
+        assertEquals(downloadedAt, updated.downloadedAt)
+        assertEquals(clockNow, updated.lastModifiedAt)
+    }
+
+    @Test
     fun deleteLocalEpubPreservesSavedWork() = runTest {
         repository.upsert(sampleSavedWork().copy(hasEpub = true))
         fileStore.writeWorkEpub(workUuid, epubBytes)
@@ -746,6 +757,7 @@ class WorkImporterLifecycleTest {
     private lateinit var database: KudosDatabase
     private lateinit var fileStore: WorkFileStore
     private lateinit var repository: WorkRepository
+    private val capturedNow = Instant.parse("2026-10-03T12:34:56Z")
 
     @Before
     fun setUp() {
@@ -754,7 +766,7 @@ class WorkImporterLifecycleTest {
             .allowMainThreadQueries()
             .build()
         fileStore = WorkFileStore(Files.createTempDirectory("kudos-import-tests"))
-        repository = WorkRepository(database, fileStore)
+        repository = WorkRepository(database, fileStore, clock = { capturedNow })
     }
 
     @After
@@ -789,7 +801,26 @@ class WorkImporterLifecycleTest {
 
         val work = (result as WorkImportResult.Success).work
         assertTrue(work.hasEpub)
+        assertEquals(capturedNow, work.downloadedAt)
         assertTrue(fileStore.workEpubExists(work.id))
+    }
+
+    @Test
+    fun redownloadKeepsTheCapturedDownloadDate() = runTest {
+        val originalDate = capturedNow.minusSeconds(86_400)
+        val existing = sampleSavedWork().copy(
+            sourceUrl = "https://archiveofourown.org/works/123",
+            downloadedAt = originalDate
+        )
+        repository.upsert(existing)
+        val importer = importer(
+            metadata = AO3Result.Success(AO3WorkMetadata(chapters = "1/1")),
+            download = AO3Result.Success(epubBytes)
+        )
+
+        val result = importer.downloadExisting(existing)
+
+        assertEquals(originalDate, (result as WorkImportResult.Success).work.downloadedAt)
     }
 
     @Test
@@ -929,6 +960,7 @@ class WorkImporterLifecycleTest {
         assertEquals("", work.sourceUrl)
         assertTrue(work.hasEpub)
         assertTrue(work.isSaved)
+        assertEquals(capturedNow, work.downloadedAt)
         assertTrue(fileStore.workEpubExists(work.id))
         val stored = repository.getWork(work.id)
         assertNotNull(stored)
