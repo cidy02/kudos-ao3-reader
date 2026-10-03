@@ -2,7 +2,6 @@ package io.github.cidy02.kudos.account
 import androidx.compose.foundation.background
 import io.github.cidy02.kudos.R
 
-import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
@@ -183,6 +182,8 @@ fun AccountScreen(
     authorRepository: io.github.cidy02.kudos.network.ao3.author.AO3AuthorRepository? = null,
     countsCache: io.github.cidy02.kudos.account.AO3AccountListCountsCache? = null,
     onOpenWorkComments: (workId: Long, focusedId: Long?) -> Unit = { _, _ -> },
+    // Inbox is its own pushed route (iOS pushes AccountInboxScreen); see Routes.AccountInbox.
+    onOpenInbox: () -> Unit = {},
     modifier: Modifier = Modifier,
     viewModel: AccountViewModel = viewModel(
         factory = AccountViewModel.factory(
@@ -199,41 +200,6 @@ fun AccountScreen(
     val palette = LocalSubjectPalette.current
     val tokens = LocalKudosTokens.current
     
-    var activePage by rememberSaveable { mutableStateOf<String?>(null) }
-
-    BackHandler(enabled = activePage != null) {
-        activePage = null
-    }
-
-    if (activePage == "Inbox" && inboxRepository != null && commentRepository != null) {
-        Scaffold(
-            topBar = {
-                TopAppBar(
-                    title = { Text("Inbox") },
-                    navigationIcon = {
-                        IconButton(onClick = { activePage = null }) {
-                            Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back")
-                        }
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.background
-                    )
-                )
-            }
-        ) { padding ->
-            Box(modifier = Modifier.padding(padding)) {
-                AccountInboxPane(
-                    inboxRepository = inboxRepository,
-                    commentRepository = commentRepository,
-                    currentUsername = username,
-                    onOpenWorkComments = onOpenWorkComments,
-                    settingsRepository = listRepository.settingsRepository
-                )
-            }
-        }
-        return
-    }
-
     // The signed-in wash is drawn by the shell (MainScaffold), so it reaches the top edge.
     LazyColumn(
         modifier = modifier.fillMaxSize(),
@@ -270,7 +236,7 @@ fun AccountScreen(
                     onOpenList = onOpenList,
                     onOpenAO3Collections = onOpenAO3Collections,
                     onOpenWeb = onOpenWeb,
-                    onOpenInbox = { activePage = "Inbox" }
+                    onOpenInbox = onOpenInbox
                 )
             }
             
@@ -348,7 +314,7 @@ fun AccountScreen(
                     AccountScopeRow(
                         title = "Inbox",
                         icon = Icons.Outlined.Inbox,
-                        onClick = { activePage = "Inbox" }
+                        onClick = onOpenInbox
                     )
                 }
             }

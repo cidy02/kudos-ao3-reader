@@ -214,13 +214,25 @@ class AccountInboxViewModel(
     }
 
     fun applyFilter(fieldName: String, value: String) {
+        applyFilters(mapOf(fieldName to value))
+    }
+
+    fun applyFilters(values: Map<String, String>) {
         val state = mutableState.value
         if (state.isPerformingBulkAction) return
-        val field = state.filterForm?.fields?.firstOrNull { it.name == fieldName } ?: return
-        if (field.options.none { it.value == value }) return
+        if (values.isEmpty()) return
+        val fields = state.filterForm?.fields ?: return
+        if (values.any { (name, value) ->
+                fields.firstOrNull { it.name == name }
+                    ?.options
+                    ?.none { it.value == value } != false
+            }
+        ) {
+            return
+        }
         mutableState.update {
             it.copy(
-                filterValues = it.filterValues + (fieldName to value),
+                filterValues = it.filterValues + values,
                 isSelecting = false,
                 selectedItemIds = emptySet()
             )
