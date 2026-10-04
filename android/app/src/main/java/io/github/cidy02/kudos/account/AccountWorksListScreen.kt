@@ -112,12 +112,13 @@ fun AccountWorksListScreen(
         hasSubjectHeader = true,
         trailingContent = {
             Box {
-                IconButton(onClick = { showMenu = true }) {
-                    Icon(
-                        imageVector = Icons.Default.MoreVert,
-                        contentDescription = "More actions",
-                        tint = tokens.secondaryInk
-                    )
+                // A glass circle, as iOS's toolbar draws it and as the Inbox's menu does.
+                io.github.cidy02.kudos.ui.subject.ToolbarCircleButton(
+                    onClick = { showMenu = true },
+                    accessibilityName = "More actions",
+                    palette = palette
+                ) {
+                    Icon(imageVector = Icons.Default.MoreVert, contentDescription = null)
                 }
                 DropdownMenu(
                     expanded = showMenu,
