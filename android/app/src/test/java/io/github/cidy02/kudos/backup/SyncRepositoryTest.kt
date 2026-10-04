@@ -324,7 +324,7 @@ class SyncRepositoryTest {
         val afterWorks = after.findFile(BackupPaths.WORKS_DIRECTORY)!!
         assertNotNull(
             "listed EPUB must not be pruned away on recovery",
-            afterWorks.findFile("$WORK_REMOTE.epub")
+            epubIn(afterWorks, WORK_REMOTE)
         )
         // Orphan removal is the post-commit prune (D); recovery itself must not
         // have emptied Works/ before export rewrote the manifest.
@@ -371,7 +371,7 @@ class SyncRepositoryTest {
         assertTrue(first is SyncResult.Success)
 
         val remoteWorks = requireKudosLibrary().findFile(BackupPaths.WORKS_DIRECTORY)!!
-        val remoteEpub = remoteWorks.findFile("$WORK_A.epub")
+        val remoteEpub = epubIn(remoteWorks, WORK_A)
         assertNotNull(remoteEpub)
         assertArrayEquals(original, readDocument(remoteEpub!!))
         val writtenOnceAt = remoteEpub.lastModified()
@@ -384,9 +384,7 @@ class SyncRepositoryTest {
         val second = syncRepository.runSync()
         assertTrue(second is SyncResult.Success)
 
-        val afterChange = requireKudosLibrary()
-            .findFile(BackupPaths.WORKS_DIRECTORY)!!
-            .findFile("$WORK_A.epub")!!
+        val afterChange = epubIn(requireKudosLibrary().findFile(BackupPaths.WORKS_DIRECTORY)!!, WORK_A)!!
         assertArrayEquals(
             "equal-length content change must propagate",
             changed,
@@ -403,9 +401,7 @@ class SyncRepositoryTest {
         clockInstant = FIXED_CLOCK.plusSeconds(60)
         val third = syncRepository.runSync()
         assertTrue(third is SyncResult.Success)
-        val afterSkip = requireKudosLibrary()
-            .findFile(BackupPaths.WORKS_DIRECTORY)!!
-            .findFile("$WORK_A.epub")!!
+        val afterSkip = epubIn(requireKudosLibrary().findFile(BackupPaths.WORKS_DIRECTORY)!!, WORK_A)!!
         assertArrayEquals(changed, readDocument(afterSkip))
         assertEquals(
             "identical content must not rewrite the remote EPUB",
@@ -437,11 +433,11 @@ class SyncRepositoryTest {
         val afterWorks = requireKudosLibrary().findFile(BackupPaths.WORKS_DIRECTORY)!!
         assertNotNull(
             "work still listed in the freshly-written manifest keeps its EPUB",
-            afterWorks.findFile("$WORK_A.epub")
+            epubIn(afterWorks, WORK_A)
         )
         assertArrayEquals(
             "keep-epub".toByteArray(),
-            readDocument(afterWorks.findFile("$WORK_A.epub")!!)
+            readDocument(epubIn(afterWorks, WORK_A)!!)
         )
         assertTrue(
             "orphan assets are removed after the manifest commit",
@@ -619,6 +615,106 @@ class SyncRepositoryTest {
     }
 
     // --------------------------------------------------------------- helpers
+
+    // Cross-platform folder rules (brief 5a): what iOS's FolderSyncService writes, reads and keeps.
+
+    @Test
+    fun syncUpNamesEpubsTheWayIosDoes() = runTest {
+        seedLocalWork(WORK_A, "Named for iOS", "epub-a".toByteArray())
+
+        assertTrue(syncRepository.runSync() is SyncResult.Success)
+
+        // iOS reads, and prunes, by `UUID.uuidString`: the UUID in capitals.
+        val names = requireKudosLibrary().findFile(BackupPaths.WORKS_DIRECTORY)!!.listFiles().map { it.name }
+        assertEquals(listOf("${WORK_A.uppercase()}.epub"), names)
+    }
+
+    @Test
+    fun syncDownFindsAnEpubIosWrote() = runTest {
+        val worksDir = seedFolder(
+            remoteBackupWork(WORK_REMOTE, "From iPhone", hasEpub = true)
+        )
+        writeChild(worksDir, "${WORK_REMOTE.uppercase()}.epub", "application/epub+zip", "from-ios".toByteArray())
+
+        assertTrue(syncRepository.runSync() is SyncResult.Success)
+
+        assertArrayEquals(
+            "the EPUB iOS wrote must reach this device",
+            "from-ios".toByteArray(),
+            Files.readAllBytes(workFileStore.workEpubPath(WORK_REMOTE))
+        )
+        val after = requireKudosLibrary().findFile(BackupPaths.WORKS_DIRECTORY)!!
+        assertEquals(listOf("${WORK_REMOTE.uppercase()}.epub"), after.listFiles().map { it.name })
+    }
+
+    @Test
+    fun aLowercaseEpubFromAnOlderAndroidBuildIsFoundAndKept() = runTest {
+        val worksDir = seedFolder(
+            remoteBackupWork(WORK_REMOTE, "From an older build", hasEpub = true)
+        )
+        writeChild(worksDir, "$WORK_REMOTE.epub", "application/epub+zip", "legacy".toByteArray())
+
+        assertTrue(syncRepository.runSync() is SyncResult.Success)
+
+        assertArrayEquals("legacy".toByteArray(), Files.readAllBytes(workFileStore.workEpubPath(WORK_REMOTE)))
+        // Still one file for the work, not pruned and not duplicated. On case-sensitive storage
+        // (a phone) it is also renamed to iOS's name; this host's file system folds case, so
+        // the rename is not asserted here.
+        val after = requireKudosLibrary().findFile(BackupPaths.WORKS_DIRECTORY)!!
+        assertEquals(1, after.listFiles().size)
+        assertArrayEquals("legacy".toByteArray(), readDocument(epubIn(after, WORK_REMOTE)!!))
+    }
+
+    @Test
+    fun syncUpKeepsTheEpubOfAListedWorkThisDeviceDoesNotHold() = runTest {
+        // The manifest lists the work without an EPUB flag, so this device imports the row and
+        // no file; another device's copy is still in the folder. iOS keeps every listed work's
+        // EPUB "so one device can never discard an EPUB another device preserved".
+        val worksDir = seedFolder(
+            remoteBackupWork(WORK_REMOTE, "Held elsewhere", hasEpub = false)
+        )
+        writeChild(worksDir, "${WORK_REMOTE.uppercase()}.epub", "application/epub+zip", "theirs".toByteArray())
+        writeChild(worksDir, "orphan-not-in-manifest.epub", "application/epub+zip", "orphan".toByteArray())
+
+        assertTrue(syncRepository.runSync() is SyncResult.Success)
+
+        val after = requireKudosLibrary().findFile(BackupPaths.WORKS_DIRECTORY)!!
+        assertNotNull("a listed work's EPUB is not an orphan", epubIn(after, WORK_REMOTE))
+        assertTrue("a file no listed work owns is still pruned", after.findFile("orphan-not-in-manifest.epub") == null)
+    }
+
+    @Test
+    fun nothingIsPrunedWhenTheFoldersManifestCannotBeRead() = runTest {
+        seedLocalWork(WORK_A, "Local", "local-a".toByteArray())
+        val kudos = ensureKudosLibrary()
+        val worksDir = kudos.createDirectory(BackupPaths.WORKS_DIRECTORY)!!
+        // Unreadable, with no .bak: this run cannot know what the folder lists.
+        writeChild(kudos, BackupPaths.MANIFEST, "application/json", "{ not json".toByteArray())
+        writeChild(worksDir, "${WORK_REMOTE.uppercase()}.epub", "application/epub+zip", "theirs".toByteArray())
+
+        assertTrue(syncRepository.runSync() is SyncResult.Success)
+
+        val after = requireKudosLibrary().findFile(BackupPaths.WORKS_DIRECTORY)!!
+        assertNotNull("this device's view was not current, so it prunes nothing", epubIn(after, WORK_REMOTE))
+        assertNotNull(epubIn(after, WORK_A))
+    }
+
+    /** A folder holding a manifest that lists [works]; returns its Works directory. */
+    private fun seedFolder(vararg works: BackupWork): DocumentFile {
+        val kudos = ensureKudosLibrary()
+        val manifest = remoteManifest(works = works.toList(), exportedAt = "2026-01-01T00:00:00Z")
+        writeChild(
+            kudos,
+            BackupPaths.MANIFEST,
+            "application/json",
+            BackupJson.encodeToString(manifest).toByteArray(Charsets.UTF_8)
+        )
+        return kudos.findFile(BackupPaths.WORKS_DIRECTORY) ?: kudos.createDirectory(BackupPaths.WORKS_DIRECTORY)!!
+    }
+
+    /** A work's EPUB in the folder, whichever case its name has. */
+    private fun epubIn(dir: DocumentFile, workId: String): DocumentFile? =
+        dir.listFiles().firstOrNull { it.name.equals("$workId.epub", ignoreCase = true) }
 
     private suspend fun seedLocalWork(id: String, title: String, epub: ByteArray) {
         database.workDao().upsert(
