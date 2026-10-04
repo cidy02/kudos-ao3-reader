@@ -1,4 +1,4 @@
-# Brief 3p: the Android reader records reading sessions, as iOS does
+# Brief 3q: the Android reader records reading sessions, as iOS does
 
 Rules (binding): work only in this worktree; don't commit, push, or switch branches; never sign in
 and never contact archiveofourown.org; no stub files; no helper scripts or `.orig` files left
@@ -28,5 +28,5 @@ one: the only caller of `upsertSession` is backup restore. So Reading Insights' 
    closed on the next start, and whatever else iOS covers.
 4. Don't change what the reader looks like or how it navigates.
 
-Write `docs/android-port/briefs/3p-result.md`: the rules from step 1, each Android call site with
+Write `docs/android-port/briefs/3q-result.md`: the rules from step 1, each Android call site with
 its iOS counterpart, anything iOS does that you didn't port and why.

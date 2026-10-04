@@ -33,6 +33,8 @@ class ReaderRepository(
     private val customFontsProvider: (suspend () -> List<CustomFont>)? = null,
     private val fontPathResolver: ((String) -> String?)? = null
 ) {
+    suspend fun currentWork(workId: String): SavedWork? = workRepository.getWork(workId)
+
     /**
      * Resolve a work for reading. On success, [ReaderOpenResult.Success.preferences]
      * is always mapped from the current [settingsProvider] snapshot (DataStore in prod).
