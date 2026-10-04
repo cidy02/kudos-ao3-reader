@@ -106,6 +106,14 @@ fun restoredDeletionState(archivedIsDeleted: Boolean?): RestoredDeletionState {
     )
 }
 
+/**
+ * iOS `archivedDeletionState`: a record already counting down on this device keeps its
+ * countdown. Restarted every time the deleted flag came back round through sync, as it was,
+ * the date moved out for ever and the record never left Recently Deleted.
+ */
+fun keptDeletionSchedule(incoming: Instant?, localIsDeleted: Boolean, local: Instant?): Instant? =
+    if (incoming != null && localIsDeleted && local != null) local else incoming
+
 fun SavedWork.toBackupWork(
     userTags: List<String> = emptyList(),
     collectionIds: List<String> = emptyList()
