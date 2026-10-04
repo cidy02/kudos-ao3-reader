@@ -1,0 +1,211 @@
+{
+  "annotations" : [
+
+  ],
+  "bookmarks" : [
+
+  ],
+  "collections" : [
+
+  ],
+  "exportedAt" : "2026-10-04T13:12:28.491Z",
+  "fandomReadWatermarks" : [
+
+  ],
+  "fonts" : [
+
+  ],
+  "pronunciations" : {
+    "fandoms" : {
+
+    },
+    "global" : {
+
+    },
+    "works" : {
+
+    }
+  },
+  "readingFavorites" : [
+
+  ],
+  "readingQueueMemberships" : [
+
+  ],
+  "readingQueues" : [
+
+  ],
+  "readingSessions" : [
+
+  ],
+  "savedSearches" : [
+
+  ],
+  "settings" : {
+    "accentColorHex" : "#990000",
+    "appTheme" : "light",
+    "autoPreserveSeriesWorkThreshold" : 5,
+    "autoPreserveSmallSeriesOnSaveForLater" : false,
+    "confirmBeforeDelete" : true,
+    "hideMatureContent" : true,
+    "matchAppReaderTheme" : true,
+    "matureContentMode" : "obscure",
+    "readerBoldText" : false,
+    "readerCustomize" : false,
+    "readerFontID" : "system",
+    "readerFontPt" : 18,
+    "readerJustify" : false,
+    "readerLetterSpacing" : 0,
+    "readerLineHeight" : 1.65,
+    "readerMargin" : 28,
+    "readerMode" : "scroll",
+    "readerTheme" : "light",
+    "readerTwoPage" : false,
+    "readerWordSpacing" : 0,
+    "requireBiometricToReveal" : false
+  },
+  "tombstones" : [
+
+  ],
+  "version" : 8,
+  "works" : [
+    {
+      "ao3Unavailable" : false,
+      "ao3WorkID" : 2002,
+      "assetIdentifier" : "2000ABCD-0000-4000-8000-00000000000B.epub",
+      "author" : "Archive Author",
+      "bookmarks" : 0,
+      "chapters" : "",
+      "comments" : 0,
+      "createdAt" : "2026-10-04T13:12:28.471Z",
+      "dateAdded" : "2026-10-04T13:12:28.471Z",
+      "datePublished" : "",
+      "dateUpdated" : "",
+      "epubDigest" : "2be63c7aa2950b6b7bbda7be0eff723a9a2410fc71dac2bf5a9b9ab07061d644",
+      "epubPreservationStatusRaw" : "notPreserved",
+      "hasEPUB" : true,
+      "hasGivenKudos" : false,
+      "hiddenFromHistoryAt" : null,
+      "hits" : 0,
+      "id" : "2000ABCD-0000-4000-8000-00000000000B",
+      "isComplete" : false,
+      "isDeleted" : false,
+      "isFavorite" : false,
+      "isFinished" : false,
+      "isQueuedForLater" : false,
+      "isSaved" : false,
+      "keepInProgressOverride" : false,
+      "knownChapterCount" : 0,
+      "kudos" : 0,
+      "language" : "",
+      "lastModifiedAt" : "2026-10-04T13:12:28.471Z",
+      "lastScrollFraction" : 0,
+      "lastSpineIndex" : 0,
+      "legacyReaderProgress" : null,
+      "metadataSyncStatusRaw" : "unknown",
+      "rating" : "",
+      "readiumLocator" : "",
+      "seriesPosition" : 0,
+      "seriesTitle" : "",
+      "seriesURL" : "",
+      "sourceURL" : "https:\/\/archiveofourown.org\/works\/2002",
+      "summary" : "",
+      "title" : "Folder Sync Two",
+      "userTags" : [
+
+      ],
+      "wordCount" : 0,
+      "workCategories" : [
+
+      ],
+      "workCharacters" : [
+
+      ],
+      "workFandoms" : [
+
+      ],
+      "workFreeforms" : [
+
+      ],
+      "workRelationships" : [
+
+      ],
+      "workTags" : [
+
+      ],
+      "workTagsFetched" : false,
+      "workWarnings" : [
+
+      ]
+    },
+    {
+      "ao3Unavailable" : false,
+      "ao3WorkID" : 2001,
+      "assetIdentifier" : "2000ABCD-0000-4000-8000-00000000000A.epub",
+      "author" : "Archive Author",
+      "bookmarks" : 0,
+      "chapters" : "",
+      "comments" : 0,
+      "createdAt" : "2026-10-04T13:12:28.467Z",
+      "dateAdded" : "2026-10-04T13:12:28.467Z",
+      "datePublished" : "",
+      "dateUpdated" : "",
+      "epubDigest" : "2be63c7aa2950b6b7bbda7be0eff723a9a2410fc71dac2bf5a9b9ab07061d644",
+      "epubPreservationStatusRaw" : "notPreserved",
+      "hasEPUB" : true,
+      "hasGivenKudos" : false,
+      "hiddenFromHistoryAt" : null,
+      "hits" : 0,
+      "id" : "2000ABCD-0000-4000-8000-00000000000A",
+      "isComplete" : false,
+      "isDeleted" : false,
+      "isFavorite" : false,
+      "isFinished" : false,
+      "isQueuedForLater" : false,
+      "isSaved" : false,
+      "keepInProgressOverride" : false,
+      "knownChapterCount" : 0,
+      "kudos" : 0,
+      "language" : "",
+      "lastModifiedAt" : "2026-10-04T13:12:28.467Z",
+      "lastScrollFraction" : 0,
+      "lastSpineIndex" : 0,
+      "legacyReaderProgress" : null,
+      "metadataSyncStatusRaw" : "unknown",
+      "rating" : "",
+      "readiumLocator" : "",
+      "seriesPosition" : 0,
+      "seriesTitle" : "",
+      "seriesURL" : "",
+      "sourceURL" : "https:\/\/archiveofourown.org\/works\/2001",
+      "summary" : "",
+      "title" : "Folder Sync One",
+      "userTags" : [
+
+      ],
+      "wordCount" : 0,
+      "workCategories" : [
+
+      ],
+      "workCharacters" : [
+
+      ],
+      "workFandoms" : [
+
+      ],
+      "workFreeforms" : [
+
+      ],
+      "workRelationships" : [
+
+      ],
+      "workTags" : [
+
+      ],
+      "workTagsFetched" : false,
+      "workWarnings" : [
+
+      ]
+    }
+  ]
+}
