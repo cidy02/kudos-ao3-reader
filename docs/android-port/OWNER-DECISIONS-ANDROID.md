@@ -40,22 +40,86 @@ sit outside the page and keep the app accent, on both platforms.
 
 Until answered: A.
 
-## 4. Should iOS's folder sync ignore letter case in EPUB file names?
+## 4. iOS's folder sync was changed (T-357): keep it?
 
-iOS names a work's EPUB in the sync folder with the UUID in capitals, and both finds and prunes
-files by that exact name. The released Android builds (0.2.1, 0.2.2) wrote lowercase names.
-Android now writes iOS's names and renames its old files, but an iPhone that joins a folder
-before the Android device has updated and synced would not find those EPUBs on case-sensitive
-storage, and would delete them from the folder as orphans. (Each Android device still holds its
-own copies and uploads them again.)
+You asked for the two apps to be fully interoperable on one folder. The audit found four ways
+the **iOS** app could delete another device's files from a shared folder, so iOS was changed too
+(`91f3930f` on `claude/polish-loop`, `ef120853` on `integrate/cloud-redesign`, not pushed):
 
-- **A.** Change iOS to compare names without regard to case, when reading and when pruning. It
-  can only ever keep more files. It needs its own tests in `FolderSyncTests`.
-- **B.** Leave iOS as it is, and tell Android users to update and sync before adding an iPhone to
-  the folder.
+- An automatic upload now reads the folder first. It used to write a manifest that did not list
+  what another device had added, and a later sync then deleted that device's EPUB.
+- A folder with files and no manifest is no longer treated as empty.
+- A manifest whose date cannot be read no longer allows deleting.
+- EPUBs are found whether their name is in capitals or lowercase (the old question 4, option A).
+- A manifest cut short by an interrupted write is repaired instead of failing every sync after.
 
-**Checked with iOS's own code (2026-10-04):** a folder written by today's Android is read by iOS
-in full (`CrossPlatformFolderSyncTests`). The same folder with the files renamed to lowercase,
-as the released builds wrote them, reaches iOS **without its EPUBs**.
+Tested: the nine iOS suites that sync a folder (73 tests), lint, and a macOS build. **Not tried
+on an iPhone or with a real cloud provider.**
 
-Until answered: iOS is unchanged. Details: `briefs/5a-result.md`.
+- **A.** Keep it (my recommendation: each change only ever keeps more files).
+- **B.** Revert it, and accept that a shared folder is not safe.
+
+Until answered: the change stays on the two local branches.
+
+## 5. Which cloud storage should a shared folder use?
+
+The apps do not talk to any cloud service. Each one reads and writes a folder that the system's
+file picker hands it, and a storage app keeps that folder in step with the cloud. Whether that
+works depends on the storage app, and I could not test any: the emulators stay in airplane mode
+and the phones are yours.
+
+- **Google Drive:** from what I could find, Drive's Android app does not let another app pick a
+  folder, so Kudos on Android cannot use a Drive folder directly. Not checked on a device.
+- **On iOS** it depends on the storage app: some let another app pick a folder, some do not.
+
+- **A.** You try it: pick one storage app that offers a folder on both phones, and tell me what
+  the pickers allow. I then test the apps against what you find.
+- **B.** Build a direct Google Drive connection into both apps. A large piece of work, with a
+  Google sign-in.
+- **C.** Support only folders a separate sync tool mirrors (on Android, a folder on the phone that
+  another app keeps in step with the cloud).
+
+Until answered: both apps sync a folder correctly as files; which cloud is unproven.
+
+## 6. Two devices syncing in the same minute
+
+Each app now stops, or declines to delete, when it sees the folder changed under it. Neither can
+see a change that has not reached it yet, so two devices that sync at the same moment can still
+write over each other's manifest. Nothing is deleted when that happens, and the next sync of
+each device puts its records back, but for a while the folder lists less than it holds.
+
+- **A.** Accept it (my recommendation for now): the window is seconds, and nothing is lost.
+- **B.** Design a safer scheme, such as one manifest per device. That is a change to the folder's
+  format, on both apps, and older versions of the apps would not understand it.
+
+Until answered: A.
+
+## 7. Deletions an iPhone and an Android phone do not tell each other about
+
+Two things, both found by the audit:
+
+- **Pairing.** A device takes another's deletions only after the two are paired. iPhones on one
+  Apple account pair by themselves; an Android phone never does. Until you pair an iPhone and an
+  Android phone both ways, each ignores what the other deletes, and a deleted work comes back.
+  Android's page now says so. iOS's page still says only "for a different account, scan its QR
+  code". **Should iOS's text mention Android?**
+- **Saved links and highlights.** When one device deletes a saved AO3 link or a highlight, the
+  other keeps its copy and puts it back in the folder. Both apps behave this way today, iPhone to
+  iPhone as well. **Should both apps remove their copy when a paired device deletes one?**
+
+Until answered: unchanged on both.
+
+## 8. Three places where Android is deliberately stricter or iOS would have to change
+
+- **A later deletion of the same record.** iOS lets a later signed deletion replace the one it
+  holds even when the work's AO3 number or address differs. Android (Codex's change) refuses
+  then, so a paired device cannot swap a deletion for one that covers less. Keep Android
+  stricter, or match iOS?
+- **Dates from the future.** Android does not let a record's date be later than its backup's
+  date. iOS takes the date as written, so one stale backup with a wrong date can block real
+  edits on iOS for good. The fix belongs on iOS. May I make it?
+- **Sizes.** iOS accepts an EPUB of up to 1 GB in a backup. Android stops at 128 MB, and reads a
+  whole backup into memory. A very large library restores on iOS and fails on Android. Raising
+  Android's limit needs the restore rewritten to read from disk. Worth doing now?
+
+Until answered: Android stricter, iOS unchanged, limits unchanged.
