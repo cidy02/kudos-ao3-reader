@@ -470,15 +470,8 @@ fun AppNavHost(
                 onOpenList = { type ->
                     navController.navigate(Routes.accountList(NavArgCodecs.encodeAccountListType(type)))
                 },
-                onOpenBackup = { navController.navigate(Routes.Backup) },
-                onOpenSettings = { navController.navigate(Routes.Settings) },
-                onOpenCollections = { navController.navigate(Routes.Collections) },
                 onOpenAO3Collections = { navController.navigate(Routes.AO3Collections) },
                 onOpenDashboard = { navController.navigate(Routes.AO3Dashboard) },
-                onOpenLocalHistory = { navController.navigate(Routes.LocalHistory) },
-                onOpenLocalFavorites = { navController.navigate(Routes.LocalFavorites) },
-                onOpenAbout = { navController.navigate(Routes.About) },
-                onOpenPrivacy = { navController.navigate(Routes.Settings) },
                 onOpenWeb = { url ->
                     when (url) {
                         "native:preferences" -> navController.navigate(Routes.AO3Preferences)

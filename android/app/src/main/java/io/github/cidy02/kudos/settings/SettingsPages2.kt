@@ -74,6 +74,7 @@ import io.github.cidy02.kudos.core.model.MatureContentMode
 import io.github.cidy02.kudos.data.preferences.SettingsRepository
 import io.github.cidy02.kudos.files.CustomFontRepository
 import io.github.cidy02.kudos.network.ao3.AO3Error
+import io.github.cidy02.kudos.ui.components.LogOutConfirmation
 import io.github.cidy02.kudos.ui.components.DestructiveConfirmation
 import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
 import io.github.cidy02.kudos.ui.subject.SectionRuleHeader
@@ -248,6 +249,15 @@ fun SettingsListeningPage() {
 @Composable
 fun SettingsAccountPage(authRepository: AO3AuthRepository?, onLogin: () -> Unit) {
     val scope = rememberCoroutineScope()
+    var confirmingLogOut by remember { mutableStateOf(false) }
+    LogOutConfirmation(
+        show = confirmingLogOut,
+        onConfirm = {
+            confirmingLogOut = false
+            scope.launch { authRepository?.logout() }
+        },
+        onDismissRequest = { confirmingLogOut = false }
+    )
     val authState by (authRepository?.state ?: flowOf(AO3AuthState.SignedOut))
         .collectAsState(initial = AO3AuthState.SignedOut)
     SettingsPage(title = "AO3 Account") {
@@ -263,7 +273,7 @@ fun SettingsAccountPage(authRepository: AO3AuthRepository?, onLogin: () -> Unit)
                         SettingsActionRow(
                             label = "Log Out",
                             icon = Icons.AutoMirrored.Outlined.Logout,
-                            onClick = { scope.launch { authRepository?.logout() } }
+                            onClick = { confirmingLogOut = true }
                         )
                     }
                     AO3AuthState.Restoring, AO3AuthState.SigningIn -> {

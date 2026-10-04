@@ -45,3 +45,17 @@ fun DestructiveConfirmation(
         }
     }
 }
+
+/** iOS `logOutConfirmation`: Log Out asks first, the same way everywhere it is offered. */
+@Composable
+fun LogOutConfirmation(show: Boolean, onConfirm: () -> Unit, onDismissRequest: () -> Unit) {
+    DestructiveConfirmation(
+        show = show,
+        title = "Log out of AO3?",
+        text = "You will be signed out of AO3 on this device. Your Library, downloads, and queues stay.",
+        confirmText = "Log Out",
+        confirmBeforeDelete = true,
+        onConfirm = onConfirm,
+        onDismissRequest = onDismissRequest
+    )
+}
