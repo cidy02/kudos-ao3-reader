@@ -7,6 +7,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -175,10 +177,15 @@ fun AccountInboxPane(
             .fillMaxSize()
             .subjectScreenWash(palette)
     ) {
+        // The Inbox is its own route now, with nothing above it: start below the status bar, so
+        // the toolbar row sits level with the shell's back button and the header below both.
+        val topInset = androidx.compose.foundation.layout.WindowInsets.statusBars
+            .asPaddingValues().calculateTopPadding()
         LazyColumn(
             contentPadding = PaddingValues(
                 start = SubjectMetrics.accountGutter,
                 end = SubjectMetrics.accountGutter,
+                top = topInset,
                 bottom = if (state.isSelecting) 92.dp else 24.dp
             ),
             modifier = Modifier.fillMaxSize()
