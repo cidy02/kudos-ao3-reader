@@ -91,6 +91,10 @@ data class SyncSettings(
     val folderUri: String? = null,
     val isEnabled: Boolean = false,
     val lastSyncAt: java.time.Instant? = null,
+    /** Device-local sync failure; excluded from backup settings. */
+    val lastError: String? = null,
+    /** Digest of the manifest this device last wrote to the folder with nothing outstanding. */
+    val lastManifestDigest: String? = null,
     val hasPendingChanges: Boolean = false
 )
 

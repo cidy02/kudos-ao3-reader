@@ -794,6 +794,28 @@ class WorkImporterLifecycleTest {
     }
 
     @Test
+    fun keepingAWorkThatIsAlreadyHereGivesItANewerClock() = runTest {
+        // A merge takes the newer snapshot's kept flag. A work kept through this path used
+        // to keep its old clock, so the copy in the sync folder, not kept and no older, took
+        // the flag back at the next sync.
+        val before = Instant.parse("2026-09-01T00:00:00Z")
+        repository.upsert(sampleSavedWork().copy(isSaved = false, lastModifiedAt = before))
+        val importer = importer(
+            metadata = AO3Result.Success(AO3WorkMetadata(chapters = "1/1")),
+            download = AO3Result.Failure(AO3Error.NotFound)
+        )
+
+        val kept = (importer.saveMetadataOnly(sampleSummary()) as WorkImportResult.Success).work
+        assertTrue(kept.isSaved)
+        assertEquals(capturedNow, kept.lastModifiedAt)
+
+        // Saved again with nothing changed, the clock stays where it is.
+        repository.upsert(kept.copy(lastModifiedAt = before))
+        val again = (importer.saveMetadataOnly(sampleSummary()) as WorkImportResult.Success).work
+        assertEquals(before, again.lastModifiedAt)
+    }
+
+    @Test
     fun downloadSuccessSetsHasEpubOnlyAfterFileExists() = runTest {
         val importer = importer(
             metadata = AO3Result.Success(AO3WorkMetadata(chapters = "1/1")),

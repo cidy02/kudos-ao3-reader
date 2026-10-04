@@ -45,7 +45,7 @@ class RoomDaoTest {
 
     @Test
     fun databaseCreatesAtCurrentSchemaVersion() = runBlocking {
-        assertEquals(13, database.openHelper.readableDatabase.version)
+        assertEquals(14, database.openHelper.readableDatabase.version)
         assertEquals(0, database.workDao().count())
     }
 

@@ -139,6 +139,30 @@ class IncomingEpubGateTest {
         assertArrayEquals(incoming, missing.epubFilesToWriteByWorkId[WORK])
     }
 
+    @Test
+    fun aPromisedEpubWithMissingOrUnusableBytesIsStillPublished() {
+        listOf(ByteArray(0), "not-an-epub".toByteArray()).forEach { bytes ->
+            BackupImportMode.entries.forEach { mode ->
+                val result = BackupMergeService.merge(BackupLibrarySnapshot(), archive(bytes), mode = mode)
+                val work = result.snapshot.works.single()
+                assertFalse(work.hasEpub)
+                assertTrue(work.remoteEpubPending)
+                assertTrue(work.toBackupWork().hasEPUB)
+            }
+        }
+    }
+
+    @Test
+    fun aLateEpubClearsThePendingPromiseEvenInFileMerge() {
+        BackupImportMode.entries.forEach { mode ->
+            val first = BackupMergeService.merge(BackupLibrarySnapshot(), archive(ByteArray(0)), mode = mode)
+            val second = BackupMergeService.merge(first.snapshot, archive(incoming), mode = mode)
+            assertTrue(second.snapshot.works.single().hasEpub)
+            assertFalse(second.snapshot.works.single().remoteEpubPending)
+            assertArrayEquals(incoming, second.epubFilesToWriteByWorkId[WORK])
+        }
+    }
+
     private fun restore(
         local: SavedWork,
         hasFile: Boolean,

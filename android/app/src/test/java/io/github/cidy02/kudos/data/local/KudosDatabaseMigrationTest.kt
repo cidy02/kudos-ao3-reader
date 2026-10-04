@@ -322,6 +322,47 @@ class KudosDatabaseMigrationTest {
         }
     }
 
+    @Test
+    fun schema13MigratesTo14AndPassesRoomValidation() = migrateFromExportedSchema(13)
+
+    @Test
+    fun migrate13To14DefaultsRemoteEpubPendingToFalseAndKeepsExistingRows() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val helper = FrameworkSQLiteOpenHelperFactory().create(
+            SupportSQLiteOpenHelper.Configuration.builder(context)
+                .name("kudos-migration-13-14")
+                .callback(object : SupportSQLiteOpenHelper.Callback(13) {
+                    override fun onCreate(db: SupportSQLiteDatabase) {
+                        db.execSQL("CREATE TABLE works (id TEXT NOT NULL, title TEXT NOT NULL, PRIMARY KEY(id))")
+                    }
+
+                    override fun onUpgrade(db: SupportSQLiteDatabase, oldVersion: Int, newVersion: Int) = Unit
+                })
+                .build()
+        )
+        val db = helper.writableDatabase
+        try {
+            db.execSQL("INSERT INTO works (id, title) VALUES ('work-pre', 'Kept title')")
+            assertFalse(columnNames(db, "works").contains("remoteEpubPending"))
+            KudosDatabaseMigrations.MIGRATION_13_14.migrate(db)
+            db.version = 14
+            db.query("SELECT title, remoteEpubPending FROM works WHERE id = 'work-pre'").use { cursor ->
+                assertTrue(cursor.moveToFirst())
+                assertEquals("Kept title", cursor.getString(0))
+                assertEquals(0, cursor.getInt(1))
+            }
+            db.execSQL("UPDATE works SET remoteEpubPending = 1 WHERE id = 'work-pre'")
+            db.query("SELECT remoteEpubPending FROM works WHERE id = 'work-pre'").use { cursor ->
+                assertTrue(cursor.moveToFirst())
+                assertEquals(1, cursor.getInt(0))
+            }
+            assertEquals(14, db.version)
+        } finally {
+            db.close()
+            helper.close()
+        }
+    }
+
     private fun migrateFromExportedSchema(version: Int) {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val name = "kudos-validate-from-$version"
@@ -361,11 +402,12 @@ class KudosDatabaseMigrationTest {
                 KudosDatabaseMigrations.MIGRATION_9_10,
                 KudosDatabaseMigrations.MIGRATION_10_11,
                 KudosDatabaseMigrations.MIGRATION_11_12,
-                KudosDatabaseMigrations.MIGRATION_12_13
+                KudosDatabaseMigrations.MIGRATION_12_13,
+                KudosDatabaseMigrations.MIGRATION_13_14
             )
             .build()
         try {
-            assertEquals(13, room.openHelper.writableDatabase.version)
+            assertEquals(14, room.openHelper.writableDatabase.version)
         } finally {
             room.close()
             context.deleteDatabase(name)
@@ -383,11 +425,12 @@ class KudosDatabaseMigrationTest {
                 KudosDatabaseMigrations.MIGRATION_9_10,
                 KudosDatabaseMigrations.MIGRATION_10_11,
                 KudosDatabaseMigrations.MIGRATION_11_12,
-                KudosDatabaseMigrations.MIGRATION_12_13
+                KudosDatabaseMigrations.MIGRATION_12_13,
+                KudosDatabaseMigrations.MIGRATION_13_14
             )
             .build()
         try {
-            assertEquals(13, db.openHelper.readableDatabase.version)
+            assertEquals(14, db.openHelper.readableDatabase.version)
         } finally {
             db.close()
         }

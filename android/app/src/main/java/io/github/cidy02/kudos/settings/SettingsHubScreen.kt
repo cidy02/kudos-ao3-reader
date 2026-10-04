@@ -151,7 +151,17 @@ fun SettingsHubScreen(
                     SubjectRowSeparator()
                     SubjectFormRow("Backup", showsDisclosure = true, onClick = { navController.navigate("backup") })
                     SubjectRowSeparator()
-                    SubjectFormRow("Sync Folder", value = if (settings.sync.isEnabled) "On" else "Off", showsDisclosure = true, onClick = { navController.navigate("folder_sync") })
+                    SubjectFormRow(
+                        "Sync Folder",
+                        value = when {
+                            settings.sync.folderUri == null -> "Off"
+                            !settings.sync.lastError.isNullOrBlank() -> "Error"
+                            settings.sync.isEnabled -> "On"
+                            else -> "Paused"
+                        },
+                        showsDisclosure = true,
+                        onClick = { navController.navigate("folder_sync") }
+                    )
                     SubjectRowSeparator()
                     SubjectFormRow("Import", showsDisclosure = true, onClick = { navController.navigate("import_files") })
                 }

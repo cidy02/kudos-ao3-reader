@@ -64,9 +64,21 @@ class WorkImporter(
             )
         }
         
-        val saved = workRepository.upsert(work)
+        val saved = workRepository.upsert(work.stampedIfFlagsChanged(existing))
         return WorkImportResult.Success(reviveIfNeeded(existing, saved))
     }
+
+    /**
+     * A kept or queued flag the reader just changed has to carry a newer clock than the copy in
+     * the sync folder: a merge takes the newer snapshot's kept flag (iOS `apply`). The merger
+     * leaves the clock alone, so a work kept through it was un-kept again by the next sync.
+     */
+    private fun SavedWork.stampedIfFlagsChanged(existing: SavedWork?): SavedWork =
+        if (existing != null && (isSaved != existing.isSaved || isQueuedForLater != existing.isQueuedForLater)) {
+            copy(lastModifiedAt = workRepository.currentInstant())
+        } else {
+            this
+        }
 
     suspend fun download(summary: AO3WorkSummary): WorkImportResult {
         val existing = findExisting(summary)
@@ -78,7 +90,7 @@ class WorkImporter(
                 existing = existing,
                 markSaved = true,
                 hasEpub = existing?.hasEpub ?: false
-            )
+            ).stampedIfFlagsChanged(existing)
         )
         val base = reviveIfNeeded(existing, merged)
 
@@ -223,6 +235,7 @@ class WorkImporter(
                     restored.copy(
                         isSaved = true,
                         hasEpub = true,
+                        remoteEpubPending = false,
                         downloadedAt = restored.downloadedAt ?: downloadedAt,
                         lastModifiedAt = workRepository.currentInstant()
                     ),
@@ -288,7 +301,7 @@ class WorkImporter(
         return when (val write = fileStore.writeWorkEpub(work.id, rebuilt)) {
             is FileWriteResult.Failure -> WorkImportResult.Failure(work, AO3Error.Validation(write.message))
             is FileWriteResult.Success -> WorkImportResult.Success(
-                workRepository.upsert(work.copy(hasEpub = true, lastModifiedAt = Instant.now()))
+                workRepository.upsert(work.copy(hasEpub = true, remoteEpubPending = false, lastModifiedAt = Instant.now()))
             )
         }
     }
@@ -327,6 +340,7 @@ class WorkImporter(
                 val updated = workRepository.upsert(
                     work.copy(
                         hasEpub = true,
+                        remoteEpubPending = false,
                         downloadedAt = work.downloadedAt ?: now,
                         isDeleted = false,
                         deletedAt = null,
