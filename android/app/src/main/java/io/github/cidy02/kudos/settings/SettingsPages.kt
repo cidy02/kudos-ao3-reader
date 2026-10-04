@@ -301,9 +301,14 @@ fun SettingsDownloadsPage(repository: SettingsRepository, settings: KudosSetting
     }
 }
 
+/** iOS `TextSizeSlider`: a small A, the slider, a large A. Settings sets points; the reader's sheet, percent. */
 @Composable
-private fun TextSizeSlider(
+internal fun TextSizeSlider(
     value: Float,
+    valueRange: ClosedFloatingPointRange<Float> = 12f..28f,
+    steps: Int = 15,
+    unit: String = " pt",
+    onValueChange: (Float) -> Unit = {},
     onValueChangeFinished: (Float) -> Unit
 ) {
     val tokens = LocalKudosTokens.current
@@ -312,17 +317,20 @@ private fun TextSizeSlider(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 13.dp, vertical = 4.dp)
-            .semantics { contentDescription = "Text size, ${kotlin.math.round(sliderValue).toInt()} pt" },
+            .semantics { contentDescription = "Text size, ${kotlin.math.round(sliderValue).toInt()}$unit" },
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         Text(text = "A", color = tokens.secondaryInk, fontSize = 13.sp)
         Slider(
             value = sliderValue,
-            onValueChange = { sliderValue = it },
+            onValueChange = {
+                sliderValue = it
+                onValueChange(it)
+            },
             onValueChangeFinished = { onValueChangeFinished(sliderValue) },
-            valueRange = 12f..28f,
-            steps = 15,
+            valueRange = valueRange,
+            steps = steps,
             modifier = Modifier.weight(1f),
             colors = accentSliderColors()
         )
