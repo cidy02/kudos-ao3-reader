@@ -40,6 +40,10 @@ Rules that protect user data. Breaking any of these is a regression even if test
 - Writes: stage to `itemReplacementDirectory` (same volume) → `replaceItemAt` — the remote package must survive any failed write. Never remove-then-write.
 - Reads: skip when coordinated `contentModificationDate` matches the stored stamp (updated after restores AND own writes) — but **never skip while `NSFileVersion` unresolved conflicts exist**.
 - All package I/O under `NSFileCoordinator`; conflicts folded by restoring each version then resolving.
+- Every upload reads first: `syncUp` is `syncNow`. A manifest published without reading drops what another device added since, and the prune after it deletes that device's files.
+- Pruning needs a view of the folder known to be current: the manifest is at its path, its date is readable, and the date equals the stored stamp. **Files and no manifest is not a first write** (older Android builds rename the manifest away for a moment; iCloud may not have downloaded it; an interrupted first sync leaves files without one): write the manifest, prune nothing. Only a folder holding nothing but hidden files is a first write.
+- A manifest that is not JSON at all was cut short by a write that died (Android writes its manifest in place). Recover from Android's `manifest.json.bak` when it decodes, write a whole manifest, prune nothing. A manifest that is whole JSON and does not decode is another app version's: it stops the sync and is never written over.
+- EPUBs are read under either letter case of the UUID, and pruning folds case: released Android builds wrote lowercase names. New files are written as `UUID.uuidString`.
 - Everything gated by `PersistenceOperationGate` (process-wide; migration / backup import / folder sync / sweep never interleave).
 
 ## Queues / collections / library behavior
