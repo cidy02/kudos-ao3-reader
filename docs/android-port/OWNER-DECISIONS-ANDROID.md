@@ -16,8 +16,10 @@ Until answered: the two differ.
 
 ## 2. The default accent on dark chrome
 
-In Dark and OLED the default accent (AO3 red, `#990000`) is hard to read on the tab bar's selected
-tab and on the toolbar's "+": about 2.4 to 1 against black, on both platforms. iOS's system chrome
+In Dark and OLED the default accent (AO3 red, `#990000`) is hard to read wherever it is text or a
+glyph on the dark page: the tab bar's selected tab, the toolbar's "+", action rows in Settings
+("Customize Theme…", "Add Font…", "Check Availability…", "Pair a Device", "Import Files") and a
+sheet's selected tab. It is about 2.4 to 1 against black, on both platforms. iOS's system chrome
 lifts the colour slightly, to about (173, 20, 20), and draws the selected tab on a neutral pill.
 Android draws the exact colour on a pill tinted with the accent, which reads a little worse.
 
