@@ -181,3 +181,19 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   - Left in place but no longer reachable: `account/LocalLibraryListsScreen.kt` (routes
     `local-history` and `local-favorites`), an old Material list.
   Reverse: `AccountOverflowDropdownMenu` and its callers in `account/AccountScreen.kt`.
+- **2026-10-04 · Large text follows iOS's Dynamic Type rules; Android's font scale above 1.3 counts
+  as iOS's accessibility sizes.** Android read the font scale nowhere, and iOS branches on
+  `dynamicTypeSize.isAccessibilitySize` (AX1 and up, about 1.65×; its largest ordinary size is
+  about 1.35×). Android's steps are 0.85, 1.0, 1.15, 1.3, 1.5, 1.8 and 2.0, so 1.5 and above take
+  iOS's large-text layouts: headers wrap, form rows stack, ledger rows become one column. Sizes
+  iOS marks `@ScaledMetric` (cover cards, rings, status tiles) are multiplied by the font scale.
+  The tab bar's labels don't scale, as iOS's don't. Brief 4a did the shared components; each
+  screen still needs its own pass.
+  Reverse: `isAccessibilityFontScale()` in `ui/subject/SubjectComponents.kt` is the one switch.
+- **2026-10-04 · A tapped tag searches AO3 inside the app, as on iOS.** iOS's
+  `AppRouter.searchAO3(field, value)` switches to Search and searches that tag in its own field
+  (fandom, character, relationship, additional tag, warning). Android's Work detail opened
+  `archiveofourown.org/tags/…/works` in the phone's browser instead, and its work rows only
+  offered a plain additional-tag search from inside Search. Both now do what iOS does (brief 3z).
+  This also removes a way for the demo to leave the app for the live site.
+  Reverse: `LocalTagSearch` in `app/MainScaffold.kt`; `WorkDetailSections.kt`.
