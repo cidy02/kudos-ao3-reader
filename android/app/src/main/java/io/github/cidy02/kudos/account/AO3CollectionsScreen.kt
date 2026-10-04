@@ -2,6 +2,7 @@ package io.github.cidy02.kudos.account
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -12,7 +13,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -20,13 +20,17 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.windowInsetsTopHeight
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
@@ -37,6 +41,8 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import io.github.cidy02.kudos.app.ProvidePushedShellChrome
 import io.github.cidy02.kudos.network.ao3.account.AO3Collection
+import io.github.cidy02.kudos.ui.components.KudosRefreshBox
+import io.github.cidy02.kudos.ui.components.KudosPaginationBar
 import io.github.cidy02.kudos.ui.components.EmptyStateCard
 import io.github.cidy02.kudos.ui.components.ErrorStateCard
 import io.github.cidy02.kudos.ui.components.LoadingStateCard
@@ -69,8 +75,44 @@ fun AO3CollectionsScreen(
     )
 ) {
     val state by viewModel.uiState.collectAsState()
+    val filters by viewModel.filters.collectAsState()
+    var showingFilters by remember { mutableStateOf(false) }
     val tokens = LocalKudosTokens.current
-    val palette = androidx.compose.runtime.remember(tokens.theme) { io.github.cidy02.kudos.ui.subject.SubjectPalette.fromHue(210.0, tokens.theme) }
+    val palette = remember(tokens.theme) { SubjectPalette.fromHue(210.0, tokens.theme) }
+    DisposableEffect(viewModel) {
+        viewModel.onAppear()
+        onDispose { viewModel.onDisappear() }
+    }
+    if (showingFilters) {
+        AO3CollectionsFilterPanel(initial = filters, onFinish = {
+            viewModel.setFilters(it)
+            showingFilters = false
+        })
+    }
+    val loaded = state as? AO3CollectionsUiState.Loaded
+    val displayed = if (filters.needsWholeIndex) loaded?.wholeIndex.orEmpty() else loaded?.collections.orEmpty()
+    val visible = filters.apply(displayed)
+    val showPaging = !filters.needsWholeIndex && (loaded?.totalPages ?: 1) > 1
+    val tally = loaded?.takeIf { !filters.needsWholeIndex || it.wholeIndex != null }?.let {
+        buildString {
+            append("${visible.size} collection${if (visible.size == 1) "" else "s"}")
+            if (visible.size != displayed.size) append(" · ${displayed.size} in all")
+            if (showPaging) append(" · page ${it.currentPage} of ${it.totalPages}")
+            if (filters.needsWholeIndex && it.wholeIndex != null) {
+                it.wholeIndexPartialNote?.let { note -> append(" · $note") }
+            }
+        }
+    }
+    loaded?.pageError?.let { message ->
+        AlertDialog(
+            onDismissRequest = viewModel::dismissPageError,
+            title = { Text("Couldn't load that page") },
+            text = { Text(message) },
+            confirmButton = {
+                TextButton(onClick = viewModel::dismissPageError) { Text("OK") }
+            }
+        )
+    }
 
     ProvidePushedShellChrome(
         hasSubjectHeader = true,
@@ -81,120 +123,145 @@ fun AO3CollectionsScreen(
                     accessibilityName = "New Collection",
                     palette = palette
                 )
-                FilterButton(
-                    filtersActive = false,
-                    onClick = { /* TODO: Filter */ },
-                    onClearFilters = { }
-                )
+                if (loaded != null && loaded.pageError == null &&
+                    (loaded.collections.isNotEmpty() || loaded.wholeIndex != null)
+                ) {
+                    FilterButton(
+                        filtersActive = filters.hasActiveFilters,
+                        onClick = { showingFilters = true },
+                        onClearFilters = viewModel::clearFilters
+                    )
+                }
             }
         }
     )
 
     Column(modifier = modifier.fillMaxSize().subjectScreenWash(palette)) {
-            Spacer(modifier = Modifier.windowInsetsTopHeight(WindowInsets.statusBars))
-            Spacer(modifier = Modifier.height(56.dp))
-
-            SubjectHeaderBlock(
-                kicker = "AO3 Account",
-                title = "Collections",
-                subtitle = when (val current = state) {
-                    is AO3CollectionsUiState.Loaded -> "${current.collections.size} collection${if (current.collections.size == 1) "" else "s"}"
-                    else -> null
-                },
-                palette = palette
-            )
-            
-            Spacer(modifier = Modifier.height(16.dp))
-            
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState())
-                    .padding(horizontal = SubjectMetrics.headerGutter),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+        Spacer(modifier = Modifier.windowInsetsTopHeight(WindowInsets.statusBars))
+        Spacer(modifier = Modifier.height(56.dp))
+        KudosRefreshBox(onRefresh = viewModel::refresh, modifier = Modifier.weight(1f)) {
+            LazyColumn(
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                contentPadding = PaddingValues(bottom = 32.dp)
             ) {
-                SubjectChip("Collections", style = SubjectChipStyle.Pill(isSelected = true), palette = palette)
-                SubjectChip("Your items", style = SubjectChipStyle.Pill(isSelected = false), palette = palette)
-            }
-            
-            Spacer(modifier = Modifier.height(16.dp))
-
-            when (val current = state) {
-                AO3CollectionsUiState.Loading -> {
-                    Box(modifier = Modifier.padding(SubjectMetrics.headerGutter)) {
-                        LoadingStateCard("Loading collections")
-                    }
-                }
-                AO3CollectionsUiState.AuthRequired -> {
-                    Box(modifier = Modifier.padding(SubjectMetrics.headerGutter)) {
-                        EmptyStateCard(
-                            title = "AO3 session required",
-                            message = "Log in to AO3 to see your collections.",
-                            primaryActionLabel = "Log In to AO3",
-                            onPrimaryAction = onLogin
-                        )
-                    }
-                }
-                is AO3CollectionsUiState.Failed -> {
-                    Box(modifier = Modifier.padding(SubjectMetrics.headerGutter)) {
-                        ErrorStateCard(
-                            title = "Couldn't load collections",
-                            message = current.message,
-                            primaryActionLabel = "Try Again",
-                            onPrimaryAction = viewModel::load
-                        )
-                    }
-                }
-                is AO3CollectionsUiState.Loaded -> {
-                    if (current.collections.isEmpty()) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = SubjectMetrics.headerGutter)
-                                .subjectPanel()
-                                .padding(16.dp)
-                        ) {
-                            Text("No collections", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                            Spacer(Modifier.height(4.dp))
-                            Text("Collections you create or maintain on AO3 show up here.", color = LocalKudosTokens.current.secondaryInk, fontSize = 14.sp)
-                        }
-                    } else {
-                        CollectionsListContent(
-                            collections = current.collections,
-                            onOpenCollection = onOpenCollection,
-                            palette = palette
-                        )
-                    }
-                    
-                    Spacer(Modifier.height(16.dp))
-                    Text(
-                        text = "These are your AO3 collections...",
-                        fontSize = 13.sp,
-                        color = LocalKudosTokens.current.tertiaryInk,
-                        modifier = Modifier.padding(horizontal = SubjectMetrics.headerGutter)
+                item {
+                    SubjectHeaderBlock(
+                        kicker = "AO3 Account", title = "Collections", subtitle = tally, palette = palette
                     )
-                    Spacer(Modifier.height(32.dp))
+                }
+                item {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
+                            .padding(horizontal = SubjectMetrics.headerGutter),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        SubjectChip("Collections", style = SubjectChipStyle.Pill(isSelected = true), palette = palette)
+                        SubjectChip("Your items", style = SubjectChipStyle.Pill(isSelected = false), palette = palette)
+                    }
+                }
+                if (filters.hasActiveFilters) {
+                    item {
+                        Row(
+                            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
+                                .padding(horizontal = SubjectMetrics.headerGutter),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            filters.summaryLabels.forEach { label ->
+                                SubjectChip(label, style = SubjectChipStyle.Tinted, palette = palette)
+                            }
+                        }
+                    }
+                }
+                when (val current = state) {
+                    AO3CollectionsUiState.Loading -> item {
+                        Box(Modifier.padding(horizontal = SubjectMetrics.headerGutter)) {
+                            LoadingStateCard("Loading collections")
+                        }
+                    }
+                    AO3CollectionsUiState.AuthRequired -> item {
+                        Box(Modifier.padding(horizontal = SubjectMetrics.headerGutter)) {
+                            EmptyStateCard(
+                                title = "AO3 session required",
+                                message = "Log in to AO3 to see your collections.",
+                                primaryActionLabel = "Log In to AO3",
+                                onPrimaryAction = onLogin
+                            )
+                        }
+                    }
+                    is AO3CollectionsUiState.Failed -> item {
+                        Box(Modifier.padding(horizontal = SubjectMetrics.headerGutter)) {
+                            ErrorStateCard(
+                                title = "Couldn't load collections", message = current.message,
+                                primaryActionLabel = "Try Again", onPrimaryAction = viewModel::load
+                            )
+                        }
+                    }
+                    is AO3CollectionsUiState.Loaded -> {
+                        if (filters.needsWholeIndex && current.wholeIndex == null) {
+                            item {
+                                Box(Modifier.padding(horizontal = SubjectMetrics.headerGutter)) {
+                                    if (current.wholeIndexError != null) {
+                                        ErrorStateCard(
+                                            title = "Couldn't load all collections", message = current.wholeIndexError,
+                                            primaryActionLabel = "Try Again", onPrimaryAction = viewModel::load
+                                        )
+                                    } else LoadingStateCard("Loading collections")
+                                }
+                            }
+                        } else {
+                            if (showPaging) item {
+                                KudosPaginationBar(
+                                    currentPage = current.currentPage, totalPages = current.totalPages,
+                                    onPageChange = viewModel::loadPage,
+                                    modifier = Modifier.padding(horizontal = SubjectMetrics.headerGutter)
+                                )
+                            }
+                            if (visible.isEmpty()) item {
+                                Column(
+                                    Modifier.fillMaxWidth().padding(horizontal = SubjectMetrics.headerGutter)
+                                        .subjectPanel().padding(16.dp)
+                                ) {
+                                    Text(
+                                        if (displayed.isEmpty()) "No collections" else "No collections match",
+                                        style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold
+                                    )
+                                    Spacer(Modifier.height(4.dp))
+                                    Text(
+                                        if (displayed.isEmpty()) "Collections you create or maintain on AO3 show up here."
+                                        else "${displayed.size} collection${if (displayed.size == 1) "" else "s"} are hidden by the current filters.",
+                                        color = tokens.secondaryInk, fontSize = 14.sp
+                                    )
+                                    if (displayed.isNotEmpty()) {
+                                        TextButton(onClick = viewModel::clearFilters) { Text("Clear Filters") }
+                                    }
+                                }
+                            } else {
+                                // AO3's demo can repeat a slug on several pages; preserve every incoming row.
+                                items(visible) { collection ->
+                                    AO3CollectionCard(
+                                        collection, onClick = { onOpenCollection(collection) }, palette = palette,
+                                        modifier = Modifier.padding(horizontal = SubjectMetrics.headerGutter)
+                                    )
+                                }
+                            }
+                            if (showPaging) item {
+                                KudosPaginationBar(
+                                    currentPage = current.currentPage, totalPages = current.totalPages,
+                                    onPageChange = viewModel::loadPage,
+                                    modifier = Modifier.padding(horizontal = SubjectMetrics.headerGutter)
+                                )
+                            }
+                            item {
+                                Text(
+                                    text = "These are your AO3 collections...", fontSize = 13.sp,
+                                    color = tokens.tertiaryInk,
+                                    modifier = Modifier.padding(horizontal = SubjectMetrics.headerGutter)
+                                )
+                            }
+                        }
+                    }
                 }
             }
-        }
-}
-
-@Composable
-private fun CollectionsListContent(
-    collections: List<AO3Collection>,
-    onOpenCollection: (AO3Collection) -> Unit,
-    palette: SubjectPalette
-) {
-    LazyColumn(
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = SubjectMetrics.headerGutter)
-    ) {
-        items(collections, key = { it.name }) { collection ->
-            AO3CollectionCard(
-                collection = collection,
-                onClick = { onOpenCollection(collection) },
-                palette = palette
-            )
         }
     }
 }
@@ -216,15 +283,13 @@ fun AO3CollectionCard(
     }
 
     val metaFacts = mutableListOf<String>()
-    if (collection.worksCount > 0) metaFacts.add("${collection.worksCount} work${if (collection.worksCount == 1) "" else "s"}")
-    if (collection.bookmarksCount > 0) metaFacts.add("${collection.bookmarksCount} bookmark${if (collection.bookmarksCount == 1) "" else "s"}")
+    if ((collection.worksCount ?: 0) > 0) metaFacts.add("${collection.worksCount} work${if (collection.worksCount == 1) "" else "s"}")
+    if ((collection.bookmarksCount ?: 0) > 0) metaFacts.add("${collection.bookmarksCount} bookmark${if (collection.bookmarksCount == 1) "" else "s"}")
     if (collection.isModerated) metaFacts.add("Moderated")
     if (collection.isClosed) metaFacts.add("Closed")
     collection.challengeKind?.let { metaFacts.add(it.displayName) }
 
-    val statusLabels = mutableListOf<String>()
-    if (collection.isUnrevealed) statusLabels.add("Unrevealed")
-    if (collection.isAnonymous) statusLabels.add("Anonymous")
+    val statusLabels = AO3CollectionCardCopy.statusLabels(collection.isUnrevealed, collection.isAnonymous)
 
     val showsByline = collection.byline.isNotBlank() || collection.maintainerNames.isNotEmpty()
 

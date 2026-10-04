@@ -35,6 +35,8 @@ class AO3AuthRepository(
      * Port of iOS `AO3AuthService.sessionGeneration`.
      */
     private var sessionGeneration: Int = 0
+    private val mutableGeneration = MutableStateFlow(0)
+    val generation: StateFlow<Int> = mutableGeneration.asStateFlow()
 
     /**
      * Short critical-section lock for generation check + session mutation.
@@ -273,8 +275,9 @@ class AO3AuthRepository(
 
     fun username(): String? = currentSession?.username
 
-    suspend fun sessionDidExpire() {
+    suspend fun sessionDidExpire(expectedGeneration: Int? = null) {
         sessionMutex.withLock {
+            if (expectedGeneration != null && expectedGeneration != sessionGeneration) return
             clearSessionLocked()
             mutableState.value = AO3AuthState.Expired()
             mutableSessionHealth.value = AO3SessionHealth.Expired
@@ -327,6 +330,7 @@ class AO3AuthRepository(
 
     private fun advanceSessionGenerationLocked(): Int {
         sessionGeneration += 1
+        mutableGeneration.value = sessionGeneration
         return sessionGeneration
     }
 

@@ -60,7 +60,16 @@ val AccountListUiState.works: List<AO3WorkSummary>
 sealed interface AO3CollectionsUiState {
     data object Loading : AO3CollectionsUiState
     data object AuthRequired : AO3CollectionsUiState
-    data class Loaded(val collections: List<AO3Collection>) : AO3CollectionsUiState
+    data class Loaded(
+        val collections: List<AO3Collection>,
+        val currentPage: Int = 1,
+        val totalPages: Int = 1,
+        val wholeIndex: List<AO3Collection>? = null,
+        val wholeIndexLoading: Boolean = false,
+        val wholeIndexError: String? = null,
+        val wholeIndexPartialNote: String? = null,
+        val pageError: String? = null
+    ) : AO3CollectionsUiState
     data class Failed(val message: String) : AO3CollectionsUiState
 }
 
