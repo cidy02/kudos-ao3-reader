@@ -372,6 +372,9 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   ORed.** iOS sets the queued flag from queue membership after every restore. Not ported:
   older Android data holds queued works with the flag and no membership, and they would drop
   out of both the library and the queues. Reverse: `isSaved` in `mergeWork`.
+  Brief 5e's unbuilt patch now migrates flag-only works into a real Saved for Later membership
+  before reconciliation and ports membership normalization; verification is pending in
+  `briefs/5e-result.md`. The queued flag remains ORed during the field merge.
 - **2026-10-04 · Keeping a work through the importer advances its clock.** Reverse:
   `stampedIfFlagsChanged` in `works/WorkImporter.kt`.
 - **2026-10-04 · Replace Library keeps omitted collections and queues for 90 days, with their

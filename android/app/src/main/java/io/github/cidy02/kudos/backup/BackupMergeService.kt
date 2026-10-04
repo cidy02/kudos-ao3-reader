@@ -18,6 +18,7 @@ import io.github.cidy02.kudos.core.model.totalProgressionIn
 import io.github.cidy02.kudos.data.local.entity.FandomReadWatermarkEntity
 import io.github.cidy02.kudos.data.local.entity.ReadingFavoriteEntity
 import io.github.cidy02.kudos.data.local.entity.ReadingSessionEntity
+import io.github.cidy02.kudos.library.ReadingQueueRepository
 import io.github.cidy02.kudos.reader.ReaderProgressGate
 import io.github.cidy02.kudos.works.EpubImportMetadata
 import io.github.cidy02.kudos.works.WorkIdentityIndex
@@ -25,6 +26,7 @@ import io.github.cidy02.kudos.works.WorkRepository
 import io.github.cidy02.kudos.works.WorkTags
 import java.time.Duration
 import java.time.Instant
+import java.util.UUID
 import kotlin.math.abs
 
 /**
@@ -43,7 +45,8 @@ object BackupMergeService {
         backup: KudosBackupPackage,
         mode: BackupImportMode = BackupImportMode.RECONCILE,
         now: Instant = Instant.now(),
-        trustedPublicKeys: Set<String> = emptySet()
+        trustedPublicKeys: Set<String> = emptySet(),
+        normalizeQueuePreservation: Boolean = true
     ): BackupMergeResult {
         val manifest = BackupValidator.validateManifest(backup.manifest, now)
         val exportedAt = parseOptionalInstant(manifest.exportedAt)
@@ -337,9 +340,41 @@ object BackupMergeService {
             )
         }.items
 
+        // Migrate legacy flag-only rows before membership/tombstone reconciliation.
+        // A pre-merge membership (even one being deleted) is evidence this is not legacy
+        // flag-only data. A cleared local flag is likewise an intentional removal.
+        val migrationQueues = current.readingQueues.toMutableList()
+        val migrationMemberships = current.readingQueueMemberships.toMutableList()
+        val inputQueueIds = (current.readingQueues.map { it.id } + manifest.readingQueues.map { it.id })
+            .mapTo(HashSet(), BackupPaths::normalizeIdForComparison)
+        val previouslyMemberIds = (current.readingQueueMemberships.map { it.workID } +
+            manifest.readingQueueMemberships.filter {
+                BackupPaths.normalizeIdForComparison(it.queueID) in inputQueueIds
+            }.map { remapWorkId(it.workID, workIdRemap) })
+            .mapTo(HashSet(), BackupPaths::normalizeIdForComparison)
+        val localWorksById = current.works.associateBy { BackupPaths.normalizeIdForComparison(it.id) }
+        val legacyQueued = worksById.values.filter { work ->
+            val id = BackupPaths.normalizeIdForComparison(work.id)
+            work.isQueuedForLater && id !in previouslyMemberIds &&
+                localWorksById[id]?.isQueuedForLater != false
+        }
+        if (legacyQueued.isNotEmpty()) {
+            val existing = migrationQueues.firstOrNull {
+                it.kindRaw == ReadingQueueKind.SAVED_FOR_LATER && !it.isDeleted
+            }
+            val queue = ReadingQueueRepository.savedForLaterQueue(existing, now) { UUID.randomUUID().toString() }
+            migrationQueues.removeAll { it.id == queue.id }
+            migrationQueues += queue
+            legacyQueued.forEach { work ->
+                migrationMemberships += ReadingQueueRepository.newMembership(
+                    queue.id, work.id, migrationMemberships, now
+                ) { UUID.randomUUID().toString() }
+            }
+        }
+
         val queueMerge = mergeQueues(
-            currentQueues = current.readingQueues,
-            currentMemberships = current.readingQueueMemberships,
+            currentQueues = migrationQueues,
+            currentMemberships = migrationMemberships,
             currentQueueTagNames = current.queueTagNamesByQueueId,
             incomingQueues = manifest.readingQueues,
             incomingMemberships = manifest.readingQueueMemberships,
@@ -360,24 +395,33 @@ object BackupMergeService {
         val restoredEpubIds = (currentEpubIds + epubFilesToWrite.keys)
             .map(BackupPaths::normalizeIdForComparison)
             .toSet()
-        // iOS `ReadingQueueService.normalize` runs at the end of restore.
-        // Port the queued-work half: membership implies isQueuedForLater, a
-        // queued file is preserved, and unknown metadata that still needs an
-        // AO3 refresh becomes pending. Unqueued preservation stays pass-through
-        // (BackupEpubPreservationPassThroughTest): Android must not invent
-        // `notPreserved` for a work the archive did not queue.
+        // Replace moves omitted custom queues to Recently Deleted in apply, retaining
+        // their memberships. Include those retained relationships in normalization too.
+        val omittedQueueIds = if (mode == BackupImportMode.REPLACE_LIBRARY) {
+            current.readingQueues.filter { local -> queueMerge.queues.none { it.id == local.id } }
+                .mapTo(HashSet()) { BackupPaths.normalizeIdForComparison(it.id) }
+        } else emptySet()
+        val normalizationMemberships = queueMerge.memberships + current.readingQueueMemberships.filter {
+            BackupPaths.normalizeIdForComparison(it.queueID) in omittedQueueIds
+        }
+        val normalizationQueueIds = (queueMerge.queues + current.readingQueues.filter {
+            BackupPaths.normalizeIdForComparison(it.id) in omittedQueueIds
+        }).mapTo(HashSet()) { BackupPaths.normalizeIdForComparison(it.id) }
         normalizeQueuedWorks(
             worksById = worksById,
-            memberships = queueMerge.memberships,
+            memberships = normalizationMemberships.filter {
+                BackupPaths.normalizeIdForComparison(it.queueID) in normalizationQueueIds
+            },
             epubIds = restoredEpubIds,
-            now = now
+            now = now,
+            reconcilePreservation = normalizeQueuePreservation
         )
         // Replace's absence cleanup never changes the omitted system queue.
         val finishedQueues = finishRestoredQueues(queueMerge.queues, queueMerge.memberships).map { queue ->
             if (mode == BackupImportMode.REPLACE_LIBRARY && queue.kindRaw == ReadingQueueKind.SAVED_FOR_LATER &&
                 manifest.readingQueues.none { it.kindRaw == ReadingQueueKind.SAVED_FOR_LATER }
             ) {
-                current.readingQueues.firstOrNull { it.id == queue.id } ?: queue
+                migrationQueues.firstOrNull { it.id == queue.id } ?: queue
             } else queue
         }
 
@@ -470,6 +514,28 @@ object BackupMergeService {
                         BackupPaths.normalizeIdForComparison(local.id)
                 }
             },
+            removedReadingSessions = current.readingSessions.filter { local ->
+                readingSessions.none { merged ->
+                    BackupPaths.normalizeIdForComparison(merged.id) ==
+                        BackupPaths.normalizeIdForComparison(local.id)
+                }
+            },
+            removedReadingFavorites = current.readingFavorites.filter { local ->
+                readingFavorites.none { merged ->
+                    BackupPaths.normalizeIdForComparison(merged.id) ==
+                        BackupPaths.normalizeIdForComparison(local.id)
+                }
+            },
+            removedFandomReadWatermarks = current.fandomReadWatermarks.filter { local ->
+                fandomReadWatermarks.none { merged ->
+                    BackupPaths.normalizeIdForComparison(merged.id) ==
+                        BackupPaths.normalizeIdForComparison(local.id)
+                }
+            },
+            removedQueueMemberships = if (mode == BackupImportMode.REPLACE_LIBRARY) emptyList() else
+                current.readingQueueMemberships.filter { local ->
+                    queueMerge.memberships.none { it.id == local.id }
+                },
             workIdRemap = workIdRemap
         )
     }
@@ -1457,6 +1523,13 @@ object BackupMergeService {
             }
         }
 
+        if (mode != BackupImportMode.REPLACE_LIBRARY) {
+            membershipsById.entries.removeAll { (_, membership) ->
+                tombstoneIndex.membershipResolution(membership.id, membership.lastModifiedAt ?: membership.queuedAt) ==
+                    TombstoneResolution.SUPPRESS_STALE
+            }
+        }
+
         if (mode == BackupImportMode.REPLACE_LIBRARY) {
             val incomingQueueIds = incomingQueues.mapTo(mutableSetOf()) { archived ->
                 val incomingId = BackupPaths.canonicalUuid(archived.id, "queue.id")
@@ -1936,37 +2009,42 @@ object BackupMergeService {
 
     private val FUTURE_CLOCK_SKEW: Duration = Duration.ofHours(24)
 
-    /**
-     * Queued-work half of Apple `ReadingQueueService.normalize`. A membership
-     * sets `isQueuedForLater`. A queued work whose EPUB is in this restore
-     * becomes `preserved` (and gains `preservedAt` only when the archive had
-     * none). Unknown metadata that still needs an AO3 refresh becomes
-     * `pending`. Works with no membership are left alone so a pass-through
-     * preservation status is not rewritten to `notPreserved`.
-     *
-     * ponytail: iOS's second pass is not ported. iOS also clears the flag of a
-     * work that claims it and is in no queue, so a work taken out of its last
-     * queue on another device stops being queued. Older Android data holds
-     * queued works that carry the flag and no membership at all
-     * (`restoreKeepsAQueueOnlyWorkOutOfTheLibrary`); cleared, they would be in
-     * neither the library nor a queue. Port it once those have memberships.
-     */
+    /** iOS normalizes only membership participants and works still claiming the flag. */
     private fun normalizeQueuedWorks(
         worksById: MutableMap<String, SavedWork>,
         memberships: List<ReadingQueueMembership>,
         epubIds: Set<String>,
-        now: Instant
+        now: Instant,
+        reconcilePreservation: Boolean
     ) {
         val queuedIds = memberships.mapTo(mutableSetOf()) {
             BackupPaths.normalizeIdForComparison(it.workID)
         }
         for ((id, work) in worksById) {
-            if (BackupPaths.normalizeIdForComparison(id) !in queuedIds) continue
-            val hasFile = work.hasEpub &&
-                BackupPaths.normalizeIdForComparison(work.id) in epubIds
+            val hasMembership = BackupPaths.normalizeIdForComparison(id) in queuedIds
+            if (!hasMembership && !work.isQueuedForLater) continue
+            val hasFile = BackupPaths.normalizeIdForComparison(work.id) in epubIds
+            if (!hasMembership) {
+                worksById[id] = work.copy(
+                    isQueuedForLater = false,
+                    hasEpub = work.hasEpub && hasFile,
+                    epubPreservationStatusRaw = "notPreserved",
+                    preservedAt = if (work.epubPreservationStatusRaw == null ||
+                        work.epubPreservationStatusRaw == "notPreserved") work.preservedAt else null
+                )
+                continue
+            }
+            // Keep membership flags current between asset batches. Otherwise a
+            // membership tombstone in batch one leaves a flag-only row that batch two
+            // mistakes for legacy data and migrates straight back into Saved for Later.
+            if (!reconcilePreservation) {
+                worksById[id] = work.copy(isQueuedForLater = true)
+                continue
+            }
             var status = work.epubPreservationStatusRaw
             var preservedAt = work.preservedAt
-            if (hasFile) {
+            if (!hasFile && status == "preserved") status = "missingFile"
+            if (work.hasEpub && hasFile) {
                 if (status != "preserving") status = "preserved"
                 if (preservedAt == null) preservedAt = now
             } else if (status == null || status == "notPreserved") {
@@ -1978,6 +2056,7 @@ object BackupMergeService {
             }
             worksById[id] = work.copy(
                 isQueuedForLater = true,
+                hasEpub = work.hasEpub && hasFile,
                 epubPreservationStatusRaw = status,
                 preservedAt = preservedAt,
                 metadataSyncStatusRaw = metadata

@@ -96,17 +96,9 @@ class ReadingQueueRepository(
         queueDao.getMembershipForWork(queueId, workId)?.let { return it.toDomain() }
 
         val now = clock()
-        val nextOrder = queueDao.getMembershipsForQueue(queueId)
-            .maxOfOrNull { it.sortOrderInQueue }
-            ?.plus(1)
-            ?: 0
-        val membership = ReadingQueueMembership(
-            id = uuidFactory(),
-            queueID = queueId,
-            workID = workId,
-            queuedAt = now,
-            lastModifiedAt = now,
-            sortOrderInQueue = nextOrder
+        val membership = newMembership(
+            queueId, workId, queueDao.getMembershipsForQueue(queueId).map { it.toDomain() },
+            now, uuidFactory
         )
         queueDao.upsertMembership(membership.toEntity())
         touchQueueMembershipChanged(queueId, now)
@@ -211,19 +203,19 @@ class ReadingQueueRepository(
     // could otherwise both pass the check-then-create race at once — confirmed via a
     // fresh install producing two "Saved for Later" rows before this fix.
     suspend fun ensureSavedForLaterQueue(): ReadingQueue = database.withTransaction {
-        queueDao.getActiveQueueByKind(ReadingQueueKind.SAVED_FOR_LATER)?.let { existing ->
-            // One-time, migration-free pin. iOS does the same on every ensure:
-            // `sortOrder = min(sortOrder, -1000)`.
-            val pinned = minOf(existing.sortOrder, ReadingQueueKind.SAVED_FOR_LATER_SORT_ORDER)
-            if (pinned != existing.sortOrder) {
-                val updated = existing.copy(sortOrder = pinned)
-                queueDao.upsertQueue(updated)
-                return@withTransaction updated.toDomain()
-            }
-            return@withTransaction existing.toDomain()
-        }
-        val now = clock()
-        val queue = ReadingQueue(
+        val existing = queueDao.getActiveQueueByKind(ReadingQueueKind.SAVED_FOR_LATER)?.toDomain()
+        val queue = savedForLaterQueue(existing, clock(), uuidFactory)
+        if (queue != existing) queueDao.upsertQueue(queue.toEntity())
+        queue
+    }
+
+    companion object {
+        /** Shared with legacy flag-only backup migration; one system-queue policy. */
+        internal fun savedForLaterQueue(
+            existing: ReadingQueue?, now: Instant, uuidFactory: () -> String
+        ): ReadingQueue = existing?.copy(
+            sortOrder = minOf(existing.sortOrder, ReadingQueueKind.SAVED_FOR_LATER_SORT_ORDER)
+        ) ?: ReadingQueue(
             id = uuidFactory(),
             name = ReadingQueueKind.SAVED_FOR_LATER_NAME,
             kindRaw = ReadingQueueKind.SAVED_FOR_LATER,
@@ -231,8 +223,16 @@ class ReadingQueueRepository(
             dateCreated = now,
             dateUpdated = now
         )
-        queueDao.upsertQueue(queue.toEntity())
-        queue
+
+        internal fun newMembership(
+            queueId: String, workId: String, memberships: List<ReadingQueueMembership>,
+            now: Instant, uuidFactory: () -> String
+        ): ReadingQueueMembership = ReadingQueueMembership(
+            id = uuidFactory(), queueID = queueId, workID = workId,
+            queuedAt = now, lastModifiedAt = now,
+            sortOrderInQueue = memberships.filter { it.queueID == queueId }
+                .maxOfOrNull { it.sortOrderInQueue }?.plus(1) ?: 0
+        )
     }
 
     /**

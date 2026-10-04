@@ -5,15 +5,24 @@ import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import com.google.crypto.tink.subtle.Ed25519Sign
+import io.github.cidy02.kudos.core.model.ReadingQueue
+import io.github.cidy02.kudos.core.model.ReadingQueueKind
+import io.github.cidy02.kudos.core.model.ReadingQueueMembership
+import io.github.cidy02.kudos.core.model.SavedWork
 import io.github.cidy02.kudos.core.model.SavedSearch
 import io.github.cidy02.kudos.core.model.SyncTombstone
 import io.github.cidy02.kudos.core.model.SyncTombstoneRecordType
 import io.github.cidy02.kudos.data.local.KudosDatabase
+import io.github.cidy02.kudos.data.local.entity.ReadingSessionEntity
+import io.github.cidy02.kudos.data.local.entity.ReadingFavoriteEntity
+import io.github.cidy02.kudos.data.local.entity.FandomReadWatermarkEntity
 import io.github.cidy02.kudos.data.local.entity.toDomain
 import io.github.cidy02.kudos.data.local.entity.toEntity
 import io.github.cidy02.kudos.data.preferences.SettingsRepository
 import io.github.cidy02.kudos.files.FontFileStore
 import io.github.cidy02.kudos.files.WorkFileStore
+import io.github.cidy02.kudos.library.ReadingQueueRepository
+import io.github.cidy02.kudos.works.converters.EpubBuilder
 import io.github.cidy02.kudos.works.WorkRepository
 import java.io.File
 import java.nio.file.Files
@@ -24,6 +33,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.test.runTest
 import org.junit.After
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -623,6 +633,126 @@ class BackupTrustPhase2Test {
     // still holds, or the two devices disagree for ever.
 
     @Test
+    fun aLocalFlagOnlyQueuedWorkGainsOneMembershipThroughTwoRestores() = runTest {
+        val work = queueOnlyWork()
+        database.workDao().upsert(work.toEntity())
+        workFileStore.writeWorkEpub(work.id, "held EPUB bytes".toByteArray())
+        assertLegacyQueueMigration(KudosBackupPackage(KudosBackupManifest(
+            version = BackupVersion.CURRENT, exportedAt = LATER
+        )))
+        assertEquals("held EPUB bytes", Files.readString(workFileStore.workEpubPath(work.id)))
+    }
+
+    @Test
+    fun anIncomingFlagOnlyQueuedWorkGainsOneMembershipThroughTwoRestores() = runTest {
+        val work = queueOnlyWork()
+        val epub = EpubBuilder.buildEpub("Queued", "<p>Text.</p>")
+        assertLegacyQueueMigration(KudosBackupPackage(KudosBackupManifest(
+            version = BackupVersion.CURRENT, exportedAt = LATER,
+            works = listOf(work.toBackupWork().copy(hasEPUB = true))
+        ), epubFilesByWorkId = mapOf(work.id to epub)))
+        assertArrayEquals(epub, Files.readAllBytes(workFileStore.workEpubPath(work.id)))
+    }
+
+    private fun queueOnlyWork() = SavedWork(
+        id = SWEPT_SEARCH, title = "Queue only", author = "Author",
+        dateAdded = Instant.parse(EARLIER), isSaved = false, isQueuedForLater = true
+    )
+
+    private suspend fun assertLegacyQueueMigration(pack: KudosBackupPackage) {
+        backupRepository.importPackage(pack)
+        val membership = database.readingQueueDao().getAllMemberships().single()
+        backupRepository.importPackage(pack)
+        assertEquals(listOf(membership), database.readingQueueDao().getAllMemberships())
+        val queue = database.readingQueueDao().getAllQueues().single()
+        assertEquals(ReadingQueueKind.SAVED_FOR_LATER, queue.kindRaw)
+        assertEquals(ReadingQueueKind.SAVED_FOR_LATER_SORT_ORDER, queue.sortOrder)
+        val work = database.workDao().getById(SWEPT_SEARCH)!!.toDomain()
+        assertTrue(work.isQueuedForLater)
+        assertTrue(work.isQueueOnlyWork)
+        assertFalse(work.isSaved)
+    }
+
+    @Test
+    fun aPeersLastMembershipDeletionClearsTheFlagAndPreservationWithoutDeletingTheEpub() = runTest {
+        val work = queueOnlyWork().copy(epubPreservationStatusRaw = "preserved",
+            preservedAt = Instant.parse(EARLIER), hasEpub = true)
+        database.workDao().upsert(work.toEntity())
+        workFileStore.writeWorkEpub(work.id, "held EPUB bytes".toByteArray())
+        val queue = ReadingQueue(id = PEER_ROW, name = "Queue", dateCreated = Instant.parse(EARLIER))
+        val membership = ReadingQueueMembership(id = TOMBSTONE_ID, queueID = queue.id,
+            workID = work.id, queuedAt = Instant.parse(EARLIER))
+        database.readingQueueDao().upsertQueue(queue.toEntity())
+        database.readingQueueDao().upsertMembership(membership.toEntity())
+        val (key, pub) = trustedPeer()
+        val pack = KudosBackupPackage(KudosBackupManifest(
+            version = BackupVersion.CURRENT, exportedAt = "2026-06-26T12:00:00Z",
+            works = listOf(work.toBackupWork()),
+            tombstones = listOf(signedTypedTombstone(membership.id,
+                SyncTombstoneRecordType.READING_QUEUE_MEMBERSHIP, key, pub, PEER_ROW))
+        ))
+        backupRepository.importPackage(pack)
+        val cleared = database.workDao().getById(work.id)!!
+        assertFalse(cleared.isQueuedForLater)
+        assertEquals("notPreserved", cleared.epubPreservationStatusRaw)
+        assertNull(cleared.preservedAt)
+        assertTrue(database.readingQueueDao().getAllMemberships().isEmpty())
+        // Repeated stale flag must not seed a replacement membership.
+        backupRepository.importPackage(pack)
+        assertFalse(database.workDao().getById(work.id)!!.isQueuedForLater)
+        assertTrue(database.readingQueueDao().getAllMemberships().isEmpty())
+        assertEquals("held EPUB bytes", Files.readString(workFileStore.workEpubPath(work.id)))
+    }
+
+    @Test
+    fun anExplicitLocalQueueRemovalIsNotMigratedBackFromAStaleFlag() = runTest {
+        val work = queueOnlyWork()
+        val pack = KudosBackupPackage(KudosBackupManifest(version = BackupVersion.CURRENT,
+            exportedAt = LATER, works = listOf(work.toBackupWork())))
+        backupRepository.importPackage(pack)
+        val queues = ReadingQueueRepository(database, clock = { CLOCK.plusSeconds(1) })
+        queues.removeFromSavedForLater(work.id)
+        assertFalse(database.workDao().getById(work.id)!!.isQueuedForLater)
+        backupRepository.importPackage(pack)
+        assertFalse(database.workDao().getById(work.id)!!.isQueuedForLater)
+        assertTrue(database.readingQueueDao().getAllMemberships().isEmpty())
+    }
+
+    @Test
+    fun aQueueOmittedByReplaceRetainsItsQueuedWorkAndEpub() = runTest {
+        val work = queueOnlyWork().copy(hasEpub = true, epubPreservationStatusRaw = "preserved")
+        database.workDao().upsert(work.toEntity())
+        workFileStore.writeWorkEpub(work.id, "held EPUB bytes".toByteArray())
+        val queue = ReadingQueue(id = PEER_ROW, name = "Omitted", dateCreated = Instant.parse(EARLIER))
+        val membership = ReadingQueueMembership(id = TOMBSTONE_ID, queueID = queue.id,
+            workID = work.id, queuedAt = Instant.parse(EARLIER))
+        database.readingQueueDao().upsertQueue(queue.toEntity())
+        database.readingQueueDao().upsertMembership(membership.toEntity())
+        val pack = KudosBackupPackage(KudosBackupManifest(version = BackupVersion.CURRENT,
+            exportedAt = LATER, works = listOf(work.toBackupWork())))
+        repeat(2) { backupRepository.importPackage(pack, BackupImportMode.REPLACE_LIBRARY) }
+        assertTrue(database.readingQueueDao().getQueueById(queue.id)!!.isDeleted)
+        assertEquals(membership, database.readingQueueDao().getMembershipById(membership.id)!!.toDomain())
+        assertTrue(database.workDao().getById(work.id)!!.isQueuedForLater)
+        assertEquals("preserved", database.workDao().getById(work.id)!!.epubPreservationStatusRaw)
+        assertEquals("held EPUB bytes", Files.readString(workFileStore.workEpubPath(work.id)))
+    }
+
+    @Test
+    fun aWorkThatNeverClaimedTheQueuedFlagKeepsItsPreservationAndEpub() = runTest {
+        val work = queueOnlyWork().copy(isQueuedForLater = false, hasEpub = true,
+            epubPreservationStatusRaw = "preserved", preservedAt = Instant.parse(EARLIER))
+        database.workDao().upsert(work.toEntity())
+        workFileStore.writeWorkEpub(work.id, "held EPUB bytes".toByteArray())
+        backupRepository.importPackage(KudosBackupPackage(KudosBackupManifest(
+            version = BackupVersion.CURRENT, exportedAt = LATER)))
+        val restored = database.workDao().getById(work.id)!!
+        assertEquals("preserved", restored.epubPreservationStatusRaw)
+        assertEquals(work.preservedAt, restored.preservedAt)
+        assertEquals("held EPUB bytes", Files.readString(workFileStore.workEpubPath(work.id)))
+    }
+
+    @Test
     fun aTrustedTombstoneRemovesASearchThisDeviceStillHas() = runTest {
         // The peer's snapshot does not list the search (it deleted it) and carries the tombstone.
         mergePeerSearchDeletion(localSearchAddedAt = "2025-06-01T00:00:00Z")
@@ -659,6 +789,87 @@ class BackupTrustPhase2Test {
         backupRepository.applyMergeResult(merge)
         assertNull(database.savedSearchDao().getById(SWEPT_SEARCH))
         assertEquals(late, database.savedSearchDao().getById(PEER_ROW)?.toDomain())
+    }
+
+    @Test
+    fun aSessionCreatedAfterSnapshotCaptureSurvivesTheApply() = runTest {
+        val captured = ReadingSessionEntity(
+            id = SWEPT_SEARCH, workID = WORK_K, startedAt = Instant.parse(EARLIER),
+            endedAt = Instant.parse(EARLIER), lastModifiedAt = Instant.parse(EARLIER)
+        )
+        val changedTarget = captured.copy(id = TOMBSTONE_ID)
+        database.readingLogDao().upsertSession(captured)
+        database.readingLogDao().upsertSession(changedTarget)
+        val snapshot = backupRepository.captureLibrarySnapshot().copy(tombstones =
+            listOf(SWEPT_SEARCH, TOMBSTONE_ID).map { id -> SyncTombstone(
+                id = id, recordID = id, recordTypeRaw = SyncTombstoneRecordType.READING_SESSION,
+                createdAt = Instant.parse(LATER), lastModifiedAt = Instant.parse(LATER)
+            ) })
+        val merge = BackupMergeService.merge(snapshot, KudosBackupPackage(KudosBackupManifest(
+            version = BackupVersion.CURRENT, exportedAt = "2026-06-26T12:00:00Z")))
+        val late = captured.copy(id = PEER_ROW, lastModifiedAt = CLOCK)
+        val changed = changedTarget.copy(lastModifiedAt = CLOCK)
+        database.readingLogDao().upsertSession(late)
+        database.readingLogDao().upsertSession(changed)
+        backupRepository.applyMergeResult(merge)
+        val held = database.readingLogDao().getAllSessions().associateBy { it.id }
+        assertNull(held[SWEPT_SEARCH])
+        assertEquals(late, held[PEER_ROW])
+        assertEquals(changed, held[TOMBSTONE_ID])
+    }
+
+    @Test
+    fun aFavoriteCreatedAfterSnapshotCaptureSurvivesTheApply() = runTest {
+        val captured = ReadingFavoriteEntity(
+            id = SWEPT_SEARCH, kindRaw = "fandom", targetKey = "A fandom",
+            createdAt = Instant.parse(EARLIER), lastModifiedAt = Instant.parse(EARLIER)
+        )
+        val changedTarget = captured.copy(id = TOMBSTONE_ID)
+        database.readingLogDao().upsertFavorite(captured)
+        database.readingLogDao().upsertFavorite(changedTarget)
+        val snapshot = backupRepository.captureLibrarySnapshot().copy(tombstones =
+            listOf(SWEPT_SEARCH, TOMBSTONE_ID).map { id -> SyncTombstone(
+                id = id, recordID = id, recordTypeRaw = SyncTombstoneRecordType.READING_FAVORITE,
+                createdAt = Instant.parse(LATER), lastModifiedAt = Instant.parse(LATER)
+            ) })
+        val merge = BackupMergeService.merge(snapshot, KudosBackupPackage(KudosBackupManifest(
+            version = BackupVersion.CURRENT, exportedAt = "2026-06-26T12:00:00Z")))
+        val late = captured.copy(id = PEER_ROW, lastModifiedAt = CLOCK)
+        val changed = changedTarget.copy(lastModifiedAt = CLOCK)
+        database.readingLogDao().upsertFavorite(late)
+        database.readingLogDao().upsertFavorite(changed)
+        backupRepository.applyMergeResult(merge)
+        val held = database.readingLogDao().getAllFavorites().associateBy { it.id }
+        assertNull(held[SWEPT_SEARCH])
+        assertEquals(late, held[PEER_ROW])
+        assertEquals(changed, held[TOMBSTONE_ID])
+    }
+
+    @Test
+    fun aWatermarkCreatedAfterSnapshotCaptureSurvivesTheApply() = runTest {
+        val captured = FandomReadWatermarkEntity(
+            id = SWEPT_SEARCH, fandomName = "A fandom", lastVisitedAt = Instant.parse(EARLIER),
+            lastModifiedAt = Instant.parse(EARLIER)
+        )
+        val changedTarget = captured.copy(id = TOMBSTONE_ID)
+        database.readingLogDao().upsertWatermark(captured)
+        database.readingLogDao().upsertWatermark(changedTarget)
+        val snapshot = backupRepository.captureLibrarySnapshot().copy(tombstones =
+            listOf(SWEPT_SEARCH, TOMBSTONE_ID).map { id -> SyncTombstone(
+                id = id, recordID = id, recordTypeRaw = SyncTombstoneRecordType.FANDOM_READ_WATERMARK,
+                createdAt = Instant.parse(LATER), lastModifiedAt = Instant.parse(LATER)
+            ) })
+        val merge = BackupMergeService.merge(snapshot, KudosBackupPackage(KudosBackupManifest(
+            version = BackupVersion.CURRENT, exportedAt = "2026-06-26T12:00:00Z")))
+        val late = captured.copy(id = PEER_ROW, lastModifiedAt = CLOCK)
+        val changed = changedTarget.copy(lastModifiedAt = CLOCK)
+        database.readingLogDao().upsertWatermark(late)
+        database.readingLogDao().upsertWatermark(changed)
+        backupRepository.applyMergeResult(merge)
+        val held = database.readingLogDao().getAllWatermarks().associateBy { it.id }
+        assertNull(held[SWEPT_SEARCH])
+        assertEquals(late, held[PEER_ROW])
+        assertEquals(changed, held[TOMBSTONE_ID])
     }
 
     @Test

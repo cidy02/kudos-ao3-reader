@@ -200,7 +200,7 @@ class SyncRepository(
                 val ownManifest = decodedLive != null && BackupPaths.sha256(manifestBytesAtRead!!) ==
                     settingsRepository.settings.first().sync.lastManifestDigest
                 if (ownManifest) {
-                    folderViewIsCurrent = true
+                    folderViewIsCurrent = importOriginals(syncDir, decodedLive!!)
                 } else {
                     (decodedLive ?: decodeManifestOrNull(backupManifest))?.let { manifest ->
                         val outcome = importManifest(syncDir, manifest)
@@ -559,58 +559,59 @@ class SyncRepository(
                 epubFiles[work.id] = bytes
                 batchBytes += bytes.size
             }
-            backupRepository.importPackage(KudosBackupPackage(manifest, epubFiles, fontFiles))
+            // These batches are one logical restore. iOS promotes queue preservation
+            // after selected assets land; doing it early protects old bytes from a later
+            // batch's EPUB. Membership flags still normalize on every batch.
+            backupRepository.importPackage(
+                KudosBackupPackage(manifest, epubFiles, fontFiles),
+                normalizeQueuePreservation = next >= manifest.works.size
+            )
             // Fonts are restored once per manifest, with the first batch (iOS
             // `readChangedRemoteAssets`). Offered again with each batch, a font whose name
             // collides with a local one gained another suffixed copy every time.
             fontFiles.clear()
         } while (next < manifest.works.size)
 
-        importOriginals(syncDir, manifest, fontFiles)
-        return ImportOutcome(complete && pendingFonts.isEmpty(), pendingFonts)
+        val originalsComplete = importOriginals(syncDir, manifest)
+        return ImportOutcome(complete && originalsComplete && pendingFonts.isEmpty(), pendingFonts)
     }
 
     /**
-     * iOS `readChangedRemoteAssets`, its last loop: an original is fetched only for a work this
-     * manifest lists, and only when this device holds none. A local original is the file the
-     * reader imported here. A folder that predates this has no `Originals` directory, which is
-     * nothing to fetch. An original and its record travel in one batch: the record is taken
-     * only with the original it describes.
+     * Fetch missing originals or records independently. Restore checks the original's
+     * bytes before attaching a record to a local original; groups stay in one batch.
      */
-    private suspend fun importOriginals(
-        syncDir: DocumentFile,
-        manifest: KudosBackupManifest,
-        fontFiles: Map<String, ByteArray>
-    ) {
-        val directory = syncDir.findFile(BackupPaths.ORIGINALS_DIRECTORY) ?: return
+    private suspend fun importOriginals(syncDir: DocumentFile, manifest: KudosBackupManifest): Boolean {
+        val directory = syncDir.findFile(BackupPaths.ORIGINALS_DIRECTORY) ?: return true
         val listed = manifest.works.mapTo(HashSet()) { BackupPaths.normalizeIdForComparison(it.id) }
         val wanted = linkedMapOf<String, MutableList<DocumentFile>>()
         directory.listFiles().forEach { file ->
             val name = file.name ?: return@forEach
             if (name.startsWith(".")) return@forEach
             val (workId, _) = BackupPaths.parseOriginalFileName(name) ?: return@forEach
-            if (workId in listed && !workFileStore.originalExists(workId) &&
-                file.length() <= BackupLimits.MAX_ENTRY_BYTES
-            ) {
-                wanted.getOrPut(workId) { mutableListOf() }.add(file)
-            }
+            if (workId in listed && (!workFileStore.originalExists(workId) ||
+                !workFileStore.conversionRecordExists(workId))
+            ) wanted.getOrPut(workId) { mutableListOf() }.add(file)
         }
 
+        var complete = true
         var batch = mutableMapOf<String, ByteArray>()
         var batchBytes = 0L
         suspend fun flush() {
             if (batch.isEmpty()) return
-            backupRepository.importPackage(KudosBackupPackage(manifest, emptyMap(), fontFiles, batch))
+            backupRepository.importOriginalFiles(manifest, batch)
             batch = mutableMapOf()
             batchBytes = 0L
         }
         wanted.values.forEach { files ->
             files.forEach { file ->
-                context.contentResolver.openInputStream(file.uri)?.use {
-                    // iOS `KudosBackupContents` limits actual bytes, not provider size.
-                    val bytes = runCatching {
+                val bytes = runCatching {
+                    context.contentResolver.openInputStream(file.uri)?.use {
                         it.readLimitedBytes(file.name.orEmpty(), BackupLimits.MAX_ENTRY_BYTES)
-                    }.getOrNull() ?: return@use
+                    }
+                }.getOrNull()
+                if (bytes == null) {
+                    complete = false
+                } else {
                     batch[file.name!!] = bytes
                     batchBytes += bytes.size
                 }
@@ -618,6 +619,7 @@ class SyncRepository(
             if (batchBytes >= maxEpubBatchBytes) flush()
         }
         flush()
+        return complete
     }
 
     /**

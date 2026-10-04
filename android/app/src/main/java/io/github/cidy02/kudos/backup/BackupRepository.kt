@@ -14,6 +14,7 @@ import io.github.cidy02.kudos.data.preferences.SettingsRepository
 import io.github.cidy02.kudos.files.FileWriteResult
 import io.github.cidy02.kudos.files.FontFileStore
 import io.github.cidy02.kudos.files.WorkFileStore
+import io.github.cidy02.kudos.works.WorkIdentityIndex
 import io.github.cidy02.kudos.works.WorkRepository
 import java.io.IOException
 import java.nio.file.Files
@@ -101,13 +102,14 @@ class BackupRepository(
 
     suspend fun importPackage(
         pack: KudosBackupPackage,
-        mode: BackupImportMode = BackupImportMode.RECONCILE
+        mode: BackupImportMode = BackupImportMode.RECONCILE,
+        normalizeQueuePreservation: Boolean = true
     ): BackupRestoreSummary = persistenceGate.withLock {
         withContext(Dispatchers.IO) {
             BackupFontValidator.validate(pack.fontFilesByFileName)
             TombstoneLocalMigration.runIfNeeded(database, settingsRepository)
             val current = captureLibrarySnapshot(pack.fontFilesByFileName.keys)
-            val merge = mergePackage(current, pack, mode)
+            val merge = mergePackage(current, pack, mode, normalizeQueuePreservation)
             applyMergeResult(merge)
             restoreOriginals(pack.originalFilesByName, merge.workIdRemap)
             merge.summary
@@ -132,24 +134,42 @@ class BackupRepository(
         }
     }
 
+    /** Asset-only fetches must not re-merge our own manifest (removed EPUBs stay removed). */
+    internal suspend fun importOriginalFiles(manifest: KudosBackupManifest, files: Map<String, ByteArray>) =
+        persistenceGate.withLock {
+            val identity = WorkIdentityIndex.snapshot(database.workDao().getAllIncludingDeleted().map { it.toDomain() })
+            val remap = manifest.works.mapNotNull { archived ->
+                identity.existingWork(archived.ao3WorkID?.toLong(), archived.sourceURL, archived.id)
+                    ?.let { BackupPaths.normalizeIdForComparison(archived.id) to it.id }
+            }.toMap()
+            restoreOriginals(files, remap)
+        }
+
     /**
-     * iOS `KudosBackupService.restore`, the originals loop. A file belongs to the work its name
-     * gives, and is written under the id that work has here. Never over an original already
-     * here and never beside one: a local original is the file the reader imported on this
-     * device, and a work has one, whatever its extension. A conversion record comes only with
-     * the original it describes.
+     * Never replace a local original. An absent conversion record may accompany either
+     * a newly restored original or byte-identical source bytes (size, then SHA-256).
+     * The same guard serves folder assets and archive restores after work-id remapping.
      */
     private suspend fun restoreOriginals(files: Map<String, ByteArray>, workIdRemap: Map<String, String>) {
-        val restored = mutableSetOf<String>()
-        // Originals first, then their records.
+        val matchingOriginals = mutableSetOf<String>()
         files.entries.sortedBy { BackupPaths.parseOriginalFileName(it.key)?.second == true }.forEach { (name, bytes) ->
             val (archivedId, isRecord) = BackupPaths.parseOriginalFileName(name) ?: return@forEach
             val workId = workIdRemap[archivedId] ?: return@forEach
             if (isRecord) {
-                if (workId in restored) workFileStore.writeConversionRecord(workId, bytes)
-            } else if (!workFileStore.originalExists(workId)) {
-                workFileStore.writeOriginal(workId, name.substringAfterLast('.', ""), bytes).orThrow()
-                restored += workId
+                if (archivedId in matchingOriginals && !workFileStore.conversionRecordExists(workId) &&
+                    !workFileStore.writeConversionRecord(workId, bytes)
+                ) throw IOException("Could not write conversion record for $workId")
+            } else {
+                val local = workFileStore.originalFile(workId)
+                if (local == null) {
+                    workFileStore.writeOriginal(workId, name.substringAfterLast('.', ""), bytes).orThrow()
+                    matchingOriginals += archivedId
+                } else if (!workFileStore.conversionRecordExists(workId) && runCatching {
+                    Files.size(local) == bytes.size.toLong() &&
+                        BackupPaths.sha256(Files.readAllBytes(local)) == BackupPaths.sha256(bytes)
+                }.getOrDefault(false)) {
+                    matchingOriginals += archivedId
+                }
             }
         }
     }
@@ -161,14 +181,16 @@ class BackupRepository(
     private suspend fun mergePackage(
         current: BackupLibrarySnapshot,
         pack: KudosBackupPackage,
-        mode: BackupImportMode
+        mode: BackupImportMode,
+        normalizeQueuePreservation: Boolean = true
     ): BackupMergeResult {
         val trusted = TombstoneTrustStore(settingsRepository).trustedPublicKeys()
         val result = BackupMergeService.merge(
             current = current,
             backup = pack,
             mode = mode,
-            trustedPublicKeys = trusted
+            trustedPublicKeys = trusted,
+            normalizeQueuePreservation = normalizeQueuePreservation
         )
         // Feeds the pairing sheet's count-only unknown-signer badge. See
         // SettingsRepository.recordUnknownSignerTombstoneIds.
@@ -383,6 +405,12 @@ class BackupRepository(
                 }
             }
         }
+        database.withTransaction {
+            merge.removedQueueMemberships.forEach { captured ->
+                val held = database.readingQueueDao().getMembershipById(captured.id)?.toDomain()
+                if (held == captured) database.readingQueueDao().deleteMembershipById(captured.id)
+            }
+        }
         snapshot.readingQueueMemberships.forEach {
             database.readingQueueDao().upsertMembership(it.toEntity())
         }
@@ -406,24 +434,24 @@ class BackupRepository(
 
         snapshot.annotations.forEach { database.annotationDao().upsert(it.toEntity()) }
 
-        val sessionIds = snapshot.readingSessions.mapTo(mutableSetOf()) { it.id }
-        database.readingLogDao().getAllSessions().forEach { session ->
-            if (session.id !in sessionIds) database.readingLogDao().deleteSession(session.id)
-        }
-        snapshot.readingSessions.forEach { database.readingLogDao().upsertSession(it) }
-
-        val favoriteIds = snapshot.readingFavorites.mapTo(mutableSetOf()) { it.id }
-        database.readingLogDao().getAllFavorites().forEach { favorite ->
-            if (favorite.id !in favoriteIds) database.readingLogDao().deleteFavorite(favorite.id)
-        }
-        snapshot.readingFavorites.forEach { database.readingLogDao().upsertFavorite(it) }
-
-        val watermarkIds = snapshot.fandomReadWatermarks.mapTo(mutableSetOf()) { it.id }
-        database.readingLogDao().getAllWatermarks().forEach { watermark ->
-            if (watermark.id !in watermarkIds) {
-                database.readingLogDao().deleteWatermark(watermark.id)
+        // As for searches, only remove unchanged rows explicitly removed from the
+        // captured snapshot. Reader activity does not take PersistenceGate.
+        database.withTransaction {
+            val heldSessions = database.readingLogDao().getAllSessions().associateBy { it.id }
+            merge.removedReadingSessions.forEach { captured ->
+                if (heldSessions[captured.id] == captured) database.readingLogDao().deleteSession(captured.id)
+            }
+            val heldFavorites = database.readingLogDao().getAllFavorites().associateBy { it.id }
+            merge.removedReadingFavorites.forEach { captured ->
+                if (heldFavorites[captured.id] == captured) database.readingLogDao().deleteFavorite(captured.id)
+            }
+            val heldWatermarks = database.readingLogDao().getAllWatermarks().associateBy { it.id }
+            merge.removedFandomReadWatermarks.forEach { captured ->
+                if (heldWatermarks[captured.id] == captured) database.readingLogDao().deleteWatermark(captured.id)
             }
         }
+        snapshot.readingSessions.forEach { database.readingLogDao().upsertSession(it) }
+        snapshot.readingFavorites.forEach { database.readingLogDao().upsertFavorite(it) }
         snapshot.fandomReadWatermarks.forEach { database.readingLogDao().upsertWatermark(it) }
 
         if (merge.mode != BackupImportMode.REPLACE_LIBRARY) {

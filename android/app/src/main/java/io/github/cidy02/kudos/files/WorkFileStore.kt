@@ -124,6 +124,10 @@ class WorkFileStore(
      * backup or the sync folder brings, byte for byte, and writes it back out, so a library
      * that passes through Android still has it.
      */
+    suspend fun conversionRecordExists(workId: String): Boolean = withContext(Dispatchers.IO) {
+        runCatching { Files.isRegularFile(conversionRecordPath(workId)) }.getOrDefault(false)
+    }
+
     suspend fun readConversionRecord(workId: String): ByteArray? = withContext(Dispatchers.IO) {
         runCatching {
             conversionRecordPath(workId).takeIf { Files.isRegularFile(it) }?.let { Files.readAllBytes(it) }
