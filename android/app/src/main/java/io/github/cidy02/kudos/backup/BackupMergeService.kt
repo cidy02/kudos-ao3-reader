@@ -1119,6 +1119,19 @@ object BackupMergeService {
             }
         }
 
+        // A search this device still has that a trusted tombstone says was deleted
+        // elsewhere (iOS `applyTombstonesToExisting`). The loop above only declines
+        // to add one back: the copy already here stayed visible, and was published
+        // again on the next export, so the deletion could never settle between two
+        // devices. The reading-log merges below already make this pass. Never in
+        // Replace, which is "make this device look like the archive".
+        if (mode != BackupImportMode.REPLACE_LIBRARY) {
+            searchesById.entries.removeAll { (id, search) ->
+                tombstoneIndex.savedSearchResolution(id, search.dateAdded) ==
+                    TombstoneResolution.SUPPRESS_STALE
+            }
+        }
+
         if (mode == BackupImportMode.REPLACE_LIBRARY) {
             val incomingIds = incoming.mapTo(mutableSetOf()) {
                 BackupPaths.canonicalUuid(it.id, "savedSearch.id")

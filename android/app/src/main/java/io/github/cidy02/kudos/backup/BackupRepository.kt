@@ -258,6 +258,16 @@ class BackupRepository(
             }
         }
 
+        // The merged set is the whole set, as for the reading log below: a search a trusted
+        // tombstone swept is no longer in it, and has to leave the database too.
+        val savedSearchIds = snapshot.savedSearches.mapTo(mutableSetOf()) {
+            BackupPaths.normalizeIdForComparison(it.id)
+        }
+        database.savedSearchDao().getAll().forEach { search ->
+            if (BackupPaths.normalizeIdForComparison(search.id) !in savedSearchIds) {
+                database.savedSearchDao().deleteById(search.id)
+            }
+        }
         snapshot.savedSearches.forEach { database.savedSearchDao().upsert(it.toEntity()) }
 
         // Snapshot tombstones are the pre-import local set plus any incoming
