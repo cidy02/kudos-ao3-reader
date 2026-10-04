@@ -13,6 +13,7 @@ import io.github.cidy02.kudos.data.local.entity.toEntity
 import io.github.cidy02.kudos.data.preferences.SettingsRepository
 import io.github.cidy02.kudos.files.FontFileStore
 import io.github.cidy02.kudos.files.WorkFileStore
+import io.github.cidy02.kudos.works.converters.EpubBuilder
 import java.io.File
 import java.nio.file.Files
 import java.time.Instant
@@ -634,13 +635,13 @@ class SyncRepositoryTest {
         val worksDir = seedFolder(
             remoteBackupWork(WORK_REMOTE, "From iPhone", hasEpub = true)
         )
-        writeChild(worksDir, "${WORK_REMOTE.uppercase()}.epub", "application/epub+zip", "from-ios".toByteArray())
+        writeChild(worksDir, "${WORK_REMOTE.uppercase()}.epub", "application/epub+zip", REMOTE_EPUB)
 
         assertTrue(syncRepository.runSync() is SyncResult.Success)
 
         assertArrayEquals(
             "the EPUB iOS wrote must reach this device",
-            "from-ios".toByteArray(),
+            REMOTE_EPUB,
             Files.readAllBytes(workFileStore.workEpubPath(WORK_REMOTE))
         )
         val after = requireKudosLibrary().findFile(BackupPaths.WORKS_DIRECTORY)!!
@@ -652,17 +653,17 @@ class SyncRepositoryTest {
         val worksDir = seedFolder(
             remoteBackupWork(WORK_REMOTE, "From an older build", hasEpub = true)
         )
-        writeChild(worksDir, "$WORK_REMOTE.epub", "application/epub+zip", "legacy".toByteArray())
+        writeChild(worksDir, "$WORK_REMOTE.epub", "application/epub+zip", REMOTE_EPUB)
 
         assertTrue(syncRepository.runSync() is SyncResult.Success)
 
-        assertArrayEquals("legacy".toByteArray(), Files.readAllBytes(workFileStore.workEpubPath(WORK_REMOTE)))
+        assertArrayEquals(REMOTE_EPUB, Files.readAllBytes(workFileStore.workEpubPath(WORK_REMOTE)))
         // Still one file for the work, not pruned and not duplicated. On case-sensitive storage
         // (a phone) it is also renamed to iOS's name; this host's file system folds case, so
         // the rename is not asserted here.
         val after = requireKudosLibrary().findFile(BackupPaths.WORKS_DIRECTORY)!!
         assertEquals(1, after.listFiles().size)
-        assertArrayEquals("legacy".toByteArray(), readDocument(epubIn(after, WORK_REMOTE)!!))
+        assertArrayEquals(REMOTE_EPUB, readDocument(epubIn(after, WORK_REMOTE)!!))
     }
 
     @Test
@@ -697,6 +698,46 @@ class SyncRepositoryTest {
         val after = requireKudosLibrary().findFile(BackupPaths.WORKS_DIRECTORY)!!
         assertNotNull("this device's view was not current, so it prunes nothing", epubIn(after, WORK_REMOTE))
         assertNotNull(epubIn(after, WORK_A))
+    }
+
+    @Test
+    fun syncDownRejectsAnInvalidEpubWithoutOverwritingTheLocalCopy() = runTest {
+        // iOS `syncDownRejectsInvalidEPUBWithoutOverwritingLocalCopy`, with the folder's record
+        // the newer one, so only the check on the bytes stands between them and the file.
+        database.workDao().upsert(
+            SavedWork(
+                id = WORK_A,
+                title = "Valid here",
+                author = "Author",
+                dateAdded = Instant.parse("2026-01-01T00:00:00Z"),
+                isSaved = true,
+                hasEpub = true
+            ).toEntity()
+        )
+        workFileStore.writeWorkEpub(WORK_A, REMOTE_EPUB)
+        val kudos = ensureKudosLibrary()
+        val manifest = remoteManifest(
+            works = listOf(
+                remoteBackupWork(WORK_A, "Corrupt in the folder", hasEpub = true)
+                    .copy(lastModifiedAt = "2026-06-01T00:00:00Z")
+            ),
+            exportedAt = "2026-06-02T00:00:00Z"
+        )
+        writeChild(
+            kudos,
+            BackupPaths.MANIFEST,
+            "application/json",
+            BackupJson.encodeToString(manifest).toByteArray(Charsets.UTF_8)
+        )
+        val worksDir = kudos.createDirectory(BackupPaths.WORKS_DIRECTORY)!!
+        writeChild(worksDir, "${WORK_A.uppercase()}.epub", "application/epub+zip", "not-an-epub".toByteArray())
+
+        assertTrue(syncRepository.runSync() is SyncResult.Success)
+
+        assertArrayEquals(REMOTE_EPUB, Files.readAllBytes(workFileStore.workEpubPath(WORK_A)))
+        // The sync-up that follows puts the good copy back in the folder.
+        val after = requireKudosLibrary().findFile(BackupPaths.WORKS_DIRECTORY)!!
+        assertArrayEquals(REMOTE_EPUB, readDocument(epubIn(after, WORK_A)!!))
     }
 
     /** A folder holding a manifest that lists [works]; returns its Works directory. */
@@ -818,5 +859,8 @@ class SyncRepositoryTest {
         private val FIXED_CLOCK: Instant = Instant.parse("2026-06-26T12:00:00Z")
         private const val WORK_A = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
         private const val WORK_REMOTE = "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
+
+        /** A real EPUB: sync-down only installs bytes that are a readable package. */
+        private val REMOTE_EPUB = EpubBuilder.buildEpub("Remote", "<p>Text.</p>")
     }
 }

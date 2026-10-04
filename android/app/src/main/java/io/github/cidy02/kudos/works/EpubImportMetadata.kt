@@ -117,6 +117,12 @@ internal data class EpubImportMetadata(
     companion object {
         fun inspect(bytes: ByteArray): EpubImportMetadata = EpubMetadataReader.inspect(bytes)
 
+        /**
+         * iOS `EPUBDocument.inspectPackage`: a whole ZIP whose package document lists at least
+         * one readable spine item. What a restore checks before bytes may replace a local EPUB.
+         */
+        fun isReadablePackage(bytes: ByteArray): Boolean = EpubMetadataReader.isReadablePackage(bytes)
+
         private fun normalized(value: String): String = value.trim().lowercase()
 
         private val ARCHIVE_WARNINGS = setOf(
@@ -184,6 +190,18 @@ private object EpubMetadataReader {
             categories = extracted.categories
         )
     }.getOrDefault(EpubImportMetadata())
+
+    fun isReadablePackage(bytes: ByteArray): Boolean = hasZipEnd(bytes) &&
+        runCatching { readOpf(bytes)?.let(::parseOpf)?.localChapterCount != null }.getOrDefault(false)
+
+    /** A complete ZIP ends with its end-of-central-directory record; a cut-off copy has none. */
+    private fun hasZipEnd(bytes: ByteArray): Boolean {
+        val last = bytes.size - ZIP_END_BYTES
+        return (last downTo maxOf(0, last - MAX_ZIP_COMMENT_BYTES)).any { i ->
+            bytes[i] == 0x50.toByte() && bytes[i + 1] == 0x4B.toByte() &&
+                bytes[i + 2] == 0x05.toByte() && bytes[i + 3] == 0x06.toByte()
+        }
+    }
 
     private fun readOpf(bytes: ByteArray): String? = runCatching {
         ZipInputStream(ByteArrayInputStream(bytes)).use { zip ->
@@ -386,6 +404,8 @@ private object EpubMetadataReader {
 
     // ponytail: bounded header walk; raise only if a legitimate 4,000+ member EPUB appears.
     private const val MAX_ENTRIES = 4_096
+    private const val ZIP_END_BYTES = 22
+    private const val MAX_ZIP_COMMENT_BYTES = 0xFFFF
     private const val MAX_ENTRY_BYTES = 2 * 1024 * 1024
     private const val MAX_TOTAL_METADATA_BYTES = 8 * 1024 * 1024
     private val METADATA_EXTENSIONS = setOf("opf", "xhtml", "html", "htm", "xml")

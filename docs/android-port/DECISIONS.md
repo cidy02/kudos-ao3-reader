@@ -210,3 +210,12 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
     churns until both devices update. iOS should also compare names without regard to case
     (`5a-result.md`); not changed.
   Reverse: `runSyncLocked`, `importManifest` and `removeOrphans` in `backup/SyncRepository.kt`.
+- **2026-10-04 · A restore replaces a local EPUB only when iOS would.** Android wrote an archive's
+  or the sync folder's EPUB over a local one whenever the archive's record was newer, without
+  looking at the bytes or at preservation. Now, as iOS (`KudosBackupService.mayReplaceEPUB`,
+  `ReadingQueueService.replaceEPUB`): a preserved work that still has its file is never replaced;
+  bytes that are not a readable EPUB are skipped and the local copy kept; a work whose file is
+  gone is always filled in; File Merge of a work in Recently Deleted replaces its file only when
+  the archive is newer. Replace Library and new records are unchanged. Kept stricter than iOS: on
+  equal clocks Android keeps the local file. Details: `briefs/5a-result.md`, part 2.
+  Reverse: the block above `mayReplaceEpub` in `backup/BackupMergeService.kt`.

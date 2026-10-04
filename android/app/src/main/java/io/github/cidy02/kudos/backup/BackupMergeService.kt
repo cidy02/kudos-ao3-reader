@@ -16,6 +16,7 @@ import io.github.cidy02.kudos.core.model.collectionMembershipRecordId
 import io.github.cidy02.kudos.data.local.entity.FandomReadWatermarkEntity
 import io.github.cidy02.kudos.data.local.entity.ReadingFavoriteEntity
 import io.github.cidy02.kudos.data.local.entity.ReadingSessionEntity
+import io.github.cidy02.kudos.works.EpubImportMetadata
 import io.github.cidy02.kudos.works.WorkIdentityIndex
 import io.github.cidy02.kudos.works.WorkRepository
 import io.github.cidy02.kudos.works.WorkTags
@@ -124,16 +125,55 @@ object BackupMergeService {
             }
             workIdRemap[archivedId] = targetId
 
-            val incomingEpub = epubFilesById[archivedId] ?: epubFilesById[targetId]
-            val existingHasEpub = targetId in currentEpubIds || existing?.hasEpub == true
-            val restoredHasEpub = incomingEpub != null || existingHasEpub
-
             val incomingModifiedAt = resolveIncomingLastModifiedAt(
                 lastModifiedAt = archived.lastModifiedAt,
                 dateAdded = archived.dateAdded,
                 exportedAt = exportedAt,
                 now = now
             )
+
+            // Whether the archive's EPUB may be written over this work's (iOS
+            // `KudosBackupService.restore`, around `mayReplaceEPUB`).
+            //
+            // The file on disk decides, not the `hasEpub` flag: a flag with no file
+            // has nothing to protect, and "a work with no local file can always be
+            // filled in" (iOS marks such a work `.missingFile` at launch).
+            val existingHasFile = targetId in currentEpubIds
+            val mayReplace = if (mode == BackupImportMode.MERGE && existing != null && !existing.isDeleted) {
+                // File Merge leaves an active overlap alone and only fills a gap
+                // (iOS `mergeRefillsAnEPUBThatWentMissingLocally`).
+                !existingHasFile
+            } else {
+                mayReplaceEpub(
+                    hasLocalFile = existingHasFile,
+                    isPreserved = existing?.epubPreservationStatusRaw == "preserved",
+                    // Replace treats the snapshot as this device's library, so a file
+                    // that actually carries the EPUB wins even when clocks are equal.
+                    isNewRecord = existing == null || mode == BackupImportMode.REPLACE_LIBRARY,
+                    // Only replace a local EPUB when the archive's copy is genuinely
+                    // the newer one. Writing it whenever the archive carried a file
+                    // means folder sync *destroys* a locally changed EPUB rather than
+                    // merely failing to propagate it: sync-down runs before sync-up,
+                    // so the stale remote copy is restored over the fresh local file
+                    // and then exported back out.
+                    //
+                    // Strictly newer, where iOS's `shouldApplyIncoming` takes >=: when
+                    // neither side's metadata moved, the two clocks are equal and
+                    // there is nothing to justify overwriting bytes this device
+                    // holds. Stricter than iOS, and kept: it only ever keeps a file.
+                    incomingIsNewer = existing != null && incomingModifiedAt != null &&
+                        existing.effectiveLastModifiedAt.isBefore(incomingModifiedAt)
+                )
+            }
+            // Check only what would be written, and never let bytes that are not a
+            // readable EPUB replace a file or claim one. iOS stages and inspects the
+            // asset the same way and skips an invalid one, leaving the existing
+            // file, `hasEPUB` and preservation as they were.
+            val incomingEpub = (epubFilesById[archivedId] ?: epubFilesById[targetId])
+                ?.takeIf { mayReplace && EpubImportMetadata.isReadablePackage(it) }
+            val existingHasEpub = existingHasFile || existing?.hasEpub == true
+            val restoredHasEpub = incomingEpub != null || existingHasEpub
+
             val restoredBase = archived.toSavedWork(hasEpub = restoredHasEpub, exportedAt = exportedAt)
             val restored = restoredBase.copy(
                 id = existing?.id ?: restoredBase.id,
@@ -166,30 +206,7 @@ object BackupMergeService {
             }
             identity.index(worksById.getValue(targetId))
 
-            // Only replace a local EPUB when the archive's copy is genuinely the
-            // newer one. Writing it whenever the archive carried a file — which is
-            // what this used to do, ungated by the LWW result above — means folder
-            // sync *destroys* a locally changed EPUB rather than merely failing to
-            // propagate it: sync-down runs before sync-up, so the stale remote copy
-            // is restored over the fresh local file and then exported back out.
-            //
-            // Strictly newer, not >=: when neither side's metadata moved, the two
-            // clocks are equal and there is nothing to justify overwriting bytes
-            // this device holds. The font merge already treats differing content as
-            // something to preserve rather than clobber.
-            // Replace treats the snapshot as this device's library, so a file that
-            // actually carries the EPUB still wins even when clocks are equal.
-            val incomingEpubWins = existing == null ||
-                mode == BackupImportMode.REPLACE_LIBRARY ||
-                (mode == BackupImportMode.MERGE && existing.isDeleted) ||
-                (
-                    mode != BackupImportMode.MERGE &&
-                    incomingModifiedAt != null &&
-                        existing.effectiveLastModifiedAt.isBefore(incomingModifiedAt)
-                    )
-            if (incomingEpub != null && (!existingHasEpub || incomingEpubWins)) {
-                epubFilesToWrite[targetId] = incomingEpub
-            }
+            if (incomingEpub != null) epubFilesToWrite[targetId] = incomingEpub
 
             val mergedTags = if (mode == BackupImportMode.REPLACE_LIBRARY) {
                 archived.userTags.normalizedNames()
@@ -2154,3 +2171,17 @@ internal class TombstoneIndex(
         map[key] = tombstone
     }
 }
+
+/**
+ * iOS `KudosBackupService.mayReplaceEPUB`: whether a restore may overwrite a local work's EPUB
+ * with an archived one. A new record has nothing to lose and a work with no file can always be
+ * filled in. A preserved work that still has its file is never replaced: preservation is the
+ * promise that this exact copy is kept, often of a work that no longer exists upstream.
+ * Otherwise only a newer archive replaces it.
+ */
+internal fun mayReplaceEpub(
+    hasLocalFile: Boolean,
+    isPreserved: Boolean,
+    isNewRecord: Boolean,
+    incomingIsNewer: Boolean
+): Boolean = isNewRecord || !hasLocalFile || (!isPreserved && incomingIsNewer)
