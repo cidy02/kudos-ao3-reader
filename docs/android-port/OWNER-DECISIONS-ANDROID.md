@@ -39,3 +39,19 @@ sit outside the page and keep the app accent, on both platforms.
 - **B.** The toolbar and tab bar follow the hero's colour too, on Home and Library.
 
 Until answered: A.
+
+## 4. Should iOS's folder sync ignore letter case in EPUB file names?
+
+iOS names a work's EPUB in the sync folder with the UUID in capitals, and both finds and prunes
+files by that exact name. The released Android builds (0.2.1, 0.2.2) wrote lowercase names.
+Android now writes iOS's names and renames its old files, but an iPhone that joins a folder
+before the Android device has updated and synced would not find those EPUBs on case-sensitive
+storage, and would delete them from the folder as orphans. (Each Android device still holds its
+own copies and uploads them again.)
+
+- **A.** Change iOS to compare names without regard to case, when reading and when pruning. It
+  can only ever keep more files. It needs its own tests in `FolderSyncTests`.
+- **B.** Leave iOS as it is, and tell Android users to update and sync before adding an iPhone to
+  the folder.
+
+Until answered: iOS is unchanged. Details: `briefs/5a-result.md`.
