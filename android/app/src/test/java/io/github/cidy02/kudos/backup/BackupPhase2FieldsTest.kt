@@ -138,13 +138,18 @@ class BackupPhase2FieldsTest {
     @Test
     fun triStateFields_archiveHasDateAndLoses_localValueIsKept() {
         val localDate = Instant.parse("2026-08-01T12:00:00Z")
+        // The Mac percent goes with the reading progress and its clock (iOS `applyProgress`),
+        // so the local side has read later, as well as been edited later.
         val local = sampleSavedWork().copy(
             hiddenFromHistoryAt = localDate,
             legacyReaderProgress = 0.75,
+            lastSpineIndex = 3,
+            progressModifiedAt = Instant.parse("2026-08-01T12:00:00Z"),
             lastModifiedAt = Instant.parse("2026-08-01T12:00:00Z")
         )
         val archive = sampleBackupWork().copy(
             lastModifiedAt = "2026-05-01T12:00:00Z",
+            progressModifiedAt = "2026-05-01T12:00:00Z",
             hiddenFromHistoryAt = JsonPrimitive("2026-04-01T12:00:00Z"),
             legacyReaderProgress = JsonPrimitive(0.2)
         )

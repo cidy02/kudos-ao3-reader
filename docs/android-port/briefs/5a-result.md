@@ -155,6 +155,25 @@ deletion says, or a snapshot dated between the two brings it back.
 Not the same as iOS, and left: iOS keeps one row per record; Android can hold two. Both suppress
 the same things.
 
+## Part 6: the Mac's reading position (`legacyReaderProgress`)
+
+The macOS reader keeps a whole-book percent, and the work's card shows it in preference to a
+locator. iOS merges it with the reading progress (`SyncMerge.applyProgress`, seven tests in
+`PersistenceSyncTests`). Android merged it with the work's metadata instead:
+
+| Case | iOS | Android before | Now |
+|---|---|---|---|
+| The other device edited the work later but read it earlier | its percent is not taken | taken (the metadata clock decided) | not taken |
+| A newer snapshot has no such key (an older build) and its locator moved | the stale percent is cleared, so the card follows the locator | kept: the card stayed on the old percent | cleared |
+| The same, but the locator did not move (or by less than the reader's own delta) | kept | kept | kept |
+| A newer snapshot carries an explicit null | cleared | cleared | cleared |
+
+Tests: `MacReadingPositionMergeTest`, six tests, five named as iOS's. One older test
+(`triStateFields_archiveHasDateAndLoses_localValueIsKept`) set a Mac percent on a work that had
+never been read; it now has the local side read later, which is what it meant.
+Already the same and already tested: an explicit null is written on export, and a manifest
+without the key decodes to "absent".
+
 ## The two apps' own code, on each other's folder (2026-10-04)
 
 The backup has golden archives written by each app and read by the other. The sync folder had

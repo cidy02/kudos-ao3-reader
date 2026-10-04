@@ -13,15 +13,19 @@ import io.github.cidy02.kudos.core.model.SyncTombstoneRecordType
 import io.github.cidy02.kudos.core.model.WorkCollection
 import io.github.cidy02.kudos.core.model.canonicalizeCollectionMembershipRecordId
 import io.github.cidy02.kudos.core.model.collectionMembershipRecordId
+import io.github.cidy02.kudos.core.model.readiumProgress
+import io.github.cidy02.kudos.core.model.totalProgressionIn
 import io.github.cidy02.kudos.data.local.entity.FandomReadWatermarkEntity
 import io.github.cidy02.kudos.data.local.entity.ReadingFavoriteEntity
 import io.github.cidy02.kudos.data.local.entity.ReadingSessionEntity
+import io.github.cidy02.kudos.reader.ReaderProgressGate
 import io.github.cidy02.kudos.works.EpubImportMetadata
 import io.github.cidy02.kudos.works.WorkIdentityIndex
 import io.github.cidy02.kudos.works.WorkRepository
 import io.github.cidy02.kudos.works.WorkTags
 import java.time.Duration
 import java.time.Instant
+import kotlin.math.abs
 
 /**
  * Restore semantics aligned with Apple `KudosBackup` + `SyncMerge`:
@@ -513,7 +517,6 @@ object BackupMergeService {
                 authorIdentitiesJSON = existing.authorIdentitiesJSON,
                 keepInProgressOverride = archived.keepInProgressOverride ?: existing.keepInProgressOverride,
                 hiddenFromHistoryAt = if (archived.hiddenFromHistoryAt != null) restored.hiddenFromHistoryAt else existing.hiddenFromHistoryAt,
-                legacyReaderProgress = if (archived.legacyReaderProgress != null) restored.legacyReaderProgress else existing.legacyReaderProgress,
                 datePublished = restored.datePublished.ifBlank { existing.datePublished },
                 dateUpdated = restored.dateUpdated.ifBlank { existing.dateUpdated },
                 epubDigest = restored.epubDigest.ifBlank { existing.epubDigest },
@@ -612,6 +615,7 @@ object BackupMergeService {
                 lastScrollFraction = existing.lastScrollFraction,
                 lastReadDate = existing.lastReadDate,
                 readiumLocator = existing.readiumLocator ?: restored.readiumLocator,
+                legacyReaderProgress = existing.legacyReaderProgress,
                 progressModifiedAt = existing.progressModifiedAt
             )
         }
@@ -628,6 +632,7 @@ object BackupMergeService {
                     lastScrollFraction = existing.lastScrollFraction,
                     lastReadDate = existing.lastReadDate,
                     readiumLocator = existing.readiumLocator ?: restored.readiumLocator,
+                    legacyReaderProgress = existing.legacyReaderProgress,
                     progressModifiedAt = existing.progressModifiedAt
                 )
             }
@@ -637,6 +642,7 @@ object BackupMergeService {
                     lastScrollFraction = existing.lastScrollFraction,
                     lastReadDate = existing.lastReadDate,
                     readiumLocator = existing.readiumLocator ?: restored.readiumLocator,
+                    legacyReaderProgress = existing.legacyReaderProgress,
                     progressModifiedAt = existing.progressModifiedAt
                 )
             }
@@ -647,8 +653,27 @@ object BackupMergeService {
             lastScrollFraction = restored.lastScrollFraction,
             lastReadDate = restored.lastReadDate,
             readiumLocator = restored.readiumLocator ?: existing.readiumLocator,
+            // The macOS reader's percent travels with the progress, not with the
+            // metadata (iOS `SyncMerge.applyProgress`). The key present is a percent or
+            // an explicit null from a device that read past it. No key at all (an
+            // older build) is not a clear, unless the locator actually moved: the
+            // card prefers the percent, and must not stay on a stale one.
+            legacyReaderProgress = when {
+                archived.legacyReaderProgress != null -> restored.legacyReaderProgress
+                keylessLocatorMoved(
+                    restored.readiumLocator,
+                    existing.readiumProgress ?: existing.legacyReaderProgress
+                ) -> null
+                else -> existing.legacyReaderProgress
+            },
             progressModifiedAt = incomingProgressAt ?: restored.lastReadDate
         )
+    }
+
+    /** iOS `keylessLocatorMoved`: by at least the reader's own delta from this device's place. */
+    private fun keylessLocatorMoved(locator: String?, local: Double?): Boolean {
+        val incoming = totalProgressionIn(locator) ?: return false
+        return local != null && abs(incoming - local) >= ReaderProgressGate.MIN_DELTA
     }
 
     private fun mergeBookmarks(
