@@ -7,7 +7,7 @@ records what Claude did with them. Where the two differ, this file is what the c
 
 | | |
 |---|---|
-| Android | `android/redesign-parity`, `e533b986`…`0cc50518` (5c) and `e3d7dece` (5d). Gate: 1,273 unit tests, all pass. |
+| Android | `android/redesign-parity`, `e533b986`…`0cc50518` (5c), `e3d7dece` (5d), `ae754e93` (5e). Gate: 1,281 unit tests, all pass. |
 | iOS | `91f3930f` and `d0b85f4f` on `claude/polish-loop`; `ef120853` and `d56fb5a5` on `integrate/cloud-redesign` (T-357). The nine suites that sync a folder: 73 tests pass on the case-sensitive volume at `91f3930f`, with lint clean and a macOS build. `d0b85f4f` adds one test and no app code; it was run with three of the suites (37 tests pass). |
 | Not pushed | All of it. |
 | Not done | A real cloud provider, a real iPhone, two devices at once. See "Not verified". |
@@ -81,23 +81,23 @@ The demo library, a folder under `Documents/`, `Kudos_Verify` in airplane mode.
 | F2 | A stale upload writes over the only index | **Fixed.** Android stops if the manifest changed; iOS reads before every upload. Two devices in the same instant: owner question 6. |
 | F3 | iOS cannot read, and prunes, lowercase EPUB names | **Fixed.** iOS reads either case; Android still renames its old files. |
 | F4 | Android prunes after reading only `.bak` | **Fixed.** |
-| F5 | Batches refuse later EPUBs | **Fixed** (equal clock replaces). Open: a work newly marked preserved by an earlier batch can still have its file refused. |
+| F5 | Batches refuse later EPUBs | **Fixed** (equal clock replaces; and since 5e only the last batch marks queued works preserved). |
 | F6 | A later tombstone can narrow what is suppressed | **Fixed on Android**, stricter than iOS: owner question 8. |
-| F7 | A saved search made during an import is deleted | **Fixed** for saved searches. Open: the same pattern for reading sessions, favorites and watermarks. |
+| F7 | A saved search made during an import is deleted | **Fixed**, and since 5e for reading sessions, favorites and watermarks. Open: Replace Library's own sweep of omitted rows has the same fault. |
 | F8 | A colliding font is copied once per batch | **Fixed** per sync. Open: repeated restores still add suffixed copies, on both apps. |
 | F9 | Unbounded reads; delete before write | **Partly.** Reads are bounded. Writes still truncate the file they replace. |
 | F10 | Conflict copies discarded early, or ignored | **Partly.** Android deletes after the commit and keeps what it cannot fold. Open: iOS does not read a `manifest (1).json` at all. |
 | F11 | Late files stranded | **Partly.** Fonts not taken stay listed. A font whose file has not arrived at all is not listed again until its owner syncs. |
-| F12 | An original and its record can be split across batches | Open. |
+| F12 | An original and its record can be split across batches | **Fixed** (5e): a late record is taken when the folder's original is the same file as the local one. |
 | F13 | The EPUB check takes the first `.opf` | **Fixed.** |
-| F14 | More than 32 MB of fonts never finishes | **Fixed.** Open: a test at the real 32 MB limit. |
+| F14 | More than 32 MB of fonts never finishes | **Fixed**, with a test at the real 32 MB limit since 5e. |
 | F15 | File names: Unicode, duplicates, length | **Partly.** Composed form compared. Open: two files of one name on a provider; names over 128 characters. |
 | F16 | Fields lost through Android | **Fixed for the folder** (unknown top-level keys are written back). Open: a backup made on Android holds no pronunciations; unknown keys inside a record are still dropped. |
 | F17 | Dates are not a safe "has it changed" signal | **Fixed on Android** (bytes compared). Open on iOS: it still skips a read when the date is unchanged. |
 | F18 | A failed write reported as success | **Fixed.** |
-| F19 | Deleted saved links and highlights stay on the peer | Open, both apps: owner question 7. |
+| F19 | Deleted saved links and highlights stay on the peer | Open, both apps: owner question 7. **Queue and collection memberships have the same gap** (found in 5e): a work taken out of a queue on one device stays in it on the other. |
 | F20 | Recently Deleted's countdown restarts on sync | **Fixed.** |
-| F21 | "Kept" and "queued" flags can never go back to off | **Kept: fixed** (5d). **Queued: open**, see below. |
+| F21 | "Kept" and "queued" flags can never go back to off | **Kept: fixed** (5d). **Queued: held** for owner question 7, see "Brief 5e". |
 | F22 | A stranger's file pruned as an original | **Fixed.** |
 | F23 | A failed re-import deletes the original | **Fixed.** |
 | F24 | The EPUB gate trusts the flag, not the file | **Fixed.** |
@@ -156,6 +156,32 @@ Still open after 5d, in order of weight:
 - A stale "kept" clock is fixed only in the importer; any other code that changes a synced flag
   without advancing `lastModifiedAt` has the same fault. The setters in `WorkRepository` do
   advance it.
+
+## Brief 5e (2026-10-04, `ae754e93`)
+
+Codex wrote four parts from `5e-sync-leftovers.md` (`5e-result.md`). Three are landed.
+
+| Part | Outcome |
+|---|---|
+| 2 | **Landed.** A reading session, favorite or fandom watermark made while an import runs is no longer swept by it. |
+| 3 | **Landed.** A conversion record that arrives after its original is taken, if the folder's original is the same file as the local one. iOS takes it without that check. |
+| 4 | **Landed.** Only the last batch of a sync marks queued works preserved (the new test fails without the fix), and a test of fonts at the real 32 MB limit. |
+| 1 | **Held.** The queued flag following queue membership. |
+
+Why part 1 is held: to make the flag follow membership, Codex's patch also **removed a queue
+membership this device holds when a paired device has deleted it**. iOS does not do that. On
+both apps a membership deletion only stops the membership being added back; a device that
+already holds it keeps it, and the two devices disagree for good. That is the same gap as
+saved links and highlights (F19), and whether to close it is owner question 7. Without the
+removal the rest of part 1 changes nothing for data written by current builds: flags and
+memberships already agree (checked in the demo library: 14 queued works, 14 memberships). What
+is left is old Android data with the flag and no membership, which the patch would have turned
+into Saved for Later memberships. Codex's patch is kept as `bcb5ce5a` on
+`android/agent-codex-5e` for when the question is answered.
+
+Changed from the patch: an original that cannot be read, or is over 128 MB, does not mark the
+sync incomplete. The prune keeps every listed work's originals whether held here or not, and
+one large original in the folder would otherwise have stopped Android pruning for good.
 
 Found while landing, not in the audit:
 
