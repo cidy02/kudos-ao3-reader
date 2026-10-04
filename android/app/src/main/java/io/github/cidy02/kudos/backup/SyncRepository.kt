@@ -285,8 +285,13 @@ class SyncRepository(
         existing: DocumentFile? = dir.findFile(fileName)
     ) {
         var file = existing
-        // An older Android build named EPUBs in lowercase; give the file the name iOS expects.
-        if (file != null && file.name != fileName) runCatching { file.renameTo(fileName) }
+        // An older Android build named EPUBs in lowercase. Such a file is replaced, not renamed:
+        // a phone's shared storage ignores letter case, and a rename that changes only the case
+        // is refused there or lands on a "name (1)" copy, which the prune would then remove.
+        if (file != null && file.name != fileName) {
+            file.delete()
+            file = null
+        }
         if (file != null && file.length() == data.size.toLong()) {
             // Equal length is not equal content. Skipping on length alone means an
             // edit that happens to keep the byte count — a typo fix, a same-width
