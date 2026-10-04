@@ -545,7 +545,11 @@ private fun TabCapsule(
                 Text(
                     text = destination.label,
                     color = if (selected) tokens.accent else tokens.secondaryInk,
-                    fontSize = 11.sp,
+                    // iOS's tab bar keeps its label size at every text size; a scaled label is
+                    // cut off by the bar. The line height and letter spacing are in sp as well.
+                    fontSize = with(LocalDensity.current) { 11.dp.toSp() },
+                    lineHeight = with(LocalDensity.current) { 24.dp.toSp() },
+                    letterSpacing = with(LocalDensity.current) { 0.5.dp.toSp() },
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
