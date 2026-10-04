@@ -1,8 +1,9 @@
-# 5a result (parts 1 and 2)
+# 5a result (parts 1 to 3)
 
 Done by Claude: Codex's weekly limit ran out before it could start. Part 1 (`d60ff5a4`) is the
 folder's layout and what each app writes, reads and deletes. Part 2 is when an incoming EPUB may
-replace a local one. The rest of the brief is listed at the end as not done.
+replace a local one. Part 3 is which EPUBs a sync-down reads. The rest of the brief is listed at
+the end as not done.
 
 ## Most important: the two apps misread, and deleted, each other's EPUBs
 
@@ -73,6 +74,28 @@ its EPUBs, so Android's check accepts what iOS builds.
 **Android is stricter than iOS in one place, kept:** on equal clocks iOS takes the incoming copy
 (`shouldApplyIncoming` uses >=) and Android keeps the local one. It only ever keeps a file.
 
+## Part 3: which EPUBs a sync-down reads
+
+| | iOS (`readChangedRemoteAssets`) | Android before | Now |
+|---|---|---|---|
+| Which EPUBs are read from the folder | only those whose size differs from the local file, or whose size is equal and whose digest differs | every listed EPUB, on every sync | as iOS |
+| How many are held in memory | the changed ones | the whole library at once | at most one batch (32 MB, then the next) |
+| `epubDigest` in the manifest it writes | the digest of the file (`Storage.fileDigest`) | whatever an earlier manifest said, never recomputed | the digest of the bytes it uploads |
+
+A library of a thousand works held several hundred megabytes in one map on every sync, which
+is more than an Android app's heap: the sync would crash rather than fail. And a stale digest in
+Android's manifest could make another device skip a changed book.
+
+The manifest is merged once per batch. A merge that brings nothing new changes nothing (every
+sync already merged the whole manifest again), and each work is offered once.
+
+Same as iOS, and a known limit: with no digest in the manifest (one written by Android 0.2.1 or
+0.2.2, or by an old iOS build), an EPUB of exactly the same size counts as unchanged.
+
+Tests in `SyncRepositoryTest`: `aCorrectedBookOfTheSameLengthIsStillFetched` (iOS
+`EqualSizeEPUBStillSyncsTests`), `withNoDigestAnEqualSizeCountsAsUnchanged`,
+`syncUpWritesTheDigestOfTheEpubItUploads`, `aSyncDownLargerThanOneBatchStillBringsEveryEpub`.
+
 ## Found and not changed (for the owner, or a later brief)
 
 - **iOS compares names exactly** when it reads and when it prunes. Released Android builds (0.2.1,
@@ -85,10 +108,13 @@ its EPUBs, so Android's check accepts what iOS builds.
 - **`Originals/`.** iOS syncs imported originals there (`<workID>.<ext>` and
   `<workID>.conversion.json`). Android neither reads nor writes that folder, and never deletes
   from it.
-- **Android reads every listed EPUB into memory on every sync.** iOS reads only the ones that
-  changed (size first, then the manifest's digest), one at a time. A large library costs Android
-  its whole size in memory, and a slow cloud folder is read in full each time. The fix is to
-  compare size and digest before reading; it is the next thing worth doing here.
+- **Android's stored digest is still only carried through.** The sync folder's manifest now has
+  the real one, but a `.kudosbackup` file exported from Android still carries whatever digest an
+  earlier manifest gave the work. The fix is to compute it where Android writes an EPUB
+  (`WorkFileStore.writeWorkEpub`'s callers), as iOS's `replaceEPUB` does.
+- **Sync-up still reads the folder's copy to compare** when the sizes are equal
+  (`writeIfChanged`). The digest could settle that too.
+- **No size limit on an EPUB read from the folder**, on either platform.
 - **A manifest that changes between this device's read and its write.** iOS compares the
   manifest's date before writing and skips the prune if another device wrote in between. Android
   only knows that it read a manifest.

@@ -704,32 +704,12 @@ class SyncRepositoryTest {
     fun syncDownRejectsAnInvalidEpubWithoutOverwritingTheLocalCopy() = runTest {
         // iOS `syncDownRejectsInvalidEPUBWithoutOverwritingLocalCopy`, with the folder's record
         // the newer one, so only the check on the bytes stands between them and the file.
-        database.workDao().upsert(
-            SavedWork(
-                id = WORK_A,
-                title = "Valid here",
-                author = "Author",
-                dateAdded = Instant.parse("2026-01-01T00:00:00Z"),
-                isSaved = true,
-                hasEpub = true
-            ).toEntity()
-        )
-        workFileStore.writeWorkEpub(WORK_A, REMOTE_EPUB)
-        val kudos = ensureKudosLibrary()
-        val manifest = remoteManifest(
-            works = listOf(
-                remoteBackupWork(WORK_A, "Corrupt in the folder", hasEpub = true)
-                    .copy(lastModifiedAt = "2026-06-01T00:00:00Z")
-            ),
+        seedOlderLocalWork(WORK_A, REMOTE_EPUB)
+        val worksDir = seedFolder(
+            remoteBackupWork(WORK_A, "Corrupt in the folder", hasEpub = true)
+                .copy(lastModifiedAt = "2026-06-01T00:00:00Z"),
             exportedAt = "2026-06-02T00:00:00Z"
         )
-        writeChild(
-            kudos,
-            BackupPaths.MANIFEST,
-            "application/json",
-            BackupJson.encodeToString(manifest).toByteArray(Charsets.UTF_8)
-        )
-        val worksDir = kudos.createDirectory(BackupPaths.WORKS_DIRECTORY)!!
         writeChild(worksDir, "${WORK_A.uppercase()}.epub", "application/epub+zip", "not-an-epub".toByteArray())
 
         assertTrue(syncRepository.runSync() is SyncResult.Success)
@@ -740,10 +720,131 @@ class SyncRepositoryTest {
         assertArrayEquals(REMOTE_EPUB, readDocument(epubIn(after, WORK_A)!!))
     }
 
+    @Test
+    fun aCorrectedBookOfTheSameLengthIsStillFetched() = runTest {
+        // iOS `EqualSizeEPUBStillSyncsTests`: equal size is not equal content, and the manifest's
+        // digest is what tells them apart without reading every book on every sync.
+        val corrected = sameLengthVariant(REMOTE_EPUB)
+        seedOlderLocalWork(WORK_A, REMOTE_EPUB)
+        val worksDir = seedFolder(
+            remoteBackupWork(WORK_A, "Corrected", hasEpub = true).copy(
+                lastModifiedAt = "2026-06-01T00:00:00Z",
+                epubDigest = BackupPaths.sha256(corrected)
+            ),
+            exportedAt = "2026-06-02T00:00:00Z"
+        )
+        writeChild(worksDir, "${WORK_A.uppercase()}.epub", "application/epub+zip", corrected)
+
+        assertTrue(syncRepository.runSync() is SyncResult.Success)
+
+        assertArrayEquals(corrected, Files.readAllBytes(workFileStore.workEpubPath(WORK_A)))
+    }
+
+    @Test
+    fun withNoDigestAnEqualSizeCountsAsUnchanged() = runTest {
+        // iOS's rule for a manifest written before digests existed: "the byte count is all
+        // there is". It is also what lets a sync leave unchanged books unread.
+        val sameSize = sameLengthVariant(REMOTE_EPUB)
+        seedOlderLocalWork(WORK_A, REMOTE_EPUB)
+        val worksDir = seedFolder(
+            remoteBackupWork(WORK_A, "Same size", hasEpub = true)
+                .copy(lastModifiedAt = "2026-06-01T00:00:00Z"),
+            exportedAt = "2026-06-02T00:00:00Z"
+        )
+        writeChild(worksDir, "${WORK_A.uppercase()}.epub", "application/epub+zip", sameSize)
+
+        assertTrue(syncRepository.runSync() is SyncResult.Success)
+
+        assertArrayEquals(REMOTE_EPUB, Files.readAllBytes(workFileStore.workEpubPath(WORK_A)))
+    }
+
+    @Test
+    fun syncUpWritesTheDigestOfTheEpubItUploads() = runTest {
+        // The digest in the manifest describes the bytes in the folder, whatever an earlier
+        // manifest said: a stale one makes another device skip a changed book.
+        database.workDao().upsert(
+            SavedWork(
+                id = WORK_A,
+                title = "Uploaded",
+                author = "Author",
+                dateAdded = FIXED_CLOCK,
+                isSaved = true,
+                hasEpub = true,
+                epubDigest = "stale"
+            ).toEntity()
+        )
+        workFileStore.writeWorkEpub(WORK_A, REMOTE_EPUB)
+
+        assertTrue(syncRepository.runSync() is SyncResult.Success)
+
+        val manifest = BackupValidator.decodeManifest(
+            readDocument(requireKudosLibrary().findFile(BackupPaths.MANIFEST)!!)
+        )
+        assertEquals(BackupPaths.sha256(REMOTE_EPUB), manifest.works.single().epubDigest)
+    }
+
+    @Test
+    fun aSyncDownLargerThanOneBatchStillBringsEveryEpub() = runTest {
+        // One byte per batch: every EPUB arrives in a pass of its own, after the pass that
+        // created its record.
+        val oneAtATime = SyncRepository(
+            context = context,
+            settingsRepository = settingsRepository,
+            backupRepository = backupRepository,
+            workFileStore = workFileStore,
+            fontFileStore = fontFileStore,
+            persistenceGate = persistenceGate,
+            clock = { clockInstant },
+            maxEpubBatchBytes = 1
+        )
+        val other = sameLengthVariant(REMOTE_EPUB)
+        val worksDir = seedFolder(
+            remoteBackupWork(WORK_REMOTE, "First", hasEpub = true),
+            remoteBackupWork(WORK_A, "Second", hasEpub = true)
+                .copy(sourceURL = "https://archiveofourown.org/works/1000")
+        )
+        writeChild(worksDir, "${WORK_REMOTE.uppercase()}.epub", "application/epub+zip", REMOTE_EPUB)
+        writeChild(worksDir, "${WORK_A.uppercase()}.epub", "application/epub+zip", other)
+
+        assertTrue(oneAtATime.runSync() is SyncResult.Success)
+
+        assertArrayEquals(REMOTE_EPUB, Files.readAllBytes(workFileStore.workEpubPath(WORK_REMOTE)))
+        assertArrayEquals(other, Files.readAllBytes(workFileStore.workEpubPath(WORK_A)))
+    }
+
+    /** A library work older than anything the tests put in the folder, holding [epub]. */
+    private suspend fun seedOlderLocalWork(id: String, epub: ByteArray) {
+        database.workDao().upsert(
+            SavedWork(
+                id = id,
+                title = "Valid here",
+                author = "Author",
+                dateAdded = Instant.parse("2026-01-01T00:00:00Z"),
+                isSaved = true,
+                hasEpub = true
+            ).toEntity()
+        )
+        workFileStore.writeWorkEpub(id, epub)
+    }
+
+    /**
+     * [epub] with one harmless byte changed (an entry's time in the ZIP's directory): the same
+     * length, other content, and still a readable package.
+     */
+    private fun sameLengthVariant(epub: ByteArray): ByteArray {
+        val copy = epub.copyOf()
+        val directory = (0..copy.size - 4).first {
+            copy[it] == 0x50.toByte() && copy[it + 1] == 0x4B.toByte() &&
+                copy[it + 2] == 1.toByte() && copy[it + 3] == 2.toByte()
+        }
+        copy[directory + 12] = (copy[directory + 12] + 1).toByte()
+        return copy
+    }
+
     /** A folder holding a manifest that lists [works]; returns its Works directory. */
-    private fun seedFolder(vararg works: BackupWork): DocumentFile {
+    private fun seedFolder(vararg works: BackupWork, exportedAt: String = "2026-01-01T00:00:00Z"): DocumentFile {
         val kudos = ensureKudosLibrary()
-        val manifest = remoteManifest(works = works.toList(), exportedAt = "2026-01-01T00:00:00Z")
+        val manifest = remoteManifest(works = works.toList(), exportedAt = exportedAt)
         writeChild(
             kudos,
             BackupPaths.MANIFEST,

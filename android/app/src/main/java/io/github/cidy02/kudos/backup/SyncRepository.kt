@@ -36,7 +36,9 @@ class SyncRepository(
     private val workFileStore: WorkFileStore,
     private val fontFileStore: FontFileStore,
     private val persistenceGate: PersistenceGate,
-    private val clock: () -> Instant = { Instant.now() }
+    private val clock: () -> Instant = { Instant.now() },
+    /** How many bytes of EPUBs one sync-down pass holds in memory at once. */
+    private val maxEpubBatchBytes: Long = 32L * 1024 * 1024
 ) {
     /**
      * Whole-run single-flight for [runSync]. [PersistenceGate] only serializes
@@ -195,6 +197,7 @@ class SyncRepository(
 
                 val expectedWorks = mutableSetOf<String>()
                 val expectedFonts = mutableSetOf<String>()
+                val epubDigests = mutableMapOf<String, String>()
 
                 // Assets first, manifest last: the manifest is the commit point, so
                 // it can never reference an asset file that was not already written.
@@ -211,6 +214,11 @@ class SyncRepository(
                             // prunes any other name as an orphan.
                             val epubName = BackupPaths.iosEpubAssetIdentifier(work.id)
                             val bytes = Files.readAllBytes(localPath)
+                            // The digest of the bytes this device uploads (iOS
+                            // `Storage.fileDigest`). Android keeps none of its own, and the
+                            // one it carries from another device's manifest can describe an
+                            // older copy: a sync-down that trusted it would skip a changed book.
+                            epubDigests[BackupPaths.normalizeIdForComparison(work.id)] = BackupPaths.sha256(bytes)
                             writeIfChanged(
                                 worksDir, epubName, "application/epub+zip", bytes,
                                 existing = remoteWorks[epubName.lowercase(Locale.ROOT)]
@@ -231,7 +239,14 @@ class SyncRepository(
                 }
 
                 // The commit point.
-                val manifestBytes = BackupJson.encodeToString(manifestOut).toByteArray(Charsets.UTF_8)
+                val manifestBytes = BackupJson.encodeToString(
+                    manifestOut.copy(
+                        works = manifestOut.works.map { work ->
+                            epubDigests[BackupPaths.normalizeIdForComparison(work.id)]
+                                ?.let { work.copy(epubDigest = it) } ?: work
+                        }
+                    )
+                ).toByteArray(Charsets.UTF_8)
                 writeManifestAtomically(syncDir, manifestBytes)
 
                 // Only now drop asset files that no manifest record references any
@@ -294,22 +309,9 @@ class SyncRepository(
     }
 
     private suspend fun importManifest(syncDir: DocumentFile, manifest: KudosBackupManifest) {
-        val epubFiles = mutableMapOf<String, ByteArray>()
         val fontFiles = mutableMapOf<String, ByteArray>()
         var totalFontBytes = 0L
 
-        syncDir.findFile(BackupPaths.WORKS_DIRECTORY)?.let { worksDir ->
-            // iOS writes the UUID in capitals; older Android builds wrote it lowercase.
-            val remoteWorks = worksDir.childrenByLowercaseName()
-            manifest.works.forEach { work ->
-                val epubName = BackupPaths.iosEpubAssetIdentifier(work.id)
-                remoteWorks[epubName.lowercase(Locale.ROOT)]?.let { file ->
-                    context.contentResolver.openInputStream(file.uri)?.use {
-                        epubFiles[work.id] = it.readBytes()
-                    }
-                }
-            }
-        }
         syncDir.findFile(BackupPaths.FONTS_DIRECTORY)?.let { fontsDir ->
             manifest.fonts.forEach { font ->
                 fontsDir.findFile(font.fileName)?.let { file ->
@@ -326,7 +328,42 @@ class SyncRepository(
             }
         }
 
-        backupRepository.importPackage(KudosBackupPackage(manifest, epubFiles, fontFiles))
+        // iOS writes the UUID in capitals; older Android builds wrote it lowercase.
+        val remoteWorks = syncDir.findFile(BackupPaths.WORKS_DIRECTORY)?.childrenByLowercaseName().orEmpty()
+        // Only the EPUBs that differ from this device's copies are read (iOS
+        // `readChangedRemoteAssets`), and only a batch at a time. Reading every listed EPUB into
+        // one map, as this used to, held a whole library in memory at once on every sync. The
+        // manifest is merged again with each batch: a merge that brings nothing new changes
+        // nothing, and each work is offered once.
+        var next = 0
+        do {
+            val epubFiles = mutableMapOf<String, ByteArray>()
+            var batchBytes = 0L
+            while (next < manifest.works.size && batchBytes < maxEpubBatchBytes) {
+                val work = manifest.works[next++]
+                val file = remoteWorks[BackupPaths.iosEpubAssetIdentifier(work.id).lowercase(Locale.ROOT)]
+                    ?: continue
+                if (isUnchangedLocally(work, file)) continue
+                context.contentResolver.openInputStream(file.uri)?.use {
+                    val bytes = it.readBytes()
+                    epubFiles[work.id] = bytes
+                    batchBytes += bytes.size
+                }
+            }
+            backupRepository.importPackage(KudosBackupPackage(manifest, epubFiles, fontFiles))
+        } while (next < manifest.works.size)
+    }
+
+    /**
+     * iOS `readChangedRemoteAssets`: size is the change signal, and when the sizes are equal the
+     * manifest's digest settles it. A manifest with no digest was written before digests
+     * existed, and the byte count is all there is.
+     */
+    private fun isUnchangedLocally(work: BackupWork, remote: DocumentFile): Boolean {
+        val local = workFileStore.workEpubPath(work.id)
+        if (!Files.isRegularFile(local) || Files.size(local) != remote.length()) return false
+        val remoteDigest = work.epubDigest.orEmpty()
+        return remoteDigest.isEmpty() || remoteDigest == BackupPaths.sha256(Files.readAllBytes(local))
     }
 
     private fun InputStream.readFontBytes(path: String): ByteArray {
