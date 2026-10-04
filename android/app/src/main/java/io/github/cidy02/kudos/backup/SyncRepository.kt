@@ -29,6 +29,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonObject
 
 private const val SYNC_WORK_NAME = "FolderSyncWorker"
 private val SYNC_INTERVAL = 6L to TimeUnit.HOURS
@@ -305,7 +306,8 @@ class SyncRepository(
 
                 // The commit point.
                 val localFontKeys = manifestOut.fonts.mapTo(HashSet()) { BackupPaths.fontFileNameKey(it.fileName) }
-                val manifestBytes = BackupJson.encodeToString(
+                val manifestJson = BackupJson.encodeToJsonElement(
+                    KudosBackupManifest.serializer(),
                     manifestOut.copy(
                         works = manifestOut.works.map { work ->
                             epubDigests[BackupPaths.normalizeIdForComparison(work.id)]
@@ -315,7 +317,19 @@ class SyncRepository(
                             BackupPaths.fontFileNameKey(it.fileName) !in localFontKeys
                         }
                     )
-                ).toByteArray(Charsets.UTF_8)
+                ).jsonObject
+                // What the folder's manifest held that this build does not know (iOS's
+                // pronunciation corrections, and whatever a later version adds) stays in the
+                // manifest this build writes. Dropped, as it was, a device that joined the
+                // folder after an Android sync never received it. It is the manifest this
+                // run replaces, read moments ago, so nothing stale is carried.
+                val unknown = if (decodedLive == null) emptyMap() else runCatching {
+                    Json.parseToJsonElement(manifestBytesAtRead!!.toString(Charsets.UTF_8)).jsonObject
+                        .filterKeys { it !in knownManifestKeys }
+                }.getOrDefault(emptyMap())
+                val manifestBytes = BackupJson
+                    .encodeToString(JsonObject.serializer(), JsonObject(manifestJson + unknown))
+                    .toByteArray(Charsets.UTF_8)
                 writeManifest(syncDir, manifestBytes, backup = manifestBytesAtRead.takeIf { decodedLive != null })
                 foldedConflicts.forEach { it.delete() }
 
@@ -409,6 +423,14 @@ class SyncRepository(
         } catch (error: Exception) {
             throw IOException("The sync folder's manifest could not be read. Its files were kept.")
         }
+    }
+
+    /** Every top-level key this build's manifest has, those it leaves out when null included. */
+    private val knownManifestKeys: Set<String> by lazy {
+        Json { encodeDefaults = true }.encodeToJsonElement(
+            KudosBackupManifest.serializer(),
+            KudosBackupManifest(version = 0, exportedAt = "")
+        ).jsonObject.keys
     }
 
     // Strict JSON, not `BackupJson`: that one is lenient, and reads a bare word as a value.
