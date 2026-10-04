@@ -364,7 +364,8 @@ fun AppNavHost(
                         navigateToWorkDetail(WorkDetailSource.LocalWork(workId))
                     },
                     onOpenReader = { workId -> navController.navigate(Routes.reader(workId)) },
-                    onOpenComments = { workId -> navController.navigate(Routes.comments(workId)) }
+                    onOpenComments = { workId -> navController.navigate(Routes.comments(workId)) },
+                    onOpenReadingQueues = { navController.navigate(Routes.readingQueues()) }
                 )
             }
         }

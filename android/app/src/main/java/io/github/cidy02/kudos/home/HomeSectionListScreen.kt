@@ -27,6 +27,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -42,6 +43,8 @@ import io.github.cidy02.kudos.app.PrivacyGate
 import io.github.cidy02.kudos.app.ProvidePushedShellChrome
 import io.github.cidy02.kudos.core.model.SavedWork
 import io.github.cidy02.kudos.core.model.WorkDownloadAction
+import io.github.cidy02.kudos.library.AddToCollectionDialog
+import io.github.cidy02.kudos.library.AddToQueueDialog
 import io.github.cidy02.kudos.library.LibraryCardActions
 import io.github.cidy02.kudos.library.LibraryCompletionFilter
 import io.github.cidy02.kudos.library.LibraryDisplayItem
@@ -52,6 +55,7 @@ import io.github.cidy02.kudos.library.LibraryFinishedFilter
 import io.github.cidy02.kudos.library.LibraryPrivacy
 import io.github.cidy02.kudos.library.LibraryPrivacyVisibility
 import io.github.cidy02.kudos.library.LibraryQuery
+import io.github.cidy02.kudos.library.LibraryQueuePreview
 import io.github.cidy02.kudos.library.LibraryRepository
 import io.github.cidy02.kudos.library.LibrarySectionKind
 import io.github.cidy02.kudos.library.LibrarySnapshot
@@ -61,6 +65,7 @@ import io.github.cidy02.kudos.library.LibrarySubjectWorkCard
 import io.github.cidy02.kudos.library.LibraryWorkMenu
 import io.github.cidy02.kudos.library.ReadingQueueRepository
 import io.github.cidy02.kudos.library.leadingSwipeActions
+import io.github.cidy02.kudos.library.queuePreviews
 import io.github.cidy02.kudos.library.readingProgressFraction
 import io.github.cidy02.kudos.library.trailingSwipeActions
 import io.github.cidy02.kudos.ui.components.EmptyStateCard
@@ -119,7 +124,8 @@ fun HomeSectionListScreen(
     initialSelection: Set<String> = emptySet(),
     onOpenWork: (String) -> Unit,
     onOpenReader: (String) -> Unit,
-    onOpenComments: (Long) -> Unit = {}
+    onOpenComments: (Long) -> Unit = {},
+    onOpenReadingQueues: () -> Unit = {}
 ) {
     val snapshot by repository.observeSnapshot().collectAsState(initial = null)
     val privacyState by privacyGate.state.collectAsState()
@@ -133,6 +139,8 @@ fun HomeSectionListScreen(
 
     var filters by remember(kind) { mutableStateOf(LibraryFilterState()) }
     var sort by remember(kind) { mutableStateOf(LibrarySort.Natural) }
+    var addToQueueWorkId by remember { mutableStateOf<String?>(null) }
+    var addToCollectionWorkId by remember { mutableStateOf<String?>(null) }
     var updatePill by remember(kind) { mutableStateOf(HomeUpdatePill.All) }
     var showFilters by remember { mutableStateOf(false) }
     var expandAll by remember { mutableStateOf(false) }
@@ -235,8 +243,8 @@ fun HomeSectionListScreen(
             toggleSelection(id)
         },
         onReveal = { id -> privacyGate.reveal(id, activity) },
-        onAddToQueue = {},
-        onAddToCollection = {},
+        onAddToQueue = { addToQueueWorkId = it },
+        onAddToCollection = { addToCollectionWorkId = it },
         onOpenComments = onOpenComments
     )
 
@@ -470,6 +478,46 @@ fun HomeSectionListScreen(
                 modifier = Modifier.align(Alignment.BottomCenter)
             )
         }
+    }
+
+    // The Library's own two dialogs; these menu entries used to do nothing here.
+    addToQueueWorkId?.let { workId ->
+        var queues by remember(workId) { mutableStateOf<List<LibraryQueuePreview>>(emptyList()) }
+        LaunchedEffect(workId) {
+            queues = runCatching { queueRepository?.queuePreviews() }.getOrNull().orEmpty()
+        }
+        AddToQueueDialog(
+            queues = queues,
+            onAdd = { queueId ->
+                addToQueueWorkId = null
+                scope.launch { runCatching { queueRepository?.addWork(queueId, workId) } }
+            },
+            onManageQueues = {
+                addToQueueWorkId = null
+                onOpenReadingQueues()
+            },
+            onDismiss = { addToQueueWorkId = null }
+        )
+    }
+    addToCollectionWorkId?.let { workId ->
+        AddToCollectionDialog(
+            workId = workId,
+            collections = snapshot?.collections.orEmpty(),
+            workRepository = workRepository,
+            scope = scope,
+            onSetMembership = { collectionId, member ->
+                scope.launch {
+                    runCatching {
+                        if (member) {
+                            workRepository.addWorkToCollection(workId, collectionId)
+                        } else {
+                            workRepository.removeFromCollection(workId, collectionId)
+                        }
+                    }
+                }
+            },
+            onDismiss = { addToCollectionWorkId = null }
+        )
     }
 
     if (showFilters) {
