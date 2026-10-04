@@ -121,6 +121,21 @@ a folder picked through the system picker under `Documents/`, on `Kudos_Verify` 
 Not seen on a device: a sync-down of another device's EPUB (unit tests only), and a real iPhone
 on the same folder (never tried).
 
+## Part 4: a deletion that could never settle (saved searches)
+
+iOS `TombstoneSweepsExistingRecordsTests`. A saved search has no Recently Deleted: deleting one
+leaves only a signed tombstone. When a paired device's tombstone arrived, Android declined to
+add the search back, but **kept the copy it already had**, and published it again on its next
+sync, where the first device suppressed it again. The two devices disagreed for ever. iOS found
+and fixed the same fault (`applyTombstonesToExisting`); Android already did this for reading
+sessions, favorites and watermarks, and not for saved searches.
+
+Now the merge removes a search a trusted tombstone covers, unless the search is newer than the
+tombstone, and never in Replace Library; and `BackupRepository` deletes what the merge removed
+(it only ever added or updated saved searches). Tests, named as iOS's, in `BackupTrustPhase2Test`:
+`aTrustedTombstoneRemovesASearchThisDeviceStillHas`, `aSearchMadeAfterTheDeletionSurvives`,
+`replaceLibraryDoesNotSweepExistingSearches`.
+
 ## The two apps' own code, on each other's folder (2026-10-04)
 
 The backup has golden archives written by each app and read by the other. The sync folder had

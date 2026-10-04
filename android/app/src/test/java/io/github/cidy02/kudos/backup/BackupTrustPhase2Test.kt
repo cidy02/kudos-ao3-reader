@@ -5,6 +5,7 @@ import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import com.google.crypto.tink.subtle.Ed25519Sign
+import io.github.cidy02.kudos.core.model.SavedSearch
 import io.github.cidy02.kudos.core.model.SyncTombstone
 import io.github.cidy02.kudos.core.model.SyncTombstoneRecordType
 import io.github.cidy02.kudos.data.local.KudosDatabase
@@ -469,6 +470,83 @@ class BackupTrustPhase2Test {
             )
         }
 
+    // iOS `TombstoneSweepsExistingRecordsTests`: a deletion has to remove the copy a device
+    // still holds, or the two devices disagree for ever.
+
+    @Test
+    fun aTrustedTombstoneRemovesASearchThisDeviceStillHas() = runTest {
+        // The peer's snapshot does not list the search (it deleted it) and carries the tombstone.
+        mergePeerSearchDeletion(localSearchAddedAt = "2025-06-01T00:00:00Z")
+
+        assertNull(database.savedSearchDao().getById(SWEPT_SEARCH))
+    }
+
+    @Test
+    fun aSearchMadeAfterTheDeletionSurvives() = runTest {
+        // Newer than the tombstone: a search the reader made since, which it must not eat.
+        mergePeerSearchDeletion(localSearchAddedAt = "2026-03-01T00:00:00Z")
+
+        assertNotNull(database.savedSearchDao().getById(SWEPT_SEARCH))
+    }
+
+    @Test
+    fun replaceLibraryDoesNotSweepExistingSearches() = runTest {
+        // The archive holds the search and a tombstone for it. Replace bypasses tombstones, or
+        // a repeated identical replace deletes what the first one put back.
+        mergePeerSearchDeletion(
+            localSearchAddedAt = "2025-06-01T00:00:00Z",
+            mode = BackupImportMode.REPLACE_LIBRARY,
+            archivedSearches = listOf(
+                BackupSavedSearch(id = SWEPT_SEARCH, name = "Shared search", dateAdded = "2025-06-01T00:00:00Z")
+            )
+        )
+
+        assertNotNull(database.savedSearchDao().getById(SWEPT_SEARCH))
+    }
+
+    /** A local search, then a trusted peer's snapshot carrying a tombstone for it (2026-01-01). */
+    private suspend fun mergePeerSearchDeletion(
+        localSearchAddedAt: String,
+        mode: BackupImportMode = BackupImportMode.MERGE,
+        archivedSearches: List<BackupSavedSearch> = emptyList()
+    ) {
+        val peer = Ed25519Sign.KeyPair.newKeyPair()
+        val pub = peer.publicKey.toLowerHex()
+        TombstoneTrustStore(settingsRepository).trust(pub)
+        database.savedSearchDao().upsert(
+            SavedSearch(
+                id = SWEPT_SEARCH,
+                name = "Shared search",
+                dateAdded = Instant.parse(localSearchAddedAt)
+            ).toEntity()
+        )
+        backupRepository.importPackage(
+            KudosBackupPackage(
+                manifest = KudosBackupManifest(
+                    version = BackupVersion.CURRENT,
+                    exportedAt = "2026-06-26T12:00:00Z",
+                    exportedBy = BackupExportedBy(
+                        platform = "ios",
+                        appVersion = "test",
+                        schemaVersion = BackupVersion.CURRENT
+                    ),
+                    savedSearches = archivedSearches,
+                    tombstones = listOf(
+                        signedTypedTombstone(
+                            recordId = SWEPT_SEARCH,
+                            recordType = SyncTombstoneRecordType.SAVED_SEARCH,
+                            privateKey = peer.privateKey,
+                            publicKeyHex = pub,
+                            tombstoneId = "cccc3333-cccc-4ccc-8ccc-cccccccccccc"
+                        )
+                    ),
+                    settings = BackupSettingsPayload()
+                )
+            ),
+            mode
+        )
+    }
+
     @Test
     fun retractWorkTombstoneMatchesAo3AndCanonicalUrl() = runTest {
         val otherRecord = "dddddddd-dddd-4ddd-8ddd-dddddddddddd"
@@ -624,6 +702,7 @@ class BackupTrustPhase2Test {
     companion object {
         private val CLOCK: Instant = Instant.parse("2026-06-26T12:00:00Z")
         private const val WORK_K = "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
+        private const val SWEPT_SEARCH = "66666666-6666-4666-8666-666666666666"
         private const val TOMBSTONE_ID = "33333333-3333-4333-8333-333333333333"
     }
 }

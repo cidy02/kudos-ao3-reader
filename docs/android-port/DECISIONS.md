@@ -230,3 +230,11 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   pruned.
   Reverse: `importManifest`, `isUnchangedLocally` and `manifestStampAtRead` in
   `backup/SyncRepository.kt`.
+- **2026-10-04 · A saved search a paired device deleted is removed here too.** Android adopted
+  the other device's signed tombstone and refused to add the search back, but kept its own copy
+  and published it again, so the deletion never settled. iOS removes the existing copy
+  (`applyTombstonesToExisting`, `TombstoneSweepsExistingRecordsTests`); Android now does the same:
+  only for a tombstone from a trusted device, not for a search newer than the tombstone, and
+  never in Replace Library. Nothing changes for a device that has paired with no one.
+  Reverse: the sweep in `mergeSavedSearches` (`backup/BackupMergeService.kt`) and the deletion
+  beside the saved-search upsert in `BackupRepository.applyMergeResult`.
