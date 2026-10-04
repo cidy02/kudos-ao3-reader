@@ -33,6 +33,7 @@ struct CrossPlatformBackupTests {
         try KudosBackupService.writeArchive(plan, to: generatedURL)
         let generated = try KudosBackupContents.read(from: generatedURL)
         try assertArchive(generated, matches: generated.manifest, epub: seeded.epub)
+        assertOriginals(in: generated)
         assertDeviceLocalFieldsAreAbsent(from: plan.manifestData)
 
         let paths = fixturePaths()
@@ -65,8 +66,12 @@ struct CrossPlatformBackupTests {
         #expect(generatedCanonical == expectedCanonical)
         let iosArchive = try KudosBackupContents.read(from: paths.iosArchive)
         try assertArchive(iosArchive, matches: expected, epub: seeded.epub)
+        assertOriginals(in: iosArchive)
 
         let androidArchive = try KudosBackupContents.read(from: paths.androidArchive)
+        // The seeded copies are still on disk and would satisfy "already here".
+        // Take them away, so the archive Android wrote has to bring its own.
+        seeded.removeOriginals()
         let restored = try restore(androidArchive)
         defer { restored.cleanup() }
         let reexported = try KudosBackupService.makeContents(
@@ -91,6 +96,13 @@ struct CrossPlatformBackupTests {
         }
         #expect(iosCanonical == androidCanonical)
         try assertRestoredEPUBs(restored.works, expected: seeded.epub)
+        // What iOS wrote into its archive came back out of Android's: a backup
+        // that passes through Android keeps a converted import's original.
+        assertOriginals(in: androidArchive)
+        let restoredOriginal = try #require(Storage.existingOriginalDocumentURL(for: Self.workOneID))
+        #expect(restoredOriginal.pathExtension == "html")
+        #expect(try Data(contentsOf: restoredOriginal) == Self.originalBytes)
+        #expect(WorkConversionRecord.read(for: Self.workOneID) == Self.conversionRecord)
     }
 
     private func seedLibrary() throws -> SeededLibrary {
@@ -199,6 +211,13 @@ struct CrossPlatformBackupTests {
             try epub.write(to: work.fileURL, options: .atomic)
             context.insert(work)
         }
+        // The first work is a converted import: the file it was made from and
+        // the record of its conversion travel with it (`Originals/`).
+        try Self.originalBytes.write(
+            to: Storage.originalDocumentURL(for: first.id, fileExtension: "html"),
+            options: .atomic
+        )
+        Self.conversionRecord.write(for: first.id)
 
         let collection = WorkCollection(name: "Portable Collection")
         collection.id = Self.collectionID
@@ -511,6 +530,22 @@ struct CrossPlatformBackupTests {
         #expect(archive.epubData(for: Self.workTwoID) == epub)
     }
 
+    private func assertOriginals(in archive: KudosBackupContents) {
+        let original = "\(Self.workOneID.uuidString).html"
+        let record = "\(Self.workOneID.uuidString).conversion.json"
+        // Without regard to letter case: iOS parses the id in the name, and
+        // Android may write it either way.
+        #expect(Set(archive.originalFileNames.map { $0.lowercased() })
+            == [original.lowercased(), record.lowercased()])
+        let names = Dictionary(
+            archive.originalFileNames.map { ($0.lowercased(), $0) },
+            uniquingKeysWith: { first, _ in first }
+        )
+        #expect(names[original.lowercased()].flatMap(archive.originalData(named:)) == Self.originalBytes)
+        #expect(names[record.lowercased()].flatMap(archive.originalData(named:))
+            .flatMap { try? JSONDecoder().decode(WorkConversionRecord.self, from: $0) } == Self.conversionRecord)
+    }
+
     private func assertRestoredEPUBs(_ works: [SavedWork], expected: Data) throws {
         #expect(works.count == 2)
         for work in works {
@@ -630,6 +665,13 @@ struct CrossPlatformBackupTests {
         return defaults
     }
 
+    private static let originalBytes = Data("<html><body><p>The original.</p></body></html>".utf8)
+    private static let conversionRecord = WorkConversionRecord(
+        converterVersion: 1,
+        format: "html",
+        originalFileName: "cross-platform.html",
+        convertedAt: Date(timeIntervalSince1970: 1_700_000_000)
+    )
     private static let workOneID = UUID(uuidString: "10000000-0000-4000-8000-000000000001")!
     private static let workTwoID = UUID(uuidString: "10000000-0000-4000-8000-000000000002")!
     private static let collectionID = UUID(uuidString: "20000000-0000-4000-8000-000000000001")!
@@ -668,6 +710,16 @@ private struct SeededLibrary {
 
     func cleanup() {
         for work in works { try? FileManager.default.removeItem(at: work.fileURL) }
+        removeOriginals()
+    }
+
+    func removeOriginals() {
+        for work in works {
+            if let original = Storage.existingOriginalDocumentURL(for: work.id) {
+                try? FileManager.default.removeItem(at: original)
+            }
+            WorkConversionRecord.delete(for: work.id)
+        }
     }
 }
 
@@ -687,6 +739,16 @@ private struct RestoredLibrary {
 
     func cleanup() {
         for work in works { try? FileManager.default.removeItem(at: work.fileURL) }
+        removeOriginals()
+    }
+
+    func removeOriginals() {
+        for work in works {
+            if let original = Storage.existingOriginalDocumentURL(for: work.id) {
+                try? FileManager.default.removeItem(at: original)
+            }
+            WorkConversionRecord.delete(for: work.id)
+        }
     }
 }
 }
