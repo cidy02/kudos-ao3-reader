@@ -15,7 +15,6 @@ import io.github.cidy02.kudos.data.preferences.SettingsRepository
 import io.github.cidy02.kudos.files.CustomFontRepository
 import io.github.cidy02.kudos.network.ao3.browse.FandomCatalogCache
 import io.github.cidy02.kudos.update.AppUpdateRepository
-import io.github.cidy02.kudos.works.WorkAvailabilitySweep
 import io.github.cidy02.kudos.works.WorkImporter
 import io.github.cidy02.kudos.works.WorkRepository
 
@@ -33,7 +32,6 @@ fun SettingsScreen(
     workImporter: WorkImporter? = null,
     fandomCatalogCache: FandomCatalogCache? = null,
     workRepository: WorkRepository? = null,
-    workAvailabilitySweep: WorkAvailabilitySweep? = null,
     onOpenAvailabilitySweep: () -> Unit = {}
 ) {
     val navController = rememberNavController()
@@ -61,7 +59,7 @@ fun SettingsScreen(
             SettingsDownloadsPage(repository, settings)
         }
         composable("preservation") {
-            SettingsPreservationPage(workAvailabilitySweep, onOpenAvailabilitySweep)
+            SettingsPreservationPage(onOpenAvailabilitySweep)
         }
         composable("library") {
             SettingsLibraryPage(repository, settings)

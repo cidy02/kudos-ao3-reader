@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.works
 
+import io.github.cidy02.kudos.core.model.SavedWork
 import io.github.cidy02.kudos.network.ao3.AO3Clock
 import io.github.cidy02.kudos.network.ao3.AO3Delay
 import io.github.cidy02.kudos.network.ao3.AO3Error
@@ -38,6 +39,12 @@ class WorkAvailabilitySweep(
         val cancelled: Boolean = false
     )
 
+    /**
+     * What the screen states before any request is sent: how many works a run would contact
+     * AO3 about, and how many have no AO3 identity and so cannot be checked at all.
+     */
+    data class Counts(val pending: Int = 0, val unverifiable: Int = 0)
+
     companion object {
         /** Don't re-ask about a work checked more recently than this. */
         val RECHECK_INTERVAL: Duration = Duration.ofDays(7)
@@ -57,26 +64,12 @@ class WorkAvailabilitySweep(
      * cannot be checked is left as it was. Cancellation stops cleanly and
      * preserves work already done.
      */
-    suspend fun sweep(limit: Int = DEFAULT_LIMIT): Summary {
+    suspend fun sweep(
+        limit: Int = DEFAULT_LIMIT,
+        onProgress: (completed: Int, total: Int) -> Unit = { _, _ -> }
+    ): Summary {
         val now = Instant.ofEpochMilli(clock.nowMillis())
-        val recheckCutoff = now.minus(RECHECK_INTERVAL)
-
-        val verifiable = workRepository.listSavedWorks().filter { work ->
-            work.sourceUrl.isNotBlank() &&
-                !work.ao3Unavailable &&
-                WorkTags.ao3WorkIdFromUrl(work.sourceUrl) != null
-        }
-
-        val pending = verifiable.filter { work ->
-            val last = work.lastAvailabilityCheck
-            last == null || !last.isAfter(recheckCutoff)
-        }
-        val skippedRecent = verifiable.size - pending.size
-
-        // null (never checked) sorts first: those are the works we know least about.
-        val ordered = pending.sortedWith(
-            compareBy(nullsFirst()) { it.lastAvailabilityCheck }
-        )
+        val (ordered, skippedRecent) = pending(workRepository.listSavedWorks(), now)
         val batch = ordered.take(limit)
         var remaining = ordered.size - batch.size
 
@@ -102,7 +95,16 @@ class WorkAvailabilitySweep(
             }
 
             val workId = WorkTags.ao3WorkIdFromUrl(work.sourceUrl) ?: continue
-            when (val result = tagsRepository.refreshTags(workId)) {
+            val result = try {
+                tagsRepository.refreshTags(workId)
+            } catch (_: CancellationException) {
+                // Stopped in the middle of a request. What was checked before it stays
+                // checked, and the caller still gets its summary.
+                cancelled = true
+                remaining += batch.size - index
+                break
+            }
+            when (result) {
                 is AO3Result.Failure -> {
                     if (result.error is AO3Error.NotFound) {
                         workRepository.upsert(
@@ -123,6 +125,7 @@ class WorkAvailabilitySweep(
                     stillAvailable++
                 }
             }
+            onProgress(index + 1, batch.size)
         }
 
         return Summary(
@@ -133,5 +136,30 @@ class WorkAvailabilitySweep(
             remaining = remaining,
             cancelled = cancelled
         )
+    }
+
+    suspend fun counts(): Counts {
+        val works = workRepository.listSavedWorks()
+        return Counts(
+            pending = pending(works, Instant.ofEpochMilli(clock.nowMillis())).first.size,
+            unverifiable = works.count { WorkTags.ao3WorkIdFromUrl(it.sourceUrl) == null }
+        )
+    }
+
+    /** The works a run would contact AO3 about, oldest check first, and how many it skips as recent. */
+    private fun pending(works: List<SavedWork>, now: Instant): Pair<List<SavedWork>, Int> {
+        val recheckCutoff = now.minus(RECHECK_INTERVAL)
+        val verifiable = works.filter { work ->
+            work.sourceUrl.isNotBlank() &&
+                !work.ao3Unavailable &&
+                WorkTags.ao3WorkIdFromUrl(work.sourceUrl) != null
+        }
+        val pending = verifiable.filter { work ->
+            val last = work.lastAvailabilityCheck
+            last == null || !last.isAfter(recheckCutoff)
+        }
+        // null (never checked) sorts first: those are the works we know least about.
+        return pending.sortedWith(compareBy(nullsFirst()) { it.lastAvailabilityCheck }) to
+            (verifiable.size - pending.size)
     }
 }
