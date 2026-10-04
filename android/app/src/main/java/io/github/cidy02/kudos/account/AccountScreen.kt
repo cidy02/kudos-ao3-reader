@@ -481,7 +481,9 @@ private fun AccountSignedInHeader(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier.padding(top = 4.dp)
             ) {
-                Box {
+                // The pill gives way, not the menu beside it: at large text it filled the row and
+                // pushed the "…" button off it.
+                Box(Modifier.weight(1f, fill = false)) {
                     Box(
                         modifier = Modifier
                             .clip(CircleShape)
@@ -494,7 +496,8 @@ private fun AccountSignedInHeader(
                             fontSize = 13.sp,
                             fontWeight = FontWeight.Medium,
                             color = tokens.primaryInk,
-                            maxLines = 1
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
                     DropdownMenu(
