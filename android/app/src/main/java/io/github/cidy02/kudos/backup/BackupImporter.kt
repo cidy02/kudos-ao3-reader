@@ -25,6 +25,7 @@ object BackupImporter {
         var manifestBytes: ByteArray? = null
         val epubFiles = mutableMapOf<String, ByteArray>()
         val fontFiles = mutableMapOf<String, ByteArray>()
+        val originalFiles = mutableMapOf<String, ByteArray>()
         var totalFontBytes = 0L
         val seenEntries = mutableSetOf<String>()
         val seenFontFileNames = mutableSetOf<String>()
@@ -41,6 +42,23 @@ object BackupImporter {
                         continue
                     }
                     if (!seenEntries.add(path)) throw BackupError.DuplicateEntry(path)
+
+                    if (path.startsWith("${BackupPaths.ORIGINALS_DIRECTORY}/")) {
+                        // The original of a converted import, and the record of its
+                        // conversion (iOS `KudosBackupExport`). One that is not named as iOS
+                        // names them, or is over this device's per-entry limit, is left
+                        // out: it must not fail the restore of everything else.
+                        val name = path.removePrefix("${BackupPaths.ORIGINALS_DIRECTORY}/")
+                        if (BackupPaths.parseOriginalFileName(name) != null) {
+                            try {
+                                originalFiles[name] = zip.readEntryBytes(path)
+                            } catch (_: BackupError.EntryTooLarge) {
+                                // Left out.
+                            }
+                        }
+                        zip.closeEntry()
+                        continue
+                    }
 
                     val fontFileName = if (path.startsWith("${BackupPaths.FONTS_DIRECTORY}/")) {
                         validateFontEntry(path).also { fileName ->
@@ -92,7 +110,8 @@ object BackupImporter {
         return KudosBackupPackage(
             manifest = manifest,
             epubFilesByWorkId = epubFiles,
-            fontFilesByFileName = fontFiles
+            fontFilesByFileName = fontFiles,
+            originalFilesByName = originalFiles
         )
     }
 

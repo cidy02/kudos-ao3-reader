@@ -43,6 +43,10 @@ object BackupExporter {
                     val bytes = kudosBackup.fontFilesByFileName[font.fileName] ?: return@forEach
                     zip.writeEntry(BackupPaths.fontEntryName(font.fileName), bytes, seenEntries)
                 }
+
+            kudosBackup.originalFilesByName.toSortedMap().forEach { (name, bytes) ->
+                zip.writeEntry("${BackupPaths.ORIGINALS_DIRECTORY}/$name", bytes, seenEntries)
+            }
         }
 
         return output.toByteArray()

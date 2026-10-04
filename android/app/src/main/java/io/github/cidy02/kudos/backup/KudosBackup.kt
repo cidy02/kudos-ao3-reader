@@ -17,7 +17,9 @@ import io.github.cidy02.kudos.data.local.entity.ReadingSessionEntity
 data class KudosBackupPackage(
     val manifest: KudosBackupManifest,
     val epubFilesByWorkId: Map<String, ByteArray> = emptyMap(),
-    val fontFilesByFileName: Map<String, ByteArray> = emptyMap()
+    val fontFilesByFileName: Map<String, ByteArray> = emptyMap(),
+    /** `Originals/` by file name, as iOS names them: `<work>.<ext>` and `<work>.conversion.json`. */
+    val originalFilesByName: Map<String, ByteArray> = emptyMap()
 )
 
 data class BackupLibrarySnapshot(
@@ -104,5 +106,11 @@ data class BackupMergeResult(
     /** Verified-but-untrusted-signer tombstone ids from this merge — count-only badge source. */
     val unknownSignerTombstoneIds: Set<String> = emptySet(),
     /** Ids adopted this run (signer now trusted) — clears matching pending ids. */
-    val adoptedIncomingTombstoneIds: Set<String> = emptySet()
+    val adoptedIncomingTombstoneIds: Set<String> = emptySet(),
+    /**
+     * The archive's work id to the id of the work it became here, for every work this merge
+     * brought in or matched (iOS `restoredWorksByArchivedID`). A work a tombstone suppressed is
+     * not in it. Both lowercase.
+     */
+    val workIdRemap: Map<String, String> = emptyMap()
 )

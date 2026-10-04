@@ -9,6 +9,7 @@ import io.github.cidy02.kudos.data.local.entity.WorkTagCrossRef
 import io.github.cidy02.kudos.data.local.entity.toDomain
 import io.github.cidy02.kudos.data.local.entity.toEntity
 import io.github.cidy02.kudos.data.preferences.SettingsRepository
+import io.github.cidy02.kudos.files.FileWriteResult
 import io.github.cidy02.kudos.files.FontFileStore
 import io.github.cidy02.kudos.files.WorkFileStore
 import io.github.cidy02.kudos.works.WorkRepository
@@ -62,10 +63,13 @@ class BackupRepository(
                 val bytes = fontFileStore.readFont(font.fileName) ?: return@forEach
                 if (bytes.isNotEmpty()) fontFiles[font.fileName] = bytes
             }
+            val originalFiles = linkedMapOf<String, ByteArray>()
+            snapshot.works.forEach { work -> originalFiles += originalFilesOf(work.id) }
             val pack = KudosBackupPackage(
                 manifest = snapshot.toV2Manifest(exportedAt = clock(), appVersion = appVersion),
                 epubFilesByWorkId = epubFiles,
-                fontFilesByFileName = fontFiles
+                fontFilesByFileName = fontFiles,
+                originalFilesByName = originalFiles
             )
             BackupExporter.exportV2(pack)
         }
@@ -87,6 +91,7 @@ class BackupRepository(
             val current = captureLibrarySnapshot(pack.fontFilesByFileName.keys)
             val merge = mergePackage(current, pack, mode)
             applyMergeResult(merge)
+            restoreOriginals(pack.originalFilesByName, merge.workIdRemap)
             merge.summary
         }
     }
@@ -101,7 +106,48 @@ class BackupRepository(
             val current = captureLibrarySnapshot(pack.fontFilesByFileName.keys)
             val merge = mergePackage(current, pack, mode)
             applyMergeResult(merge)
+            restoreOriginals(pack.originalFilesByName, merge.workIdRemap)
             merge.summary
+        }
+    }
+
+    /**
+     * A work's original and its conversion record under the names iOS gives them (iOS
+     * `KudosBackupService.makeContents`). An original over the per-entry limit stays behind:
+     * it must not fail the export of everything else.
+     */
+    suspend fun originalFilesOf(workId: String): Map<String, ByteArray> = withContext(Dispatchers.IO) {
+        val file = workFileStore.originalFile(workId) ?: return@withContext emptyMap()
+        val size = runCatching { Files.size(file) }.getOrDefault(0L)
+        if (size == 0L || size > BackupLimits.MAX_ENTRY_BYTES) return@withContext emptyMap()
+        val extension = file.fileName.toString().substringAfterLast('.', "")
+        buildMap {
+            put(BackupPaths.iosOriginalFileName(workId, extension), Files.readAllBytes(file))
+            workFileStore.readConversionRecord(workId)?.let {
+                put(BackupPaths.iosConversionRecordFileName(workId), it)
+            }
+        }
+    }
+
+    /**
+     * iOS `KudosBackupService.restore`, the originals loop. A file belongs to the work its name
+     * gives, and is written under the id that work has here. Never over an original already
+     * here and never beside one: a local original is the file the reader imported on this
+     * device, and a work has one, whatever its extension. A conversion record comes only with
+     * the original it describes.
+     */
+    private suspend fun restoreOriginals(files: Map<String, ByteArray>, workIdRemap: Map<String, String>) {
+        val restored = mutableSetOf<String>()
+        // Originals first, then their records.
+        files.entries.sortedBy { BackupPaths.parseOriginalFileName(it.key)?.second == true }.forEach { (name, bytes) ->
+            val (archivedId, isRecord) = BackupPaths.parseOriginalFileName(name) ?: return@forEach
+            val workId = workIdRemap[archivedId] ?: return@forEach
+            if (isRecord) {
+                if (workId in restored) workFileStore.writeConversionRecord(workId, bytes)
+            } else if (!workFileStore.originalExists(workId)) {
+                val written = workFileStore.writeOriginal(workId, name.substringAfterLast('.', ""), bytes)
+                if (written is FileWriteResult.Success) restored += workId
+            }
         }
     }
 
