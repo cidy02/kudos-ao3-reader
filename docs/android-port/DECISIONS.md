@@ -154,3 +154,19 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   `TASKS.md` row. Backup first: `~/kudos-tools/out/discard-<name>.patch` (tracked changes against
   each old HEAD) and `discard-<name>-untracked.tgz`.
   Reverse: check out the old commit in the worktree and `git apply` its patch.
+- **2026-10-03 · Fixes from the four-theme audit; what follows iOS and what was left for the
+  owner.** Twenty-one screens were checked on the emulator in Light, Sepia and OLED, and seven at
+  the largest font. Bugs fixed (see the commits): dark status-bar icons on a Dark or OLED page,
+  untinted icons drawn black on dark pages, two Account screens whose header sat under the status
+  bar, and library works shown unblurred on the AO3 account lists. Decisions inside those fixes:
+  - **The Account hub's tiles and rows are glass panels**, as iOS draws them and as `subjectPanel`
+    draws every other screen. They were Material cards, stark white on Sepia. Sepia's Material
+    container colours, never set, are now its own cream and tan.
+  - **The tab bar's labels don't grow with the font size**, as iOS's system tab bar doesn't. At
+    Android's largest size they were cut off by the bar.
+  - **The account lists treat a Mature library work as iOS's `visibleEntries` does:** blurred in
+    Blur mode until revealed; in Hide mode not paired, so it shows as a plain AO3 row. The menu's
+    dead "Hide Mature Content" became iOS's Show mature / Hide mature.
+  - **Not changed, for the owner** (`OWNER-DECISIONS-ANDROID.md`): the default accent is hard to
+    read on dark chrome on both platforms.
+  Reverse: each is one commit on `android/redesign-parity`, dated 2026-10-03 after 23:30.
