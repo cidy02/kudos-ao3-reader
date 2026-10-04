@@ -96,6 +96,13 @@ Tests in `SyncRepositoryTest`: `aCorrectedBookOfTheSameLengthIsStillFetched` (iO
 `EqualSizeEPUBStillSyncsTests`), `withNoDigestAnEqualSizeCountsAsUnchanged`,
 `syncUpWritesTheDigestOfTheEpubItUploads`, `aSyncDownLargerThanOneBatchStillBringsEveryEpub`.
 
+**A manifest another device writes mid-sync.** iOS compares the manifest's date just before it
+writes, and skips the prune if it moved (`viewIsCurrent` in `performSyncUp`,
+`StaleSyncUpKeepsRemoteAssetsTests`). Android now does the same: a first sync of a large library
+takes long enough for another device's upload to land in between, and pruning by a manifest that
+never saw that upload deleted its EPUB. Test: `aManifestAnotherDeviceWritesMidSyncStopsThePrune`
+(checked that it fails without the fix).
+
 ## Found and not changed (for the owner, or a later brief)
 
 - **iOS compares names exactly** when it reads and when it prunes. Released Android builds (0.2.1,
@@ -115,9 +122,6 @@ Tests in `SyncRepositoryTest`: `aCorrectedBookOfTheSameLengthIsStillFetched` (iO
 - **Sync-up still reads the folder's copy to compare** when the sizes are equal
   (`writeIfChanged`). The digest could settle that too.
 - **No size limit on an EPUB read from the folder**, on either platform.
-- **A manifest that changes between this device's read and its write.** iOS compares the
-  manifest's date before writing and skips the prune if another device wrote in between. Android
-  only knows that it read a manifest.
 - **Android shows no restore summary.** iOS tells the reader "Skipped N invalid EPUB files to
   protect your existing copy." and how many works arrived without their EPUB. Android counts
   neither.

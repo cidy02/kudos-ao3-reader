@@ -136,6 +136,7 @@ class SyncRepository(
                     !name.startsWith(BackupPaths.MANIFEST_TEMP)
             }
             val liveManifest = syncDir.findFile(BackupPaths.MANIFEST)
+            val manifestStampAtRead = liveManifest?.lastModified()
             val backupManifest = syncDir.findFile(BackupPaths.MANIFEST_BACKUP)
             var foldedConflicts = 0
             // iOS prunes only while its view of the folder is current. A manifest that is there
@@ -236,6 +237,14 @@ class SyncRepository(
                             writeIfChanged(fontsDir, font.fileName, "application/octet-stream", bytes)
                         }
                     }
+                }
+
+                // iOS's `viewIsCurrent` (`performSyncUp`): if another device wrote the
+                // manifest after this run read it, the manifest about to be written does
+                // not know that device's new works, and pruning by it would delete their
+                // EPUBs. Stale files simply remain; a later, informed sync clears them.
+                if (syncDir.findFile(BackupPaths.MANIFEST)?.lastModified() != manifestStampAtRead) {
+                    folderViewIsCurrent = false
                 }
 
                 // The commit point.

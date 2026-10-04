@@ -741,6 +741,38 @@ class SyncRepositoryTest {
     }
 
     @Test
+    fun aManifestAnotherDeviceWritesMidSyncStopsThePrune() = runTest {
+        // iOS `aStaleSyncUpKeepsAnotherDevicesRemoteEPUB`. The other device's write lands after
+        // this run has read the folder and before it writes: the export asks the clock for its
+        // date exactly there.
+        seedLocalWork(WORK_A, "Local", "local-a".toByteArray())
+        ensureKudosLibrary()
+        var otherDeviceWrote = false
+        val midSync = SyncRepository(
+            context = context,
+            settingsRepository = settingsRepository,
+            backupRepository = backupRepository,
+            workFileStore = workFileStore,
+            fontFileStore = fontFileStore,
+            persistenceGate = persistenceGate,
+            clock = {
+                if (!otherDeviceWrote) {
+                    otherDeviceWrote = true
+                    val worksDir = seedFolder(remoteBackupWork(WORK_REMOTE, "Theirs", hasEpub = true))
+                    writeChild(worksDir, "${WORK_REMOTE.uppercase()}.epub", "application/epub+zip", REMOTE_EPUB)
+                }
+                clockInstant
+            }
+        )
+
+        assertTrue(midSync.runSync() is SyncResult.Success)
+
+        val after = requireKudosLibrary().findFile(BackupPaths.WORKS_DIRECTORY)!!
+        assertNotNull("a work this run never learned about keeps its EPUB", epubIn(after, WORK_REMOTE))
+        assertNotNull(epubIn(after, WORK_A))
+    }
+
+    @Test
     fun withNoDigestAnEqualSizeCountsAsUnchanged() = runTest {
         // iOS's rule for a manifest written before digests existed: "the byte count is all
         // there is". It is also what lets a sync leave unchanged books unread.
