@@ -23,6 +23,7 @@ import java.text.Normalizer
 import java.time.Instant
 import java.util.Locale
 import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
@@ -69,6 +70,7 @@ class SyncRepository(
             Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
         )
         settingsRepository.updateSyncFolderUri(uri.toString())
+        settingsRepository.updateSyncLastError(null)
         settingsRepository.updateSyncIsEnabled(true)
         scheduleWorker()
     }
@@ -84,6 +86,7 @@ class SyncRepository(
         }
         settingsRepository.updateSyncIsEnabled(false)
         settingsRepository.updateSyncFolderUri(null)
+        settingsRepository.updateSyncLastError(null)
         WorkManager.getInstance(context).cancelUniqueWork(SYNC_WORK_NAME)
     }
 
@@ -110,7 +113,19 @@ class SyncRepository(
             return@withContext SyncResult.SkippedAlreadyRunning
         }
         try {
-            return@withContext runSyncLocked()
+            val result = try {
+                runSyncLocked()
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                SyncResult.Error(error.message ?: "Sync failed.")
+            }
+            when (result) {
+                is SyncResult.Error -> settingsRepository.updateSyncLastError(result.message)
+                is SyncResult.Success -> settingsRepository.updateSyncLastError(null)
+                SyncResult.SkippedAlreadyRunning -> Unit
+            }
+            return@withContext result
         } finally {
             runSyncMutex.unlock()
         }
@@ -353,6 +368,8 @@ class SyncRepository(
             settingsRepository.updateSyncLastSyncAt(clock())
             settingsRepository.updateSyncHasPendingChanges(false)
             return SyncResult.Success(foldedConflicts.size)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             return SyncResult.Error(e.message ?: "Sync failed.")
         }
@@ -499,6 +516,7 @@ class SyncRepository(
             var batchBytes = 0L
             while (next < manifest.works.size && batchBytes < maxEpubBatchBytes) {
                 val work = manifest.works[next++]
+                if (!work.hasEPUB) continue
                 val file = remoteWorks[BackupPaths.iosEpubAssetIdentifier(work.id).lowercase(Locale.ROOT)]
                     ?: continue
                 if (isUnchangedLocally(work, file)) continue

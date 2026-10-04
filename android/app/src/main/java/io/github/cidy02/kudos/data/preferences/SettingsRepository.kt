@@ -231,6 +231,13 @@ class SettingsRepository(
         }
     }
 
+    suspend fun updateSyncLastError(message: String?) {
+        dataStore.edit {
+            if (message.isNullOrBlank()) it.remove(Keys.SyncLastError)
+            else it[Keys.SyncLastError] = message
+        }
+    }
+
     suspend fun updateSyncHasPendingChanges(hasPending: Boolean) {
         dataStore.edit { it[Keys.SyncHasPendingChanges] = hasPending }
     }
@@ -454,6 +461,7 @@ class SettingsRepository(
                 folderUri = preferences[Keys.SyncFolderUri],
                 isEnabled = preferences[Keys.SyncIsEnabled] ?: false,
                 lastSyncAt = preferences[Keys.SyncLastSyncAt]?.let { Instant.ofEpochMilli(it) },
+                lastError = preferences[Keys.SyncLastError],
                 hasPendingChanges = preferences[Keys.SyncHasPendingChanges] ?: false
             )
         )
@@ -495,6 +503,7 @@ class SettingsRepository(
         val SyncIsEnabled = booleanPreferencesKey("syncIsEnabled")
         val SyncFolderUri = stringPreferencesKey("syncFolderUri")
         val SyncLastSyncAt = androidx.datastore.preferences.core.longPreferencesKey("syncLastSyncAt")
+        val SyncLastError = stringPreferencesKey("syncLastError")
         val SyncHasPendingChanges = booleanPreferencesKey("syncHasPendingChanges")
         val TombstoneMigrationComplete = booleanPreferencesKey("tombstoneMigrationComplete")
         val TrustedTombstonePublicKeys = stringSetPreferencesKey("trustedTombstonePublicKeys")

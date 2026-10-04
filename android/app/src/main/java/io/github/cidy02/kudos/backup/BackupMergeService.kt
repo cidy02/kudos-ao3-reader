@@ -226,6 +226,17 @@ object BackupMergeService {
                 summary = summary.copy(worksUpdated = summary.worksUpdated + 1)
                 mergeWork(existing, restored, archived, incomingModifiedAt, exportedAt)
             }
+            // Asset state is device-local and follows disk, independently of which
+            // metadata snapshot won (including add-only File Merge).
+            val merged = worksById.getValue(targetId)
+            worksById[targetId] = merged.copy(
+                hasEpub = incomingEpub != null || existingHasFile,
+                remoteEpubPending = when {
+                    incomingEpub != null -> false
+                    archived.hasEPUB && !existingHasFile -> true
+                    else -> existing?.remoteEpubPending ?: false
+                }
+            )
             identity.index(worksById.getValue(targetId))
 
             if (incomingEpub != null) epubFilesToWrite[targetId] = incomingEpub
@@ -361,7 +372,14 @@ object BackupMergeService {
             epubIds = restoredEpubIds,
             now = now
         )
-        val finishedQueues = finishRestoredQueues(queueMerge.queues, queueMerge.memberships)
+        // Replace's absence cleanup never changes the omitted system queue.
+        val finishedQueues = finishRestoredQueues(queueMerge.queues, queueMerge.memberships).map { queue ->
+            if (mode == BackupImportMode.REPLACE_LIBRARY && queue.kindRaw == ReadingQueueKind.SAVED_FOR_LATER &&
+                manifest.readingQueues.none { it.kindRaw == ReadingQueueKind.SAVED_FOR_LATER }
+            ) {
+                current.readingQueues.firstOrNull { it.id == queue.id } ?: queue
+            } else queue
+        }
 
         val readingSessions = mergeReadingSessions(
             current = current.readingSessions,
@@ -514,8 +532,8 @@ object BackupMergeService {
                 // No hasEpub coercion: an EPUB on disk is what `isQueuedForLater`
                 // already protects, and promoting it to `isSaved` silently
                 // converted every queue-only work into a library work on merge.
-                isSaved = restored.isSaved || existing.isSaved,
-                isQueuedForLater = restored.isQueuedForLater || existing.isQueuedForLater,
+                isSaved = restored.isSaved,
+                isQueuedForLater = restored.isQueuedForLater,
                 permanentDeletionScheduledAt = keptDeletionSchedule(
                     restored.permanentDeletionScheduledAt,
                     existing.isDeleted,
@@ -546,7 +564,6 @@ object BackupMergeService {
             // Keep local flags/metadata; still absorb non-destructive fills.
             existing.copy(
                 hasEpub = existing.hasEpub || restored.hasEpub,
-                isQueuedForLater = existing.isQueuedForLater || restored.isQueuedForLater,
                 title = existing.title.ifBlank { restored.title },
                 author = existing.author.ifBlank { restored.author },
                 summary = existing.summary.ifBlank { restored.summary },
@@ -1451,8 +1468,14 @@ object BackupMergeService {
             val incomingMembershipIds = incomingMemberships.mapTo(mutableSetOf()) {
                 BackupPaths.canonicalUuid(it.id, "membership.id")
             }
+            val systemQueueIds = queuesById.values
+                .filter { it.kindRaw == ReadingQueueKind.SAVED_FOR_LATER }
+                .mapTo(HashSet()) { BackupPaths.normalizeIdForComparison(it.id) }
             membershipsById.keys.toList().forEach { id ->
-                if (id !in incomingMembershipIds) membershipsById.remove(id)
+                val membership = membershipsById.getValue(id)
+                if (id !in incomingMembershipIds &&
+                    BackupPaths.normalizeIdForComparison(membership.queueID) !in systemQueueIds
+                ) membershipsById.remove(id)
             }
         }
 

@@ -28,6 +28,7 @@ data class WorkEntity(
     val isSaved: Boolean = false,
     val isFinished: Boolean,
     val hasEpub: Boolean,
+    @ColumnInfo(defaultValue = "0") val remoteEpubPending: Boolean = false,
     val isComplete: Boolean,
     val rating: String,
     val language: String,

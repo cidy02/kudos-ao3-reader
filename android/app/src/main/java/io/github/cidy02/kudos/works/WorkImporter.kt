@@ -223,6 +223,7 @@ class WorkImporter(
                     restored.copy(
                         isSaved = true,
                         hasEpub = true,
+                        remoteEpubPending = false,
                         downloadedAt = restored.downloadedAt ?: downloadedAt,
                         lastModifiedAt = workRepository.currentInstant()
                     ),
@@ -288,7 +289,7 @@ class WorkImporter(
         return when (val write = fileStore.writeWorkEpub(work.id, rebuilt)) {
             is FileWriteResult.Failure -> WorkImportResult.Failure(work, AO3Error.Validation(write.message))
             is FileWriteResult.Success -> WorkImportResult.Success(
-                workRepository.upsert(work.copy(hasEpub = true, lastModifiedAt = Instant.now()))
+                workRepository.upsert(work.copy(hasEpub = true, remoteEpubPending = false, lastModifiedAt = Instant.now()))
             )
         }
     }
@@ -327,6 +328,7 @@ class WorkImporter(
                 val updated = workRepository.upsert(
                     work.copy(
                         hasEpub = true,
+                        remoteEpubPending = false,
                         downloadedAt = work.downloadedAt ?: now,
                         isDeleted = false,
                         deletedAt = null,

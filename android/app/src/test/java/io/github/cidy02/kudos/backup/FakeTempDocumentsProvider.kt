@@ -39,6 +39,8 @@ class FakeTempDocumentsProvider : ContentProvider() {
     var reportedLastModified: Long? = null
     /** Every rename asked for, as "old -> new": a test can show a file was never renamed away. */
     val renames = mutableListOf<String>()
+    /** Names passed through actual document deletion, for pruning assertions. */
+    val deletions = mutableListOf<String>()
     private data class Node(
         val id: String,
         val name: String,
@@ -291,6 +293,7 @@ class FakeTempDocumentsProvider : ContentProvider() {
         if (node.id == ROOT_DOCUMENT_ID) {
             throw IllegalArgumentException("Cannot delete root")
         }
+        deletions += node.name
         nodes.values
             .filter { it.parentId == documentId }
             .map { it.id }

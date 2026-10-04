@@ -26,6 +26,8 @@ data class SavedWork(
     val isQueuedForLater: Boolean = false,
     val isFinished: Boolean = false,
     val hasEpub: Boolean = true,
+    /** Device-local promise of an EPUB not yet received; never a manifest key. */
+    val remoteEpubPending: Boolean = false,
     val isComplete: Boolean = false,
     val rating: String = "",
     val language: String = "",
