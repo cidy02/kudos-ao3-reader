@@ -27,6 +27,7 @@ import io.github.cidy02.kudos.ui.subject.SectionRuleHeader
 import io.github.cidy02.kudos.ui.subject.SubjectChip
 import io.github.cidy02.kudos.ui.subject.SubjectKicker
 import io.github.cidy02.kudos.ui.subject.SubjectMetrics
+import io.github.cidy02.kudos.ui.subject.isAccessibilityFontScale
 import io.github.cidy02.kudos.ui.subject.subjectScreenWash
 
 import android.content.Intent
@@ -885,8 +886,11 @@ private fun AccountHubShortcuts(
             title = "Shortcuts",
             onSeeAll = { /* TODO implement shortcut editor */ }
         )
+        // iOS `shortcutGridColumns`: three across, two at accessibility text sizes on a phone, so
+        // a label reflows instead of breaking mid-word.
+        val columns = if (isAccessibilityFontScale()) 2 else 3
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            defaults.chunked(3).forEach { row ->
+            defaults.chunked(columns).forEach { row ->
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -901,7 +905,7 @@ private fun AccountHubShortcuts(
                             )
                         }
                     }
-                    repeat(3 - row.size) {
+                    repeat(columns - row.size) {
                         Spacer(modifier = Modifier.weight(1f))
                     }
                 }
