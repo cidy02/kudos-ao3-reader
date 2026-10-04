@@ -36,6 +36,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import io.github.cidy02.kudos.core.strippingHtml
 import io.github.cidy02.kudos.network.ao3.search.AO3WorkSummary
 
 import io.github.cidy02.kudos.core.model.SavedWork
@@ -374,7 +375,7 @@ fun SensitiveWorkRow(
         title = work.title,
         author = work.author,
         fandoms = work.workFandoms,
-        summary = work.summary,
+        summary = remember(work.summary) { work.summary.strippingHtml() },
         discoveryTags = (work.workRelationships + work.workCharacters + work.workFreeforms),
         warnings = work.workWarnings,
         categories = work.workCategories,

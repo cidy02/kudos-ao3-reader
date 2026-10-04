@@ -74,6 +74,7 @@ import io.github.cidy02.kudos.app.ProvidePushedShellChrome
 import io.github.cidy02.kudos.core.model.PrivacySettings
 import io.github.cidy02.kudos.core.model.SavedWork
 import io.github.cidy02.kudos.core.model.WorkCollection
+import io.github.cidy02.kudos.core.strippingHtml
 import io.github.cidy02.kudos.data.preferences.SettingsRepository
 import io.github.cidy02.kudos.home.HomeFacts
 import io.github.cidy02.kudos.ui.components.DestructiveConfirmation
@@ -978,7 +979,7 @@ private fun DetailedCollectionWorkCard(
             )
         } else if (work.summary.isNotBlank()) {
             Text(
-                text = work.summary.replace(Regex("<[^>]*>"), " ").trim(),
+                text = work.summary.strippingHtml(),
                 color = tokens.secondaryInk,
                 fontSize = 13.sp,
                 maxLines = 3,

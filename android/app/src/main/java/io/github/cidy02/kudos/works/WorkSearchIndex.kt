@@ -1,6 +1,7 @@
 package io.github.cidy02.kudos.works
 
 import io.github.cidy02.kudos.core.model.SavedWork
+import io.github.cidy02.kudos.core.strippingHtml
 import java.text.Normalizer
 import java.util.Locale
 import kotlinx.coroutines.delay
@@ -73,8 +74,7 @@ object WorkSearchIndex {
         if (work.language.isNotBlank()) parts.add(work.language)
         parts.add(if (work.isComplete) "complete" else "wip in progress")
         if (work.summary.isNotBlank()) {
-            val stripped = work.summary.replace(Regex("<[^>]*>"), "")
-            parts.add(stripped.take(SUMMARY_LIMIT))
+            parts.add(work.summary.strippingHtml().take(SUMMARY_LIMIT))
         }
         return normalize(parts.joinToString("\n"))
     }
