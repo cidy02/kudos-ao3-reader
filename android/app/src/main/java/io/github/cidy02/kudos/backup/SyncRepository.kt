@@ -19,6 +19,7 @@ import java.io.IOException
 import java.io.InputStream
 import java.nio.file.Files
 import java.time.Instant
+import java.util.Locale
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
@@ -135,6 +136,10 @@ class SyncRepository(
             val liveManifest = syncDir.findFile(BackupPaths.MANIFEST)
             val backupManifest = syncDir.findFile(BackupPaths.MANIFEST_BACKUP)
             var foldedConflicts = 0
+            // iOS prunes only while its view of the folder is current. A manifest that is there
+            // but could not be read means this run never saw what the folder lists, and pruning
+            // by this device's view alone would delete other devices' files.
+            var folderViewIsCurrent = liveManifest == null && backupManifest == null
 
             if (liveManifest != null || backupManifest != null || conflicts.isNotEmpty()) {
                 // The live manifest, or the .bak kept beside it. That fallback is
@@ -145,7 +150,10 @@ class SyncRepository(
                 // way, forever.
                 val primary = decodeManifestOrNull(liveManifest)
                     ?: decodeManifestOrNull(backupManifest)
-                primary?.let { importManifest(syncDir, it) }
+                primary?.let {
+                    importManifest(syncDir, it)
+                    folderViewIsCurrent = true
+                }
 
                 conflicts.forEach { file ->
                     val manifest = decodeManifestOrNull(file)
@@ -191,22 +199,32 @@ class SyncRepository(
                 // Assets first, manifest last: the manifest is the commit point, so
                 // it can never reference an asset file that was not already written.
                 if (worksDir != null) {
+                    // iOS keeps the EPUB of every work the manifest lists, whether or not this
+                    // device holds a copy, so one device can never discard an EPUB another
+                    // preserved (`FolderSyncService`, after its commit point).
+                    manifestOut.works.forEach { expectedWorks.add(BackupPaths.iosEpubAssetIdentifier(it.id)) }
+                    val remoteWorks = worksDir.childrenByLowercaseName()
                     snapshot.works.filter { it.hasEpub }.forEach { work ->
                         val localPath = workFileStore.workEpubPath(work.id)
                         if (Files.isRegularFile(localPath)) {
-                            val epubName = "${BackupPaths.canonicalUuid(work.id, "work.id")}.epub"
-                            expectedWorks.add(epubName)
+                            // iOS's name: the UUID in capitals. iOS looks for exactly that, and
+                            // prunes any other name as an orphan.
+                            val epubName = BackupPaths.iosEpubAssetIdentifier(work.id)
                             val bytes = Files.readAllBytes(localPath)
-                            writeIfChanged(worksDir, epubName, "application/epub+zip", bytes)
+                            writeIfChanged(
+                                worksDir, epubName, "application/epub+zip", bytes,
+                                existing = remoteWorks[epubName.lowercase(Locale.ROOT)]
+                            )
                         }
                     }
                 }
 
                 if (fontsDir != null) {
+                    // As iOS: every font the manifest lists is kept.
+                    manifestOut.fonts.forEach { expectedFonts.add(it.fileName) }
                     snapshot.fonts.forEach { font ->
                         val bytes = fontFileStore.readFont(font.fileName)
                         if (bytes != null && bytes.isNotEmpty()) {
-                            expectedFonts.add(font.fileName)
                             writeIfChanged(fontsDir, font.fileName, "application/octet-stream", bytes)
                         }
                     }
@@ -221,8 +239,10 @@ class SyncRepository(
                 // crash in between leaves assets deleted while the manifest still
                 // lists them — iOS prunes after its own commit for exactly this
                 // reason.
-                worksDir?.let { removeOrphans(it, expectedWorks) }
-                fontsDir?.let { removeOrphans(it, expectedFonts) }
+                if (folderViewIsCurrent) {
+                    worksDir?.let { removeOrphans(it, expectedWorks) }
+                    fontsDir?.let { removeOrphans(it, expectedFonts) }
+                }
             }
 
             settingsRepository.updateSyncLastSyncAt(clock())
@@ -233,8 +253,16 @@ class SyncRepository(
         }
     }
     
-    private fun writeIfChanged(dir: DocumentFile, fileName: String, mimeType: String, data: ByteArray) {
-        var file = dir.findFile(fileName)
+    private fun writeIfChanged(
+        dir: DocumentFile,
+        fileName: String,
+        mimeType: String,
+        data: ByteArray,
+        existing: DocumentFile? = dir.findFile(fileName)
+    ) {
+        var file = existing
+        // An older Android build named EPUBs in lowercase; give the file the name iOS expects.
+        if (file != null && file.name != fileName) runCatching { file.renameTo(fileName) }
         if (file != null && file.length() == data.size.toLong()) {
             // Equal length is not equal content. Skipping on length alone means an
             // edit that happens to keep the byte count — a typo fix, a same-width
@@ -271,9 +299,11 @@ class SyncRepository(
         var totalFontBytes = 0L
 
         syncDir.findFile(BackupPaths.WORKS_DIRECTORY)?.let { worksDir ->
+            // iOS writes the UUID in capitals; older Android builds wrote it lowercase.
+            val remoteWorks = worksDir.childrenByLowercaseName()
             manifest.works.forEach { work ->
-                val epubName = "${BackupPaths.canonicalUuid(work.id, "work.id")}.epub"
-                worksDir.findFile(epubName)?.let { file ->
+                val epubName = BackupPaths.iosEpubAssetIdentifier(work.id)
+                remoteWorks[epubName.lowercase(Locale.ROOT)]?.let { file ->
                     context.contentResolver.openInputStream(file.uri)?.use {
                         epubFiles[work.id] = it.readBytes()
                     }
@@ -363,11 +393,18 @@ class SyncRepository(
     }
 
     private fun removeOrphans(directory: DocumentFile, expected: Set<String>) {
+        // An expected file under another case is still that file.
+        val keep = expected.mapTo(HashSet()) { it.lowercase(Locale.ROOT) }
         directory.listFiles().forEach { file ->
             val name = file.name ?: return@forEach
-            if (name !in expected) file.delete()
+            if (name.startsWith(".")) return@forEach // hidden and system files, as iOS skips them
+            if (name.lowercase(Locale.ROOT) !in keep) file.delete()
         }
     }
+
+    /** One listing of a folder, by lowercase name: a `findFile` per work lists it every time. */
+    private fun DocumentFile.childrenByLowercaseName(): Map<String, DocumentFile> =
+        listFiles().mapNotNull { file -> file.name?.let { it.lowercase(Locale.ROOT) to file } }.toMap()
 }
 
 sealed interface SyncResult {

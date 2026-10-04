@@ -197,3 +197,16 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   offered a plain additional-tag search from inside Search. Both now do what iOS does (brief 3z).
   This also removes a way for the demo to leave the app for the live site.
   Reverse: `LocalTagSearch` in `app/MainScaffold.kt`; `WorkDetailSections.kt`.
+- **2026-10-04 · Android's sync folder uses iOS's EPUB names, and prunes as iOS does.** Android
+  named a work's EPUB in the folder with a lowercase UUID; iOS uses capitals, and each app looked
+  for, and pruned by, its own exact name. A folder shared across the two had each deleting the
+  other's EPUBs. Android also pruned the EPUB of any work it held no file for, and pruned even
+  when it could not read the folder's manifest; iOS does neither (`FolderSyncService`). Android now
+  writes iOS's name, finds either case, renames an older lowercase file when it rewrites it,
+  keeps every work and font the manifest lists, and prunes nothing when the manifest was
+  unreadable. The manifest's own format is unchanged; only file names in `Works/`.
+  - **Consequence to know:** an Android device still on an older build does not find the new
+    names. Nothing is lost from a library (each device re-uploads what it holds), but the folder
+    churns until both devices update. iOS should also compare names without regard to case
+    (`5a-result.md`); not changed.
+  Reverse: `runSyncLocked`, `importManifest` and `removeOrphans` in `backup/SyncRepository.kt`.
