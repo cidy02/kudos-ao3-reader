@@ -135,6 +135,8 @@ fun WorkLedgerRow(
     modifier: Modifier = Modifier
 ) {
     val tokens = LocalKudosTokens.current
+    val fontScale = LocalDensity.current.fontScale
+    val accessibilityFontScale = isAccessibilityFontScale()
     // iOS CoverArt.workHue, as every other work surface uses.
     val palette = remember(fandoms, title, tokens.theme) {
         SubjectPalette.fromHue(HomeFacts.workHue(fandoms, title), tokens.theme)
@@ -143,7 +145,43 @@ fun WorkLedgerRow(
     // An obscured row is blurred under "Tap to reveal", as iOS's SensitiveWorkRow; the
     // accessibility label alone hid nothing on screen.
     Box(modifier.fillMaxWidth().clip(shape)) {
-    Row(
+    if (accessibilityFontScale) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .then(if (obscured) Modifier.blur(10.dp) else Modifier)
+                .clip(shape)
+                .background(palette.rowWash)
+                .border(if (selected) 2.dp else 0.5.dp, if (selected) tokens.accent else palette.rowBorder, shape)
+                .combinedClickable(onClick = onClick, onLongClick = onLongClick)
+                .padding(horizontal = 14.dp, vertical = 13.dp)
+                .semantics {
+                    contentDescription = if (obscured) "Hidden mature work. Activate to reveal." else "$title, by $author"
+                },
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            SubjectKicker(
+                text = HomeFacts.primaryFandom(fandoms) ?: "Library",
+                palette = palette,
+                trailingCount = (fandoms.count { it.isNotBlank() } - 1).coerceAtLeast(0),
+                size = 9.sp,
+                ruleSpacing = 4.dp
+            )
+            WorkProgressRing(progress, state = progressState, diameter = 44.dp * fontScale)
+            Row(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    title,
+                    color = tokens.primaryInk,
+                    fontSize = 16.5.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.weight(1f, fill = false)
+                )
+                if (favorite) Text("★", color = Color(0xFFFFC107), fontSize = 13.sp)
+            }
+            Text(metadata, color = tokens.secondaryInk, fontSize = 11.5.sp)
+            LedgerSignalGrid(signals.take(4), palette)
+        }
+    } else Row(
         Modifier
             .fillMaxWidth()
             .then(if (obscured) Modifier.blur(10.dp) else Modifier)
@@ -158,7 +196,7 @@ fun WorkLedgerRow(
         horizontalArrangement = Arrangement.spacedBy(13.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        WorkProgressRing(progress, state = progressState, diameter = 44.dp)
+        WorkProgressRing(progress, state = progressState, diameter = 44.dp * fontScale)
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
             SubjectKicker(
                 text = HomeFacts.primaryFandom(fandoms) ?: "Library",
@@ -195,14 +233,16 @@ fun WorkLedgerRow(
 
 @Composable
 private fun LedgerSignalGrid(signals: List<WorkCardSignal>, palette: SubjectPalette) {
-    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+    val fontScale = LocalDensity.current.fontScale
+    val tileSize = 22.dp * fontScale
+    Column(verticalArrangement = Arrangement.spacedBy(3.dp * fontScale)) {
         signals.chunked(2).forEach { row ->
-            Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(3.dp * fontScale)) {
                 row.forEach { signal ->
                     Box(
                         Modifier
-                            .size(22.dp)
-                            .clip(RoundedCornerShape(6.dp))
+                            .size(tileSize)
+                            .clip(RoundedCornerShape(6.dp * fontScale))
                             .background(signal.tint.copy(alpha = 0.34f))
                             .semantics { contentDescription = signal.description },
                         contentAlignment = Alignment.Center

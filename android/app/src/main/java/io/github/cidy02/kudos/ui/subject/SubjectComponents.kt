@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -112,6 +113,10 @@ private fun compactUnit(magnitude: Long, unit: Double, suffix: String): String {
 
 @Composable
 private fun TextUnit.asDp(): Dp = with(LocalDensity.current) { toDp() }
+
+/** iOS `DynamicTypeSize.isAccessibilitySize`: Android crosses it above 1.3x. */
+@Composable
+fun isAccessibilityFontScale(): Boolean = LocalDensity.current.fontScale > 1.3f
 
 /**
  * Full-bleed subject wash, aligned to the top. The gradient is [washHeight] tall
@@ -215,6 +220,8 @@ fun SubjectHeaderBlock(
     trailing: (@Composable () -> Unit)? = null
 ) {
     val tokens = LocalKudosTokens.current
+    val accessibilityFontScale = isAccessibilityFontScale()
+    val isOneWord = title.none { it.isWhitespace() }
     Column(
         modifier
             .fillMaxWidth()
@@ -235,8 +242,19 @@ fun SubjectHeaderBlock(
             fontWeight = FontWeight.Bold,
             letterSpacing = (-0.6).sp,
             style = TextStyle(fontFeatureSettings = "tnum"),
-            maxLines = if (title.any { it.isWhitespace() }) 2 else 1,
-            overflow = TextOverflow.Ellipsis
+            maxLines = when {
+                isOneWord -> 1
+                accessibilityFontScale -> Int.MAX_VALUE
+                else -> 2
+            },
+            overflow = TextOverflow.Ellipsis,
+            // iOS's minimumScaleFactor (0.5 for one word, 0.7 otherwise). Auto-size counts up from
+            // the minimum in 0.25sp steps, so the minimum must sit a whole number of steps below
+            // the maximum, or the text never reaches its full size: 22.5, not 22.4.
+            autoSize = TextAutoSize.StepBased(
+                minFontSize = if (isOneWord) 16.sp else 22.5.sp,
+                maxFontSize = 32.sp
+            )
         )
         when {
             subtitle != null && trailing != null -> Row(
@@ -285,6 +303,7 @@ fun SectionRuleHeader(
 ) {
     val tokens = LocalKudosTokens.current
     val labelSize = 11.sp
+    val accessibilityFontScale = isAccessibilityFontScale()
     Row(
         modifier
             .fillMaxWidth()
@@ -298,7 +317,7 @@ fun SectionRuleHeader(
             fontSize = labelSize,
             fontWeight = FontWeight.Bold,
             letterSpacing = (11f * 0.127f).sp,
-            maxLines = 1,
+            maxLines = if (accessibilityFontScale) Int.MAX_VALUE else 1,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f, fill = false)
         )
@@ -528,7 +547,8 @@ private fun StatCell(
                 fontWeight = FontWeight.SemiBold,
                 style = TextStyle(fontFeatureSettings = "tnum"),
                 maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+                overflow = TextOverflow.Ellipsis,
+                autoSize = TextAutoSize.StepBased(minFontSize = 9.sp, maxFontSize = 13.sp)
             )
             if (opens) {
                 Icon(
@@ -545,7 +565,8 @@ private fun StatCell(
             fontSize = 9.sp,
             letterSpacing = (9f * 0.07f).sp,
             maxLines = 1,
-            overflow = TextOverflow.Ellipsis
+            overflow = TextOverflow.Ellipsis,
+            autoSize = TextAutoSize.StepBased(minFontSize = 6.25.sp, maxFontSize = 9.sp)
         )
     }
 }
@@ -590,8 +611,15 @@ private fun WorkProgressRingSized(
     } else {
         tokens.primaryInk.withOpacity(0.8)
     }
-    val percentSize = (diameter.value * 15f / SubjectMetrics.ringDiameter.value).sp
-    val stateSize = (diameter.value * 8f / SubjectMetrics.ringDiameter.value).sp
+    val percentSize = with(LocalDensity.current) {
+        (diameter * (15f / SubjectMetrics.ringDiameter.value)).toSp()
+    }
+    val stateSize = with(LocalDensity.current) {
+        (diameter * (8f / SubjectMetrics.ringDiameter.value)).toSp()
+    }
+    val stateTracking = with(LocalDensity.current) {
+        (diameter * (0.09f * 8f / SubjectMetrics.ringDiameter.value)).toSp()
+    }
     val spoken = when {
         state != null -> "$percent percent, $state"
         percent > 0 -> "$percent percent"
@@ -649,7 +677,7 @@ private fun WorkProgressRingSized(
                     color = tokens.secondaryInk,
                     fontSize = stateSize,
                     fontWeight = FontWeight.SemiBold,
-                    letterSpacing = (diameter.value * 0.09f * 8f / SubjectMetrics.ringDiameter.value).sp,
+                    letterSpacing = stateTracking,
                     maxLines = 1
                 )
             }
@@ -973,7 +1001,8 @@ fun <T> SubjectSegmentedControl(
                     fontSize = 13.sp,
                     fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
                     maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                    overflow = TextOverflow.Ellipsis,
+                    autoSize = TextAutoSize.StepBased(minFontSize = 9.sp, maxFontSize = 13.sp)
                 )
             }
         }
