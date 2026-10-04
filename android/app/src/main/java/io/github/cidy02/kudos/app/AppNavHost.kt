@@ -816,20 +816,21 @@ fun AppNavHost(
                 workImporter = container.workImporter,
                 fandomCatalogCache = container.fandomCatalogCache,
                 workRepository = container.workRepository,
-                workAvailabilitySweep = io.github.cidy02.kudos.works.WorkAvailabilitySweep(
-                    container.workRepository,
-                    container.tagsRepository
-                ),
                 onOpenAvailabilitySweep = { navController.navigate(Routes.AvailabilitySweep) }
             )
         }
         sharedComposable(Routes.AvailabilitySweep) {
             AvailabilitySweepScreen(
                 workRepository = container.workRepository,
+                sweep = remember {
+                    io.github.cidy02.kudos.works.WorkAvailabilitySweep(
+                        container.workRepository,
+                        container.tagsRepository
+                    )
+                },
                 onOpenWork = { workId ->
                     navigateToWorkDetail(WorkDetailSource.LocalWork(workId))
-                },
-                onBack = { navController.popBackStack() }
+                }
             )
         }
         sharedComposable(Routes.QueueStorage) {

@@ -85,7 +85,6 @@ import io.github.cidy02.kudos.ui.subject.SubjectSegmentedControl
 import io.github.cidy02.kudos.ui.subject.SubjectToggle
 import io.github.cidy02.kudos.update.AppUpdateRepository
 import io.github.cidy02.kudos.update.AppUpdateState
-import io.github.cidy02.kudos.works.WorkAvailabilitySweep
 import io.github.cidy02.kudos.works.WorkImportResult
 import io.github.cidy02.kudos.works.WorkImporter
 import java.time.ZoneId
@@ -170,62 +169,22 @@ fun SettingsImportPage(workImporter: WorkImporter?) {
 }
 
 @Composable
-fun SettingsPreservationPage(
-    workAvailabilitySweep: WorkAvailabilitySweep?,
-    onOpenAvailabilitySweep: () -> Unit
-) {
-    val scope = rememberCoroutineScope()
-    val tokens = LocalKudosTokens.current
-    var sweepBusy by remember { mutableStateOf(false) }
-    var sweepStatus by remember { mutableStateOf<String?>(null) }
-
+fun SettingsPreservationPage(onOpenAvailabilitySweep: () -> Unit) {
     SettingsPage(title = "Preservation") {
         item {
-            Column(Modifier.padding(top = 22.dp)) {
-                SettingsPanel {
-                    SettingsActionRow(
-                        label = if (sweepBusy) "Sweeping…" else "Check Availability…",
-                        icon = Icons.Outlined.Sync,
-                        enabled = !sweepBusy,
-                        contentDescription = "Check library for deleted/hidden works on AO3.",
-                        onClick = {
-                            if (workAvailabilitySweep == null) {
-                                onOpenAvailabilitySweep()
-                            } else if (!sweepBusy) {
-                                sweepBusy = true
-                                sweepStatus = null
-                                scope.launch {
-                                    try {
-                                        val summary = workAvailabilitySweep.sweep()
-                                        sweepStatus = "Sweep complete: ${summary.checked} checked, ${summary.nowUnavailable} unavailable."
-                                    } catch (e: Exception) {
-                                        sweepStatus = "Sweep failed: ${e.message}"
-                                    } finally {
-                                        sweepBusy = false
-                                    }
-                                }
-                            }
-                        }
-                    )
-                    SubjectRowSeparator()
-                    SubjectFormRow(
-                        "Unavailable Works",
-                        showsDisclosure = true,
-                        onClick = onOpenAvailabilitySweep
-                    )
-                }
-                if (sweepStatus != null) {
-                    Text(
-                        text = sweepStatus!!,
-                        color = tokens.secondaryInk,
-                        fontSize = 13.sp,
-                        modifier = Modifier.padding(horizontal = SubjectMetrics.accountGutter).padding(top = 8.dp)
-                    )
-                }
-                SettingsFootnote(
-                    "Checks which saved works are still on AO3 and marks missing ones as the " +
-                        "last copy you have. Kudos checks one work at a time and waits between " +
-                        "checks, so start it when you have time."
+            // Deliberately a button that opens a screen, never a background task and never a
+            // check that starts at a tap: it is one AO3 request per work, and the screen
+            // states that cost before any is sent (iOS `SettingsPreservationPage`).
+            SettingsSection(
+                footnote = "Checks which saved works are still on AO3 and marks missing ones as the " +
+                    "last copy you have. Kudos checks one work at a time and waits between " +
+                    "checks, so start it when you have time."
+            ) {
+                SettingsActionRow(
+                    label = "Check Availability…",
+                    icon = Icons.Outlined.Sync,
+                    contentDescription = "Check library for deleted/hidden works on AO3.",
+                    onClick = onOpenAvailabilitySweep
                 )
             }
         }

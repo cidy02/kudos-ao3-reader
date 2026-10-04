@@ -52,20 +52,75 @@ at the shake; Android takes none.
 **Not seen on the emulator:** the shake path. The emulator's sensors could not be made to
 trigger it.
 
+## Check Availability (`settings/AvailabilitySweepScreen.kt`) — done
+
+This one is more than a redraw, because the two apps did it differently:
+
+| | iOS | Android before | Now |
+|---|---|---|---|
+| Settings › Preservation › "Check Availability…" | opens the screen | **started the check at once**, with a line of status under the row | opens the screen |
+| The screen | states the cost first ("Before you start"), then "Check Now"; progress; a result; the list of works no longer on AO3 | only that list, under a Material title bar | iOS's screen |
+| "Unavailable Works" row on Preservation | none: the list is on the screen | a second row opening the list | removed; the list is on the screen |
+
+iOS's reason is in its code: a check is one AO3 request for each work, and the reader is the
+only one who can decide that is worth it, so the screen says so before any request is sent.
+
+Strings, all iOS's: "Before you start"; "Kudos will check N work(s), one at a time."; "AO3 can't
+tell Kudos what changed, so each work must be checked separately. Kudos waits about two seconds
+between works to avoid overloading AO3; you can stop anytime and keep the results so far.";
+"N imported work(s) came from other sites, so Kudos can't check them on AO3."; "This check covers
+up to 150 works. Start it again later for the rest; works checked during the past week are
+skipped."; "Checked X of Y"; "Finished" / "Stopped"; "N work is / works are no longer on AO3";
+"Kudos marked them as no longer on AO3. Any downloaded copies are now treated as the last copies
+you have and will be kept permanently."; "Everything checked is still on AO3"; "Checked N.",
+"Skipped N checked in the last week.", "N still to check. Run this again to continue."; "No
+longer on AO3 (N)"; "Check Now" / "Checking…"; "You checked every AO3 work in your Library within
+the past week."
+
+Gone: "Sweeping…", "Sweep complete: X checked, Y unavailable.", "Sweep failed: …", "Unavailable
+Works", "No works are currently marked unavailable on AO3." (iOS shows no list when there is
+none). Kept because a test pins it: the row's accessibility label "Check library for
+deleted/hidden works on AO3."
+
+Callbacks: `onOpenWork` unchanged. `onBack` is gone (the shell's back button). The screen now
+takes the `WorkAvailabilitySweep`, and `SettingsScreen` and the Preservation page no longer do.
+`WorkAvailabilitySweep` gained `counts()` and a progress callback, and a check stopped in the
+middle of a request now returns its summary instead of throwing.
+
+**Different from iOS, by placement:** iOS has "Stop" and "Done" in the sheet's toolbar. Here the
+page is pushed: "Stop" is a row under "Checking…", and the back button is Done. Leaving the
+screen stops the check on both.
+
+**Different from iOS, found and not changed** (rules of the check, not of the screen):
+- Android checks saved library works; iOS checks every work that is not in Recently Deleted.
+- Android never checks a work again once it is marked "no longer on AO3"; iOS checks it again
+  after a week, so a work that comes back loses the mark.
+- iOS counts a work as checked even when the answer was inconclusive; Android counts only the
+  conclusive ones.
+
+**Not seen on the emulator:** the running state and "Stopped". The demo has one work to check,
+so the check ends at once.
+
 ## Found on the way, fixed
 
 `SubjectFormRow` gave the label what was left after the value. A long value took the row and
-the label was one letter wide, a letter to a line ("System" on this screen). The label now keeps
-its width and the value takes the rest. On the Settings hub the values moved by two pixels;
-nothing else changed.
+the label was one letter wide, a letter to a line ("System" on Report a Bug). The label now
+keeps its width and the value takes the rest. On the Settings hub the values moved by two
+pixels; nothing else changed.
+
+`SettingsPanel` shrank to the width of what it held. A panel with one short line was narrower
+than its neighbours ("Finished" on Check Availability). A panel now spans the page.
 
 ## Seen on the emulator
 
-Both screens in Light, OLED and Sepia and at the largest text size; About scrolled to its end;
-"Report a Bug" from About opens the report; typing into the field works.
+About and Report a Bug in Light, OLED and Sepia and at the largest text size; About scrolled to
+its end; "Report a Bug" from About opens the report; typing into the field works.
+
+Check Availability in the same three themes and at the largest text size; reached from
+Settings › Preservation; one check run in the demo ("Finished", "Everything checked is still on
+AO3", "Checked 1."), with the demo database copied first and put back after, because a check
+rewrites a work's AO3 details from the demo's one fixture.
 
 ## Still to do
 
-Queue Storage and Check Availability. Check Availability is more than a redraw: iOS's screen
-explains the cost and has the "Check Now" button, and Android's Preservation page starts the
-check at once.
+Queue Storage.

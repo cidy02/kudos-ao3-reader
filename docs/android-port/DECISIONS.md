@@ -267,3 +267,10 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   original it describes. An original over 128 MB is left out rather than failing the restore.
   No format change: this is iOS's existing layout.
   Reverse: `originalFilesByName` in `backup/KudosBackup.kt` and its users.
+- **2026-10-04 · "Check Availability…" opens a screen that states the cost first; it no longer
+  starts at a tap.** Android's Preservation page ran the check the moment the row was tapped. A
+  check is one AO3 request for each work, and iOS deliberately makes it a screen that says so
+  before any request is sent (`AvailabilitySweepView`, `SettingsPreservationPage`). Android now
+  has that screen: the cost, "Check Now", progress, the result, and the list of works no longer
+  on AO3 (which was a separate row). Reverse: `settings/AvailabilitySweepScreen.kt` and
+  `SettingsPreservationPage`.

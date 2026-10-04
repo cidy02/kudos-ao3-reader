@@ -95,6 +95,9 @@ fun SettingsPanel(
     Column(
         modifier
             .padding(horizontal = SubjectMetrics.accountGutter)
+            // A panel spans the page whatever it holds: one with a single short line of
+            // text used to shrink to that line.
+            .fillMaxWidth()
             .subjectPanel(),
         content = content
     )
