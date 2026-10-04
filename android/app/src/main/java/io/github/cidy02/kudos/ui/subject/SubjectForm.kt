@@ -47,6 +47,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -89,7 +90,10 @@ fun SubjectFieldLabel(
     )
 }
 
-/** A labelled form row. [trailing] replaces the value, as a switch or a swatch does. */
+/**
+ * A labelled form row. [trailing] replaces the value, as a switch or a swatch does.
+ * [valueMaxLines] above one lets a value the reader has to see whole wrap instead of being cut.
+ */
 @Composable
 fun SubjectFormRow(
     label: String,
@@ -97,6 +101,7 @@ fun SubjectFormRow(
     value: String? = null,
     showsDisclosure: Boolean = false,
     onClick: (() -> Unit)? = null,
+    valueMaxLines: Int = 1,
     trailing: (@Composable () -> Unit)? = null
 ) {
     val tokens = LocalKudosTokens.current
@@ -119,14 +124,18 @@ fun SubjectFormRow(
                     text = value.orEmpty(),
                     color = tokens.secondaryInk,
                     fontSize = 14.5.sp,
-                    maxLines = 1,
+                    maxLines = valueMaxLines,
                     overflow = TextOverflow.Ellipsis
                 )
             }
         } else {
+            // Beside a value the label keeps its own width and the value takes what is left.
+            // The other way round, a long value took the row and left the label one letter
+            // wide, a letter to a line.
+            val hasValue = trailing == null && value != null
             Text(
                 text = label,
-                modifier = Modifier.weight(1f),
+                modifier = if (hasValue) Modifier else Modifier.weight(1f),
                 color = tokens.primaryInk,
                 fontSize = 14.5.sp
             )
@@ -135,9 +144,11 @@ fun SubjectFormRow(
             } else if (value != null) {
                 Text(
                     text = value,
+                    modifier = Modifier.weight(1f),
                     color = tokens.secondaryInk,
                     fontSize = 14.5.sp,
-                    maxLines = 1,
+                    textAlign = TextAlign.End,
+                    maxLines = valueMaxLines,
                     overflow = TextOverflow.Ellipsis
                 )
             }

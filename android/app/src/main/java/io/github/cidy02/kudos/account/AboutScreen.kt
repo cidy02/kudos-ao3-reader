@@ -6,151 +6,184 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
+import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Book
+import androidx.compose.material.icons.outlined.BugReport
+import androidx.compose.material.icons.outlined.Code
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import io.github.cidy02.kudos.BuildConfig
+import io.github.cidy02.kudos.settings.SettingsActionRow
+import io.github.cidy02.kudos.settings.SettingsPage
+import io.github.cidy02.kudos.settings.SettingsPanel
+import io.github.cidy02.kudos.settings.SettingsSection
+import io.github.cidy02.kudos.ui.subject.SubjectRowSeparator
+import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
 
+/**
+ * Settings › About (iOS `AboutView`): the app's identity, its license, the open-source
+ * components it is built on, where to send feedback, and the AO3 disclaimer.
+ */
 @Composable
-fun AboutScreen(
-    onReportBug: () -> Unit,
-    modifier: Modifier = Modifier
-) {
+fun AboutScreen(onReportBug: () -> Unit) {
     val context = LocalContext.current
-    val versionString = "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})"
+    val tokens = LocalKudosTokens.current
 
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 20.dp, vertical = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        Text("Kudos", style = MaterialTheme.typography.headlineSmall)
-        Text(
-            text = "Version $versionString",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Text(
-            text = "A native Archive of Our Own reader for Android.",
-            style = MaterialTheme.typography.bodyLarge
-        )
-
-        OutlinedButton(
-            onClick = onReportBug,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text("Report a Bug")
-        }
-
-        HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
-
-        Text("License", style = MaterialTheme.typography.titleMedium)
-        Text(
-            text = "Kudos is free software, released under the GNU Affero General " +
-                "Public License v3.0 (AGPL-3.0). You may use, study, share, and modify it under the " +
-                "terms of that license.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-
-        HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
-
-        Text("Open-Source Components", style = MaterialTheme.typography.titleMedium)
-        DependencyCredit(
-            name = "Jsoup",
-            license = "MIT License",
-            detail = "HTML parsing for AO3 scraping.",
-            url = "https://github.com/jhy/jsoup",
-            onOpenUrl = { openUrl(context, it) }
-        )
-        DependencyCredit(
-            name = "Readium Kotlin Toolkit",
-            license = "BSD-3-Clause",
-            detail = "The EPUB reading engine.",
-            url = "https://github.com/readium/kotlin-toolkit",
-            onOpenUrl = { openUrl(context, it) }
-        )
-
-        HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
-
-        Text("Disclaimer", style = MaterialTheme.typography.titleMedium)
-        Text(
-            text = "Kudos is an unofficial, open-source app and is not affiliated with " +
-                "Archive of Our Own or the Organization for Transformative Works. " +
-                "It reads AO3's public web pages — AO3 has no official API.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Text(
-            text = "AO3 login uses AO3's real login page. Kudos never stores your password. " +
-                "Session cookies stay on this device and are excluded from backups.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Spacer(Modifier.height(4.dp))
-        Text(
-            text = "Source: github.com/cidy02/kudos-ao3-reader",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.clickable {
-                openUrl(context, "https://github.com/cidy02/kudos-ao3-reader")
+    SettingsPage(title = "About") {
+        item {
+            SettingsPanel(Modifier.padding(top = 22.dp)) {
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 13.dp, vertical = 18.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Book,
+                        contentDescription = null,
+                        tint = tokens.accent,
+                        modifier = Modifier.size(42.dp)
+                    )
+                    Text("Kudos", color = tokens.primaryInk, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                    Text(
+                        // The same string a bug report carries: with the commit, on a build
+                        // that knows it (iOS `AboutView.versionString`).
+                        text = "Version " + bugReportVersionString(
+                            versionName = BuildConfig.VERSION_NAME,
+                            versionCode = BuildConfig.VERSION_CODE,
+                            gitCommitSha = BuildConfig.GIT_COMMIT_SHA
+                        ),
+                        color = tokens.secondaryInk,
+                        fontSize = 13.sp
+                    )
+                    Text(
+                        text = "Read and save Archive of Our Own works on your Android devices.",
+                        color = tokens.secondaryInk,
+                        fontSize = 15.sp,
+                        textAlign = TextAlign.Center
+                    )
+                }
             }
-        )
+        }
+        item {
+            SettingsSection(footnote = null, label = "License") {
+                Text(
+                    text = buildAnnotatedString {
+                        append("Kudos is free to use, study, share, and change under the ")
+                        withStyle(SpanStyle(fontWeight = FontWeight.Bold)) {
+                            append("GNU Affero General Public License v3.0 (AGPL-3.0)")
+                        }
+                        append(".")
+                    },
+                    modifier = Modifier.padding(horizontal = 13.dp, vertical = 12.dp),
+                    color = tokens.primaryInk,
+                    fontSize = 16.sp,
+                    lineHeight = 22.sp
+                )
+            }
+        }
+        item {
+            SettingsSection(footnote = null, label = "Open-Source Components") {
+                CreditRow(
+                    name = "Jsoup",
+                    license = "MIT License",
+                    detail = "Reads AO3 pages so Kudos can show works.",
+                    url = "https://github.com/jhy/jsoup"
+                )
+                SubjectRowSeparator()
+                CreditRow(
+                    name = "Readium Kotlin Toolkit",
+                    license = "BSD-3-Clause",
+                    detail = "Displays downloaded works in the reader.",
+                    url = "https://github.com/readium/kotlin-toolkit"
+                )
+                SubjectRowSeparator()
+                CreditRow(
+                    name = "ao3_api",
+                    license = "Reference",
+                    detail = "Helped guide how Kudos reads AO3 pages.",
+                    url = "https://github.com/ArmindoFlores/ao3_api"
+                )
+            }
+        }
+        item {
+            SettingsSection(footnote = null, label = "Help & Feedback") {
+                SettingsActionRow(label = "Report a Bug", onClick = onReportBug, icon = Icons.Outlined.BugReport)
+                SubjectRowSeparator()
+                SettingsActionRow(
+                    label = "View on GitHub",
+                    onClick = { openUrl(context, REPOSITORY) },
+                    icon = Icons.Outlined.Code
+                )
+            }
+        }
+        item {
+            SettingsSection(footnote = null, label = "Disclaimer") {
+                Text(
+                    text = "Kudos is an unofficial personal project. It isn't affiliated with or " +
+                        "endorsed by the Organization for Transformative Works or Archive of Our " +
+                        "Own. AO3 doesn't provide an official way for apps to read its pages, " +
+                        "so Kudos reads the same public pages you can visit.",
+                    modifier = Modifier.padding(horizontal = 13.dp, vertical = 12.dp),
+                    color = tokens.secondaryInk,
+                    fontSize = 13.sp,
+                    lineHeight = 18.sp
+                )
+            }
+        }
     }
 }
 
 @Composable
-private fun DependencyCredit(
-    name: String,
-    license: String,
-    detail: String,
-    url: String,
-    onOpenUrl: (String) -> Unit
-) {
+private fun CreditRow(name: String, license: String, detail: String, url: String) {
+    val context = LocalContext.current
+    val tokens = LocalKudosTokens.current
     Column(
-        modifier = Modifier
+        Modifier
             .fillMaxWidth()
-            .padding(vertical = 4.dp),
-        verticalArrangement = Arrangement.spacedBy(2.dp)
+            .padding(horizontal = 13.dp, vertical = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(3.dp)
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(name, style = MaterialTheme.typography.bodyMedium)
             Text(
-                text = license,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                text = name,
+                modifier = Modifier.weight(1f),
+                color = tokens.primaryInk,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Medium
             )
+            Text(license, color = tokens.secondaryInk, fontSize = 12.sp)
         }
-        Text(
-            text = detail,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
+        Text(detail, color = tokens.secondaryInk, fontSize = 12.sp, lineHeight = 16.sp)
         Text(
             text = url.removePrefix("https://"),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.clickable { onOpenUrl(url) }
+            modifier = Modifier.clickable { openUrl(context, url) },
+            color = tokens.accent,
+            fontSize = 12.sp
         )
     }
 }
+
+private const val REPOSITORY = "https://github.com/cidy02/kudos-ao3-reader"
 
 private fun openUrl(context: android.content.Context, url: String) {
     runCatching {
