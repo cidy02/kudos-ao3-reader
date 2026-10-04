@@ -526,6 +526,28 @@ class BackupTrustPhase2Test {
     }
 
     @Test
+    fun aLaterSameRowCannotChangeTheSignedWorkIdentity() = runTest {
+        val (key, pub) = trustedPeer()
+        seedOwnWorkTombstone(at = EARLIER)
+        val changedIdentity = TombstoneSigning.signWithRawKey(
+            SyncTombstone(
+                id = TOMBSTONE_ID,
+                recordID = WORK_K,
+                recordTypeRaw = SyncTombstoneRecordType.SAVED_WORK,
+                createdAt = Instant.parse(LATER),
+                lastModifiedAt = Instant.parse(LATER),
+                ao3WorkID = 9999,
+                sourceURL = "https://archiveofourown.org/works/9999"
+            ), key, pub
+        ).toBackupTombstone()
+        importTombstone(changedIdentity)
+        val held = database.syncTombstoneDao().getAll().single()
+        assertEquals(4242, held.ao3WorkID)
+        assertEquals("https://archiveofourown.org/works/4242", held.sourceURL)
+        assertEquals(Instant.parse(EARLIER), held.lastModifiedAt)
+    }
+
+    @Test
     fun anOlderIncomingTombstoneLeavesTheLaterOneAlone() = runTest {
         val (key, pub) = trustedPeer()
         seedOwnWorkTombstone(at = LATER)
@@ -614,6 +636,29 @@ class BackupTrustPhase2Test {
         mergePeerSearchDeletion(localSearchAddedAt = "2026-03-01T00:00:00Z")
 
         assertNotNull(database.savedSearchDao().getById(SWEPT_SEARCH))
+    }
+
+    @Test
+    fun aSearchCreatedAfterSnapshotCaptureSurvivesTheApply() = runTest {
+        val captured = SavedSearch(id = SWEPT_SEARCH, name = "Deleted search", dateAdded = Instant.parse(EARLIER))
+        database.savedSearchDao().upsert(captured.toEntity())
+        val snapshot = backupRepository.captureLibrarySnapshot().copy(
+            tombstones = listOf(SyncTombstone(
+                id = TOMBSTONE_ID,
+                recordID = SWEPT_SEARCH,
+                recordTypeRaw = SyncTombstoneRecordType.SAVED_SEARCH,
+                createdAt = Instant.parse(LATER),
+                lastModifiedAt = Instant.parse(LATER)
+            ))
+        )
+        val merge = BackupMergeService.merge(snapshot, KudosBackupPackage(KudosBackupManifest(
+            version = BackupVersion.CURRENT, exportedAt = "2026-06-26T12:00:00Z"
+        )))
+        val late = SavedSearch(id = PEER_ROW, name = "Saved while merging", dateAdded = CLOCK)
+        database.savedSearchDao().upsert(late.toEntity())
+        backupRepository.applyMergeResult(merge)
+        assertNull(database.savedSearchDao().getById(SWEPT_SEARCH))
+        assertEquals(late, database.savedSearchDao().getById(PEER_ROW)?.toDomain())
     }
 
     @Test

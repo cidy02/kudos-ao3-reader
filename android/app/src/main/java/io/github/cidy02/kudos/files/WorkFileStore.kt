@@ -75,8 +75,9 @@ class WorkFileStore(
             try {
                 Files.createDirectories(originalsDirectory)
                 val destination = originalPath(workId, extension)
-                // Only one original per work: a re-import replaces it.
-                deleteOriginalFiles(workId)
+                // iOS `Storage.originalDocumentURL` / backup restore preserve local
+                // originals. A failed re-import must preserve them too: install first.
+                val previous = findOriginal(workId)
                 val temp = Files.createTempFile(originalsDirectory, ".$workId-", ".tmp")
                 try {
                     Files.write(temp, bytes)
@@ -85,6 +86,8 @@ class WorkFileStore(
                     } catch (_: IOException) {
                         Files.move(temp, destination, StandardCopyOption.REPLACE_EXISTING)
                     }
+                    if (previous != null && previous != destination) Files.deleteIfExists(previous)
+                    Files.deleteIfExists(conversionRecordPath(workId))
                     FileWriteResult.Success(destination)
                 } finally {
                     Files.deleteIfExists(temp)

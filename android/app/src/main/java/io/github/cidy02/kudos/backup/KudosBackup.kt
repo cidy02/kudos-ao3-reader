@@ -107,6 +107,8 @@ data class BackupMergeResult(
     val unknownSignerTombstoneIds: Set<String> = emptySet(),
     /** Ids adopted this run (signer now trusted) — clears matching pending ids. */
     val adoptedIncomingTombstoneIds: Set<String> = emptySet(),
+    /** Captured rows explicitly swept by merge; later-created searches are never candidates. */
+    val removedSavedSearches: List<SavedSearch> = emptyList(),
     /**
      * The archive's work id to the id of the work it became here, for every work this merge
      * brought in or matched (iOS `restoredWorksByArchivedID`). A work a tombstone suppressed is

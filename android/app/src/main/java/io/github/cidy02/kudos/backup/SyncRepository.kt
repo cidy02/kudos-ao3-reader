@@ -19,6 +19,7 @@ import java.io.IOException
 import java.io.InputStream
 import java.nio.file.Files
 import java.nio.file.Path
+import java.text.Normalizer
 import java.time.Instant
 import java.util.Locale
 import java.util.concurrent.TimeUnit
@@ -26,6 +27,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
 
 private const val SYNC_WORK_NAME = "FolderSyncWorker"
 private val SYNC_INTERVAL = 6L to TimeUnit.HOURS
@@ -129,8 +132,10 @@ class SyncRepository(
             // A SAF provider that loses a write race leaves "manifest (1).json"
             // beside the real one. iOS's foldConflictContents restores *every*
             // unresolved version rather than picking a winner, so nothing a user
-            // did on either device is dropped; we do the same, then delete the
-            // folded copies.
+            // did on either device is dropped; we do the same, and delete the
+            // folded copies once this run's own manifest, which now lists what
+            // they held, is in the folder. Deleted before that, as they used to
+            // be, a run that then failed left their records in no index at all.
             val conflicts = syncDir.listFiles().filter { file ->
                 val name = file.name ?: return@filter false
                 name.startsWith("manifest") && name.endsWith(".json") &&
@@ -138,36 +143,54 @@ class SyncRepository(
                     name != BackupPaths.MANIFEST_BACKUP &&
                     !name.startsWith(BackupPaths.MANIFEST_TEMP)
             }
-            val liveManifest = syncDir.findFile(BackupPaths.MANIFEST)
-            val manifestStampAtRead = liveManifest?.lastModified()
+            val manifestBytesAtRead = readLiveManifest(syncDir)
+            val decodedLive = manifestBytesAtRead?.let { bytes ->
+                runCatching { BackupValidator.decodeManifest(bytes) }.getOrNull()
+            }
+            // Whole JSON this build cannot read was written by a version of Kudos that knows
+            // more than this one, or lists more than this one allows. It is not damage, and
+            // writing over it would drop what that version listed. A manifest cut short by an
+            // interrupted write is damage: no device can read it, and this run repairs it.
+            if (decodedLive == null && manifestBytesAtRead != null && isWholeJsonObject(manifestBytesAtRead)) {
+                throw IOException("This version of Kudos cannot read the sync folder's manifest. Its files were kept.")
+            }
             val backupManifest = syncDir.findFile(BackupPaths.MANIFEST_BACKUP)
-            var foldedConflicts = 0
-            // iOS prunes only while its view of the folder is current. A manifest that is there
-            // but could not be read means this run never saw what the folder lists, and pruning
-            // by this device's view alone would delete other devices' files.
-            var folderViewIsCurrent = liveManifest == null && backupManifest == null
+            val foldedConflicts = mutableListOf<DocumentFile>()
+            // Fonts in the folder that this run could not take: unreadable, or over a limit.
+            // This device has no row for them, so its own manifest would stop listing them
+            // and the next device to prune would delete another device's font. They go back
+            // into the manifest as they were found.
+            val pendingFonts = linkedMapOf<String, BackupFont>()
+            // Pruning needs a current and complete view of the folder (iOS `performSyncUp`,
+            // `viewIsCurrent`): this run read the live manifest, took what it lists, and left
+            // no conflict copy unfolded. Without that view the run still publishes, and only
+            // never deletes. Refusing to publish instead would leave a folder whose manifest
+            // was lost or cut short unable to sync again, and an interrupted first sync is
+            // enough to leave one: files in the folder and no manifest yet.
+            var folderViewIsCurrent = false
 
-            if (liveManifest != null || backupManifest != null || conflicts.isNotEmpty()) {
-                // The live manifest, or the .bak kept beside it. That fallback is
-                // what stops a half-written manifest from wedging the folder for
-                // good: import runs before export, so a manifest that throws here
-                // aborts the run at the catch below and the export that would have
-                // rewritten it never happens — every later sync then fails the same
-                // way, forever.
-                val primary = decodeManifestOrNull(liveManifest)
-                    ?: decodeManifestOrNull(backupManifest)
-                primary?.let { folderViewIsCurrent = importManifest(syncDir, it) }
+            if (manifestBytesAtRead != null || backupManifest != null || conflicts.isNotEmpty()) {
+                // The .bak is the previous manifest: enough to recover this device's records
+                // when the live one is missing or damaged, never proof of what the folder
+                // lists now. A run that read only the .bak prunes nothing.
+                (decodedLive ?: decodeManifestOrNull(backupManifest))?.let { manifest ->
+                    val outcome = importManifest(syncDir, manifest)
+                    pendingFonts += outcome.pendingFonts
+                    folderViewIsCurrent = decodedLive != null && outcome.complete
+                }
 
                 conflicts.forEach { file ->
-                    val manifest = decodeManifestOrNull(file)
-                    if (manifest != null) {
-                        if (!importManifest(syncDir, manifest)) folderViewIsCurrent = false
-                        file.delete()
-                        foldedConflicts += 1
+                    val outcome = decodeManifestOrNull(file)?.let { importManifest(syncDir, it) }
+                    if (outcome != null) pendingFonts += outcome.pendingFonts
+                    if (outcome?.complete == true) {
+                        foldedConflicts += file
+                    } else {
+                        // Unreadable, or a file it lists could not be read yet (iOS
+                        // `foldConflictVersions` leaves such a version unresolved). It stays
+                        // where it is, and nothing is pruned while it is there: deleting it
+                        // would discard what the other device wrote.
+                        folderViewIsCurrent = false
                     }
-                    // An unreadable conflict copy is left where it is: deleting it
-                    // would discard whatever the other device wrote, and throwing
-                    // would wedge this folder exactly like the primary used to.
                 }
             } else {
                 root.findFile("Kudos.kudosbackup")?.let { remoteBackup ->
@@ -178,6 +201,9 @@ class SyncRepository(
                         }
                     }
                 }
+                // A folder with nothing in it is a first write, and has nothing to prune.
+                // One that holds files and no manifest is not: see above.
+                folderViewIsCurrent = syncDir.listFiles().isEmpty()
             }
 
             // 2. Export incrementally
@@ -211,8 +237,7 @@ class SyncRepository(
                     snapshot.works.filter { it.hasEpub }.forEach { work ->
                         val localPath = workFileStore.workEpubPath(work.id)
                         if (Files.isRegularFile(localPath)) {
-                            // iOS's name: the UUID in capitals. iOS looks for exactly that, and
-                            // prunes any other name as an orphan.
+                            // iOS's name: the UUID in capitals.
                             val epubName = BackupPaths.iosEpubAssetIdentifier(work.id)
                             val bytes = Files.readAllBytes(localPath)
                             // The digest of the bytes this device uploads (iOS
@@ -222,7 +247,8 @@ class SyncRepository(
                             epubDigests[BackupPaths.normalizeIdForComparison(work.id)] = BackupPaths.sha256(bytes)
                             writeIfChanged(
                                 worksDir, epubName, "application/epub+zip", bytes,
-                                existing = remoteWorks[epubName.lowercase(Locale.ROOT)]
+                                existing = remoteWorks[epubName.lowercase(Locale.ROOT)],
+                                recase = true
                             )
                         }
                     }
@@ -231,10 +257,15 @@ class SyncRepository(
                 if (fontsDir != null) {
                     // As iOS: every font the manifest lists is kept.
                     manifestOut.fonts.forEach { expectedFonts.add(it.fileName) }
+                    pendingFonts.values.forEach { expectedFonts.add(it.fileName) }
+                    val remoteFonts = fontsDir.listFiles()
                     snapshot.fonts.forEach { font ->
                         val bytes = fontFileStore.readFont(font.fileName)
                         if (bytes != null && bytes.isNotEmpty()) {
-                            writeIfChanged(fontsDir, font.fileName, "application/octet-stream", bytes)
+                            writeIfChanged(
+                                fontsDir, font.fileName, "application/octet-stream", bytes,
+                                existing = remoteFonts.fontNamed(font.fileName)
+                            )
                         }
                     }
                 }
@@ -262,24 +293,31 @@ class SyncRepository(
                     }
                 }
 
-                // iOS's `viewIsCurrent` (`performSyncUp`): if another device wrote the
-                // manifest after this run read it, the manifest about to be written does
-                // not know that device's new works, and pruning by it would delete their
-                // EPUBs. Stale files simply remain; a later, informed sync clears them.
-                if (syncDir.findFile(BackupPaths.MANIFEST)?.lastModified() != manifestStampAtRead) {
-                    folderViewIsCurrent = false
+                // iOS `performSyncUp` needs a current index. A provider's dates can be
+                // absent, coarse, or the time of a download, so compare the bytes: if another
+                // device wrote the manifest after this run read it, the manifest about to be
+                // written does not know what that one lists. Writing it would drop those
+                // records from the folder's only index. This run stops, and the next reads
+                // the new manifest first.
+                if (!readLiveManifest(syncDir).contentEquals(manifestBytesAtRead)) {
+                    throw IOException("Sync folder changed during sync. Try syncing again.")
                 }
 
                 // The commit point.
+                val localFontKeys = manifestOut.fonts.mapTo(HashSet()) { BackupPaths.fontFileNameKey(it.fileName) }
                 val manifestBytes = BackupJson.encodeToString(
                     manifestOut.copy(
                         works = manifestOut.works.map { work ->
                             epubDigests[BackupPaths.normalizeIdForComparison(work.id)]
                                 ?.let { work.copy(epubDigest = it) } ?: work
+                        },
+                        fonts = manifestOut.fonts + pendingFonts.values.filter {
+                            BackupPaths.fontFileNameKey(it.fileName) !in localFontKeys
                         }
                     )
                 ).toByteArray(Charsets.UTF_8)
-                writeManifestAtomically(syncDir, manifestBytes)
+                writeManifest(syncDir, manifestBytes, backup = manifestBytesAtRead.takeIf { decodedLive != null })
+                foldedConflicts.forEach { it.delete() }
 
                 // Only now drop asset files that no manifest record references any
                 // more. Pruning *before* the commit point, as this used to, means a
@@ -300,7 +338,7 @@ class SyncRepository(
 
             settingsRepository.updateSyncLastSyncAt(clock())
             settingsRepository.updateSyncHasPendingChanges(false)
-            return SyncResult.Success(foldedConflicts)
+            return SyncResult.Success(foldedConflicts.size)
         } catch (e: Exception) {
             return SyncResult.Error(e.message ?: "Sync failed.")
         }
@@ -311,13 +349,17 @@ class SyncRepository(
         fileName: String,
         mimeType: String,
         data: ByteArray,
-        existing: DocumentFile? = dir.findFile(fileName)
+        existing: DocumentFile? = dir.findFile(fileName),
+        recase: Boolean = false
     ) {
         var file = existing
-        // An older Android build named EPUBs in lowercase. Such a file is replaced, not renamed:
-        // a phone's shared storage ignores letter case, and a rename that changes only the case
-        // is refused there or lands on a "name (1)" copy, which the prune would then remove.
-        if (file != null && file.name != fileName) {
+        // An EPUB an older Android build named in lowercase is replaced by one under iOS's
+        // name, not kept: a released iOS build looks for the exact name, and neither reads nor
+        // keeps another. Deleted and written again, not renamed: a phone's shared storage
+        // ignores letter case, and a rename that changes only the case is refused there or
+        // lands on a "name (1)" copy. If the write then fails the folder is without the file
+        // until the next sync; this device holds the bytes, and the run fails loudly.
+        if (recase && file != null && file.name != fileName) {
             file.delete()
             file = null
         }
@@ -335,9 +377,10 @@ class SyncRepository(
         if (file == null) {
             file = dir.createFile(mimeType, fileName)
         }
-        if (file != null) {
-            context.contentResolver.openOutputStream(file.uri, "wt")?.use { it.write(data) }
-        }
+        val target = file ?: throw IOException("Could not create $fileName.")
+        val output = context.contentResolver.openOutputStream(target.uri, "wt")
+            ?: throw IOException("Could not write $fileName.")
+        output.use { it.write(data) }
     }
 
     /** Decodes a manifest document, or null if it is absent, empty or unreadable. */
@@ -345,51 +388,80 @@ class SyncRepository(
         if (file == null) return null
         return runCatching {
             context.contentResolver.openInputStream(file.uri)?.use { input ->
-                val bytes = input.readBytes()
-                if (bytes.isEmpty()) null else BackupValidator.decodeManifest(bytes)
+                BackupValidator.decodeManifest(
+                    input.readLimitedBytes(BackupPaths.MANIFEST, BackupLimits.MAX_MANIFEST_BYTES)
+                )
             }
         }.getOrNull()
     }
 
     /**
-     * Merges [manifest] and the files it lists. False when a listed font was left for a later
-     * pass: iOS counts that as an outstanding asset and does not prune while one is, because
-     * the manifest this device writes next will not list a font it never installed.
+     * The live manifest's bytes, null when the folder has none. A manifest that is there and
+     * cannot be read (a provider that is offline, a file over the limit) throws: it is not a
+     * missing one, and what was not read is not written over.
      */
-    private suspend fun importManifest(syncDir: DocumentFile, manifest: KudosBackupManifest): Boolean {
+    private fun readLiveManifest(syncDir: DocumentFile): ByteArray? {
+        val file = syncDir.findFile(BackupPaths.MANIFEST) ?: return null
+        return try {
+            (context.contentResolver.openInputStream(file.uri) ?: throw IOException()).use {
+                it.readLimitedBytes(BackupPaths.MANIFEST, BackupLimits.MAX_MANIFEST_BYTES)
+            }
+        } catch (error: Exception) {
+            throw IOException("The sync folder's manifest could not be read. Its files were kept.")
+        }
+    }
+
+    // Strict JSON, not `BackupJson`: that one is lenient, and reads a bare word as a value.
+    private fun isWholeJsonObject(bytes: ByteArray): Boolean =
+        runCatching { Json.parseToJsonElement(bytes.toString(Charsets.UTF_8)) is JsonObject }.getOrDefault(false)
+
+    /** What importing one manifest left in the folder untaken. */
+    private class ImportOutcome(
+        /** False when a file the manifest lists is in the folder and could not be taken. */
+        val complete: Boolean,
+        /** The fonts among those, by file name. */
+        val pendingFonts: Map<String, BackupFont>
+    )
+
+    /**
+     * Merges [manifest] and the files it lists that are in the folder. A file the manifest
+     * lists and the folder does not hold is nothing to fetch, as on iOS
+     * (`readChangedRemoteAssets`): it may arrive later or be gone for good, and counting it as
+     * outstanding would hold every later sync back for a file that never comes.
+     */
+    private suspend fun importManifest(syncDir: DocumentFile, manifest: KudosBackupManifest): ImportOutcome {
         val fontFiles = mutableMapOf<String, ByteArray>()
+        val pendingFonts = linkedMapOf<String, BackupFont>()
         var totalFontBytes = 0L
         var complete = true
 
-        syncDir.findFile(BackupPaths.FONTS_DIRECTORY)?.let { fontsDir ->
-            manifest.fonts.forEach { font ->
-                val file = fontsDir.findFile(font.fileName) ?: return@forEach
-                val path = "${BackupPaths.FONTS_DIRECTORY}/${font.fileName}"
-                // iOS `readChangedRemoteAssets`: a font over the per-file limit, or one that
-                // cannot be read, is left out of this pass and must not block the rest of the
-                // manifest. Throwing here, as this used to, failed the whole sync every time
-                // the folder held such a font.
-                val bytes = runCatching {
-                    context.contentResolver.openInputStream(file.uri)?.use { it.readFontBytes(path) }
-                }.getOrNull()
-                if (bytes == null) {
-                    complete = false
-                    return@forEach
-                }
-                // A font this device already holds byte for byte takes none of the pass's
-                // allowance. One that would take the pass over it waits for the next sync,
-                // when what this one installs no longer counts: a library larger than the
-                // allowance arrives over several syncs instead of never.
-                val settled = fontFileStore.readFont(font.fileName)?.contentEquals(bytes) == true
-                if (!settled) {
-                    if (totalFontBytes + bytes.size > maxFontPassBytes) {
-                        complete = false
-                        return@forEach
-                    }
-                    totalFontBytes += bytes.size
-                }
-                fontFiles[font.fileName] = bytes
+        val remoteFonts = syncDir.findFile(BackupPaths.FONTS_DIRECTORY)?.listFiles().orEmpty()
+        manifest.fonts.forEach { font ->
+            val file = remoteFonts.fontNamed(font.fileName) ?: return@forEach
+            val path = "${BackupPaths.FONTS_DIRECTORY}/${font.fileName}"
+            // iOS `readChangedRemoteAssets`: a font over the per-file limit, or one that
+            // cannot be read, is left out of this pass and must not block the rest of the
+            // manifest. Throwing here, as this used to, failed the whole sync every time
+            // the folder held such a font.
+            val bytes = runCatching {
+                context.contentResolver.openInputStream(file.uri)?.use { it.readFontBytes(path) }
+            }.getOrNull()
+            if (bytes == null) {
+                pendingFonts[font.fileName] = font
+                return@forEach
             }
+            // A font this device already holds byte for byte is not offered to the merge at
+            // all (iOS leaves it out of the incoming set): the restore validator caps the
+            // whole set it is given, so counting settled fonts against it meant a library
+            // larger than one pass's allowance never finished arriving. One that would take
+            // the pass over the allowance waits for the next sync.
+            if (fontFileStore.readFont(font.fileName)?.contentEquals(bytes) == true) return@forEach
+            if (totalFontBytes + bytes.size > maxFontPassBytes) {
+                pendingFonts[font.fileName] = font
+                return@forEach
+            }
+            totalFontBytes += bytes.size
+            fontFiles[font.fileName] = bytes
         }
 
         // iOS writes the UUID in capitals; older Android builds wrote it lowercase.
@@ -408,17 +480,30 @@ class SyncRepository(
                 val file = remoteWorks[BackupPaths.iosEpubAssetIdentifier(work.id).lowercase(Locale.ROOT)]
                     ?: continue
                 if (isUnchangedLocally(work, file)) continue
-                context.contentResolver.openInputStream(file.uri)?.use {
-                    val bytes = it.readBytes()
-                    epubFiles[work.id] = bytes
-                    batchBytes += bytes.size
+                // There and not readable, or larger than an archive entry may be: outstanding,
+                // as on iOS. Read whole and unbounded, as this used to be, one oversized file
+                // named like an EPUB ended the app.
+                val bytes = runCatching {
+                    context.contentResolver.openInputStream(file.uri)?.use {
+                        it.readLimitedBytes(file.name.orEmpty(), BackupLimits.MAX_ENTRY_BYTES)
+                    }
+                }.getOrNull()
+                if (bytes == null) {
+                    complete = false
+                    continue
                 }
+                epubFiles[work.id] = bytes
+                batchBytes += bytes.size
             }
             backupRepository.importPackage(KudosBackupPackage(manifest, epubFiles, fontFiles))
+            // Fonts are restored once per manifest, with the first batch (iOS
+            // `readChangedRemoteAssets`). Offered again with each batch, a font whose name
+            // collides with a local one gained another suffixed copy every time.
+            fontFiles.clear()
         } while (next < manifest.works.size)
 
         importOriginals(syncDir, manifest, fontFiles)
-        return complete
+        return ImportOutcome(complete && pendingFonts.isEmpty(), pendingFonts)
     }
 
     /**
@@ -458,7 +543,10 @@ class SyncRepository(
         wanted.values.forEach { files ->
             files.forEach { file ->
                 context.contentResolver.openInputStream(file.uri)?.use {
-                    val bytes = it.readBytes()
+                    // iOS `KudosBackupContents` limits actual bytes, not provider size.
+                    val bytes = runCatching {
+                        it.readLimitedBytes(file.name.orEmpty(), BackupLimits.MAX_ENTRY_BYTES)
+                    }.getOrNull() ?: return@use
                     batch[file.name!!] = bytes
                     batchBytes += bytes.size
                 }
@@ -480,7 +568,10 @@ class SyncRepository(
         return remoteDigest.isEmpty() || remoteDigest == BackupPaths.sha256(Files.readAllBytes(local))
     }
 
-    private fun InputStream.readFontBytes(path: String): ByteArray {
+    private fun InputStream.readFontBytes(path: String): ByteArray =
+        readLimitedBytes(path, BackupLimits.MAX_FONT_ENTRY_BYTES)
+
+    internal fun InputStream.readLimitedBytes(path: String, limit: Long): ByteArray {
         val output = ByteArrayOutputStream()
         val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
         var total = 0L
@@ -488,7 +579,7 @@ class SyncRepository(
             val count = read(buffer)
             if (count < 0) break
             total += count
-            if (total > BackupLimits.MAX_FONT_ENTRY_BYTES) {
+            if (total > limit) {
                 throw BackupError.EntryTooLarge(path)
             }
             output.write(buffer, 0, count)
@@ -497,50 +588,59 @@ class SyncRepository(
     }
 
     /**
-     * SAF has no atomic-replace primitive, so this is the closest achievable
-     * equivalent of iOS's `options: .atomic`: write a fresh temp document, fsync
-     * it, demote the live manifest to `.bak`, then rename the temp into place.
+     * Writes the manifest over the one that is there, and never takes it away first.
      *
-     * Opening the live manifest with `"wt"` — which is what this used to do —
-     * truncates it to zero length for the whole write. A crash or a second device
-     * reading in that window sees no index at all for a folder that still holds
-     * every EPUB, and a *partially* written manifest is worse still: it throws on
-     * the next import, before the export that would repair it ever runs.
+     * This used to demote the live manifest to `.bak` and rename a temp into its place, which
+     * left the folder with no `manifest.json` in between. iOS reads a folder with files and no
+     * manifest as a first write: it publishes its own library and prunes every file that
+     * library does not list. A manifest that is cut short instead cannot be read by either
+     * app, and neither prunes by what it could not read; the next run repairs it. So the
+     * manifest this run read goes to `.bak` as a copy ([backup], null when it was unreadable),
+     * and the live file is then written in place.
+     *
+     * A folder with no manifest yet still gets a temp renamed into place: there is nothing to
+     * take away, and a first manifest is then never seen half-written.
      */
-    private fun writeManifestAtomically(syncDir: DocumentFile, bytes: ByteArray) {
-        val resolver = context.contentResolver
+    private fun writeManifest(syncDir: DocumentFile, bytes: ByteArray, backup: ByteArray?) {
+        val live = syncDir.findFile(BackupPaths.MANIFEST)
+        if (live != null) {
+            if (backup != null) {
+                val copy = syncDir.findFile(BackupPaths.MANIFEST_BACKUP)
+                    ?: syncDir.createFile("application/octet-stream", BackupPaths.MANIFEST_BACKUP)
+                    ?: throw IOException("Could not create the manifest's backup copy.")
+                writeDurably(copy, backup)
+            }
+            writeDurably(live, bytes)
+            return
+        }
 
-        // A run that died mid-write leaves a temp behind. It is never
-        // authoritative, so drop it rather than let it look like a conflict copy.
+        // A first write that died leaves a temp behind. It is never authoritative, so drop
+        // it rather than let it look like a conflict copy.
         syncDir.listFiles().forEach { file ->
             if (file.name?.startsWith(BackupPaths.MANIFEST_TEMP) == true) file.delete()
         }
-
         // createDocument may append its own extension for the MIME type, so the
         // temp is never looked up by name again — we keep the handle we were given.
         val temp = syncDir.createFile("application/json", BackupPaths.MANIFEST_TEMP)
             ?: throw IOException("Could not create a temporary manifest.")
         try {
-            val descriptor = resolver.openFileDescriptor(temp.uri, "w")
-                ?: throw IOException("Could not open the temporary manifest for writing.")
-            ParcelFileDescriptor.AutoCloseOutputStream(descriptor).use { output ->
-                output.write(bytes)
-                output.flush()
-                // Durability before the rename: a rename that reaches the disk
-                // ahead of its own data is precisely the corruption this prevents.
-                descriptor.fileDescriptor.sync()
-            }
+            writeDurably(temp, bytes)
         } catch (error: Exception) {
             temp.delete()
             throw error
         }
+        DocumentsContract.renameDocument(context.contentResolver, temp.uri, BackupPaths.MANIFEST)
+    }
 
-        val live = syncDir.findFile(BackupPaths.MANIFEST)
-        if (live != null) {
-            syncDir.findFile(BackupPaths.MANIFEST_BACKUP)?.delete()
-            DocumentsContract.renameDocument(resolver, live.uri, BackupPaths.MANIFEST_BACKUP)
+    /** Writes [bytes] as the whole of [file], and has them on disk before returning. */
+    private fun writeDurably(file: DocumentFile, bytes: ByteArray) {
+        val descriptor = context.contentResolver.openFileDescriptor(file.uri, "wt")
+            ?: throw IOException("Could not open ${file.name} for writing.")
+        ParcelFileDescriptor.AutoCloseOutputStream(descriptor).use { output ->
+            output.write(bytes)
+            output.flush()
+            descriptor.fileDescriptor.sync()
         }
-        DocumentsContract.renameDocument(resolver, temp.uri, BackupPaths.MANIFEST)
     }
 
     /**
@@ -549,20 +649,15 @@ class SyncRepository(
      */
     private fun copyIfSizeDiffers(dir: DocumentFile, fileName: String, local: Path, existing: DocumentFile?) {
         var file = existing
-        if (file != null && file.name != fileName) {
-            file.delete()
-            file = null
-        }
         // ponytail: size is the change signal. An original is written once and replaced only by
         // a re-import; one re-imported at exactly the same size is not uploaded again. Compare
         // a digest if that ever matters.
         if (file != null && file.length() == Files.size(local)) return
         if (file == null) file = dir.createFile("application/octet-stream", fileName)
-        if (file != null) {
-            context.contentResolver.openOutputStream(file.uri, "wt")?.use { output ->
-                Files.newInputStream(local).use { it.copyTo(output) }
-            }
-        }
+        val target = file ?: throw IOException("Could not create $fileName.")
+        val output = context.contentResolver.openOutputStream(target.uri, "wt")
+            ?: throw IOException("Could not write $fileName.")
+        output.use { Files.newInputStream(local).use { input -> input.copyTo(it) } }
     }
 
     /**
@@ -579,19 +674,34 @@ class SyncRepository(
         }
     }
 
+    /**
+     * The font in a folder listing called [name]: as written, else by its composed form (iOS
+     * compares names so). Letter case is not folded: two fonts can differ only by it.
+     */
+    private fun Array<out DocumentFile>.fontNamed(name: String): DocumentFile? {
+        firstOrNull { it.name == name }?.let { return it }
+        val composed = Normalizer.normalize(name, Normalizer.Form.NFC)
+        return firstOrNull { file -> file.name?.let { Normalizer.normalize(it, Normalizer.Form.NFC) } == composed }
+    }
+
     private fun removeOrphans(directory: DocumentFile, expected: Set<String>) {
         // An expected file under another case is still that file.
-        val keep = expected.mapTo(HashSet()) { it.lowercase(Locale.ROOT) }
+        val keep = expected.mapTo(HashSet()) { BackupPaths.fontFileNameKey(it) }
         directory.listFiles().forEach { file ->
             val name = file.name ?: return@forEach
             if (name.startsWith(".")) return@forEach // hidden and system files, as iOS skips them
-            if (name.lowercase(Locale.ROOT) !in keep) file.delete()
+            if (BackupPaths.fontFileNameKey(name) !in keep) file.delete()
         }
     }
 
-    /** One listing of a folder, by lowercase name: a `findFile` per work lists it every time. */
+    /**
+     * One listing of a folder, by lowercase name: a `findFile` per work lists it every time.
+     * Storage that tells letter case apart can hold an old lowercase EPUB beside iOS's; the
+     * one in capitals sorts first and is the one taken, as it is the one iOS reads.
+     */
     private fun DocumentFile.childrenByLowercaseName(): Map<String, DocumentFile> =
-        listFiles().mapNotNull { file -> file.name?.let { it.lowercase(Locale.ROOT) to file } }.toMap()
+        listFiles().filter { it.name != null }.sortedByDescending { it.name }
+            .associateBy { BackupPaths.fontFileNameKey(it.name!!) }
 }
 
 sealed interface SyncResult {

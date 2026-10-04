@@ -35,6 +35,10 @@ import org.robolectric.shadows.ShadowContentResolver
  *  - openFile → real [ParcelFileDescriptor] (so `FileDescriptor.sync()` works)
  */
 class FakeTempDocumentsProvider : ContentProvider() {
+    /** Zero models the value DocumentFile exposes for an unknown provider date. */
+    var reportedLastModified: Long? = null
+    /** Every rename asked for, as "old -> new": a test can show a file was never renamed away. */
+    val renames = mutableListOf<String>()
     private data class Node(
         val id: String,
         val name: String,
@@ -305,6 +309,7 @@ class FakeTempDocumentsProvider : ContentProvider() {
         if (node.id == ROOT_DOCUMENT_ID) {
             throw IllegalArgumentException("Cannot rename root")
         }
+        renames += "${node.name} -> $displayName"
         val target = File(node.file.parentFile, displayName)
         if (target.absolutePath == node.file.absolutePath) return
 
@@ -359,7 +364,7 @@ class FakeTempDocumentsProvider : ContentProvider() {
                 }
             DocumentsContract.Document.COLUMN_SIZE ->
                 if (node.directory) 0L else node.file.length()
-            DocumentsContract.Document.COLUMN_LAST_MODIFIED -> node.file.lastModified()
+            DocumentsContract.Document.COLUMN_LAST_MODIFIED -> reportedLastModified ?: node.file.lastModified()
             DocumentsContract.Document.COLUMN_FLAGS -> {
                 var flags =
                     DocumentsContract.Document.FLAG_SUPPORTS_WRITE or

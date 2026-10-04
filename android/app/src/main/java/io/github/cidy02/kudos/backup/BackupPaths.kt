@@ -1,6 +1,7 @@
 package io.github.cidy02.kudos.backup
 
 import java.security.MessageDigest
+import java.text.Normalizer
 import java.util.Locale
 import java.util.UUID
 
@@ -51,7 +52,10 @@ object BackupPaths {
         val base = fileName.substringBeforeLast('.', fileName)
         val isRecord = base.endsWith(".conversion")
         val id = if (isRecord) base.removeSuffix(".conversion") else base
-        return runCatching { UUID.fromString(id).toString() }.getOrNull()?.let { it to isRecord }
+        // iOS `FolderSyncService.removeOrphanedOriginals` uses UUID(uuidString:).
+        // Java also accepts short components ("1-1-1-1-1"); those are not our files.
+        return runCatching { UUID.fromString(id).toString() }.getOrNull()
+            ?.takeIf { it.equals(id, ignoreCase = true) }?.let { it to isRecord }
     }
 
     fun canonicalUuid(value: String, field: String = "id"): String {
@@ -166,7 +170,10 @@ object BackupPaths {
         }
     }
 
-    fun fontFileNameKey(fileName: String): String = fileName.lowercase(Locale.ROOT)
+    // iOS `KudosBackupService.restore` uses Swift String equality, which treats
+    // composed/decomposed Unicode as the same name. Fold only keys, never wire names.
+    fun fontFileNameKey(fileName: String): String =
+        Normalizer.normalize(fileName, Normalizer.Form.NFC).lowercase(Locale.ROOT)
 
     fun sha256(bytes: ByteArray): String {
         val digest = MessageDigest.getInstance("SHA-256").digest(bytes)

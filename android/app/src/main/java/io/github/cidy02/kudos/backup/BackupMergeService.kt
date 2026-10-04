@@ -99,6 +99,11 @@ object BackupMergeService {
                 val sameRecordDeletedLater = held.recordTypeRaw == incoming.recordTypeRaw &&
                     BackupPaths.normalizeIdForComparison(held.recordID) ==
                     BackupPaths.normalizeIdForComparison(incoming.recordID) &&
+                    // iOS `KudosBackupService.restore` replaces the signed identity too.
+                    // Keep all suppressors here: matching an unsigned row id alone cannot
+                    // justify removing a local deletion's AO3/URL identity (see Brief 5c F6).
+                    held.ao3WorkID == incoming.ao3WorkID &&
+                    held.sourceURL.trim().equals(incoming.sourceURL.trim(), ignoreCase = true) &&
                     incoming.lastModifiedAt.isAfter(held.lastModifiedAt)
                 if (!sameRecordDeletedLater) return@forEach
             }
@@ -174,12 +179,12 @@ object BackupMergeService {
                     // so the stale remote copy is restored over the fresh local file
                     // and then exported back out.
                     //
-                    // Strictly newer, where iOS's `shouldApplyIncoming` takes >=: when
-                    // neither side's metadata moved, the two clocks are equal and
-                    // there is nothing to justify overwriting bytes this device
-                    // holds. Stricter than iOS, and kept: it only ever keeps a file.
-                    incomingIsNewer = existing != null && incomingModifiedAt != null &&
-                        existing.effectiveLastModifiedAt.isBefore(incomingModifiedAt)
+                    // iOS `KudosBackupService.mayReplaceEPUB` uses shouldApplyIncoming
+                    // (>=). A prior asset batch already merged this record's clock;
+                    // rejecting equality would discard its later batch's corrected EPUB.
+                    incomingIsNewer = existing != null && SyncMerge.shouldApplyIncoming(
+                        existing.effectiveLastModifiedAt, incomingModifiedAt
+                    )
                 )
             }
             // Check only what would be written, and never let bytes that are not a
@@ -441,6 +446,12 @@ object BackupMergeService {
             adoptedIncomingTombstoneIds = adoptedIncoming
                 .map { BackupPaths.normalizeIdForComparison(it.id) }
                 .toSet(),
+            removedSavedSearches = current.savedSearches.filter { local ->
+                savedSearches.none { merged ->
+                    BackupPaths.normalizeIdForComparison(merged.id) ==
+                        BackupPaths.normalizeIdForComparison(local.id)
+                }
+            },
             workIdRemap = workIdRemap
         )
     }
