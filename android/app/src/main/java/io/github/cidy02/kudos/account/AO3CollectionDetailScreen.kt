@@ -19,11 +19,19 @@ import androidx.compose.foundation.layout.windowInsetsTopHeight
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -32,13 +40,18 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.fragment.app.FragmentActivity
+import io.github.cidy02.kudos.app.PrivacyGate
 import io.github.cidy02.kudos.app.ProvidePushedShellChrome
+import io.github.cidy02.kudos.core.model.KudosSettings
+import io.github.cidy02.kudos.data.preferences.SettingsRepository
 import io.github.cidy02.kudos.home.HomeFacts
 import io.github.cidy02.kudos.network.ao3.AO3Constants
 import io.github.cidy02.kudos.network.ao3.AO3Result
@@ -49,6 +62,7 @@ import io.github.cidy02.kudos.network.ao3.displayMessage
 import io.github.cidy02.kudos.network.ao3.search.AO3SearchPage
 import io.github.cidy02.kudos.network.ao3.search.AO3WorkSummary
 import io.github.cidy02.kudos.ui.components.KudosPaginationBar
+import io.github.cidy02.kudos.ui.components.KudosRefreshBox
 import io.github.cidy02.kudos.ui.components.SensitiveWorkRow
 import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
 import io.github.cidy02.kudos.ui.subject.SectionRuleHeader
@@ -60,6 +74,7 @@ import io.github.cidy02.kudos.ui.subject.SubjectRowSeparator
 import io.github.cidy02.kudos.ui.subject.SubjectSegmentedControl
 import io.github.cidy02.kudos.ui.subject.SubjectStatCell
 import io.github.cidy02.kudos.ui.subject.SubjectStatStrip
+import io.github.cidy02.kudos.ui.subject.ToolbarCircleButton
 import io.github.cidy02.kudos.ui.subject.subjectPanel
 import io.github.cidy02.kudos.ui.subject.subjectScreenWash
 import kotlinx.coroutines.launch
@@ -69,6 +84,8 @@ fun AO3CollectionDetailScreen(
     slug: String,
     title: String,
     repository: AO3CollectionDetailRepository,
+    settingsRepository: SettingsRepository,
+    privacyGate: PrivacyGate,
     onOpenWork: (AO3WorkSummary) -> Unit,
     onOpenWebFallback: (String) -> Unit
 ) {
@@ -80,7 +97,11 @@ fun AO3CollectionDetailScreen(
     var loadedSegments by remember(slug) { mutableStateOf(emptySet<AO3CollectionSegment>()) }
     var phase by remember(slug) { mutableStateOf<AO3CollectionDetailPhase>(AO3CollectionDetailPhase.Idle) }
     var loadGeneration by remember(slug) { mutableIntStateOf(0) }
+    var showMenu by remember(slug) { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+    val settings by settingsRepository.settings.collectAsState(initial = KudosSettings.Defaults)
+    val reveal by privacyGate.state.collectAsState()
+    val activity = LocalContext.current as? FragmentActivity
     val tokens = LocalKudosTokens.current
     val paletteTitle = show?.collection?.title ?: title
     val palette = remember(paletteTitle, tokens.theme) {
@@ -93,61 +114,59 @@ fun AO3CollectionDetailScreen(
         AO3CollectionSegment.People -> peoplePage?.currentPage ?: 1
     }
 
-    fun load(target: AO3CollectionSegment, page: Int = currentPage(target)) {
+    suspend fun load(target: AO3CollectionSegment, page: Int = currentPage(target)) {
         val generation = ++loadGeneration
         phase = AO3CollectionDetailPhase.Loading
-        scope.launch {
-            if (show == null) {
-                when (val result = repository.getCollectionShow(slug)) {
-                    is AO3Result.Success -> {
-                        if (generation != loadGeneration) return@launch
-                        show = result.value
+        if (show == null) {
+            when (val result = repository.getCollectionShow(slug)) {
+                is AO3Result.Success -> {
+                    if (generation != loadGeneration) return
+                    show = result.value
+                }
+                is AO3Result.Failure -> {
+                    if (generation == loadGeneration) {
+                        phase = AO3CollectionDetailPhase.Failed(result.error.displayMessage())
                     }
-                    is AO3Result.Failure -> {
-                        if (generation == loadGeneration) {
-                            phase = AO3CollectionDetailPhase.Failed(result.error.displayMessage())
-                        }
-                        return@launch
-                    }
+                    return
                 }
             }
+        }
 
-            when (target) {
-                AO3CollectionSegment.Works -> when (val result = repository.getCollectionWorks(slug, page)) {
-                    is AO3Result.Success -> if (generation == loadGeneration) worksPage = result.value
-                    is AO3Result.Failure -> {
-                        if (generation == loadGeneration) {
-                            phase = AO3CollectionDetailPhase.Failed(result.error.displayMessage())
-                        }
-                        return@launch
+        when (target) {
+            AO3CollectionSegment.Works -> when (val result = repository.getCollectionWorks(slug, page)) {
+                is AO3Result.Success -> if (generation == loadGeneration) worksPage = result.value
+                is AO3Result.Failure -> {
+                    if (generation == loadGeneration) {
+                        phase = AO3CollectionDetailPhase.Failed(result.error.displayMessage())
                     }
-                }
-                AO3CollectionSegment.Bookmarks -> when (
-                    val result = repository.getCollectionBookmarks(slug, page)
-                ) {
-                    is AO3Result.Success -> if (generation == loadGeneration) bookmarksPage = result.value
-                    is AO3Result.Failure -> {
-                        if (generation == loadGeneration) {
-                            phase = AO3CollectionDetailPhase.Failed(result.error.displayMessage())
-                        }
-                        return@launch
-                    }
-                }
-                AO3CollectionSegment.People -> when (val result = repository.getCollectionPeople(slug, page)) {
-                    is AO3Result.Success -> if (generation == loadGeneration) peoplePage = result.value
-                    is AO3Result.Failure -> {
-                        if (generation == loadGeneration) {
-                            phase = AO3CollectionDetailPhase.Failed(result.error.displayMessage())
-                        }
-                        return@launch
-                    }
+                    return
                 }
             }
+            AO3CollectionSegment.Bookmarks -> when (
+                val result = repository.getCollectionBookmarks(slug, page)
+            ) {
+                is AO3Result.Success -> if (generation == loadGeneration) bookmarksPage = result.value
+                is AO3Result.Failure -> {
+                    if (generation == loadGeneration) {
+                        phase = AO3CollectionDetailPhase.Failed(result.error.displayMessage())
+                    }
+                    return
+                }
+            }
+            AO3CollectionSegment.People -> when (val result = repository.getCollectionPeople(slug, page)) {
+                is AO3Result.Success -> if (generation == loadGeneration) peoplePage = result.value
+                is AO3Result.Failure -> {
+                    if (generation == loadGeneration) {
+                        phase = AO3CollectionDetailPhase.Failed(result.error.displayMessage())
+                    }
+                    return
+                }
+            }
+        }
 
-            if (generation == loadGeneration) {
-                loadedSegments = loadedSegments + target
-                phase = AO3CollectionDetailPhase.Loaded
-            }
+        if (generation == loadGeneration) {
+            loadedSegments = loadedSegments + target
+            phase = AO3CollectionDetailPhase.Loaded
         }
     }
 
@@ -159,151 +178,194 @@ fun AO3CollectionDetailScreen(
         }
     }
 
-    ProvidePushedShellChrome(hasSubjectHeader = true)
+    ProvidePushedShellChrome(
+        hasSubjectHeader = true,
+        trailingContent = if (settings.privacy.hideMatureContent) {
+            {
+                Box {
+                    ToolbarCircleButton(
+                        onClick = { showMenu = true },
+                        accessibilityName = "More actions",
+                        palette = palette
+                    ) {
+                        Icon(imageVector = Icons.Default.MoreVert, contentDescription = null)
+                    }
+                    DropdownMenu(
+                        expanded = showMenu,
+                        onDismissRequest = { showMenu = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text(if (reveal.revealAll) "Hide mature" else "Show mature") },
+                            leadingIcon = {
+                                Icon(
+                                    if (reveal.revealAll) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
+                                    contentDescription = null
+                                )
+                            },
+                            onClick = {
+                                showMenu = false
+                                privacyGate.toggleRevealAll(activity)
+                            }
+                        )
+                    }
+                }
+            }
+        } else {
+            null
+        }
+    )
 
-    LazyColumn(
+    KudosRefreshBox(
+        onRefresh = {
+            loadedSegments = loadedSegments - segment
+            load(segment)
+        },
         modifier = Modifier
             .fillMaxSize()
-            .subjectScreenWash(palette),
-        contentPadding = PaddingValues(bottom = 24.dp)
+            .subjectScreenWash(palette)
     ) {
-        item {
-            Spacer(Modifier.windowInsetsTopHeight(WindowInsets.statusBars))
-            Spacer(Modifier.height(56.dp))
-            SubjectHeaderBlock(
-                kicker = "Collection",
-                title = show?.collection?.title ?: title,
-                subtitle = show?.collection?.let { collection ->
-                    listOf(collection.byline, collection.summary)
-                        .filter { it.isNotBlank() }
-                        .joinToString(" · ")
-                        .takeIf { it.isNotBlank() }
-                },
-                palette = palette,
-                gutter = SubjectMetrics.accountGutter
-            )
-        }
-
-        show?.let { collectionShow ->
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(bottom = 24.dp)
+        ) {
             item {
-                SubjectStatStrip(
-                    cells = listOf(
-                        SubjectStatCell(collectionShow.collection.worksCount.toString(), "Works"),
-                        SubjectStatCell(collectionShow.collection.bookmarksCount.toString(), "Bookmarks")
-                    ),
+                Spacer(Modifier.windowInsetsTopHeight(WindowInsets.statusBars))
+                Spacer(Modifier.height(56.dp))
+                SubjectHeaderBlock(
+                    kicker = "Collection",
+                    title = show?.collection?.title ?: title,
+                    subtitle = show?.collection?.let { collection ->
+                        listOf(collection.byline, collection.summary)
+                            .filter { it.isNotBlank() }
+                            .joinToString(" · ")
+                            .takeIf { it.isNotBlank() }
+                    },
                     palette = palette,
-                    modifier = Modifier
-                        .padding(top = 12.dp)
-                        .padding(horizontal = SubjectMetrics.panelGutter)
+                    gutter = SubjectMetrics.accountGutter
                 )
             }
-        }
 
-        item {
-            SubjectSegmentedControl(
-                options = AO3CollectionSegment.entries,
-                selected = segment,
-                onSelect = { segment = it },
-                title = { it.title },
-                contentDescription = "Collection section",
-                modifier = Modifier
-                    .padding(top = 14.dp)
-                    .padding(horizontal = SubjectMetrics.accountGutter)
-            )
-        }
-
-        show?.let { collectionShow ->
-            val actions = collectionManageActions(collectionShow, slug)
-            if (actions.isNotEmpty()) {
+            show?.let { collectionShow ->
                 item {
-                    SectionRuleHeader(
-                        title = "Manage",
-                        modifier = Modifier.padding(top = 18.dp, bottom = 8.dp)
+                    SubjectStatStrip(
+                        cells = listOf(
+                            SubjectStatCell(collectionShow.collection.worksCount.toString(), "Works"),
+                            SubjectStatCell(collectionShow.collection.bookmarksCount.toString(), "Bookmarks")
+                        ),
+                        palette = palette,
+                        modifier = Modifier
+                            .padding(top = 12.dp)
+                            .padding(horizontal = SubjectMetrics.panelGutter)
                     )
                 }
+            }
+
+            item {
+                SubjectSegmentedControl(
+                    options = AO3CollectionSegment.entries,
+                    selected = segment,
+                    onSelect = { segment = it },
+                    title = { it.title },
+                    contentDescription = "Collection section",
+                    modifier = Modifier
+                        .padding(top = 14.dp)
+                        .padding(horizontal = SubjectMetrics.accountGutter)
+                )
+            }
+
+            show?.let { collectionShow ->
+                val actions = collectionManageActions(collectionShow, slug)
+                if (actions.isNotEmpty()) {
+                    item {
+                        SectionRuleHeader(
+                            title = "Manage",
+                            modifier = Modifier.padding(top = 18.dp, bottom = 8.dp)
+                        )
+                    }
+                    item {
+                        Column(
+                            Modifier
+                                .padding(horizontal = SubjectMetrics.accountGutter)
+                                .subjectPanel()
+                        ) {
+                            actions.forEachIndexed { index, action ->
+                                if (index > 0) SubjectRowSeparator()
+                                SubjectFormRow(
+                                    label = action.label,
+                                    showsDisclosure = true,
+                                    onClick = { onOpenWebFallback(action.url) }
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            when (val currentPhase = phase) {
+                AO3CollectionDetailPhase.Idle -> Unit
+                AO3CollectionDetailPhase.Loading -> {
+                    if (segmentRowsAreEmpty(segment, worksPage, bookmarksPage, peoplePage)) {
+                        item {
+                            Box(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 20.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                            }
+                        }
+                    } else {
+                        collectionSegmentContent(
+                            segment = segment,
+                            show = show,
+                            worksPage = worksPage,
+                            bookmarksPage = bookmarksPage,
+                            peoplePage = peoplePage,
+                            palette = palette,
+                            onOpenWork = onOpenWork
+                        )
+                    }
+                }
+                is AO3CollectionDetailPhase.Failed -> item {
+                    CollectionFailureCard(
+                        message = currentPhase.message,
+                        onRetry = { scope.launch { load(segment) } },
+                        modifier = Modifier
+                            .padding(top = 14.dp)
+                            .padding(horizontal = SubjectMetrics.accountGutter)
+                    )
+                }
+                AO3CollectionDetailPhase.Loaded -> collectionSegmentContent(
+                    segment = segment,
+                    show = show,
+                    worksPage = worksPage,
+                    bookmarksPage = bookmarksPage,
+                    peoplePage = peoplePage,
+                    palette = palette,
+                    onOpenWork = onOpenWork
+                )
+            }
+
+            val totalPages = when (segment) {
+                AO3CollectionSegment.Works -> worksPage?.totalPages ?: 1
+                AO3CollectionSegment.Bookmarks -> bookmarksPage?.totalPages ?: 1
+                AO3CollectionSegment.People -> peoplePage?.totalPages ?: 1
+            }
+            if (phase !is AO3CollectionDetailPhase.Failed && totalPages > 1) {
                 item {
-                    Column(
-                        Modifier
+                    KudosPaginationBar(
+                        currentPage = currentPage(segment),
+                        totalPages = totalPages,
+                        enabled = phase != AO3CollectionDetailPhase.Loading,
+                        onPageChange = { page -> scope.launch { load(segment, page) } },
+                        modifier = Modifier
+                            .padding(top = 14.dp)
                             .padding(horizontal = SubjectMetrics.accountGutter)
                             .subjectPanel()
-                    ) {
-                        actions.forEachIndexed { index, action ->
-                            if (index > 0) SubjectRowSeparator()
-                            SubjectFormRow(
-                                label = action.label,
-                                showsDisclosure = true,
-                                onClick = { onOpenWebFallback(action.url) }
-                            )
-                        }
-                    }
-                }
-            }
-        }
-
-        when (val currentPhase = phase) {
-            AO3CollectionDetailPhase.Idle -> Unit
-            AO3CollectionDetailPhase.Loading -> {
-                if (segmentRowsAreEmpty(segment, worksPage, bookmarksPage, peoplePage)) {
-                    item {
-                        Box(
-                            Modifier
-                                .fillMaxWidth()
-                                .padding(top = 20.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            CircularProgressIndicator(modifier = Modifier.size(24.dp))
-                        }
-                    }
-                } else {
-                    collectionSegmentContent(
-                        segment = segment,
-                        show = show,
-                        worksPage = worksPage,
-                        bookmarksPage = bookmarksPage,
-                        peoplePage = peoplePage,
-                        palette = palette,
-                        onOpenWork = onOpenWork
+                            .padding(horizontal = 4.dp)
                     )
                 }
-            }
-            is AO3CollectionDetailPhase.Failed -> item {
-                CollectionFailureCard(
-                    message = currentPhase.message,
-                    onRetry = { load(segment) },
-                    modifier = Modifier
-                        .padding(top = 14.dp)
-                        .padding(horizontal = SubjectMetrics.accountGutter)
-                )
-            }
-            AO3CollectionDetailPhase.Loaded -> collectionSegmentContent(
-                segment = segment,
-                show = show,
-                worksPage = worksPage,
-                bookmarksPage = bookmarksPage,
-                peoplePage = peoplePage,
-                palette = palette,
-                onOpenWork = onOpenWork
-            )
-        }
-
-        val totalPages = when (segment) {
-            AO3CollectionSegment.Works -> worksPage?.totalPages ?: 1
-            AO3CollectionSegment.Bookmarks -> bookmarksPage?.totalPages ?: 1
-            AO3CollectionSegment.People -> peoplePage?.totalPages ?: 1
-        }
-        if (phase !is AO3CollectionDetailPhase.Failed && totalPages > 1) {
-            item {
-                KudosPaginationBar(
-                    currentPage = currentPage(segment),
-                    totalPages = totalPages,
-                    enabled = phase != AO3CollectionDetailPhase.Loading,
-                    onPageChange = { load(segment, it) },
-                    modifier = Modifier
-                        .padding(top = 14.dp)
-                        .padding(horizontal = SubjectMetrics.accountGutter)
-                        .subjectPanel()
-                        .padding(horizontal = 4.dp)
-                )
             }
         }
     }

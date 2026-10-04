@@ -611,6 +611,8 @@ fun AppNavHost(
                     slug = slug,
                     title = title ?: slug,
                     repository = container.collectionDetailRepository,
+                    settingsRepository = container.settingsRepository,
+                    privacyGate = container.privacyGate,
                     onOpenWork = { work ->
                         navigateToWorkDetail(WorkDetailSource.RemoteSummary(work))
                     },

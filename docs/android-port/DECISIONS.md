@@ -135,3 +135,22 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   - On both, the toolbar or shell chrome and the tab bar sit outside and keep the app accent.
   Reverse: `HeroWash.swift`; the provider around `AppNavHost` in `MainScaffold.kt`.
 
+- **2026-10-03 · The AO3 collection page shows every work, as iOS does; "Show mature" there only
+  flips the session gate.** Codex's 3m-detail-3 left out Works and Bookmarks rows rated Mature or
+  Explicit until the reader chose Show mature. iOS doesn't: `AO3CollectionDetailView.workRows`
+  draws every row with `EnrichingAO3WorkRow`, and `PrivacyGate` only takes a `SavedWork`, so Hide
+  mature content covers the reader's own library and never AO3's listings. As written, a collection
+  of Mature works would have read "This collection has no works yet." under a count of 234. Claude
+  removed the filter before landing. The menu stays (shown only while Hide mature content is on)
+  and toggles the shared `PrivacyGate`.
+  - Also removed: refetching the header on pull to refresh. iOS reloads the selected segment only
+    and keeps the header it has, which is one AO3 request fewer per pull.
+  - Not ported: leaving the page when the collection is deleted. Android has no native delete
+    (every Manage row opens the web fallback), so nothing can announce it.
+  Reverse: `workRows` and `load` in `account/AO3CollectionDetailScreen.kt`.
+- **2026-10-03 · Cleared the three stale agent worktrees** (`~/kudos-agent-codex`, `-gemini2`,
+  `-grok`), as the handoff directed, and moved them to the lane head. They held briefs 3o,
+  3m-detail and 3q, already landed as `35647609`, `9a667f13` and `64e0d4cf`, plus Grok's unported
+  `TASKS.md` row. Backup first: `~/kudos-tools/out/discard-<name>.patch` (tracked changes against
+  each old HEAD) and `discard-<name>-untracked.tgz`.
+  Reverse: check out the old commit in the worktree and `git apply` its patch.
