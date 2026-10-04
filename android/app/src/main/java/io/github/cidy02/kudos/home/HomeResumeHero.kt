@@ -31,6 +31,8 @@ import io.github.cidy02.kudos.ui.subject.HomeStatusArrangement
 import io.github.cidy02.kudos.ui.subject.HomeStatusTray
 import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
 import io.github.cidy02.kudos.ui.subject.SubjectKicker
+import androidx.compose.ui.platform.LocalDensity
+import io.github.cidy02.kudos.ui.subject.isAccessibilityFontScale
 import io.github.cidy02.kudos.ui.subject.SubjectMetrics
 import io.github.cidy02.kudos.ui.subject.SubjectPalette
 import io.github.cidy02.kudos.ui.subject.WorkReadingOrDownloadRing
@@ -96,6 +98,60 @@ private fun HeroBody(
         ?: if (work.lastReadDate == null) "Ready to resume" else "Last opened"
     val whenText = work.lastReadDate?.let { HomeFacts.relativeNamed(it, now) }
     val figures = HomeFacts.localWorkMetadata(author = "", wordCount = work.wordCount, chapters = work.chapters)
+    // iOS `HomeResumeHero`: at accessibility text sizes the status tray joins the column above
+    // the kicker, the title is not limited to two lines, and the ring, the place and Resume
+    // stack instead of sharing a row. The ring grows with the text (`@ScaledMetric`).
+    val large = isAccessibilityFontScale()
+    val trayReserve = if (large) 0.dp else 78.dp
+    val tray: @Composable (Modifier) -> Unit = { trayModifier ->
+        HomeStatusTray(
+            rating = work.rating,
+            categories = work.workCategories,
+            warnings = work.workWarnings,
+            isComplete = work.isComplete,
+            arrangement = HomeStatusArrangement.Grid,
+            tileSize = 22.dp,
+            modifier = trayModifier
+        )
+    }
+    val ring: @Composable () -> Unit = {
+        WorkReadingOrDownloadRing(
+            downloading = downloading,
+            progress = fraction,
+            state = if (fraction >= 1.0) "Finished" else "Reading",
+            diameter = SubjectMetrics.ringDiameter * LocalDensity.current.fontScale
+        )
+    }
+    val placeLines: @Composable (Modifier) -> Unit = { placeModifier ->
+        Column(placeModifier, verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Text(
+                text = place,
+                color = tokens.primaryInk,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = if (large) Int.MAX_VALUE else 2
+            )
+            if (whenText != null) {
+                Text(
+                    text = whenText,
+                    color = tokens.primaryInk.withOpacity(0.6),
+                    fontSize = 12.sp,
+                    maxLines = if (large) Int.MAX_VALUE else 1
+                )
+            }
+        }
+    }
+    val resume: @Composable () -> Unit = {
+        Text(
+            text = "Resume",
+            color = palette.solidButtonLabel,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier
+                .background(palette.solidButtonFill, RoundedCornerShape(percent = 50))
+                .padding(horizontal = 18.dp, vertical = 10.dp)
+        )
+    }
     Box(Modifier.fillMaxWidth()) {
         Column(
             Modifier
@@ -103,6 +159,7 @@ private fun HeroBody(
                 .padding(horizontal = 18.dp, vertical = 16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            if (large) tray(Modifier)
             val fandom = HomeFacts.primaryFandom(work.workFandoms)
             if (fandom != null) {
                 SubjectKicker(
@@ -110,7 +167,7 @@ private fun HeroBody(
                     palette = palette,
                     size = 9.5.sp,
                     ruleSpacing = 7.dp,
-                    modifier = Modifier.padding(end = 78.dp)
+                    modifier = Modifier.padding(end = trayReserve)
                 )
             }
             Text(
@@ -119,58 +176,30 @@ private fun HeroBody(
                 fontSize = 31.sp,
                 fontWeight = FontWeight.Bold,
                 letterSpacing = (-0.62).sp,
-                maxLines = 2,
-                modifier = Modifier.padding(end = 78.dp)
+                maxLines = if (large) Int.MAX_VALUE else 2,
+                modifier = Modifier.padding(end = trayReserve)
             )
             MetadataLine(author = work.author, figures = figures)
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                WorkReadingOrDownloadRing(
-                    downloading = downloading,
-                    progress = fraction,
-                    state = if (fraction >= 1.0) "Finished" else "Reading"
-                )
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                    Text(
-                        text = place,
-                        color = tokens.primaryInk,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        maxLines = 2
-                    )
-                    if (whenText != null) {
-                        Text(
-                            text = whenText,
-                            color = tokens.primaryInk.withOpacity(0.6),
-                            fontSize = 12.sp,
-                            maxLines = 1
-                        )
+            if (large) {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        ring()
+                        placeLines(Modifier.fillMaxWidth())
                     }
+                    resume()
                 }
-                Text(
-                    text = "Resume",
-                    color = palette.solidButtonLabel,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier
-                        .background(palette.solidButtonFill, RoundedCornerShape(percent = 50))
-                        .padding(horizontal = 18.dp, vertical = 10.dp)
-                )
+            } else {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    ring()
+                    placeLines(Modifier.weight(1f))
+                    resume()
+                }
             }
         }
-        HomeStatusTray(
-            rating = work.rating,
-            categories = work.workCategories,
-            warnings = work.workWarnings,
-            isComplete = work.isComplete,
-            arrangement = HomeStatusArrangement.Grid,
-            tileSize = 22.dp,
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .padding(14.dp)
-        )
+        if (!large) tray(Modifier.align(Alignment.TopEnd).padding(14.dp))
     }
 }
 
