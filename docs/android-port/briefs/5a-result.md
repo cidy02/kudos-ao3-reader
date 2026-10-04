@@ -104,6 +104,23 @@ takes long enough for another device's upload to land in between, and pruning by
 never saw that upload deleted its EPUB. Test: `aManifestAnotherDeviceWritesMidSyncStopsThePrune`
 (checked that it fails without the fix).
 
+## Seen on the emulator (Android's own storage provider, 2026-10-04)
+
+The unit tests use a fake provider, so the folder was also synced for real: the demo library,
+a folder picked through the system picker under `Documents/`, on `Kudos_Verify` in airplane mode.
+
+- **Layout:** `KudosLibrary/manifest.json`, `Works/`, `Fonts/`. 15 EPUBs, each named with its UUID
+  in capitals, as iOS names them.
+- **Digests:** all 15 `epubDigest` values in the manifest equal the SHA-256 of the file.
+- **A second sync** rewrote no EPUB (same date and size), added no name, and left
+  `manifest.json.bak` beside the manifest.
+- **A lowercase file** (one EPUB renamed by hand, as Android 0.2.x wrote it) came back under the
+  uppercase name with the same content, and no "(1)" copy.
+- **An orphan EPUB** no work lists was pruned; a hidden file beside it was left alone.
+
+Not seen on a device: a sync-down of another device's EPUB (unit tests only), and a real iPhone
+on the same folder (never tried).
+
 ## Found and not changed (for the owner, or a later brief)
 
 - **iOS compares names exactly** when it reads and when it prunes. Released Android builds (0.2.1,
