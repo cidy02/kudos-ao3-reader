@@ -228,7 +228,11 @@ enum FolderSyncService {
     ) async throws -> FolderSyncResult {
         guard snapshot(defaults: defaults).isConnected else { return FolderSyncResult() }
         return try await runGuarded(defaults: defaults) {
-            let result = try await performSyncUp(in: context, defaults: defaults)
+            // The automatic uploader calls syncUp alone. Restore the visible remote
+            // index before publishing, just as Android `runSyncLocked` does.
+            var result = try await performSyncDown(in: context, defaults: defaults)
+            let upResult = try await performSyncUp(in: context, defaults: defaults)
+            result.didWriteRemoteFile = upResult.didWriteRemoteFile
             recordSuccess(defaults: defaults)
             defaults.set(false, forKey: dirtyFlagKey)
             return result
@@ -415,8 +419,16 @@ enum FolderSyncService {
             let remoteStampBeforeWrite = try? manifestURL.resourceValues(
                 forKeys: [.contentModificationDateKey]
             ).contentModificationDate
-            let viewIsCurrent = remoteStampBeforeWrite == nil
-                || remoteStampBeforeWrite == storedStamp
+            // Android `SyncRepository.writeManifestAtomically` temporarily leaves only
+            // manifest.json.bak. An existing payload without its live index is not an
+            // empty folder: publishing here would erase its asset membership.
+            if !FileManager.default.fileExists(atPath: manifestURL.path),
+               let names = try? FileManager.default.contentsOfDirectory(atPath: syncDirectoryURL.path),
+               !names.isEmpty {
+                throw FolderSyncError.unreadableSyncFile
+            }
+            let viewIsCurrent = !FileManager.default.fileExists(atPath: manifestURL.path)
+                || (remoteStampBeforeWrite != nil && remoteStampBeforeWrite == storedStamp)
 
             try await Task.detached {
                 try coordinatedWriteSyncDirectory(
@@ -723,7 +735,11 @@ nonisolated private func readChangedRemoteAssets(
 
     var selection = RemoteAssetSelection()
     for work in manifest.works where work.hasEPUB {
-        let remoteURL = worksDirectory.appendingPathComponent("\(work.id.uuidString).epub")
+        // Released Android builds wrote lowercase UUIDs. As archive restore already
+        // does (`KudosBackupContents`), read either case and keep both during pruning.
+        let canonicalURL = worksDirectory.appendingPathComponent("\(work.id.uuidString).epub")
+        let lowercaseURL = worksDirectory.appendingPathComponent("\(work.id.uuidString.lowercased()).epub")
+        let remoteURL = remoteAssetExists(canonicalURL) ? canonicalURL : lowercaseURL
         let localURL = Storage.workAssetURL(
             identifier: work.assetIdentifier ?? "",
             fallbackID: work.id
@@ -995,6 +1011,7 @@ nonisolated private func removeOrphanedOriginals(in directory: URL, keepingWorkI
 
 nonisolated private func removeOrphans(in directory: URL, keeping expected: Set<String>) {
     let fileManager = FileManager.default
+    let foldedExpected = Set(expected.map { $0.lowercased() })
     guard let names = try? fileManager.contentsOfDirectory(atPath: directory.path) else { return }
     for name in names {
         // Map iCloud placeholder names (".X.icloud") back to their real name so
@@ -1004,7 +1021,7 @@ nonisolated private func removeOrphans(in directory: URL, keeping expected: Set<
             realName = String(realName.dropFirst().dropLast(".icloud".count))
         }
         guard !realName.hasPrefix(".") else { continue } // other hidden/system files
-        guard !expected.contains(realName) else { continue }
+        guard !foldedExpected.contains(realName.lowercased()) else { continue }
         try? fileManager.removeItem(at: directory.appendingPathComponent(name))
     }
 }

@@ -1,5 +1,17 @@
 # REGRESSION_TEST_MATRIX.md
 
+Brief 5c (2026-10-04): added/strengthened Android `SyncRepositoryTest`,
+`IncomingEpubGateTest`, `BackupTrustPhase2Test`, `BackupPathsTest` and
+`OriginalsRoundTripTest`; iOS `FolderSyncTests` and
+`StaleSyncUpKeepsRemoteAssetsTests`. Coverage targets missing/unreadable indexes,
+zero-date concurrent publication, incomplete assets/conflicts, batch replacement,
+font collision repetition, stale-false preserved EPUBs, captured-search removal,
+Unicode/UUID names and failed original re-import. **Not run in this sandbox.**
+The lowercase sync-EPUB regression uses the existing case-sensitive APFS harness.
+Real provider selection, duplicate names, remote upload ordering, concurrency,
+disk failures and the unresolved lifecycle/transport gaps remain manual/follow-up;
+see [the complete review](android-port/briefs/5c-result.md).
+
 What must keep working, where it's tested, and what is manual-only. Run everything via `KUDOS_CASEFOLD_SIMULATOR_UDID=<udid> Scripts/verify.sh` (or just the suite via `KUDOS_CASEFOLD_SIMULATOR_UDID=<udid> Scripts/test.sh`; parallel testing deliberately disabled). The full target uses the case-sensitive APFS harness, so raw `xcodebuild test` is not a valid complete-suite command. 724+ tests / 68+ suites green as of T-150 (reader redesign polish, on top of the T-148/T-149 reader chrome redesign).
 
 | Area | Invariant | Automated coverage | Manual-only residue |

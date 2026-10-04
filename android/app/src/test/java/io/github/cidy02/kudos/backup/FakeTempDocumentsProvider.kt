@@ -35,6 +35,8 @@ import org.robolectric.shadows.ShadowContentResolver
  *  - openFile → real [ParcelFileDescriptor] (so `FileDescriptor.sync()` works)
  */
 class FakeTempDocumentsProvider : ContentProvider() {
+    /** Zero models the value DocumentFile exposes for an unknown provider date. */
+    var reportedLastModified: Long? = null
     private data class Node(
         val id: String,
         val name: String,
@@ -359,7 +361,7 @@ class FakeTempDocumentsProvider : ContentProvider() {
                 }
             DocumentsContract.Document.COLUMN_SIZE ->
                 if (node.directory) 0L else node.file.length()
-            DocumentsContract.Document.COLUMN_LAST_MODIFIED -> node.file.lastModified()
+            DocumentsContract.Document.COLUMN_LAST_MODIFIED -> reportedLastModified ?: node.file.lastModified()
             DocumentsContract.Document.COLUMN_FLAGS -> {
                 var flags =
                     DocumentsContract.Document.FLAG_SUPPORTS_WRITE or

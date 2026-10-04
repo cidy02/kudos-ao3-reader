@@ -61,6 +61,18 @@ class SyncRepositoryTest {
 
     private var clockInstant: Instant = FIXED_CLOCK
 
+    @Test
+    fun originalReadLimitCountsStreamBytesWithoutTrustingProviderSize() {
+        with(syncRepository) {
+            try {
+                java.io.ByteArrayInputStream(ByteArray(17)).readLimitedBytes("Originals/work.pdf", 16)
+                fail("Actual bytes must be bounded even if a provider reports size zero")
+            } catch (_: BackupError.EntryTooLarge) {
+                // Expected: the 17th byte exceeds the limit.
+            }
+        }
+    }
+
     @Before
     fun setUp() {
         context = ApplicationProvider.getApplicationContext()
@@ -234,7 +246,7 @@ class SyncRepositoryTest {
     // ------------------------------------------------------------------ (B)
 
     @Test
-    fun corruptPrimaryManifestFallsBackToBakAndSelfHeals() = runTest {
+    fun corruptPrimaryManifestImportsBakButDoesNotPublishAnOlderIndex() = runTest {
         // Remote holds a good .bak (with a work local does not have) and a
         // truncated primary — the exact wedge that used to make every later
         // sync fail forever because import threw before export could repair it.
@@ -273,8 +285,8 @@ class SyncRepositoryTest {
 
         val result = syncRepository.runSync()
         assertTrue(
-            "corrupt primary must not wedge the folder: $result",
-            result is SyncResult.Success
+            "an older backup cannot authorize a replacement index: $result",
+            result is SyncResult.Error
         )
 
         val imported = database.workDao().getById(WORK_REMOTE)
@@ -283,11 +295,8 @@ class SyncRepositoryTest {
 
         val healed = requireKudosLibrary().findFile(BackupPaths.MANIFEST)
         assertNotNull(healed)
-        val healedManifest = BackupValidator.decodeManifest(readDocument(healed!!))
-        assertTrue(
-            "export should rewrite a valid manifest listing the recovered work",
-            healedManifest.works.any { it.id == WORK_REMOTE }
-        )
+        assertArrayEquals(corrupt, readDocument(healed!!))
+        assertArrayEquals(bakBytes, readDocument(requireKudosLibrary().findFile(BackupPaths.MANIFEST_BACKUP)!!))
     }
 
     @Test
@@ -309,8 +318,7 @@ class SyncRepositoryTest {
             "application/epub+zip",
             "keep-me".toByteArray()
         )
-        // Orphan that is NOT in the bak; after a successful recovery+export the
-        // orphan is pruned, but the listed work's EPUB must remain.
+        // This may belong to a work lost from the older .bak. Recovery must keep it.
         writeChild(
             worksDir,
             "orphan-not-in-manifest.epub",
@@ -319,7 +327,7 @@ class SyncRepositoryTest {
         )
 
         val result = syncRepository.runSync()
-        assertTrue("zero-length primary recovery: $result", result is SyncResult.Success)
+        assertTrue("zero-length primary recovery: $result", result is SyncResult.Error)
 
         val after = requireKudosLibrary()
         val afterWorks = after.findFile(BackupPaths.WORKS_DIRECTORY)!!
@@ -327,10 +335,10 @@ class SyncRepositoryTest {
             "listed EPUB must not be pruned away on recovery",
             epubIn(afterWorks, WORK_REMOTE)
         )
-        // Orphan removal is the post-commit prune (D); recovery itself must not
-        // have emptied Works/ before export rewrote the manifest.
+        // Recovery is local only: the damaged live index and all assets stay intact.
         assertNotNull(after.findFile(BackupPaths.MANIFEST))
-        BackupValidator.decodeManifest(readDocument(after.findFile(BackupPaths.MANIFEST)!!))
+        assertArrayEquals(ByteArray(0), readDocument(after.findFile(BackupPaths.MANIFEST)!!))
+        assertNotNull(afterWorks.findFile("orphan-not-in-manifest.epub"))
 
         val imported = database.workDao().getById(WORK_REMOTE)
         assertNotNull(imported)
@@ -338,7 +346,7 @@ class SyncRepositoryTest {
     }
 
     @Test
-    fun unparseableConflictCopyDoesNotFailSyncAndIsNotDeleted() = runTest {
+    fun unparseableConflictCopyPreventsPublicationAndIsNotDeleted() = runTest {
         seedLocalWork(WORK_A, "Local A", "local-a".toByteArray())
 
         val kudos = ensureKudosLibrary()
@@ -351,12 +359,27 @@ class SyncRepositoryTest {
         )
 
         val result = syncRepository.runSync()
-        assertTrue("unparseable conflict must not fail sync: $result", result is SyncResult.Success)
-        assertEquals(0, (result as SyncResult.Success).foldedConflicts)
+        assertTrue("unreadable conflict must hold publication: $result", result is SyncResult.Error)
 
         val stillThere = requireKudosLibrary().findFile("manifest (1).json")
         assertNotNull("unreadable conflict must be left in place", stillThere)
         assertTrue(stillThere!!.exists())
+    }
+
+    @Test
+    fun aConflictWhoseEpubHasNotArrivedKeepsItsIndexAndStopsPublication() = runTest {
+        seedFolder()
+        val kudos = requireKudosLibrary()
+        val primary = readDocument(kudos.findFile(BackupPaths.MANIFEST)!!)
+        val conflict = BackupJson.encodeToString(remoteManifest(
+            works = listOf(remoteBackupWork(WORK_REMOTE, "Uploading", hasEpub = true)),
+            exportedAt = "2026-06-02T00:00:00Z"
+        )).toByteArray()
+        writeChild(kudos, "manifest (1).json", "application/json", conflict)
+        assertTrue(syncRepository.runSync() is SyncResult.Error)
+        assertArrayEquals(primary, readDocument(kudos.findFile(BackupPaths.MANIFEST)!!))
+        assertArrayEquals(conflict, readDocument(kudos.findFile("manifest (1).json")!!))
+        assertNotNull(database.workDao().getById(WORK_REMOTE))
     }
 
     // ------------------------------------------------------------------ (C)
@@ -625,7 +648,7 @@ class SyncRepositoryTest {
 
         assertTrue(syncRepository.runSync() is SyncResult.Success)
 
-        // iOS reads, and prunes, by `UUID.uuidString`: the UUID in capitals.
+        // New files use iOS's canonical `UUID.uuidString` spelling.
         val names = requireKudosLibrary().findFile(BackupPaths.WORKS_DIRECTORY)!!.listFiles().map { it.name }
         assertEquals(listOf("${WORK_A.uppercase()}.epub"), names)
     }
@@ -649,7 +672,7 @@ class SyncRepositoryTest {
     }
 
     @Test
-    fun aLowercaseEpubFromAnOlderAndroidBuildIsFoundAndGivenIosName() = runTest {
+    fun aLowercaseEpubFromAnOlderAndroidBuildIsFoundAndKept() = runTest {
         val worksDir = seedFolder(
             remoteBackupWork(WORK_REMOTE, "From an older build", hasEpub = true)
         )
@@ -658,9 +681,9 @@ class SyncRepositoryTest {
         assertTrue(syncRepository.runSync() is SyncResult.Success)
 
         assertArrayEquals(REMOTE_EPUB, Files.readAllBytes(workFileStore.workEpubPath(WORK_REMOTE)))
-        // One file for the work, under iOS's name, with the same bytes.
+        // Keep the recognized old name instead of delete/recreate recasing.
         val after = requireKudosLibrary().findFile(BackupPaths.WORKS_DIRECTORY)!!
-        assertEquals(listOf("${WORK_REMOTE.uppercase()}.epub"), after.listFiles().map { it.name })
+        assertEquals(listOf("$WORK_REMOTE.epub"), after.listFiles().map { it.name })
         assertArrayEquals(REMOTE_EPUB, readDocument(epubIn(after, WORK_REMOTE)!!))
     }
 
@@ -691,11 +714,11 @@ class SyncRepositoryTest {
         writeChild(kudos, BackupPaths.MANIFEST, "application/json", "{ not json".toByteArray())
         writeChild(worksDir, "${WORK_REMOTE.uppercase()}.epub", "application/epub+zip", "theirs".toByteArray())
 
-        assertTrue(syncRepository.runSync() is SyncResult.Success)
+        assertTrue(syncRepository.runSync() is SyncResult.Error)
 
         val after = requireKudosLibrary().findFile(BackupPaths.WORKS_DIRECTORY)!!
         assertNotNull("this device's view was not current, so it prunes nothing", epubIn(after, WORK_REMOTE))
-        assertNotNull(epubIn(after, WORK_A))
+        assertArrayEquals("{ not json".toByteArray(), readDocument(requireKudosLibrary().findFile(BackupPaths.MANIFEST)!!))
     }
 
     @Test
@@ -739,12 +762,13 @@ class SyncRepositoryTest {
     }
 
     @Test
-    fun aManifestAnotherDeviceWritesMidSyncStopsThePrune() = runTest {
+    fun aManifestAnotherDeviceWritesWithNoDateStopsPublication() = runTest {
         // iOS `aStaleSyncUpKeepsAnotherDevicesRemoteEPUB`. The other device's write lands after
         // this run has read the folder and before it writes: the export asks the clock for its
         // date exactly there.
         seedLocalWork(WORK_A, "Local", "local-a".toByteArray())
         ensureKudosLibrary()
+        provider.reportedLastModified = 0
         var otherDeviceWrote = false
         val midSync = SyncRepository(
             context = context,
@@ -763,11 +787,13 @@ class SyncRepositoryTest {
             }
         )
 
-        assertTrue(midSync.runSync() is SyncResult.Success)
+        assertTrue(midSync.runSync() is SyncResult.Error)
 
         val after = requireKudosLibrary().findFile(BackupPaths.WORKS_DIRECTORY)!!
         assertNotNull("a work this run never learned about keeps its EPUB", epubIn(after, WORK_REMOTE))
         assertNotNull(epubIn(after, WORK_A))
+        val manifest = BackupValidator.decodeManifest(readDocument(requireKudosLibrary().findFile(BackupPaths.MANIFEST)!!))
+        assertTrue(manifest.works.any { it.id == WORK_REMOTE })
     }
 
     @Test
@@ -842,6 +868,60 @@ class SyncRepositoryTest {
         assertArrayEquals(other, Files.readAllBytes(workFileStore.workEpubPath(WORK_A)))
     }
 
+    @Test
+    fun aFalseFlagCannotHideAPreservedLocalFileFromTheRestoreGate() = runTest {
+        database.workDao().upsert(
+            SavedWork(id = WORK_A, title = "Preserved", author = "Author",
+                dateAdded = Instant.parse("2026-01-01T00:00:00Z"), hasEpub = false,
+                epubPreservationStatusRaw = "preserved").toEntity()
+        )
+        workFileStore.writeWorkEpub(WORK_A, REMOTE_EPUB)
+        val captured = backupRepository.captureLibrarySnapshot()
+        assertTrue(WORK_A in captured.epubWorkIds)
+        val incoming = KudosBackupPackage(
+            remoteManifest(works = listOf(remoteBackupWork(WORK_A, "Incoming", hasEpub = true)),
+                exportedAt = "2026-06-02T00:00:00Z"),
+            mapOf(WORK_A to sameLengthVariant(REMOTE_EPUB)), emptyMap()
+        )
+        val merged = BackupMergeService.merge(captured, incoming)
+        assertTrue(merged.epubFilesToWriteByWorkId.isEmpty())
+        assertArrayEquals(REMOTE_EPUB, Files.readAllBytes(workFileStore.workEpubPath(WORK_A)))
+    }
+
+    @Test
+    fun laterBatchesReplaceExistingEpubsAndDoNotDuplicateCollidingFonts() = runTest {
+        val corrected = sameLengthVariant(REMOTE_EPUB)
+        seedOlderLocalWork(WORK_A, REMOTE_EPUB)
+        seedOlderLocalWork(WORK_REMOTE, REMOTE_EPUB)
+        fontFileStore.writeFont("reader.otf", "local font bytes".toByteArray())
+        database.customFontDao().upsert(CustomFont(name = "Local", fileName = "reader.otf").toEntity())
+        val incomingFont = context.assets.open("readium/fonts/OpenDyslexic-Regular.otf").use { it.readBytes() }
+        val worksDir = seedFolder(
+            remoteBackupWork(WORK_A, "First corrected", hasEpub = true).copy(
+                sourceURL = "", lastModifiedAt = "2026-06-01T00:00:00Z", epubDigest = BackupPaths.sha256(corrected)
+            ),
+            remoteBackupWork(WORK_REMOTE, "Second corrected", hasEpub = true).copy(
+                sourceURL = "", lastModifiedAt = "2026-06-01T00:00:00Z", epubDigest = BackupPaths.sha256(corrected)
+            ), exportedAt = "2026-06-02T00:00:00Z"
+        )
+        writeChild(worksDir, "${WORK_A.uppercase()}.epub", "application/epub+zip", corrected)
+        writeChild(worksDir, "${WORK_REMOTE.uppercase()}.epub", "application/epub+zip", corrected)
+        val kudos = requireKudosLibrary()
+        val manifest = BackupValidator.decodeManifest(readDocument(kudos.findFile(BackupPaths.MANIFEST)!!)).copy(
+            fonts = listOf(BackupFont("Remote", "reader.otf", "2026-01-01T00:00:00Z"))
+        )
+        writeChild(kudos, BackupPaths.MANIFEST, "application/json", BackupJson.encodeToString(manifest).toByteArray())
+        val fonts = kudos.createDirectory(BackupPaths.FONTS_DIRECTORY)!!
+        writeChild(fonts, "reader.otf", "font/otf", incomingFont)
+        val batched = SyncRepository(context, settingsRepository, backupRepository, workFileStore,
+            fontFileStore, persistenceGate, clock = { clockInstant }, maxEpubBatchBytes = 1)
+        assertTrue(batched.runSync() is SyncResult.Success)
+        assertArrayEquals(corrected, Files.readAllBytes(workFileStore.workEpubPath(WORK_A)))
+        assertArrayEquals(corrected, Files.readAllBytes(workFileStore.workEpubPath(WORK_REMOTE)))
+        assertEquals(setOf("reader.otf", "reader-restored-1.otf"),
+            database.customFontDao().getAll().map { it.fileName }.toSet())
+    }
+
     /** A library work older than anything the tests put in the folder, holding [epub]. */
     private suspend fun seedOlderLocalWork(id: String, epub: ByteArray) {
         database.workDao().upsert(
@@ -897,7 +977,7 @@ class SyncRepositoryTest {
 
         val result = syncRepository.runSync()
 
-        assertTrue("an oversized font must not abort the sync: $result", result is SyncResult.Success)
+        assertTrue("incomplete assets must hold the remote index: $result", result is SyncResult.Error)
         assertTrue(database.customFontDao().getAll().isEmpty())
         assertFalse(fontFileStore.fontExists("oversized.ttf"))
         assertEquals(listOf("Unrelated Bookmark"), database.bookmarkDao().getAll().map { it.title })
@@ -934,13 +1014,13 @@ class SyncRepositoryTest {
         writeChild(fontsDir, "first.otf", "font/otf", font)
         writeChild(fontsDir, "second.otf", "font/otf", font)
 
-        assertTrue(oneFontAtATime.runSync() is SyncResult.Success)
+        assertTrue(oneFontAtATime.runSync() is SyncResult.Error)
         assertEquals(listOf("first.otf"), database.customFontDao().getAll().map { it.fileName })
         // The font left for later is still in the folder.
         assertNotNull(requireKudosLibrary().findFile(BackupPaths.FONTS_DIRECTORY)!!.findFile("second.otf"))
 
-        // The device that owns both fonts syncs again and lists them again.
-        writeChild(requireKudosLibrary(), BackupPaths.MANIFEST, "application/json", manifest)
+        // The original manifest stays authoritative without another device republishing it.
+        assertArrayEquals(manifest, readDocument(requireKudosLibrary().findFile(BackupPaths.MANIFEST)!!))
         clockInstant = FIXED_CLOCK.plusSeconds(60)
         assertTrue(oneFontAtATime.runSync() is SyncResult.Success)
 

@@ -1,5 +1,18 @@
 # DATA_AND_PERSISTENCE_INVARIANTS.md
 
+## Brief 5c safety handoff (2026-10-04; tests pending)
+
+See [the cross-platform sync/backup review](android-port/briefs/5c-result.md) for
+29 findings and the exact unbuilt patch scope. Android now imports a recovery
+`.bak` without authorizing publication from it, withholds publication/prune for
+missing listed EPUBs/fonts or unresolved recognized conflicts, and compares visible
+manifest bytes before publication. iOS refuses publication into a nonempty payload
+without its live manifest, reads either UUID case, and reads remote before standalone
+upload. These guards do not provide a remote atomic commit or certify cloud providers.
+Manifest/Room formats are unchanged. Existing-row deletion, recovery countdown,
+Replace recovery, clock clamping and pronunciation transport remain open; full
+interoperability must not be inferred from golden canonical comparisons.
+
 Rules that protect user data. Breaking any of these is a regression even if tests pass. Confirmed as of 2026-07-10.
 
 ## Never lose

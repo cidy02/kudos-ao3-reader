@@ -9,6 +9,7 @@ import io.github.cidy02.kudos.data.local.KudosDatabase
 import io.github.cidy02.kudos.data.local.entity.toEntity
 import io.github.cidy02.kudos.data.preferences.SettingsRepository
 import io.github.cidy02.kudos.files.FontFileStore
+import io.github.cidy02.kudos.files.FileWriteResult
 import io.github.cidy02.kudos.files.WorkFileStore
 import java.io.ByteArrayInputStream
 import java.nio.file.Files
@@ -24,6 +25,7 @@ import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -130,6 +132,17 @@ class OriginalsRoundTripTest {
         assertNull(files.readConversionRecord(WORK))
     }
 
+    @Test
+    fun aFailedReimportKeepsTheOriginalAndItsRecord() = runTest {
+        val target = deviceWithAnOriginal()
+        val blocked = target.root.resolve("originals/$WORK.html")
+        Files.createDirectories(blocked)
+        Files.write(blocked.resolve("cannot-replace-this-directory"), byteArrayOf(1))
+        assertTrue(target.workFiles.writeOriginal(WORK, "html", HTML) is FileWriteResult.Failure)
+        assertArrayEquals(PDF, target.workFiles.readOriginal(WORK)?.second)
+        assertArrayEquals(RECORD, target.workFiles.readConversionRecord(WORK))
+    }
+
     private suspend fun deviceWithAnOriginal() = device().apply {
         seedWork(WORK)
         workFiles.writeOriginal(WORK, "pdf", PDF)
@@ -146,7 +159,7 @@ class OriginalsRoundTripTest {
     private class Device : AutoCloseable {
         private val context = ApplicationProvider.getApplicationContext<Context>()
         private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
-        private val root = Files.createTempDirectory("kudos-originals")
+        val root = Files.createTempDirectory("kudos-originals")
         val database: KudosDatabase = Room.inMemoryDatabaseBuilder(context, KudosDatabase::class.java)
             .allowMainThreadQueries()
             .build()

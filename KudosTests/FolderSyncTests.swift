@@ -11,6 +11,64 @@ extension PersistenceGateSuites {
 @MainActor
 @Suite(.serialized)
 struct FolderSyncTests {
+    @Test func anAndroidManifestRenameGapCannotPublishOrPrune() async throws {
+        let container = try container()
+        let defaults = try testDefaults()
+        let folder = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        defer { FolderSyncService.disconnect(defaults: defaults) }
+        let payload = folder.appendingPathComponent(FolderSyncService.syncDirectoryName)
+        let works = payload.appendingPathComponent(FolderSyncService.worksSubdirectoryName)
+        try FileManager.default.createDirectory(at: works, withIntermediateDirectories: true)
+        let epub = works.appendingPathComponent("\(UUID().uuidString.lowercased()).epub")
+        try Data("only remote copy".utf8).write(to: epub)
+        let backup = payload.appendingPathComponent("manifest.json.bak")
+        try Data("remote index".utf8).write(to: backup)
+        try FolderSyncService.connect(to: folder, defaults: defaults)
+        do {
+            _ = try await FolderSyncService.syncNow(in: container.mainContext, defaults: defaults)
+            Issue.record("Expected missing live manifest to refuse publication")
+        } catch let error as FolderSyncError {
+            #expect(error == .unreadableSyncFile)
+        }
+        #expect(try Data(contentsOf: epub) == Data("only remote copy".utf8))
+        #expect(try Data(contentsOf: backup) == Data("remote index".utf8))
+        #expect(!FileManager.default.fileExists(atPath: payload.appendingPathComponent("manifest.json").path))
+    }
+
+    @Test func aListedLowercaseAndroidEPUBIsKeptAndRead() async throws {
+        try await CaseSensitiveFontTestVolume.withFontsDirectory {
+            let container = try container()
+            let context = container.mainContext
+            let defaults = try testDefaults()
+            let folder = Storage.fontsDirectory.appendingPathComponent("SharedSync", isDirectory: true)
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            defer { try? FileManager.default.removeItem(at: folder) }
+            defer { FolderSyncService.disconnect(defaults: defaults) }
+            let work = SavedWork(id: try #require(UUID(uuidString: "abcdabcd-abcd-4bcd-8bcd-abcdabcdabcd")),
+                                 title: "Android copy", author: "Writer")
+            work.hasEPUB = true
+            defer { try? FileManager.default.removeItem(at: work.fileURL) }
+            let contents = try KudosBackupService.makeContents(
+                works: [work], bookmarks: [], fonts: [], readingQueues: [], defaults: defaults
+            )
+            let payload = folder.appendingPathComponent(FolderSyncService.syncDirectoryName)
+            let works = payload.appendingPathComponent(FolderSyncService.worksSubdirectoryName)
+            try FileManager.default.createDirectory(at: works, withIntermediateDirectories: true)
+            let lowercase = works.appendingPathComponent("\(work.id.uuidString.lowercased()).epub")
+            let bytes = try Data(contentsOf: EPUBTests.sampleEPUB)
+            try bytes.write(to: lowercase)
+            try contents.manifestData().write(to: payload.appendingPathComponent("manifest.json"))
+            try FolderSyncService.connect(to: folder, defaults: defaults)
+            _ = try await FolderSyncService.syncDown(in: context, defaults: defaults)
+            let restored = try #require(try context.fetch(FetchDescriptor<SavedWork>()).first)
+            #expect(restored.hasEPUB)
+            #expect(try Data(contentsOf: restored.fileURL) == bytes)
+            _ = try await FolderSyncService.syncUp(in: context, defaults: defaults)
+            #expect(try Data(contentsOf: lowercase) == bytes)
+        }
+    }
+
     /// The welcome cover asking the reader to enable sync kept reappearing on
     /// every launch for anyone who chose their folder in **Settings** rather
     /// than in onboarding: `connect` stored the bookmark, but only
