@@ -106,11 +106,64 @@ struct CrossPlatformFolderSyncTests {
         }
         // Every original Android put in the folder is on this device too,
         // under the work its name gives.
+        try expectOriginalsArrived(from: syncDirectory, count: 2)
+        #expect(try relativeFiles(in: syncDirectory) == before)
+    }
+
+    /// The folder two phones share: iOS wrote it, then Android synced a work
+    /// of its own into it (Android's `SyncRepositoryTest`, run with
+    /// `-Dkudos.writeGolden=true`, starting from the fixture the first test
+    /// here writes). The two tests above each prove one direction. This one
+    /// reads a folder both apps have written to: every work of both arrives
+    /// with its EPUB and its original, and a full sync from here leaves every
+    /// file in place and goes on listing all three works.
+    @Test func aFolderBothAppsWroteIsReadAndKept() async throws {
+        let folder = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let syncDirectory = folder.appendingPathComponent(FolderSyncService.syncDirectoryName)
+        try FileManager.default.copyItem(at: fixturePaths().sharedFolder, to: syncDirectory)
+        let before = try relativeFiles(in: syncDirectory)
+
+        let container = try container()
+        let context = container.mainContext
+        let defaults = try testDefaults()
+        defer { FolderSyncService.disconnect(defaults: defaults) }
+        try FolderSyncService.connect(to: folder, defaults: defaults)
+
+        _ = try await FolderSyncService.syncNow(in: context, defaults: defaults)
+
+        let restored = try context.fetch(FetchDescriptor<SavedWork>())
+        defer { restored.forEach { try? FileManager.default.removeItem(at: $0.fileURL) } }
+        defer { removeOriginals(of: restored.map(\.id)) }
+        #expect(Set(restored.map(\.title)) == ["Folder Sync One", "Folder Sync Two", "Android's own work"])
+        for work in restored {
+            #expect(work.hasEPUB)
+            let remote = syncDirectory
+                .appendingPathComponent(FolderSyncService.worksSubdirectoryName)
+                .appendingPathComponent("\(work.id.uuidString).epub")
+            #expect(try Data(contentsOf: work.fileURL) == Data(contentsOf: remote))
+        }
+        // iOS's original and Android's, each with its conversion record.
+        try expectOriginalsArrived(from: syncDirectory, count: 4)
+
+        // Nothing either app put there was pruned or renamed, and the manifest
+        // this device wrote over Android's still lists all three with an EPUB.
+        #expect(try relativeFiles(in: syncDirectory) == before)
+        let written = try KudosBackupContents.decodeManifest(
+            Data(contentsOf: syncDirectory.appendingPathComponent(FolderSyncService.manifestFileName))
+        )
+        #expect(written.works.count == 3)
+        #expect(written.works.filter(\.hasEPUB).count == 3)
+    }
+
+    /// Every file in the folder's `Originals/` is on this device too, byte for
+    /// byte, under the work its name gives.
+    private func expectOriginalsArrived(from syncDirectory: URL, count: Int) throws {
         let originals = try FileManager.default.contentsOfDirectory(
             at: syncDirectory.appendingPathComponent(FolderSyncService.originalsSubdirectoryName),
             includingPropertiesForKeys: nil
         )
-        #expect(originals.count == 2)
+        #expect(originals.count == count)
         for remote in originals {
             let base = remote.deletingPathExtension().lastPathComponent
             let isRecord = base.hasSuffix(".conversion")
@@ -120,7 +173,6 @@ struct CrossPlatformFolderSyncTests {
                 : try #require(Storage.existingOriginalDocumentURL(for: id))
             #expect(try Data(contentsOf: local) == Data(contentsOf: remote))
         }
-        #expect(try relativeFiles(in: syncDirectory) == before)
     }
 
     private func removeOriginals(of ids: [UUID]) {
@@ -159,7 +211,7 @@ struct CrossPlatformFolderSyncTests {
         return files
     }
 
-    private func fixturePaths() -> (iosFolder: URL, androidFolder: URL) {
+    private func fixturePaths() -> (iosFolder: URL, androidFolder: URL, sharedFolder: URL) {
         let root = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
@@ -169,6 +221,12 @@ struct CrossPlatformFolderSyncTests {
             ),
             root.appendingPathComponent(
                 "KudosTests/Fixtures/cross-platform/android-sync-folder/KudosLibrary"
+            ),
+            // Beside iOS's own folder, not under `KudosTests/`: Xcode bundles
+            // every file there flat, and this folder repeats the Android
+            // golden's file names.
+            root.appendingPathComponent(
+                "android/app/src/test/resources/cross-platform/android-after-ios-sync-folder/KudosLibrary"
             )
         )
     }
