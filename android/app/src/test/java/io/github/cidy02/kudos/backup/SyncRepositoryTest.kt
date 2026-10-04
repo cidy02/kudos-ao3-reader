@@ -950,6 +950,91 @@ class SyncRepositoryTest {
         )
     }
 
+    @Test
+    fun aReadableConflictCopyIsMergedAndRemoved() = runTest {
+        // iOS `foldConflictContentsMergesAllInputs`: when two devices wrote at once, every
+        // version is merged, so nothing either of them did is dropped.
+        val kudos = ensureKudosLibrary()
+        seedFolder(remoteBackupWork(WORK_REMOTE, "In the manifest", hasEpub = false))
+        writeChild(
+            kudos,
+            "manifest (1).json",
+            "application/json",
+            BackupJson.encodeToString(
+                remoteManifest(
+                    works = listOf(
+                        remoteBackupWork(WORK_A, "In the conflict copy", hasEpub = false)
+                            .copy(sourceURL = "https://archiveofourown.org/works/1000")
+                    ),
+                    exportedAt = "2026-01-01T00:00:00Z"
+                )
+            ).toByteArray()
+        )
+
+        val result = syncRepository.runSync()
+
+        assertEquals(SyncResult.Success(foldedConflicts = 1), result)
+        assertEquals("In the manifest", database.workDao().getById(WORK_REMOTE)?.title)
+        assertEquals("In the conflict copy", database.workDao().getById(WORK_A)?.title)
+        assertTrue(requireKudosLibrary().findFile("manifest (1).json") == null)
+    }
+
+    @Test
+    fun aSecondSyncWhileOneRunsIsSkipped() = runTest {
+        // The lifecycle, the background worker and Sync Now can all ask at once. iOS refuses
+        // the second (`operationGatePreventsInterleavedFolderSync`); here it is skipped.
+        seedLocalWork(WORK_A, "Local", "local-a".toByteArray())
+        var second: SyncResult? = null
+        lateinit var repository: SyncRepository
+        repository = SyncRepository(
+            context = context,
+            settingsRepository = settingsRepository,
+            backupRepository = backupRepository,
+            workFileStore = workFileStore,
+            fontFileStore = fontFileStore,
+            persistenceGate = persistenceGate,
+            clock = {
+                // Asked in the middle of the first run's export.
+                if (second == null) second = runBlocking { repository.runSync() }
+                clockInstant
+            }
+        )
+
+        assertTrue(repository.runSync() is SyncResult.Success)
+
+        assertEquals(SyncResult.SkippedAlreadyRunning, second)
+    }
+
+    @Test
+    fun pendingChangesClearOnlyAfterASyncThatWrote() = runTest {
+        // iOS `dirtyFlagOnlyClearsAfterAnActualWrite`: "pending" means local changes not yet
+        // written out, and a run that wrote nothing has not written them.
+        seedLocalWork(WORK_A, "Local", "local-a".toByteArray())
+        settingsRepository.updateSyncHasPendingChanges(true)
+        settingsRepository.updateSyncFolderUri(null)
+
+        assertTrue(syncRepository.runSync() is SyncResult.Error)
+        assertTrue(settingsRepository.snapshot().sync.hasPendingChanges)
+
+        settingsRepository.updateSyncFolderUri(treeUri.toString())
+        assertTrue(syncRepository.runSync() is SyncResult.Success)
+        assertFalse(settingsRepository.snapshot().sync.hasPendingChanges)
+    }
+
+    @Test
+    fun syncUpDoesNotChangeLocalModificationDates() = runTest {
+        // iOS's test of the same name: writing the library out is not an edit to it, or
+        // every sync would make this device's copy of everything the newest.
+        seedOlderLocalWork(WORK_A, REMOTE_EPUB)
+        val before = database.workDao().getById(WORK_A)!!
+
+        assertTrue(syncRepository.runSync() is SyncResult.Success)
+
+        val after = database.workDao().getById(WORK_A)!!
+        assertEquals(before.lastModifiedAt, after.lastModifiedAt)
+        assertEquals(before.dateAdded, after.dateAdded)
+    }
+
     // The sync folder across the two apps (iOS `CrossPlatformFolderSyncTests`). The backup
     // goldens prove each side reads the other's manifest; these prove each side finds the
     // other's files, and leaves them in place.
