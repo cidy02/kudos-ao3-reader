@@ -1020,6 +1020,42 @@ class SyncRepositoryTest {
             database.customFontDao().getAll().map { it.fileName }.toSet())
     }
 
+    @Test
+    fun anEpubThatCannotBeWrittenHereFailsTheSyncAndIsTakenByTheNext() = runTest {
+        // A failed write keeps the old bytes, under a row that now carries the folder's
+        // clock. Reported as a success, as it was, this same run then uploaded those old
+        // bytes as the newest copy, and every other device took them.
+        val corrected = sameLengthVariant(REMOTE_EPUB)
+        seedOlderLocalWork(WORK_A, REMOTE_EPUB)
+        val worksDir = seedFolder(
+            remoteBackupWork(WORK_A, "Corrected", hasEpub = true).copy(
+                sourceURL = "", lastModifiedAt = "2026-06-01T00:00:00Z", epubDigest = BackupPaths.sha256(corrected)
+            ),
+            exportedAt = "2026-06-02T00:00:00Z"
+        )
+        writeChild(worksDir, "${WORK_A.uppercase()}.epub", "application/epub+zip", corrected)
+        val manifest = readDocument(requireKudosLibrary().findFile(BackupPaths.MANIFEST)!!)
+
+        val localWorks = workFileStore.workEpubPath(WORK_A).parent.toFile()
+        localWorks.setWritable(false)
+        try {
+            assertTrue(syncRepository.runSync() is SyncResult.Error)
+        } finally {
+            localWorks.setWritable(true)
+        }
+
+        // Nothing was published: the folder's index and its copy are as they were.
+        assertArrayEquals(manifest, readDocument(requireKudosLibrary().findFile(BackupPaths.MANIFEST)!!))
+        assertArrayEquals(corrected, readDocument(epubIn(worksDir, WORK_A)!!))
+
+        // The first try already moved this device's clock up to the folder's. The EPUB is
+        // offered again all the same, and an equal clock lets it in.
+        assertTrue(syncRepository.runSync() is SyncResult.Success)
+        assertArrayEquals(corrected, Files.readAllBytes(workFileStore.workEpubPath(WORK_A)))
+        val after = requireKudosLibrary().findFile(BackupPaths.WORKS_DIRECTORY)!!
+        assertArrayEquals(corrected, readDocument(epubIn(after, WORK_A)!!))
+    }
+
     /** A library work older than anything the tests put in the folder, holding [epub]. */
     private suspend fun seedOlderLocalWork(id: String, epub: ByteArray) {
         database.workDao().upsert(
