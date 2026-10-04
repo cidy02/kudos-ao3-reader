@@ -1,4 +1,5 @@
 package io.github.cidy02.kudos.account
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import io.github.cidy02.kudos.R
 
@@ -913,7 +914,10 @@ private fun AccountShortcutGridTile(
 ) {
     Card(
         onClick = onClick,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+        // A glass panel, as iOS draws the hub and as `subjectPanel` draws every other screen.
+        // Material's container colour ignores the theme: it is stark white on Sepia.
+        colors = CardDefaults.cardColors(containerColor = LocalKudosTokens.current.glassFill(0.09)),
+        border = BorderStroke(0.5.dp, LocalKudosTokens.current.glassStroke(0.13)),
         shape = RoundedCornerShape(14.dp)
     ) {
         Column(
@@ -1002,7 +1006,8 @@ fun AccountScopeGroup(
         )
         AnimatedVisibility(visible = !collapsed) {
             Card(
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+                colors = CardDefaults.cardColors(containerColor = LocalKudosTokens.current.glassFill(0.09)),
+                border = BorderStroke(0.5.dp, LocalKudosTokens.current.glassStroke(0.13)),
                 shape = MaterialTheme.shapes.large
             ) {
                 Column {
@@ -1403,9 +1408,8 @@ private fun HubCollectionsPane(
                     items(current.collections, key = { it.name }) { collection ->
                         Card(
                             onClick = { onOpenCollection(collection) },
-                            colors = CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.surfaceContainerLow
-                            ),
+                            colors = CardDefaults.cardColors(containerColor = LocalKudosTokens.current.glassFill(0.09)),
+                            border = BorderStroke(0.5.dp, LocalKudosTokens.current.glassStroke(0.13)),
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             ListItem(
