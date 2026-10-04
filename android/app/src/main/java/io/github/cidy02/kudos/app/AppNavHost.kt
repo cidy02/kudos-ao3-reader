@@ -569,9 +569,7 @@ fun AppNavHost(
             )
         }
         sharedComposable(Routes.BugReport) {
-            BugReportScreen(
-                onBack = { navController.popBackStack() }
-            )
+            BugReportScreen()
         }
         sharedComposable(Routes.AccountLogin) {
             AO3NativeLoginScreen(

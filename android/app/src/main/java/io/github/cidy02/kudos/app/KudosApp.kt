@@ -210,7 +210,7 @@ fun KudosApp(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    BugReportScreen(onBack = { showBugReport = false })
+                    BugReportScreen(onCancel = { showBugReport = false })
                 }
             }
         }

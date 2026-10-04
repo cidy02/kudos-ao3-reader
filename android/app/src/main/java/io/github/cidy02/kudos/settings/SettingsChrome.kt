@@ -115,7 +115,7 @@ fun SettingsFootnote(text: String, modifier: Modifier = Modifier) {
 
 @Composable
 fun SettingsSection(
-    footnote: String,
+    footnote: String?,
     label: String? = null,
     top: Dp = 22.dp,
     content: @Composable ColumnScope.() -> Unit
@@ -123,7 +123,7 @@ fun SettingsSection(
     Column(Modifier.padding(top = top)) {
         if (label != null) SettingsGroupLabel(label)
         SettingsPanel(content = content)
-        SettingsFootnote(footnote)
+        if (footnote != null) SettingsFootnote(footnote)
     }
 }
 
