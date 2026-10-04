@@ -109,7 +109,10 @@ struct StaleSyncUpKeepsRemoteAssetsTests {
         FolderSyncService.markDirty(defaults: defaults)
         _ = try await FolderSyncService.syncUp(in: context, defaults: defaults)
 
-        // Our manifest does not list their work — but their backup copy stays.
+        // The standalone uploader must first restore the other device's index;
+        // merely skipping prune loses the membership on the following sync.
+        let published = try KudosBackupContents.read(from: syncDirectoryURL)
+        #expect(published.manifest.works.contains { $0.id == otherWork.id })
         #expect(FileManager.default.fileExists(atPath: theirEPUB.path))
         #expect(try Data(contentsOf: theirEPUB) == Data("their-only-backup-copy".utf8))
     }
