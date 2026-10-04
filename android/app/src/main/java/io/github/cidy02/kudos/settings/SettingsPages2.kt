@@ -698,7 +698,6 @@ fun SettingsFolderSyncPage(repository: SettingsRepository, settings: KudosSettin
     val container = (context.applicationContext as? KudosApplication)?.container
     val syncRepository = container?.syncRepository
     var lastSyncFolded by remember { mutableStateOf(0) }
-    var lastSyncError by remember { mutableStateOf<String?>(null) }
     var syncBusy by remember { mutableStateOf(false) }
     var showPairing by remember { mutableStateOf(false) }
     var trustedDevices by remember { mutableStateOf<List<TrustedDevice>>(emptyList()) }
@@ -815,7 +814,6 @@ fun SettingsFolderSyncPage(repository: SettingsRepository, settings: KudosSettin
                                 scope.launch {
                                     val result = syncRepository?.runSync()
                                     lastSyncFolded = (result as? io.github.cidy02.kudos.backup.SyncResult.Success)?.foldedConflicts ?: 0
-                                    lastSyncError = (result as? io.github.cidy02.kudos.backup.SyncResult.Error)?.message
                                     syncBusy = false
                                 }
                             }
@@ -826,9 +824,8 @@ fun SettingsFolderSyncPage(repository: SettingsRepository, settings: KudosSettin
                         SubjectFormRow("Last Synced", value = formatSyncInstant(instant))
                     }
                 }
-                // iOS shows the last error here, in the same quiet text. A Sync Now that failed
-                // used to show nothing at all: only a "Last Synced" that did not move.
-                lastSyncError?.takeIf { connected }?.let { SettingsFootnote(it) }
+                // The stored error covers manual, lifecycle and background worker runs.
+                settings.sync.lastError?.takeIf { connected && it.isNotBlank() }?.let { SettingsFootnote(it) }
                 if (connected && lastSyncFolded > 0) {
                     SettingsFootnote(
                         if (lastSyncFolded == 1) {

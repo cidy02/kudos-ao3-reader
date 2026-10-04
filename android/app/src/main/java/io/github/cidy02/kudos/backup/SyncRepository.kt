@@ -23,6 +23,7 @@ import java.text.Normalizer
 import java.time.Instant
 import java.util.Locale
 import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
@@ -69,6 +70,8 @@ class SyncRepository(
             Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
         )
         settingsRepository.updateSyncFolderUri(uri.toString())
+        settingsRepository.updateSyncLastError(null)
+        settingsRepository.updateSyncLastManifestDigest(null)
         settingsRepository.updateSyncIsEnabled(true)
         scheduleWorker()
     }
@@ -84,6 +87,8 @@ class SyncRepository(
         }
         settingsRepository.updateSyncIsEnabled(false)
         settingsRepository.updateSyncFolderUri(null)
+        settingsRepository.updateSyncLastError(null)
+        settingsRepository.updateSyncLastManifestDigest(null)
         WorkManager.getInstance(context).cancelUniqueWork(SYNC_WORK_NAME)
     }
 
@@ -110,7 +115,19 @@ class SyncRepository(
             return@withContext SyncResult.SkippedAlreadyRunning
         }
         try {
-            return@withContext runSyncLocked()
+            val result = try {
+                runSyncLocked()
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                SyncResult.Error(error.message ?: "Sync failed.")
+            }
+            when (result) {
+                is SyncResult.Error -> settingsRepository.updateSyncLastError(result.message)
+                is SyncResult.Success -> settingsRepository.updateSyncLastError(null)
+                SyncResult.SkippedAlreadyRunning -> Unit
+            }
+            return@withContext result
         } finally {
             runSyncMutex.unlock()
         }
@@ -174,10 +191,22 @@ class SyncRepository(
                 // The .bak is the previous manifest: enough to recover this device's records
                 // when the live one is missing or damaged, never proof of what the folder
                 // lists now. A run that read only the .bak prunes nothing.
-                (decodedLive ?: decodeManifestOrNull(backupManifest))?.let { manifest ->
-                    val outcome = importManifest(syncDir, manifest)
-                    pendingFonts += outcome.pendingFonts
-                    folderViewIsCurrent = decodedLive != null && outcome.complete
+                // iOS skips the restore when the manifest is the one this device last wrote or
+                // restored, by its date (`lastRestoredRemoteStampKey`). A date is not a safe
+                // signal on a provider, so this compares a digest of the bytes. Nothing in such
+                // a manifest is news. Merged again every time, as it was, it brought back a
+                // download the reader had just removed: this device's own last manifest still
+                // said the work had one.
+                val ownManifest = decodedLive != null && BackupPaths.sha256(manifestBytesAtRead!!) ==
+                    settingsRepository.settings.first().sync.lastManifestDigest
+                if (ownManifest) {
+                    folderViewIsCurrent = true
+                } else {
+                    (decodedLive ?: decodeManifestOrNull(backupManifest))?.let { manifest ->
+                        val outcome = importManifest(syncDir, manifest)
+                        pendingFonts += outcome.pendingFonts
+                        folderViewIsCurrent = decodedLive != null && outcome.complete
+                    }
                 }
 
                 conflicts.forEach { file ->
@@ -332,6 +361,16 @@ class SyncRepository(
                     .toByteArray(Charsets.UTF_8)
                 writeManifest(syncDir, manifestBytes, backup = manifestBytesAtRead.takeIf { decodedLive != null })
                 foldedConflicts.forEach { it.delete() }
+                // Remembered only when nothing is outstanding (iOS withholds its stamp the same
+                // way): a work still owed an EPUB, or one whose file has gone missing from this
+                // device, is looked for again by the next sync.
+                val settled = folderViewIsCurrent && snapshot.works.none { work ->
+                    work.remoteEpubPending ||
+                        (work.hasEpub && BackupPaths.normalizeIdForComparison(work.id) !in snapshot.epubWorkIds)
+                }
+                settingsRepository.updateSyncLastManifestDigest(
+                    if (settled) BackupPaths.sha256(manifestBytes) else null
+                )
 
                 // Only now drop asset files that no manifest record references any
                 // more. Pruning *before* the commit point, as this used to, means a
@@ -353,6 +392,8 @@ class SyncRepository(
             settingsRepository.updateSyncLastSyncAt(clock())
             settingsRepository.updateSyncHasPendingChanges(false)
             return SyncResult.Success(foldedConflicts.size)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             return SyncResult.Error(e.message ?: "Sync failed.")
         }
@@ -499,6 +540,7 @@ class SyncRepository(
             var batchBytes = 0L
             while (next < manifest.works.size && batchBytes < maxEpubBatchBytes) {
                 val work = manifest.works[next++]
+                if (!work.hasEPUB) continue
                 val file = remoteWorks[BackupPaths.iosEpubAssetIdentifier(work.id).lowercase(Locale.ROOT)]
                     ?: continue
                 if (isUnchangedLocally(work, file)) continue

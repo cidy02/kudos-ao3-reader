@@ -132,7 +132,7 @@ fun SavedWork.toBackupWork(
         isSaved = isSaved,
         isQueuedForLater = isQueuedForLater,
         isFinished = isFinished,
-        hasEPUB = hasEpub,
+        hasEPUB = hasEpub || remoteEpubPending,
         isComplete = isComplete,
         rating = rating,
         language = language,

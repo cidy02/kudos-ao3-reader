@@ -334,4 +334,12 @@ object KudosDatabaseMigrations {
             db.execSQL("ALTER TABLE works ADD COLUMN downloadedAt INTEGER")
         }
     }
+
+    /** v13 → v14: device-local promise of a remote EPUB not yet received. */
+    val MIGRATION_13_14 = object : Migration(13, 14) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE works ADD COLUMN remoteEpubPending INTEGER NOT NULL DEFAULT 0")
+        }
+    }
+
 }

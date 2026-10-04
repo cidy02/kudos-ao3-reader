@@ -2,6 +2,7 @@ package io.github.cidy02.kudos.backup
 
 import androidx.room.withTransaction
 import io.github.cidy02.kudos.core.model.BackupSettings
+import io.github.cidy02.kudos.core.model.ReadingQueueKind
 import io.github.cidy02.kudos.data.local.KudosDatabase
 import io.github.cidy02.kudos.data.local.entity.CollectionWorkCrossRef
 import io.github.cidy02.kudos.data.local.entity.QueueTagCrossRef
@@ -266,7 +267,14 @@ class BackupRepository(
             // The flag follows the file on disk, whatever the write did.
             val hasFile = workFileStore.workEpubExists(workId)
             database.workDao().getById(workId)?.let { entity ->
-                if (entity.hasEpub != hasFile) database.workDao().upsert(entity.copy(hasEpub = hasFile))
+                database.workDao().upsert(entity.copy(
+                    hasEpub = hasFile,
+                    remoteEpubPending = when {
+                        write is FileWriteResult.Success -> false
+                        !hasFile -> true // Failed installation still owes the promised bytes.
+                        else -> entity.remoteEpubPending
+                    }
+                ))
             }
             // A write that failed kept the old bytes, under a row that now carries the
             // incoming clock. Reported as a success, as it was, the next sync uploaded
@@ -382,8 +390,15 @@ class BackupRepository(
             val keepMemberships = snapshot.readingQueueMemberships
                 .map { BackupPaths.normalizeIdForComparison(it.id) }
                 .toSet()
+            // Omitted queues remain recoverable with their memberships. The system
+            // queue is never cleared by Replace's absence cleanup either.
+            val replacedQueueIds = snapshot.readingQueues
+                .filter { it.kindRaw != ReadingQueueKind.SAVED_FOR_LATER }
+                .mapTo(HashSet()) { BackupPaths.normalizeIdForComparison(it.id) }
             database.readingQueueDao().getAllMemberships().forEach { membership ->
-                if (BackupPaths.normalizeIdForComparison(membership.id) !in keepMemberships) {
+                if (BackupPaths.normalizeIdForComparison(membership.queueID) in replacedQueueIds &&
+                    BackupPaths.normalizeIdForComparison(membership.id) !in keepMemberships
+                ) {
                     database.readingQueueDao().deleteMembershipById(membership.id)
                 }
             }
@@ -420,8 +435,8 @@ class BackupRepository(
      * Replace is this-device-only. Works omitted from the snapshot go to
      * Recently Deleted (no EPUB delete, no SyncTombstone). Bookmarks and
      * saved searches are hard-deleted after merge has minted immediate-delete
-     * tombstones (annotation pattern). Collections / queues / annotations
-     * without a Recently Deleted persist path stay DAO-deleted here.
+     * tombstones. Omitted collections and custom queues keep their memberships
+     * for 90 days; annotations keep their rows marked pending deletion (iOS).
      */
     private suspend fun removeRecordsAbsentFromReplaceSnapshot(snapshot: BackupLibrarySnapshot) {
         val now = clock()
@@ -463,8 +478,13 @@ class BackupRepository(
             .toSet()
         database.collectionDao().getAllIncludingDeleted().forEach { entity ->
             if (BackupPaths.normalizeIdForComparison(entity.id) !in keepCollections) {
-                database.collectionDao().removeAllWorks(entity.id)
-                database.collectionDao().deleteById(entity.id)
+                if (!entity.isDeleted) {
+                    database.collectionDao().upsert(entity.copy(
+                        isDeleted = true,
+                        deletedAt = now,
+                        permanentDeletionScheduledAt = now.plus(WorkRepository.RECOVERY_WINDOW)
+                    ))
+                }
             }
         }
 
@@ -472,8 +492,14 @@ class BackupRepository(
             .map { BackupPaths.normalizeIdForComparison(it.id) }
             .toSet()
         database.readingQueueDao().getAllQueues().forEach { entity ->
-            if (BackupPaths.normalizeIdForComparison(entity.id) !in keepQueues) {
-                database.readingQueueDao().deleteQueueById(entity.id)
+            if (entity.kindRaw != ReadingQueueKind.SAVED_FOR_LATER &&
+                BackupPaths.normalizeIdForComparison(entity.id) !in keepQueues && !entity.isDeleted
+            ) {
+                database.readingQueueDao().upsertQueue(entity.copy(
+                    isDeleted = true,
+                    deletedAt = now,
+                    permanentDeletionScheduledAt = now.plus(WorkRepository.RECOVERY_WINDOW)
+                ))
             }
         }
 
@@ -481,8 +507,8 @@ class BackupRepository(
             .map { BackupPaths.normalizeIdForComparison(it.id) }
             .toSet()
         database.annotationDao().getAll().forEach { entity ->
-            if (BackupPaths.normalizeIdForComparison(entity.id) !in keepAnnotations) {
-                database.annotationDao().deleteById(entity.id)
+            if (BackupPaths.normalizeIdForComparison(entity.id) !in keepAnnotations && !entity.isPendingDeletion) {
+                database.annotationDao().upsert(entity.copy(isPendingDeletion = true, deletedAt = now))
             }
         }
     }

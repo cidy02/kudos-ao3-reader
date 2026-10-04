@@ -216,6 +216,7 @@ class WorkRepository(
         return upsert(
             work.copy(
                 hasEpub = hasEpub,
+                remoteEpubPending = false,
                 freedAt = if (hasEpub) work.freedAt else null,
                 lastModifiedAt = clock()
             )
@@ -332,7 +333,7 @@ class WorkRepository(
     suspend fun deleteLocalEpub(workId: String): SavedWork? {
         val work = getWork(workId) ?: return null
         fileStore.deleteWorkEpub(workId)
-        return upsert(work.copy(hasEpub = false, freedAt = null, lastModifiedAt = clock()))
+        return upsert(work.copy(hasEpub = false, remoteEpubPending = false, freedAt = null, lastModifiedAt = clock()))
     }
 
     /**

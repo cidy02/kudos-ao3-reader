@@ -7,12 +7,21 @@ import androidx.documentfile.provider.DocumentFile
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import io.github.cidy02.kudos.core.model.CustomFont
+import io.github.cidy02.kudos.core.model.ReadingAnnotation
+import io.github.cidy02.kudos.core.model.ReadingQueue
+import io.github.cidy02.kudos.core.model.ReadingQueueKind
+import io.github.cidy02.kudos.core.model.ReadingQueueMembership
 import io.github.cidy02.kudos.core.model.SavedWork
+import io.github.cidy02.kudos.core.model.WorkCollection
 import io.github.cidy02.kudos.data.local.KudosDatabase
+import io.github.cidy02.kudos.data.local.entity.CollectionWorkCrossRef
+import io.github.cidy02.kudos.data.local.entity.toDomain
 import io.github.cidy02.kudos.data.local.entity.toEntity
 import io.github.cidy02.kudos.data.preferences.SettingsRepository
 import io.github.cidy02.kudos.files.FontFileStore
 import io.github.cidy02.kudos.files.WorkFileStore
+import io.github.cidy02.kudos.library.ReadingQueueRepository
+import io.github.cidy02.kudos.works.WorkRepository
 import io.github.cidy02.kudos.works.converters.EpubBuilder
 import java.io.File
 import java.nio.file.Files
@@ -1431,6 +1440,395 @@ class SyncRepositoryTest {
             }
         }
         // The names are the contract here; what the manifest holds is the backup goldens' business.
+        assertEquals(
+            written.keys,
+            golden.walkTopDown().filter { it.isFile && !it.name.startsWith(".") }
+                .map { it.relativeTo(golden).path }.toSet()
+        )
+    }
+
+    @Test
+    fun aPromisedEpubThatDidNotArriveIsPublishedByBackupAndSync() = runTest {
+        seedFolder(remoteBackupWork(WORK_REMOTE, "Promised", hasEpub = true))
+
+        assertTrue(syncRepository.runSync() is SyncResult.Success)
+
+        val local = database.workDao().getById(WORK_REMOTE)!!
+        assertFalse(local.hasEpub)
+        assertTrue(local.remoteEpubPending)
+        assertFalse(workFileStore.workEpubExists(WORK_REMOTE))
+        val published = BackupValidator.decodeManifest(
+            readDocument(requireKudosLibrary().findFile(BackupPaths.MANIFEST)!!)
+        )
+        assertTrue(published.works.single().hasEPUB)
+        val backup = BackupImporter.importV2Zip(backupRepository.exportV2ZipBytes())
+        assertTrue(backup.manifest.works.single().hasEPUB)
+        assertTrue(backup.epubFilesByWorkId.isEmpty())
+        assertFalse(BackupJson.encodeToString(backup.manifest).contains("remoteEpubPending"))
+    }
+
+    @Test
+    fun aPromisedEpubIsTakenWhenItArrivesAndTheFlagClears() = runTest {
+        val works = seedFolder(remoteBackupWork(WORK_REMOTE, "Promised", hasEpub = true))
+        assertTrue(syncRepository.runSync() is SyncResult.Success)
+        assertTrue(database.workDao().getById(WORK_REMOTE)!!.remoteEpubPending)
+        writeChild(works, BackupPaths.iosEpubAssetIdentifier(WORK_REMOTE), "application/epub+zip", REMOTE_EPUB)
+
+        assertTrue(syncRepository.runSync() is SyncResult.Success)
+
+        val local = database.workDao().getById(WORK_REMOTE)!!
+        assertTrue(local.hasEpub)
+        assertFalse(local.remoteEpubPending)
+        assertArrayEquals(REMOTE_EPUB, Files.readAllBytes(workFileStore.workEpubPath(WORK_REMOTE)))
+    }
+
+    @Test
+    fun aRemovedDownloadStaysRemovedUnlessAnotherManifestPromisesIt() = runTest {
+        seedLocalWork(WORK_A, "Local", REMOTE_EPUB)
+        val repository = WorkRepository(database, workFileStore, clock = { clockInstant })
+        // Removing bytes explicitly clears any previously pending promise.
+        database.workDao().upsert(database.workDao().getById(WORK_A)!!.copy(remoteEpubPending = true))
+        repository.deleteLocalEpub(WORK_A)
+        assertFalse(database.workDao().getById(WORK_A)!!.remoteEpubPending)
+        val entry = remoteBackupWork(WORK_A, "Local", hasEpub = false)
+        val works = seedFolder(entry)
+        writeChild(works, BackupPaths.iosEpubAssetIdentifier(WORK_A), "application/epub+zip", REMOTE_EPUB)
+
+        assertTrue(syncRepository.runSync() is SyncResult.Success)
+        assertFalse(workFileStore.workEpubExists(WORK_A))
+        assertFalse(database.workDao().getById(WORK_A)!!.hasEpub)
+        assertNotNull("the folder's copy is retained", epubIn(works, WORK_A))
+
+        // The peer advertises its copy; iOS's hasEPUB loop now permits fetching it.
+        seedFolder(entry.copy(hasEPUB = true))
+        assertTrue(syncRepository.runSync() is SyncResult.Success)
+        assertTrue(database.workDao().getById(WORK_A)!!.hasEpub)
+        assertFalse(database.workDao().getById(WORK_A)!!.remoteEpubPending)
+        assertArrayEquals(REMOTE_EPUB, Files.readAllBytes(workFileStore.workEpubPath(WORK_A)))
+    }
+
+    @Test
+    fun aFailedEpubInstallationKeepsThePromiseUntilTheWriteSucceeds() = runTest {
+        val pack = KudosBackupPackage(
+            remoteManifest(listOf(remoteBackupWork(WORK_REMOTE, "Promised", hasEpub = true)),
+                BackupValidator.formatInstant(FIXED_CLOCK)),
+            epubFilesByWorkId = mapOf(WORK_REMOTE to REMOTE_EPUB)
+        )
+        // A nonempty directory at the file destination makes both move attempts fail.
+        val destination = workFileStore.workEpubPath(WORK_REMOTE)
+        Files.createDirectories(destination)
+        val blocker = destination.resolve("blocking-file")
+        Files.write(blocker, byteArrayOf(1))
+        try {
+            backupRepository.importPackage(pack)
+            fail("A failed asset write must fail the import")
+        } catch (_: java.io.IOException) {
+            val held = database.workDao().getById(WORK_REMOTE)!!
+            assertFalse(held.hasEpub)
+            assertTrue(held.remoteEpubPending)
+            assertTrue(held.toDomain().toBackupWork().hasEPUB)
+        } finally {
+            Files.deleteIfExists(blocker)
+            Files.deleteIfExists(destination)
+        }
+
+        backupRepository.importPackage(pack)
+        assertTrue(database.workDao().getById(WORK_REMOTE)!!.hasEpub)
+        assertFalse(database.workDao().getById(WORK_REMOTE)!!.remoteEpubPending)
+        assertArrayEquals(REMOTE_EPUB, Files.readAllBytes(destination))
+    }
+
+    @Test
+    fun aKeptFlagClearedInANewerSnapshotClearsHereAndTheEpubStays() = runTest {
+        assertKeptFlagMerge(localSaved = true, incomingSaved = false, incomingNewer = true, expectedSaved = false)
+    }
+
+    @Test
+    fun aKeptFlagClearedInAnOlderSnapshotDoesNotClearHere() = runTest {
+        assertKeptFlagMerge(localSaved = true, incomingSaved = false, incomingNewer = false, expectedSaved = true)
+    }
+
+    @Test
+    fun anOlderSnapshotCannotSetAKeptFlagThatWasClearedHere() = runTest {
+        assertKeptFlagMerge(localSaved = false, incomingSaved = true, incomingNewer = false, expectedSaved = false)
+    }
+
+    /** iOS `KudosBackupService.apply`: the newer snapshot's kept flag, and never a file deleted. */
+    private suspend fun assertKeptFlagMerge(
+        localSaved: Boolean,
+        incomingSaved: Boolean,
+        incomingNewer: Boolean,
+        expectedSaved: Boolean
+    ) {
+        val local = SavedWork(
+            id = WORK_A, title = "Local", author = "Author", dateAdded = FIXED_CLOCK.minusSeconds(120),
+            lastModifiedAt = FIXED_CLOCK, isSaved = localSaved, hasEpub = true
+        )
+        database.workDao().upsert(local.toEntity())
+        workFileStore.writeWorkEpub(WORK_A, REMOTE_EPUB)
+        val incoming = local.copy(
+            lastModifiedAt = if (incomingNewer) FIXED_CLOCK.plusSeconds(60) else FIXED_CLOCK.minusSeconds(60),
+            isSaved = incomingSaved, hasEpub = false
+        ).toBackupWork()
+        backupRepository.importPackage(KudosBackupPackage(
+            remoteManifest(listOf(incoming), BackupValidator.formatInstant(FIXED_CLOCK.plusSeconds(120)))
+        ))
+
+        val merged = database.workDao().getById(WORK_A)!!
+        assertEquals(expectedSaved, merged.isSaved)
+        assertTrue(merged.hasEpub)
+        assertArrayEquals(REMOTE_EPUB, Files.readAllBytes(workFileStore.workEpubPath(WORK_A)))
+    }
+
+    @Test
+    fun aQueueOnlyWorkStaysQueueOnlyAndKeepsItsEpub() = runTest {
+        val local = SavedWork(
+            id = WORK_A, title = "Queue only", author = "Author", dateAdded = FIXED_CLOCK.minusSeconds(120),
+            lastModifiedAt = FIXED_CLOCK, isSaved = false, isQueuedForLater = true, hasEpub = true
+        )
+        database.workDao().upsert(local.toEntity())
+        workFileStore.writeWorkEpub(WORK_A, REMOTE_EPUB)
+        val queue = ReadingQueue(id = ANDROID_TWO, name = "Queue", dateCreated = FIXED_CLOCK)
+        database.readingQueueDao().upsertQueue(queue.toEntity())
+        database.readingQueueDao().upsertMembership(
+            ReadingQueueMembership(
+                id = "44444444-4444-4444-8444-444444444444", queueID = queue.id, workID = WORK_A,
+                queuedAt = FIXED_CLOCK
+            ).toEntity()
+        )
+        val incoming = local.copy(lastModifiedAt = FIXED_CLOCK.plusSeconds(60), hasEpub = false).toBackupWork()
+
+        backupRepository.importPackage(KudosBackupPackage(
+            remoteManifest(listOf(incoming), BackupValidator.formatInstant(FIXED_CLOCK.plusSeconds(120)))
+        ))
+
+        val merged = database.workDao().getById(WORK_A)!!
+        assertFalse("a merge must not promote a queue-only work into the library", merged.isSaved)
+        assertTrue(merged.isQueuedForLater)
+        assertArrayEquals(REMOTE_EPUB, Files.readAllBytes(workFileStore.workEpubPath(WORK_A)))
+    }
+
+    @Test
+    fun aDownloadRemovedHereStaysRemovedThroughThisDevicesNextSync() = runTest {
+        // The folder's manifest, written by this device a moment ago, still says the work has
+        // an EPUB, and the folder still holds the file. Merged again, that manifest brought
+        // the download straight back.
+        seedLocalWork(WORK_A, "Local", REMOTE_EPUB)
+        assertTrue(syncRepository.runSync() is SyncResult.Success)
+        val works = requireKudosLibrary().findFile(BackupPaths.WORKS_DIRECTORY)!!
+        assertNotNull(epubIn(works, WORK_A))
+
+        WorkRepository(database, workFileStore, clock = { clockInstant }).deleteLocalEpub(WORK_A)
+        clockInstant = FIXED_CLOCK.plusSeconds(60)
+        assertTrue(syncRepository.runSync() is SyncResult.Success)
+
+        assertFalse(workFileStore.workEpubExists(WORK_A))
+        assertFalse(database.workDao().getById(WORK_A)!!.hasEpub)
+        val written = BackupValidator.decodeManifest(readDocument(requireKudosLibrary().findFile(BackupPaths.MANIFEST)!!))
+        assertFalse(written.works.single { it.id.equals(WORK_A, ignoreCase = true) }.hasEPUB)
+        assertNotNull("the folder keeps its copy", epubIn(works, WORK_A))
+    }
+
+    @Test
+    fun anEpubThatWentMissingFromThisDeviceIsTakenBackFromTheFolder() = runTest {
+        // Not removed by the reader: the file is just gone. The work still says it has one,
+        // so the device is owed it, and the folder's copy is how it comes back.
+        seedLocalWork(WORK_A, "Local", REMOTE_EPUB)
+        assertTrue(syncRepository.runSync() is SyncResult.Success)
+        Files.delete(workFileStore.workEpubPath(WORK_A))
+
+        clockInstant = FIXED_CLOCK.plusSeconds(60)
+        assertTrue(syncRepository.runSync() is SyncResult.Success)
+        clockInstant = FIXED_CLOCK.plusSeconds(120)
+        assertTrue(syncRepository.runSync() is SyncResult.Success)
+
+        assertArrayEquals(REMOTE_EPUB, Files.readAllBytes(workFileStore.workEpubPath(WORK_A)))
+        val row = database.workDao().getById(WORK_A)!!
+        assertTrue(row.hasEpub)
+        assertFalse(row.remoteEpubPending)
+    }
+
+    @Test
+    fun replaceKeepsOmittedCollectionsAndQueuesForNinetyDaysWithRestorableMemberships() = runTest {
+        seedLocalWork(WORK_A, "Kept work", REMOTE_EPUB)
+        val collection = WorkCollection(
+            id = ANDROID_ONE, name = "Omitted collection", dateAdded = FIXED_CLOCK, workIds = listOf(WORK_A)
+        )
+        val queue = ReadingQueue(id = ANDROID_TWO, name = "Omitted queue", dateCreated = FIXED_CLOCK)
+        val membership = ReadingQueueMembership(
+            id = WORK_REMOTE, queueID = queue.id, workID = WORK_A, queuedAt = FIXED_CLOCK, note = "Restore this note"
+        )
+        database.collectionDao().upsert(collection.toEntity())
+        database.collectionDao().addWork(CollectionWorkCrossRef(collection.id, WORK_A))
+        database.readingQueueDao().upsertQueue(queue.toEntity())
+        database.readingQueueDao().upsertMembership(membership.toEntity())
+        val pack = KudosBackupPackage(remoteManifest(
+            listOf(database.workDao().getById(WORK_A)!!.toDomain().toBackupWork()),
+            BackupValidator.formatInstant(FIXED_CLOCK)
+        ))
+
+        backupRepository.importPackage(pack, BackupImportMode.REPLACE_LIBRARY)
+
+        val deletedCollection = database.collectionDao().getDeleted().single()
+        val queueRepository = ReadingQueueRepository(database, clock = { clockInstant })
+        val deletedQueue = queueRepository.listRecentlyDeletedQueues().single()
+        val deadline = FIXED_CLOCK.plus(WorkRepository.RECOVERY_WINDOW)
+        assertEquals(FIXED_CLOCK, deletedCollection.deletedAt)
+        assertEquals(deadline, deletedCollection.permanentDeletionScheduledAt)
+        assertEquals(FIXED_CLOCK, deletedQueue.deletedAt)
+        assertEquals(deadline, deletedQueue.permanentDeletionScheduledAt)
+        assertEquals(listOf(WORK_A), database.collectionDao().getWorkIdsForCollection(collection.id))
+        assertEquals(listOf(membership.toEntity()), database.readingQueueDao().getMembershipsForQueue(queue.id))
+        assertTrue(database.syncTombstoneDao().getAll().isEmpty())
+
+        clockInstant = FIXED_CLOCK.plusSeconds(86_400)
+        backupRepository.importPackage(pack, BackupImportMode.REPLACE_LIBRARY)
+        assertEquals(deadline, database.collectionDao().getById(collection.id)!!.permanentDeletionScheduledAt)
+        assertEquals(deadline, database.readingQueueDao().getQueueById(queue.id)!!.permanentDeletionScheduledAt)
+
+        val workRepository = WorkRepository(database, workFileStore, clock = { clockInstant })
+        assertEquals(listOf(WORK_A), workRepository.restoreCollectionFromRecentlyDeleted(collection.id)!!.workIds)
+        assertFalse(queueRepository.restoreQueueFromRecentlyDeleted(queue.id)!!.isDeleted)
+        assertEquals(listOf(membership.toEntity()), database.readingQueueDao().getMembershipsForQueue(queue.id))
+        assertArrayEquals(REMOTE_EPUB, Files.readAllBytes(workFileStore.workEpubPath(WORK_A)))
+    }
+
+    @Test
+    fun replaceLeavesTheOmittedSystemQueueAndItsMembershipsUntouched() = runTest {
+        seedLocalWork(WORK_A, "Queued work", REMOTE_EPUB)
+        val queue = ReadingQueue(
+            id = ANDROID_ONE, name = ReadingQueueKind.SAVED_FOR_LATER_NAME,
+            kindRaw = ReadingQueueKind.SAVED_FOR_LATER, sortOrder = ReadingQueueKind.SAVED_FOR_LATER_SORT_ORDER,
+            dateCreated = FIXED_CLOCK, notes = "Local system queue"
+        ).toEntity()
+        val membership = ReadingQueueMembership(
+            id = ANDROID_TWO, queueID = queue.id, workID = WORK_A, queuedAt = FIXED_CLOCK, note = "Local note"
+        ).toEntity()
+        database.readingQueueDao().upsertQueue(queue)
+        database.readingQueueDao().upsertMembership(membership)
+
+        backupRepository.importPackage(KudosBackupPackage(remoteManifest(emptyList(),
+            BackupValidator.formatInstant(FIXED_CLOCK))), BackupImportMode.REPLACE_LIBRARY)
+
+        assertEquals(queue, database.readingQueueDao().getQueueById(queue.id))
+        assertEquals(listOf(membership), database.readingQueueDao().getMembershipsForQueue(queue.id))
+        assertTrue(ReadingQueueRepository(database).listRecentlyDeletedQueues().isEmpty())
+    }
+
+    @Test
+    fun replaceMarksOmittedAnnotationsPendingDeletionWithoutLosingTheirRows() = runTest {
+        seedLocalWork(WORK_A, "Annotated work", REMOTE_EPUB)
+        val annotation = ReadingAnnotation(
+            id = ANDROID_ONE, workID = WORK_A, kindRaw = "highlight", locatorString = "{\"href\":\"chapter.xhtml\"}",
+            selectedText = "Kept highlight", note = "Kept note", createdAt = FIXED_CLOCK
+        ).toEntity()
+        database.annotationDao().upsert(annotation)
+        val pack = KudosBackupPackage(remoteManifest(emptyList(), BackupValidator.formatInstant(FIXED_CLOCK)))
+
+        backupRepository.importPackage(pack, BackupImportMode.REPLACE_LIBRARY)
+
+        val deleted = database.annotationDao().getById(annotation.id)!!
+        assertEquals(annotation.copy(isPendingDeletion = true, deletedAt = FIXED_CLOCK), deleted)
+        clockInstant = FIXED_CLOCK.plusSeconds(86_400)
+        backupRepository.importPackage(pack, BackupImportMode.REPLACE_LIBRARY)
+        assertEquals(deleted, database.annotationDao().getById(annotation.id))
+    }
+
+    @Test
+    fun aFailedBackgroundRunStoresItsMessageAndTheNextSuccessClearsIt() = runTest {
+        val kudos = ensureKudosLibrary()
+        writeChild(kudos, BackupPaths.MANIFEST, "application/json", "{\"version\":99}".toByteArray())
+        // No page state or Sync Now handler participates in these repository calls.
+        val failed = syncRepository.runSync()
+        assertTrue(failed is SyncResult.Error)
+        assertEquals((failed as SyncResult.Error).message, settingsRepository.snapshot().sync.lastError)
+        assertNull(settingsRepository.snapshot().sync.lastSyncAt)
+        val backup = BackupImporter.importV2Zip(backupRepository.exportV2ZipBytes())
+        assertFalse(BackupJson.encodeToString(backup.manifest.settings).contains("lastError"))
+        settingsRepository.replaceAll(io.github.cidy02.kudos.core.model.KudosSettings.Defaults)
+        assertEquals(failed.message, settingsRepository.snapshot().sync.lastError)
+
+        seedFolder()
+        assertTrue(syncRepository.runSync() is SyncResult.Success)
+        assertNull(settingsRepository.snapshot().sync.lastError)
+        assertEquals(FIXED_CLOCK, settingsRepository.snapshot().sync.lastSyncAt)
+    }
+
+    @Test
+    fun anEarlySyncFailureAlsoStoresItsMessage() = runTest {
+        settingsRepository.updateSyncFolderUri(null)
+        val result = syncRepository.runSync()
+        assertEquals(SyncResult.Error("No sync folder selected."), result)
+        assertEquals("No sync folder selected.", settingsRepository.snapshot().sync.lastError)
+    }
+
+    @Test
+    fun androidAddsItsWorkToTheIosFolderWithoutPruningEitherDevicesAssets() = runTest {
+        val fixture = iosSyncFolder()
+        val iosManifestBytes = File(fixture, BackupPaths.MANIFEST).readBytes()
+        val iosManifest = BackupValidator.decodeManifest(iosManifestBytes)
+        // An outgoing snapshot must not predate the snapshot it just read.
+        clockInstant = BackupValidator.parseInstant(iosManifest.exportedAt, "exportedAt").plusSeconds(60)
+        putFolder(fixture, ensureKudosLibrary())
+        val before = relativeFiles(requireKudosLibrary()).mapValues { (_, file) -> readDocument(file) }
+        val androidEpub = EpubBuilder.buildEpub("Android's own work", "<p>Added after the iOS sync.</p>")
+        val androidOriginal = "<html><body><p>Android's original.</p></body></html>".toByteArray()
+        val androidRecord =
+            """{"format":"html","originalFileName":"android.html","converterVersion":1,"convertedAt":721692800}"""
+                .toByteArray()
+        database.workDao().upsert(SavedWork(
+            id = ANDROID_ONE, title = "Android's own work", author = "Android Author",
+            sourceUrl = "https://archiveofourown.org/works/3001", ao3WorkID = 3001,
+            dateAdded = clockInstant, lastModifiedAt = clockInstant, hasEpub = true, isSaved = true
+        ).toEntity())
+        workFileStore.writeWorkEpub(ANDROID_ONE, androidEpub)
+        workFileStore.writeOriginal(ANDROID_ONE, "html", androidOriginal)
+        workFileStore.writeConversionRecord(ANDROID_ONE, androidRecord)
+        provider.deletions.clear()
+
+        assertTrue(syncRepository.runSync() is SyncResult.Success)
+
+        val written = relativeFiles(requireKudosLibrary())
+        val androidAssets = mapOf(
+            "${BackupPaths.WORKS_DIRECTORY}/${BackupPaths.iosEpubAssetIdentifier(ANDROID_ONE)}" to androidEpub,
+            "${BackupPaths.ORIGINALS_DIRECTORY}/${BackupPaths.iosOriginalFileName(ANDROID_ONE, "html")}" to androidOriginal,
+            "${BackupPaths.ORIGINALS_DIRECTORY}/${BackupPaths.iosConversionRecordFileName(ANDROID_ONE)}" to androidRecord
+        )
+        assertEquals("only Android's three asset files were added", before.keys + androidAssets.keys, written.keys)
+        before.filterKeys { it != BackupPaths.MANIFEST }.forEach { (path, bytes) ->
+            assertArrayEquals("iOS asset kept at $path", bytes, readDocument(written.getValue(path)))
+        }
+        androidAssets.forEach { (path, bytes) ->
+            assertArrayEquals("Android asset added at $path", bytes, readDocument(written.getValue(path)))
+        }
+        assertTrue("no document was pruned: ${provider.deletions}", provider.deletions.isEmpty())
+        assertArrayEquals(iosManifestBytes,
+            readDocument(requireKudosLibrary().findFile(BackupPaths.MANIFEST_BACKUP)!!))
+        val manifestBytes = readDocument(written.getValue(BackupPaths.MANIFEST))
+        val manifest = BackupValidator.decodeManifest(manifestBytes)
+        assertEquals(3, manifest.works.size)
+        assertEquals(iosManifest.works.map { it.id }.toSet() + ANDROID_ONE, manifest.works.map { it.id }.toSet())
+        assertTrue(manifest.works.all { it.hasEPUB })
+        assertEquals(BackupVersion.CURRENT, manifest.version)
+        assertEquals("android", manifest.exportedBy?.platform)
+        // iOS's top-level fields Android has no table for survive the shared-folder write too.
+        assertEquals(Json.parseToJsonElement(iosManifestBytes.toString(Charsets.UTF_8)).jsonObject["pronunciations"],
+            Json.parseToJsonElement(manifestBytes.toString(Charsets.UTF_8)).jsonObject["pronunciations"])
+
+        // Opt-in fixture generation, as for the Android-only golden: the assets and the live
+        // manifest, without the .bak. It is kept beside iOS's folder in these test resources
+        // and not under `KudosTests/`: Xcode bundles every file there flat, and this folder
+        // repeats names the Android-only golden already has.
+        val golden = fixturePath(
+            "android/app/src/test/resources/cross-platform/android-after-ios-sync-folder/KudosLibrary"
+        )
+        if (System.getProperty("kudos.writeGolden") == "true") {
+            golden.deleteRecursively()
+            written.forEach { (path, file) ->
+                File(golden, path).apply { parentFile.mkdirs() }.writeBytes(readDocument(file))
+            }
+        }
+        // The folder iOS's `aFolderBothAppsWroteIsReadAndKept` reads is the one this writes.
         assertEquals(
             written.keys,
             golden.walkTopDown().filter { it.isFile && !it.name.startsWith(".") }
