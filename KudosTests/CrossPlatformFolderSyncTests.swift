@@ -48,6 +48,14 @@ struct CrossPlatformFolderSyncTests {
             works.append(work)
         }
         try context.save()
+        // The first is a converted import: the file it was made from and the
+        // record of its conversion go into the folder's `Originals/`.
+        defer { removeOriginals(of: [Self.workOneID]) }
+        try Self.originalBytes.write(
+            to: Storage.originalDocumentURL(for: Self.workOneID, fileExtension: "html"),
+            options: .atomic
+        )
+        Self.conversionRecord.write(for: Self.workOneID)
 
         try FolderSyncService.connect(to: folder, defaults: defaults)
         _ = try await FolderSyncService.syncUp(in: context, defaults: defaults)
@@ -87,6 +95,7 @@ struct CrossPlatformFolderSyncTests {
 
         let restored = try context.fetch(FetchDescriptor<SavedWork>())
         defer { restored.forEach { try? FileManager.default.removeItem(at: $0.fileURL) } }
+        defer { removeOriginals(of: restored.map(\.id)) }
         #expect(restored.count == 2)
         for work in restored {
             #expect(work.hasEPUB)
@@ -95,7 +104,32 @@ struct CrossPlatformFolderSyncTests {
                 .appendingPathComponent("\(work.id.uuidString).epub")
             #expect(try Data(contentsOf: work.fileURL) == Data(contentsOf: remote))
         }
+        // Every original Android put in the folder is on this device too,
+        // under the work its name gives.
+        let originals = try FileManager.default.contentsOfDirectory(
+            at: syncDirectory.appendingPathComponent(FolderSyncService.originalsSubdirectoryName),
+            includingPropertiesForKeys: nil
+        )
+        #expect(originals.count == 2)
+        for remote in originals {
+            let base = remote.deletingPathExtension().lastPathComponent
+            let isRecord = base.hasSuffix(".conversion")
+            let id = try #require(UUID(uuidString: isRecord ? String(base.dropLast(".conversion".count)) : base))
+            let local = isRecord
+                ? WorkConversionRecord.url(for: id)
+                : try #require(Storage.existingOriginalDocumentURL(for: id))
+            #expect(try Data(contentsOf: local) == Data(contentsOf: remote))
+        }
         #expect(try relativeFiles(in: syncDirectory) == before)
+    }
+
+    private func removeOriginals(of ids: [UUID]) {
+        for id in ids {
+            if let original = Storage.existingOriginalDocumentURL(for: id) {
+                try? FileManager.default.removeItem(at: original)
+            }
+            WorkConversionRecord.delete(for: id)
+        }
     }
 
     // xcodebuild injects TEST_RUNNER_* into the test process and strips the
@@ -162,6 +196,14 @@ struct CrossPlatformFolderSyncTests {
         defaults.removePersistentDomain(forName: name)
         return defaults
     }
+
+    private static let originalBytes = Data("<html><body><p>The original.</p></body></html>".utf8)
+    private static let conversionRecord = WorkConversionRecord(
+        converterVersion: 1,
+        format: "html",
+        originalFileName: "cross-platform.html",
+        convertedAt: Date(timeIntervalSince1970: 1_700_000_000)
+    )
 
     // Letters in both: an id of digits alone reads the same in either case,
     // and the case of the file name is the thing under test.
