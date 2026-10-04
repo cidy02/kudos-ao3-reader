@@ -18,6 +18,7 @@ import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.io.InputStream
 import java.nio.file.Files
+import java.nio.file.Path
 import java.time.Instant
 import java.util.Locale
 import java.util.concurrent.TimeUnit
@@ -238,6 +239,29 @@ class SyncRepository(
                     }
                 }
 
+                // The original of each converted import, and the record of its conversion,
+                // under iOS's names (`writeSyncDirectoryContents`).
+                var originalsDir = syncDir.findFile(BackupPaths.ORIGINALS_DIRECTORY)
+                if (originalsDir == null) originalsDir = syncDir.createDirectory(BackupPaths.ORIGINALS_DIRECTORY)
+                if (originalsDir != null) {
+                    val remoteOriginals = originalsDir.childrenByLowercaseName()
+                    snapshot.works.forEach { work ->
+                        val local = workFileStore.originalFile(work.id) ?: return@forEach
+                        val name = BackupPaths.iosOriginalFileName(
+                            work.id,
+                            local.fileName.toString().substringAfterLast('.', "")
+                        )
+                        copyIfSizeDiffers(originalsDir, name, local, remoteOriginals[name.lowercase(Locale.ROOT)])
+                        workFileStore.readConversionRecord(work.id)?.let { record ->
+                            val recordName = BackupPaths.iosConversionRecordFileName(work.id)
+                            writeIfChanged(
+                                originalsDir, recordName, "application/octet-stream", record,
+                                existing = remoteOriginals[recordName.lowercase(Locale.ROOT)]
+                            )
+                        }
+                    }
+                }
+
                 // iOS's `viewIsCurrent` (`performSyncUp`): if another device wrote the
                 // manifest after this run read it, the manifest about to be written does
                 // not know that device's new works, and pruning by it would delete their
@@ -265,6 +289,12 @@ class SyncRepository(
                 if (folderViewIsCurrent) {
                     worksDir?.let { removeOrphans(it, expectedWorks) }
                     fontsDir?.let { removeOrphans(it, expectedFonts) }
+                    originalsDir?.let { directory ->
+                        removeOrphanedOriginals(
+                            directory,
+                            manifestOut.works.mapTo(HashSet()) { BackupPaths.normalizeIdForComparison(it.id) }
+                        )
+                    }
                 }
             }
 
@@ -386,7 +416,56 @@ class SyncRepository(
             }
             backupRepository.importPackage(KudosBackupPackage(manifest, epubFiles, fontFiles))
         } while (next < manifest.works.size)
+
+        importOriginals(syncDir, manifest, fontFiles)
         return complete
+    }
+
+    /**
+     * iOS `readChangedRemoteAssets`, its last loop: an original is fetched only for a work this
+     * manifest lists, and only when this device holds none. A local original is the file the
+     * reader imported here. A folder that predates this has no `Originals` directory, which is
+     * nothing to fetch. An original and its record travel in one batch: the record is taken
+     * only with the original it describes.
+     */
+    private suspend fun importOriginals(
+        syncDir: DocumentFile,
+        manifest: KudosBackupManifest,
+        fontFiles: Map<String, ByteArray>
+    ) {
+        val directory = syncDir.findFile(BackupPaths.ORIGINALS_DIRECTORY) ?: return
+        val listed = manifest.works.mapTo(HashSet()) { BackupPaths.normalizeIdForComparison(it.id) }
+        val wanted = linkedMapOf<String, MutableList<DocumentFile>>()
+        directory.listFiles().forEach { file ->
+            val name = file.name ?: return@forEach
+            if (name.startsWith(".")) return@forEach
+            val (workId, _) = BackupPaths.parseOriginalFileName(name) ?: return@forEach
+            if (workId in listed && !workFileStore.originalExists(workId) &&
+                file.length() <= BackupLimits.MAX_ENTRY_BYTES
+            ) {
+                wanted.getOrPut(workId) { mutableListOf() }.add(file)
+            }
+        }
+
+        var batch = mutableMapOf<String, ByteArray>()
+        var batchBytes = 0L
+        suspend fun flush() {
+            if (batch.isEmpty()) return
+            backupRepository.importPackage(KudosBackupPackage(manifest, emptyMap(), fontFiles, batch))
+            batch = mutableMapOf()
+            batchBytes = 0L
+        }
+        wanted.values.forEach { files ->
+            files.forEach { file ->
+                context.contentResolver.openInputStream(file.uri)?.use {
+                    val bytes = it.readBytes()
+                    batch[file.name!!] = bytes
+                    batchBytes += bytes.size
+                }
+            }
+            if (batchBytes >= maxEpubBatchBytes) flush()
+        }
+        flush()
     }
 
     /**
@@ -462,6 +541,42 @@ class SyncRepository(
             DocumentsContract.renameDocument(resolver, live.uri, BackupPaths.MANIFEST_BACKUP)
         }
         DocumentsContract.renameDocument(resolver, temp.uri, BackupPaths.MANIFEST)
+    }
+
+    /**
+     * Copies [local] into [dir] as [fileName] unless a file of that name and size is already
+     * there, without holding it in memory: an original can be a large PDF.
+     */
+    private fun copyIfSizeDiffers(dir: DocumentFile, fileName: String, local: Path, existing: DocumentFile?) {
+        var file = existing
+        if (file != null && file.name != fileName) {
+            file.delete()
+            file = null
+        }
+        // ponytail: size is the change signal. An original is written once and replaced only by
+        // a re-import; one re-imported at exactly the same size is not uploaded again. Compare
+        // a digest if that ever matters.
+        if (file != null && file.length() == Files.size(local)) return
+        if (file == null) file = dir.createFile("application/octet-stream", fileName)
+        if (file != null) {
+            context.contentResolver.openOutputStream(file.uri, "wt")?.use { output ->
+                Files.newInputStream(local).use { it.copyTo(output) }
+            }
+        }
+    }
+
+    /**
+     * iOS `removeOrphanedOriginals`: by the work a file belongs to, since a work can have two
+     * files here and the extension is whatever was imported. Anything not shaped like one of
+     * ours is left strictly alone.
+     */
+    private fun removeOrphanedOriginals(directory: DocumentFile, keepingWorkIds: Set<String>) {
+        directory.listFiles().forEach { file ->
+            val name = file.name ?: return@forEach
+            if (name.startsWith(".")) return@forEach
+            val (workId, _) = BackupPaths.parseOriginalFileName(name) ?: return@forEach
+            if (workId !in keepingWorkIds) file.delete()
+        }
     }
 
     private fun removeOrphans(directory: DocumentFile, expected: Set<String>) {
