@@ -355,3 +355,28 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   read and the read-before-upload; its refusal to write a folder with no manifest was reworked
   for the same reason as on Android. **This changes the reference app's behaviour and needs the
   owner's eye.** Reverse: revert `91f3930f` (polish) and `ef120853` (integrate).
+- **2026-10-04 · Room 14: a work remembers it is owed an EPUB** (`remoteEpubPending`, iOS
+  `remoteEPUBPending`). Local only, never in a manifest. Migration `MIGRATION_13_14`, tested from
+  the exported schema 13 and on the emulator's real database. A work promised an EPUB that has
+  not arrived is exported as having one, so an iPhone goes on looking for it.
+  Reverse: needs a migration back; leave the column and stop reading it.
+- **2026-10-04 · The sync fetches an EPUB only for a work whose manifest entry says it has
+  one** (iOS `readChangedRemoteAssets`). Android fetched every listed work's file. Reverse: the
+  `hasEPUB` guard in `importManifest` (`backup/SyncRepository.kt`).
+- **2026-10-04 · A manifest this device wrote itself is not merged again.** iOS skips it by its
+  date; Android by a digest of its bytes (`syncLastManifestDigest` in DataStore), stored only
+  when nothing is outstanding and cleared when the folder is changed. Without it a removed
+  download came back at the next sync, and every sync merged the whole library for nothing.
+  Reverse: `ownManifest` in `runSyncLocked`.
+- **2026-10-04 · The kept flag follows the newer snapshot, as on iOS; the queued flag stays
+  ORed.** iOS sets the queued flag from queue membership after every restore. Not ported:
+  older Android data holds queued works with the flag and no membership, and they would drop
+  out of both the library and the queues. Reverse: `isSaved` in `mergeWork`.
+- **2026-10-04 · Keeping a work through the importer advances its clock.** Reverse:
+  `stampedIfFlagsChanged` in `works/WorkImporter.kt`.
+- **2026-10-04 · Replace Library keeps omitted collections and queues for 90 days, with their
+  memberships, and marks omitted highlights pending deletion** (iOS). It deleted them outright.
+  Reverse: `removeRecordsAbsentFromReplaceSnapshot` in `backup/BackupRepository.kt`.
+- **2026-10-04 · The last sync error is stored and shown** (iOS `lastError`): on the Sync
+  Folder page, and as "Error" on the Settings row, which now reads Off, Error, On or Paused as
+  iOS's does. Not in backups. Reverse: `syncLastError` in `SettingsRepository`.
