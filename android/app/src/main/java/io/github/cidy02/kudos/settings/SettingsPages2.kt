@@ -725,10 +725,10 @@ fun SettingsFolderSyncPage(repository: SettingsRepository, settings: KudosSettin
         item {
             SettingsSection(
                 label = "Deletion signing",
-                footnote = "Kudos checks that deletions came from one of your devices. Devices using the " +
-                    "same Apple account are trusted automatically; for a different account, scan " +
-                    "its QR code or share its pairing code. A backup file can never mark a device " +
-                    "as trusted."
+                footnote = "Kudos checks that deletions came from one of your devices. Pair each of your " +
+                    "other devices here, and pair this one on each of them: scan its QR code or " +
+                    "share its pairing code. Deletions from a device that is not paired are " +
+                    "ignored. A backup file can never mark a device as trusted."
             ) {
                 Column(Modifier.padding(horizontal = 13.dp, vertical = 12.dp)) {
                     Text("This device", color = tokens.primaryInk, fontSize = 16.sp)
@@ -838,9 +838,9 @@ fun SettingsFolderSyncPage(repository: SettingsRepository, settings: KudosSettin
                 }
                 SettingsFootnote(
                     "Kudos stores your library data, including reading history, in the folder you " +
-                        "choose using the same kind of file as a backup. If the folder is in iCloud " +
-                        "Drive, Apple shares changes through your personal iCloud account; changes may " +
-                        "not appear immediately, and Kudos still works offline. Turning off Auto Sync " +
+                        "choose using the same kind of file as a backup. If the folder belongs to a " +
+                        "cloud storage app, that app shares changes through your account with it; " +
+                        "changes may not appear immediately, and Kudos still works offline. Turning off Auto Sync " +
                         "stops automatic updates, but Sync Now still works."
                 )
             }
