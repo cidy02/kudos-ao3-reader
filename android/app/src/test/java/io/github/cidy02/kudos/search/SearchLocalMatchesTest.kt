@@ -5,6 +5,7 @@ import io.github.cidy02.kudos.core.model.Tag
 import io.github.cidy02.kudos.core.model.WorkCollection
 import io.github.cidy02.kudos.network.ao3.browse.AO3Fandom
 import io.github.cidy02.kudos.network.ao3.search.AO3SearchFilters
+import io.github.cidy02.kudos.network.ao3.search.AO3Warning
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -123,6 +124,25 @@ class SearchLocalMatchesTest {
         )
         assertEquals("Naruto", next.fandom)
         assertEquals("Bleach", next.excludedFandoms)
+    }
+
+    @Test
+    fun tappedTagsUseTheirAo3SearchFields() {
+        assertEquals("Naruto", tagSearchFilters(SearchSubjectField.FANDOM, "Naruto").fandom)
+        assertEquals("Sasuke", tagSearchFilters(SearchSubjectField.CHARACTER, "Sasuke").characters)
+        assertEquals(
+            "Naruto/Sasuke",
+            tagSearchFilters(SearchSubjectField.RELATIONSHIP, "Naruto/Sasuke").relationships
+        )
+        assertEquals("Slow Burn", tagSearchFilters(SearchSubjectField.FREEFORM, "Slow Burn").additionalTags)
+        assertEquals(
+            setOf(AO3Warning.DEATH),
+            tagSearchFilters(SearchSubjectField.WARNING, "Major Character Death").warnings
+        )
+        assertEquals(
+            "Unrecognized warning",
+            tagSearchFilters(SearchSubjectField.WARNING, "Unrecognized warning").additionalTags
+        )
     }
 
     private fun work(title: String, fandoms: List<String> = emptyList()) =

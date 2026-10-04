@@ -180,6 +180,14 @@ fun SearchScreen(
         localSelection = emptySet()
     }
 
+    val tagRequestTick by SearchTagRequests.tick.collectAsState()
+    LaunchedEffect(tagRequestTick) {
+        SearchTagRequests.take()?.let { request ->
+            leaveSelection()
+            viewModel.searchTag(request.field, request.value, request.isFreshTabJump)
+        }
+    }
+
     fun goBack() {
         if (remoteSelection.isSelecting) {
             remoteSelection.exit()
@@ -367,9 +375,9 @@ fun SearchScreen(
                                     remoteSelection.exit()
                                     viewModel.loadPage(it)
                                 },
-                                onTagClick = {
+                                onTagClick = { field, tag ->
                                     remoteSelection.exit()
-                                    viewModel.searchTag(it)
+                                    viewModel.searchTag(field, tag)
                                 },
                                 onSortSelected = { sort ->
                                     remoteSelection.exit()
@@ -992,7 +1000,7 @@ private fun SearchResultsList(
     onToggleSelection: (Long) -> Unit,
     onOpenWork: (AO3WorkSummary) -> Unit,
     onPage: (Int) -> Unit,
-    onTagClick: (String) -> Unit,
+    onTagClick: (SearchSubjectField, String) -> Unit,
     onSortSelected: (AO3SearchSort) -> Unit,
     onRefresh: suspend () -> Unit
 ) {
@@ -1030,7 +1038,7 @@ private fun SearchResultsList(
                         work = work.remote,
                         onOpenWork = onOpenWork,
                         expandAll = expandAll,
-                        onTagClick = onTagClick,
+                        onTagSearch = onTagClick,
                         modifier = Modifier.padding(horizontal = 16.dp)
                     )
                 }

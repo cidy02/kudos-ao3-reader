@@ -67,11 +67,14 @@ class NavigationRoutesTest {
         assertTrue(Routes.hasSubjectHeader(Routes.RecentlyDeleted))
         assertTrue(Routes.hasSubjectHeader(Routes.LibrarySection))
         assertTrue(Routes.hasSubjectHeader(Routes.librarySection("to-read")))
+        assertTrue(Routes.hasSubjectHeader(Routes.BrowseWorks))
+        assertTrue(Routes.hasSubjectHeader(Routes.browseWorks("Sherlock")))
+        assertTrue(Routes.hasSubjectHeader(Routes.SeriesWorks))
+        assertTrue(Routes.hasSubjectHeader(Routes.seriesWorks("https://archiveofourown.org/series/123")))
 
         assertFalse(Routes.hasSubjectHeader(Routes.HomeSection))
         assertFalse(Routes.hasSubjectHeader(Routes.WorkDetail))
         assertFalse(Routes.hasSubjectHeader(Routes.Settings))
-        assertFalse(Routes.hasSubjectHeader(Routes.BrowseWorks))
         assertFalse(Routes.hasSubjectHeader(null))
     }
 

@@ -1,20 +1,27 @@
 package io.github.cidy02.kudos.browse
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.windowInsetsTopHeight
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.outlined.Checklist
 import androidx.compose.material.icons.outlined.UnfoldLess
 import androidx.compose.material.icons.outlined.UnfoldMore
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -25,11 +32,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import io.github.cidy02.kudos.network.ao3.AO3Result
+import io.github.cidy02.kudos.app.ProvidePushedShellChrome
 import io.github.cidy02.kudos.network.ao3.browse.AO3BrowseRepository
 import io.github.cidy02.kudos.network.ao3.search.AO3SearchFilters
 import io.github.cidy02.kudos.network.ao3.search.AO3SearchPage
@@ -43,6 +50,7 @@ import io.github.cidy02.kudos.ui.components.EmptyStateCard
 import io.github.cidy02.kudos.ui.components.KudosSectionHeader
 import io.github.cidy02.kudos.ui.subject.FilterButton
 import io.github.cidy02.kudos.ui.subject.SubjectHeaderBlock
+import io.github.cidy02.kudos.ui.subject.ToolbarCircleButton
 import io.github.cidy02.kudos.ui.subject.subjectScreenWash
 import io.github.cidy02.kudos.ui.components.LoadingStateCard
 import io.github.cidy02.kudos.ui.components.MetadataChipRow
@@ -74,6 +82,7 @@ fun FandomWorksScreen(
     // revised_at, and the sheet would sit there claiming "Best Match".
     var filters by remember { mutableStateOf(AO3BrowseRepository.browseBaseline()) }
     var showFilterSheet by remember { mutableStateOf(false) }
+    var showMenu by remember { mutableStateOf(false) }
     var expandAllCards by remember { mutableStateOf(false) }
     val selection = rememberRemoteWorkSelection()
     var bulkBusy by remember { mutableStateOf(false) }
@@ -116,41 +125,59 @@ fun FandomWorksScreen(
 
     LaunchedEffect(fandomName, filters) { load() }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .subjectScreenWash(palette)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(end = 4.dp),
-            horizontalArrangement = Arrangement.End,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
+    ProvidePushedShellChrome(
+        hasSubjectHeader = true,
+        trailingContent = {
             FilterButton(
                 filtersActive = narrowed,
                 onClick = { showFilterSheet = true },
                 badgeCount = if (narrowed) activeFilters else 0,
                 onClearFilters = { filters = browseDefault }
             )
-            IconButton(onClick = { expandAllCards = !expandAllCards }) {
-                Icon(
-                    imageVector = if (expandAllCards) Icons.Outlined.UnfoldLess else Icons.Outlined.UnfoldMore,
-                    contentDescription = if (expandAllCards) "Collapse all" else "Expand all"
-                )
-            }
-            if (workImporter != null) {
-                IconButton(
-                    onClick = { if (selection.isSelecting) selection.exit() else selection.enter() }
+            Box {
+                ToolbarCircleButton(
+                    onClick = { showMenu = true },
+                    accessibilityName = "More actions",
+                    palette = palette
                 ) {
-                    Icon(
-                        imageVector = Icons.Outlined.Checklist,
-                        contentDescription = if (selection.isSelecting) "Exit selection" else "Select works"
+                    Icon(Icons.Default.MoreVert, contentDescription = null)
+                }
+                DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+                    if (workImporter != null) {
+                        DropdownMenuItem(
+                            text = { Text(if (selection.isSelecting) "Exit selection" else "Select") },
+                            leadingIcon = { Icon(Icons.Outlined.Checklist, contentDescription = null) },
+                            onClick = {
+                                showMenu = false
+                                if (selection.isSelecting) selection.exit() else selection.enter()
+                            }
+                        )
+                    }
+                    DropdownMenuItem(
+                        text = { Text(if (expandAllCards) "Collapse All" else "Expand All") },
+                        leadingIcon = {
+                            Icon(
+                                if (expandAllCards) Icons.Outlined.UnfoldLess else Icons.Outlined.UnfoldMore,
+                                contentDescription = null
+                            )
+                        },
+                        onClick = {
+                            showMenu = false
+                            expandAllCards = !expandAllCards
+                        }
                     )
                 }
             }
         }
+    )
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .subjectScreenWash(palette)
+    ) {
+        Spacer(Modifier.windowInsetsTopHeight(WindowInsets.statusBars))
+        Spacer(Modifier.height(56.dp))
         SubjectHeaderBlock(
             kicker = "Browse",
             title = fandomName,

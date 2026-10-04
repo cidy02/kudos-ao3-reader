@@ -278,6 +278,8 @@ object Routes {
             base == Collections.substringBefore("?").substringBefore("/") ||
             base == CollectionDetail.substringBefore("?").substringBefore("/") ||
             base == AO3CollectionDetail.substringBefore("?").substringBefore("/") ||
+            base == BrowseWorks.substringBefore("?").substringBefore("/") ||
+            base == SeriesWorks.substringBefore("?").substringBefore("/") ||
             base == RecentlyDeleted.substringBefore("?").substringBefore("/") ||
             base == LibrarySection.substringBefore("?").substringBefore("/")
     }

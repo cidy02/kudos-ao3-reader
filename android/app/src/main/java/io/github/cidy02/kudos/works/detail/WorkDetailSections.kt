@@ -1,6 +1,5 @@
 package io.github.cidy02.kudos.works.detail
 
-import android.net.Uri
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -36,7 +35,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
@@ -45,6 +43,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.cidy02.kudos.home.HomeFacts
+import io.github.cidy02.kudos.search.LocalTagSearch
+import io.github.cidy02.kudos.search.SearchSubjectField
 import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
 import io.github.cidy02.kudos.ui.subject.SubjectChip
 import io.github.cidy02.kudos.ui.subject.SubjectChipStyle
@@ -192,17 +192,22 @@ fun WorkDetailTagSections(
     palette: SubjectPalette,
     modifier: Modifier = Modifier
 ) {
-    val uriHandler = LocalUriHandler.current
+    val searchTag = LocalTagSearch.current
     val tokens = LocalKudosTokens.current
 
-    data class TagCluster(val title: String, val tags: List<String>, val isTinted: Boolean = false)
+    data class TagCluster(
+        val title: String,
+        val tags: List<String>,
+        val field: SearchSubjectField,
+        val isTinted: Boolean = false
+    )
 
     val clusters = listOf(
-        TagCluster("Archive Warnings", warnings),
-        TagCluster("Fandoms", fandoms),
-        TagCluster("Relationships", relationships, isTinted = true),
-        TagCluster("Characters", characters),
-        TagCluster("Additional Tags", freeforms)
+        TagCluster("Archive Warnings", warnings, SearchSubjectField.WARNING),
+        TagCluster("Fandoms", fandoms, SearchSubjectField.FANDOM),
+        TagCluster("Relationships", relationships, SearchSubjectField.RELATIONSHIP, isTinted = true),
+        TagCluster("Characters", characters, SearchSubjectField.CHARACTER),
+        TagCluster("Additional Tags", freeforms, SearchSubjectField.FREEFORM)
     ).filter { it.tags.isNotEmpty() }
 
     if (clusters.isEmpty()) return
@@ -239,9 +244,7 @@ fun WorkDetailTagSections(
                             text = tag,
                             style = if (cluster.isTinted) SubjectChipStyle.Tinted else SubjectChipStyle.Neutral,
                             palette = palette,
-                            modifier = Modifier.clickable {
-                                uriHandler.openUri("https://archiveofourown.org/tags/${Uri.encode(tag)}/works")
-                            }
+                            modifier = Modifier.clickable { searchTag(cluster.field, tag) }
                         )
                     }
                 }

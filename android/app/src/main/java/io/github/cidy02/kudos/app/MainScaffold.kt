@@ -80,6 +80,8 @@ import io.github.cidy02.kudos.ui.subject.GlassCircleButton
 import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
 import io.github.cidy02.kudos.ui.subject.SubjectMetrics
 import io.github.cidy02.kudos.ui.subject.ToolbarCircleButton
+import io.github.cidy02.kudos.search.LocalTagSearch
+import io.github.cidy02.kudos.search.SearchTagRequests
 import io.github.cidy02.kudos.ui.subject.withOpacity
 import io.github.cidy02.kudos.ui.theme.KudosThemeMode
 import io.github.cidy02.kudos.works.DownloadQueueBanner
@@ -239,6 +241,14 @@ fun MainScaffold(
                     LocalShellOverlayState provides overlay,
                     LocalPushedShellChrome provides pushedChrome,
                     LocalSearchExit provides { navController.navigateShellRoot(searchReturnTab) },
+                    LocalTagSearch provides { field, value ->
+                        SearchTagRequests.request(
+                            field = field,
+                            value = value,
+                            isFreshTabJump = currentRoute != Routes.Search
+                        )
+                        navController.navigateShellRoot(Routes.Search)
+                    },
                     LocalKudosTokens provides (heroPalette?.let { tokens.copy(accent = it.tint) } ?: tokens),
                     io.github.cidy02.kudos.ui.subject.LocalSubjectPalette provides (heroPalette ?: scopePalette)
                 ) {
