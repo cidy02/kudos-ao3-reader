@@ -649,7 +649,7 @@ class SyncRepositoryTest {
     }
 
     @Test
-    fun aLowercaseEpubFromAnOlderAndroidBuildIsFoundAndKept() = runTest {
+    fun aLowercaseEpubFromAnOlderAndroidBuildIsFoundAndGivenIosName() = runTest {
         val worksDir = seedFolder(
             remoteBackupWork(WORK_REMOTE, "From an older build", hasEpub = true)
         )
@@ -658,11 +658,9 @@ class SyncRepositoryTest {
         assertTrue(syncRepository.runSync() is SyncResult.Success)
 
         assertArrayEquals(REMOTE_EPUB, Files.readAllBytes(workFileStore.workEpubPath(WORK_REMOTE)))
-        // Still one file for the work, not pruned and not duplicated. On case-sensitive storage
-        // (a phone) it is also renamed to iOS's name; this host's file system folds case, so
-        // the rename is not asserted here.
+        // One file for the work, under iOS's name, with the same bytes.
         val after = requireKudosLibrary().findFile(BackupPaths.WORKS_DIRECTORY)!!
-        assertEquals(1, after.listFiles().size)
+        assertEquals(listOf("${WORK_REMOTE.uppercase()}.epub"), after.listFiles().map { it.name })
         assertArrayEquals(REMOTE_EPUB, readDocument(epubIn(after, WORK_REMOTE)!!))
     }
 

@@ -29,8 +29,10 @@ folder's copy of it on its next sync, though the manifest still listed the work.
 - EPUBs are written under iOS's name (`BackupPaths.iosEpubAssetIdentifier`).
 - An EPUB is found under either case, from one listing of the folder (a `findFile` per work
   listed it every time).
-- A lowercase file left by an older Android build is renamed to iOS's name the next time this
-  device writes it.
+- A lowercase file left by an older Android build is replaced by one under iOS's name the next
+  time this device writes it. It is deleted and written again rather than renamed: a phone's
+  shared storage ignores letter case, and a case-only rename there is refused or lands on a
+  "name (1)" copy.
 - Every work and every font the outgoing manifest lists is kept, as on iOS.
 - Nothing is pruned when the folder holds a manifest this run could not read.
 - Pruning compares names without regard to case, and skips hidden files, as iOS does.
@@ -41,8 +43,7 @@ New in `SyncRepositoryTest` (17 tests, all passing): `syncUpNamesEpubsTheWayIosD
 `syncDownFindsAnEpubIosWrote`, `aLowercaseEpubFromAnOlderAndroidBuildIsFoundAndKept`,
 `syncUpKeepsTheEpubOfAListedWorkThisDeviceDoesNotHold`,
 `nothingIsPrunedWhenTheFoldersManifestCannotBeRead`. The older tests look an EPUB up by work
-rather than by a lowercase name. The rename itself is not asserted: the test host's file system
-folds case.
+rather than by a lowercase name.
 
 ## Part 2: when an incoming EPUB may replace a local one
 
