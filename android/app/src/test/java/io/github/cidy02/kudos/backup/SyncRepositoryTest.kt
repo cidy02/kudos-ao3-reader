@@ -1035,6 +1035,83 @@ class SyncRepositoryTest {
         assertEquals(before.dateAdded, after.dateAdded)
     }
 
+    // Originals (brief 5b): the file a converted import was made from, and the record of its
+    // conversion, in the folder's `Originals/` as iOS keeps them.
+
+    @Test
+    fun syncUpWritesAnOriginalAndItsRecordUnderIosNames() = runTest {
+        seedLocalWork(WORK_A, "Imported from a PDF", "local-a".toByteArray())
+        workFileStore.writeOriginal(WORK_A, "pdf", ORIGINAL_PDF)
+        workFileStore.writeConversionRecord(WORK_A, CONVERSION_RECORD)
+
+        assertTrue(syncRepository.runSync() is SyncResult.Success)
+
+        val originals = requireKudosLibrary().findFile(BackupPaths.ORIGINALS_DIRECTORY)!!
+        assertEquals(
+            setOf("${WORK_A.uppercase()}.pdf", "${WORK_A.uppercase()}.conversion.json"),
+            originals.listFiles().map { it.name }.toSet()
+        )
+        assertArrayEquals(ORIGINAL_PDF, readDocument(originals.findFile("${WORK_A.uppercase()}.pdf")!!))
+        assertArrayEquals(
+            CONVERSION_RECORD,
+            readDocument(originals.findFile("${WORK_A.uppercase()}.conversion.json")!!)
+        )
+    }
+
+    @Test
+    fun syncDownBringsAnOriginalThisDeviceLacks() = runTest {
+        seedFolderOriginal(WORK_REMOTE, "pdf", ORIGINAL_PDF, record = CONVERSION_RECORD)
+
+        assertTrue(syncRepository.runSync() is SyncResult.Success)
+
+        val (extension, bytes) = workFileStore.readOriginal(WORK_REMOTE)!!
+        assertEquals("pdf", extension)
+        assertArrayEquals(ORIGINAL_PDF, bytes)
+        assertArrayEquals(CONVERSION_RECORD, workFileStore.readConversionRecord(WORK_REMOTE))
+    }
+
+    @Test
+    fun syncDownLeavesALocalOriginalAlone() = runTest {
+        // The file the reader imported on this device, of another kind.
+        seedOlderLocalWork(WORK_REMOTE, REMOTE_EPUB)
+        workFileStore.writeOriginal(WORK_REMOTE, "html", "<html>imported here</html>".toByteArray())
+        seedFolderOriginal(WORK_REMOTE, "pdf", ORIGINAL_PDF, record = CONVERSION_RECORD)
+
+        assertTrue(syncRepository.runSync() is SyncResult.Success)
+
+        assertEquals("html", workFileStore.readOriginal(WORK_REMOTE)!!.first)
+        assertTrue(workFileStore.readConversionRecord(WORK_REMOTE) == null)
+    }
+
+    @Test
+    fun anOriginalOfAWorkNoLongerListedIsPrunedAndAStrangersFileIsNot() = runTest {
+        seedFolderOriginal(WORK_REMOTE, "pdf", ORIGINAL_PDF, record = null)
+        val originals = requireKudosLibrary().findFile(BackupPaths.ORIGINALS_DIRECTORY)!!
+        // A work no manifest lists, and a file that is not one of ours.
+        writeChild(originals, "${WORK_A.uppercase()}.pdf", "application/octet-stream", ORIGINAL_PDF)
+        writeChild(originals, "notes.txt", "application/octet-stream", "left by someone else".toByteArray())
+
+        assertTrue(syncRepository.runSync() is SyncResult.Success)
+
+        val after = requireKudosLibrary().findFile(BackupPaths.ORIGINALS_DIRECTORY)!!
+        assertEquals(
+            setOf("${WORK_REMOTE.uppercase()}.pdf", "notes.txt"),
+            after.listFiles().map { it.name }.toSet()
+        )
+    }
+
+    /** A folder whose manifest lists [workId], holding that work's original in `Originals/`. */
+    private fun seedFolderOriginal(workId: String, extension: String, bytes: ByteArray, record: ByteArray?) {
+        seedFolder(remoteBackupWork(workId, "Imported elsewhere", hasEpub = false))
+        val kudos = requireKudosLibrary()
+        val originals = kudos.findFile(BackupPaths.ORIGINALS_DIRECTORY)
+            ?: kudos.createDirectory(BackupPaths.ORIGINALS_DIRECTORY)!!
+        writeChild(originals, "${workId.uppercase()}.$extension", "application/octet-stream", bytes)
+        if (record != null) {
+            writeChild(originals, "${workId.uppercase()}.conversion.json", "application/octet-stream", record)
+        }
+    }
+
     // The sync folder across the two apps (iOS `CrossPlatformFolderSyncTests`). The backup
     // goldens prove each side reads the other's manifest; these prove each side finds the
     // other's files, and leaves them in place.
@@ -1267,6 +1344,10 @@ class SyncRepositoryTest {
         // the file name is the thing under test.
         private const val ANDROID_ONE = "3000abcd-0000-4000-8000-00000000000a"
         private const val ANDROID_TWO = "3000abcd-0000-4000-8000-00000000000b"
+
+        private val ORIGINAL_PDF = "%PDF-1.7 the original".toByteArray()
+        private val CONVERSION_RECORD =
+            """{"converterVersion":4,"format":"pdf","originalFileName":"story.pdf","convertedAt":0}""".toByteArray()
 
         /** A real EPUB: sync-down only installs bytes that are a readable package. */
         private val REMOTE_EPUB = EpubBuilder.buildEpub("Remote", "<p>Text.</p>")
