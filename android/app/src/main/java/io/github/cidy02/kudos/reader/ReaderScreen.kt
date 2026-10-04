@@ -2,9 +2,27 @@ package io.github.cidy02.kudos.reader
 
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.outlined.Tune
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.sp
+import io.github.cidy02.kudos.settings.SettingsActionRow
+import io.github.cidy02.kudos.settings.SettingsGroupLabel
+import io.github.cidy02.kudos.settings.SettingsPanel
+import io.github.cidy02.kudos.settings.SettingsSection
+import io.github.cidy02.kudos.settings.SubjectSliderRow
+import io.github.cidy02.kudos.settings.TextSizeSlider
+import io.github.cidy02.kudos.ui.subject.SubjectFormRow
+import io.github.cidy02.kudos.ui.subject.SubjectMetrics
+import io.github.cidy02.kudos.ui.subject.SubjectRowSeparator
+import io.github.cidy02.kudos.ui.subject.SubjectSegmentedControl
+import io.github.cidy02.kudos.ui.subject.SubjectToggle
+import io.github.cidy02.kudos.ui.subject.ToolbarCircleButton
 import kotlin.math.roundToInt
 import android.content.Context
 import android.content.Intent
@@ -60,10 +78,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Slider
 import androidx.compose.material3.Snackbar
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -912,66 +928,57 @@ private fun ReaderReading(
             if (showDisplaySheet) {
                 val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
                 val availableVoices by speechController.availableVoices.collectAsState()
+                // The sheet takes the reader's theme, as iOS's does, not the app's.
                 ModalBottomSheet(
                     onDismissRequest = { showDisplaySheet = false },
-                    sheetState = sheetState
+                    sheetState = sheetState,
+                    containerColor = tokens.background
                 ) {
-                    ReaderDisplaySheet(
-                        preferences = state.preferences,
-                        availableVoices = availableVoices,
-                        onFontSizeChange = viewModel::setFontSizePercent,
-                        onThemeChange = viewModel::setColorTheme,
-                        onScrollModeChange = viewModel::setScrollMode,
-                        onTwoPageChange = viewModel::setTwoPage,
-                        onBoldChange = viewModel::setBold,
-                        onLetterSpacingChange = viewModel::setLetterSpacing,
-                        onWordSpacingChange = viewModel::setWordSpacing,
-                        onSpeechRateChange = viewModel::setSpeechRate,
-                        onSpeechPitchChange = viewModel::setSpeechPitch,
-                        onSpeechVoiceChange = viewModel::setSpeechVoiceIdentifier,
-                        onFontFamilyChange = viewModel::setFontFamily
-                    )
+                    CompositionLocalProvider(
+                        LocalKudosTokens provides tokens,
+                        LocalContentColor provides tokens.primaryInk
+                    ) {
+                        ReaderDisplaySheet(
+                            preferences = state.preferences,
+                            keepScreenAwake = keepScreenAwake,
+                            availableVoices = availableVoices,
+                            onDone = { showDisplaySheet = false },
+                            onFontSizeChange = viewModel::setFontSizePercent,
+                            onThemeChange = viewModel::setColorTheme,
+                            onScrollModeChange = viewModel::setScrollMode,
+                            onTwoPageChange = viewModel::setTwoPage,
+                            onKeepScreenAwakeChange = viewModel::setKeepScreenAwake,
+                            onBoldChange = viewModel::setBold,
+                            onLetterSpacingChange = viewModel::setLetterSpacing,
+                            onWordSpacingChange = viewModel::setWordSpacing,
+                            onSpeechRateChange = viewModel::setSpeechRate,
+                            onSpeechPitchChange = viewModel::setSpeechPitch,
+                            onSpeechVoiceChange = viewModel::setSpeechVoiceIdentifier,
+                            onFontFamilyChange = viewModel::setFontFamily
+                        )
+                    }
                 }
             }
         }
     }
 }
 
-@Composable
-private fun ReaderFontSection(
-    currentFontId: String?,
-    onFontFamilyChange: (String?) -> Unit
-) {
-    val options = ReaderFontCatalog.builtIns
-    val currentId = currentFontId ?: "system"
-
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(text = "Font", style = MaterialTheme.typography.titleSmall)
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            options.forEach { option ->
-                FilterChip(
-                    selected = currentId == option.id,
-                    onClick = { onFontFamilyChange(if (option.id == "system") null else option.id) },
-                    label = { Text(option.name) }
-                )
-            }
-        }
-    }
-}
-
+/**
+ * iOS `ReaderOptionsForm`, titled "Display & Themes": Appearance, Text Size, Reading, Read Aloud,
+ * Font, in that order. Every control writes through the reader's view model to the same settings
+ * the Settings pages write, and the open book follows at once.
+ */
 @Composable
 private fun ReaderDisplaySheet(
     preferences: ReaderPreferences,
+    keepScreenAwake: Boolean,
     availableVoices: List<io.github.cidy02.kudos.reader.speech.TTSVoice> = emptyList(),
+    onDone: () -> Unit = {},
     onFontSizeChange: (Int) -> Unit,
     onThemeChange: (ReaderColorTheme) -> Unit,
     onScrollModeChange: (Boolean) -> Unit = {},
     onTwoPageChange: (Boolean) -> Unit = {},
+    onKeepScreenAwakeChange: (Boolean) -> Unit = {},
     onBoldChange: (Boolean) -> Unit = {},
     onLetterSpacingChange: (Double) -> Unit = {},
     onWordSpacingChange: (Double) -> Unit = {},
@@ -980,136 +987,190 @@ private fun ReaderDisplaySheet(
     onSpeechVoiceChange: (String?) -> Unit = {},
     onFontFamilyChange: (String?) -> Unit = {}
 ) {
+    val tokens = LocalKudosTokens.current
+    var showCustomize by remember { mutableStateOf(false) }
+    val twoPage = !preferences.scroll && preferences.columnCount >= 2
+    // iOS offers the two-page spread on iPad and Mac, never on a phone. It also shows here while
+    // it is on, so a phone that has it on can turn it off.
+    val wide = LocalConfiguration.current.screenWidthDp >= 600
+    val currentFontId = preferences.fontFamily ?: "system"
     Column(
         modifier = Modifier
             .fillMaxWidth()
+            .verticalScroll(rememberScrollState())
             .navigationBarsPadding()
-            .padding(horizontal = 24.dp, vertical = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+            .padding(bottom = 24.dp)
     ) {
-        Text(text = "Display", style = MaterialTheme.typography.titleLarge)
-
-        Text(
-            text = "Text size · ${preferences.fontSizePercent}%",
-            style = MaterialTheme.typography.titleSmall
-        )
-        Slider(
-            value = preferences.fontSizePercent.toFloat(),
-            onValueChange = { onFontSizeChange(it.toInt()) },
-            valueRange = ReaderSettingsMapper.MIN_FONT_PERCENT.toFloat()..
-                ReaderSettingsMapper.MAX_FONT_PERCENT.toFloat(),
-            steps = 19
-        )
-
-        Text(text = "Theme", style = MaterialTheme.typography.titleSmall)
         Row(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = SubjectMetrics.accountGutter),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            ReaderColorTheme.entries.forEach { theme ->
-                FilterChip(
-                    selected = preferences.theme == theme,
-                    onClick = { onThemeChange(theme) },
-                    label = { Text(theme.name) }
+            Text(
+                text = "Display & Themes",
+                color = tokens.primaryInk,
+                fontSize = 17.sp,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.weight(1f)
+            )
+            ToolbarCircleButton(onClick = onDone, accessibilityName = "Done") {
+                Icon(Icons.Filled.Check, contentDescription = null)
+            }
+        }
+
+        SettingsGroupLabel("Appearance", Modifier.padding(top = 14.dp))
+        SettingsPanel {
+            SubjectSegmentedControl(
+                options = ReaderColorTheme.entries,
+                selected = preferences.theme,
+                onSelect = onThemeChange,
+                title = { if (it == ReaderColorTheme.Oled) "OLED" else it.name },
+                contentDescription = "Theme",
+                modifier = Modifier.padding(horizontal = 10.dp, vertical = 10.dp)
+            )
+            SubjectRowSeparator()
+            SettingsActionRow(
+                label = "Customize Theme…",
+                icon = Icons.Outlined.Tune,
+                onClick = { showCustomize = !showCustomize }
+            )
+            if (showCustomize) {
+                SubjectRowSeparator()
+                SubjectFormRow(
+                    "Bold Text",
+                    trailing = { SubjectToggle(checked = preferences.bold, onCheckedChange = onBoldChange) }
+                )
+                SubjectRowSeparator()
+                SubjectSliderRow(
+                    label = "Letter spacing",
+                    value = preferences.letterSpacingEm.toFloat(),
+                    valueRange = 0f..0.5f,
+                    steps = 0,
+                    formatValue = { "%.2f em".format(it) },
+                    onValueChangeFinished = { onLetterSpacingChange(it.toDouble()) }
+                )
+                SubjectRowSeparator()
+                SubjectSliderRow(
+                    label = "Word spacing",
+                    value = preferences.wordSpacingEm.toFloat(),
+                    valueRange = 0f..1f,
+                    steps = 0,
+                    formatValue = { "%.2f em".format(it) },
+                    onValueChangeFinished = { onWordSpacingChange(it.toDouble()) }
                 )
             }
         }
 
-        Text(text = "Reading mode", style = MaterialTheme.typography.titleSmall)
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            modifier = Modifier
-                .fillMaxWidth()
-                .horizontalScroll(rememberScrollState())
+        SettingsGroupLabel("Text Size", Modifier.padding(top = 22.dp))
+        SettingsPanel {
+            TextSizeSlider(
+                value = preferences.fontSizePercent.toFloat(),
+                valueRange = ReaderSettingsMapper.MIN_FONT_PERCENT.toFloat()..
+                    ReaderSettingsMapper.MAX_FONT_PERCENT.toFloat(),
+                steps = 19,
+                unit = "%",
+                onValueChange = { onFontSizeChange(it.toInt()) },
+                onValueChangeFinished = { onFontSizeChange(it.toInt()) }
+            )
+        }
+
+        SettingsSection(
+            label = "Reading",
+            footnote = if (wide) {
+                "On a wide screen, Paged mode can show two pages side by side."
+            } else {
+                "Choose whether you turn pages or scroll while reading."
+            }
         ) {
-            FilterChip(
+            SubjectSegmentedControl(
+                options = listOf(true, false),
                 selected = preferences.scroll,
-                onClick = { onScrollModeChange(true) },
-                label = { Text("Scroll") }
+                onSelect = onScrollModeChange,
+                title = { scroll -> if (scroll) "Scrolled" else "Paged" },
+                contentDescription = "Layout",
+                modifier = Modifier.padding(horizontal = 10.dp, vertical = 10.dp)
             )
-            FilterChip(
-                selected = !preferences.scroll,
-                onClick = { onScrollModeChange(false) },
-                label = { Text("Paged") }
-            )
-            FilterChip(
-                selected = !preferences.scroll && preferences.columnCount >= 2,
-                onClick = { onTwoPageChange(true) },
-                label = { Text("Two-page") }
+            if (wide || twoPage) {
+                SubjectRowSeparator()
+                SubjectFormRow(
+                    "Two-page spread",
+                    trailing = {
+                        SubjectToggle(
+                            checked = twoPage,
+                            onCheckedChange = onTwoPageChange,
+                            enabled = !preferences.scroll
+                        )
+                    }
+                )
+            }
+            SubjectRowSeparator()
+            SubjectFormRow(
+                "Keep screen awake",
+                trailing = { SubjectToggle(checked = keepScreenAwake, onCheckedChange = onKeepScreenAwakeChange) }
             )
         }
 
-        ReaderFontSection(
-            currentFontId = preferences.fontFamily,
-            onFontFamilyChange = onFontFamilyChange
-        )
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text("Bold text", style = MaterialTheme.typography.titleSmall)
-            Switch(checked = preferences.bold, onCheckedChange = onBoldChange)
-        }
-
-        Text(
-            text = "Letter spacing · ${"%.2f".format(preferences.letterSpacingEm)} em",
-            style = MaterialTheme.typography.titleSmall
-        )
-        Slider(
-            value = preferences.letterSpacingEm.toFloat(),
-            onValueChange = { onLetterSpacingChange(it.toDouble()) },
-            valueRange = 0f..0.5f
-        )
-
-        Text(
-            text = "Word spacing · ${"%.2f".format(preferences.wordSpacingEm)} em",
-            style = MaterialTheme.typography.titleSmall
-        )
-        Slider(
-            value = preferences.wordSpacingEm.toFloat(),
-            onValueChange = { onWordSpacingChange(it.toDouble()) },
-            valueRange = 0f..1f
-        )
-
-        Text(text = "Read aloud", style = MaterialTheme.typography.titleMedium)
-        if (availableVoices.isNotEmpty()) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                availableVoices.forEach { voice ->
-                    FilterChip(
-                        selected = preferences.speechVoiceIdentifier == voice.id,
-                        onClick = { onSpeechVoiceChange(voice.id) },
-                        label = { Text(voice.name) }
-                    )
+        SettingsGroupLabel("Read Aloud", Modifier.padding(top = 22.dp))
+        SettingsPanel {
+            if (availableVoices.isNotEmpty()) {
+                Text(
+                    text = "Voice",
+                    color = tokens.primaryInk,
+                    fontSize = 16.sp,
+                    modifier = Modifier.padding(start = 13.dp, top = 10.dp, end = 13.dp)
+                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState())
+                        .padding(horizontal = 13.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    availableVoices.forEach { voice ->
+                        FilterChip(
+                            selected = preferences.speechVoiceIdentifier == voice.id,
+                            onClick = { onSpeechVoiceChange(voice.id) },
+                            label = { Text(voice.name) }
+                        )
+                    }
                 }
+                SubjectRowSeparator()
+            }
+            SubjectSliderRow(
+                label = "Speed",
+                value = preferences.speechRate,
+                valueRange = 0.5f..2.0f,
+                steps = 0,
+                formatValue = { "%.1f×".format(it) },
+                onValueChangeFinished = onSpeechRateChange
+            )
+            SubjectRowSeparator()
+            SubjectSliderRow(
+                label = "Pitch",
+                value = preferences.speechPitch,
+                valueRange = 0.5f..2.0f,
+                steps = 0,
+                formatValue = { "%.1f".format(it) },
+                onValueChangeFinished = onSpeechPitchChange
+            )
+        }
+
+        SettingsGroupLabel("Font", Modifier.padding(top = 22.dp))
+        SettingsPanel {
+            ReaderFontCatalog.builtIns.forEachIndexed { index, option ->
+                if (index > 0) SubjectRowSeparator()
+                SubjectFormRow(
+                    label = option.name,
+                    onClick = { onFontFamilyChange(if (option.id == "system") null else option.id) },
+                    trailing = {
+                        if (currentFontId == option.id) {
+                            Icon(Icons.Filled.Check, contentDescription = "Selected", tint = tokens.accent)
+                        }
+                    }
+                )
             }
         }
-        Text(
-            text = "Speed · ${"%.1f".format(preferences.speechRate)}×",
-            style = MaterialTheme.typography.titleSmall
-        )
-        Slider(
-            value = preferences.speechRate,
-            onValueChange = onSpeechRateChange,
-            valueRange = 0.5f..2.0f
-        )
-        Text(
-            text = "Pitch · ${"%.1f".format(preferences.speechPitch)}",
-            style = MaterialTheme.typography.titleSmall
-        )
-        Slider(
-            value = preferences.speechPitch,
-            onValueChange = onSpeechPitchChange,
-            valueRange = 0.5f..2.0f
-        )
-
-        Spacer(modifier = Modifier.height(16.dp))
     }
 }
 

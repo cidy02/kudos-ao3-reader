@@ -302,6 +302,10 @@ class ReaderViewModel(
         }
     }
 
+    fun setKeepScreenAwake(on: Boolean) {
+        viewModelScope.launch { settingsRepository.updateKeepScreenAwake(on) }
+    }
+
     fun setScrollMode(scroll: Boolean) {
         updatePreferences { it.copy(scroll = scroll, publisherStyles = false) }
         viewModelScope.launch {
