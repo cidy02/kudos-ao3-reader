@@ -225,5 +225,8 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   from the local file, or the sizes are equal and the manifest's digest differs; at most 32 MB is
   held at once, and the manifest is merged again with each batch. Android's manifest now carries
   the digest of the bytes it uploads, not the one an earlier manifest gave it. Same as iOS and a
-  known limit: with no digest in the manifest, an equal size counts as unchanged.
-  Reverse: `importManifest` and `isUnchangedLocally` in `backup/SyncRepository.kt`.
+  known limit: with no digest in the manifest, an equal size counts as unchanged. And as iOS's
+  `viewIsCurrent`: if the manifest's date moved between this run's read and its write, nothing is
+  pruned.
+  Reverse: `importManifest`, `isUnchangedLocally` and `manifestStampAtRead` in
+  `backup/SyncRepository.kt`.
