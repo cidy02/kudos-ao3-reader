@@ -5,13 +5,14 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.ZoneOffset
+import java.util.UUID
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * Mirrors Apple `ReadingStatisticsTests`.
- */
+/** Mirrors Apple `ReadingStatisticsTests` and `ReadingInsightsTests`. */
 class ReadingStatisticsTest {
     @Test
     fun separatesStartedFinishedAndInProgressWorks() {
@@ -125,12 +126,154 @@ class ReadingStatisticsTest {
     }
 
     @Test
-    fun readiumLocatorOnlyStillCountsAsStarted() {
-        // A backup restore can land a work with only a Readium locator and no
-        // lastReadDate/spine/scroll — SavedWork.hasStartedReading and
-        // CategoryStats.hasBeenRead both already treat that as started.
+    fun readiumOnlyWorkCountsAsStarted() {
         val locatorOnly = work("Locator only", readiumLocator = "{\"href\":\"chapter1.xhtml\"}")
-        assertEquals(true, ReadingStatistics.hasStarted(locatorOnly))
+        val statistics = ReadingStatistics.from(listOf(locatorOnly))
+
+        assertEquals(1, statistics.startedWorks)
+        assertEquals(1, statistics.inProgressWorks)
+    }
+
+    @Test
+    fun theTypicalSessionIsTheMedianSoOneBingeCannotMoveIt() {
+        val facts = listOf(
+            fact(day = 1, minutes = 20.0),
+            fact(day = 2, minutes = 30.0),
+            fact(day = 3, minutes = 40.0),
+            fact(day = 4, minutes = 240.0)
+        )
+
+        assertEquals(35 * 60.0, ReadingInsights.medianSeconds(facts), 0.0)
+    }
+
+    @Test
+    fun medianOfNothingIsZeroRatherThanACrash() {
+        assertEquals(0.0, ReadingInsights.medianSeconds(emptyList()), 0.0)
+    }
+
+    @Test
+    fun finishRateCountsWorksNotSessionsSoARereadCannotInflateIt() {
+        val reread = UUID.randomUUID().toString()
+        val abandoned = UUID.randomUUID().toString()
+        val facts = listOf(
+            fact(work = reread, day = 1, minutes = 30.0, didFinish = true),
+            fact(work = reread, day = 2, minutes = 30.0, didFinish = true),
+            fact(work = reread, day = 3, minutes = 30.0, didFinish = true),
+            fact(work = abandoned, day = 4, minutes = 30.0)
+        )
+
+        assertEquals(0.5, ReadingInsights.finishRate(facts) ?: -1.0, 0.0)
+    }
+
+    @Test
+    fun noStartedWorksIsNoDataRatherThanZeroPercent() {
+        assertNull(ReadingInsights.finishRate(emptyList()))
+    }
+
+    @Test
+    fun aStreakCountsDaysSoTwoSessionsInOneEveningAreOneDay() {
+        val facts = listOf(
+            fact(day = 1, hour = 19, minutes = 30.0),
+            fact(day = 1, hour = 22, minutes = 30.0),
+            fact(day = 2, minutes = 30.0),
+            fact(day = 3, minutes = 30.0),
+            fact(day = 9, minutes = 30.0)
+        )
+
+        assertEquals(3, ReadingInsights.longestStreak(facts, ZoneOffset.UTC))
+    }
+
+    @Test
+    fun aStreakOfOneDayIsOneNotZero() {
+        assertEquals(
+            1,
+            ReadingInsights.longestStreak(
+                listOf(fact(day = 4, minutes = 30.0)),
+                ZoneOffset.UTC
+            )
+        )
+    }
+
+    @Test
+    fun fandomSharesPartitionTheHoursRatherThanOverCounting() {
+        val facts = listOf(
+            fact(day = 1, minutes = 60.0, fandom = "Naruto"),
+            fact(day = 2, minutes = 30.0, fandom = "Cyberpunk 2077"),
+            fact(day = 3, minutes = 20.0, fandom = "Blade Runner"),
+            fact(day = 4, minutes = 10.0, fandom = "Dracula"),
+            fact(day = 5, minutes = 5.0)
+        )
+
+        val shares = ReadingInsights.fandomShares(facts)
+
+        assertEquals(
+            listOf("Naruto", "Cyberpunk 2077", "Blade Runner", "Everything else"),
+            shares.map { it.name }
+        )
+        assertEquals(15 * 60.0, shares.last().seconds, 0.0)
+        assertTrue(shares.last().isRemainder)
+        assertEquals(125 * 60.0, shares.sumOf { it.seconds }, 0.0)
+    }
+
+    @Test
+    fun noRemainderRowAppearsWhenNothingIsLeftOver() {
+        val shares = ReadingInsights.fandomShares(
+            listOf(
+                fact(day = 1, minutes = 60.0, fandom = "Naruto"),
+                fact(day = 2, minutes = 30.0, fandom = "Dracula")
+            )
+        )
+
+        assertEquals(listOf("Naruto", "Dracula"), shares.map { it.name })
+        assertFalse(shares.any { it.isRemainder })
+    }
+
+    @Test
+    fun wordsPerHourIsWeightedByTimeNotAveragedAcrossSessions() {
+        val facts = listOf(
+            fact(day = 1, minutes = 60.0, words = 10_000),
+            fact(day = 2, minutes = 180.0, words = 60_000),
+            fact(day = 3, minutes = 0.0, words = 900_000)
+        )
+
+        assertEquals(17_500.0, ReadingInsights.wordsPerHour(facts), 0.0)
+    }
+
+    @Test
+    fun aFirstPeriodHasNoDeltaRatherThanADeltaAgainstZero() {
+        val insights = ReadingInsights.make(
+            facts = listOf(fact(day = 1, minutes = 60.0)),
+            zone = ZoneOffset.UTC
+        )
+
+        assertNull(insights.previousPeriodSeconds)
+        assertEquals(3_600.0, insights.totalSeconds, 0.0)
+    }
+
+    @Test
+    fun theDeltaComesFromThePriorPeriodsOwnRows() {
+        val insights = ReadingInsights.make(
+            facts = listOf(fact(day = 1, minutes = 90.0)),
+            previousPeriodFacts = listOf(fact(day = 1, minutes = 30.0)),
+            zone = ZoneOffset.UTC
+        )
+
+        assertEquals(1_800.0, insights.previousPeriodSeconds ?: -1.0, 0.0)
+        assertEquals(
+            "+1.0",
+            ReadingInsights.signedHoursLabel(
+                insights.totalSeconds - (insights.previousPeriodSeconds ?: 0.0)
+            )
+        )
+    }
+
+    @Test
+    fun labelsMatchTheSpecsOwnFormats() {
+        assertEquals("18.4", ReadingInsights.hoursLabel(18.4 * 3_600))
+        assertEquals("−0.6", ReadingInsights.signedHoursLabel(-0.6 * 3_600))
+        assertEquals("31 min", ReadingInsights.durationLabel(31 * 60.0))
+        assertEquals("1h 12m", ReadingInsights.durationLabel(72 * 60.0))
+        assertEquals("2h", ReadingInsights.durationLabel(120 * 60.0))
     }
 
     @Test
@@ -148,6 +291,25 @@ class ReadingStatisticsTest {
         assertEquals("1M", formatCompactNumber(999_950))
         assertEquals("1B", formatCompactNumber(999_999_500))
     }
+
+    private fun fact(
+        work: String = UUID.randomUUID().toString(),
+        day: Int,
+        hour: Int = 12,
+        minutes: Double,
+        words: Int = 0,
+        didFinish: Boolean = false,
+        fandom: String = ""
+    ): ReadingSessionFacts = ReadingSessionFacts(
+        workID = work,
+        startedAt = LocalDate.of(2026, 8, day)
+            .atTime(hour, 0)
+            .toInstant(ZoneOffset.UTC),
+        durationSeconds = minutes * 60,
+        wordCount = words,
+        didFinish = didFinish,
+        fandom = fandom
+    )
 
     private fun work(
         title: String,

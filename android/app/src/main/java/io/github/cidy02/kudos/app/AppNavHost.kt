@@ -778,6 +778,7 @@ fun AppNavHost(
         sharedComposable(Routes.ReadingStatistics) {
             ReadingStatisticsScreen(
                 libraryRepository = container.libraryRepository,
+                readingLogDao = container.database.readingLogDao(),
                 settingsRepository = container.settingsRepository,
                 privacyGate = container.privacyGate
             )
