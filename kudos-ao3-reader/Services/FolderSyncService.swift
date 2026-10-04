@@ -88,6 +88,8 @@ enum FolderSyncService {
     /// it, so a manifest always describes files that already exist.
     nonisolated static let syncDirectoryName = "KudosLibrary"
     nonisolated static let manifestFileName = "manifest.json"
+    /// Android's copy of the manifest it last replaced. iOS writes none.
+    nonisolated static let manifestBackupFileName = "manifest.json.bak"
     nonisolated static let worksSubdirectoryName = "Works"
     nonisolated static let fontsSubdirectoryName = "Fonts"
     /// The documents converted works were made from. A sync folder is a backup,
@@ -227,12 +229,13 @@ enum FolderSyncService {
         defaults: UserDefaults = .standard
     ) async throws -> FolderSyncResult {
         guard snapshot(defaults: defaults).isConnected else { return FolderSyncResult() }
-        return try await runGuarded(defaults: defaults) {
-            let result = try await performSyncUp(in: context, defaults: defaults)
-            recordSuccess(defaults: defaults)
-            defaults.set(false, forKey: dirtyFlagKey)
-            return result
-        }
+        // The automatic uploader calls this alone, seven seconds after a local
+        // change. Writing without reading first published a manifest that did
+        // not list what another device had added since. This device then
+        // stamped its own write, skipped the next read, and on the sync after
+        // that pruned the other device's EPUB by a manifest that never knew of
+        // it. Android's sync reads before it writes on every run, too.
+        return try await syncNow(in: context, defaults: defaults)
     }
 
     @discardableResult
@@ -304,7 +307,7 @@ enum FolderSyncService {
             // asset fetches are still outstanding or unresolved conflict
             // versions exist — both can need work without the manifest's
             // modification date moving.
-            let remoteStamp = try? await Task.detached {
+            var remoteStamp = try? await Task.detached {
                 try coordinatedContentModificationDate(of: manifestURL)
             }.value
             if let storedStamp = defaults.object(forKey: lastRestoredRemoteStampKey) as? Date,
@@ -315,9 +318,18 @@ enum FolderSyncService {
                 result.skippedUnchanged = true
                 return
             }
-            let manifest = try await Task.detached {
-                try coordinatedReadManifest(from: manifestURL)
+            // A manifest that was cut short gives this device no view of what
+            // the folder lists. With the stamp withheld, the sync-up that
+            // follows writes a whole manifest and prunes nothing; stopping here
+            // instead would leave the folder unable to sync for good.
+            let read = try await Task.detached {
+                try coordinatedReadManifestOrBackup(in: syncDirectoryURL)
             }.value
+            if read?.isLive != true {
+                remoteStamp = nil
+                defaults.removeObject(forKey: lastRestoredRemoteStampKey)
+            }
+            guard let manifest = read?.manifest else { return }
             // Fetch only assets that are missing or changed relative to local
             // state — unchanged EPUBs never leave disk, unlike the old
             // whole-package read that materialized every blob in memory.
@@ -415,8 +427,18 @@ enum FolderSyncService {
             let remoteStampBeforeWrite = try? manifestURL.resourceValues(
                 forKeys: [.contentModificationDateKey]
             ).contentModificationDate
-            let viewIsCurrent = remoteStampBeforeWrite == nil
-                || remoteStampBeforeWrite == storedStamp
+            // Only a folder with nothing in it is a first write. One that holds
+            // files and no manifest is not: older Android builds rename the
+            // manifest away for a moment while they replace it, a manifest that
+            // iCloud has not downloaded is not at its path, and an interrupted
+            // first sync leaves its files without one. Read as a first write, as
+            // it was, this device pruned every file its own library did not
+            // list. It writes its manifest and prunes nothing; refusing to write
+            // would leave such a folder unable to sync for good. A manifest
+            // whose date cannot be read is not known to be the one last read.
+            let viewIsCurrent = FileManager.default.fileExists(atPath: manifestURL.path)
+                ? remoteStampBeforeWrite != nil && remoteStampBeforeWrite == storedStamp
+                : syncDirectoryHoldsNothing(syncDirectoryURL)
 
             try await Task.detached {
                 try coordinatedWriteSyncDirectory(
@@ -692,6 +714,37 @@ nonisolated private func coordinatedReadManifest(from url: URL) throws -> KudosB
     try KudosBackupContents.decodeManifest(coordinatedReadData(from: url))
 }
 
+/// The manifest a sync-down restores from. `isLive` is false when the live
+/// manifest was cut short and Android's backup copy stood in for it; the result
+/// is nil when there was no backup copy to read either.
+///
+/// A manifest that is not JSON at all was cut short by a write that died:
+/// Android writes its manifest in place, so an interrupted write leaves one,
+/// and no device can read it. Android keeps the manifest it replaced beside
+/// the live one, and that is the best record there is of what the folder
+/// listed. A manifest that is whole JSON and does not decode is another app
+/// version's, and still throws: writing over it would drop what that version
+/// listed.
+nonisolated private func coordinatedReadManifestOrBackup(
+    in syncDirectoryURL: URL
+) throws -> (manifest: KudosBackupManifest, isLive: Bool)? {
+    let data = try coordinatedReadData(
+        from: syncDirectoryURL.appendingPathComponent(FolderSyncService.manifestFileName)
+    )
+    if (try? JSONSerialization.jsonObject(with: data)) != nil {
+        return (try KudosBackupContents.decodeManifest(data), true)
+    }
+    let backupURL = syncDirectoryURL.appendingPathComponent(FolderSyncService.manifestBackupFileName)
+    return (try? coordinatedReadManifest(from: backupURL)).map { ($0, false) }
+}
+
+/// Whether a sync folder holds nothing but hidden files. Only then is writing
+/// to a folder with no manifest a first write.
+nonisolated private func syncDirectoryHoldsNothing(_ url: URL) -> Bool {
+    ((try? FileManager.default.contentsOfDirectory(atPath: url.path)) ?? [])
+        .allSatisfy { $0.hasPrefix(".") }
+}
+
 /// The subset of remote assets a sync-down actually needs to move: files that
 /// are missing locally or differ from the local copy. `missingAssetCount`
 /// tracks manifest-referenced assets that couldn't be fetched or fit in this
@@ -723,7 +776,11 @@ nonisolated private func readChangedRemoteAssets(
 
     var selection = RemoteAssetSelection()
     for work in manifest.works where work.hasEPUB {
-        let remoteURL = worksDirectory.appendingPathComponent("\(work.id.uuidString).epub")
+        // Released Android builds wrote lowercase UUIDs. As archive restore already
+        // does (`KudosBackupContents`), read either case and keep both during pruning.
+        let canonicalURL = worksDirectory.appendingPathComponent("\(work.id.uuidString).epub")
+        let lowercaseURL = worksDirectory.appendingPathComponent("\(work.id.uuidString.lowercased()).epub")
+        let remoteURL = remoteAssetExists(canonicalURL) ? canonicalURL : lowercaseURL
         let localURL = Storage.workAssetURL(
             identifier: work.assetIdentifier ?? "",
             fallbackID: work.id
@@ -995,6 +1052,7 @@ nonisolated private func removeOrphanedOriginals(in directory: URL, keepingWorkI
 
 nonisolated private func removeOrphans(in directory: URL, keeping expected: Set<String>) {
     let fileManager = FileManager.default
+    let foldedExpected = Set(expected.map { $0.lowercased() })
     guard let names = try? fileManager.contentsOfDirectory(atPath: directory.path) else { return }
     for name in names {
         // Map iCloud placeholder names (".X.icloud") back to their real name so
@@ -1004,7 +1062,7 @@ nonisolated private func removeOrphans(in directory: URL, keeping expected: Set<
             realName = String(realName.dropFirst().dropLast(".icloud".count))
         }
         guard !realName.hasPrefix(".") else { continue } // other hidden/system files
-        guard !expected.contains(realName) else { continue }
+        guard !foldedExpected.contains(realName.lowercased()) else { continue }
         try? fileManager.removeItem(at: directory.appendingPathComponent(name))
     }
 }

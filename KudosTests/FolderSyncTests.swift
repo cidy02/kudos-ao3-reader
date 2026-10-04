@@ -11,6 +11,118 @@ extension PersistenceGateSuites {
 @MainActor
 @Suite(.serialized)
 struct FolderSyncTests {
+    /// Files and no manifest: what an older Android build leaves for a moment
+    /// while it replaces its manifest, and what an interrupted first sync
+    /// leaves for good. Read as a first write, this device pruned every file
+    /// its own library did not list.
+    @Test func aFolderWithFilesAndNoManifestIsWrittenToAndNothingInItIsPruned() async throws {
+        let container = try container()
+        let defaults = try testDefaults()
+        let folder = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        defer { FolderSyncService.disconnect(defaults: defaults) }
+        let payload = folder.appendingPathComponent(FolderSyncService.syncDirectoryName)
+        let works = payload.appendingPathComponent(FolderSyncService.worksSubdirectoryName)
+        try FileManager.default.createDirectory(at: works, withIntermediateDirectories: true)
+        let epub = works.appendingPathComponent("\(UUID().uuidString).epub")
+        try Data("only remote copy".utf8).write(to: epub)
+        try FolderSyncService.connect(to: folder, defaults: defaults)
+
+        _ = try await FolderSyncService.syncNow(in: container.mainContext, defaults: defaults)
+
+        #expect(try Data(contentsOf: epub) == Data("only remote copy".utf8))
+        // Written to, not refused: a folder left like this must be able to sync again.
+        _ = try KudosBackupContents.decodeManifest(
+            Data(contentsOf: payload.appendingPathComponent(FolderSyncService.manifestFileName))
+        )
+    }
+
+    /// A manifest cut short by a write that died is not JSON, and no device can
+    /// read it. This device recovers what Android's `.bak` lists, writes a
+    /// whole manifest, and prunes nothing: it never saw what the folder listed.
+    @Test func aManifestCutShortIsRepairedFromTheBackupAndNothingIsPruned() async throws {
+        let container = try container()
+        let context = container.mainContext
+        let defaults = try testDefaults()
+        let folder = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        defer { FolderSyncService.disconnect(defaults: defaults) }
+        let payload = folder.appendingPathComponent(FolderSyncService.syncDirectoryName)
+        let works = payload.appendingPathComponent(FolderSyncService.worksSubdirectoryName)
+        try FileManager.default.createDirectory(at: works, withIntermediateDirectories: true)
+        let listed = SavedWork(title: "In the backup manifest", author: "Writer")
+        let previous = try KudosBackupService.makeContents(
+            works: [listed], bookmarks: [], fonts: [], readingQueues: [], defaults: defaults
+        ).manifestData()
+        let manifestURL = payload.appendingPathComponent(FolderSyncService.manifestFileName)
+        try previous.prefix(previous.count / 2).write(to: manifestURL)
+        try previous.write(to: payload.appendingPathComponent(FolderSyncService.manifestBackupFileName))
+        let unlisted = works.appendingPathComponent("\(UUID().uuidString).epub")
+        try Data("listed only by the manifest that was cut short".utf8).write(to: unlisted)
+        try FolderSyncService.connect(to: folder, defaults: defaults)
+
+        _ = try await FolderSyncService.syncNow(in: context, defaults: defaults)
+
+        let repaired = try KudosBackupContents.decodeManifest(Data(contentsOf: manifestURL))
+        #expect(repaired.works.contains { $0.id == listed.id })
+        #expect(FileManager.default.fileExists(atPath: unlisted.path))
+    }
+
+    /// Whole JSON this build cannot decode is another app version's manifest,
+    /// not damage. It is left as it is and the sync reports the failure.
+    @Test func aManifestThisBuildCannotReadIsNotWrittenOver() async throws {
+        let container = try container()
+        let defaults = try testDefaults()
+        let folder = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        defer { FolderSyncService.disconnect(defaults: defaults) }
+        let payload = folder.appendingPathComponent(FolderSyncService.syncDirectoryName)
+        try FileManager.default.createDirectory(at: payload, withIntermediateDirectories: true)
+        let newer = Data(#"{"version": 99, "exportedAt": "2026-06-01T00:00:00Z", "works": []}"#.utf8)
+        let manifestURL = payload.appendingPathComponent(FolderSyncService.manifestFileName)
+        try newer.write(to: manifestURL)
+        try FolderSyncService.connect(to: folder, defaults: defaults)
+
+        await #expect(throws: (any Error).self) {
+            try await FolderSyncService.syncUp(in: container.mainContext, defaults: defaults)
+        }
+
+        #expect(try Data(contentsOf: manifestURL) == newer)
+    }
+
+    @Test func aListedLowercaseAndroidEPUBIsKeptAndRead() async throws {
+        try await CaseSensitiveFontTestVolume.withFontsDirectory {
+            let container = try container()
+            let context = container.mainContext
+            let defaults = try testDefaults()
+            let folder = Storage.fontsDirectory.appendingPathComponent("SharedSync", isDirectory: true)
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            defer { try? FileManager.default.removeItem(at: folder) }
+            defer { FolderSyncService.disconnect(defaults: defaults) }
+            let work = SavedWork(id: try #require(UUID(uuidString: "abcdabcd-abcd-4bcd-8bcd-abcdabcdabcd")),
+                                 title: "Android copy", author: "Writer")
+            work.hasEPUB = true
+            defer { try? FileManager.default.removeItem(at: work.fileURL) }
+            let contents = try KudosBackupService.makeContents(
+                works: [work], bookmarks: [], fonts: [], readingQueues: [], defaults: defaults
+            )
+            let payload = folder.appendingPathComponent(FolderSyncService.syncDirectoryName)
+            let works = payload.appendingPathComponent(FolderSyncService.worksSubdirectoryName)
+            try FileManager.default.createDirectory(at: works, withIntermediateDirectories: true)
+            let lowercase = works.appendingPathComponent("\(work.id.uuidString.lowercased()).epub")
+            let bytes = try Data(contentsOf: EPUBTests.sampleEPUB)
+            try bytes.write(to: lowercase)
+            try contents.manifestData().write(to: payload.appendingPathComponent("manifest.json"))
+            try FolderSyncService.connect(to: folder, defaults: defaults)
+            _ = try await FolderSyncService.syncDown(in: context, defaults: defaults)
+            let restored = try #require(try context.fetch(FetchDescriptor<SavedWork>()).first)
+            #expect(restored.hasEPUB)
+            #expect(try Data(contentsOf: restored.fileURL) == bytes)
+            _ = try await FolderSyncService.syncUp(in: context, defaults: defaults)
+            #expect(try Data(contentsOf: lowercase) == bytes)
+        }
+    }
+
     /// The welcome cover asking the reader to enable sync kept reappearing on
     /// every launch for anyone who chose their folder in **Settings** rather
     /// than in onboarding: `connect` stored the bookmark, but only
