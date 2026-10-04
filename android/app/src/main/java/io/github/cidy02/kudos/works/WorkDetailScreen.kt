@@ -65,6 +65,7 @@ import io.github.cidy02.kudos.core.model.WorkCollection
 import io.github.cidy02.kudos.core.model.WorkDownloadAction
 import io.github.cidy02.kudos.core.model.WorkDownloadSemantics
 import io.github.cidy02.kudos.core.model.readingProgress
+import io.github.cidy02.kudos.core.strippingHtml
 import io.github.cidy02.kudos.data.preferences.SettingsRepository
 import io.github.cidy02.kudos.home.HomeFacts
 import io.github.cidy02.kudos.library.ReadingQueueRepository
@@ -1777,7 +1778,8 @@ private data class WorkDetailUiState(
     val author: String = local?.author ?: remote?.authorText ?: ""
     val tappableAuthorNames: List<String> =
         resolveTappableAuthorNames(remote?.authors, local?.author)
-    val summary: String = local?.summary ?: remote?.summary ?: ""
+    // iOS shows the library copy's summary when it has one, stripped of the EPUB's HTML.
+    val summary: String = local?.summary?.takeIf { it.isNotEmpty() }?.strippingHtml() ?: remote?.summary ?: ""
     val sourceUrl: String = local?.sourceUrl ?: remote?.workUrl ?: ""
     val ao3WorkId: Long? = WorkTags.ao3WorkIdFromUrl(sourceUrl)
     val fandoms: List<String> = local?.workFandoms?.takeIf { it.isNotEmpty() }
