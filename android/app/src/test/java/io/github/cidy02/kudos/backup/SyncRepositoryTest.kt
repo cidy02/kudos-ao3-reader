@@ -1091,6 +1091,119 @@ class SyncRepositoryTest {
         assertArrayEquals(corrected, readDocument(epubIn(after, WORK_A)!!))
     }
 
+    @Test
+    fun queuePreservationFromAnEarlierBatchDoesNotRejectALaterEpub() = runTest {
+        val corrected = sameLengthVariant(REMOTE_EPUB)
+        seedOlderLocalWork(WORK_A, REMOTE_EPUB)
+        seedOlderLocalWork(WORK_REMOTE, REMOTE_EPUB)
+        val worksDir = seedFolder(
+            remoteBackupWork(WORK_A, "First", hasEpub = true).copy(sourceURL = "",
+                lastModifiedAt = "2026-06-01T00:00:00Z", epubDigest = BackupPaths.sha256(corrected)),
+            remoteBackupWork(WORK_REMOTE, "Second", hasEpub = true).copy(sourceURL = "",
+                lastModifiedAt = "2026-06-01T00:00:00Z", epubDigest = BackupPaths.sha256(corrected)),
+            exportedAt = "2026-06-02T00:00:00Z"
+        )
+        val kudos = requireKudosLibrary()
+        val queue = ReadingQueue(id = ANDROID_ONE, name = "Incoming queue",
+            dateCreated = Instant.parse("2026-06-01T00:00:00Z"))
+        val manifest = BackupValidator.decodeManifest(readDocument(kudos.findFile(BackupPaths.MANIFEST)!!)).copy(
+            readingQueues = listOf(queue.toBackupReadingQueue(emptyList())),
+            readingQueueMemberships = listOf(WORK_A, WORK_REMOTE).map { id ->
+                ReadingQueueMembership(id = id, queueID = queue.id, workID = id,
+                    queuedAt = queue.dateCreated).toBackupReadingQueueMembership()
+            }
+        )
+        writeChild(kudos, BackupPaths.MANIFEST, "application/json", BackupJson.encodeToString(manifest).toByteArray())
+        writeChild(worksDir, BackupPaths.iosEpubAssetIdentifier(WORK_A), "application/epub+zip", corrected)
+        writeChild(worksDir, BackupPaths.iosEpubAssetIdentifier(WORK_REMOTE), "application/epub+zip", corrected)
+        val before = backupRepository.captureLibrarySnapshot()
+        // This is the old per-batch sequence: metadata/membership for the second work
+        // lands with the first file, and normalization preserves the second's old file.
+        val firstBatch = BackupMergeService.merge(before,
+            KudosBackupPackage(manifest, mapOf(WORK_A to corrected)))
+        assertEquals("preserved", firstBatch.snapshot.works.single { it.id == WORK_REMOTE }.epubPreservationStatusRaw)
+        val singlePass = BackupMergeService.merge(before,
+            KudosBackupPackage(manifest, mapOf(WORK_A to corrected, WORK_REMOTE to corrected)))
+        assertArrayEquals(corrected, singlePass.epubFilesToWriteByWorkId[WORK_REMOTE])
+
+        val batched = SyncRepository(context, settingsRepository, backupRepository, workFileStore,
+            fontFileStore, persistenceGate, clock = { clockInstant }, maxEpubBatchBytes = 1)
+        assertTrue(batched.runSync() is SyncResult.Success)
+        assertArrayEquals(corrected, Files.readAllBytes(workFileStore.workEpubPath(WORK_A)))
+        assertArrayEquals(corrected, Files.readAllBytes(workFileStore.workEpubPath(WORK_REMOTE)))
+        assertEquals("preserved", database.workDao().getById(WORK_REMOTE)!!.epubPreservationStatusRaw)
+    }
+
+    @Test
+    fun aFontLibraryOverTheRealAggregateLimitConvergesInTwoSyncs() = runTest {
+        // As in iOS's real-cap test: a loadable OTF with zero padding after its tables.
+        // Nine files at the 4 MiB entry cap exceed the real 32 MiB pass cap by one file.
+        val source = context.assets.open("readium/fonts/OpenDyslexic-Regular.otf").use { it.readBytes() }
+        assertTrue(source.size.toLong() <= BackupLimits.MAX_FONT_ENTRY_BYTES)
+        val font = source.copyOf(BackupLimits.MAX_FONT_ENTRY_BYTES.toInt())
+        val count = (BackupLimits.MAX_TOTAL_FONT_BYTES / font.size).toInt() + 1
+        assertEquals(9, count)
+        val kudos = ensureKudosLibrary()
+        val fontsDir = kudos.createDirectory(BackupPaths.FONTS_DIRECTORY)!!
+        val fonts = (0 until count).map { index ->
+            BackupFont("Font $index", "aggregate-$index.otf", "2026-06-26T12:00:00Z")
+        }
+        writeChild(kudos, BackupPaths.MANIFEST, "application/json", BackupJson.encodeToString(
+            remoteManifest(emptyList(), "2026-06-26T12:00:00Z").copy(fonts = fonts)
+        ).toByteArray())
+        fonts.forEach { writeChild(fontsDir, it.fileName, "font/otf", font) }
+
+        // The default repository has no injected allowance.
+        assertTrue(syncRepository.runSync() is SyncResult.Success)
+        assertEquals(count - 1, database.customFontDao().getAll().size)
+        val written = BackupValidator.decodeManifest(readDocument(kudos.findFile(BackupPaths.MANIFEST)!!))
+        assertEquals(fonts.map { it.fileName }.toSet(), written.fonts.map { it.fileName }.toSet())
+        assertEquals(count, fontsDir.listFiles().size)
+        clockInstant = FIXED_CLOCK.plusSeconds(60)
+        assertTrue(syncRepository.runSync() is SyncResult.Success)
+        assertEquals(count, database.customFontDao().getAll().size)
+        fonts.forEach { assertArrayEquals(font, fontFileStore.readFont(it.fileName)) }
+    }
+
+    @Test
+    fun aConversionRecordArrivingOneSyncAfterItsOriginalIsTaken() = runTest {
+        seedFolderOriginal(WORK_REMOTE, "pdf", ORIGINAL_PDF, record = null)
+        assertTrue(syncRepository.runSync() is SyncResult.Success)
+        assertNull(workFileStore.readConversionRecord(WORK_REMOTE))
+        val originals = requireKudosLibrary().findFile(BackupPaths.ORIGINALS_DIRECTORY)!!
+        // Only the sidecar arrives; the manifest bytes are still our own last write.
+        writeChild(originals, BackupPaths.iosConversionRecordFileName(WORK_REMOTE),
+            "application/json", CONVERSION_RECORD)
+        clockInstant = FIXED_CLOCK.plusSeconds(60)
+        assertTrue(syncRepository.runSync() is SyncResult.Success)
+        assertArrayEquals(CONVERSION_RECORD, workFileStore.readConversionRecord(WORK_REMOTE))
+        assertArrayEquals(ORIGINAL_PDF, workFileStore.readOriginal(WORK_REMOTE)!!.second)
+    }
+
+    @Test
+    fun aConversionRecordBesideADifferentSameSizeOriginalIsNotTaken() = runTest {
+        seedOlderLocalWork(WORK_REMOTE, REMOTE_EPUB)
+        val localOriginal = ORIGINAL_PDF.copyOf().also { it[it.lastIndex] = 'X'.code.toByte() }
+        workFileStore.writeOriginal(WORK_REMOTE, "pdf", localOriginal)
+        seedFolderOriginal(WORK_REMOTE, "pdf", ORIGINAL_PDF, record = CONVERSION_RECORD)
+        assertTrue(syncRepository.runSync() is SyncResult.Success)
+        assertNull(workFileStore.readConversionRecord(WORK_REMOTE))
+        assertArrayEquals(localOriginal, workFileStore.readOriginal(WORK_REMOTE)!!.second)
+    }
+
+    @Test
+    fun aMatchingOriginalImportedHereGainsOnlyTheMissingRecord() = runTest {
+        seedOlderLocalWork(WORK_REMOTE, REMOTE_EPUB)
+        workFileStore.writeOriginal(WORK_REMOTE, "pdf", ORIGINAL_PDF)
+        val path = workFileStore.originalFile(WORK_REMOTE)!!
+        val modified = Files.getLastModifiedTime(path)
+        seedFolderOriginal(WORK_REMOTE, "pdf", ORIGINAL_PDF, record = CONVERSION_RECORD)
+        assertTrue(syncRepository.runSync() is SyncResult.Success)
+        assertArrayEquals(CONVERSION_RECORD, workFileStore.readConversionRecord(WORK_REMOTE))
+        assertArrayEquals(ORIGINAL_PDF, workFileStore.readOriginal(WORK_REMOTE)!!.second)
+        assertEquals(modified, Files.getLastModifiedTime(path))
+    }
+
     /** A library work older than anything the tests put in the folder, holding [epub]. */
     private suspend fun seedOlderLocalWork(id: String, epub: ByteArray) {
         database.workDao().upsert(
