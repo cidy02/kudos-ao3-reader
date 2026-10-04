@@ -25,6 +25,35 @@ object BackupPaths {
     const val WORKS_DIRECTORY = "Works"
     const val FONTS_DIRECTORY = "Fonts"
 
+    /**
+     * iOS `Originals/`: the file a converted import was made from (`<work>.<ext>`) and the
+     * record of its conversion (`<work>.conversion.json`). In a backup archive and in the
+     * sync folder alike.
+     */
+    const val ORIGINALS_DIRECTORY = "Originals"
+    const val CONVERSION_RECORD_SUFFIX = ".conversion.json"
+
+    /** iOS `Storage.originalDocumentURL`: the work's UUID in capitals, then the extension. */
+    fun iosOriginalFileName(workId: String, extension: String): String =
+        "${canonicalUuid(workId, "work.id").uppercase(Locale.ROOT)}.$extension"
+
+    /** iOS `WorkConversionRecord.url`. */
+    fun iosConversionRecordFileName(workId: String): String =
+        "${canonicalUuid(workId, "work.id").uppercase(Locale.ROOT)}$CONVERSION_RECORD_SUFFIX"
+
+    /**
+     * The work an `Originals/` file belongs to (its id, lowercase), and whether the file is the
+     * conversion record. Null for a name iOS would not have written; such a file is ignored,
+     * as iOS's restore ignores it.
+     */
+    fun parseOriginalFileName(fileName: String): Pair<String, Boolean>? {
+        if (!isSafeFontFileName(fileName)) return null
+        val base = fileName.substringBeforeLast('.', fileName)
+        val isRecord = base.endsWith(".conversion")
+        val id = if (isRecord) base.removeSuffix(".conversion") else base
+        return runCatching { UUID.fromString(id).toString() }.getOrNull()?.let { it to isRecord }
+    }
+
     fun canonicalUuid(value: String, field: String = "id"): String {
         return try {
             UUID.fromString(value).toString()

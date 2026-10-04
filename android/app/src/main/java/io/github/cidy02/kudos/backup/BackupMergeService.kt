@@ -440,7 +440,8 @@ object BackupMergeService {
             unknownSignerTombstoneIds = unknownSignerIds,
             adoptedIncomingTombstoneIds = adoptedIncoming
                 .map { BackupPaths.normalizeIdForComparison(it.id) }
-                .toSet()
+                .toSet(),
+            workIdRemap = workIdRemap
         )
     }
 

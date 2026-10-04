@@ -112,18 +112,48 @@ class WorkFileStore(
     suspend fun deleteOriginal(workId: String): Boolean =
         withContext(Dispatchers.IO) { runCatching { deleteOriginalFiles(workId) }.getOrDefault(false) }
 
+    /** The archived original's file, if there is one: for its size and name without reading it. */
+    fun originalFile(workId: String): Path? = runCatching { findOriginal(workId) }.getOrNull()
+
+    /**
+     * iOS `WorkConversionRecord`, `<work>.conversion.json` beside the original: which converter
+     * made the EPUB, and from which file. Android writes none of its own. It keeps the one a
+     * backup or the sync folder brings, byte for byte, and writes it back out, so a library
+     * that passes through Android still has it.
+     */
+    suspend fun readConversionRecord(workId: String): ByteArray? = withContext(Dispatchers.IO) {
+        runCatching {
+            conversionRecordPath(workId).takeIf { Files.isRegularFile(it) }?.let { Files.readAllBytes(it) }
+        }.getOrNull()
+    }
+
+    suspend fun writeConversionRecord(workId: String, bytes: ByteArray): Boolean = withContext(Dispatchers.IO) {
+        runCatching {
+            Files.createDirectories(originalsDirectory)
+            Files.write(conversionRecordPath(workId), bytes)
+        }.isSuccess
+    }
+
     private fun findOriginal(workId: String): Path? {
         val uuid = UUID.fromString(workId).toString()
         if (!Files.isDirectory(originalsDirectory)) return null
+        val record = conversionRecordPath(workId)
         Files.newDirectoryStream(originalsDirectory, "$uuid.*").use { stream ->
-            return stream.firstOrNull { Files.isRegularFile(it) }
+            // The conversion record shares the prefix and is not the original (iOS
+            // `existingOriginalDocumentURL`): rebuilding would try to convert its own bookkeeping.
+            return stream.firstOrNull { Files.isRegularFile(it) && it != record }
         }
     }
 
     private fun deleteOriginalFiles(workId: String): Boolean {
+        // The record describes the original it sits beside, and goes with it.
+        Files.deleteIfExists(conversionRecordPath(workId))
         val existing = findOriginal(workId) ?: return false
         return Files.deleteIfExists(existing)
     }
+
+    private fun conversionRecordPath(workId: String): Path =
+        originalsDirectory.resolve("${UUID.fromString(workId)}${BackupPaths.CONVERSION_RECORD_SUFFIX}").normalize()
 
     private val originalsDirectory: Path
         get() = filesRoot.resolve("originals").normalize()
