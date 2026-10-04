@@ -871,6 +871,85 @@ class SyncRepositoryTest {
         return copy
     }
 
+    @Test
+    fun syncDownSkipsOversizedFontAndRestoresUnrelatedState() = runTest {
+        // iOS's test of the same name: one font over the per-file limit must not stop the sync.
+        val kudos = ensureKudosLibrary()
+        val fontsDir = kudos.createDirectory(BackupPaths.FONTS_DIRECTORY)!!
+        val manifest = remoteManifest(emptyList(), "2026-06-26T12:00:00Z").copy(
+            fonts = listOf(BackupFont("Oversized", "oversized.ttf", "2026-06-26T12:00:00Z")),
+            bookmarks = listOf(
+                BackupBookmark(
+                    title = "Unrelated Bookmark",
+                    urlString = "https://example.com/safe",
+                    dateAdded = "2026-01-01T00:00:00Z",
+                    id = "77777777-7777-4777-8777-777777777777"
+                )
+            )
+        )
+        writeChild(kudos, BackupPaths.MANIFEST, "application/json", BackupJson.encodeToString(manifest).toByteArray())
+        writeChild(
+            fontsDir,
+            "oversized.ttf",
+            "font/ttf",
+            ByteArray(BackupLimits.MAX_FONT_ENTRY_BYTES.toInt() + 1)
+        )
+
+        val result = syncRepository.runSync()
+
+        assertTrue("an oversized font must not abort the sync: $result", result is SyncResult.Success)
+        assertTrue(database.customFontDao().getAll().isEmpty())
+        assertFalse(fontFileStore.fontExists("oversized.ttf"))
+        assertEquals(listOf("Unrelated Bookmark"), database.bookmarkDao().getAll().map { it.title })
+        // Another device's font this one did not take is not this device's to prune.
+        assertNotNull(requireKudosLibrary().findFile(BackupPaths.FONTS_DIRECTORY)!!.findFile("oversized.ttf"))
+    }
+
+    @Test
+    fun aFontLibraryLargerThanOnePassArrivesOverSeveralSyncs() = runTest {
+        // iOS `syncDownConvergesWhenFontLibraryExceedsAggregateCap`: over the allowance is a
+        // reason to take fewer fonts in one pass, not to fail the sync for good.
+        val font = context.assets.open("readium/fonts/OpenDyslexic-Regular.otf").use { it.readBytes() }
+        val oneFontAtATime = SyncRepository(
+            context = context,
+            settingsRepository = settingsRepository,
+            backupRepository = backupRepository,
+            workFileStore = workFileStore,
+            fontFileStore = fontFileStore,
+            persistenceGate = persistenceGate,
+            clock = { clockInstant },
+            maxFontPassBytes = font.size.toLong()
+        )
+        val kudos = ensureKudosLibrary()
+        val fontsDir = kudos.createDirectory(BackupPaths.FONTS_DIRECTORY)!!
+        val manifest = BackupJson.encodeToString(
+            remoteManifest(emptyList(), "2026-06-26T12:00:00Z").copy(
+                fonts = listOf(
+                    BackupFont("First", "first.otf", "2026-06-26T12:00:00Z"),
+                    BackupFont("Second", "second.otf", "2026-06-26T12:00:00Z")
+                )
+            )
+        ).toByteArray()
+        writeChild(kudos, BackupPaths.MANIFEST, "application/json", manifest)
+        writeChild(fontsDir, "first.otf", "font/otf", font)
+        writeChild(fontsDir, "second.otf", "font/otf", font)
+
+        assertTrue(oneFontAtATime.runSync() is SyncResult.Success)
+        assertEquals(listOf("first.otf"), database.customFontDao().getAll().map { it.fileName })
+        // The font left for later is still in the folder.
+        assertNotNull(requireKudosLibrary().findFile(BackupPaths.FONTS_DIRECTORY)!!.findFile("second.otf"))
+
+        // The device that owns both fonts syncs again and lists them again.
+        writeChild(requireKudosLibrary(), BackupPaths.MANIFEST, "application/json", manifest)
+        clockInstant = FIXED_CLOCK.plusSeconds(60)
+        assertTrue(oneFontAtATime.runSync() is SyncResult.Success)
+
+        assertEquals(
+            listOf("first.otf", "second.otf"),
+            database.customFontDao().getAll().map { it.fileName }.sorted()
+        )
+    }
+
     // The sync folder across the two apps (iOS `CrossPlatformFolderSyncTests`). The backup
     // goldens prove each side reads the other's manifest; these prove each side finds the
     // other's files, and leaves them in place.

@@ -252,3 +252,10 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   absent is not a clear, unless the incoming locator moved by at least the reader's own delta.
   Android now does the same. Reverse: `applyProgressLww` and `keylessLocatorMoved` in
   `backup/BackupMergeService.kt`.
+- **2026-10-04 · A font over the limits is skipped; it no longer fails the sync.** Android threw
+  when a font in the sync folder was over 4 MB, or when the folder's fonts added up to more than
+  32 MB, and the sync failed every time after. iOS skips such a font, does not count fonts the
+  device already holds, and prunes nothing while a font is still outstanding
+  (`readChangedRemoteAssets`). Android now does the same. A file that is not a font at all still
+  fails the sync, as on iOS. Reverse: the font loop in `importManifest`
+  (`backup/SyncRepository.kt`).

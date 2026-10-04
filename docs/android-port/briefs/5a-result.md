@@ -174,6 +174,27 @@ never been read; it now has the local side read later, which is what it meant.
 Already the same and already tested: an explicit null is written on export, and a manifest
 without the key decodes to "absent".
 
+## Part 7: fonts that stopped the whole sync
+
+The limits are the same on both sides: 4 MB a font, 32 MB of fonts in one pass. What happens at
+them was not:
+
+| Case | iOS | Android before | Now |
+|---|---|---|---|
+| A font in the folder is over 4 MB, or cannot be read | skipped; everything else syncs | **the sync failed**, every time, until the font was removed | skipped |
+| The folder's fonts add up to more than 32 MB | the pass takes what fits; fonts already installed do not count, so the rest arrive on later syncs | **the sync failed** ("Total font size exceeds limit"), counting every font every time | as iOS |
+| A font was left for a later pass | nothing is pruned from the folder that run | (the sync had already failed) | nothing is pruned |
+| A font that is not a font at all | the sync fails with "not a valid Kudos backup" | fails with "Invalid font file" | unchanged, and the same on both |
+
+An iPhone user with a large font collection could never have added an Android device to the
+folder. The last row but one matters because the manifest this device writes next does not
+list a font it never installed, so a prune by that manifest would delete the other device's
+font.
+
+Tests in `SyncRepositoryTest`: `syncDownSkipsOversizedFontAndRestoresUnrelatedState` (iOS's name)
+and `aFontLibraryLargerThanOnePassArrivesOverSeveralSyncs` (iOS
+`syncDownConvergesWhenFontLibraryExceedsAggregateCap`).
+
 ## The two apps' own code, on each other's folder (2026-10-04)
 
 The backup has golden archives written by each app and read by the other. The sync folder had
