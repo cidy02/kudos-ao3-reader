@@ -3,7 +3,10 @@ package io.github.cidy02.kudos.backup
 import io.github.cidy02.kudos.core.model.SavedWork
 import io.github.cidy02.kudos.works.EpubImportMetadata
 import io.github.cidy02.kudos.works.converters.EpubBuilder
+import java.io.ByteArrayOutputStream
 import java.time.Instant
+import java.util.zip.ZipEntry
+import java.util.zip.ZipOutputStream
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -38,6 +41,38 @@ class IncomingEpubGateTest {
         // Cut off part-way, as a copy still being uploaded is: the ZIP has no end record.
         assertFalse(EpubImportMetadata.isReadablePackage(incoming.copyOf(incoming.size - 40)))
     }
+
+    @Test
+    fun thePackageIsTheOneTheContainerNames() {
+        val opf = """<package><manifest><item id="c" href="c.xhtml"/></manifest>""" +
+            """<spine><itemref idref="c"/></spine></package>"""
+        fun container(path: String) =
+            """<container><rootfiles><rootfile full-path="$path"/></rootfiles></container>"""
+        // iOS accepts a package document under whatever name the container gives.
+        assertTrue(
+            EpubImportMetadata.isReadablePackage(
+                zip("META-INF/container.xml" to container("OPS/package.xml"), "OPS/package.xml" to opf)
+            )
+        )
+        // A ZIP that holds a stray package document and no container is not an EPUB.
+        assertFalse(EpubImportMetadata.isReadablePackage(zip("stray.opf" to opf)))
+        // Nor is one whose container names a package that is not there.
+        assertFalse(
+            EpubImportMetadata.isReadablePackage(
+                zip("META-INF/container.xml" to container("gone.opf"), "stray.opf" to opf)
+            )
+        )
+    }
+
+    private fun zip(vararg entries: Pair<String, String>): ByteArray = ByteArrayOutputStream().also { bytes ->
+        ZipOutputStream(bytes).use { zip ->
+            entries.forEach { (name, text) ->
+                zip.putNextEntry(ZipEntry(name))
+                zip.write(text.toByteArray())
+                zip.closeEntry()
+            }
+        }
+    }.toByteArray()
 
     @Test
     fun aNewerArchiveReplacesAnOrdinaryWorksEpub() {

@@ -5,6 +5,9 @@ import io.github.cidy02.kudos.files.TextDecoding
 import io.github.cidy02.kudos.network.ao3.search.AO3Language
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
+import java.io.File
+import java.io.InputStream
+import java.util.zip.ZipFile
 import java.util.zip.ZipInputStream
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
@@ -191,17 +194,34 @@ private object EpubMetadataReader {
         )
     }.getOrDefault(EpubImportMetadata())
 
-    fun isReadablePackage(bytes: ByteArray): Boolean = hasZipEnd(bytes) &&
-        runCatching { readOpf(bytes)?.let(::parseOpf)?.localChapterCount != null }.getOrDefault(false)
-
-    /** A complete ZIP ends with its end-of-central-directory record; a cut-off copy has none. */
-    private fun hasZipEnd(bytes: ByteArray): Boolean {
-        val last = bytes.size - ZIP_END_BYTES
-        return (last downTo maxOf(0, last - MAX_ZIP_COMMENT_BYTES)).any { i ->
-            bytes[i] == 0x50.toByte() && bytes[i + 1] == 0x4B.toByte() &&
-                bytes[i + 2] == 0x05.toByte() && bytes[i + 3] == 0x06.toByte()
+    /**
+     * iOS `EPUBDocument.inspectPackage`: the package document `META-INF/container.xml` names,
+     * read through the ZIP's own directory, has a spine item its manifest lists.
+     *
+     * This used to take the first `.opf` it met while streaming the entries, behind a search
+     * for the bytes that end a ZIP. A package document under another name was refused where
+     * iOS accepts it, and a ZIP that merely held a stray `.opf` passed, and could replace a
+     * good local EPUB.
+     */
+    fun isReadablePackage(bytes: ByteArray): Boolean = runCatching {
+        // `ZipFile` reads the central directory, as iOS's reader does, and needs a file.
+        val file = File.createTempFile("incoming", ".epub")
+        try {
+            file.writeBytes(bytes)
+            ZipFile(file).use { zip ->
+                fun text(name: String) = zip.getEntry(name)
+                    ?.let { zip.getInputStream(it).use { input -> input.readBounded(MAX_ENTRY_BYTES) } }
+                    ?.let(TextDecoding::decode)
+                val packagePath = text("META-INF/container.xml")
+                    ?.let { Jsoup.parse(it, "", Parser.xmlParser()) }
+                    ?.getAllElements()?.firstOrNull { it.localName() == "rootfile" }
+                    ?.attr("full-path")
+                packagePath?.let(::text)?.let(::parseOpf)?.localChapterCount != null
+            }
+        } finally {
+            file.delete()
         }
-    }
+    }.getOrDefault(false)
 
     private fun readOpf(bytes: ByteArray): String? = runCatching {
         ZipInputStream(ByteArrayInputStream(bytes)).use { zip ->
@@ -385,7 +405,7 @@ private object EpubMetadataReader {
     private fun isMetadataCandidate(name: String): Boolean =
         name.substringAfterLast('.', "").lowercase() in METADATA_EXTENSIONS
 
-    private fun ZipInputStream.readBounded(limit: Int): ByteArray? {
+    private fun InputStream.readBounded(limit: Int): ByteArray? {
         val output = ByteArrayOutputStream()
         val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
         var total = 0
@@ -404,8 +424,6 @@ private object EpubMetadataReader {
 
     // ponytail: bounded header walk; raise only if a legitimate 4,000+ member EPUB appears.
     private const val MAX_ENTRIES = 4_096
-    private const val ZIP_END_BYTES = 22
-    private const val MAX_ZIP_COMMENT_BYTES = 0xFFFF
     private const val MAX_ENTRY_BYTES = 2 * 1024 * 1024
     private const val MAX_TOTAL_METADATA_BYTES = 8 * 1024 * 1024
     private val METADATA_EXTENSIONS = setOf("opf", "xhtml", "html", "htm", "xml")
