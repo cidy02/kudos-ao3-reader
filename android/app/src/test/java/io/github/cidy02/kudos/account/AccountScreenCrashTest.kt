@@ -34,9 +34,7 @@ class AccountScreenCrashTest {
                 inboxRepository = container.inboxRepository,
                 commentRepository = container.commentRepository,
                 onLogin = {},
-                onOpenList = {},
-                onOpenBackup = {},
-                onOpenSettings = {}
+                onOpenList = {}
             )
         }
         

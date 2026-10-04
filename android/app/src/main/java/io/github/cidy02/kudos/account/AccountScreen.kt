@@ -135,6 +135,7 @@ import io.github.cidy02.kudos.auth.AO3AuthState
 import io.github.cidy02.kudos.auth.AO3SessionHealth
 import io.github.cidy02.kudos.network.ao3.account.AO3Collection
 import io.github.cidy02.kudos.network.ao3.search.AO3WorkSummary
+import io.github.cidy02.kudos.ui.components.LogOutConfirmation
 import io.github.cidy02.kudos.ui.components.SensitiveWorkRow
 import io.github.cidy02.kudos.ui.components.EmptyStateCard
 import io.github.cidy02.kudos.ui.components.ErrorStateCard
@@ -165,15 +166,8 @@ fun AccountScreen(
     workRepository: WorkRepository,
     onLogin: () -> Unit,
     onOpenList: (AccountListType) -> Unit,
-    onOpenBackup: () -> Unit,
-    onOpenSettings: () -> Unit,
-    onOpenCollections: () -> Unit = {},
     onOpenAO3Collections: () -> Unit = {},
     onOpenDashboard: () -> Unit = {},
-    onOpenLocalHistory: () -> Unit = {},
-    onOpenLocalFavorites: () -> Unit = {},
-    onOpenAbout: () -> Unit = {},
-    onOpenPrivacy: () -> Unit = {},
     onOpenWeb: (String) -> Unit = {},
     onOpenWork: (AO3WorkSummary) -> Unit = {},
     onOpenCollection: (AO3Collection) -> Unit = {},
@@ -215,13 +209,6 @@ fun AccountScreen(
                 onLogin = onLogin,
                 onLogout = viewModel::logout,
                 onVerifySession = viewModel::verifySession,
-                onOpenSettings = onOpenSettings,
-                onOpenAbout = onOpenAbout,
-                onOpenPrivacy = onOpenPrivacy,
-                onOpenBackup = onOpenBackup,
-                onOpenLocalHistory = onOpenLocalHistory,
-                onOpenLocalFavorites = onOpenLocalFavorites,
-                onOpenCollections = onOpenCollections,
                 onOpenAuthorProfile = { onOpenWeb("native:profile") },
                 onOpenWeb = onOpenWeb
             )
@@ -390,13 +377,6 @@ private fun AccountProfileHeader(
     onLogin: () -> Unit,
     onLogout: () -> Unit,
     onVerifySession: () -> Unit,
-    onOpenSettings: () -> Unit,
-    onOpenAbout: () -> Unit,
-    onOpenPrivacy: () -> Unit,
-    onOpenBackup: () -> Unit,
-    onOpenLocalHistory: () -> Unit,
-    onOpenLocalFavorites: () -> Unit,
-    onOpenCollections: () -> Unit,
     onOpenAuthorProfile: () -> Unit = {},
     onOpenWeb: (String) -> Unit = {}
 ) {
@@ -408,32 +388,11 @@ private fun AccountProfileHeader(
             pseuds = pseuds,
             onOpenAuthorProfile = onOpenAuthorProfile,
             onVerifySession = onVerifySession,
-            onOpenSettings = onOpenSettings,
-            onOpenAbout = onOpenAbout,
-            onOpenPrivacy = onOpenPrivacy,
-            onOpenBackup = onOpenBackup,
-            onOpenLocalHistory = onOpenLocalHistory,
-            onOpenLocalFavorites = onOpenLocalFavorites,
-            onOpenCollections = onOpenCollections,
             onLogout = onLogout,
             onOpenWeb = onOpenWeb
         )
     } else {
-        AccountSignedOutHeader(
-            authState = authState,
-            sessionHealth = sessionHealth,
-            onLogin = onLogin,
-            onVerifySession = onVerifySession,
-            onOpenSettings = onOpenSettings,
-            onOpenAbout = onOpenAbout,
-            onOpenPrivacy = onOpenPrivacy,
-            onOpenBackup = onOpenBackup,
-            onOpenLocalHistory = onOpenLocalHistory,
-            onOpenLocalFavorites = onOpenLocalFavorites,
-            onOpenCollections = onOpenCollections,
-            onLogout = onLogout,
-            onOpenWeb = onOpenWeb
-        )
+        AccountSignedOutHeader(authState = authState, onLogin = onLogin)
     }
 }
 
@@ -445,13 +404,6 @@ private fun AccountSignedInHeader(
     pseuds: List<io.github.cidy02.kudos.network.ao3.author.AO3AuthorPseud>,
     onOpenAuthorProfile: () -> Unit,
     onVerifySession: () -> Unit,
-    onOpenSettings: () -> Unit,
-    onOpenAbout: () -> Unit,
-    onOpenPrivacy: () -> Unit,
-    onOpenBackup: () -> Unit,
-    onOpenLocalHistory: () -> Unit,
-    onOpenLocalFavorites: () -> Unit,
-    onOpenCollections: () -> Unit,
     onLogout: () -> Unit,
     onOpenWeb: (String) -> Unit
 ) {
@@ -592,17 +544,9 @@ private fun AccountSignedInHeader(
                     AccountOverflowDropdownMenu(
                         expanded = menuOpen,
                         onDismissRequest = { menuOpen = false },
-                        isLoggedIn = true,
                         sessionHealth = sessionHealth,
                         username = username,
                         onVerifySession = onVerifySession,
-                        onOpenSettings = onOpenSettings,
-                        onOpenAbout = onOpenAbout,
-                        onOpenPrivacy = onOpenPrivacy,
-                        onOpenBackup = onOpenBackup,
-                        onOpenLocalHistory = onOpenLocalHistory,
-                        onOpenLocalFavorites = onOpenLocalFavorites,
-                        onOpenCollections = onOpenCollections,
                         onLogout = onLogout,
                         onOpenWeb = onOpenWeb
                     )
@@ -615,21 +559,9 @@ private fun AccountSignedInHeader(
 @Composable
 private fun AccountSignedOutHeader(
     authState: AO3AuthState,
-    sessionHealth: AO3SessionHealth,
     onLogin: () -> Unit,
-    onVerifySession: () -> Unit,
-    onOpenSettings: () -> Unit,
-    onOpenAbout: () -> Unit,
-    onOpenPrivacy: () -> Unit,
-    onOpenBackup: () -> Unit,
-    onOpenLocalHistory: () -> Unit,
-    onOpenLocalFavorites: () -> Unit,
-    onOpenCollections: () -> Unit,
-    onLogout: () -> Unit,
-    onOpenWeb: (String) -> Unit
 ) {
     val tokens = LocalKudosTokens.current
-    var menuOpen by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
@@ -664,40 +596,6 @@ private fun AccountSignedOutHeader(
                 maxLines = 2
             )
 
-            Box {
-                Box(
-                    modifier = Modifier
-                        .size(width = 36.dp, height = 30.dp)
-                        .clip(CircleShape)
-                        .background(tokens.glassFill(0.12))
-                        .clickable { menuOpen = true },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Outlined.MoreHoriz,
-                        contentDescription = "Account menu",
-                        tint = tokens.primaryInk,
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
-                AccountOverflowDropdownMenu(
-                    expanded = menuOpen,
-                    onDismissRequest = { menuOpen = false },
-                    isLoggedIn = false,
-                    sessionHealth = sessionHealth,
-                    username = null,
-                    onVerifySession = onVerifySession,
-                    onOpenSettings = onOpenSettings,
-                    onOpenAbout = onOpenAbout,
-                    onOpenPrivacy = onOpenPrivacy,
-                    onOpenBackup = onOpenBackup,
-                    onOpenLocalHistory = onOpenLocalHistory,
-                    onOpenLocalFavorites = onOpenLocalFavorites,
-                    onOpenCollections = onOpenCollections,
-                    onLogout = onLogout,
-                    onOpenWeb = onOpenWeb
-                )
-            }
         }
 
         Text(
@@ -739,132 +637,78 @@ private fun AccountSignedOutHeader(
     }
 }
 
+/** iOS's account menu (`accountMenu`): Verify Session, Open on AO3, Log Out. Log Out asks first. */
 @Composable
 private fun AccountOverflowDropdownMenu(
     expanded: Boolean,
     onDismissRequest: () -> Unit,
-    isLoggedIn: Boolean,
     sessionHealth: AO3SessionHealth,
-    username: String?,
+    username: String,
     onVerifySession: () -> Unit,
-    onOpenSettings: () -> Unit,
-    onOpenAbout: () -> Unit,
-    onOpenPrivacy: () -> Unit,
-    onOpenBackup: () -> Unit,
-    onOpenLocalHistory: () -> Unit,
-    onOpenLocalFavorites: () -> Unit,
-    onOpenCollections: () -> Unit,
     onLogout: () -> Unit,
     onOpenWeb: (String) -> Unit
 ) {
+    var confirmingLogOut by remember { mutableStateOf(false) }
     DropdownMenu(expanded = expanded, onDismissRequest = onDismissRequest) {
-        if (isLoggedIn) {
-            DropdownMenuItem(
-                text = {
-                    Text(if (sessionHealth.isChecking) "Checking…" else "Verify Session")
-                },
-                leadingIcon = {
-                    if (sessionHealth.isChecking) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(18.dp),
-                            strokeWidth = 2.dp
-                        )
-                    } else {
-                        Icon(
-                            imageVector = Icons.Outlined.Refresh,
-                            contentDescription = null
-                        )
-                    }
-                },
-                enabled = !sessionHealth.isChecking,
-                onClick = {
-                    onDismissRequest()
-                    onVerifySession()
-                }
-            )
-            if (username != null) {
-                DropdownMenuItem(
-                    text = { Text("Open on AO3") },
-                    leadingIcon = {
-                        Icon(Icons.Outlined.Public, contentDescription = null)
-                    },
-                    onClick = {
-                        onDismissRequest()
-                        onOpenWeb("https://archiveofourown.org/users/$username")
-                    }
-                )
-            }
-            HorizontalDivider()
-        }
         DropdownMenuItem(
-            text = { Text("Settings") },
-            onClick = {
-                onDismissRequest()
-                onOpenSettings()
-            }
-        )
-        DropdownMenuItem(
-            text = { Text("Privacy & Local Data") },
-            onClick = {
-                onDismissRequest()
-                onOpenPrivacy()
-            }
-        )
-        DropdownMenuItem(
-            text = { Text("Backup") },
-            onClick = {
-                onDismissRequest()
-                onOpenBackup()
-            }
-        )
-        DropdownMenuItem(
-            text = { Text("Local Reading History") },
-            onClick = {
-                onDismissRequest()
-                onOpenLocalHistory()
-            }
-        )
-        DropdownMenuItem(
-            text = { Text("Favorites") },
-            onClick = {
-                onDismissRequest()
-                onOpenLocalFavorites()
-            }
-        )
-        DropdownMenuItem(
-            text = { Text("Local Collections") },
-            onClick = {
-                onDismissRequest()
-                onOpenCollections()
-            }
-        )
-        DropdownMenuItem(
-            text = { Text("About Kudos") },
-            onClick = {
-                onDismissRequest()
-                onOpenAbout()
-            }
-        )
-        if (isLoggedIn) {
-            HorizontalDivider()
-            DropdownMenuItem(
-                text = {
-                    Text("Log Out", color = MaterialTheme.colorScheme.error)
-                },
-                leadingIcon = {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Outlined.Logout,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.error
+            text = {
+                Text(if (sessionHealth.isChecking) "Checking…" else "Verify Session")
+            },
+            leadingIcon = {
+                if (sessionHealth.isChecking) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(18.dp),
+                        strokeWidth = 2.dp
                     )
-                },
-                onClick = {
-                    onDismissRequest()
-                    onLogout()
+                } else {
+                    Icon(
+                        imageVector = Icons.Outlined.Refresh,
+                        contentDescription = null
+                    )
                 }
-            )
-        }
+            },
+            enabled = !sessionHealth.isChecking,
+            onClick = {
+                onDismissRequest()
+                onVerifySession()
+            }
+        )
+        DropdownMenuItem(
+            text = { Text("Open on AO3") },
+            leadingIcon = {
+                Icon(Icons.Outlined.Public, contentDescription = null)
+            },
+            onClick = {
+                onDismissRequest()
+                onOpenWeb("https://archiveofourown.org/users/$username")
+            }
+        )
+        HorizontalDivider()
+        DropdownMenuItem(
+            text = {
+                Text("Log Out", color = MaterialTheme.colorScheme.error)
+            },
+            leadingIcon = {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Outlined.Logout,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.error
+                )
+            },
+            onClick = {
+                onDismissRequest()
+                confirmingLogOut = true
+            }
+        )
     }
+    LogOutConfirmation(
+        show = confirmingLogOut,
+        onConfirm = {
+            confirmingLogOut = false
+            onLogout()
+        },
+        onDismissRequest = { confirmingLogOut = false }
+    )
 }
 
 @Composable

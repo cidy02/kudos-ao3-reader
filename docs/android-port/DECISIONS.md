@@ -170,3 +170,14 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   - **Not changed, for the owner** (`OWNER-DECISIONS-ANDROID.md`): the default accent is hard to
     read on dark chrome on both platforms.
   Reverse: each is one commit on `android/redesign-parity`, dated 2026-10-03 after 23:30.
+- **2026-10-03 · The Account header's menu is iOS's three items, and Log Out asks first.** Android's
+  "…" menu also held Settings, Privacy & Local Data, Backup, Local Reading History, Favorites, Local
+  Collections and About Kudos, and it showed on the signed-out card too. iOS's menu
+  (`AccountComponents.accountMenu`) is Verify Session, Open on AO3 and Log Out, and its signed-out
+  card has no menu. Android now matches. Nothing became unreachable that iOS offers: Settings is
+  the gear; Privacy, Backup and About are inside Settings; History, Favorites and Collections are
+  in the Library. Log Out shows iOS's confirmation ("Log out of AO3?") in this menu and in
+  Settings > AO3 Account; before, one tap logged out.
+  - Left in place but no longer reachable: `account/LocalLibraryListsScreen.kt` (routes
+    `local-history` and `local-favorites`), an old Material list.
+  Reverse: `AccountOverflowDropdownMenu` and its callers in `account/AccountScreen.kt`.
