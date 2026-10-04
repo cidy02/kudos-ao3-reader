@@ -199,9 +199,10 @@ fun MainScaffold(
     }
     val authState by container.authRepository.state.collectAsState()
     val scopePalette = io.github.cidy02.kudos.ui.subject.LocalSubjectPalette.current
+    val heroPalette = washHue?.let { io.github.cidy02.kudos.ui.subject.SubjectPalette.fromHue(it, tokens.theme) }
     val washModifier = when {
-        washHue != null ->
-            Modifier.subjectScreenWash(io.github.cidy02.kudos.ui.subject.SubjectPalette.fromHue(washHue, tokens.theme))
+        heroPalette != null ->
+            Modifier.subjectScreenWash(heroPalette)
         currentRoute == Routes.Account && authState is io.github.cidy02.kudos.auth.AO3AuthState.SignedIn ->
             Modifier.subjectScreenWash(scopePalette)
         else -> Modifier
@@ -230,18 +231,26 @@ fun MainScaffold(
                     .fillMaxWidth()
                     .padding(top = topPad, bottom = bottomPad)
             ) {
+                // Under a hero wash the page's controls take the hero's colour too, as iOS's
+                // `heroWash` does through `screenTint` (owner, 2026-10-03). The shell's own
+                // chrome and tab bar sit outside this and keep the app accent, as on iOS.
+                val scheme = MaterialTheme.colorScheme
                 CompositionLocalProvider(
                     LocalShellOverlayState provides overlay,
                     LocalPushedShellChrome provides pushedChrome,
-                    LocalSearchExit provides { navController.navigateShellRoot(searchReturnTab) }
+                    LocalSearchExit provides { navController.navigateShellRoot(searchReturnTab) },
+                    LocalKudosTokens provides (heroPalette?.let { tokens.copy(accent = it.tint) } ?: tokens),
+                    io.github.cidy02.kudos.ui.subject.LocalSubjectPalette provides (heroPalette ?: scopePalette)
                 ) {
-                    AppNavHost(
-                        container = container,
-                        navController = navController,
-                        modifier = Modifier.fillMaxSize(),
-                        shellChrome = homeChrome,
-                        libraryChrome = libraryChrome
-                    )
+                    MaterialTheme(colorScheme = heroPalette?.let { scheme.copy(primary = it.tint) } ?: scheme) {
+                        AppNavHost(
+                            container = container,
+                            navController = navController,
+                            modifier = Modifier.fillMaxSize(),
+                            shellChrome = homeChrome,
+                            libraryChrome = libraryChrome
+                        )
+                    }
                 }
             }
         }
