@@ -54,4 +54,8 @@ own copies and uploads them again.)
 - **B.** Leave iOS as it is, and tell Android users to update and sync before adding an iPhone to
   the folder.
 
+**Checked with iOS's own code (2026-10-04):** a folder written by today's Android is read by iOS
+in full (`CrossPlatformFolderSyncTests`). The same folder with the files renamed to lowercase,
+as the released builds wrote them, reaches iOS **without its EPUBs**.
+
 Until answered: iOS is unchanged. Details: `briefs/5a-result.md`.
