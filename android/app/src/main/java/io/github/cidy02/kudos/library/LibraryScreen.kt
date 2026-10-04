@@ -453,159 +453,30 @@ fun LibraryScreen(
     }
 
     addToQueueWorkId?.let { workId ->
-        AlertDialog(
-            onDismissRequest = { addToQueueWorkId = null },
-            title = { Text("Add to Queue") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    if (state.readingQueues.isEmpty()) {
-                        Text(
-                            "No queues yet. Create one from Reading Queues.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    } else {
-                        state.readingQueues.forEach { queue ->
-                            TextButton(
-                                onClick = {
-                                    addToQueueWorkId = null
-                                    viewModel.addToQueue(workId, queue.id)
-                                },
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Text(queue.name, modifier = Modifier.fillMaxWidth())
-                            }
-                        }
-                    }
-                }
+        AddToQueueDialog(
+            queues = state.readingQueues,
+            onAdd = { queueId ->
+                addToQueueWorkId = null
+                viewModel.addToQueue(workId, queueId)
             },
-            confirmButton = {
-                TextButton(onClick = { addToQueueWorkId = null }) { Text("Close") }
+            onManageQueues = {
+                addToQueueWorkId = null
+                onOpenReadingQueues()
             },
-            dismissButton = {
-                TextButton(
-                    onClick = {
-                        addToQueueWorkId = null
-                        onOpenReadingQueues()
-                    }
-                ) { Text("Manage queues") }
-            }
+            onDismiss = { addToQueueWorkId = null }
         )
     }
 
     addToCollectionWorkId?.let { workId ->
-        // Checklist of existing shelves + create-new (iOS AddToCollectionView).
-        // Membership is tracked locally because Library snapshot only re-emits when
-        // the works Flow changes, not on cross-ref-only membership toggles.
-        var newName by remember(workId) { mutableStateOf("") }
-        var memberIds by remember(workId) { mutableStateOf<Set<String>>(emptySet()) }
-        var membershipLoaded by remember(workId) { mutableStateOf(false) }
-        LaunchedEffect(workId) {
-            membershipLoaded = false
-            memberIds = runCatching {
-                workRepository.collectionsForWork(workId).map { it.id }.toSet()
-            }.getOrDefault(emptySet())
-            membershipLoaded = true
-        }
-        AlertDialog(
-            onDismissRequest = { addToCollectionWorkId = null },
-            title = { Text("Add to Collection") },
-            text = {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(max = 420.dp)
-                        .verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        OutlinedTextField(
-                            value = newName,
-                            onValueChange = { newName = it },
-                            label = { Text("New collection") },
-                            singleLine = true,
-                            modifier = Modifier.weight(1f)
-                        )
-                        TextButton(
-                            enabled = newName.trim().isNotEmpty(),
-                            onClick = {
-                                val name = newName.trim()
-                                if (name.isEmpty()) return@TextButton
-                                newName = ""
-                                // Create-or-match by name and attach; update local
-                                // checklist from the returned membership list.
-                                scope.launch {
-                                    val updated = runCatching {
-                                        workRepository.addToCollection(workId, name)
-                                    }.getOrDefault(emptyList())
-                                    memberIds = updated.map { it.id }.toSet()
-                                }
-                            }
-                        ) { Text("Add") }
-                    }
-                    if (state.collections.isEmpty()) {
-                        Text(
-                            "No collections yet. Create one above to start grouping works.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    } else {
-                        Text(
-                            text = "Collections",
-                            style = MaterialTheme.typography.labelLarge,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        state.collections
-                            .sortedBy { it.name.lowercase() }
-                            .forEach { collection ->
-                                val isMember = collection.id in memberIds
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clickable(enabled = membershipLoaded) {
-                                            val next = !isMember
-                                            memberIds = if (next) {
-                                                memberIds + collection.id
-                                            } else {
-                                                memberIds - collection.id
-                                            }
-                                            viewModel.setCollectionMembership(
-                                                workId,
-                                                collection.id,
-                                                member = next
-                                            )
-                                        }
-                                        .padding(vertical = 2.dp),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Checkbox(
-                                        checked = isMember,
-                                        onCheckedChange = null,
-                                        enabled = membershipLoaded
-                                    )
-                                    Text(
-                                        text = collection.name,
-                                        style = MaterialTheme.typography.bodyLarge,
-                                        modifier = Modifier.weight(1f)
-                                    )
-                                    Text(
-                                        text = collection.workIds.size.toString(),
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                            }
-                    }
-                }
+        AddToCollectionDialog(
+            workId = workId,
+            collections = state.collections,
+            workRepository = workRepository,
+            scope = scope,
+            onSetMembership = { collectionId, member ->
+                viewModel.setCollectionMembership(workId, collectionId, member)
             },
-            confirmButton = {
-                TextButton(onClick = { addToCollectionWorkId = null }) { Text("Done") }
-            }
+            onDismiss = { addToCollectionWorkId = null }
         )
     }
 

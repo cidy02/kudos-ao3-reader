@@ -470,14 +470,7 @@ class LibraryViewModel(
     suspend fun refresh() {
         val queues = queueRepository ?: return
         runCatching {
-            queues.ensureSavedForLaterQueue()
-            queues.listQueues().map { queue ->
-                LibraryQueuePreview(
-                    id = queue.id,
-                    name = queue.displayName,
-                    workCount = queues.listWorks(queue.id).size
-                )
-            }
+            queues.queuePreviews()
         }.onSuccess { readingQueues.value = it }
         deletedQueueCount.value = runCatching { queues.listRecentlyDeletedQueues().size }.getOrDefault(0)
     }
@@ -486,14 +479,7 @@ class LibraryViewModel(
         val queues = queueRepository ?: return
         viewModelScope.launch {
             runCatching {
-                queues.ensureSavedForLaterQueue()
-                queues.listQueues().map { queue ->
-                    LibraryQueuePreview(
-                        id = queue.id,
-                        name = queue.displayName,
-                        workCount = queues.listWorks(queue.id).size
-                    )
-                }
+                queues.queuePreviews()
             }.onSuccess { readingQueues.value = it }
             deletedQueueCount.value = runCatching {
                 queues.listRecentlyDeletedQueues().size
