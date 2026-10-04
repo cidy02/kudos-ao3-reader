@@ -126,4 +126,12 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   route, but `AO3CollectionDetailScreen` was never written, so it doesn't compile. The work is
   staged in `~/kudos-agent-gemini2` (the `Routes.kt` conflict with the Inbox route resolved) with
   brief 3m-detail-2 for the missing screen. Gemini ran out of quota before starting it.
+- **2026-10-03 · Owner: Home and Library take their accent from the hero too, not only the wash.**
+  "Home/Library are not deriving accent color from the wash". The first version coloured only the
+  gradient and kept the page's controls on the app accent; that was Claude's choice and is reversed.
+  - iOS: `HeroWash` now sets the screen tint (polish `ec14fd04`, integrate `58e24389`).
+  - Android: `MainScaffold` gives the page tokens, subject palette and Material `primary` carrying
+    the hero's tint while the wash shows.
+  - On both, the toolbar or shell chrome and the tab bar sit outside and keep the app accent.
+  Reverse: `HeroWash.swift`; the provider around `AppNavHost` in `MainScaffold.kt`.
 
