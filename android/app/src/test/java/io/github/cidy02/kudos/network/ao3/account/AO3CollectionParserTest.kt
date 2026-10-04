@@ -16,7 +16,7 @@ class AO3CollectionParserTest {
         assertEquals("Winter Exchange 2026", show.collection.title)
         assertEquals(234, show.collection.worksCount)
         assertEquals(18, show.collection.bookmarksCount)
-        assertTrue(show.collection.worksCount > 0)
+        assertTrue((show.collection.worksCount ?: 0) > 0)
         assertTrue(show.collection.maintainerIdentities.isNotEmpty())
         assertEquals("AO3_Reader", show.collection.maintainerIdentities.first().displayName)
     }
