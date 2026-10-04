@@ -10,6 +10,7 @@ import io.github.cidy02.kudos.core.model.SavedWork
 import io.github.cidy02.kudos.core.model.WorkCollection
 import io.github.cidy02.kudos.data.local.entity.toDomain
 import io.github.cidy02.kudos.data.local.entity.toEntity
+import io.github.cidy02.kudos.works.converters.EpubBuilder
 import java.io.ByteArrayOutputStream
 import java.nio.file.Files
 import java.time.Instant
@@ -1378,7 +1379,8 @@ class BackupTombstoneTrustPhase1MergeTest {
 
     @Test
     fun reconcileModeStillLwwUpdatesOverlap() {
-        val incomingEpub = "incoming-newer-epub".toByteArray()
+        // A real EPUB: a restore only writes bytes that are a readable package.
+        val incomingEpub = EpubBuilder.buildEpub("Incoming", "<p>Text.</p>")
         val local = sampleSavedWork().copy(
             title = "Local Title",
             lastSpineIndex = 3,

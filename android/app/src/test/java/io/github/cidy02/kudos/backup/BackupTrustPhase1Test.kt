@@ -21,6 +21,7 @@ import io.github.cidy02.kudos.data.preferences.SettingsRepository
 import io.github.cidy02.kudos.files.FontFileStore
 import io.github.cidy02.kudos.files.WorkFileStore
 import io.github.cidy02.kudos.works.WorkRepository
+import io.github.cidy02.kudos.works.converters.EpubBuilder
 import java.io.File
 import java.nio.file.Files
 import java.time.Instant
@@ -42,6 +43,9 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
+/** A real EPUB: a restore only writes bytes that are a readable package. */
+private val INCOMING_EPUB = EpubBuilder.buildEpub("Incoming", "<p>Text.</p>")
+
 /**
  * Production-entry-point coverage for Phase 1 backup trust:
  * [BackupRepository.importPackage] and folder-sync ingest via [SyncRepository].
@@ -53,6 +57,7 @@ import org.robolectric.annotation.Config
  * File Merge add-only vs folder-sync LWW: [importPackageMergeDoesNotOverwriteExistingOverlap]
  * vs [importPackageReconcileStillLwwUpdatesOverlap] / [folderSyncIngestStillLwwUpdatesOverlap].
  */
+
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
 class BackupTrustPhase1Test {
@@ -372,7 +377,7 @@ class BackupTrustPhase1Test {
             lastSpineIndex = 8,
             lastScrollFraction = 0.8,
             userTags = emptyList(),
-            epubBytes = "incoming-epub".toByteArray()
+            epubBytes = INCOMING_EPUB
         ).let { pack ->
             pack.copy(
                 manifest = pack.manifest.copy(
@@ -610,7 +615,7 @@ class BackupTrustPhase1Test {
             lastSpineIndex = 8,
             lastScrollFraction = 0.8,
             userTags = listOf("Incoming"),
-            epubBytes = "incoming-epub".toByteArray(),
+            epubBytes = INCOMING_EPUB,
             tombstoneRecordId = WORK_J
         )
 
@@ -651,7 +656,7 @@ class BackupTrustPhase1Test {
             lastSpineIndex = 8,
             lastScrollFraction = 0.8,
             userTags = listOf("Incoming"),
-            epubBytes = "incoming-epub".toByteArray()
+            epubBytes = INCOMING_EPUB
         )
 
         val summary = backupRepository.importPackage(incoming, BackupImportMode.MERGE)
@@ -667,7 +672,7 @@ class BackupTrustPhase1Test {
             database.tagDao().getTagsForWork(WORK_K).map { it.name }
         )
         assertArrayEquals(
-            "incoming-epub".toByteArray(),
+            INCOMING_EPUB,
             Files.readAllBytes(workFileStore.workEpubPath(WORK_K))
         )
     }
@@ -681,7 +686,7 @@ class BackupTrustPhase1Test {
             lastSpineIndex = 8,
             lastScrollFraction = 0.8,
             userTags = listOf("Incoming"),
-            epubBytes = "incoming-epub".toByteArray()
+            epubBytes = INCOMING_EPUB
         )
 
         val summary = backupRepository.importPackage(incoming, BackupImportMode.RECONCILE)
@@ -696,7 +701,7 @@ class BackupTrustPhase1Test {
             database.tagDao().getTagsForWork(WORK_K).map { it.name }.sorted()
         )
         assertArrayEquals(
-            "incoming-epub".toByteArray(),
+            INCOMING_EPUB,
             Files.readAllBytes(workFileStore.workEpubPath(WORK_K))
         )
         assertEquals(1, summary.worksUpdated)
