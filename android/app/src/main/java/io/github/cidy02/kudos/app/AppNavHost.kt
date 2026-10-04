@@ -591,13 +591,34 @@ fun AppNavHost(
                 repository = container.accountListRepository,
                 onLogin = { navController.navigate(Routes.AccountLogin) },
                 onOpenCollection = { collection ->
-                    val type = AccountListType.Collection(
-                        name = collection.name,
-                        displayTitle = collection.title
-                    )
-                    navController.navigate(Routes.accountList(NavArgCodecs.encodeAccountListType(type)))
+                    navController.navigate(Routes.ao3CollectionDetail(collection.name, collection.title))
                 }
             )
+        }
+        sharedComposable(
+            Routes.AO3CollectionDetail,
+            arguments = listOf(
+                Routes.navArgOf("collectionSlug"),
+                navArgument("collectionTitle") { type = NavType.StringType; nullable = true; defaultValue = null }
+            )
+        ) { backStackEntry ->
+            val slug = Routes.routeArg(backStackEntry, "collectionSlug")
+            val title = Routes.routeArg(backStackEntry, "collectionTitle") ?: slug
+            if (slug == null) {
+                navController.popBackStack()
+            } else {
+                io.github.cidy02.kudos.account.AO3CollectionDetailScreen(
+                    slug = slug,
+                    title = title ?: slug,
+                    repository = container.collectionDetailRepository,
+                    onOpenWork = { work ->
+                        navigateToWorkDetail(WorkDetailSource.RemoteSummary(work))
+                    },
+                    onOpenWebFallback = { url ->
+                        navController.navigate(Routes.webFallback(url))
+                    }
+                )
+            }
         }
         sharedComposable(
             Routes.AccountList,
