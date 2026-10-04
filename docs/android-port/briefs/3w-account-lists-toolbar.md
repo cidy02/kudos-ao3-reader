@@ -11,7 +11,11 @@ The screen is `android/app/src/main/java/io/github/cidy02/kudos/account/AccountW
 `kudos-ao3-reader/Features/Bookmarks/AO3AccountWorksList.swift` (the iOS lane is
 `/Users/cidy02/kudos-ios-polish`). iOS wins: same behaviour, iOS's strings verbatim.
 
-## 1. Mature works (do this first, and completely)
+## 1. Mature works (DONE by Claude on 2026-10-03; skip to section 2)
+
+Landed while Codex was out: the menu item, the blur, and Hide mode's un-pairing
+(`visibleEntries` and `PairedWorkRow` in the screen, `AccountListPrivacyTest`). The text below is
+kept as the record of what was asked. Don't redo it; build on it.
 
 Today the ⋮ menu's "Hide Mature Content" / "Show Mature Content" flips a local `hideMature` that
 nothing reads, and no row on this screen is ever blurred.
