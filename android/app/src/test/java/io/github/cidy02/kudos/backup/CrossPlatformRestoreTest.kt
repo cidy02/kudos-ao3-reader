@@ -60,10 +60,19 @@ class CrossPlatformRestoreTest {
         importedPack.epubFilesByWorkId.forEach { (workId, bytes) ->
             assertArrayEquals(bytes, Files.readAllBytes(harness.workFiles.workEpubPath(workId)))
         }
+        // The converted import's original and the record of its conversion (iOS `Originals/`).
+        assertEquals(2, importedPack.originalFilesByName.size)
+        assertOriginalsRestored(importedPack, harness)
 
         val androidBytes = harness.repository.exportV2ZipBytes()
         assertDeviceLocalFieldsAreAbsent(androidBytes)
-        val androidManifest = BackupImporter.importV2Zip(androidBytes).manifest
+        val androidPack = BackupImporter.importV2Zip(androidBytes)
+        val androidManifest = androidPack.manifest
+        // What iOS put in comes back out of Android, byte for byte, under iOS's names.
+        assertEquals(importedPack.originalFilesByName.keys, androidPack.originalFilesByName.keys)
+        importedPack.originalFilesByName.forEach { (name, bytes) ->
+            assertArrayEquals(name, bytes, androidPack.originalFilesByName[name])
+        }
         assertEquals(canonical(expected), canonical(androidManifest))
         assertFalse(androidManifest.works.any { it.id.isBlank() })
 
@@ -89,8 +98,23 @@ class CrossPlatformRestoreTest {
             importedPack.epubFilesByWorkId.forEach { (workId, bytes) ->
                 assertArrayEquals(bytes, Files.readAllBytes(roundTrip.workFiles.workEpubPath(workId)))
             }
+            assertOriginalsRestored(importedPack, roundTrip)
         } finally {
             roundTrip.close()
+        }
+    }
+
+    /** Every `Originals/` file of [pack] is on [device], under the work it names. */
+    private suspend fun assertOriginalsRestored(pack: KudosBackupPackage, device: Harness) {
+        pack.originalFilesByName.forEach { (name, bytes) ->
+            val (workId, isRecord) = checkNotNull(BackupPaths.parseOriginalFileName(name)) { name }
+            if (isRecord) {
+                assertArrayEquals(name, bytes, device.workFiles.readConversionRecord(workId))
+            } else {
+                val (extension, original) = checkNotNull(device.workFiles.readOriginal(workId)) { name }
+                assertEquals(name.substringAfterLast('.'), extension)
+                assertArrayEquals(name, bytes, original)
+            }
         }
     }
 

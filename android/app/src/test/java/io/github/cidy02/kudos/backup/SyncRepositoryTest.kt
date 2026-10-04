@@ -1135,6 +1135,18 @@ class SyncRepositoryTest {
                 Files.readAllBytes(workFileStore.workEpubPath(work.id))
             )
         }
+        // The original of the converted import among them, and the record of its conversion.
+        val originals = File(fixture, BackupPaths.ORIGINALS_DIRECTORY).listFiles().orEmpty()
+        assertEquals(2, originals.size)
+        originals.forEach { file ->
+            val (workId, isRecord) = BackupPaths.parseOriginalFileName(file.name)!!
+            val here = if (isRecord) {
+                workFileStore.readConversionRecord(workId)
+            } else {
+                workFileStore.readOriginal(workId)?.second
+            }
+            assertArrayEquals(file.name, file.readBytes(), here)
+        }
         // iOS's files are still there under their own names, with nothing put beside them.
         assertEquals(before, relativeFiles(requireKudosLibrary()).keys)
     }
@@ -1158,6 +1170,9 @@ class SyncRepositoryTest {
             )
             workFileStore.writeWorkEpub(id, epub)
         }
+        // The first is a converted import: its original and the record of its conversion.
+        workFileStore.writeOriginal(ANDROID_ONE, "html", "<html><body><p>From Android.</p></body></html>".toByteArray())
+        workFileStore.writeConversionRecord(ANDROID_ONE, CONVERSION_RECORD)
 
         assertTrue(syncRepository.runSync() is SyncResult.Success)
 

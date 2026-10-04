@@ -259,3 +259,11 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   (`readChangedRemoteAssets`). Android now does the same. A file that is not a font at all still
   fails the sync, as on iOS. Reverse: the font loop in `importManifest`
   (`backup/SyncRepository.kt`).
+- **2026-10-04 · A converted import's original file travels with Android's backups and sync
+  folder.** Android dropped iOS's `Originals/` on restore and exported none, so a library that
+  passed through Android lost the file a work was converted from (often the last copy). Android
+  now reads, restores, exports and syncs them by iOS's rules (`briefs/5b-result.md`). The
+  conversion record is carried through byte for byte, not ported, and is taken only with the
+  original it describes. An original over 128 MB is left out rather than failing the restore.
+  No format change: this is iOS's existing layout.
+  Reverse: `originalFilesByName` in `backup/KudosBackup.kt` and its users.
