@@ -5,9 +5,13 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
@@ -34,13 +38,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import io.github.cidy02.kudos.app.LocalPushedShellChrome
 import io.github.cidy02.kudos.network.ao3.AO3Result
 import io.github.cidy02.kudos.network.ao3.displayMessage
 import io.github.cidy02.kudos.network.ao3.preferences.AO3PreferencesRepository
 import io.github.cidy02.kudos.network.ao3.preferences.AO3PreferencesSnapshot
 import io.github.cidy02.kudos.ui.components.ErrorStateCard
 import io.github.cidy02.kudos.ui.components.LoadingStateCard
-import io.github.cidy02.kudos.app.LocalPushedShellChrome
 import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
 import io.github.cidy02.kudos.ui.subject.LocalSubjectPalette
 import io.github.cidy02.kudos.ui.subject.SubjectFieldLabel
@@ -64,7 +68,7 @@ fun AO3PreferencesScreen(
 ) {
     val chrome = LocalPushedShellChrome.current
     LaunchedEffect(Unit) {
-        chrome.customTitle = "My Preferences"
+        chrome.customTitle = null
         chrome.hasSubjectHeader = true
     }
 
@@ -145,14 +149,22 @@ fun AO3PreferencesScreen(
         }
     }
 
+    // Below the status bar and the shell's floating back row, as the Settings hub does.
+    val topInset = WindowInsets.systemBars.asPaddingValues().calculateTopPadding() + 56.dp
     when {
-        loading -> LoadingStateCard("Loading AO3 preferences…")
-        error != null && snapshot == null -> ErrorStateCard(
-            title = "Preferences failed",
-            message = error!!,
-            primaryActionLabel = "Try Again",
-            onPrimaryAction = { load() }
-        )
+        loading -> Column {
+            Spacer(Modifier.height(topInset))
+            LoadingStateCard("Loading AO3 preferences…")
+        }
+        error != null && snapshot == null -> Column {
+            Spacer(Modifier.height(topInset))
+            ErrorStateCard(
+                title = "Preferences failed",
+                message = error!!,
+                primaryActionLabel = "Try Again",
+                onPrimaryAction = { load() }
+            )
+        }
         snapshot != null -> {
             val snap = snapshot!!
             val palette = LocalSubjectPalette.current
@@ -163,13 +175,13 @@ fun AO3PreferencesScreen(
                 contentPadding = PaddingValues(bottom = 20.dp)
             ) {
                 item {
+                    Spacer(Modifier.height(topInset))
                     SubjectHeaderBlock(
                         kicker = "AO3 Account",
                         title = "AO3 Preferences",
                         subtitle = "Stored on AO3 · applies everywhere you read",
                         palette = palette,
-                        gutter = SubjectMetrics.accountGutter,
-                        modifier = Modifier.padding(top = 20.dp)
+                        gutter = SubjectMetrics.accountGutter
                     )
                     
                     if (status != null) {

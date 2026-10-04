@@ -5,9 +5,13 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -34,7 +38,7 @@ fun AccountMoreOnAO3Screen(
 ) {
     val chrome = LocalPushedShellChrome.current
     LaunchedEffect(Unit) {
-        chrome.customTitle = "More on AO3"
+        chrome.customTitle = null
         chrome.hasSubjectHeader = true
     }
 
@@ -47,13 +51,14 @@ fun AccountMoreOnAO3Screen(
         contentPadding = PaddingValues(bottom = 20.dp)
     ) {
         item {
+            // Below the status bar and the shell's floating back row, as the Settings hub does.
+            Spacer(Modifier.height(WindowInsets.systemBars.asPaddingValues().calculateTopPadding() + 56.dp))
             SubjectHeaderBlock(
                 kicker = "AO3 Account",
                 title = "More on AO3",
                 subtitle = "Opens on AO3 in Browse",
                 palette = palette,
-                gutter = SubjectMetrics.accountGutter,
-                modifier = Modifier.padding(top = 20.dp)
+                gutter = SubjectMetrics.accountGutter
             )
         }
 
