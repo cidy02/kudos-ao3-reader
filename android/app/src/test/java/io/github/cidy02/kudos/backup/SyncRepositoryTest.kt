@@ -871,6 +871,115 @@ class SyncRepositoryTest {
         return copy
     }
 
+    // The sync folder across the two apps (iOS `CrossPlatformFolderSyncTests`). The backup
+    // goldens prove each side reads the other's manifest; these prove each side finds the
+    // other's files, and leaves them in place.
+
+    @Test
+    fun aFolderIosWroteIsReadAndKept() = runTest {
+        // Written by iOS's own FolderSyncService. `KUDOS_WRITE_GOLDEN=1` on iOS rewrites it.
+        val fixture = iosSyncFolder()
+        putFolder(fixture, ensureKudosLibrary())
+        val before = relativeFiles(requireKudosLibrary()).keys
+
+        assertTrue(syncRepository.runSync() is SyncResult.Success)
+
+        val listed = BackupValidator.decodeManifest(File(fixture, BackupPaths.MANIFEST).readBytes())
+            .works.filter { it.hasEPUB }
+        assertEquals(2, listed.size)
+        listed.forEach { work ->
+            val inFolder = "${BackupPaths.WORKS_DIRECTORY}/${BackupPaths.iosEpubAssetIdentifier(work.id)}"
+            assertArrayEquals(
+                File(fixture, inFolder).readBytes(),
+                Files.readAllBytes(workFileStore.workEpubPath(work.id))
+            )
+        }
+        // iOS's files are still there under their own names, with nothing put beside them.
+        assertEquals(before, relativeFiles(requireKudosLibrary()).keys)
+    }
+
+    @Test
+    fun theFolderAndroidWritesIsTheFixtureIosReads() = runTest {
+        // The EPUB iOS's own fixture carries, so iOS's check of an incoming EPUB accepts it.
+        val epub = File(iosSyncFolder(), BackupPaths.WORKS_DIRECTORY).listFiles()!!
+            .first { it.extension == "epub" }.readBytes()
+        listOf(ANDROID_ONE to 3001, ANDROID_TWO to 3002).forEach { (id, ao3WorkId) ->
+            database.workDao().upsert(
+                SavedWork(
+                    id = id,
+                    title = "Folder Sync $ao3WorkId",
+                    author = "Archive Author",
+                    sourceUrl = "https://archiveofourown.org/works/$ao3WorkId",
+                    dateAdded = FIXED_CLOCK,
+                    isSaved = true,
+                    hasEpub = true
+                ).toEntity()
+            )
+            workFileStore.writeWorkEpub(id, epub)
+        }
+
+        assertTrue(syncRepository.runSync() is SyncResult.Success)
+
+        val written = relativeFiles(requireKudosLibrary())
+        val golden = fixturePath("KudosTests/Fixtures/cross-platform/android-sync-folder/KudosLibrary")
+        if (System.getProperty("kudos.writeGolden") == "true") {
+            golden.deleteRecursively()
+            written.forEach { (path, file) ->
+                File(golden, path).apply { parentFile.mkdirs() }.writeBytes(readDocument(file))
+            }
+        }
+        // The names are the contract here; what the manifest holds is the backup goldens' business.
+        assertEquals(
+            written.keys,
+            golden.walkTopDown().filter { it.isFile && !it.name.startsWith(".") }
+                .map { it.relativeTo(golden).path }.toSet()
+        )
+    }
+
+    private fun iosSyncFolder(): File = File(
+        checkNotNull(javaClass.classLoader?.getResource("cross-platform/ios-sync-folder/KudosLibrary")) {
+            "Missing the iOS sync folder fixture. Regenerate with KUDOS_WRITE_GOLDEN=1 on iOS."
+        }.toURI()
+    )
+
+    private fun fixturePath(relative: String): File {
+        var candidate = File(System.getProperty("user.dir")).absoluteFile
+        while (!File(candidate, "KudosTests").isDirectory && candidate.parentFile != null) {
+            candidate = candidate.parentFile
+        }
+        return File(candidate, relative)
+    }
+
+    /** Recreates [source], a folder on disk, inside [target] through the documents provider. */
+    private fun putFolder(source: File, target: DocumentFile) {
+        source.listFiles().orEmpty().forEach { child ->
+            when {
+                child.isDirectory ->
+                    putFolder(child, target.findFile(child.name) ?: target.createDirectory(child.name)!!)
+                !child.name.startsWith(".") -> writeChild(
+                    target,
+                    child.name,
+                    if (child.extension == "epub") "application/epub+zip" else "application/json",
+                    child.readBytes()
+                )
+            }
+        }
+    }
+
+    /**
+     * Every file under [dir] by its path relative to it. Hidden files and the manifest's
+     * backup copy (Android keeps one, iOS does not) are not what the two apps must agree on.
+     */
+    private fun relativeFiles(dir: DocumentFile, prefix: String = ""): Map<String, DocumentFile> =
+        dir.listFiles().flatMap { file ->
+            val name = file.name ?: return@flatMap emptyList()
+            when {
+                file.isDirectory -> relativeFiles(file, "$prefix$name/").toList()
+                name.startsWith(".") || name.endsWith(".bak") -> emptyList()
+                else -> listOf("$prefix$name" to file)
+            }
+        }.toMap()
+
     /** A folder holding a manifest that lists [works]; returns its Works directory. */
     private fun seedFolder(vararg works: BackupWork, exportedAt: String = "2026-01-01T00:00:00Z"): DocumentFile {
         val kudos = ensureKudosLibrary()
@@ -990,6 +1099,10 @@ class SyncRepositoryTest {
         private val FIXED_CLOCK: Instant = Instant.parse("2026-06-26T12:00:00Z")
         private const val WORK_A = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
         private const val WORK_REMOTE = "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
+        // Letters in both: an id of digits alone reads the same in either case, and the case of
+        // the file name is the thing under test.
+        private const val ANDROID_ONE = "3000abcd-0000-4000-8000-00000000000a"
+        private const val ANDROID_TWO = "3000abcd-0000-4000-8000-00000000000b"
 
         /** A real EPUB: sync-down only installs bytes that are a readable package. */
         private val REMOTE_EPUB = EpubBuilder.buildEpub("Remote", "<p>Text.</p>")

@@ -121,6 +121,34 @@ a folder picked through the system picker under `Documents/`, on `Kudos_Verify` 
 Not seen on a device: a sync-down of another device's EPUB (unit tests only), and a real iPhone
 on the same folder (never tried).
 
+## The two apps' own code, on each other's folder (2026-10-04)
+
+The backup has golden archives written by each app and read by the other. The sync folder had
+none, so every finding above rested on reading iOS's code. It now has the same:
+
+- iOS's `CrossPlatformFolderSyncTests.theFolderIOSWritesIsTheFixtureAndroidReads` runs iOS's
+  `FolderSyncService.syncUp` and (with `KUDOS_WRITE_GOLDEN=1`) writes the folder to
+  `android/app/src/test/resources/cross-platform/ios-sync-folder/`.
+- Android's `SyncRepositoryTest.aFolderIosWroteIsReadAndKept` syncs against it: both EPUBs
+  arrive byte for byte, and iOS's files are still there under their names afterwards.
+- Android's `theFolderAndroidWritesIsTheFixtureIosReads` (with `-Dkudos.writeGolden=true`) writes
+  `KudosTests/Fixtures/cross-platform/android-sync-folder/`.
+- iOS's `aFolderAndroidWroteIsReadAndKept` runs a full iOS sync against it: both EPUBs arrive,
+  and Android's files are still there.
+
+All four pass. What the real folders showed:
+
+- iOS names an EPUB `2000ABCD-0000-4000-8000-00000000000A.epub`: capitals, as read from its code.
+- Android now writes `3000ABCD-…-00000000000A.epub`, and the digest it puts in the manifest is the
+  same string iOS computes for the same bytes.
+- **With the fixture's files renamed to lowercase** (what Android 0.2.1 and 0.2.2 wrote), the
+  iOS test fails: the works arrive on iOS **without their EPUBs**. So owner question 4 is not
+  hypothetical. (Whether iOS then deletes the lowercase files was not observed: the simulator's
+  disk ignores letter case and an iPhone's does not.)
+
+The ids in both fixtures have letters in them on purpose: an id of digits alone reads the same
+in either case.
+
 ## Found and not changed (for the owner, or a later brief)
 
 - **iOS compares names exactly** when it reads and when it prunes. Released Android builds (0.2.1,
