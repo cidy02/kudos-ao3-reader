@@ -7,6 +7,19 @@ import org.junit.Test
 
 class BackupPathsTest {
 
+    @Test
+    fun fontComparisonMatchesSwiftCanonicalUnicodeEquality() {
+        assertTrue(BackupPaths.fontFileNameKey("CAF\u00c9.ttf") ==
+            BackupPaths.fontFileNameKey("Cafe\u0301.ttf"))
+    }
+
+    @Test
+    fun originalNamesMustUseTheFullUuidAsIosDoes() {
+        assertTrue(BackupPaths.parseOriginalFileName("1-1-1-1-1.pdf") == null)
+        assertTrue(BackupPaths.parseOriginalFileName("1-1-1-1-1.conversion.json") == null)
+        assertTrue(BackupPaths.parseOriginalFileName("ABCDEFAB-ABCD-4BCD-8BCD-ABCDEFABCDEF.pdf") != null)
+    }
+
     /**
      * [BackupPaths.uniqueSuffixedFontFileName] is a tight CPU loop with no
      * coroutine suspension points, so [kotlinx.coroutines.withTimeout] cannot

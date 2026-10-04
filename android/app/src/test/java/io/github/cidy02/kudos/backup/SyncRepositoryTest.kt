@@ -28,6 +28,7 @@ import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
 import org.junit.Before
@@ -60,6 +61,18 @@ class SyncRepositoryTest {
     private lateinit var provider: FakeTempDocumentsProvider
 
     private var clockInstant: Instant = FIXED_CLOCK
+
+    @Test
+    fun originalReadLimitCountsStreamBytesWithoutTrustingProviderSize() {
+        with(syncRepository) {
+            try {
+                java.io.ByteArrayInputStream(ByteArray(17)).readLimitedBytes("Originals/work.pdf", 16)
+                fail("Actual bytes must be bounded even if a provider reports size zero")
+            } catch (_: BackupError.EntryTooLarge) {
+                // Expected: the 17th byte exceeds the limit.
+            }
+        }
+    }
 
     @Before
     fun setUp() {
@@ -234,7 +247,7 @@ class SyncRepositoryTest {
     // ------------------------------------------------------------------ (B)
 
     @Test
-    fun corruptPrimaryManifestFallsBackToBakAndSelfHeals() = runTest {
+    fun corruptPrimaryManifestFallsBackToBakAndSelfHealsWithoutPruning() = runTest {
         // Remote holds a good .bak (with a work local does not have) and a
         // truncated primary — the exact wedge that used to make every later
         // sync fail forever because import threw before export could repair it.
@@ -288,6 +301,9 @@ class SyncRepositoryTest {
             "export should rewrite a valid manifest listing the recovered work",
             healedManifest.works.any { it.id == WORK_REMOTE }
         )
+        // The .bak was the way back to this device's records, never the list of what the
+        // folder holds: a damaged manifest is not copied over it.
+        assertArrayEquals(bakBytes, readDocument(requireKudosLibrary().findFile(BackupPaths.MANIFEST_BACKUP)!!))
     }
 
     @Test
@@ -309,8 +325,8 @@ class SyncRepositoryTest {
             "application/epub+zip",
             "keep-me".toByteArray()
         )
-        // Orphan that is NOT in the bak; after a successful recovery+export the
-        // orphan is pruned, but the listed work's EPUB must remain.
+        // Not in the .bak. It may belong to a work the damaged manifest listed and the
+        // older .bak does not, so a run that read only the .bak must keep it.
         writeChild(
             worksDir,
             "orphan-not-in-manifest.epub",
@@ -327,9 +343,8 @@ class SyncRepositoryTest {
             "listed EPUB must not be pruned away on recovery",
             epubIn(afterWorks, WORK_REMOTE)
         )
-        // Orphan removal is the post-commit prune (D); recovery itself must not
-        // have emptied Works/ before export rewrote the manifest.
-        assertNotNull(after.findFile(BackupPaths.MANIFEST))
+        assertNotNull(afterWorks.findFile("orphan-not-in-manifest.epub"))
+        // The folder is readable again: left damaged, no device could ever sync to it.
         BackupValidator.decodeManifest(readDocument(after.findFile(BackupPaths.MANIFEST)!!))
 
         val imported = database.workDao().getById(WORK_REMOTE)
@@ -357,6 +372,112 @@ class SyncRepositoryTest {
         val stillThere = requireKudosLibrary().findFile("manifest (1).json")
         assertNotNull("unreadable conflict must be left in place", stillThere)
         assertTrue(stillThere!!.exists())
+    }
+
+    @Test
+    fun aConflictWhoseEpubHasNotArrivedIsFoldedAndItsWorkStaysListed() = runTest {
+        // As iOS: a file that is not in the folder is nothing to fetch, not a reason to stop.
+        // The work goes into this device's manifest, so its EPUB is kept when it does arrive.
+        seedFolder()
+        val kudos = requireKudosLibrary()
+        val conflict = BackupJson.encodeToString(remoteManifest(
+            works = listOf(remoteBackupWork(WORK_REMOTE, "Uploading", hasEpub = true)),
+            exportedAt = "2026-06-02T00:00:00Z"
+        )).toByteArray()
+        writeChild(kudos, "manifest (1).json", "application/json", conflict)
+
+        val result = syncRepository.runSync()
+
+        assertEquals(1, (result as SyncResult.Success).foldedConflicts)
+        assertNull(requireKudosLibrary().findFile("manifest (1).json"))
+        val manifest = BackupValidator.decodeManifest(readDocument(requireKudosLibrary().findFile(BackupPaths.MANIFEST)!!))
+        assertTrue(manifest.works.any { it.id == WORK_REMOTE })
+    }
+
+    @Test
+    fun aFoldedConflictCopyStaysUntilTheManifestThatListsItIsWritten() = runTest {
+        // The run folds the copy, then stops before its own manifest is written. Deleted at
+        // the fold, as it used to be, the copy's records were then in no index in the folder.
+        seedFolder()
+        val kudos = requireKudosLibrary()
+        val conflict = BackupJson.encodeToString(remoteManifest(
+            works = listOf(remoteBackupWork(WORK_REMOTE, "Only in the copy", hasEpub = false)),
+            exportedAt = "2026-06-02T00:00:00Z"
+        )).toByteArray()
+        writeChild(kudos, "manifest (1).json", "application/json", conflict)
+        var otherDeviceWrote = false
+        val interrupted = SyncRepository(
+            context = context,
+            settingsRepository = settingsRepository,
+            backupRepository = backupRepository,
+            workFileStore = workFileStore,
+            fontFileStore = fontFileStore,
+            persistenceGate = persistenceGate,
+            clock = {
+                if (!otherDeviceWrote) {
+                    otherDeviceWrote = true
+                    val theirs = remoteManifest(emptyList(), "2026-06-03T00:00:00Z")
+                    writeChild(requireKudosLibrary(), BackupPaths.MANIFEST, "application/json",
+                        BackupJson.encodeToString(theirs).toByteArray())
+                }
+                clockInstant
+            }
+        )
+
+        assertTrue(interrupted.runSync() is SyncResult.Error)
+
+        assertArrayEquals(conflict, readDocument(requireKudosLibrary().findFile("manifest (1).json")!!))
+    }
+
+    @Test
+    fun aFolderWithFilesAndNoManifestIsWrittenToAndNothingInItIsPruned() = runTest {
+        // What an interrupted first sync leaves: EPUBs uploaded, no manifest yet. Refusing to
+        // write here would leave the folder unable to sync for good; pruning by this device's
+        // library alone would delete the other device's book.
+        seedLocalWork(WORK_A, "Local", "local-a".toByteArray())
+        val worksDir = ensureKudosLibrary().createDirectory(BackupPaths.WORKS_DIRECTORY)!!
+        writeChild(worksDir, "${WORK_REMOTE.uppercase()}.epub", "application/epub+zip", "theirs".toByteArray())
+
+        assertTrue(syncRepository.runSync() is SyncResult.Success)
+
+        val after = requireKudosLibrary()
+        BackupValidator.decodeManifest(readDocument(after.findFile(BackupPaths.MANIFEST)!!))
+        assertNotNull(epubIn(after.findFile(BackupPaths.WORKS_DIRECTORY)!!, WORK_REMOTE))
+    }
+
+    @Test
+    fun aManifestThisBuildCannotReadIsNotWrittenOver() = runTest {
+        // Whole JSON of a version this build does not know: another app version's index, not
+        // damage. Written over, what that version listed would be gone from the folder.
+        seedLocalWork(WORK_A, "Local", "local-a".toByteArray())
+        val kudos = ensureKudosLibrary()
+        val newer = """{"version": 99, "exportedAt": "2026-06-01T00:00:00Z", "works": []}""".toByteArray()
+        writeChild(kudos, BackupPaths.MANIFEST, "application/json", newer)
+        val worksDir = kudos.createDirectory(BackupPaths.WORKS_DIRECTORY)!!
+        writeChild(worksDir, "${WORK_REMOTE.uppercase()}.epub", "application/epub+zip", "theirs".toByteArray())
+
+        assertTrue(syncRepository.runSync() is SyncResult.Error)
+
+        assertArrayEquals(newer, readDocument(requireKudosLibrary().findFile(BackupPaths.MANIFEST)!!))
+        val after = requireKudosLibrary().findFile(BackupPaths.WORKS_DIRECTORY)!!
+        assertNotNull(epubIn(after, WORK_REMOTE))
+        assertNull("nothing of this device's is uploaded either", epubIn(after, WORK_A))
+    }
+
+    @Test
+    fun theManifestIsReplacedInPlaceAndThePreviousOneIsKeptAsTheBackup() = runTest {
+        // iOS reads a folder with files and no manifest as a first write, and prunes by its
+        // own library. So the manifest is never renamed away while its replacement goes in.
+        seedFolder(remoteBackupWork(WORK_REMOTE, "Theirs", hasEpub = false))
+        val previous = readDocument(requireKudosLibrary().findFile(BackupPaths.MANIFEST)!!)
+        provider.renames.clear()
+
+        assertTrue(syncRepository.runSync() is SyncResult.Success)
+
+        assertTrue("renamed: ${provider.renames}", provider.renames.isEmpty())
+        val after = requireKudosLibrary()
+        assertArrayEquals(previous, readDocument(after.findFile(BackupPaths.MANIFEST_BACKUP)!!))
+        assertFalse(previous.contentEquals(readDocument(after.findFile(BackupPaths.MANIFEST)!!)))
     }
 
     // ------------------------------------------------------------------ (C)
@@ -417,9 +538,9 @@ class SyncRepositoryTest {
     fun pruningHappensAfterManifestCommitAndKeepsListedWorks() = runTest {
         seedLocalWork(WORK_A, "Kept Work", "keep-epub".toByteArray())
 
-        val kudos = ensureKudosLibrary()
-        val worksDir = kudos.findFile(BackupPaths.WORKS_DIRECTORY)
-            ?: kudos.createDirectory(BackupPaths.WORKS_DIRECTORY)!!
+        // A folder whose manifest this run reads: without one it has no view of what the
+        // folder lists, and prunes nothing.
+        val worksDir = seedFolder()
         // Orphan asset that no local work references.
         writeChild(
             worksDir,
@@ -739,12 +860,13 @@ class SyncRepositoryTest {
     }
 
     @Test
-    fun aManifestAnotherDeviceWritesMidSyncStopsThePrune() = runTest {
+    fun aManifestAnotherDeviceWritesWithNoDateStopsPublication() = runTest {
         // iOS `aStaleSyncUpKeepsAnotherDevicesRemoteEPUB`. The other device's write lands after
         // this run has read the folder and before it writes: the export asks the clock for its
         // date exactly there.
         seedLocalWork(WORK_A, "Local", "local-a".toByteArray())
         ensureKudosLibrary()
+        provider.reportedLastModified = 0
         var otherDeviceWrote = false
         val midSync = SyncRepository(
             context = context,
@@ -763,11 +885,13 @@ class SyncRepositoryTest {
             }
         )
 
-        assertTrue(midSync.runSync() is SyncResult.Success)
+        assertTrue(midSync.runSync() is SyncResult.Error)
 
         val after = requireKudosLibrary().findFile(BackupPaths.WORKS_DIRECTORY)!!
         assertNotNull("a work this run never learned about keeps its EPUB", epubIn(after, WORK_REMOTE))
         assertNotNull(epubIn(after, WORK_A))
+        val manifest = BackupValidator.decodeManifest(readDocument(requireKudosLibrary().findFile(BackupPaths.MANIFEST)!!))
+        assertTrue(manifest.works.any { it.id == WORK_REMOTE })
     }
 
     @Test
@@ -842,6 +966,60 @@ class SyncRepositoryTest {
         assertArrayEquals(other, Files.readAllBytes(workFileStore.workEpubPath(WORK_A)))
     }
 
+    @Test
+    fun aFalseFlagCannotHideAPreservedLocalFileFromTheRestoreGate() = runTest {
+        database.workDao().upsert(
+            SavedWork(id = WORK_A, title = "Preserved", author = "Author",
+                dateAdded = Instant.parse("2026-01-01T00:00:00Z"), hasEpub = false,
+                epubPreservationStatusRaw = "preserved").toEntity()
+        )
+        workFileStore.writeWorkEpub(WORK_A, REMOTE_EPUB)
+        val captured = backupRepository.captureLibrarySnapshot()
+        assertTrue(WORK_A in captured.epubWorkIds)
+        val incoming = KudosBackupPackage(
+            remoteManifest(works = listOf(remoteBackupWork(WORK_A, "Incoming", hasEpub = true)),
+                exportedAt = "2026-06-02T00:00:00Z"),
+            mapOf(WORK_A to sameLengthVariant(REMOTE_EPUB)), emptyMap()
+        )
+        val merged = BackupMergeService.merge(captured, incoming)
+        assertTrue(merged.epubFilesToWriteByWorkId.isEmpty())
+        assertArrayEquals(REMOTE_EPUB, Files.readAllBytes(workFileStore.workEpubPath(WORK_A)))
+    }
+
+    @Test
+    fun laterBatchesReplaceExistingEpubsAndDoNotDuplicateCollidingFonts() = runTest {
+        val corrected = sameLengthVariant(REMOTE_EPUB)
+        seedOlderLocalWork(WORK_A, REMOTE_EPUB)
+        seedOlderLocalWork(WORK_REMOTE, REMOTE_EPUB)
+        fontFileStore.writeFont("reader.otf", "local font bytes".toByteArray())
+        database.customFontDao().upsert(CustomFont(name = "Local", fileName = "reader.otf").toEntity())
+        val incomingFont = context.assets.open("readium/fonts/OpenDyslexic-Regular.otf").use { it.readBytes() }
+        val worksDir = seedFolder(
+            remoteBackupWork(WORK_A, "First corrected", hasEpub = true).copy(
+                sourceURL = "", lastModifiedAt = "2026-06-01T00:00:00Z", epubDigest = BackupPaths.sha256(corrected)
+            ),
+            remoteBackupWork(WORK_REMOTE, "Second corrected", hasEpub = true).copy(
+                sourceURL = "", lastModifiedAt = "2026-06-01T00:00:00Z", epubDigest = BackupPaths.sha256(corrected)
+            ), exportedAt = "2026-06-02T00:00:00Z"
+        )
+        writeChild(worksDir, "${WORK_A.uppercase()}.epub", "application/epub+zip", corrected)
+        writeChild(worksDir, "${WORK_REMOTE.uppercase()}.epub", "application/epub+zip", corrected)
+        val kudos = requireKudosLibrary()
+        val manifest = BackupValidator.decodeManifest(readDocument(kudos.findFile(BackupPaths.MANIFEST)!!)).copy(
+            fonts = listOf(BackupFont("Remote", "reader.otf", "2026-01-01T00:00:00Z"))
+        )
+        writeChild(kudos, BackupPaths.MANIFEST, "application/json", BackupJson.encodeToString(manifest).toByteArray())
+        val fonts = kudos.createDirectory(BackupPaths.FONTS_DIRECTORY)!!
+        writeChild(fonts, "reader.otf", "font/otf", incomingFont)
+        val batched = SyncRepository(context, settingsRepository, backupRepository, workFileStore,
+            fontFileStore, persistenceGate, clock = { clockInstant }, maxEpubBatchBytes = 1)
+        assertTrue(batched.runSync() is SyncResult.Success)
+        assertArrayEquals(corrected, Files.readAllBytes(workFileStore.workEpubPath(WORK_A)))
+        assertArrayEquals(corrected, Files.readAllBytes(workFileStore.workEpubPath(WORK_REMOTE)))
+        assertEquals(setOf("reader.otf", "reader-restored-1.otf"),
+            database.customFontDao().getAll().map { it.fileName }.toSet())
+    }
+
     /** A library work older than anything the tests put in the folder, holding [epub]. */
     private suspend fun seedOlderLocalWork(id: String, epub: ByteArray) {
         database.workDao().upsert(
@@ -901,8 +1079,12 @@ class SyncRepositoryTest {
         assertTrue(database.customFontDao().getAll().isEmpty())
         assertFalse(fontFileStore.fontExists("oversized.ttf"))
         assertEquals(listOf("Unrelated Bookmark"), database.bookmarkDao().getAll().map { it.title })
-        // Another device's font this one did not take is not this device's to prune.
+        // Another device's font this one did not take is not this device's to prune, and
+        // stays in the manifest this device writes: left out, the next device to prune
+        // would delete it.
         assertNotNull(requireKudosLibrary().findFile(BackupPaths.FONTS_DIRECTORY)!!.findFile("oversized.ttf"))
+        val written = BackupValidator.decodeManifest(readDocument(requireKudosLibrary().findFile(BackupPaths.MANIFEST)!!))
+        assertEquals(listOf("oversized.ttf"), written.fonts.map { it.fileName })
     }
 
     @Test
@@ -939,8 +1121,10 @@ class SyncRepositoryTest {
         // The font left for later is still in the folder.
         assertNotNull(requireKudosLibrary().findFile(BackupPaths.FONTS_DIRECTORY)!!.findFile("second.otf"))
 
-        // The device that owns both fonts syncs again and lists them again.
-        writeChild(requireKudosLibrary(), BackupPaths.MANIFEST, "application/json", manifest)
+        // And still in the manifest this device wrote, so no other device has to list it
+        // again before the next sync can take it.
+        val written = BackupValidator.decodeManifest(readDocument(requireKudosLibrary().findFile(BackupPaths.MANIFEST)!!))
+        assertEquals(listOf("first.otf", "second.otf"), written.fonts.map { it.fileName }.sorted())
         clockInstant = FIXED_CLOCK.plusSeconds(60)
         assertTrue(oneFontAtATime.runSync() is SyncResult.Success)
 

@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.backup
 
+import androidx.room.withTransaction
 import io.github.cidy02.kudos.core.model.BackupSettings
 import io.github.cidy02.kudos.data.local.KudosDatabase
 import io.github.cidy02.kudos.data.local.entity.CollectionWorkCrossRef
@@ -210,8 +211,9 @@ class BackupRepository(
             .groupBy({ it.queueId }, { tagNamesById[it.tagId] })
             .mapValues { (_, names) -> names.filterNotNull() }
         val settings = BackupSettings.fromSettings(settingsRepository.snapshot())
+        // iOS `KudosBackupService.mayReplaceEPUB` protects preserved local files;
+        // a stale false flag must not hide real bytes from that protection.
         val epubWorkIds = works
-            .filter { it.hasEpub }
             .map { BackupPaths.normalizeIdForComparison(it.id) }
             .filter { id ->
                 runCatching { Files.isRegularFile(workFileStore.workEpubPath(id)) }.getOrDefault(false)
@@ -242,7 +244,7 @@ class BackupRepository(
         )
     }
 
-    private suspend fun applyMergeResult(merge: BackupMergeResult) {
+    internal suspend fun applyMergeResult(merge: BackupMergeResult) {
         val snapshot = merge.snapshot
 
         if (merge.mode == BackupImportMode.REPLACE_LIBRARY) {
@@ -304,14 +306,13 @@ class BackupRepository(
             }
         }
 
-        // The merged set is the whole set, as for the reading log below: a search a trusted
-        // tombstone swept is no longer in it, and has to leave the database too.
-        val savedSearchIds = snapshot.savedSearches.mapTo(mutableSetOf()) {
-            BackupPaths.normalizeIdForComparison(it.id)
-        }
-        database.savedSearchDao().getAll().forEach { search ->
-            if (BackupPaths.normalizeIdForComparison(search.id) !in savedSearchIds) {
-                database.savedSearchDao().deleteById(search.id)
+        // iOS `KudosBackupService.applyTombstonesToExisting` removes captured targets,
+        // not anything missing from an earlier snapshot. Ordinary search saves do not
+        // take PersistenceGate, so protect later-created/changed rows at apply time.
+        database.withTransaction {
+            merge.removedSavedSearches.forEach { captured ->
+                val held = database.savedSearchDao().getById(captured.id)?.toDomain()
+                if (held == captured) database.savedSearchDao().deleteById(captured.id)
             }
         }
         snapshot.savedSearches.forEach { database.savedSearchDao().upsert(it.toEntity()) }

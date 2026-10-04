@@ -47,6 +47,13 @@ class IncomingEpubGateTest {
     }
 
     @Test
+    fun anEqualClockStillAcceptsTheLaterAssetBatch() {
+        val first = restore(local(), hasFile = true, epub = ByteArray(0))
+        val second = BackupMergeService.merge(first.snapshot, archive(incoming))
+        assertArrayEquals(incoming, second.epubFilesToWriteByWorkId[WORK])
+    }
+
+    @Test
     fun aPreservedWorkThatStillHasItsFileIsNeverReplaced() {
         val result = restore(local(status = "preserved"), hasFile = true, epub = incoming)
 
