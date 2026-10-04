@@ -16,11 +16,11 @@ import kotlinx.coroutines.sync.withLock
  * sparse [AO3WorkSummary] and those cards render with no tags, no stats and no
  * summary while every other list in the app shows them.
  *
- * **One work at a time, on demand, never as a batch.** Filling a 20-work page
- * eagerly would mean 20 work-page fetches before anything could be shown, each
- * taking a politeness slot — the list would sit empty for as long as that took, and
- * scrolling past a work you didn't care about would still have cost a request. Rows
- * ask for their own metadata as they appear and the card fills in behind them.
+ * Rows ask for their metadata as they appear and the card fills in behind them.
+ * The account Subscriptions screen also walks only its loaded page sequentially,
+ * after drawing it, so Refine and Mark All as Seen can use chapter counts before
+ * every row has appeared (iOS parity). Leaving/changing the page cancels that walk;
+ * it shares these same cached/in-flight lookups with the rows.
  *
  * Results are memoised for the process lifetime so paging back never re-fetches.
  * Nothing is persisted — this is presentation detail for a screen the user is

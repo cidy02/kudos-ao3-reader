@@ -67,6 +67,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import io.github.cidy02.kudos.app.ProvidePushedShellChrome
+import io.github.cidy02.kudos.auth.isSignedIn
 import io.github.cidy02.kudos.author.AO3BookmarkFootnote
 import io.github.cidy02.kudos.core.model.SavedWork
 import io.github.cidy02.kudos.data.preferences.SettingsRepository
@@ -77,6 +78,13 @@ import io.github.cidy02.kudos.home.HomeFacts
 import io.github.cidy02.kudos.network.ao3.account.AO3ReadingEntry
 import io.github.cidy02.kudos.network.ao3.author.AO3AuthorBookmark
 import io.github.cidy02.kudos.network.ao3.search.AO3WorkSummary
+import io.github.cidy02.kudos.network.ao3.search.AO3SearchFilters
+import io.github.cidy02.kudos.search.SearchFilterSheet
+import io.github.cidy02.kudos.search.collectLocalTagSuggestions
+import io.github.cidy02.kudos.search.includesAccountWork
+import io.github.cidy02.kudos.search.hasPostedChapterCount
+import io.github.cidy02.kudos.search.isSubscriptionIndexOnly
+import io.github.cidy02.kudos.search.refineMatchText
 import io.github.cidy02.kudos.ui.components.DestructiveConfirmation
 import io.github.cidy02.kudos.ui.components.EmptyStateCard
 import io.github.cidy02.kudos.ui.components.ErrorStateCard
@@ -84,6 +92,7 @@ import io.github.cidy02.kudos.ui.components.KudosPaginationBar
 import io.github.cidy02.kudos.ui.components.LoadingStateCard
 import io.github.cidy02.kudos.ui.components.SensitiveWorkRow
 import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
+import io.github.cidy02.kudos.ui.subject.FilterButton
 import io.github.cidy02.kudos.ui.subject.SectionRuleHeader
 import io.github.cidy02.kudos.ui.subject.SubjectChip
 import io.github.cidy02.kudos.ui.subject.SubjectChipStyle
@@ -94,6 +103,8 @@ import io.github.cidy02.kudos.ui.subject.subjectPanel
 import io.github.cidy02.kudos.ui.subject.subjectScreenWash
 import io.github.cidy02.kudos.works.CanonicalWork
 import io.github.cidy02.kudos.works.WorkRepository
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 
 /**
  * Top-level screen for AO3 Account Work Lists (Marked for Later, Bookmarks, History, Subscriptions, Collections).
@@ -121,48 +132,127 @@ fun AccountWorksListScreen(
     var expandAll by remember { mutableStateOf(false) }
     val settings by settingsRepository.settings.collectAsState(initial = KudosSettings.Defaults)
     val reveal by privacyGate.state.collectAsState()
-    val activity = LocalContext.current as? FragmentActivity
+    val context = LocalContext.current
+    val activity = context as? FragmentActivity
+    val authState by repository.authRepository.state.collectAsState()
     var showMenu by remember { mutableStateOf(false) }
+    var showingFilters by remember(type) { mutableStateOf(false) }
+    var filters by remember(type) { mutableStateOf(AO3SearchFilters()) }
+    var subscriptionsScope by remember(type) { mutableStateOf("works") }
+    var subscriptionWatermarks by remember(type) {
+        mutableStateOf(SubscriptionWatermarks.load(context, SubscriptionWatermarks.NAMESPACE_SUBSCRIPTIONS))
+    }
+    val loaded = state as? AccountListUiState.Loaded
+    val pageWorks = loaded?.page?.works.orEmpty()
+    var unsubscribedIds by remember(type, pageWorks, authState) { mutableStateOf(setOf<Long>()) }
+    var enrichedSubscriptions by remember(type, pageWorks, authState) {
+        mutableStateOf(emptyMap<Long, AO3WorkSummary>())
+    }
+    val enricher = remember(context) {
+        (context.applicationContext as? io.github.cidy02.kudos.KudosApplication)
+            ?.container?.sparseWorkEnricher
+    }
+    // iOS enriches only the loaded subscriptions page, after it is on screen. Reuse the
+    // rows' memoised anonymous lookup, sequentially; changing page/session cancels the walk.
+    LaunchedEffect(type, pageWorks, authState) {
+        if (type == AccountListType.Subscriptions && authState.isSignedIn) {
+            for (work in pageWorks) {
+                val known = enricher?.enrich(work) ?: work
+                currentCoroutineContext().ensureActive()
+                enrichedSubscriptions = enrichedSubscriptions + (work.id to known)
+                if (known.hasPostedChapterCount()) {
+                    subscriptionWatermarks = SubscriptionWatermarks.baseline(
+                        context, SubscriptionWatermarks.NAMESPACE_SUBSCRIPTIONS, listOf(known)
+                    )
+                }
+            }
+        }
+    }
+    val refinedWorks = remember(loaded?.canonicalWorks, filters, enrichedSubscriptions, unsubscribedIds, type) {
+        loaded?.canonicalWorks.orEmpty().mapNotNull { entry ->
+            val subscriptions = type == AccountListType.Subscriptions
+            if (subscriptions && entry.remote.id in unsubscribedIds) return@mapNotNull null
+            val known = if (subscriptions) enrichedSubscriptions[entry.remote.id] ?: entry.remote else entry.remote
+            if (filters.includesAccountWork(known, subscriptions)) entry.copy(remote = known) else null
+        }
+    }
+    val works = remember(refinedWorks, settings.privacy, reveal) {
+        visibleEntries(refinedWorks, settings.privacy, reveal)
+    }
+    val hasWorks = authState.isSignedIn && pageWorks.isNotEmpty() &&
+        (type != AccountListType.Subscriptions || subscriptionsScope == "works")
+    val hasNewChapters = type == AccountListType.Subscriptions && works.any {
+        SubscriptionWatermarks.newChapterCount(it.remote, subscriptionWatermarks) > 0
+    }
 
     ProvidePushedShellChrome(
         hasSubjectHeader = true,
         trailingContent = {
-            Box {
-                // A glass circle, as iOS's toolbar draws it and as the Inbox's menu does.
-                io.github.cidy02.kudos.ui.subject.ToolbarCircleButton(
-                    onClick = { showMenu = true },
-                    accessibilityName = "More actions",
-                    palette = palette
-                ) {
-                    Icon(imageVector = Icons.Default.MoreVert, contentDescription = null)
-                }
-                DropdownMenu(
-                    expanded = showMenu,
-                    onDismissRequest = { showMenu = false }
-                ) {
-                    // iOS's MatureRevealToggle: present only while Hide mature content is on.
-                    if (settings.privacy.hideMatureContent) {
-                        DropdownMenuItem(
-                            text = { Text(if (reveal.revealAll) "Hide mature" else "Show mature") },
-                            leadingIcon = {
-                                Icon(
-                                    if (reveal.revealAll) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
-                                    contentDescription = null
-                                )
-                            },
-                            onClick = {
-                                showMenu = false
-                                privacyGate.toggleRevealAll(activity)
-                            }
+            if (settings.privacy.hideMatureContent || hasWorks) {
+                Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                    if (hasWorks) {
+                        FilterButton(
+                            filtersActive = filters.hasActiveFilters,
+                            onClick = { showingFilters = true },
+                            onClearFilters = { filters = AO3SearchFilters() }
                         )
                     }
-                    DropdownMenuItem(
-                        text = { Text(if (expandAll) "Collapse All" else "Expand All") },
-                        onClick = {
-                            showMenu = false
-                            expandAll = !expandAll
+                    Box {
+                        // A glass circle, as iOS's toolbar draws it and as the Inbox's menu does.
+                        io.github.cidy02.kudos.ui.subject.ToolbarCircleButton(
+                            onClick = { showMenu = true },
+                            accessibilityName = "More actions",
+                            palette = palette
+                        ) {
+                            Icon(imageVector = Icons.Default.MoreVert, contentDescription = null)
                         }
-                    )
+                        DropdownMenu(
+                            expanded = showMenu,
+                            onDismissRequest = { showMenu = false }
+                        ) {
+                            // iOS's MatureRevealToggle: present only while Hide mature content is on.
+                            if (settings.privacy.hideMatureContent) {
+                                DropdownMenuItem(
+                                    text = { Text(if (reveal.revealAll) "Hide mature" else "Show mature") },
+                                    leadingIcon = {
+                                        Icon(
+                                            if (reveal.revealAll) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
+                                            contentDescription = null
+                                        )
+                                    },
+                                    onClick = {
+                                        showMenu = false
+                                        privacyGate.toggleRevealAll(activity)
+                                    }
+                                )
+                            }
+                            // These lists have fixed layouts on iOS. Android's other lists draw
+                            // detailed cards; there is no account display-mode setting to switch.
+                            if (hasWorks && type != AccountListType.MarkedForLater && type != AccountListType.Subscriptions) {
+                                DropdownMenuItem(
+                                    text = { Text(if (expandAll) "Collapse All" else "Expand All") },
+                                    onClick = {
+                                        showMenu = false
+                                        expandAll = !expandAll
+                                    }
+                                )
+                            }
+                            if (hasWorks && hasNewChapters) {
+                                DropdownMenuItem(
+                                    text = { Text("Mark All as Seen") },
+                                    leadingIcon = { Icon(Icons.Outlined.NotificationsOff, contentDescription = null) },
+                                    onClick = {
+                                        showMenu = false
+                                        subscriptionWatermarks = SubscriptionWatermarks.markAllSeen(
+                                            context,
+                                            SubscriptionWatermarks.NAMESPACE_SUBSCRIPTIONS,
+                                            works.map { it.remote }.filter { it.hasPostedChapterCount() }
+                                        )
+                                    }
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -212,9 +302,6 @@ fun AccountWorksListScreen(
                             )
                         }
                     } else {
-                        val works = remember(current.canonicalWorks, settings.privacy, reveal) {
-                            visibleEntries(current.canonicalWorks, settings.privacy, reveal)
-                        }
                         val rowPrivacy = remember(settings.privacy, reveal, activity) {
                             PairedRowPrivacy(
                                 isObscured = {
@@ -264,6 +351,10 @@ fun AccountWorksListScreen(
                                 AccountListType.Subscriptions -> {
                                     SubscriptionsBrowser(
                                         works = works,
+                                        watermarks = subscriptionWatermarks,
+                                        scope = subscriptionsScope,
+                                        onScopeChange = { subscriptionsScope = it },
+                                        onUnsubscribeWork = { unsubscribedIds = unsubscribedIds + it.remote.id },
                                         currentPage = current.page.currentPage,
                                         totalPages = current.page.totalPages,
                                         expandAll = expandAll,
@@ -290,6 +381,21 @@ fun AccountWorksListScreen(
                 }
             }
         }
+    }
+    if (showingFilters) {
+        val pending = if (type == AccountListType.Subscriptions && filters.hasActiveFilters) {
+            works.count { it.remote.isSubscriptionIndexOnly() }
+        } else 0
+        SearchFilterSheet(
+            filters = filters,
+            onFiltersChange = { filters = it },
+            onApply = { showingFilters = false },
+            onClear = { filters = AO3SearchFilters() },
+            onDismiss = { showingFilters = false },
+            localTagSuggestions = collectLocalTagSuggestions(loaded?.canonicalWorks.orEmpty().mapNotNull { it.local }),
+            refine = true,
+            refineMatchText = if (pageWorks.isEmpty()) null else refineMatchText(pageWorks.size, works.size - pending, pending)
+        )
     }
 }
 
@@ -803,6 +909,10 @@ private fun HistoryBrowser(
 @Composable
 private fun SubscriptionsBrowser(
     works: List<CanonicalWork>,
+    watermarks: Map<Long, SubscriptionWatermark>,
+    scope: String,
+    onScopeChange: (String) -> Unit,
+    onUnsubscribeWork: (CanonicalWork) -> Unit,
     currentPage: Int,
     totalPages: Int,
     expandAll: Boolean,
@@ -810,27 +920,9 @@ private fun SubscriptionsBrowser(
     onLoadPage: (Int) -> Unit,
     onOpenWork: (AO3WorkSummary) -> Unit
 ) {
-    val context = LocalContext.current
-    var watermarks by remember {
-        mutableStateOf(SubscriptionWatermarks.load(context, SubscriptionWatermarks.NAMESPACE_SUBSCRIPTIONS))
-    }
-
-    LaunchedEffect(works) {
-        watermarks = SubscriptionWatermarks.baseline(
-            context,
-            SubscriptionWatermarks.NAMESPACE_SUBSCRIPTIONS,
-            works.map { it.remote }
-        )
-    }
-
-    var scope by remember { mutableStateOf("works") } // "works", "series", "authors"
     var filter by remember { mutableStateOf("all") }
-    var unsubscribedIds by remember { mutableStateOf(setOf<Long>()) }
     var pendingUnsubscribe by remember { mutableStateOf<CanonicalWork?>(null) }
-
-    val activeWorks = remember(works, unsubscribedIds) {
-        works.filter { it.remote.id !in unsubscribedIds }
-    }
+    val activeWorks = works
 
     val updatedWorks = remember(activeWorks, watermarks) {
         activeWorks.filter { SubscriptionWatermarks.newChapterCount(it.remote, watermarks) > 0 }
@@ -854,7 +946,7 @@ private fun SubscriptionsBrowser(
         onConfirm = {
             val pending = pendingUnsubscribe ?: return@DestructiveConfirmation
             pendingUnsubscribe = null
-            unsubscribedIds = unsubscribedIds + pending.remote.id
+            onUnsubscribeWork(pending)
         },
         onDismissRequest = { pendingUnsubscribe = null }
     )
@@ -896,9 +988,9 @@ private fun SubscriptionsBrowser(
                     .horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                SubjectChip("Works", style = SubjectChipStyle.Pill(scope == "works"), palette = palette, modifier = Modifier.clickable { scope = "works" })
-                SubjectChip("Series", style = SubjectChipStyle.Pill(scope == "series"), palette = palette, modifier = Modifier.clickable { scope = "series" })
-                SubjectChip("Authors", style = SubjectChipStyle.Pill(scope == "authors"), palette = palette, modifier = Modifier.clickable { scope = "authors" })
+                SubjectChip("Works", style = SubjectChipStyle.Pill(scope == "works"), palette = palette, modifier = Modifier.clickable { onScopeChange("works") })
+                SubjectChip("Series", style = SubjectChipStyle.Pill(scope == "series"), palette = palette, modifier = Modifier.clickable { onScopeChange("series") })
+                SubjectChip("Authors", style = SubjectChipStyle.Pill(scope == "authors"), palette = palette, modifier = Modifier.clickable { onScopeChange("authors") })
             }
         }
 

@@ -44,6 +44,7 @@ import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Search
 
@@ -72,7 +73,10 @@ fun SearchFilterSheet(
      */
     allowsRelevanceSort: Boolean = true,
     localTagSuggestions: LocalTagSuggestions = LocalTagSuggestions(),
-    autocompleteRepository: io.github.cidy02.kudos.network.ao3.search.AO3TagAutocompleteRepository? = null
+    autocompleteRepository: io.github.cidy02.kudos.network.ao3.search.AO3TagAutocompleteRepository? = null,
+    /** Account lists narrow the loaded page live; search-only facets stay out of this panel. */
+    refine: Boolean = false,
+    refineMatchText: String? = null
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)
 
@@ -105,14 +109,20 @@ fun SearchFilterSheet(
                     Icon(Icons.Outlined.Refresh, contentDescription = "Reset filters")
                 }
                 Spacer(modifier = Modifier.weight(1f))
-                FilledIconButton(onClick = onApply, enabled = filters.isSearchable) {
-                    Icon(Icons.Outlined.Search, contentDescription = "Apply filters")
+                FilledIconButton(onClick = onApply, enabled = refine || filters.isSearchable) {
+                    Icon(
+                        if (refine) Icons.Outlined.Check else Icons.Outlined.Search,
+                        contentDescription = if (refine) "Done" else "Apply filters"
+                    )
                 }
             }
             Text(
-                text = "Filters",
+                text = if (refine) "Refine" else "Filters",
                 style = MaterialTheme.typography.titleLarge
             )
+            if (refine && refineMatchText != null) {
+                Text(text = refineMatchText, style = MaterialTheme.typography.bodySmall)
+            }
 
             Column(
                 modifier = Modifier
@@ -121,7 +131,7 @@ fun SearchFilterSheet(
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                FilterSection(title = "Sort by") {
+                if (!refine) FilterSection(title = "Sort by") {
                     ChipRow {
                         AO3SearchSort.entries
                             .filter { allowsRelevanceSort || it != AO3SearchSort.RELEVANCE }
@@ -218,7 +228,7 @@ fun SearchFilterSheet(
                     }
                 }
 
-                FilterSection(title = "Crossovers") {
+                if (!refine) FilterSection(title = "Crossovers") {
                     ChipRow {
                         AO3Crossover.entries.forEach { crossover ->
                             FilterChip(
@@ -246,7 +256,7 @@ fun SearchFilterSheet(
                     }
                 }
 
-                FilterSection(title = "Updated") {
+                if (!refine) FilterSection(title = "Updated") {
                     ChipRow {
                         AO3Updated.entries.forEach { updated ->
                             FilterChip(
@@ -276,7 +286,7 @@ fun SearchFilterSheet(
 
                 FilterSection(
                     title = "Tags",
-                    footer = "Comma-separated. Suggestions come from your library and AO3. " +
+                    footer = if (refine) null else "Comma-separated. Suggestions come from your library and AO3. " +
                         "Use Exclude fields for −\"tag\" query clauses."
                 ) {
                     TagPairFields(
@@ -370,21 +380,22 @@ fun SearchFilterSheet(
                 Spacer(modifier = Modifier.height(4.dp))
             }
 
-            HorizontalDivider()
-
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                // Apply and Reset live in the header now; Close and Save stay here,
-                // because both are rarer and more deliberate than either.
-                Spacer(modifier = Modifier.weight(1f))
-                OutlinedButton(onClick = onDismiss) {
-                    Text("Close")
-                }
-                if (onSave != null) {
-                    OutlinedButton(onClick = onSave) {
-                        Text("Save Search…")
+            if (!refine) {
+                HorizontalDivider()
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    // Apply and Reset live in the header now; Close and Save stay here,
+                    // because both are rarer and more deliberate than either.
+                    Spacer(modifier = Modifier.weight(1f))
+                    OutlinedButton(onClick = onDismiss) {
+                        Text("Close")
+                    }
+                    if (onSave != null) {
+                        OutlinedButton(onClick = onSave) {
+                            Text("Save Search…")
+                        }
                     }
                 }
             }
