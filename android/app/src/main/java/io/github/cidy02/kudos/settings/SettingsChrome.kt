@@ -20,6 +20,7 @@ import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -138,10 +139,15 @@ fun SettingsActionRow(
     modifier: Modifier = Modifier,
     icon: ImageVector? = null,
     enabled: Boolean = true,
-    contentDescription: String? = null
+    contentDescription: String? = null,
+    destructive: Boolean = false
 ) {
     val tokens = LocalKudosTokens.current
-    val color = if (enabled) tokens.accent else tokens.secondaryInk.copy(alpha = 0.45f)
+    val color = when {
+        !enabled -> tokens.secondaryInk.copy(alpha = 0.45f)
+        destructive -> MaterialTheme.colorScheme.error
+        else -> tokens.accent
+    }
     SettingsIconRow(
         label = label,
         color = color,

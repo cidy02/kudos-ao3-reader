@@ -58,16 +58,12 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
 import androidx.navigation.NavController
 import io.github.cidy02.kudos.BuildConfig
 import io.github.cidy02.kudos.KudosApplication
 import io.github.cidy02.kudos.auth.AO3AuthRepository
 import io.github.cidy02.kudos.auth.AO3AuthState
 import io.github.cidy02.kudos.backup.PairingCard
-import io.github.cidy02.kudos.backup.TombstoneSigning
-import io.github.cidy02.kudos.backup.TombstoneTrustStore
-import io.github.cidy02.kudos.backup.TrustedDevice
 import io.github.cidy02.kudos.core.model.AppThemeSetting
 import io.github.cidy02.kudos.core.model.KudosSettings
 import io.github.cidy02.kudos.core.model.MatureContentMode
@@ -699,17 +695,6 @@ fun SettingsFolderSyncPage(repository: SettingsRepository, settings: KudosSettin
     val syncRepository = container?.syncRepository
     var lastSyncFolded by remember { mutableStateOf(0) }
     var syncBusy by remember { mutableStateOf(false) }
-    var showPairing by remember { mutableStateOf(false) }
-    var trustedDevices by remember { mutableStateOf<List<TrustedDevice>>(emptyList()) }
-    val deviceKey = remember(context) {
-        runCatching {
-            TombstoneSigning.initialize(context)
-            TombstoneSigning.publicKeyHex()
-        }.getOrNull()
-    }
-    LaunchedEffect(Unit) {
-        trustedDevices = runCatching { TombstoneTrustStore(repository).trustedDevices() }.getOrDefault(emptyList())
-    }
 
     val syncFolderLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocumentTree()
@@ -723,45 +708,14 @@ fun SettingsFolderSyncPage(repository: SettingsRepository, settings: KudosSettin
 
     SettingsPage(title = "Sync Folder") {
         item {
-            SettingsSection(
-                label = "Deletion signing",
-                footnote = "Kudos checks that deletions came from one of your devices. Pair each of your " +
-                    "other devices here, and pair this one on each of them: scan its QR code or " +
-                    "share its pairing code. Deletions from a device that is not paired are " +
-                    "ignored. A backup file can never mark a device as trusted."
-            ) {
-                Column(Modifier.padding(horizontal = 13.dp, vertical = 12.dp)) {
-                    Text("This device", color = tokens.primaryInk, fontSize = 16.sp)
-                    Text(
-                        text = deviceKey ?: "Unavailable",
-                        color = tokens.secondaryInk,
-                        fontSize = 12.sp,
-                        lineHeight = 16.sp,
-                        modifier = Modifier.padding(top = 4.dp)
-                    )
-                }
-                SubjectRowSeparator()
-                if (trustedDevices.isEmpty()) {
-                    Text(
-                        text = "No other devices paired yet.",
-                        color = tokens.secondaryInk,
-                        fontSize = 15.sp,
-                        modifier = Modifier.padding(horizontal = 13.dp, vertical = 12.dp)
-                    )
-                } else {
-                    trustedDevices.forEachIndexed { index, device ->
-                        if (index > 0) SubjectRowSeparator()
-                        SubjectFormRow(
-                            label = device.label.ifBlank { "Paired device" },
-                            value = device.publicKeyHex.take(8)
-                        )
-                    }
-                }
-                SubjectRowSeparator()
-                SettingsActionRow(
-                    label = "Pair a Device",
-                    enabled = container != null,
-                    onClick = { showPairing = true }
+            // The section the Backup page shows too: this device's key, the paired devices
+            // with rename, undo and revoke, and the pairing sheet.
+            if (container != null) {
+                PairingCard(
+                    settingsRepository = container.settingsRepository,
+                    database = container.database,
+                    workRepository = container.workRepository,
+                    backupChrome = true
                 )
             }
         }
@@ -846,15 +800,6 @@ fun SettingsFolderSyncPage(repository: SettingsRepository, settings: KudosSettin
         }
     }
 
-    if (showPairing && container != null) {
-        Dialog(onDismissRequest = { showPairing = false }) {
-            PairingCard(
-                settingsRepository = container.settingsRepository,
-                database = container.database,
-                workRepository = container.workRepository
-            )
-        }
-    }
 }
 
 @Composable

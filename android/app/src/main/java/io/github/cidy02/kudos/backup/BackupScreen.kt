@@ -6,28 +6,25 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.FileDownload
+import androidx.compose.material.icons.outlined.FileUpload
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Checkbox
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -37,12 +34,22 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import io.github.cidy02.kudos.data.local.KudosDatabase
 import io.github.cidy02.kudos.data.preferences.SettingsRepository
-import io.github.cidy02.kudos.ui.components.KudosScreenHeader
-import io.github.cidy02.kudos.ui.components.MetadataChipRow
+import io.github.cidy02.kudos.settings.SettingsActionRow
+import io.github.cidy02.kudos.settings.SettingsFootnote
+import io.github.cidy02.kudos.settings.SettingsPage
+import io.github.cidy02.kudos.settings.SettingsSection
+import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
+import io.github.cidy02.kudos.ui.subject.SubjectFormRow
+import io.github.cidy02.kudos.ui.subject.SubjectMetrics
+import io.github.cidy02.kudos.ui.subject.SubjectRowSeparator
+import io.github.cidy02.kudos.ui.subject.SubjectToggle
 import io.github.cidy02.kudos.works.WorkRepository
 import java.io.File
+import java.nio.file.Files
+import java.nio.file.StandardOpenOption
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
@@ -108,6 +115,7 @@ fun BackupScreen(
                 pendingImport = PendingBackupImport(
                     bytes = bytes,
                     preview = preview,
+                    manifest = pack.manifest,
                     syncEnabled = syncEnabled
                 )
             } catch (error: Exception) {
@@ -138,7 +146,13 @@ fun BackupScreen(
                     docs.mkdirs()
                     val file = File(docs, repository.suggestedSafetyBackupFileName())
                     val safetyBytes = repository.exportV2ZipBytes()
-                    withContext(Dispatchers.IO) { file.writeBytes(safetyBytes) }
+                    withContext(Dispatchers.IO) {
+                        // Never overwrite the only copy that can undo an earlier Replace.
+                        Files.write(
+                            file.toPath(), safetyBytes,
+                            StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE
+                        )
+                    }
                     safetyName = file.name
                     if (pauseSync && pending.syncEnabled) {
                         settingsRepository.updateSyncIsEnabled(false)
@@ -166,122 +180,79 @@ fun BackupScreen(
         }
     }
 
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 18.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
-    ) {
+    val tokens = LocalKudosTokens.current
+    SettingsPage(title = "Backup") {
         item {
-            // TopAppBar already says "Backup"; keep privacy/compatibility guidance only.
-            KudosScreenHeader(
-                subtitle = "Portable Kudos backups keep Library data, EPUB files, fonts, and settings separate from AO3 session data."
-            )
-        }
-        item {
-            BackupInfoCard(
-                title = "Compatibility",
-                rows = listOf(
-                    "Export writes ZIP packages at manifest v${BackupVersion.CURRENT} (Apple-compatible).",
-                    "Import accepts Apple/Android .kudosbackup ZIP versions ${BackupVersion.APPLE_V1}–${BackupVersion.CURRENT}.",
-                    "Merge adds works that are not already here. Replace Library makes this device match the file.",
-                    "Unsigned deletion claims in a backup or sync folder are ignored. Signed tombstones apply only from devices you already trust."
-                )
-            )
-        }
-        item {
-            BackupInfoCard(
-                title = "Privacy",
-                rows = listOf(
-                    "AO3 passwords are never stored.",
-                    "AO3 cookies, CSRF tokens, and session files are excluded from backups.",
-                    "Backup import treats ZIP paths and filenames as untrusted input."
-                )
-            )
-        }
-        item {
-            Card(
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceContainerLow
-                ),
-                modifier = Modifier.fillMaxWidth()
+            SettingsSection(
+                footnote = "Your backup file includes your Library, Reading Queues, downloaded copies, " +
+                    "User Tags, saved links, custom fonts, imported original files, and app " +
+                    "settings. Importing adds anything you don't have without removing what is " +
+                    "already here. Your AO3 sign-in and password are never included."
             ) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Text("Import and export", style = MaterialTheme.typography.titleMedium)
-                    MetadataChipRow(
-                        labels = listOf(
-                            "v${BackupVersion.CURRENT} ZIP",
-                            "v1–v${BackupVersion.CURRENT} import",
-                            "SAF picker",
-                            "merge or replace",
-                            "session excluded"
-                        ),
-                        prominent = true
-                    )
-                    Text(
-                        text = "Export saves a portable library archive. Import can merge new works " +
-                            "or replace this device's library. Unsigned or untrusted tombstones in the file are not applied.",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        OutlinedButton(
-                            enabled = !busy,
-                            onClick = {
-                                importLauncher.launch(
-                                    arrayOf(
-                                        "application/zip",
-                                        "application/octet-stream",
-                                        "*/*"
-                                    )
-                                )
-                            },
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Text("Import")
-                        }
-                        Button(
-                            enabled = !busy,
-                            onClick = {
-                                exportLauncher.launch(repository.suggestedExportFileName())
-                            },
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Text("Export")
-                        }
+                SettingsActionRow(
+                    label = "Export Backup…",
+                    icon = Icons.Outlined.FileUpload,
+                    enabled = !busy,
+                    onClick = {
+                        exportLauncher.launch(repository.suggestedExportFileName())
                     }
-                    if (busy) {
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(12.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            CircularProgressIndicator()
-                            Text(
-                                text = "Working…",
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                SubjectRowSeparator()
+                SettingsActionRow(
+                    label = "Import Backup…",
+                    icon = Icons.Outlined.FileDownload,
+                    enabled = !busy,
+                    onClick = {
+                        importLauncher.launch(
+                            arrayOf(
+                                "application/zip",
+                                "application/octet-stream",
+                                "*/*"
                             )
-                        }
-                    }
-                    statusMessage?.let { message ->
-                        Text(
-                            text = message,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = if (statusIsError) {
-                                MaterialTheme.colorScheme.error
-                            } else {
-                                MaterialTheme.colorScheme.primary
-                            }
                         )
                     }
+                )
+                if (busy) {
+                    LinearProgressIndicator(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 13.dp),
+                        color = tokens.accent,
+                        trackColor = tokens.glassFill(0.12)
+                    )
+                    Text(
+                        text = "Working…",
+                        color = tokens.secondaryInk,
+                        fontSize = 13.sp,
+                        modifier = Modifier.padding(horizontal = 13.dp, vertical = 8.dp)
+                    )
+                }
+                statusMessage?.let { message ->
+                    Text(
+                        text = message,
+                        color = if (statusIsError) MaterialTheme.colorScheme.error else tokens.secondaryInk,
+                        fontSize = 13.sp,
+                        modifier = Modifier.padding(horizontal = 13.dp, vertical = 12.dp)
+                    )
                 }
             }
+            // Keep Android's existing compatibility and trust-boundary warnings visible.
+            SettingsFootnote(
+                "Export writes ZIP packages at manifest v${BackupVersion.CURRENT} (Apple-compatible).\n" +
+                    "Import accepts Apple/Android .kudosbackup ZIP versions ${BackupVersion.APPLE_V1}–${BackupVersion.CURRENT}.\n" +
+                    "Merge adds works that are not already here. Replace Library makes this device match the file.\n" +
+                    "Unsigned deletion claims in a backup or sync folder are ignored. Signed tombstones apply only from devices you already trust."
+            )
+            SettingsFootnote(
+                "AO3 passwords are never stored.\n" +
+                    "AO3 cookies, CSRF tokens, and session files are excluded from backups.\n" +
+                    "Backup import treats ZIP paths and filenames as untrusted input."
+            )
         }
         item {
             PairingCard(
                 settingsRepository = settingsRepository,
                 database = database,
-                workRepository = workRepository
+                workRepository = workRepository,
+                backupChrome = true
             )
         }
     }
@@ -301,9 +272,11 @@ fun BackupScreen(
 private data class PendingBackupImport(
     val bytes: ByteArray,
     val preview: BackupImportPreview,
+    val manifest: KudosBackupManifest,
     val syncEnabled: Boolean
 )
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ImportBackupDialog(
     pending: PendingBackupImport,
@@ -312,138 +285,188 @@ private fun ImportBackupDialog(
     onReplace: (pauseSync: Boolean) -> Unit
 ) {
     val preview = pending.preview
-    if (preview.isLibraryEmpty) {
-        AlertDialog(
-            onDismissRequest = onDismiss,
-            title = { Text("Restore from Backup") },
-            text = {
-                Text(
-                    "This library is empty. Restore ${preview.fileWorkCount} work(s) from the selected backup."
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = onMerge) { Text("Restore from Backup") }
-            },
-            dismissButton = {
-                TextButton(onClick = onDismiss) { Text("Cancel") }
-            }
-        )
-    } else {
-        ReplaceOrMergeDialog(
-            pending = pending,
-            onDismiss = onDismiss,
-            onMerge = onMerge,
-            onReplace = onReplace
-        )
-    }
-}
-
-@Composable
-private fun ReplaceOrMergeDialog(
-    pending: PendingBackupImport,
-    onDismiss: () -> Unit,
-    onMerge: () -> Unit,
-    onReplace: (pauseSync: Boolean) -> Unit
-) {
-    val preview = pending.preview
+    val tokens = LocalKudosTokens.current
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    var reviewingReplace by remember { mutableStateOf(false) }
     var acknowledgeRemoval by remember { mutableStateOf(false) }
     var pauseSync by remember { mutableStateOf(true) }
     var replaceArmed by remember { mutableStateOf(false) }
-    LaunchedEffect(acknowledgeRemoval, preview.willRemove) {
+    // Each review/re-check gets its own full delay; leaving review cancels the wait.
+    LaunchedEffect(reviewingReplace, acknowledgeRemoval, preview.willRemove) {
         replaceArmed = false
-        if (preview.willRemove == 0 || acknowledgeRemoval) {
+        if (reviewingReplace && acknowledgeRemoval) {
             delay(1_500)
             replaceArmed = true
         }
     }
-    val replaceEnabled = replaceArmed && (preview.willRemove == 0 || acknowledgeRemoval)
+    val replaceEnabled = replaceArmed && acknowledgeRemoval
 
-    AlertDialog(
+    ModalBottomSheet(
         onDismissRequest = onDismiss,
-        title = { Text("Import this backup?") },
-        text = {
-            Column(
-                modifier = Modifier.verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+        sheetState = sheetState,
+        containerColor = tokens.background,
+        contentColor = tokens.primaryInk
+    ) {
+        Column(Modifier.fillMaxHeight(0.9f)) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = SubjectMetrics.accountGutter),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    "Library: ${preview.localWorkCount} works. File: ${preview.fileWorkCount} works. " +
-                        "Will add ${preview.willAdd}. Will remove ${preview.willRemove}. " +
-                        "In both: ${preview.inBoth}."
+                    text = if (reviewingReplace) "Replace Library" else "Import Backup",
+                    color = tokens.primaryInk,
+                    fontSize = 20.sp,
+                    modifier = Modifier.weight(1f)
                 )
-                Text(
-                    "Merge adds works that are not already here. It does not delete local works " +
-                        "or apply unsigned deletion claims from the file."
-                )
-                if (preview.isMuchSmallerThanLibrary) {
-                    Text(
-                        "This backup is much smaller than your library.",
-                        color = MaterialTheme.colorScheme.tertiary
-                    )
+                if (reviewingReplace) {
+                    TextButton(
+                        onClick = {
+                            reviewingReplace = false
+                            acknowledgeRemoval = false
+                        },
+                        colors = ButtonDefaults.textButtonColors(contentColor = tokens.accent)
+                    ) { Text("Back") }
                 }
-                if (preview.willRemove > 0) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Checkbox(
-                            checked = acknowledgeRemoval,
-                            onCheckedChange = { acknowledgeRemoval = it }
-                        )
-                        Text("Remove ${preview.willRemove} works that are not in this backup.")
-                    }
-                }
-                if (pending.syncEnabled) {
-                    Text("Sync will put removed works back. Pause sync for this device?")
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Checkbox(
-                            checked = pauseSync,
-                            onCheckedChange = { pauseSync = it }
-                        )
-                        Text("Pause sync (recommended). The sync folder is not wiped.")
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            Column(horizontalAlignment = Alignment.End) {
-                TextButton(onClick = onMerge) { Text("Merge") }
                 TextButton(
-                    onClick = { onReplace(pending.syncEnabled && pauseSync) },
-                    enabled = replaceEnabled,
-                    colors = ButtonDefaults.textButtonColors(
-                        contentColor = MaterialTheme.colorScheme.error
-                    )
-                ) {
-                    Text("Replace Library")
-                }
+                    onClick = onDismiss,
+                    colors = ButtonDefaults.textButtonColors(contentColor = tokens.accent)
+                ) { Text("Cancel") }
             }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
-        }
-    )
-}
-
-@Composable
-private fun BackupInfoCard(
-    title: String,
-    rows: List<String>
-) {
-    Card(
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
-        ),
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Text(text = title, style = MaterialTheme.typography.titleMedium)
-            rows.forEach { row ->
-                Text(
-                    text = row,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .verticalScroll(rememberScrollState())
+                    .padding(bottom = 24.dp)
+            ) {
+                SettingsSection(label = "This backup", footnote = null) {
+                    if (reviewingReplace) {
+                        SubjectFormRow("Works in your library", value = "${preview.localWorkCount}")
+                        SubjectRowSeparator()
+                        SubjectFormRow("Works in this backup", value = "${preview.fileWorkCount}")
+                        SubjectRowSeparator()
+                        SubjectFormRow("Will be added", value = "${preview.willAdd}")
+                        SubjectRowSeparator()
+                        SubjectFormRow("Will be removed", value = "${preview.willRemove}")
+                        SubjectRowSeparator()
+                        SubjectFormRow("In both", value = "${preview.inBoth}")
+                    } else {
+                        SubjectFormRow("Library records", value = "${pending.manifest.works.size}")
+                        SubjectRowSeparator()
+                        SubjectFormRow("Saved links", value = "${pending.manifest.bookmarks.size}")
+                        SubjectRowSeparator()
+                        SubjectFormRow("Reading queues", value = "${pending.manifest.readingQueues.size}")
+                        SubjectRowSeparator()
+                        SubjectFormRow("Collections", value = "${pending.manifest.collections.size}")
+                        SubjectRowSeparator()
+                        SubjectFormRow("Custom fonts", value = "${pending.manifest.fonts.size}")
+                    }
+                }
+                // Preserve the warning in the choice step too, before either import action.
+                if (!preview.isLibraryEmpty && preview.isMuchSmallerThanLibrary) {
+                    Text(
+                        text = "This backup has far fewer works than your current library.",
+                        color = MaterialTheme.colorScheme.tertiary,
+                        fontSize = 13.sp,
+                        lineHeight = 18.sp,
+                        modifier = Modifier.padding(horizontal = SubjectMetrics.accountGutter).padding(top = 16.dp)
+                    )
+                }
+                if (reviewingReplace) {
+                    SettingsSection(
+                        footnote = "Replace only changes this device. Removed works go to Recently Deleted and " +
+                            "can return through Merge; saved links, saved searches, reading history, stars, " +
+                            "and fandom visits are deleted completely and remembered as deleted, so Merge " +
+                            "will not bring them back. To restore everything, import the saved copy and " +
+                            "choose Replace."
+                    ) {
+                        // iOS asks for acknowledgement even when the removal count is zero.
+                        SubjectFormRow(
+                            label = "Remove ${preview.willRemove} works that are not in this backup",
+                            trailing = {
+                                SubjectToggle(
+                                    checked = acknowledgeRemoval,
+                                    onCheckedChange = { acknowledgeRemoval = it },
+                                    contentDescription = "Remove ${preview.willRemove} works that are not in this backup"
+                                )
+                            }
+                        )
+                        if (pending.syncEnabled) {
+                            SubjectRowSeparator()
+                            SubjectFormRow(
+                                label = "Pause Library Sync on this device",
+                                trailing = {
+                                    SubjectToggle(
+                                        checked = pauseSync,
+                                        onCheckedChange = { pauseSync = it },
+                                        contentDescription = "Pause Library Sync on this device"
+                                    )
+                                }
+                            )
+                            Text(
+                                text = "If you leave Library Sync on, it will add the removed works back. " +
+                                    "Pause it on this device?",
+                                color = tokens.secondaryInk,
+                                fontSize = 13.sp,
+                                lineHeight = 18.sp,
+                                modifier = Modifier.padding(horizontal = 13.dp, vertical = 8.dp)
+                            )
+                            Text(
+                                text = "Pause sync (recommended). The sync folder is not wiped.",
+                                color = tokens.secondaryInk,
+                                fontSize = 13.sp,
+                                lineHeight = 18.sp,
+                                modifier = Modifier.padding(horizontal = 13.dp).padding(bottom = 8.dp)
+                            )
+                        }
+                        Text(
+                            text = "Kudos saves a copy of your current library before replacing it. " +
+                                "If the copy cannot be saved, your library will not be replaced.",
+                            color = tokens.secondaryInk,
+                            fontSize = 13.sp,
+                            lineHeight = 18.sp,
+                            modifier = Modifier.padding(horizontal = 13.dp, vertical = 12.dp)
+                        )
+                        SubjectRowSeparator()
+                        SettingsActionRow(
+                            label = "Replace Library",
+                            destructive = true,
+                            enabled = replaceEnabled,
+                            onClick = { onReplace(pending.syncEnabled && pauseSync) }
+                        )
+                    }
+                } else {
+                    if (preview.isLibraryEmpty) {
+                        SettingsSection(
+                            footnote = "This library is empty. Restore ${preview.fileWorkCount} work(s) from the selected backup."
+                        ) {
+                            SettingsActionRow(label = "Restore from Backup", onClick = onMerge)
+                        }
+                    } else {
+                        SettingsSection(
+                            footnote = "Merge keeps everything already on this device and adds anything you don't " +
+                                "have from the backup. It removes nothing."
+                        ) {
+                            SettingsActionRow(label = "Merge", onClick = onMerge)
+                        }
+                        SettingsFootnote(
+                            "Merge adds works that are not already here. It does not delete local works " +
+                                "or apply unsigned deletion claims from the file."
+                        )
+                        SettingsSection(
+                            footnote = "Replace makes this device match the backup. Your works, reading positions, " +
+                                "notes, collections, and queues change to match it, and anything missing from " +
+                                "the backup is removed. You will confirm before it starts, and Kudos saves a " +
+                                "copy of your current library first."
+                        ) {
+                            SettingsActionRow(
+                                label = "Replace Library…",
+                                destructive = true,
+                                onClick = { reviewingReplace = true }
+                            )
+                        }
+                    }
+                }
             }
         }
     }
