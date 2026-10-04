@@ -15,6 +15,7 @@ import io.github.cidy02.kudos.network.ao3.writes.AO3WriteRepository
 import io.github.cidy02.kudos.reader.settings.ReaderColorTheme
 import io.github.cidy02.kudos.reader.settings.ReaderPreferences
 import io.github.cidy02.kudos.reader.settings.ReaderSettingsMapper
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -26,6 +27,7 @@ import kotlinx.coroutines.launch
  */
 class ReaderViewModel(
     private val repository: ReaderRepository,
+    private val readingLogService: ReadingLogService,
     private val settingsRepository: SettingsRepository,
     private val annotationRepository: AnnotationRepository,
     private val workId: String,
@@ -46,6 +48,7 @@ class ReaderViewModel(
 
     private var autoFinishedThisSession = false
     private var spineCountForEof = 0
+    private var sessionLifecycleJob: Job? = null
 
     /** iOS KeepScreenAwakeModifier: the screen stays lit while a book is open, if asked. */
     val keepScreenAwake: kotlinx.coroutines.flow.StateFlow<Boolean> = settingsRepository.settings
@@ -123,23 +126,41 @@ class ReaderViewModel(
         markFinished()
     }
 
-    fun flushProgress() {
-        viewModelScope.launch {
-            saver.flush()
-            repository.finishReading(workId)
+    fun startReadingSession() {
+        enqueueSessionLifecycle {
+            repository.currentWork(workId)?.let { readingLogService.startSession(it) }
         }
     }
 
-    fun close() {
-        viewModelScope.launch {
+    fun pauseReadingSession() {
+        enqueueSessionLifecycle {
             saver.flush()
-            repository.finishReading(workId)
+            repository.finishReading(workId)?.let { readingLogService.pauseSession(it) }
+        }
+    }
+
+    fun resumeReadingSession() {
+        enqueueSessionLifecycle { readingLogService.resumeSession(workId) }
+    }
+
+    fun close() {
+        enqueueSessionLifecycle {
+            saver.flush()
+            repository.finishReading(workId)?.let { readingLogService.endSession(it) }
             repository.close(workId)
         }
     }
 
+    private fun enqueueSessionLifecycle(block: suspend () -> Unit) {
+        val previous = sessionLifecycleJob
+        sessionLifecycleJob = viewModelScope.launch {
+            previous?.join()
+            block()
+        }
+    }
+
     fun markFinished() {
-        viewModelScope.launch {
+        enqueueSessionLifecycle {
             repository.setFinished(workId, true)
             updateReading { reading ->
                 reading.copy(
@@ -362,6 +383,7 @@ class ReaderViewModel(
     companion object {
         fun factory(
             repository: ReaderRepository,
+            readingLogService: ReadingLogService,
             settingsRepository: SettingsRepository,
             annotationRepository: AnnotationRepository,
             workId: String,
@@ -371,6 +393,7 @@ class ReaderViewModel(
                 initializer {
                     ReaderViewModel(
                         repository,
+                        readingLogService,
                         settingsRepository,
                         annotationRepository,
                         workId,

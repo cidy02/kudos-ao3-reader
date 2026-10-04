@@ -248,10 +248,12 @@ private fun ReaderReading(
     }
 
     // Persist any pending progress when leaving the reader…
+    LaunchedEffect(Unit) { viewModel.startReadingSession() }
     DisposableEffect(Unit) {
         onDispose { viewModel.close() }
     }
-    LifecycleEventEffect(Lifecycle.Event.ON_STOP) { viewModel.flushProgress() }
+    LifecycleEventEffect(Lifecycle.Event.ON_STOP) { viewModel.pauseReadingSession() }
+    LifecycleEventEffect(Lifecycle.Event.ON_START) { viewModel.resumeReadingSession() }
 
     val opening by produceState<ReadiumOpenResult?>(initialValue = null, state.epubPath, attempt) {
         value = null

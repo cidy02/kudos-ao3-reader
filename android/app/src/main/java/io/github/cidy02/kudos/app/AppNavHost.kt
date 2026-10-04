@@ -728,6 +728,7 @@ fun AppNavHost(
                     key = workId,
                     factory = ReaderViewModel.factory(
                         container.readerRepository,
+                        container.readingLogService,
                         container.settingsRepository,
                         container.annotationRepository,
                         workId,

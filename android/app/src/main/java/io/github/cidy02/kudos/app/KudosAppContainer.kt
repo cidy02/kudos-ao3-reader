@@ -42,6 +42,7 @@ import io.github.cidy02.kudos.network.ao3.search.AO3SearchRepository
 import io.github.cidy02.kudos.network.ao3.search.AO3TagAutocompleteRepository
 import io.github.cidy02.kudos.network.github.GitHubReleaseClient
 import io.github.cidy02.kudos.reader.ReaderRepository
+import io.github.cidy02.kudos.reader.ReadingLogService
 import io.github.cidy02.kudos.search.SavedSearchRepository
 import io.github.cidy02.kudos.update.AppUpdateInstaller
 import io.github.cidy02.kudos.update.AppUpdateNotifier
@@ -254,6 +255,10 @@ class KudosAppContainer(
             settingsProvider = { settingsRepository.snapshot() },
             customFontRepository = customFontRepository
         )
+    }
+
+    val readingLogService: ReadingLogService by lazy {
+        ReadingLogService(database.readingLogDao())
     }
 
     val annotationRepository: io.github.cidy02.kudos.reader.AnnotationRepository by lazy {

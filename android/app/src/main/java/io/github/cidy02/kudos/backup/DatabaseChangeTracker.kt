@@ -17,6 +17,7 @@ class DatabaseChangeTracker(
         "reading_queues",
         "reading_queue_memberships",
         "annotations",
+        "reading_sessions",
         "collections",
         "collection_work_cross_refs",
         "sync_tombstones"
