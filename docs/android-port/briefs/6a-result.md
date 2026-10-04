@@ -101,6 +101,34 @@ screen stops the check on both.
 **Not seen on the emulator:** the running state and "Stopped". The demo has one work to check,
 so the check ends at once.
 
+## Queue Storage (`settings/QueueStorageScreen.kt`) — done
+
+Redrawn as iOS's `ReadingQueueStorageView`. It had two back buttons (the shell's and a Material
+title bar's), Material cards, and a pull-to-refresh that did nothing.
+
+| | Before | After |
+|---|---|---|
+| Summary | "Queued Works", "Queue-only Works", "Preserved EPUBs", "Preserved Storage" in a Material card | the same four, as form rows |
+| Empty list | card "No EPUBs" / "No queued EPUBs are currently stored on this device." | "None of your queued works is downloaded on this device." |
+| A row | title, author, size, a "Queue" capsule; a bookmark icon on every row | the same; a clock for a work in Saved for Later and a list for one only in other queues, as iOS |
+| Footnote | "Removing a work here only removes queue membership. Saved or favorited works stay in Kudos; queue-only works are removed when their last queue is gone." | "Removing a work here takes it out of its queues. It stays in Kudos if you saved or favorited it, but a work kept only by queues is removed when its last queue is gone." |
+| Confirmation | "This keeps the work in your Library and only removes its reading queue membership." / "This queue-only work will be removed from Kudos if it has no remaining queues." | "Kudos will remove the work from its reading queues. It will stay in your Library." / "Kudos will remove this work if it isn't in another queue, because you haven't saved or favorited it." |
+
+Unchanged: the title "Remove from reading queues?", the buttons "Remove from Queues" and
+"Remove Queues & Delete", the swipe that asks, and the call
+(`removeFromAllQueuesAndDeleteIfQueueOnly`).
+
+**Added, because iOS has it and the call exists:** holding a row opens a menu with "Keep
+Download" (only for a work that is not saved; `WorkRepository.setSaved(id, true)`, iOS
+`WorkLifecycle.setSaved`) and "Remove from Reading Queues". iOS also offers Keep Download in the
+swipe; here the swipe stays the one action it was.
+
+Callbacks: `onBack` is gone (the shell's back button). `SettingsGroup` and `LabeledContent`,
+used only here, are gone.
+
+**Different from iOS, left:** the rows are drawn at once inside the panel, not lazily (marked in
+the code). The author is plain text; iOS's is a tappable byline.
+
 ## Found on the way, fixed
 
 `SubjectFormRow` gave the label what was left after the value. A long value took the row and
@@ -121,6 +149,11 @@ Settings › Preservation; one check run in the demo ("Finished", "Everything ch
 AO3", "Checked 1."), with the demo database copied first and put back after, because a check
 rewrites a work's AO3 details from the demo's one fixture.
 
+Queue Storage in the same three themes and at the largest text size; holding a row (the menu)
+and swiping one (the confirmation, then Cancel). Nothing was removed and nothing kept.
+
 ## Still to do
 
-Queue Storage.
+Nothing in this brief. Left for later, from above: the shake path of Report a Bug and the
+running state of Check Availability were not seen; the three differences in the availability
+check's own rules; an audit of the open-source components Android really bundles.

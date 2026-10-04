@@ -838,8 +838,7 @@ fun AppNavHost(
                 workRepository = container.workRepository,
                 readingQueueRepository = container.readingQueueRepository,
                 settingsRepository = container.settingsRepository,
-                workFileStore = container.workFileStore,
-                onBack = { navController.popBackStack() }
+                workFileStore = container.workFileStore
             )
         }
         sharedComposable(Routes.Backup) {
