@@ -274,3 +274,84 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   has that screen: the cost, "Check Now", progress, the result, and the list of works no longer
   on AO3 (which was a separate row). Reverse: `settings/AvailabilitySweepScreen.kt` and
   `SettingsPreservationPage`.
+- **2026-10-04 · A sync always writes its manifest; without a full view of the folder it only
+  never deletes.** Codex's audit (brief 5c) proposed that Android stop and write nothing when the
+  folder's manifest is missing or damaged, when a listed file is not in the folder, or when a
+  font is over a limit. A folder in any of those states could then never sync again, and an
+  interrupted first sync is enough to leave one (files uploaded, no manifest yet). Decided
+  instead: the run writes its manifest, and prunes only when it read the live manifest, took
+  every file that is in the folder, and left no conflict copy unfolded. A manifest recovered
+  from `.bak` never allows a prune. A file the manifest lists that is not in the folder is
+  nothing to fetch, as on iOS. This replaces the rule of earlier today that a font over a limit
+  only stops the prune: that still holds, and the font now also stays in the manifest Android
+  writes. Reverse: `folderViewIsCurrent` and `pendingFonts` in `runSyncLocked`
+  (`backup/SyncRepository.kt`).
+- **2026-10-04 · A manifest Android cannot read is never written over, unless it is plainly
+  damaged.** Three cases. Cut short or empty (not JSON at all): damage from a write that died;
+  the run repairs it and prunes nothing. Whole JSON that does not decode (a version number this
+  build does not know, or more than its limits allow): another app version's index; the sync
+  stops with a message and the file is left as it is. There and not readable at all (the
+  provider is offline, the file is over 8 MB): the sync stops. Reverse: `readLiveManifest` and
+  `isWholeJsonObject` in `backup/SyncRepository.kt`.
+- **2026-10-04 · A manifest another device wrote during the sync stops the run.** Earlier today
+  the run went on and only skipped the prune. It then wrote a manifest that did not list what
+  the other device had just added, and the folder's only index lost those records. The run now
+  stops ("Sync folder changed during sync. Try syncing again.") and the next one reads the new
+  manifest first. The comparison is of the manifest's bytes, not its date: a provider's dates can
+  be missing or coarse. Supersedes `de066460`. Reverse: the `contentEquals` check before the
+  commit point in `runSyncLocked`.
+- **2026-10-04 · The manifest is written in place, and the one it replaces is copied to `.bak`
+  first.** Android renamed the live manifest to `.bak` and then renamed a temp into place, so
+  for a moment the folder held files and no manifest. A released iOS build reads that as a first
+  write, publishes its own library, and prunes every file that library does not list. A manifest
+  cut short instead cannot be read by either app, and neither prunes by what it could not read.
+  A folder with no manifest yet still gets a temp renamed into place. Seen on the emulator with
+  Android's own storage provider: names exact, no "(1)" copies, `.bak` holds the manifest that
+  was replaced. Reverse: `writeManifest` in `backup/SyncRepository.kt`.
+- **2026-10-04 · An old lowercase EPUB is still replaced by one under iOS's name.** The audit
+  proposed keeping the lowercase name and having iOS read either case. iOS now does read either
+  case (T-357), but a released iOS build reads only the name in capitals and prunes the other,
+  so Android goes on replacing the file. It is deleted and written again (a rename that changes
+  only case is refused on a phone's storage). Originals and conversion records keep whatever
+  name they have: iOS finds them by listing the folder, in either case. Reverse: `recase` in
+  `writeIfChanged`.
+- **2026-10-04 · An incoming EPUB with an equal clock replaces the local one, as on iOS.** This
+  morning's rule (`932d1e93`) asked for a strictly newer clock. With batches, the first merge
+  moved every clock up to the folder's, and each later batch's EPUB was then refused. iOS's rule
+  is newer or equal. Android bumps the clock on every local EPUB write, so a local re-download
+  is still not undone. Reverse: `incomingIsNewer` in `BackupMergeService.kt`.
+- **2026-10-04 · A later tombstone replaces a held one only when AO3 id and URL also match.**
+  Narrower than iOS, which replaces on type and record id alone (`NewestTombstoneWinsTests`).
+  Codex's reason: the row id is not signed, so a trusted key could swap a held deletion for one
+  that suppresses less. Kept as the safer side; a legitimate change of URL spelling is then not
+  taken. **Differs from iOS; listed for the owner.** Reverse: `sameRecordDeletedLater`.
+- **2026-10-04 · Font names are compared in composed form; letter case is not folded when a
+  font is looked up.** A provider can list `Café.ttf` in decomposed form, and an exact compare
+  then missed it. Case is not folded for the lookup because two fonts can differ only by it, and
+  folding wrote one font's bytes over the other's file. The prune does fold case: it keeps more.
+  Reverse: `fontNamed` in `backup/SyncRepository.kt`.
+- **2026-10-04 · Top-level manifest keys Android does not know are written back as found.** iOS's
+  pronunciation corrections, and whatever a later version adds. Android has no table for them
+  and dropped them from the folder's index. No format change (they are iOS's keys) and no Room
+  change. Backups exported from Android still hold none. Reverse: `knownManifestKeys` and
+  `unknown` in `runSyncLocked`.
+- **2026-10-04 · A file that cannot be written fails the import.** A restore ignored failed
+  EPUB, font and original writes and reported success; the sync then uploaded the old bytes as
+  the newest copy. Reverse: `orThrow` in `backup/BackupRepository.kt`.
+- **2026-10-04 · A deleted record keeps the countdown it already has** (iOS
+  `archivedDeletionState`). Reverse: `keptDeletionSchedule` in `backup/BackupMappers.kt`.
+- **2026-10-04 · The incoming-EPUB check reads the package the container names** (iOS
+  `inspectPackage`), through the ZIP's central directory. Reverse: `isReadablePackage` in
+  `works/EpubImportMetadata.kt`.
+- **2026-10-04 · Android's Sync Folder page says devices must be paired, and shows why a sync
+  failed.** iOS's text ("devices on the same Apple account are trusted automatically") is not
+  true on Android. **Android's wording now differs from iOS's on purpose.** Reverse: the two
+  footnotes and `lastSyncError` in `SettingsFolderSyncPage` (`settings/SettingsPages2.kt`).
+- **2026-10-04 · iOS folder sync changed (T-357, on `claude/polish-loop` and
+  `integrate/cloud-redesign`, not pushed).** An upload reads first (`syncUp` is `syncNow`);
+  files and no manifest is not a first write; a manifest with no readable date allows no prune;
+  EPUBs are read in either letter case and the prune folds case; a manifest cut short is
+  repaired, from Android's `manifest.json.bak` when there is one. Codex drafted the lowercase
+  read and the read-before-upload; its refusal to write a folder with no manifest was reworked
+  for the same reason as on Android. **This changes the reference app's behaviour and needs the
+  owner's eye.** Reverse: revert `91f3930f` (polish) and `ef120853` (integrate).
