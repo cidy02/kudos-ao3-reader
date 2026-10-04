@@ -38,7 +38,9 @@ class SyncRepository(
     private val persistenceGate: PersistenceGate,
     private val clock: () -> Instant = { Instant.now() },
     /** How many bytes of EPUBs one sync-down pass holds in memory at once. */
-    private val maxEpubBatchBytes: Long = 32L * 1024 * 1024
+    private val maxEpubBatchBytes: Long = 32L * 1024 * 1024,
+    /** How many bytes of fonts one sync-down may install (iOS `maxTotalFontBytes`). */
+    private val maxFontPassBytes: Long = BackupLimits.MAX_TOTAL_FONT_BYTES
 ) {
     /**
      * Whole-run single-flight for [runSync]. [PersistenceGate] only serializes
@@ -153,15 +155,12 @@ class SyncRepository(
                 // way, forever.
                 val primary = decodeManifestOrNull(liveManifest)
                     ?: decodeManifestOrNull(backupManifest)
-                primary?.let {
-                    importManifest(syncDir, it)
-                    folderViewIsCurrent = true
-                }
+                primary?.let { folderViewIsCurrent = importManifest(syncDir, it) }
 
                 conflicts.forEach { file ->
                     val manifest = decodeManifestOrNull(file)
                     if (manifest != null) {
-                        importManifest(syncDir, manifest)
+                        if (!importManifest(syncDir, manifest)) folderViewIsCurrent = false
                         file.delete()
                         foldedConflicts += 1
                     }
@@ -322,23 +321,44 @@ class SyncRepository(
         }.getOrNull()
     }
 
-    private suspend fun importManifest(syncDir: DocumentFile, manifest: KudosBackupManifest) {
+    /**
+     * Merges [manifest] and the files it lists. False when a listed font was left for a later
+     * pass: iOS counts that as an outstanding asset and does not prune while one is, because
+     * the manifest this device writes next will not list a font it never installed.
+     */
+    private suspend fun importManifest(syncDir: DocumentFile, manifest: KudosBackupManifest): Boolean {
         val fontFiles = mutableMapOf<String, ByteArray>()
         var totalFontBytes = 0L
+        var complete = true
 
         syncDir.findFile(BackupPaths.FONTS_DIRECTORY)?.let { fontsDir ->
             manifest.fonts.forEach { font ->
-                fontsDir.findFile(font.fileName)?.let { file ->
-                    context.contentResolver.openInputStream(file.uri)?.use {
-                        val path = "${BackupPaths.FONTS_DIRECTORY}/${font.fileName}"
-                        val bytes = it.readFontBytes(path)
-                        totalFontBytes += bytes.size.toLong()
-                        if (totalFontBytes > BackupLimits.MAX_TOTAL_FONT_BYTES) {
-                            throw BackupError.InvalidPackage("Total font size exceeds limit")
-                        }
-                        fontFiles[font.fileName] = bytes
-                    }
+                val file = fontsDir.findFile(font.fileName) ?: return@forEach
+                val path = "${BackupPaths.FONTS_DIRECTORY}/${font.fileName}"
+                // iOS `readChangedRemoteAssets`: a font over the per-file limit, or one that
+                // cannot be read, is left out of this pass and must not block the rest of the
+                // manifest. Throwing here, as this used to, failed the whole sync every time
+                // the folder held such a font.
+                val bytes = runCatching {
+                    context.contentResolver.openInputStream(file.uri)?.use { it.readFontBytes(path) }
+                }.getOrNull()
+                if (bytes == null) {
+                    complete = false
+                    return@forEach
                 }
+                // A font this device already holds byte for byte takes none of the pass's
+                // allowance. One that would take the pass over it waits for the next sync,
+                // when what this one installs no longer counts: a library larger than the
+                // allowance arrives over several syncs instead of never.
+                val settled = fontFileStore.readFont(font.fileName)?.contentEquals(bytes) == true
+                if (!settled) {
+                    if (totalFontBytes + bytes.size > maxFontPassBytes) {
+                        complete = false
+                        return@forEach
+                    }
+                    totalFontBytes += bytes.size
+                }
+                fontFiles[font.fileName] = bytes
             }
         }
 
@@ -366,6 +386,7 @@ class SyncRepository(
             }
             backupRepository.importPackage(KudosBackupPackage(manifest, epubFiles, fontFiles))
         } while (next < manifest.works.size)
+        return complete
     }
 
     /**
