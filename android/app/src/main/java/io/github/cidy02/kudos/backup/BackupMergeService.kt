@@ -516,6 +516,11 @@ object BackupMergeService {
                 // converted every queue-only work into a library work on merge.
                 isSaved = restored.isSaved || existing.isSaved,
                 isQueuedForLater = restored.isQueuedForLater || existing.isQueuedForLater,
+                permanentDeletionScheduledAt = keptDeletionSchedule(
+                    restored.permanentDeletionScheduledAt,
+                    existing.isDeleted,
+                    existing.permanentDeletionScheduledAt
+                ),
                 dateAdded = minInstant(existing.dateAdded, restored.dateAdded),
                 createdAt = minNullableInstant(existing.createdAt, restored.createdAt),
                 lastModifiedAt = maxInstant(existing.lastModifiedAt, incomingModifiedAt)
@@ -1058,7 +1063,11 @@ object BackupMergeService {
                     } else {
                         null
                     },
-                    permanentDeletionScheduledAt = deletionState.permanentDeletionScheduledAt
+                    permanentDeletionScheduledAt = keptDeletionSchedule(
+                        deletionState.permanentDeletionScheduledAt,
+                        existing.isDeleted,
+                        existing.permanentDeletionScheduledAt
+                    )
                 )
                 collectionsById[id] = fillCollectionFields(
                     base, archived, incomingWins = true, exportedAt = exportedAt
@@ -1345,7 +1354,11 @@ object BackupMergeService {
                         },
                         isDeleted = deletionState.isDeleted,
                         deletedAt = if (deletionState.isDeleted) restored.deletedAt else null,
-                        permanentDeletionScheduledAt = deletionState.permanentDeletionScheduledAt,
+                        permanentDeletionScheduledAt = keptDeletionSchedule(
+                            deletionState.permanentDeletionScheduledAt,
+                            existing.isDeleted,
+                            existing.permanentDeletionScheduledAt
+                        ),
                         dateCreated = minInstant(existing.dateCreated, restored.dateCreated)
                     )
                     val filled = fillQueueFields(existing, archived, incomingWins = true)
