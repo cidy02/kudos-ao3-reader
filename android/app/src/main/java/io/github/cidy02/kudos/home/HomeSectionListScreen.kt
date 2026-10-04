@@ -132,6 +132,7 @@ fun HomeSectionListScreen(
     }
 
     var filters by remember(kind) { mutableStateOf(LibraryFilterState()) }
+    var sort by remember(kind) { mutableStateOf(LibrarySort.Natural) }
     var updatePill by remember(kind) { mutableStateOf(HomeUpdatePill.All) }
     var showFilters by remember { mutableStateOf(false) }
     var expandAll by remember { mutableStateOf(false) }
@@ -165,12 +166,14 @@ fun HomeSectionListScreen(
         kind.works(displayItems.map { it.item.work }) { true }
             .mapNotNull { displayById[it.id] }
     }
-    val filteredItems = remember(sectionItems, filters) {
-        if (filters.hasActiveFilters) {
+    val filteredItems = remember(sectionItems, filters, sort) {
+        val narrowed = if (filters.hasActiveFilters) {
             LibraryQuery.filterOnly(sectionItems, filters = filters)
         } else {
             sectionItems
         }
+        // iOS keeps the section's own order until a sort is picked (`HomeSectionListView`).
+        if (sort == LibrarySort.Natural) narrowed else LibraryQuery.sortDisplayItems(narrowed, sort)
     }
     val visibleItems = remember(filteredItems, kind, updatePill) {
         if (kind == HomeSectionKind.RecentlyUpdated) updatePill.apply(filteredItems) else filteredItems
@@ -472,13 +475,16 @@ fun HomeSectionListScreen(
     if (showFilters) {
         LibraryFilterPanel(
             filters = filters,
-            sort = LibrarySort.RecentlyAdded,
+            sort = sort,
             userTags = snapshot?.userTags.orEmpty(),
             collections = snapshot?.collections.orEmpty(),
             onFiltersChange = { filters = it },
-            onSortChange = {},
+            onSortChange = { sort = it },
             onApply = { showFilters = false },
-            onClear = { filters = LibraryFilterState() },
+            onClear = {
+                filters = LibraryFilterState()
+                sort = LibrarySort.Natural
+            },
             onDismiss = { showFilters = false }
         )
     }
