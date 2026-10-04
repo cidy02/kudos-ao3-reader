@@ -23,6 +23,8 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
 import org.junit.After
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
@@ -462,6 +464,30 @@ class SyncRepositoryTest {
         val after = requireKudosLibrary().findFile(BackupPaths.WORKS_DIRECTORY)!!
         assertNotNull(epubIn(after, WORK_REMOTE))
         assertNull("nothing of this device's is uploaded either", epubIn(after, WORK_A))
+    }
+
+    @Test
+    fun whatTheManifestHoldsThatThisBuildDoesNotKnowStaysInTheOneItWrites() = runTest {
+        // iOS's read-aloud pronunciation corrections: Android has no such thing, and wrote a
+        // manifest without them. A device that joined the folder after that never got them.
+        val pronunciations = """{"global":{"Cid":"sid"},"fandoms":{},"works":{}}"""
+        val theirs = BackupJson.encodeToString(remoteManifest(emptyList(), "2026-06-01T00:00:00Z"))
+        val kudos = ensureKudosLibrary()
+        writeChild(
+            kudos, BackupPaths.MANIFEST, "application/json",
+            theirs.trimEnd().removeSuffix("}").plus(""", "pronunciations": $pronunciations}""").toByteArray()
+        )
+        seedLocalWork(WORK_A, "Local", "local-a".toByteArray())
+
+        assertTrue(syncRepository.runSync() is SyncResult.Success)
+
+        val written = Json.parseToJsonElement(
+            readDocument(requireKudosLibrary().findFile(BackupPaths.MANIFEST)!!).toString(Charsets.UTF_8)
+        ).jsonObject
+        assertEquals(Json.parseToJsonElement(pronunciations), written["pronunciations"])
+        // What this build does know is its own: the exporter is this device, not theirs.
+        assertTrue(written["works"].toString().contains(WORK_A, ignoreCase = true))
+        assertFalse(written["exportedBy"].toString().contains("\"test\""))
     }
 
     @Test
