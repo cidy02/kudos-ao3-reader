@@ -250,7 +250,111 @@ in either case.
 - **Each app's older sync file.** iOS folds `KudosLibrary.kudosbackup` (a folder package);
   Android folds `Kudos.kudosbackup` (a zip). Neither reads the other's. Nothing is misread.
 
+## The table: iOS's 65 sync tests, and the Android test for each
+
+Verdicts: **same** (an Android test already pinned the rule), **fixed** (Android differed and was
+changed here), **new test** (Android already behaved the same; it had no test), **iOS only** (an
+iOS mechanism Android does not have), **differs** (left as it is, and why), **not compared**.
+Where a row says "by name", the Android test was matched by what its name says and not read
+line by line.
+
+### `FolderSyncTests` (29)
+
+| iOS test | Android test | Verdict |
+|---|---|---|
+| `connectingAFolderRecordsItAsConfigured` | | not compared (onboarding) |
+| `disconnectingDoesNotReArmTheOnboardingPrompt` | | not compared (onboarding) |
+| `syncUpWritesReadableSyncDirectory` | `syncUpNamesEpubsTheWayIosDoes`, `theFolderAndroidWritesIsTheFixtureIosReads` | fixed `d60ff5a4` |
+| `syncDownRestoresWorkQueueAndCollection` | `aFolderIosWroteIsReadAndKept`; queues and collections go through the merge the backup uses | new test |
+| `syncDownRejectsInvalidEPUBWithoutOverwritingLocalCopy` | `syncDownRejectsAnInvalidEpubWithoutOverwritingTheLocalCopy` | fixed `932d1e93` |
+| `syncDownRejectsInvalidFontWithoutPersistenceOrSelectorChange` | `folderSyncRejectsInvalidFontBeforePersistenceAndRetainsSelector` | same |
+| `syncDownSkipsOversizedFontAndRestoresUnrelatedState` | the same name | fixed `b799dda8` |
+| `syncDownPreservesCollidingFontBytesAndLocalSelector` | `folderSyncPreservesAllLocalFontBytesAndRetainsSelector` | same |
+| `syncDownConvergesWhenFontLibraryExceedsAggregateCap` | `aFontLibraryLargerThanOnePassArrivesOverSeveralSyncs` | fixed `b799dda8` |
+| `syncDownPreservesEveryCaseFoldedDatabaseRow` | `folderSyncCaseVariantCollisionPreservesLocalBytesAndUsesSuffix` | same, by name |
+| `syncDownTreatsTwoLocalFilesAsAmbiguousWhenIncomingMatchesDatabaseFile` | `caseVariantOrphanNeverSubstitutesForExactDatabaseFile`, `missingExactDatabaseFileDoesNotCopyOverCaseVariantOrphan` | same, by name |
+| `syncUpThenSyncDownConvergesWithoutDuplicates` | `equalLengthContentChangeIsRewrittenButIdenticalBytesAreSkipped`; a second sync on the emulator | same |
+| `syncDownMissingFileIsNoop` | every test that starts from an empty folder | same |
+| `operationGatePreventsInterleavedFolderSync` | `aSecondSyncWhileOneRunsIsSkipped` | differs: iOS refuses and records an error; Android skips a second sync and waits its turn behind a backup import. Nothing is lost either way. New test |
+| `dirtyFlagOnlyClearsAfterAnActualWrite` | `pendingChangesClearOnlyAfterASyncThatWrote` | new test |
+| `foldConflictContentsMergesAllInputs` | `aReadableConflictCopyIsMergedAndRemoved` | new test |
+| `foldConflictContentsDoesNotAdoptIncomingUnsignedTombstones` | `folderSyncIngestDoesNotAdoptIncomingTombstones` | same |
+| `folderSyncResultAbsorbsAnotherResultsCountsRatherThanDiscardingThem` | | iOS only: Android shows no counts |
+| `removedCollectionMembershipIsNotResurrectedByStaleSync` | `suppressesResurrectionOfAWorkRemovedFromACollection` | same |
+| `newerCollectionSnapshotRevivesRemovedMembership` | `revivesCollectionWhenArchiveIsNewerThanTombstone` | same for the collection, by name; the membership case not compared |
+| `collectionTombstoneConflictsAreReportedInRestoreSummary` | | iOS only: Android shows no restore summary |
+| `syncUpDoesNotChangeLocalModificationDates` | the same name | new test |
+| `failedSyncUpWritePreservesExistingRemoteManifest` | `manifestWriteIsAtomicishAndKeepsBakOnSecondSync`, `corruptPrimaryManifestFallsBackToBakAndSelfHeals` | same (Android keeps a `.bak`) |
+| `legacySyncPackageIsFoldedReadOnlyAndLeftUntouched` | | iOS only: its own older format |
+| `syncUpLeavesUnchangedEPUBFilesAlone` | `equalLengthContentChangeIsRewrittenButIdenticalBytesAreSkipped`; the emulator | same |
+| `syncUpRemovesOrphanedAssetsButKeepsManifestReferencedOnes` | `pruningHappensAfterManifestCommitAndKeepsListedWorks`, `syncUpKeepsTheEpubOfAListedWorkThisDeviceDoesNotHold` | fixed `d60ff5a4` |
+| `syncDownRetriesManifestReferencedEPUBOnceItAppears` | `anOlderArchiveStillFillsAFileThatWentMissing` | same: Android reads the manifest on every sync and takes any listed EPUB it lacks |
+| `syncDownRejectsSymlinkedEPUBAsset` | | iOS only: Android reaches the folder through the system's document provider |
+| `syncDownSkipsUnchangedRemotePackage` | | iOS only: Android merges the manifest on every sync (slower, not wrong) |
+
+### `EqualSizeEPUBStillSyncsTests`, `MergeMissingEPUBRecoveryTests`, `StaleSyncUpKeepsRemoteAssetsTests` (5)
+
+| iOS test | Android test | Verdict |
+|---|---|---|
+| `aCorrectedBookOfTheSameLengthIsStillFetched` | the same name | fixed `f4da80c3` |
+| `anExistingBookGetsADigestOnReconcile` | `syncUpWritesTheDigestOfTheEpubItUploads` | differs: Android keeps no digest of its own, and computes the one it writes to the folder |
+| `mergeRefillsAnEPUBThatWentMissingLocally` | `fileMergeFillsAGapButLeavesAPresentFileAlone` | fixed `932d1e93` |
+| `mergeLeavesAnExistingLocalEPUBAlone` | the same test | same |
+| `aStaleSyncUpKeepsAnotherDevicesRemoteEPUB` | `nothingIsPrunedWhenTheFoldersManifestCannotBeRead`, `aManifestAnotherDeviceWritesMidSyncStopsThePrune` | fixed `d60ff5a4`, `de066460` |
+
+### `NewestTombstoneWinsTests`, `TombstoneSweepsExistingRecordsTests` (7)
+
+| iOS test | Android test | Verdict |
+|---|---|---|
+| `aLaterDeletionReplacesTheEarlierTombstone` | `aLaterDeletionOfTheSameRecordReplacesTheEarlierRow` | fixed `0370ebad` |
+| `aSnapshotBetweenTheTwoDeletionsCannotResurrectTheWork` | the same name | new test |
+| `theAdoptedRowStillVerifiesAndTakesTheSignedIdentity` | | differs: Android keeps the peer's tombstone as a second row; both suppress the same |
+| `anOlderIncomingTombstoneLeavesTheLaterOneAlone` | the same name | new test |
+| `aTrustedTombstoneRemovesASearchThisDeviceStillHas` | the same name | fixed `0c7db7b0` |
+| `aSearchMadeAfterTheDeletionSurvives` | the same name | new test |
+| `replaceLibraryDoesNotSweepExistingSearches` | the same name | new test |
+
+### `PersistenceSyncTests` (24)
+
+| iOS test | Android test | Verdict |
+|---|---|---|
+| `migrationIsIdempotentAndMarksMissingEPUBRecoverable` | `anOlderArchiveStillFillsAFileThatWentMissing` | iOS only (a launch migration); the rule it serves is the Android test named |
+| `progressMergeDoesNotRegressToOlderSnapshot` | `keepsLocalProgressWhenLocalLastReadIsNewerAndArchiveLacksProgressClock` | same, by name |
+| `backupRestoreKeepsNewerLocalProgress` | `appliesArchiveProgressWhenProgressModifiedAtIsNewer` | same, by name |
+| `newerMacPercentSurvivesBackupAndBeatsTheLocator` | the same name | new test |
+| `olderMacPercentLeavesNewerLocalProgress` | the same name, and `olderProgressDoesNotBringItsMacPercentEvenWhenItsMetadataIsNewer` | fixed `d8f0d17e` |
+| `newerSnapshotWithoutMacPercentClearsIt` | the same name | new test |
+| `keylessSnapshotAtTheSameTimeKeepsTheMacPercent` | the same name | new test |
+| `newerKeylessSnapshotClearsTheMacPercentWhenTheLocatorMoves` | the same name | fixed `d8f0d17e` |
+| `clearedMacPercentIsExportedAsNull` | | same by the code (`BackupMappers` writes an explicit null); no Android test of it |
+| `manifestWithoutTheMacPercentKeyDecodesItAsNil` | `keylessSnapshotAtTheSameTimeKeepsTheMacPercent` depends on it | same |
+| `deletingWorkCreatesTombstone` | | not compared (work lifecycle, outside `backup/`) |
+| `deletingWorkThenImportingOlderBackupDoesNotResurrectIt` | `suppressesResurrectionOfDeletedWorkByUuid` | same |
+| `backupImportDoesNotResurrectExplicitlyUnfavoritedWork` | the same name | new test |
+| `newestTombstoneDecidesSuppressionWhenSeveralShareAO3Identity` | `aSnapshotBetweenTheTwoDeletionsCannotResurrectTheWork` | new test |
+| `suppressedQueueMembershipsAreNotRehomedIntoSavedForLater` | the same name | new test |
+| `newerMembershipChangeRevivesOlderQueueTombstone` | the same name | new test; see the note below |
+| `newerQueueMetadataRevivesOlderQueueTombstone` | the same name | new test; see the note below |
+| `ambiguousQueueTimestampsPreserveDataForSafety` | the same name | new test |
+| `newestQueueTombstoneSuppressesDeterministically` | the same name | new test |
+| `oldQueueTombstoneDoesNotSuppressFreshQueueID` | the same name | new test |
+| `membershipChangesUpdateQueueFreshnessSignal` | `membershipTimestampsCountTowardsTheQueueConflictClock` | same in the merge; the repository's side not compared |
+| `freshInstallRestoreAdoptsArchivedFlagsWithNoExistingLocalRecord` | | not compared |
+| `exportedAtAloneDoesNotReviveContentStaleQueue` | the same name | new test |
+| `tombstoneSurvivesBackupRoundTripIntoFreshInstall` | `exportsAndReimportsTombstonesInManifest` | same, by name |
+
+**Note, a difference kept:** iOS's two revival tests use a snapshot whose records are dated after
+the snapshot itself. Android holds a record's clock to the date of the snapshot that carries it
+(a defence against a forged clock, `BackupTimestampClampTest`), so with those exact values
+Android does not revive the queue. A real export is never dated before its own records, and
+Android's tests use one that is not.
+
+Counts: 12 fixed, 20 new tests, 20 same, 6 iOS only, 3 differ and are left, 4 not compared.
+
 ## Not done from the brief
 
-The test-by-test table against iOS's seven test files (65 tests); tombstones (newest wins,
-signatures, sweeping existing records); conflict copies; what stops a sync from running at all.
+- `Originals/`: iOS syncs the original file of a converted import; Android neither reads nor
+  writes that folder, and never deletes from it.
+- The four rows marked "not compared", and the two "same" rows that say a part was not.
+- A real iPhone and a real Android phone on one folder. Each app has been run against a folder
+  the other's own code wrote, in tests; the two have never shared a live folder.
