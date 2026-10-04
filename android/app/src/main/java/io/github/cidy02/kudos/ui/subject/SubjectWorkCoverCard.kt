@@ -42,6 +42,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -66,6 +67,19 @@ object HomeCardMetrics {
     val height = 231.93.dp
     val radius = 16.dp
     val tileRadius = 12.dp
+}
+
+private data class ScaledHomeCardSize(val width: Dp, val height: Dp)
+
+/** iOS `ScaledCarouselCardSize`: scale proportionally, then clamp to the window. */
+@Composable
+private fun scaledHomeCardSize(): ScaledHomeCardSize {
+    val fontScale = LocalDensity.current.fontScale
+    val scaledWidth = HomeCardMetrics.width * fontScale
+    val scaledHeight = HomeCardMetrics.height * fontScale
+    val maxWidth = (LocalConfiguration.current.screenWidthDp.dp - 32.dp).coerceAtLeast(1.dp)
+    val clampRatio = minOf(1f, maxWidth.value / scaledWidth.value)
+    return ScaledHomeCardSize(scaledWidth * clampRatio, scaledHeight * clampRatio)
 }
 
 enum class HomeStatusArrangement { Grid, Strip }
@@ -97,6 +111,8 @@ fun SubjectWorkCoverCard(
     isSelected: Boolean = false
 ) {
     val tokens = LocalKudosTokens.current
+    val cardSize = scaledHomeCardSize()
+    val ringDiameter = SubjectMetrics.ringDiameter * LocalDensity.current.fontScale
     val hue = HomeFacts.workHue(work.workFandoms, work.title)
     val palette = SubjectPalette.fromHue(hue, tokens.theme)
     val shape = RoundedCornerShape(HomeCardMetrics.radius)
@@ -114,7 +130,7 @@ fun SubjectWorkCoverCard(
     Box(
         modifier
             .padding(top = 2.dp, bottom = 8.dp)
-            .size(HomeCardMetrics.width, HomeCardMetrics.height)
+            .size(cardSize.width, cardSize.height)
             .downloadDimmed(dim)
     ) {
         Box(
@@ -149,7 +165,7 @@ fun SubjectWorkCoverCard(
                                 downloading = downloading,
                                 progress = resolved,
                                 state = if ((resolved ?: 0.0) >= 1.0) "Finished" else "Reading",
-                                diameter = 68.dp
+                                diameter = ringDiameter
                             )
                             footer != null -> UpdateBadge(footer)
                         }
@@ -192,10 +208,11 @@ fun SubjectRemoteCoverCard(
     showsProvenance: Boolean = false
 ) {
     val tokens = LocalKudosTokens.current
+    val cardSize = scaledHomeCardSize()
     val hue = HomeFacts.workHue(summary.fandoms, summary.title)
     val palette = SubjectPalette.fromHue(hue, tokens.theme)
     val shape = RoundedCornerShape(HomeCardMetrics.radius)
-    Box(modifier.padding(top = 2.dp, bottom = 8.dp).size(HomeCardMetrics.width, HomeCardMetrics.height)) {
+    Box(modifier.padding(top = 2.dp, bottom = 8.dp).size(cardSize.width, cardSize.height)) {
         CoverSurface(palette = palette, shape = shape, hero = false) {
             Column(
                 Modifier
@@ -265,10 +282,11 @@ fun SubjectRemoteCoverCard(
 fun HomeCoverSkeleton(modifier: Modifier = Modifier) {
     val tokens = LocalKudosTokens.current
     val shape = RoundedCornerShape(HomeCardMetrics.radius)
+    val cardSize = scaledHomeCardSize()
     Box(
         modifier
             .padding(top = 2.dp, bottom = 8.dp)
-            .size(HomeCardMetrics.width, HomeCardMetrics.height)
+            .size(cardSize.width, cardSize.height)
             .then(cardShadow(tokens.theme, shape, hero = false))
             .clip(shape)
             .background(tokens.cardFill)
@@ -307,50 +325,55 @@ fun HomeStatusTray(
     modifier: Modifier = Modifier
 ) {
     val tokens = LocalKudosTokens.current
+    val fontScale = LocalDensity.current.fontScale
+    val scaledTileSize = tileSize * fontScale
     val ratingTint = AO3StatusTint.rating(rating) ?: AO3StatusTint.gray
     val category = categories.firstOrNull { AO3StatusTint.category(it) != null }
     val categoryTint = category?.let { AO3StatusTint.category(it) } ?: AO3StatusTint.gray
     val warningTint = if (HomeFacts.hasRealArchiveWarning(warnings)) AO3StatusTint.orange else AO3StatusTint.gray
     val completeTint = if (isComplete) AO3StatusTint.green else AO3StatusTint.gray
     val marks: @Composable () -> Unit = {
-        StatusTile(tileSize, ratingTint) { RatingMark(rating, ratingTint, tileSize) }
-        StatusTile(tileSize, categoryTint) { CategoryMark(categories, categoryTint, tileSize) }
-        StatusTile(tileSize, warningTint) {
+        StatusTile(scaledTileSize, ratingTint) { RatingMark(rating, ratingTint, scaledTileSize) }
+        StatusTile(scaledTileSize, categoryTint) { CategoryMark(categories, categoryTint, scaledTileSize) }
+        StatusTile(scaledTileSize, warningTint) {
             Icon(
                 Icons.Filled.Error,
                 contentDescription = "Warnings",
                 tint = warningTint,
-                modifier = Modifier.size(tileSize * 0.58f)
+                modifier = Modifier.size(scaledTileSize * 0.58f)
             )
         }
-        StatusTile(tileSize, completeTint) { CompletionMark(isComplete, completeTint, tileSize) }
+        StatusTile(scaledTileSize, completeTint) { CompletionMark(isComplete, completeTint, scaledTileSize) }
     }
     val trayShape = RoundedCornerShape(SubjectMetrics.trayRadius)
     if (arrangement == HomeStatusArrangement.Grid) {
         Column(
-            modifier.background(tokens.glassFill(0.16), trayShape).padding(4.dp),
-            verticalArrangement = Arrangement.spacedBy(3.dp)
+            modifier.background(tokens.glassFill(0.16), trayShape).padding(4.dp * fontScale),
+            verticalArrangement = Arrangement.spacedBy(3.dp * fontScale)
         ) {
-            Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
-                StatusTile(tileSize, ratingTint) { RatingMark(rating, ratingTint, tileSize) }
-                StatusTile(tileSize, categoryTint) { CategoryMark(categories, categoryTint, tileSize) }
+            Row(horizontalArrangement = Arrangement.spacedBy(3.dp * fontScale)) {
+                StatusTile(scaledTileSize, ratingTint) { RatingMark(rating, ratingTint, scaledTileSize) }
+                StatusTile(scaledTileSize, categoryTint) { CategoryMark(categories, categoryTint, scaledTileSize) }
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
-                StatusTile(tileSize, warningTint) {
+            Row(horizontalArrangement = Arrangement.spacedBy(3.dp * fontScale)) {
+                StatusTile(scaledTileSize, warningTint) {
                     Icon(
                         Icons.Filled.Error,
                         contentDescription = "Warnings",
                         tint = warningTint,
-                        modifier = Modifier.size(tileSize * 0.58f)
+                        modifier = Modifier.size(scaledTileSize * 0.58f)
                     )
                 }
-                StatusTile(tileSize, completeTint) { CompletionMark(isComplete, completeTint, tileSize) }
+                StatusTile(scaledTileSize, completeTint) { CompletionMark(isComplete, completeTint, scaledTileSize) }
             }
         }
     } else {
         Row(
-            modifier.background(tokens.glassFill(0.16), trayShape).padding(horizontal = 6.dp, vertical = 4.dp),
-            horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterHorizontally),
+            modifier.background(tokens.glassFill(0.16), trayShape).padding(
+                horizontal = 6.dp * fontScale,
+                vertical = 4.dp * fontScale
+            ),
+            horizontalArrangement = Arrangement.spacedBy(4.dp * fontScale, Alignment.CenterHorizontally),
             verticalAlignment = Alignment.CenterVertically
         ) {
             marks()

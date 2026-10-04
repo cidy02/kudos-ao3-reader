@@ -43,9 +43,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlin.math.max
@@ -98,6 +100,7 @@ fun SubjectFormRow(
     trailing: (@Composable () -> Unit)? = null
 ) {
     val tokens = LocalKudosTokens.current
+    val stackValue = isAccessibilityFontScale() && value != null
     Row(
         modifier
             .fillMaxWidth()
@@ -106,23 +109,45 @@ fun SubjectFormRow(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        Text(
-            text = label,
-            modifier = Modifier.weight(1f),
-            color = tokens.primaryInk,
-            fontSize = 14.5.sp
-        )
-        if (trailing != null) {
-            trailing()
-        } else if (value != null) {
-            Text(text = value, color = tokens.secondaryInk, fontSize = 14.5.sp)
+        if (stackValue) {
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                Text(text = label, color = tokens.primaryInk, fontSize = 14.5.sp)
+                Text(
+                    text = value.orEmpty(),
+                    color = tokens.secondaryInk,
+                    fontSize = 14.5.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        } else {
+            Text(
+                text = label,
+                modifier = Modifier.weight(1f),
+                color = tokens.primaryInk,
+                fontSize = 14.5.sp
+            )
+            if (trailing != null) {
+                trailing()
+            } else if (value != null) {
+                Text(
+                    text = value,
+                    color = tokens.secondaryInk,
+                    fontSize = 14.5.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
         }
         if (showsDisclosure) {
             Icon(
                 imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
                 contentDescription = null,
                 tint = tokens.tertiaryInk,
-                modifier = Modifier.size(18.dp)
+                modifier = Modifier.size(with(LocalDensity.current) { 18.sp.toDp() })
             )
         }
     }

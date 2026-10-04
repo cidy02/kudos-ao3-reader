@@ -36,6 +36,8 @@ import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material3.Surface
 import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.sp
 
 import androidx.compose.runtime.staticCompositionLocalOf
 
@@ -102,6 +104,7 @@ fun WorkStatLabel(
     item: WorkStatItem,
     modifier: Modifier = Modifier
 ) {
+    val iconSize = with(LocalDensity.current) { 14.sp.toDp() }
     Row(
         modifier = modifier.semantics {
             contentDescription = item.accessibilityLabel ?: item.text
@@ -116,7 +119,7 @@ fun WorkStatLabel(
                 // Secondary — not primary/accent. Language, words, kudos etc. sit
                 // under the category chips as quiet metadata (iOS WorkStatLabel).
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(14.dp)
+                modifier = Modifier.size(iconSize)
             )
         }
         Text(
@@ -477,6 +480,7 @@ fun WorkStatusChipRow(
     modifier: Modifier = Modifier
 ) {
     if (stats.isEmpty()) return
+    val iconSize = with(LocalDensity.current) { 13.sp.toDp() }
     FlowRow(
         modifier = modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally),
@@ -516,7 +520,7 @@ fun WorkStatusChipRow(
                             imageVector = it,
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(13.dp)
+                            modifier = Modifier.size(iconSize)
                         )
                     }
                     Text(text = stat.text, style = MaterialTheme.typography.labelSmall)

@@ -1039,12 +1039,13 @@ private fun LibraryDashboardWorkSection(
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun LibrarySubjectWorkCard(
+internal fun LibrarySubjectWorkCard(
     display: LibraryDisplayItem,
     kind: LibrarySectionKind,
     actions: LibraryCardActions,
     selected: Boolean = false,
-    selecting: Boolean = false
+    selecting: Boolean = false,
+    footerOverride: String? = null
 ) {
     val work = display.item.work
     val obscured = display.privacyVisibility == LibraryPrivacyVisibility.Obscured
@@ -1068,7 +1069,7 @@ private fun LibrarySubjectWorkCard(
                 work = work,
                 obscured = obscured,
                 downloading = false,
-                footer = if (kind == LibrarySectionKind.Finished) "Finished" else null,
+                footer = footerOverride ?: if (kind == LibrarySectionKind.Finished) "Finished" else null,
                 progress = if (kind == LibrarySectionKind.ReadingNow) progress else null,
                 isSelecting = selecting,
                 isSelected = selected
@@ -1079,7 +1080,7 @@ private fun LibrarySubjectWorkCard(
 }
 
 @Composable
-private fun LibrarySubjectLedgerRow(
+internal fun LibrarySubjectLedgerRow(
     display: LibraryDisplayItem,
     kind: LibrarySectionKind,
     actions: LibraryCardActions,
@@ -1087,7 +1088,8 @@ private fun LibrarySubjectLedgerRow(
     onRemoveFromAllQueues: (String) -> Unit,
     selected: Boolean = false,
     selecting: Boolean = false,
-    showsZeroStats: Boolean = true
+    showsZeroStats: Boolean = true,
+    expandAll: Boolean = false
 ) {
     val work = display.item.work
     val obscured = display.privacyVisibility == LibraryPrivacyVisibility.Obscured
@@ -1103,6 +1105,7 @@ private fun LibrarySubjectLedgerRow(
             selecting = selecting,
             selected = selected,
             obscured = obscured,
+            expandAll = expandAll,
             onSelect = { actions.onSelect(work.id) },
             onReveal = { actions.onReveal(work.id) },
             onLongClick = { if (!obscured && !selecting) menuOpen = true },
@@ -1122,7 +1125,7 @@ private fun LibrarySubjectLedgerRow(
 }
 
 @Composable
-private fun leadingSwipeActions(
+internal fun leadingSwipeActions(
     work: SavedWork,
     kind: LibrarySectionKind,
     actions: LibraryCardActions
@@ -1165,7 +1168,7 @@ private fun leadingSwipeActions(
 }
 
 @Composable
-private fun trailingSwipeActions(
+internal fun trailingSwipeActions(
     work: SavedWork,
     kind: LibrarySectionKind,
     actions: LibraryCardActions,
@@ -1195,7 +1198,7 @@ private fun trailingSwipeActions(
 }
 
 @Composable
-private fun LibraryWorkMenu(
+internal fun LibraryWorkMenu(
     expanded: Boolean,
     onDismiss: () -> Unit,
     work: SavedWork,
