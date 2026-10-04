@@ -112,3 +112,18 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   - The iCloud workarounds (post-commit ref check, rsync snapshot) are dropped from the loop.
   - The old iCloud copy is a frozen fallback. The two copies share nothing but GitHub.
   Reverse: keep working in the old folders; delete the new ones.
+- **2026-10-03 · T-356 is not a colour bug: iOS's toolbar forces a white glyph.** The queue page's
+  filled "+" is a system toolbar item with `.glassProminent`. Setting the screen colour on the
+  button (`.screenTint`) and setting the foreground on the label inside it both left the glyph
+  white on Neon reread's light purple (checked on the simulator both times), so the change was
+  reverted. A dark glyph on iOS would need a custom-drawn button instead of a toolbar item.
+  Android still draws black on a light fill, so the two differ. **Owner decision needed:** build
+  the custom iOS button, or make Android's glyph white to match iOS as it renders.
+- **2026-10-03 · Installed integrate `1aa3cd9a` on the owner's iPhone** (owner: "install latest
+  version on paired iphone"). Signed by passing the owner-approved public team ID on the
+  `xcodebuild` command line, as earlier device builds were; no tracked file changed.
+- **2026-10-03 · 3m-detail (Gemini Pro) was incomplete.** It has the model, parser, repository and
+  route, but `AO3CollectionDetailScreen` was never written, so it doesn't compile. The work is
+  staged in `~/kudos-agent-gemini2` (the `Routes.kt` conflict with the Inbox route resolved) with
+  brief 3m-detail-2 for the missing screen. Gemini ran out of quota before starting it.
+
