@@ -245,3 +245,10 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   back (iOS `NewestTombstoneWinsTests`). The row is now replaced only when the incoming tombstone
   is trusted, is for the same record, and is later. It can only widen what the row suppresses.
   Reverse: `sameRecordDeletedLater` in `backup/BackupMergeService.kt`.
+- **2026-10-04 · The Mac's reading percent merges with the reading progress, as on iOS.**
+  Android took `legacyReaderProgress` from whichever side had the newer metadata, and never
+  cleared it when a snapshot with no such key had read further. iOS decides it inside the progress
+  merge (`SyncMerge.applyProgress`): taken only when the incoming progress wins; a key that is
+  absent is not a clear, unless the incoming locator moved by at least the reader's own delta.
+  Android now does the same. Reverse: `applyProgressLww` and `keylessLocatorMoved` in
+  `backup/BackupMergeService.kt`.
