@@ -219,3 +219,11 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   the archive is newer. Replace Library and new records are unchanged. Kept stricter than iOS: on
   equal clocks Android keeps the local file. Details: `briefs/5a-result.md`, part 2.
   Reverse: the block above `mayReplaceEpub` in `backup/BackupMergeService.kt`.
+- **2026-10-04 · A sync-down reads only the EPUBs that changed, a batch at a time.** Android read
+  every EPUB in the sync folder into one map on every sync: a large library would run the app out
+  of memory. Now, as iOS's `readChangedRemoteAssets`: an EPUB is read only when its size differs
+  from the local file, or the sizes are equal and the manifest's digest differs; at most 32 MB is
+  held at once, and the manifest is merged again with each batch. Android's manifest now carries
+  the digest of the bytes it uploads, not the one an earlier manifest gave it. Same as iOS and a
+  known limit: with no digest in the manifest, an equal size counts as unchanged.
+  Reverse: `importManifest` and `isUnchangedLocally` in `backup/SyncRepository.kt`.
