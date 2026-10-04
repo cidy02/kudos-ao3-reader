@@ -698,6 +698,7 @@ fun SettingsFolderSyncPage(repository: SettingsRepository, settings: KudosSettin
     val container = (context.applicationContext as? KudosApplication)?.container
     val syncRepository = container?.syncRepository
     var lastSyncFolded by remember { mutableStateOf(0) }
+    var lastSyncError by remember { mutableStateOf<String?>(null) }
     var syncBusy by remember { mutableStateOf(false) }
     var showPairing by remember { mutableStateOf(false) }
     var trustedDevices by remember { mutableStateOf<List<TrustedDevice>>(emptyList()) }
@@ -814,6 +815,7 @@ fun SettingsFolderSyncPage(repository: SettingsRepository, settings: KudosSettin
                                 scope.launch {
                                     val result = syncRepository?.runSync()
                                     lastSyncFolded = (result as? io.github.cidy02.kudos.backup.SyncResult.Success)?.foldedConflicts ?: 0
+                                    lastSyncError = (result as? io.github.cidy02.kudos.backup.SyncResult.Error)?.message
                                     syncBusy = false
                                 }
                             }
@@ -824,16 +826,16 @@ fun SettingsFolderSyncPage(repository: SettingsRepository, settings: KudosSettin
                         SubjectFormRow("Last Synced", value = formatSyncInstant(instant))
                     }
                 }
+                // iOS shows the last error here, in the same quiet text. A Sync Now that failed
+                // used to show nothing at all: only a "Last Synced" that did not move.
+                lastSyncError?.takeIf { connected }?.let { SettingsFootnote(it) }
                 if (connected && lastSyncFolded > 0) {
-                    Text(
-                        text = if (lastSyncFolded == 1) {
+                    SettingsFootnote(
+                        if (lastSyncFolded == 1) {
                             "Merged 1 conflicting copy from another device."
                         } else {
                             "Merged $lastSyncFolded conflicting copies from other devices."
-                        },
-                        color = tokens.secondaryInk,
-                        fontSize = 13.sp,
-                        modifier = Modifier.padding(horizontal = SubjectMetrics.accountGutter).padding(top = 8.dp)
+                        }
                     )
                 }
                 SettingsFootnote(
