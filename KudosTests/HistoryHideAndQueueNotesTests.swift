@@ -127,7 +127,10 @@ struct HistoryHideAndQueueNotesTests {
         _ = try KudosBackupService.restore(decoded, into: target, defaults: try testDefaults(), mode: .replaceLibrary)
 
         let restoredWork = try #require(try target.fetch(FetchDescriptor<SavedWork>()).first)
-        let restoredQueue = try #require(try target.fetch(FetchDescriptor<ReadingQueue>()).first)
+        // By id: a restore also creates Saved for Later, so `.first` may be that queue instead.
+        let restoredQueue = try #require(
+            try target.fetch(FetchDescriptor<ReadingQueue>()).first { $0.id == queue.id }
+        )
         #expect(restoredWork.hiddenFromHistoryAt == Date(timeIntervalSince1970: 2_000))
         #expect(restoredQueue.notes == "Everything before the sequel lands.")
     }
@@ -188,7 +191,9 @@ struct HistoryHideAndQueueNotesTests {
         let fresh = try makeContext()
         _ = try KudosBackupService.restore(archive, into: fresh, defaults: try testDefaults(), mode: .replaceLibrary)
         let restoredWork = try #require(try fresh.fetch(FetchDescriptor<SavedWork>()).first)
-        let restoredQueue = try #require(try fresh.fetch(FetchDescriptor<ReadingQueue>()).first)
+        let restoredQueue = try #require(
+            try fresh.fetch(FetchDescriptor<ReadingQueue>()).first { $0.id == queueID }
+        )
         #expect(restoredWork.hiddenFromHistoryAt == nil)
         #expect(restoredQueue.notes == nil)
         #expect(history([restoredWork]) == [restoredWork.id])
