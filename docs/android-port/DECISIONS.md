@@ -380,3 +380,26 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
 - **2026-10-04 · The last sync error is stored and shown** (iOS `lastError`): on the Sync
   Folder page, and as "Error" on the Settings row, which now reads Off, Error, On or Paused as
   iOS's does. Not in backups. Reverse: `syncLastError` in `SettingsRepository`.
+- **2026-10-04 · A queue membership this device holds is not removed when a paired device has
+  deleted it. Held for the owner.** Codex's brief 5e patch removed it, to let the queued flag
+  follow membership. iOS does not: a membership deletion only stops the membership being added
+  back. Closing that gap is a change to how deletions travel on both apps (saved links and
+  highlights are the same), so it is owner question 7, and the queued-flag part of 5e waits with
+  it. The patch is kept as `bcb5ce5a` on `android/agent-codex-5e`.
+- **2026-10-04 · A late conversion record is taken only beside the same original.** iOS takes
+  an absent record on its own; that can attach one device's record to another device's
+  different file. Android compares the folder's original with the local one (size, then
+  SHA-256) first. **Stricter than iOS on purpose.** Reverse: `restoreOriginals` in
+  `backup/BackupRepository.kt`.
+- **2026-10-04 · Only the last batch of a sync marks queued works preserved.** Reverse:
+  `normalizeQueuePreservation` in `BackupMergeService.merge`.
+- **2026-10-04 · The Backup page is iOS's, with three guards added and none removed** (brief
+  6b): Replace has a review step of its own, the acknowledgement is asked even when nothing
+  would be removed, and the copy saved before a Replace can no longer overwrite an earlier one.
+  Not taken from iOS: the "second attempt" override that lets a Replace go ahead without a
+  saved copy. Android keeps refusing. Reverse: `backup/BackupScreen.kt`.
+- **2026-10-04 · The Sync Folder page uses the Backup page's pairing section.** It had a
+  hand-drawn copy that opened an old Material dialog. Reverse: `SettingsFolderSyncPage`.
+- **2026-10-04 · Kept on Android's Backup page though iOS's has neither:** the two technical
+  notes under the footer, and the pairing section (iOS shows pairing only on its Sync Folder
+  page). Nothing was removed without the owner; it is owner question 9.

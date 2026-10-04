@@ -103,9 +103,13 @@ Two things, both found by the audit:
   Android phone both ways, each ignores what the other deletes, and a deleted work comes back.
   Android's page now says so. iOS's page still says only "for a different account, scan its QR
   code". **Should iOS's text mention Android?**
-- **Saved links and highlights.** When one device deletes a saved AO3 link or a highlight, the
-  other keeps its copy and puts it back in the folder. Both apps behave this way today, iPhone to
-  iPhone as well. **Should both apps remove their copy when a paired device deletes one?**
+- **Saved links, highlights, and works taken out of a queue or collection.** When one device
+  deletes a saved AO3 link or a highlight, or takes a work out of a queue or a collection, the
+  other device keeps its copy and puts it back in the folder. The first device ignores it, so
+  the two disagree for good. Both apps behave this way today, iPhone to iPhone as well. (A
+  deleted work, queue or collection does travel; so do saved searches and reading history.)
+  **Should both apps remove their copy when a paired device deletes one?** Codex has written
+  the queue part for Android; it waits for this answer.
 
 Until answered: unchanged on both.
 
@@ -123,3 +127,19 @@ Until answered: unchanged on both.
   Android's limit needs the restore rewritten to read from disk. Worth doing now?
 
 Until answered: Android stricter, iOS unchanged, limits unchanged.
+
+## 9. Two things Android's Backup page has that iOS's does not
+
+The Backup page is now drawn as iOS's. Two things on it are Android's own, and I kept both
+rather than remove anything without you:
+
+- **Two blocks of technical notes** under the footer ("Export writes ZIP packages at manifest
+  v8…", "AO3 cookies, CSRF tokens, and session files are excluded…"). iOS shows one plain
+  paragraph.
+- **The pairing section** ("Deletion signing"). iOS has it only on the Sync Folder page; Android
+  shows the same section on both pages.
+
+- **A.** Remove both from the Backup page, to match iOS.
+- **B.** Keep them.
+
+Until answered: kept.
