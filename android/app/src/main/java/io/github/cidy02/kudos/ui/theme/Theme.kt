@@ -1,13 +1,18 @@
 package io.github.cidy02.kudos.ui.theme
 
+import android.app.Activity
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalView
+import androidx.core.view.WindowCompat
 import io.github.cidy02.kudos.ui.subject.KudosTokens
 import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
 import io.github.cidy02.kudos.ui.subject.LocalSubjectPalette
@@ -82,7 +87,13 @@ private val SepiaScheme = lightColorScheme(
     surface = ColorTokens.SepiaSurface,
     onSurface = Ink,
     surfaceVariant = ColorTokens.SepiaVariant,
-    onSurfaceVariant = InkMuted
+    onSurfaceVariant = InkMuted,
+    // Left unset, these are Material's lavender-white baseline: stark white cards on Sepia.
+    surfaceContainerLowest = ColorTokens.SepiaSurface,
+    surfaceContainerLow = ColorTokens.SepiaSurface,
+    surfaceContainer = ColorTokens.SepiaVariant,
+    surfaceContainerHigh = ColorTokens.SepiaVariant,
+    surfaceContainerHighest = ColorTokens.SepiaVariant
 )
 
 @Composable
@@ -117,15 +128,28 @@ fun KudosTheme(
         readerTheme.scopePalette(accent)
     }
 
+    // The bars' icons follow the app's theme, not the phone's. `enableEdgeToEdge()` alone leaves
+    // a dark clock on a Dark or OLED page whenever the phone is in light mode, and the reverse.
+    val view = LocalView.current
+    if (!view.isInEditMode) {
+        SideEffect {
+            val window = (view.context as? Activity)?.window ?: return@SideEffect
+            WindowCompat.getInsetsController(window, view).apply {
+                isAppearanceLightStatusBars = !readerTheme.isDarkFamily
+                isAppearanceLightNavigationBars = !readerTheme.isDarkFamily
+            }
+        }
+    }
+
     CompositionLocalProvider(
         LocalKudosTokens provides tokens,
         LocalSubjectPalette provides scopePalette
     ) {
-        MaterialTheme(
-            colorScheme = colorScheme,
-            typography = KudosTypography,
-            content = content
-        )
+        MaterialTheme(colorScheme = colorScheme, typography = KudosTypography) {
+            // Screens draw on a wash, not on a Material Surface, so nothing else sets the colour
+            // of an untinted icon: it stayed black, invisible on Dark and OLED.
+            CompositionLocalProvider(LocalContentColor provides colorScheme.onBackground, content = content)
+        }
     }
 }
 
