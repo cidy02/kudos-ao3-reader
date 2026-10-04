@@ -403,3 +403,19 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
 - **2026-10-04 · Kept on Android's Backup page though iOS's has neither:** the two technical
   notes under the footer, and the pairing section (iOS shows pairing only on its Sync Folder
   page). Nothing was removed without the owner; it is owner question 9.
+- **2026-10-04 · The Subscriptions page looks up every work on the loaded page, as iOS does.**
+  Android looked up only the rows that scrolled into view, and its own comment called an eager
+  page-wide lookup wrong. iOS walks the loaded page (`enrichLoadedSubscriptionPage`) because the
+  new-chapter badges, Mark All as Seen and the Refine filter need every row's chapter count, and
+  its networking policy names the walk as an allowed exception: anonymous, one work at a time,
+  through the paced client, bounded by the page, stopped when the screen is left. Up to 20
+  requests for a page the reader opened, where there used to be as many as rows seen.
+  Reverse: the `LaunchedEffect` walk in `account/AccountWorksListScreen.kt`.
+- **2026-10-04 · A sort or filter on AO3 Collections reads the account's other collections
+  pages, as iOS does.** One page at a time through the paced client, never more than 25,
+  started only by the reader applying a filter or pulling to refresh, stopped when the screen is
+  left. Named in iOS's networking policy as an allowed exception. Reverse: `loadWholeIndex` in
+  `AO3CollectionsViewModel` (`account/AccountViewModel.kt`).
+- **2026-10-04 · Not ported to the account lists, for lack of anything behind them:** iOS's
+  display mode picker (Android has no account-wide display setting) and Clear History (Android
+  has no call for AO3's clear-history form). Both are listed in `briefs/3w-result.md`.
