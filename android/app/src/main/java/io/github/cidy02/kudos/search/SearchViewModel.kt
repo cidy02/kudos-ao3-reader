@@ -261,9 +261,9 @@ class SearchViewModel(
         runSearch(1, restored)
     }
 
-    fun searchTag(tag: String) {
-        pushCurrentResults()
-        val next = AO3SearchFilters(additionalTags = tag)
+    fun searchTag(field: SearchSubjectField, tag: String, isFreshTabJump: Boolean = false) {
+        if (isFreshTabJump) filterHistory.clear() else pushCurrentResults()
+        val next = tagSearchFilters(field, tag)
         _filters.value = next
         runSearch(1, next)
     }

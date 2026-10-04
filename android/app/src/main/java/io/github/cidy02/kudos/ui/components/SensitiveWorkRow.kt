@@ -2,6 +2,7 @@ package io.github.cidy02.kudos.ui.components
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -51,6 +52,8 @@ import androidx.compose.material.icons.filled.Star
 import androidx.compose.ui.graphics.Color
 import kotlin.math.absoluteValue
 import io.github.cidy02.kudos.home.HomeFacts
+import io.github.cidy02.kudos.search.LocalTagSearch
+import io.github.cidy02.kudos.search.SearchSubjectField
 import io.github.cidy02.kudos.ui.subject.SubjectPalette
 import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
 import androidx.compose.material3.Checkbox
@@ -94,6 +97,9 @@ fun SensitiveWorkRow(
     fandoms: List<String>,
     summary: String,
     discoveryTags: List<String>,
+    relationships: List<String> = emptyList(),
+    characters: List<String> = emptyList(),
+    freeforms: List<String> = emptyList(),
     warnings: List<String>,
     categories: List<String>,
     rating: String,
@@ -115,16 +121,23 @@ fun SensitiveWorkRow(
     onReveal: (() -> Unit)? = null,
     onSelect: (() -> Unit)? = null,
     onTagClick: ((String) -> Unit)? = null,
+    onTagSearch: ((SearchSubjectField, String) -> Unit)? = null,
     onLongClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     var expanded by remember(id) { mutableStateOf(expandAll) }
     LaunchedEffect(expandAll) { expanded = expandAll }
     
-    val expandable = summary.length > 120 || fandoms.size > 1 || discoveryTags.isNotEmpty() || warnings.any { it.isNotBlank() }
+    val expandable = summary.length > 120 || fandoms.size > 1 || discoveryTags.isNotEmpty() ||
+        relationships.isNotEmpty() || characters.isNotEmpty() || freeforms.isNotEmpty() ||
+        warnings.any { it.isNotBlank() }
     
     val tokens = LocalKudosTokens.current
     val palette = SubjectPalette.fromHue(HomeFacts.workHue(fandoms, title), tokens.theme)
+    val defaultTagSearch = LocalTagSearch.current
+    val tagSearch: (SearchSubjectField, String) -> Unit = onTagSearch ?: { field, tag ->
+        if (onTagClick != null) onTagClick(tag) else defaultTagSearch(field, tag)
+    }
 
     Box(modifier = modifier.workCardZoomSource(id.toLongOrNull() ?: 0L)) {
         val cardMod = Modifier
@@ -214,15 +227,21 @@ fun SensitiveWorkRow(
 
                         if (fandoms.isNotEmpty()) {
                             val hidden = if (expanded) 0 else fandoms.size - 1
-                            CardMetaLine(
-                                text = if (hidden > 0) {
-                                    "${fandoms.first()}  +$hidden other${if (hidden == 1) "" else "s"}"
-                                } else {
-                                    fandoms.joinToString(", ")
-                                },
-                                icon = Icons.AutoMirrored.Outlined.MenuBook,
-                                accessibilityLabel = "Fandom: ${fandoms.joinToString()}"
-                            )
+                            val visibleFandoms = if (expanded) fandoms else fandoms.take(1)
+                            visibleFandoms.forEachIndexed { index, fandom ->
+                                CardMetaLine(
+                                    text = if (index == 0 && hidden > 0) {
+                                        "$fandom  +$hidden other${if (hidden == 1) "" else "s"}"
+                                    } else {
+                                        fandom
+                                    },
+                                    icon = Icons.AutoMirrored.Outlined.MenuBook,
+                                    accessibilityLabel = "Fandom: $fandom",
+                                    modifier = Modifier.clickable {
+                                        tagSearch(SearchSubjectField.FANDOM, fandom)
+                                    }
+                                )
+                            }
                         }
 
                         if (summary.isNotBlank()) {
@@ -235,12 +254,38 @@ fun SensitiveWorkRow(
                             )
                         }
 
-                        if (expanded && discoveryTags.isNotEmpty()) {
-                            MetadataChipRow(
-                                labels = discoveryTags,
-                                maxItems = 16,
-                                onLabelClick = onTagClick
-                            )
+                        if (expanded) {
+                            val hasCategorizedDiscoveryTags = relationships.isNotEmpty() ||
+                                characters.isNotEmpty() || freeforms.isNotEmpty()
+                            val groups = buildList {
+                                if (warnings.isNotEmpty()) {
+                                    add(Triple("Archive Warnings", warnings, SearchSubjectField.WARNING))
+                                }
+                                if (relationships.isNotEmpty()) {
+                                    add(Triple("Relationships", relationships, SearchSubjectField.RELATIONSHIP))
+                                }
+                                if (characters.isNotEmpty()) {
+                                    add(Triple("Characters", characters, SearchSubjectField.CHARACTER))
+                                }
+                                if (freeforms.isNotEmpty()) {
+                                    add(Triple("Additional Tags", freeforms, SearchSubjectField.FREEFORM))
+                                }
+                                if (!hasCategorizedDiscoveryTags && discoveryTags.isNotEmpty()) {
+                                    add(Triple("Tags", discoveryTags, SearchSubjectField.FREEFORM))
+                                }
+                            }
+                            groups.forEach { (label, tags, field) ->
+                                Text(
+                                    text = label,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                MetadataChipRow(
+                                    labels = tags,
+                                    maxItems = 16,
+                                    onLabelClick = { tag -> tagSearch(field, tag) }
+                                )
+                            }
                         }
 
                         WorkStatusChipRow(
@@ -307,6 +352,7 @@ fun SensitiveWorkRow(
     modifier: Modifier = Modifier,
     expandAll: Boolean = false,
     onTagClick: ((String) -> Unit)? = null,
+    onTagSearch: ((SearchSubjectField, String) -> Unit)? = null,
     onLongClick: (() -> Unit)? = null
 ) {
     var showMenu by remember { mutableStateOf(false) }
@@ -319,6 +365,9 @@ fun SensitiveWorkRow(
             fandoms = work.fandoms.filter { it.isNotBlank() },
             summary = work.summary,
             discoveryTags = (work.relationships + work.characters + work.freeforms).filter { it.isNotBlank() },
+            relationships = work.relationships.filter { it.isNotBlank() },
+            characters = work.characters.filter { it.isNotBlank() },
+            freeforms = work.freeforms.filter { it.isNotBlank() },
             warnings = work.warnings,
             categories = work.categories,
             rating = work.rating,
@@ -333,6 +382,7 @@ fun SensitiveWorkRow(
             expandAll = expandAll,
             onClick = { onOpenWork(work) },
             onTagClick = onTagClick,
+            onTagSearch = onTagSearch,
             onLongClick = onLongClick ?: { showMenu = true }
         )
         
@@ -367,6 +417,7 @@ fun SensitiveWorkRow(
     onSelect: (() -> Unit)? = null,
     onReveal: (() -> Unit)? = null,
     onTagClick: ((String) -> Unit)? = null,
+    onTagSearch: ((SearchSubjectField, String) -> Unit)? = null,
     onLongClick: (() -> Unit)? = null,
     showsZeroStats: Boolean = LocalShowsZeroStats.current
 ) {
@@ -377,6 +428,9 @@ fun SensitiveWorkRow(
         fandoms = work.workFandoms,
         summary = remember(work.summary) { work.summary.strippingHtml() },
         discoveryTags = (work.workRelationships + work.workCharacters + work.workFreeforms),
+        relationships = work.workRelationships,
+        characters = work.workCharacters,
+        freeforms = work.workFreeforms,
         warnings = work.workWarnings,
         categories = work.workCategories,
         rating = work.rating,
@@ -397,9 +451,9 @@ fun SensitiveWorkRow(
         onSelect = onSelect,
         onReveal = onReveal,
         onTagClick = onTagClick,
+        onTagSearch = onTagSearch,
         onLongClick = onLongClick,
         showsZeroStats = showsZeroStats,
         modifier = modifier
     )
 }
-

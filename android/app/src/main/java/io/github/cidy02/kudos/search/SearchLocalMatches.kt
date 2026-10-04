@@ -5,6 +5,7 @@ import io.github.cidy02.kudos.core.model.Tag
 import io.github.cidy02.kudos.core.model.WorkCollection
 import io.github.cidy02.kudos.network.ao3.browse.AO3Fandom
 import io.github.cidy02.kudos.network.ao3.search.AO3SearchFilters
+import io.github.cidy02.kudos.network.ao3.search.AO3Warning
 import io.github.cidy02.kudos.works.WorkSearchIndex
 
 /**
@@ -111,12 +112,13 @@ data class SearchSubject(
     val field: SearchSubjectField?
 )
 
-enum class SearchSubjectField { FANDOM, CHARACTER, RELATIONSHIP, FREEFORM }
+enum class SearchSubjectField { WARNING, FANDOM, CHARACTER, RELATIONSHIP, FREEFORM }
 
 const val SEARCH_RESULTS_FALLBACK = "Search Results"
 
 fun AO3SearchFilters.searchSubject(): SearchSubject {
     val fields = listOf(
+        warnings.singleOrNull()?.title.orEmpty() to SearchSubjectField.WARNING,
         fandom to SearchSubjectField.FANDOM,
         characters to SearchSubjectField.CHARACTER,
         relationships to SearchSubjectField.RELATIONSHIP,
@@ -129,6 +131,19 @@ fun AO3SearchFilters.searchSubject(): SearchSubject {
     }
     val text = query.trim()
     return SearchSubject(text.ifEmpty { SEARCH_RESULTS_FALLBACK }, null)
+}
+
+/** A tapped work tag becomes a fresh, field-specific AO3 search, matching iOS. */
+fun tagSearchFilters(field: SearchSubjectField, value: String): AO3SearchFilters = when (field) {
+    SearchSubjectField.WARNING -> {
+        val warning = AO3Warning.entries.firstOrNull { it.title == value }
+        if (warning == null) AO3SearchFilters(additionalTags = value)
+        else AO3SearchFilters(warnings = setOf(warning))
+    }
+    SearchSubjectField.FANDOM -> AO3SearchFilters(fandom = value)
+    SearchSubjectField.CHARACTER -> AO3SearchFilters(characters = value)
+    SearchSubjectField.RELATIONSHIP -> AO3SearchFilters(relationships = value)
+    SearchSubjectField.FREEFORM -> AO3SearchFilters(additionalTags = value)
 }
 
 /** Puts [name] in the included-fandom field and drops it from the excluded list. */

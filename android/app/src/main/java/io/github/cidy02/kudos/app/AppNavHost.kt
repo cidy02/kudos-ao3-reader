@@ -886,6 +886,9 @@ fun AppNavHost(
                 SeriesWorksScreen(
                     seriesUrl = seriesUrl,
                     seriesRepository = container.seriesRepository,
+                    workImporter = container.workImporter,
+                    readingQueueRepository = container.readingQueueRepository,
+                    onOpenAo3 = { url -> navController.navigate(Routes.webFallback(url)) },
                     onOpenWork = { work ->
                         navigateToWorkDetail(WorkDetailSource.RemoteSummary(work))
                     }
