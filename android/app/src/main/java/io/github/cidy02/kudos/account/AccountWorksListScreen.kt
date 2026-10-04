@@ -26,6 +26,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.outlined.AccessTime
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Delete
@@ -43,6 +45,8 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -51,6 +55,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.fragment.app.FragmentActivity
+import io.github.cidy02.kudos.app.PrivacyGate
+import io.github.cidy02.kudos.app.PrivacyRevealState
+import io.github.cidy02.kudos.core.model.KudosSettings
+import io.github.cidy02.kudos.core.model.PrivacySettings
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -60,6 +69,9 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import io.github.cidy02.kudos.app.ProvidePushedShellChrome
 import io.github.cidy02.kudos.author.AO3BookmarkFootnote
 import io.github.cidy02.kudos.core.model.SavedWork
+import io.github.cidy02.kudos.data.preferences.SettingsRepository
+import io.github.cidy02.kudos.library.LibraryPrivacy
+import io.github.cidy02.kudos.library.LibraryPrivacyVisibility
 import io.github.cidy02.kudos.core.model.readingProgress
 import io.github.cidy02.kudos.home.HomeFacts
 import io.github.cidy02.kudos.network.ao3.account.AO3ReadingEntry
@@ -92,6 +104,8 @@ fun AccountWorksListScreen(
     type: AccountListType,
     repository: AccountListRepository,
     workRepository: WorkRepository,
+    settingsRepository: SettingsRepository,
+    privacyGate: PrivacyGate,
     onLogin: () -> Unit,
     onOpenWork: (AO3WorkSummary) -> Unit,
     modifier: Modifier = Modifier,
@@ -105,7 +119,9 @@ fun AccountWorksListScreen(
     val palette = remember(tokens.theme) { SubjectPalette.fromHue(210.0, tokens.theme) }
 
     var expandAll by remember { mutableStateOf(false) }
-    var hideMature by remember { mutableStateOf(false) }
+    val settings by settingsRepository.settings.collectAsState(initial = KudosSettings.Defaults)
+    val reveal by privacyGate.state.collectAsState()
+    val activity = LocalContext.current as? FragmentActivity
     var showMenu by remember { mutableStateOf(false) }
 
     ProvidePushedShellChrome(
@@ -124,13 +140,22 @@ fun AccountWorksListScreen(
                     expanded = showMenu,
                     onDismissRequest = { showMenu = false }
                 ) {
-                    DropdownMenuItem(
-                        text = { Text(if (hideMature) "Show Mature Content" else "Hide Mature Content") },
-                        onClick = {
-                            showMenu = false
-                            hideMature = !hideMature
-                        }
-                    )
+                    // iOS's MatureRevealToggle: present only while Hide mature content is on.
+                    if (settings.privacy.hideMatureContent) {
+                        DropdownMenuItem(
+                            text = { Text(if (reveal.revealAll) "Hide mature" else "Show mature") },
+                            leadingIcon = {
+                                Icon(
+                                    if (reveal.revealAll) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
+                                    contentDescription = null
+                                )
+                            },
+                            onClick = {
+                                showMenu = false
+                                privacyGate.toggleRevealAll(activity)
+                            }
+                        )
+                    }
                     DropdownMenuItem(
                         text = { Text(if (expandAll) "Collapse All" else "Expand All") },
                         onClick = {
@@ -187,64 +212,78 @@ fun AccountWorksListScreen(
                             )
                         }
                     } else {
-                        when (type) {
-                            AccountListType.MarkedForLater -> {
-                                MarkedForLaterBrowser(
-                                    works = current.canonicalWorks,
-                                    currentPage = current.page.currentPage,
-                                    totalPages = current.page.totalPages,
-                                    expandAll = expandAll,
-                                    palette = palette,
-                                    onLoadPage = viewModel::load,
-                                    onOpenWork = onOpenWork
-                                )
-                            }
-                            AccountListType.Bookmarks -> {
-                                BookmarksBrowser(
-                                    works = current.canonicalWorks,
-                                    bookmarks = current.page.bookmarkDetails,
-                                    currentPage = current.page.currentPage,
-                                    totalPages = current.page.totalPages,
-                                    expandAll = expandAll,
-                                    palette = palette,
-                                    onLoadPage = viewModel::load,
-                                    onOpenWork = onOpenWork
-                                )
-                            }
-                            AccountListType.History -> {
-                                HistoryBrowser(
-                                    works = current.canonicalWorks,
-                                    readings = current.page.readingEntries,
-                                    currentPage = current.page.currentPage,
-                                    totalPages = current.page.totalPages,
-                                    expandAll = expandAll,
-                                    palette = palette,
-                                    onLoadPage = viewModel::load,
-                                    onOpenWork = onOpenWork
-                                )
-                            }
-                            AccountListType.Subscriptions -> {
-                                SubscriptionsBrowser(
-                                    works = current.canonicalWorks,
-                                    currentPage = current.page.currentPage,
-                                    totalPages = current.page.totalPages,
-                                    expandAll = expandAll,
-                                    palette = palette,
-                                    onLoadPage = viewModel::load,
-                                    onOpenWork = onOpenWork
-                                )
-                            }
-                            else -> {
-                                GenericAccountWorksBrowser(
-                                    type = type,
-                                    works = current.canonicalWorks,
-                                    currentPage = current.page.currentPage,
-                                    totalPages = current.page.totalPages,
-                                    expandAll = expandAll,
-                                    palette = palette,
-                                    onLoadPage = viewModel::load,
-                                    onOpenWork = onOpenWork
-                                )
+                        val works = remember(current.canonicalWorks, settings.privacy, reveal) {
+                            visibleEntries(current.canonicalWorks, settings.privacy, reveal)
+                        }
+                        val rowPrivacy = remember(settings.privacy, reveal, activity) {
+                            PairedRowPrivacy(
+                                isObscured = {
+                                    LibraryPrivacy.visibility(it, settings.privacy, reveal) ==
+                                        LibraryPrivacyVisibility.Obscured
+                                },
+                                reveal = { privacyGate.reveal(it.id, activity) }
+                            )
+                        }
+                        CompositionLocalProvider(LocalPairedRowPrivacy provides rowPrivacy) {
+                            when (type) {
+                                AccountListType.MarkedForLater -> {
+                                    MarkedForLaterBrowser(
+                                        works = works,
+                                        currentPage = current.page.currentPage,
+                                        totalPages = current.page.totalPages,
+                                        expandAll = expandAll,
+                                        palette = palette,
+                                        onLoadPage = viewModel::load,
+                                        onOpenWork = onOpenWork
+                                    )
+                                }
+                                AccountListType.Bookmarks -> {
+                                    BookmarksBrowser(
+                                        works = works,
+                                        bookmarks = current.page.bookmarkDetails,
+                                        currentPage = current.page.currentPage,
+                                        totalPages = current.page.totalPages,
+                                        expandAll = expandAll,
+                                        palette = palette,
+                                        onLoadPage = viewModel::load,
+                                        onOpenWork = onOpenWork
+                                    )
+                                }
+                                AccountListType.History -> {
+                                    HistoryBrowser(
+                                        works = works,
+                                        readings = current.page.readingEntries,
+                                        currentPage = current.page.currentPage,
+                                        totalPages = current.page.totalPages,
+                                        expandAll = expandAll,
+                                        palette = palette,
+                                        onLoadPage = viewModel::load,
+                                        onOpenWork = onOpenWork
+                                    )
+                                }
+                                AccountListType.Subscriptions -> {
+                                    SubscriptionsBrowser(
+                                        works = works,
+                                        currentPage = current.page.currentPage,
+                                        totalPages = current.page.totalPages,
+                                        expandAll = expandAll,
+                                        palette = palette,
+                                        onLoadPage = viewModel::load,
+                                        onOpenWork = onOpenWork
+                                    )
+                                }
+                                else -> {
+                                    GenericAccountWorksBrowser(
+                                        type = type,
+                                        works = works,
+                                        currentPage = current.page.currentPage,
+                                        totalPages = current.page.totalPages,
+                                        expandAll = expandAll,
+                                        palette = palette,
+                                        onLoadPage = viewModel::load,
+                                        onOpenWork = onOpenWork
+                                    )
+                                }
                             }
                         }
                     }
@@ -426,19 +465,7 @@ private fun MarkedForLaterRow(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
-        if (work.local != null) {
-            SensitiveWorkRow(
-                work = work.local,
-                expandAll = expandAll,
-                onOpenWork = { onOpenWork(work.remote) }
-            )
-        } else {
-            EnrichingWorkRow(
-                work = work.remote,
-                expandAll = expandAll,
-                onOpenWork = onOpenWork
-            )
-        }
+        PairedWorkRow(work = work, expandAll = expandAll, onOpenWork = onOpenWork)
 
         Row(
             modifier = Modifier
@@ -564,19 +591,7 @@ private fun BookmarksBrowser(
                     modifier = Modifier.fillMaxWidth(),
                     verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    if (work.local != null) {
-                        SensitiveWorkRow(
-                            work = work.local,
-                            expandAll = expandAll,
-                            onOpenWork = { onOpenWork(work.remote) }
-                        )
-                    } else {
-                        EnrichingWorkRow(
-                            work = work.remote,
-                            expandAll = expandAll,
-                            onOpenWork = onOpenWork
-                        )
-                    }
+                    PairedWorkRow(work = work, expandAll = expandAll, onOpenWork = onOpenWork)
 
                     val bookmark = bookmarksByWorkId[work.remote.id]
                     if (bookmark != null) {
@@ -734,19 +749,7 @@ private fun HistoryBrowser(
                     modifier = Modifier.fillMaxWidth(),
                     verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    if (work.local != null) {
-                        SensitiveWorkRow(
-                            work = work.local,
-                            expandAll = expandAll,
-                            onOpenWork = { onOpenWork(work.remote) }
-                        )
-                    } else {
-                        EnrichingWorkRow(
-                            work = work.remote,
-                            expandAll = expandAll,
-                            onOpenWork = onOpenWork
-                        )
-                    }
+                    PairedWorkRow(work = work, expandAll = expandAll, onOpenWork = onOpenWork)
 
                     val reading = readingsByWorkId[work.remote.id]
                     Row(
@@ -1017,19 +1020,7 @@ private fun SubscriptionWorkRow(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
-        if (work.local != null) {
-            SensitiveWorkRow(
-                work = work.local,
-                expandAll = expandAll,
-                onOpenWork = { onOpenWork(work.remote) }
-            )
-        } else {
-            EnrichingWorkRow(
-                work = work.remote,
-                expandAll = expandAll,
-                onOpenWork = onOpenWork
-            )
-        }
+        PairedWorkRow(work = work, expandAll = expandAll, onOpenWork = onOpenWork)
 
         Row(
             modifier = Modifier
@@ -1108,19 +1099,7 @@ private fun GenericAccountWorksBrowser(
         }
 
         items(works, key = { "gen-${it.id}" }) { work ->
-            if (work.local != null) {
-                SensitiveWorkRow(
-                    work = work.local,
-                    expandAll = expandAll,
-                    onOpenWork = { onOpenWork(work.remote) }
-                )
-            } else {
-                EnrichingWorkRow(
-                    work = work.remote,
-                    expandAll = expandAll,
-                    onOpenWork = onOpenWork
-                )
-            }
+            PairedWorkRow(work = work, expandAll = expandAll, onOpenWork = onOpenWork)
         }
 
         if (totalPages > 1) {
@@ -1136,6 +1115,53 @@ private fun GenericAccountWorksBrowser(
 /**
  * An AO3 work card that enriches itself when sparse (e.g. Subscriptions).
  */
+/**
+ * iOS `AO3AccountWorksList.visibleEntries`: a library work that Hide mode hides is not paired, so
+ * it stays a plain AO3 row with no local state. In Blur mode it stays paired, and its row blurs.
+ */
+internal fun visibleEntries(
+    works: List<CanonicalWork>,
+    privacy: PrivacySettings,
+    reveal: PrivacyRevealState
+): List<CanonicalWork> = works.map { work ->
+    val hidden = work.local != null &&
+        LibraryPrivacy.visibility(work.local, privacy, reveal) == LibraryPrivacyVisibility.Hidden
+    if (hidden) work.copy(local = null) else work
+}
+
+/**
+ * How a library work on these lists is shown, and what a tap on a blurred one does. Read from
+ * the composition, as iOS's rows read its `PrivacyGate` from the environment.
+ */
+private class PairedRowPrivacy(
+    val isObscured: (SavedWork) -> Boolean = { false },
+    val reveal: (SavedWork) -> Unit = {}
+)
+
+private val LocalPairedRowPrivacy = compositionLocalOf { PairedRowPrivacy() }
+
+/** A work in the reader's library draws as its library row, blurred while the privacy gate hides it. */
+@Composable
+private fun PairedWorkRow(
+    work: CanonicalWork,
+    expandAll: Boolean,
+    onOpenWork: (AO3WorkSummary) -> Unit
+) {
+    val local = work.local
+    if (local != null) {
+        val privacy = LocalPairedRowPrivacy.current
+        SensitiveWorkRow(
+            work = local,
+            expandAll = expandAll,
+            obscured = privacy.isObscured(local),
+            onReveal = { privacy.reveal(local) },
+            onOpenWork = { onOpenWork(work.remote) }
+        )
+    } else {
+        EnrichingWorkRow(work = work.remote, expandAll = expandAll, onOpenWork = onOpenWork)
+    }
+}
+
 @Composable
 private fun EnrichingWorkRow(
     work: AO3WorkSummary,

@@ -635,6 +635,8 @@ fun AppNavHost(
                     type = type,
                     repository = container.accountListRepository,
                     workRepository = container.workRepository,
+                    settingsRepository = container.settingsRepository,
+                    privacyGate = container.privacyGate,
                     onLogin = { navController.navigate(Routes.AccountLogin) },
                     onOpenWork = { work ->
                         navigateToWorkDetail(WorkDetailSource.RemoteSummary(work))
