@@ -2,6 +2,7 @@ package io.github.cidy02.kudos.backup
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -41,6 +42,14 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import io.github.cidy02.kudos.settings.SettingsActionRow
+import io.github.cidy02.kudos.settings.SettingsSection
+import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
+import io.github.cidy02.kudos.ui.subject.SubjectRowSeparator
+import io.github.cidy02.kudos.ui.subject.SubjectFormRow
+import io.github.cidy02.kudos.ui.subject.SubjectToggle
+import io.github.cidy02.kudos.ui.subject.subjectPanel
 import io.github.cidy02.kudos.data.local.KudosDatabase
 import io.github.cidy02.kudos.data.preferences.SettingsRepository
 import io.github.cidy02.kudos.works.WorkRepository
@@ -57,7 +66,34 @@ import kotlinx.coroutines.launch
 fun PairingCard(
     settingsRepository: SettingsRepository,
     database: KudosDatabase,
-    workRepository: WorkRepository
+    workRepository: WorkRepository,
+    backupChrome: Boolean = false
+) {
+    // Sync Folder also uses PairingCard. Its default presentation stays unchanged.
+    if (backupChrome) {
+        val tokens = LocalKudosTokens.current
+        MaterialTheme(
+            colorScheme = MaterialTheme.colorScheme.copy(
+                primary = tokens.accent,
+                onSurface = tokens.primaryInk,
+                onSurfaceVariant = tokens.secondaryInk,
+                surface = tokens.background,
+                surfaceContainerLow = tokens.background
+            )
+        ) {
+            PairingContent(settingsRepository, database, workRepository, backupChrome = true)
+        }
+    } else {
+        PairingContent(settingsRepository, database, workRepository, backupChrome = false)
+    }
+}
+
+@Composable
+private fun PairingContent(
+    settingsRepository: SettingsRepository,
+    database: KudosDatabase,
+    workRepository: WorkRepository,
+    backupChrome: Boolean
 ) {
     val trustStore = remember { TombstoneTrustStore(settingsRepository) }
     val revocationService = remember {
@@ -82,79 +118,117 @@ fun PairingCard(
         unknownSignerCount = unknownSignerIds.size
     }
 
-    Card(
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
+    val deviceKey = if (backupChrome) {
+        remember { runCatching { TombstoneSigning.publicKeyHex() }.getOrDefault("") }.ifBlank { "Unavailable" }
+    } else {
+        ""
+    }
+    val pairingContent: @Composable ColumnScope.() -> Unit = {
+        if (backupChrome) {
+            Text("This device", color = LocalKudosTokens.current.primaryInk, fontSize = 16.sp)
+            SelectionContainer {
+                Text(
+                    text = deviceKey,
+                    fontFamily = FontFamily.Monospace,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            SubjectRowSeparator()
+        } else {
             Text("Paired devices", style = MaterialTheme.typography.titleMedium)
             Text(
                 "Deletions only cross devices you've paired. A backup file can never add a trusted device.",
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+        }
 
-            if (unknownSignerCount > 0) {
-                // Count-only: no key list, no names, no Trust affordance here.
-                // Its only action is opening this same pairing sheet.
-                AssistChip(
-                    onClick = { showSheet = true },
-                    label = {
-                        Text(
-                            if (unknownSignerCount == 1) {
-                                "1 deletion skipped from an unpaired device"
-                            } else {
-                                "$unknownSignerCount deletions skipped from an unpaired device"
-                            }
-                        )
-                    }
-                )
-            }
-
-            if (trustedDevices.isEmpty()) {
-                Text(
-                    "No other devices paired yet.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+        if (unknownSignerCount > 0) {
+            val label = if (unknownSignerCount == 1) {
+                "1 deletion skipped from an unpaired device"
             } else {
-                trustedDevices.forEach { device ->
-                    TrustedDeviceRow(
-                        device = device,
-                        onRename = { newLabel ->
-                            scope.launch {
-                                trustStore.rename(device.publicKeyHex, newLabel)
+                "$unknownSignerCount deletions skipped from an unpaired device"
+            }
+            if (backupChrome) {
+                SettingsActionRow(label = label, onClick = { showSheet = true })
+            } else {
+                // Count-only: no key list, names, or Trust affordance.
+                AssistChip(onClick = { showSheet = true }, label = { Text(label) })
+            }
+        }
+
+        if (trustedDevices.isEmpty()) {
+            Text(
+                "No other devices paired yet.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        } else {
+            trustedDevices.forEach { device ->
+                TrustedDeviceRow(
+                    device = device,
+                    onRename = { newLabel ->
+                        scope.launch {
+                            trustStore.rename(device.publicKeyHex, newLabel)
+                            trustedDevices = trustStore.trustedDevices()
+                        }
+                    },
+                    onUndo = {
+                        scope.launch {
+                            if (trustStore.undoTrust(device.publicKeyHex)) {
                                 trustedDevices = trustStore.trustedDevices()
+                                status = "Undid trust for that device."
                             }
-                        },
-                        onUndo = {
-                            scope.launch {
-                                if (trustStore.undoTrust(device.publicKeyHex)) {
-                                    trustedDevices = trustStore.trustedDevices()
-                                    status = "Undid trust for that device."
-                                }
-                            }
-                        },
-                        onRevoke = { revokeTarget = device }
-                    )
-                }
+                        }
+                    },
+                    onRevoke = { revokeTarget = device }
+                )
             }
+        }
 
-            Button(onClick = { showSheet = true }) {
-                Text("Pair a device")
-            }
-
-            status?.let {
-                Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
-            }
+        if (backupChrome) {
+            SubjectRowSeparator()
+            SettingsActionRow(label = "Pair a Device", onClick = { showSheet = true })
+        } else {
+            Button(onClick = { showSheet = true }) { Text("Pair a device") }
+        }
+        status?.let {
+            Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+        }
+    }
+    if (backupChrome) {
+        SettingsSection(
+            label = "Deletion signing",
+            // Android has no automatic Apple-account trust: two devices take each other's
+            // deletions only once each has paired the other.
+            footnote = "Kudos checks that deletions came from one of your devices. Pair each of your " +
+                "other devices here, and pair this one on each of them: scan its QR code or " +
+                "share its pairing code. Deletions from a device that is not paired are " +
+                "ignored. A backup file can never mark a device as trusted."
+        ) {
+            Column(
+                modifier = Modifier.padding(horizontal = 13.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+                content = pairingContent
+            )
+        }
+    } else {
+        Card(
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+                content = pairingContent
+            )
         }
     }
 
     if (showSheet) {
         PairingBottomSheet(
             trustStore = trustStore,
+            backupChrome = backupChrome,
             onDismiss = { showSheet = false },
             onTrusted = {
                 scope.launch { trustedDevices = trustStore.trustedDevices() }
@@ -253,6 +327,7 @@ private fun TrustedDeviceRow(
 @Composable
 private fun PairingBottomSheet(
     trustStore: TombstoneTrustStore,
+    backupChrome: Boolean,
     onDismiss: () -> Unit,
     onTrusted: () -> Unit
 ) {
@@ -281,20 +356,36 @@ private fun PairingBottomSheet(
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            Text("Pair a device", style = MaterialTheme.typography.titleLarge)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    if (backupChrome) "Pair a Device" else "Pair a device",
+                    style = MaterialTheme.typography.titleLarge,
+                    modifier = Modifier.weight(1f)
+                )
+                if (backupChrome) {
+                    TextButton(onClick = onDismiss) { Text("Close") }
+                }
+            }
             Text(
                 "Scan this device's code from your other device. Kudos on Android never scans a code itself.",
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
 
             if (justTrustedHex == null) {
-                Button(
+                PairingAction(
+                    backupChrome = backupChrome,
+                    label = if (backupChrome) {
+                        if (showQr) "Hide My QR Code" else "Show My QR Code"
+                    } else {
+                        if (showQr) "Hide my QR code" else "Show my QR code"
+                    },
                     onClick = { showQr = !showQr },
-                    enabled = deviceHex.isNotBlank(),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text(if (showQr) "Hide my QR code" else "Show my QR code")
-                }
+                    enabled = deviceHex.isNotBlank()
+                )
 
                 if (showQr && deviceHex.isNotBlank()) {
                     val payload = PairingKeyCodec.encode(deviceHex)
@@ -308,18 +399,18 @@ private fun PairingBottomSheet(
                     )
                 }
 
-                OutlinedButton(
+                PairingAction(
+                    backupChrome = backupChrome,
+                    label = if (backupChrome) "Copy My Key" else "Copy Key",
+                    outlined = true,
                     onClick = {
                         clipboard.setText(AnnotatedString(PairingKeyCodec.encode(deviceHex)))
                     },
-                    enabled = deviceHex.isNotBlank(),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("Copy Key")
-                }
+                    enabled = deviceHex.isNotBlank()
+                )
 
                 TextButton(onClick = { showAdvanced = !showAdvanced }) {
-                    Text(if (showAdvanced) "Hide advanced" else "Advanced: paste a key manually")
+                    Text(if (backupChrome || !showAdvanced) "Advanced: paste a key manually" else "Hide advanced")
                 }
 
                 if (showAdvanced) {
@@ -331,19 +422,35 @@ private fun PairingBottomSheet(
                         label = { Text("Other device's key") },
                         placeholder = { Text("kudos-pub-v1:… or 64-char hex") }
                     )
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Checkbox(
-                            checked = confirmedFromOwnDevice,
-                            onCheckedChange = { confirmedFromOwnDevice = it }
+                    if (backupChrome) {
+                        SubjectFormRow(
+                            label = "I got this key from my other device",
+                            trailing = {
+                                SubjectToggle(
+                                    checked = confirmedFromOwnDevice,
+                                    onCheckedChange = { confirmedFromOwnDevice = it },
+                                    contentDescription = "I got this key from my other device"
+                                )
+                            }
                         )
-                        Text("I got this key from my other device")
+                    } else {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Checkbox(
+                                checked = confirmedFromOwnDevice,
+                                onCheckedChange = { confirmedFromOwnDevice = it }
+                            )
+                            Text("I got this key from my other device")
+                        }
                     }
-                    Button(
+
+                    PairingAction(
+                        backupChrome = backupChrome,
+                        label = "Trust",
                         onClick = {
                             val hex = PairingKeyCodec.decode(pasteText)
                             if (hex == null) {
                                 error = "Not a recognizable Kudos device key."
-                                return@Button
+                                return@PairingAction
                             }
                             scope.launch {
                                 if (trustStore.trust(hex)) {
@@ -353,11 +460,8 @@ private fun PairingBottomSheet(
                                 }
                             }
                         },
-                        enabled = PairingTrustGate.canTrust(pasteText, confirmedFromOwnDevice),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text("Trust")
-                    }
+                        enabled = PairingTrustGate.canTrust(pasteText, confirmedFromOwnDevice)
+                    )
                     error?.let {
                         Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
                     }
@@ -374,7 +478,10 @@ private fun PairingBottomSheet(
             } else {
                 // Trusted just now — name it locally. Never pre-filled from
                 // the QR/pasted payload; the field starts blank.
-                Text("Trusted. Name this device so you recognize it later.")
+                Text(
+                    if (backupChrome) "This device is now trusted. Give it a name you will recognize later."
+                    else "Trusted. Name this device so you recognize it later."
+                )
                 OutlinedTextField(
                     value = trustLabel,
                     onValueChange = { trustLabel = it },
@@ -383,19 +490,45 @@ private fun PairingBottomSheet(
                     label = { Text("Device name") },
                     placeholder = { Text("e.g. Sam's iPhone") }
                 )
-                Button(
+                PairingAction(
+                    backupChrome = backupChrome,
+                    label = "Done",
                     onClick = {
-                        val hex = justTrustedHex ?: return@Button
+                        val hex = justTrustedHex ?: return@PairingAction
                         scope.launch {
                             if (trustLabel.isNotBlank()) trustStore.rename(hex, trustLabel)
                             onTrusted()
                         }
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("Done")
-                }
+                    }
+                )
             }
+        }
+    }
+}
+
+/** Backup uses form rows; other callers keep their original buttons. */
+@Composable
+private fun PairingAction(
+    backupChrome: Boolean,
+    label: String,
+    onClick: () -> Unit,
+    enabled: Boolean = true,
+    outlined: Boolean = false
+) {
+    if (backupChrome) {
+        SettingsActionRow(
+            label = label,
+            onClick = onClick,
+            enabled = enabled,
+            modifier = Modifier.subjectPanel()
+        )
+    } else if (outlined) {
+        OutlinedButton(onClick = onClick, enabled = enabled, modifier = Modifier.fillMaxWidth()) {
+            Text(label)
+        }
+    } else {
+        Button(onClick = onClick, enabled = enabled, modifier = Modifier.fillMaxWidth()) {
+            Text(label)
         }
     }
 }
