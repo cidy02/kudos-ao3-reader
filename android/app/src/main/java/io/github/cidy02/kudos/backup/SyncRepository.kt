@@ -201,6 +201,8 @@ class SyncRepository(
                     settingsRepository.settings.first().sync.lastManifestDigest
                 if (ownManifest) {
                     folderViewIsCurrent = true
+                    // Files can land in the folder after the manifest that lists their work.
+                    importOriginals(syncDir, decodedLive!!)
                 } else {
                     (decodedLive ?: decodeManifestOrNull(backupManifest))?.let { manifest ->
                         val outcome = importManifest(syncDir, manifest)
@@ -559,61 +561,72 @@ class SyncRepository(
                 epubFiles[work.id] = bytes
                 batchBytes += bytes.size
             }
-            backupRepository.importPackage(KudosBackupPackage(manifest, epubFiles, fontFiles))
+            // The batches are one restore; only the last marks queued works preserved
+            // (see `BackupMergeService.merge`).
+            backupRepository.importPackage(
+                KudosBackupPackage(manifest, epubFiles, fontFiles),
+                normalizeQueuePreservation = next >= manifest.works.size
+            )
             // Fonts are restored once per manifest, with the first batch (iOS
             // `readChangedRemoteAssets`). Offered again with each batch, a font whose name
             // collides with a local one gained another suffixed copy every time.
             fontFiles.clear()
         } while (next < manifest.works.size)
 
-        importOriginals(syncDir, manifest, fontFiles)
+        importOriginals(syncDir, manifest)
         return ImportOutcome(complete && pendingFonts.isEmpty(), pendingFonts)
     }
 
     /**
-     * iOS `readChangedRemoteAssets`, its last loop: an original is fetched only for a work this
-     * manifest lists, and only when this device holds none. A local original is the file the
-     * reader imported here. A folder that predates this has no `Originals` directory, which is
-     * nothing to fetch. An original and its record travel in one batch: the record is taken
-     * only with the original it describes.
+     * What this device lacks from the folder's `Originals`, for the works [manifest] lists: an
+     * original, when it holds none (iOS `readChangedRemoteAssets`, its last loop), and a
+     * conversion record, when it holds the original without one. A cloud folder delivers files
+     * in any order, so a record can arrive a sync after its original; taken only together with
+     * its original, as it was, it was then never taken.
+     *
+     * The restore attaches a late record only if the folder's original is the same file as the
+     * local one, so that original is read again for the comparison, and only when its size
+     * already matches. An original this device does not take is not at risk: the prune keeps
+     * every listed work's originals, held here or not.
      */
-    private suspend fun importOriginals(
-        syncDir: DocumentFile,
-        manifest: KudosBackupManifest,
-        fontFiles: Map<String, ByteArray>
-    ) {
+    private suspend fun importOriginals(syncDir: DocumentFile, manifest: KudosBackupManifest) {
         val directory = syncDir.findFile(BackupPaths.ORIGINALS_DIRECTORY) ?: return
         val listed = manifest.works.mapTo(HashSet()) { BackupPaths.normalizeIdForComparison(it.id) }
-        val wanted = linkedMapOf<String, MutableList<DocumentFile>>()
+        val inFolder = linkedMapOf<String, MutableList<DocumentFile>>()
         directory.listFiles().forEach { file ->
             val name = file.name ?: return@forEach
             if (name.startsWith(".")) return@forEach
             val (workId, _) = BackupPaths.parseOriginalFileName(name) ?: return@forEach
-            if (workId in listed && !workFileStore.originalExists(workId) &&
-                file.length() <= BackupLimits.MAX_ENTRY_BYTES
-            ) {
-                wanted.getOrPut(workId) { mutableListOf() }.add(file)
-            }
+            if (workId in listed) inFolder.getOrPut(workId) { mutableListOf() }.add(file)
+        }
+        val wanted = inFolder.filter { (workId, files) ->
+            val local = workFileStore.originalFile(workId) ?: return@filter true
+            if (workFileStore.conversionRecordExists(workId)) return@filter false
+            val isRecord = { file: DocumentFile -> BackupPaths.parseOriginalFileName(file.name!!)?.second == true }
+            files.any(isRecord) && files.any { !isRecord(it) && it.length() == Files.size(local) }
         }
 
         var batch = mutableMapOf<String, ByteArray>()
         var batchBytes = 0L
         suspend fun flush() {
             if (batch.isEmpty()) return
-            backupRepository.importPackage(KudosBackupPackage(manifest, emptyMap(), fontFiles, batch))
+            backupRepository.importOriginalFiles(manifest, batch)
             batch = mutableMapOf()
             batchBytes = 0L
         }
         wanted.values.forEach { files ->
             files.forEach { file ->
-                context.contentResolver.openInputStream(file.uri)?.use {
-                    // iOS `KudosBackupContents` limits actual bytes, not provider size.
-                    val bytes = runCatching {
+                // The size a provider reports can be zero or unknown, so the stream is limited
+                // too (iOS `KudosBackupContents` limits the bytes it reads); the reported size
+                // still saves reading 128 MB of a file that says it is larger.
+                if (file.length() > BackupLimits.MAX_ENTRY_BYTES) return@forEach
+                val bytes = runCatching {
+                    context.contentResolver.openInputStream(file.uri)?.use {
                         it.readLimitedBytes(file.name.orEmpty(), BackupLimits.MAX_ENTRY_BYTES)
-                    }.getOrNull() ?: return@use
-                    batch[file.name!!] = bytes
-                    batchBytes += bytes.size
-                }
+                    }
+                }.getOrNull() ?: return@forEach
+                batch[file.name!!] = bytes
+                batchBytes += bytes.size
             }
             if (batchBytes >= maxEpubBatchBytes) flush()
         }

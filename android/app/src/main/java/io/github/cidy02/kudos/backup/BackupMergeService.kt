@@ -43,7 +43,14 @@ object BackupMergeService {
         backup: KudosBackupPackage,
         mode: BackupImportMode = BackupImportMode.RECONCILE,
         now: Instant = Instant.now(),
-        trustedPublicKeys: Set<String> = emptySet()
+        trustedPublicKeys: Set<String> = emptySet(),
+        /**
+         * False for every batch of a sync but its last. The batches are one restore: iOS
+         * selects every asset, restores once, and marks queued works preserved at the end.
+         * Marked after an earlier batch, a queued work's old EPUB was protected from the
+         * corrected one a later batch carried.
+         */
+        normalizeQueuePreservation: Boolean = true
     ): BackupMergeResult {
         val manifest = BackupValidator.validateManifest(backup.manifest, now)
         val exportedAt = parseOptionalInstant(manifest.exportedAt)
@@ -370,7 +377,8 @@ object BackupMergeService {
             worksById = worksById,
             memberships = queueMerge.memberships,
             epubIds = restoredEpubIds,
-            now = now
+            now = now,
+            reconcilePreservation = normalizeQueuePreservation
         )
         // Replace's absence cleanup never changes the omitted system queue.
         val finishedQueues = finishRestoredQueues(queueMerge.queues, queueMerge.memberships).map { queue ->
@@ -469,6 +477,15 @@ object BackupMergeService {
                     BackupPaths.normalizeIdForComparison(merged.id) ==
                         BackupPaths.normalizeIdForComparison(local.id)
                 }
+            },
+            removedReadingSessions = current.readingSessions.filter { local ->
+                readingSessions.none { it.id == local.id }
+            },
+            removedReadingFavorites = current.readingFavorites.filter { local ->
+                readingFavorites.none { it.id == local.id }
+            },
+            removedFandomReadWatermarks = current.fandomReadWatermarks.filter { local ->
+                fandomReadWatermarks.none { it.id == local.id }
             },
             workIdRemap = workIdRemap
         )
@@ -1955,13 +1972,18 @@ object BackupMergeService {
         worksById: MutableMap<String, SavedWork>,
         memberships: List<ReadingQueueMembership>,
         epubIds: Set<String>,
-        now: Instant
+        now: Instant,
+        reconcilePreservation: Boolean
     ) {
         val queuedIds = memberships.mapTo(mutableSetOf()) {
             BackupPaths.normalizeIdForComparison(it.workID)
         }
         for ((id, work) in worksById) {
             if (BackupPaths.normalizeIdForComparison(id) !in queuedIds) continue
+            if (!reconcilePreservation) {
+                worksById[id] = work.copy(isQueuedForLater = true)
+                continue
+            }
             val hasFile = work.hasEpub &&
                 BackupPaths.normalizeIdForComparison(work.id) in epubIds
             var status = work.epubPreservationStatusRaw

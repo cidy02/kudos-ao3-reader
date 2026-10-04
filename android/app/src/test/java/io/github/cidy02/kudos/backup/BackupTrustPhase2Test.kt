@@ -9,6 +9,9 @@ import io.github.cidy02.kudos.core.model.SavedSearch
 import io.github.cidy02.kudos.core.model.SyncTombstone
 import io.github.cidy02.kudos.core.model.SyncTombstoneRecordType
 import io.github.cidy02.kudos.data.local.KudosDatabase
+import io.github.cidy02.kudos.data.local.entity.ReadingSessionEntity
+import io.github.cidy02.kudos.data.local.entity.ReadingFavoriteEntity
+import io.github.cidy02.kudos.data.local.entity.FandomReadWatermarkEntity
 import io.github.cidy02.kudos.data.local.entity.toDomain
 import io.github.cidy02.kudos.data.local.entity.toEntity
 import io.github.cidy02.kudos.data.preferences.SettingsRepository
@@ -659,6 +662,87 @@ class BackupTrustPhase2Test {
         backupRepository.applyMergeResult(merge)
         assertNull(database.savedSearchDao().getById(SWEPT_SEARCH))
         assertEquals(late, database.savedSearchDao().getById(PEER_ROW)?.toDomain())
+    }
+
+    @Test
+    fun aSessionCreatedAfterSnapshotCaptureSurvivesTheApply() = runTest {
+        val captured = ReadingSessionEntity(
+            id = SWEPT_SEARCH, workID = WORK_K, startedAt = Instant.parse(EARLIER),
+            endedAt = Instant.parse(EARLIER), lastModifiedAt = Instant.parse(EARLIER)
+        )
+        val changedTarget = captured.copy(id = TOMBSTONE_ID)
+        database.readingLogDao().upsertSession(captured)
+        database.readingLogDao().upsertSession(changedTarget)
+        val snapshot = backupRepository.captureLibrarySnapshot().copy(tombstones =
+            listOf(SWEPT_SEARCH, TOMBSTONE_ID).map { id -> SyncTombstone(
+                id = id, recordID = id, recordTypeRaw = SyncTombstoneRecordType.READING_SESSION,
+                createdAt = Instant.parse(LATER), lastModifiedAt = Instant.parse(LATER)
+            ) })
+        val merge = BackupMergeService.merge(snapshot, KudosBackupPackage(KudosBackupManifest(
+            version = BackupVersion.CURRENT, exportedAt = "2026-06-26T12:00:00Z")))
+        val late = captured.copy(id = PEER_ROW, lastModifiedAt = CLOCK)
+        val changed = changedTarget.copy(lastModifiedAt = CLOCK)
+        database.readingLogDao().upsertSession(late)
+        database.readingLogDao().upsertSession(changed)
+        backupRepository.applyMergeResult(merge)
+        val held = database.readingLogDao().getAllSessions().associateBy { it.id }
+        assertNull(held[SWEPT_SEARCH])
+        assertEquals(late, held[PEER_ROW])
+        assertEquals(changed, held[TOMBSTONE_ID])
+    }
+
+    @Test
+    fun aFavoriteCreatedAfterSnapshotCaptureSurvivesTheApply() = runTest {
+        val captured = ReadingFavoriteEntity(
+            id = SWEPT_SEARCH, kindRaw = "fandom", targetKey = "A fandom",
+            createdAt = Instant.parse(EARLIER), lastModifiedAt = Instant.parse(EARLIER)
+        )
+        val changedTarget = captured.copy(id = TOMBSTONE_ID)
+        database.readingLogDao().upsertFavorite(captured)
+        database.readingLogDao().upsertFavorite(changedTarget)
+        val snapshot = backupRepository.captureLibrarySnapshot().copy(tombstones =
+            listOf(SWEPT_SEARCH, TOMBSTONE_ID).map { id -> SyncTombstone(
+                id = id, recordID = id, recordTypeRaw = SyncTombstoneRecordType.READING_FAVORITE,
+                createdAt = Instant.parse(LATER), lastModifiedAt = Instant.parse(LATER)
+            ) })
+        val merge = BackupMergeService.merge(snapshot, KudosBackupPackage(KudosBackupManifest(
+            version = BackupVersion.CURRENT, exportedAt = "2026-06-26T12:00:00Z")))
+        val late = captured.copy(id = PEER_ROW, lastModifiedAt = CLOCK)
+        val changed = changedTarget.copy(lastModifiedAt = CLOCK)
+        database.readingLogDao().upsertFavorite(late)
+        database.readingLogDao().upsertFavorite(changed)
+        backupRepository.applyMergeResult(merge)
+        val held = database.readingLogDao().getAllFavorites().associateBy { it.id }
+        assertNull(held[SWEPT_SEARCH])
+        assertEquals(late, held[PEER_ROW])
+        assertEquals(changed, held[TOMBSTONE_ID])
+    }
+
+    @Test
+    fun aWatermarkCreatedAfterSnapshotCaptureSurvivesTheApply() = runTest {
+        val captured = FandomReadWatermarkEntity(
+            id = SWEPT_SEARCH, fandomName = "A fandom", lastVisitedAt = Instant.parse(EARLIER),
+            lastModifiedAt = Instant.parse(EARLIER)
+        )
+        val changedTarget = captured.copy(id = TOMBSTONE_ID)
+        database.readingLogDao().upsertWatermark(captured)
+        database.readingLogDao().upsertWatermark(changedTarget)
+        val snapshot = backupRepository.captureLibrarySnapshot().copy(tombstones =
+            listOf(SWEPT_SEARCH, TOMBSTONE_ID).map { id -> SyncTombstone(
+                id = id, recordID = id, recordTypeRaw = SyncTombstoneRecordType.FANDOM_READ_WATERMARK,
+                createdAt = Instant.parse(LATER), lastModifiedAt = Instant.parse(LATER)
+            ) })
+        val merge = BackupMergeService.merge(snapshot, KudosBackupPackage(KudosBackupManifest(
+            version = BackupVersion.CURRENT, exportedAt = "2026-06-26T12:00:00Z")))
+        val late = captured.copy(id = PEER_ROW, lastModifiedAt = CLOCK)
+        val changed = changedTarget.copy(lastModifiedAt = CLOCK)
+        database.readingLogDao().upsertWatermark(late)
+        database.readingLogDao().upsertWatermark(changed)
+        backupRepository.applyMergeResult(merge)
+        val held = database.readingLogDao().getAllWatermarks().associateBy { it.id }
+        assertNull(held[SWEPT_SEARCH])
+        assertEquals(late, held[PEER_ROW])
+        assertEquals(changed, held[TOMBSTONE_ID])
     }
 
     @Test

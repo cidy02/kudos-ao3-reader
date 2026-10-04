@@ -109,6 +109,9 @@ data class BackupMergeResult(
     val adoptedIncomingTombstoneIds: Set<String> = emptySet(),
     /** Captured rows explicitly swept by merge; later-created searches are never candidates. */
     val removedSavedSearches: List<SavedSearch> = emptyList(),
+    val removedReadingSessions: List<ReadingSessionEntity> = emptyList(),
+    val removedReadingFavorites: List<ReadingFavoriteEntity> = emptyList(),
+    val removedFandomReadWatermarks: List<FandomReadWatermarkEntity> = emptyList(),
     /**
      * The archive's work id to the id of the work it became here, for every work this merge
      * brought in or matched (iOS `restoredWorksByArchivedID`). A work a tombstone suppressed is
