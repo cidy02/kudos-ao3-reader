@@ -14,6 +14,7 @@ import io.github.cidy02.kudos.files.FileWriteResult
 import io.github.cidy02.kudos.files.FontFileStore
 import io.github.cidy02.kudos.files.WorkFileStore
 import io.github.cidy02.kudos.works.WorkRepository
+import java.io.IOException
 import java.nio.file.Files
 import java.time.Instant
 import java.time.ZoneOffset
@@ -146,10 +147,14 @@ class BackupRepository(
             if (isRecord) {
                 if (workId in restored) workFileStore.writeConversionRecord(workId, bytes)
             } else if (!workFileStore.originalExists(workId)) {
-                val written = workFileStore.writeOriginal(workId, name.substringAfterLast('.', ""), bytes)
-                if (written is FileWriteResult.Success) restored += workId
+                workFileStore.writeOriginal(workId, name.substringAfterLast('.', ""), bytes).orThrow()
+                restored += workId
             }
         }
+    }
+
+    private fun FileWriteResult.orThrow() {
+        if (this is FileWriteResult.Failure) throw IOException(message, cause)
     }
 
     private suspend fun mergePackage(
@@ -257,12 +262,18 @@ class BackupRepository(
         }
 
         merge.epubFilesToWriteByWorkId.forEach { (workId, bytes) ->
-            workFileStore.writeWorkEpub(workId, bytes)
+            val write = workFileStore.writeWorkEpub(workId, bytes)
+            // The flag follows the file on disk, whatever the write did.
+            val hasFile = workFileStore.workEpubExists(workId)
             database.workDao().getById(workId)?.let { entity ->
-                if (!entity.hasEpub) {
-                    database.workDao().upsert(entity.copy(hasEpub = true))
-                }
+                if (entity.hasEpub != hasFile) database.workDao().upsert(entity.copy(hasEpub = hasFile))
             }
+            // A write that failed kept the old bytes, under a row that now carries the
+            // incoming clock. Reported as a success, as it was, the next sync uploaded
+            // those old bytes as the newest copy and every other device took them. Failing
+            // here stops that upload; the same EPUB is offered again on the next import,
+            // and an equal clock still lets it in.
+            write.orThrow()
         }
 
         // User tags (merge-add only).
@@ -284,7 +295,7 @@ class BackupRepository(
 
         snapshot.fonts.forEach { database.customFontDao().upsert(it.toEntity()) }
         merge.fontFilesToWriteByFileName.forEach { (fileName, bytes) ->
-            fontFileStore.writeFont(fileName, bytes)
+            fontFileStore.writeFont(fileName, bytes).orThrow()
         }
 
         snapshot.collections.forEach { collection ->
