@@ -88,8 +88,8 @@ class AO3AccountParser(
                 else -> null
             }
             
-            val worksText = li.selectFirst("dd.works")?.normalizedText()?.replace(",", "")?.toIntOrNull() ?: 0
-            val bookmarksText = li.selectFirst("dd.bookmarks")?.normalizedText()?.replace(",", "")?.toIntOrNull() ?: 0
+            val worksText = li.selectFirst("dd.works")?.normalizedText()?.replace(",", "")?.toIntOrNull()
+            val bookmarksText = li.selectFirst("dd.bookmarks")?.normalizedText()?.replace(",", "")?.toIntOrNull()
             
             val summary = li.selectFirst("blockquote.userstuff.summary")?.normalizedText().orEmpty()
             val updated = li.selectFirst("p.datetime")?.normalizedText().orEmpty()
@@ -114,6 +114,18 @@ class AO3AccountParser(
                 viewerIsOwner = viewerIsOwner
             )
         }
+    }
+
+    fun parseCollectionsIndex(
+        html: String,
+        page: Int = 1,
+        finalUrl: String? = null
+    ): AO3CollectionsIndexPage {
+        val collections = parseCollections(html, finalUrl)
+        val currentPage = page.coerceAtLeast(1)
+        return AO3CollectionsIndexPage(
+            collections, currentPage, Jsoup.parse(html).parseTotalPages(currentPage)
+        )
     }
 
     fun parseSubscriptionsPage(html: String, page: Int): AO3SearchPage {

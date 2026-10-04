@@ -15,6 +15,7 @@ data class AO3AuthorIdentity(
  *
  * [name] is the URL slug (`/collections/<name>`); [title] is the display name;
  * [byline] is the maintainers line when shown.
+ * A null count is unknown, distinct from a parsed zero (iOS filter parity).
  */
 data class AO3Collection(
     val name: String,
@@ -29,9 +30,16 @@ data class AO3Collection(
     val isAnonymous: Boolean = false,
     val isModerated: Boolean = false,
     val isClosed: Boolean = false,
-    val worksCount: Int = 0,
-    val bookmarksCount: Int = 0,
+    val worksCount: Int? = null,
+    val bookmarksCount: Int? = null,
     val challengeKind: AO3ChallengeKind? = null,
     val updatedAtText: String = "",
     val iconURL: String? = null
+)
+
+/** The rows and pagination from one account collections-index response. */
+data class AO3CollectionsIndexPage(
+    val collections: List<AO3Collection>,
+    val currentPage: Int = 1,
+    val totalPages: Int = 1
 )
