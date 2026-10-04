@@ -8,7 +8,7 @@ records what Claude did with them. Where the two differ, this file is what the c
 | | |
 |---|---|
 | Android | `android/redesign-parity`, `e533b986`…`0cc50518` (5c) and `e3d7dece` (5d). Gate: 1,273 unit tests, all pass. |
-| iOS | `91f3930f` and `d0b85f4f` on `claude/polish-loop`; `ef120853` and `d56fb5a5` on `integrate/cloud-redesign` (T-357). The nine suites that sync a folder: 74 tests pass on the case-sensitive volume. Lint clean. macOS builds. |
+| iOS | `91f3930f` and `d0b85f4f` on `claude/polish-loop`; `ef120853` and `d56fb5a5` on `integrate/cloud-redesign` (T-357). The nine suites that sync a folder: 73 tests pass on the case-sensitive volume at `91f3930f`, with lint clean and a macOS build. `d0b85f4f` adds one test and no app code; it was run with three of the suites (37 tests pass). |
 | Not pushed | All of it. |
 | Not done | A real cloud provider, a real iPhone, two devices at once. See "Not verified". |
 
