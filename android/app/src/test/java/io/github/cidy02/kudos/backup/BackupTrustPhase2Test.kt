@@ -470,6 +470,133 @@ class BackupTrustPhase2Test {
             )
         }
 
+    // iOS `NewestTombstoneWinsTests`: a record deleted twice stays deleted for as long as the
+    // later deletion says.
+
+    @Test
+    fun aSnapshotBetweenTheTwoDeletionsCannotResurrectTheWork() = runTest {
+        val (key, pub) = trustedPeer()
+        seedOwnWorkTombstone(at = EARLIER)
+        // The peer's later deletion of the same work arrives under a row id of its own.
+        importTombstone(peerWorkTombstone(at = LATER, rowId = PEER_ROW, key = key, pub = pub))
+
+        // A snapshot from between the two deletions still lists the work.
+        backupRepository.importPackage(
+            KudosBackupPackage(
+                manifest = KudosBackupManifest(
+                    version = BackupVersion.CURRENT,
+                    exportedAt = BETWEEN,
+                    exportedBy = BackupExportedBy(
+                        platform = "ios",
+                        appVersion = "test",
+                        schemaVersion = BackupVersion.CURRENT
+                    ),
+                    works = listOf(
+                        BackupWork(
+                            id = WORK_K,
+                            title = "Deleted twice",
+                            author = "Author",
+                            sourceURL = "https://archiveofourown.org/works/4242",
+                            dateAdded = EARLIER,
+                            isSaved = true,
+                            hasEPUB = false,
+                            lastModifiedAt = BETWEEN,
+                            ao3WorkID = 4242
+                        )
+                    ),
+                    settings = BackupSettingsPayload()
+                )
+            )
+        )
+
+        assertNull(database.workDao().getById(WORK_K))
+    }
+
+    @Test
+    fun aLaterDeletionOfTheSameRecordReplacesTheEarlierRow() = runTest {
+        // The same row id: what iOS publishes after it has taken the later deletion into its row.
+        val (key, pub) = trustedPeer()
+        seedOwnWorkTombstone(at = EARLIER)
+
+        importTombstone(peerWorkTombstone(at = LATER, rowId = TOMBSTONE_ID, key = key, pub = pub))
+
+        val stored = database.syncTombstoneDao().getAll().single()
+        assertEquals(Instant.parse(LATER), stored.lastModifiedAt)
+        assertEquals(pub, stored.signerPublicKey)
+    }
+
+    @Test
+    fun anOlderIncomingTombstoneLeavesTheLaterOneAlone() = runTest {
+        val (key, pub) = trustedPeer()
+        seedOwnWorkTombstone(at = LATER)
+
+        importTombstone(peerWorkTombstone(at = EARLIER, rowId = TOMBSTONE_ID, key = key, pub = pub))
+
+        // Still this device's own, later row: the import signs it with this device's key.
+        val stored = database.syncTombstoneDao().getAll().single()
+        assertEquals(Instant.parse(LATER), stored.lastModifiedAt)
+        assertFalse(stored.signerPublicKey == pub)
+    }
+
+    private suspend fun trustedPeer(): Pair<ByteArray, String> {
+        val peer = Ed25519Sign.KeyPair.newKeyPair()
+        val pub = peer.publicKey.toLowerHex()
+        TombstoneTrustStore(settingsRepository).trust(pub)
+        return peer.privateKey to pub
+    }
+
+    /** This device's own deletion of [WORK_K], under [TOMBSTONE_ID]. */
+    private suspend fun seedOwnWorkTombstone(at: String) {
+        database.syncTombstoneDao().upsert(
+            SyncTombstone(
+                id = TOMBSTONE_ID,
+                recordID = WORK_K,
+                recordTypeRaw = SyncTombstoneRecordType.SAVED_WORK,
+                createdAt = Instant.parse(at),
+                lastModifiedAt = Instant.parse(at),
+                sourceURL = "https://archiveofourown.org/works/4242",
+                ao3WorkID = 4242,
+                deletionReason = "workDeleted"
+            ).toEntity()
+        )
+    }
+
+    private fun peerWorkTombstone(at: String, rowId: String, key: ByteArray, pub: String): BackupTombstone {
+        val unsigned = BackupTombstone(
+            id = rowId,
+            recordID = WORK_K,
+            recordTypeRaw = SyncTombstoneRecordType.SAVED_WORK,
+            createdAt = at,
+            lastModifiedAt = at,
+            sourceURL = "https://archiveofourown.org/works/4242",
+            ao3WorkID = 4242
+        )
+        val signed = TombstoneSigning.signWithRawKey(
+            unsigned.copy(signerPublicKey = pub).toSyncTombstone(),
+            key,
+            pub
+        )
+        return unsigned.copy(signerPublicKey = signed.signerPublicKey, signature = signed.signature)
+    }
+
+    private suspend fun importTombstone(tombstone: BackupTombstone) {
+        backupRepository.importPackage(
+            KudosBackupPackage(
+                manifest = KudosBackupManifest(
+                    version = BackupVersion.CURRENT,
+                    exportedAt = "2026-06-26T12:00:00Z",
+                    exportedBy = BackupExportedBy(
+                        platform = "ios",
+                        appVersion = "test",
+                        schemaVersion = BackupVersion.CURRENT
+                    ),
+                    tombstones = listOf(tombstone),
+                    settings = BackupSettingsPayload()
+                )
+            )
+        )
+    }
+
     // iOS `TombstoneSweepsExistingRecordsTests`: a deletion has to remove the copy a device
     // still holds, or the two devices disagree for ever.
 
@@ -703,6 +830,10 @@ class BackupTrustPhase2Test {
         private val CLOCK: Instant = Instant.parse("2026-06-26T12:00:00Z")
         private const val WORK_K = "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
         private const val SWEPT_SEARCH = "66666666-6666-4666-8666-666666666666"
+        private const val PEER_ROW = "44444444-4444-4444-8444-444444444444"
+        private const val EARLIER = "2026-01-01T00:00:00Z"
+        private const val BETWEEN = "2026-02-01T00:00:00Z"
+        private const val LATER = "2026-03-01T00:00:00Z"
         private const val TOMBSTONE_ID = "33333333-3333-4333-8333-333333333333"
     }
 }

@@ -84,7 +84,20 @@ object BackupMergeService {
             val incomingKey = BackupPaths.normalizeIdForComparison(incoming.id)
             // `id` is not in the signed payload — a trusted signature must never
             // overwrite a local tombstone row (spec §2: local deletes still suppress).
-            if (tombstonesById.containsKey(incomingKey)) return@forEach
+            //
+            // One exception, iOS `NewestTombstoneWinsTests`: the same record, deleted
+            // again later. `lastModifiedAt` is the suppression key, so keeping the
+            // earlier row keeps the narrower window, and a snapshot dated between
+            // the two deletions walks through it and brings the record back. It
+            // only ever widens what the row already suppresses.
+            val held = tombstonesById[incomingKey]
+            if (held != null) {
+                val sameRecordDeletedLater = held.recordTypeRaw == incoming.recordTypeRaw &&
+                    BackupPaths.normalizeIdForComparison(held.recordID) ==
+                    BackupPaths.normalizeIdForComparison(incoming.recordID) &&
+                    incoming.lastModifiedAt.isAfter(held.lastModifiedAt)
+                if (!sameRecordDeletedLater) return@forEach
+            }
             tombstonesById[incomingKey] = incoming
             adoptedIncoming += incoming
         }

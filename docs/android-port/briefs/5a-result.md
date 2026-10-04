@@ -136,6 +136,25 @@ tombstone, and never in Replace Library; and `BackupRepository` deletes what the
 `aTrustedTombstoneRemovesASearchThisDeviceStillHas`, `aSearchMadeAfterTheDeletionSurvives`,
 `replaceLibraryDoesNotSweepExistingSearches`.
 
+## Part 5: a record deleted twice (the newest tombstone)
+
+iOS `NewestTombstoneWinsTests`: a record deleted twice stays deleted for as long as the later
+deletion says, or a snapshot dated between the two brings it back.
+
+- **Two rows for one record** (each device made its own): Android stores both and its index
+  takes the newest, so the outcome is iOS's. It had no test; now
+  `aSnapshotBetweenTheTwoDeletionsCannotResurrectTheWork`.
+- **The same row, later** (what iOS publishes once it has taken the later deletion into its own
+  row): Android dropped it, because a row id it already holds is never overwritten, and kept the
+  earlier date. Now a trusted tombstone replaces the row it shares an id with when it is for the
+  same record and later. A different record under the same id is still refused
+  (`importPackageDoesNotOverwriteLocalTombstoneRowByUnsignedId` still passes), and an older one
+  changes nothing. Tests: `aLaterDeletionOfTheSameRecordReplacesTheEarlierRow`,
+  `anOlderIncomingTombstoneLeavesTheLaterOneAlone`.
+
+Not the same as iOS, and left: iOS keeps one row per record; Android can hold two. Both suppress
+the same things.
+
 ## The two apps' own code, on each other's folder (2026-10-04)
 
 The backup has golden archives written by each app and read by the other. The sync folder had

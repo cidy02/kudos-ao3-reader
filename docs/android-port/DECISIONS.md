@@ -238,3 +238,10 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   never in Replace Library. Nothing changes for a device that has paired with no one.
   Reverse: the sweep in `mergeSavedSearches` (`backup/BackupMergeService.kt`) and the deletion
   beside the saved-search upsert in `BackupRepository.applyMergeResult`.
+- **2026-10-04 · A later deletion of the same record replaces the tombstone row it shares an id
+  with.** Android never overwrote a tombstone row it already held, to stop a trusted key from
+  swapping a local deletion for another record's. That also dropped the same record's later
+  deletion, and kept the earlier date: a snapshot dated between the two would bring the record
+  back (iOS `NewestTombstoneWinsTests`). The row is now replaced only when the incoming tombstone
+  is trusted, is for the same record, and is later. It can only widen what the row suppresses.
+  Reverse: `sameRecordDeletedLater` in `backup/BackupMergeService.kt`.
