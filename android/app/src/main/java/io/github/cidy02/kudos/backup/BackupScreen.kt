@@ -251,8 +251,7 @@ fun BackupScreen(
             PairingCard(
                 settingsRepository = settingsRepository,
                 database = database,
-                workRepository = workRepository,
-                backupChrome = true
+                workRepository = workRepository
             )
         }
     }
