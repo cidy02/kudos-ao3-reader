@@ -257,6 +257,12 @@ object DemoLibrary {
     ) {
         val allWorks = database.workDao().getAllIncludingDeleted()
         if (allWorks.any { it.title == SAMPLES[0].title }) {
+            // Add list fixture links to an installed demo without replacing its reading state.
+            for (row in allWorks.filter { it.title == "Sodium Lights" || it.title == "Ashfall" }) {
+                val work = workRepository.getWork(row.id) ?: continue
+                val linked = withDemoListLinks(work)
+                if (linked != work) workRepository.upsert(linked)
+            }
             // Upgrade an already-installed demo's old single-spine search fixture.
             allWorks.firstOrNull { it.title == "The Long Way Down" && it.hasEpub }?.let {
                 writePlaceholderEpub(it.id, it.title, fileStore)
@@ -312,7 +318,7 @@ object DemoLibrary {
                 writePlaceholderEpub(work.id, work.title, fileStore)
             }
 
-            val savedWork = workRepository.upsert(work)
+            val savedWork = workRepository.upsert(withDemoListLinks(work))
             seededWorks.add(savedWork)
         }
 
@@ -390,6 +396,20 @@ object DemoLibrary {
         }
 
         seedRecentlyDeleted(database, workRepository, fileStore, clock)
+    }
+
+    private fun withDemoListLinks(work: SavedWork): SavedWork = when {
+        work.title == "Sodium Lights" && work.seriesUrl.isBlank() -> work.copy(
+            seriesTitle = "My Series",
+            seriesPosition = 1,
+            seriesUrl = "https://archiveofourown.org/series/999",
+            ao3SeriesID = 999
+        )
+        work.title == "Ashfall" && work.sourceUrl.isBlank() -> work.copy(
+            sourceUrl = WorkTags.ao3WorkUrl(999_000_003L),
+            ao3WorkID = 999_000_003
+        )
+        else -> work
     }
 
     private suspend fun seedRecentlyDeleted(
