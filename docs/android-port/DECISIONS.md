@@ -526,3 +526,19 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   the top buttons scrolled away, text ran under the clock. The wash-coloured ground that sits
   behind the buttons now shrinks to the status bar's height instead of going away. Reverse:
   the `fadeHeight` lines in `app/MainScaffold.kt`.
+- **2026-10-05 · Which files an import writes is decided when it writes them.** A work marked
+  to keep, a download removed, or a work deleted while an import ran still got the file the
+  import had planned. Each EPUB, original and font is now checked against the work's row at the
+  moment of writing, by the merge's own rule. Reverse: `applyMergeResultLocked` in
+  `backup/BackupRepository.kt`.
+- **2026-10-05 · Subscriptions lists series and authors, as iOS does.** The two tabs were fixed
+  empty states that told a reader with subscriptions they had none. They now ask AO3 for the
+  reader's own `type=series` and `type=users` pages: one request when a tab is opened, on a
+  page change and on pull-to-refresh, through the paced client, never in the background. The
+  networking policy allows a signed-in read of the reader's own account lists. No Unsubscribe
+  on these rows yet (brief 3an). Reverse: `account/NamedSubscriptionsLoader.kt` and
+  `parseNamedSubscriptions` in `network/ao3/account/AO3AccountParser.kt`.
+- **2026-10-05 · Found, not yet fixed: Unsubscribe on the Subscriptions page does not
+  unsubscribe.** It hides the work's row on the device, in memory, and sends AO3 nothing; the
+  subscription is still there on AO3 and the row is back at the next visit. iOS posts AO3's own
+  form. Brief 3an.

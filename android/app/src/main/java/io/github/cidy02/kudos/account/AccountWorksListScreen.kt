@@ -32,6 +32,8 @@ import androidx.compose.material.icons.outlined.AccessTime
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.NotificationsOff
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -42,6 +44,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.runtime.key
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -89,6 +92,10 @@ import io.github.cidy02.kudos.ui.components.DestructiveConfirmation
 import io.github.cidy02.kudos.ui.components.EmptyStateCard
 import io.github.cidy02.kudos.ui.components.ErrorStateCard
 import io.github.cidy02.kudos.ui.components.KudosPaginationBar
+import io.github.cidy02.kudos.ui.components.KudosRefreshBox
+import io.github.cidy02.kudos.network.ao3.AO3Constants
+import io.github.cidy02.kudos.network.ao3.account.AO3NamedSubscription
+import io.github.cidy02.kudos.network.ao3.account.AO3NamedSubscriptionsScope
 import io.github.cidy02.kudos.ui.components.LoadingStateCard
 import io.github.cidy02.kudos.ui.components.SensitiveWorkRow
 import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
@@ -119,6 +126,8 @@ fun AccountWorksListScreen(
     privacyGate: PrivacyGate,
     onLogin: () -> Unit,
     onOpenWork: (AO3WorkSummary) -> Unit,
+    onOpenSeries: (String) -> Unit,
+    onOpenAuthor: (String) -> Unit,
     modifier: Modifier = Modifier,
     viewModel: AccountListViewModel = viewModel(
         key = type.listKey,
@@ -139,6 +148,12 @@ fun AccountWorksListScreen(
     var showingFilters by remember(type) { mutableStateOf(false) }
     var filters by remember(type) { mutableStateOf(AO3SearchFilters()) }
     var subscriptionsScope by remember(type) { mutableStateOf("works") }
+    var subscriptionsPage by remember(type, subscriptionsScope) { mutableStateOf(1) }
+    val generation by repository.authRepository.generation.collectAsState()
+    val namedScope = AO3NamedSubscriptionsScope.entries.firstOrNull { it.parameter == subscriptionsScope }
+    val namedLoader = remember(repository, namedScope, subscriptionsPage, generation) {
+        namedScope?.let { NamedSubscriptionsLoader(repository, it, subscriptionsPage) }
+    }
     var subscriptionWatermarks by remember(type) {
         mutableStateOf(SubscriptionWatermarks.load(context, SubscriptionWatermarks.NAMESPACE_SUBSCRIPTIONS))
     }
@@ -154,8 +169,8 @@ fun AccountWorksListScreen(
     }
     // iOS enriches only the loaded subscriptions page, after it is on screen. Reuse the
     // rows' memoised anonymous lookup, sequentially; changing page/session cancels the walk.
-    LaunchedEffect(type, pageWorks, authState) {
-        if (type == AccountListType.Subscriptions && authState.isSignedIn) {
+    LaunchedEffect(type, pageWorks, authState, subscriptionsScope) {
+        if (type == AccountListType.Subscriptions && subscriptionsScope == "works" && authState.isSignedIn) {
             for (work in pageWorks) {
                 val known = enricher?.enrich(work) ?: work
                 currentCoroutineContext().ensureActive()
@@ -198,13 +213,8 @@ fun AccountWorksListScreen(
                         )
                     }
                     Box {
-                        // A glass circle, as iOS's toolbar draws it and as the Inbox's menu does.
-                        io.github.cidy02.kudos.ui.subject.ToolbarCircleButton(
-                            onClick = { showMenu = true },
-                            accessibilityName = "More actions",
-                            palette = palette
-                        ) {
-                            Icon(imageVector = Icons.Default.MoreVert, contentDescription = null)
+                        IconButton(onClick = { showMenu = true }) {
+                            Icon(imageVector = Icons.Default.MoreVert, contentDescription = "More actions")
                         }
                         DropdownMenu(
                             expanded = showMenu,
@@ -267,7 +277,36 @@ fun AccountWorksListScreen(
             Spacer(modifier = Modifier.windowInsetsTopHeight(WindowInsets.statusBars))
             Spacer(modifier = Modifier.height(56.dp))
 
-            when (val current = state) {
+            if (type == AccountListType.Subscriptions) {
+                val rowPrivacy = remember(settings.privacy, reveal, activity) {
+                    PairedRowPrivacy(
+                        isObscured = { LibraryPrivacy.visibility(it, settings.privacy, reveal) == LibraryPrivacyVisibility.Obscured },
+                        reveal = { privacyGate.reveal(it.id, activity) }
+                    )
+                }
+                CompositionLocalProvider(LocalPairedRowPrivacy provides rowPrivacy) {
+                    SubscriptionsBrowser(
+                        works = works,
+                        watermarks = subscriptionWatermarks,
+                        scope = subscriptionsScope,
+                        onScopeChange = { subscriptionsScope = it },
+                        onUnsubscribeWork = { unsubscribedIds = unsubscribedIds + it.remote.id },
+                        currentPage = loaded?.page?.currentPage ?: 1,
+                        totalPages = loaded?.page?.totalPages ?: 1,
+                        expandAll = expandAll,
+                        palette = palette,
+                        onLoadPage = viewModel::load,
+                        onOpenWork = onOpenWork,
+                        worksState = state,
+                        namedLoader = namedLoader,
+                        namedScope = namedScope,
+                        onNamedPageChange = { subscriptionsPage = it },
+                        onLogin = onLogin,
+                        onOpenSeries = onOpenSeries,
+                        onOpenAuthor = onOpenAuthor
+                    )
+                }
+            } else when (val current = state) {
                 AccountListUiState.Loading -> {
                     Box(modifier = Modifier.padding(SubjectMetrics.accountGutter)) {
                         LoadingStateCard("Loading ${type.title}")
@@ -340,21 +379,6 @@ fun AccountWorksListScreen(
                                     HistoryBrowser(
                                         works = works,
                                         readings = current.page.readingEntries,
-                                        currentPage = current.page.currentPage,
-                                        totalPages = current.page.totalPages,
-                                        expandAll = expandAll,
-                                        palette = palette,
-                                        onLoadPage = viewModel::load,
-                                        onOpenWork = onOpenWork
-                                    )
-                                }
-                                AccountListType.Subscriptions -> {
-                                    SubscriptionsBrowser(
-                                        works = works,
-                                        watermarks = subscriptionWatermarks,
-                                        scope = subscriptionsScope,
-                                        onScopeChange = { subscriptionsScope = it },
-                                        onUnsubscribeWork = { unsubscribedIds = unsubscribedIds + it.remote.id },
                                         currentPage = current.page.currentPage,
                                         totalPages = current.page.totalPages,
                                         expandAll = expandAll,
@@ -907,7 +931,7 @@ private fun HistoryBrowser(
 // region 4. Subscriptions Browser
 
 @Composable
-private fun SubscriptionsBrowser(
+internal fun SubscriptionsBrowser(
     works: List<CanonicalWork>,
     watermarks: Map<Long, SubscriptionWatermark>,
     scope: String,
@@ -918,8 +942,21 @@ private fun SubscriptionsBrowser(
     expandAll: Boolean,
     palette: SubjectPalette,
     onLoadPage: (Int) -> Unit,
-    onOpenWork: (AO3WorkSummary) -> Unit
+    onOpenWork: (AO3WorkSummary) -> Unit,
+    worksState: AccountListUiState,
+    namedLoader: NamedSubscriptionsLoader?,
+    namedScope: AO3NamedSubscriptionsScope?,
+    onNamedPageChange: (Int) -> Unit,
+    onLogin: () -> Unit,
+    onOpenSeries: (String) -> Unit,
+    onOpenAuthor: (String) -> Unit
 ) {
+    var retryNamed by remember(namedLoader) { mutableStateOf(0) }
+    // Activation, retry and refresh all die with the visible tab's composition.
+    LaunchedEffect(namedLoader, retryNamed) { namedLoader?.load() }
+    // A new flow must not draw the previous scope's last collected value for one frame.
+    val namedState = key(namedLoader) { namedLoader?.uiState?.collectAsState()?.value }
+    val namedPage = (namedState as? NamedSubscriptionsUiState.Loaded)?.page
     var filter by remember { mutableStateOf("all") }
     var pendingUnsubscribe by remember { mutableStateOf<CanonicalWork?>(null) }
     val activeWorks = works
@@ -951,7 +988,9 @@ private fun SubscriptionsBrowser(
         onDismissRequest = { pendingUnsubscribe = null }
     )
 
-    val subtitle = buildString {
+    val subtitle = if (namedScope != null) {
+        namedPage?.let { namedScope.subtitle(it.rows.size, it.currentPage, it.totalPages) }.orEmpty()
+    } else if (worksState !is AccountListUiState.Loaded) "" else buildString {
         append(if (displayedWorks.size == 1) "1 work" else "${displayedWorks.size} works")
         if (filter == "all" && updatedWorks.isNotEmpty()) {
             append(" · ${updatedWorks.size} with new chapters")
@@ -961,41 +1000,27 @@ private fun SubscriptionsBrowser(
         }
     }
 
-    LazyColumn(
-        verticalArrangement = Arrangement.spacedBy(10.dp),
-        contentPadding = PaddingValues(
-            start = SubjectMetrics.accountGutter,
-            end = SubjectMetrics.accountGutter,
-            bottom = 24.dp
-        ),
-        modifier = Modifier.fillMaxSize()
-    ) {
-        item {
-            SubjectHeaderBlock(
-                kicker = "AO3 Account",
-                title = "Subscriptions",
-                subtitle = subtitle,
-                palette = palette,
-                gutter = 0.dp
-            )
-        }
-
-        // Scope rail: Works / Series / Authors
-        item {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                SubjectChip("Works", style = SubjectChipStyle.Pill(scope == "works"), palette = palette, modifier = Modifier.clickable { onScopeChange("works") })
-                SubjectChip("Series", style = SubjectChipStyle.Pill(scope == "series"), palette = palette, modifier = Modifier.clickable { onScopeChange("series") })
-                SubjectChip("Authors", style = SubjectChipStyle.Pill(scope == "authors"), palette = palette, modifier = Modifier.clickable { onScopeChange("authors") })
+    val listContent: @Composable () -> Unit = {
+        LazyColumn(
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+            contentPadding = PaddingValues(
+                start = SubjectMetrics.accountGutter,
+                end = SubjectMetrics.accountGutter,
+                bottom = 24.dp
+            ),
+            modifier = Modifier.fillMaxSize()
+        ) {
+            item {
+                SubjectHeaderBlock(
+                    kicker = "AO3 Account",
+                    title = "Subscriptions",
+                    subtitle = subtitle,
+                    palette = palette,
+                    gutter = 0.dp
+                )
             }
-        }
 
-        if (scope == "works") {
-            // Filter rail: All / Updated
+            // Scope rail: Works / Series / Authors
             item {
                 Row(
                     modifier = Modifier
@@ -1003,96 +1028,181 @@ private fun SubscriptionsBrowser(
                         .horizontalScroll(rememberScrollState()),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    SubjectChip("All", style = SubjectChipStyle.Pill(filter == "all"), palette = palette, modifier = Modifier.clickable { filter = "all" })
-                    SubjectChip("Updated", style = SubjectChipStyle.Pill(filter == "updated"), palette = palette, modifier = Modifier.clickable { filter = "updated" })
-                    SubjectChip("Reset", style = SubjectChipStyle.Pill(false), leadingIcon = Icons.Outlined.Close, modifier = Modifier.clickable { filter = "all" })
-                }
-            }
-
-            if (totalPages > 1) {
-                item {
-                    KudosPaginationBar(currentPage = currentPage, totalPages = totalPages, onPageChange = onLoadPage)
-                }
-            }
-
-            if (displayedWorks.isEmpty()) {
-                item {
-                    EmptyStateCard(
-                        title = "No subscriptions",
-                        message = "Works you subscribe to on AO3 show up here."
-                    )
-                }
-            } else if (filter == "all" && updatedWorks.isNotEmpty()) {
-                item {
-                    SectionRuleHeader(title = "New since you last looked", count = updatedWorks.size)
-                }
-                items(updatedWorks, key = { "sub-up-${it.id}" }) { work ->
-                    SubscriptionWorkRow(
-                        work = work,
-                        expandAll = expandAll,
-                        palette = palette,
-                        newCount = SubscriptionWatermarks.newChapterCount(work.remote, watermarks),
-                        onOpenWork = onOpenWork,
-                        onUnsubscribe = { pendingUnsubscribe = work }
-                    )
-                }
-
-                val otherWorks = activeWorks.filter { it !in updatedWorks }
-                if (otherWorks.isNotEmpty()) {
-                    item {
-                        SectionRuleHeader(title = "All works", count = otherWorks.size)
+                    listOf("works" to "Works", "series" to "Series", "users" to "Authors").forEach { (value, title) ->
+                        // The page's own pills, as before 3am and as the row of filters below.
+                        SubjectChip(
+                            title, style = SubjectChipStyle.Pill(scope == value), palette = palette,
+                            modifier = Modifier.clickable { onScopeChange(value) }
+                        )
                     }
-                    items(otherWorks, key = { "sub-all-${it.id}" }) { work ->
+                }
+            }
+
+            if (scope == "works" && worksState !is AccountListUiState.Loaded) {
+                item {
+                    when (worksState) {
+                        AccountListUiState.Loading -> LoadingStateCard("Loading Subscriptions")
+                        AccountListUiState.AuthRequired -> EmptyStateCard(
+                            "AO3 session required", "Your AO3 session needs to be refreshed.",
+                            primaryActionLabel = "Log In Again", onPrimaryAction = onLogin
+                        )
+                        is AccountListUiState.Failed -> ErrorStateCard(
+                            "Could not load Subscriptions", worksState.message,
+                            primaryActionLabel = "Retry", onPrimaryAction = { onLoadPage(currentPage) }
+                        )
+                        is AccountListUiState.Loaded -> Unit
+                    }
+                }
+            } else if (scope == "works") {
+                // Filter rail: All / Updated
+                item {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        SubjectChip("All", style = SubjectChipStyle.Pill(filter == "all"), palette = palette, modifier = Modifier.clickable { filter = "all" })
+                        SubjectChip("Updated", style = SubjectChipStyle.Pill(filter == "updated"), palette = palette, modifier = Modifier.clickable { filter = "updated" })
+                        SubjectChip("Reset", style = SubjectChipStyle.Pill(false), leadingIcon = Icons.Outlined.Close, modifier = Modifier.clickable { filter = "all" })
+                    }
+                }
+
+                if (totalPages > 1) {
+                    item {
+                        KudosPaginationBar(currentPage = currentPage, totalPages = totalPages, onPageChange = onLoadPage)
+                    }
+                }
+
+                if (displayedWorks.isEmpty()) {
+                    item {
+                        EmptyStateCard(
+                            title = "No subscriptions",
+                            message = "Works you subscribe to on AO3 show up here."
+                        )
+                    }
+                } else if (filter == "all" && updatedWorks.isNotEmpty()) {
+                    item {
+                        SectionRuleHeader(title = "New since you last looked", count = updatedWorks.size)
+                    }
+                    items(updatedWorks, key = { "sub-up-${it.id}" }) { work ->
                         SubscriptionWorkRow(
                             work = work,
                             expandAll = expandAll,
                             palette = palette,
-                            newCount = 0,
+                            newCount = SubscriptionWatermarks.newChapterCount(work.remote, watermarks),
+                            onOpenWork = onOpenWork,
+                            onUnsubscribe = { pendingUnsubscribe = work }
+                        )
+                    }
+
+                    val otherWorks = activeWorks.filter { it !in updatedWorks }
+                    if (otherWorks.isNotEmpty()) {
+                        item {
+                            SectionRuleHeader(title = "All works", count = otherWorks.size)
+                        }
+                        items(otherWorks, key = { "sub-all-${it.id}" }) { work ->
+                            SubscriptionWorkRow(
+                                work = work,
+                                expandAll = expandAll,
+                                palette = palette,
+                                newCount = 0,
+                                onOpenWork = onOpenWork,
+                                onUnsubscribe = { pendingUnsubscribe = work }
+                            )
+                        }
+                    }
+                } else {
+                    items(displayedWorks, key = { "sub-${it.id}" }) { work ->
+                        SubscriptionWorkRow(
+                            work = work,
+                            expandAll = expandAll,
+                            palette = palette,
+                            newCount = SubscriptionWatermarks.newChapterCount(work.remote, watermarks),
                             onOpenWork = onOpenWork,
                             onUnsubscribe = { pendingUnsubscribe = work }
                         )
                     }
                 }
-            } else {
-                items(displayedWorks, key = { "sub-${it.id}" }) { work ->
-                    SubscriptionWorkRow(
-                        work = work,
-                        expandAll = expandAll,
-                        palette = palette,
-                        newCount = SubscriptionWatermarks.newChapterCount(work.remote, watermarks),
-                        onOpenWork = onOpenWork,
-                        onUnsubscribe = { pendingUnsubscribe = work }
+
+                item {
+                    Text(
+                        text = "Your subscriptions are stored on AO3. Unsubscribing here also unsubscribes you on AO3. You're viewing $currentPage of $totalPages ${if (totalPages == 1) "page" else "pages"}.",
+                        color = LocalKudosTokens.current.secondaryInk,
+                        fontSize = 12.sp,
+                        modifier = Modifier.padding(top = 8.dp)
                     )
                 }
-            }
 
-            item {
-                Text(
-                    text = "Your subscriptions are stored on AO3. Unsubscribing here also unsubscribes you on AO3. You're viewing $currentPage of $totalPages ${if (totalPages == 1) "page" else "pages"}.",
-                    color = LocalKudosTokens.current.secondaryInk,
-                    fontSize = 12.sp,
-                    modifier = Modifier.padding(top = 8.dp)
-                )
-            }
-
-            if (totalPages > 1) {
-                item {
-                    KudosPaginationBar(currentPage = currentPage, totalPages = totalPages, onPageChange = onLoadPage)
+                if (totalPages > 1) {
+                    item {
+                        KudosPaginationBar(currentPage = currentPage, totalPages = totalPages, onPageChange = onLoadPage)
+                    }
+                }
+            } else if (namedScope != null) {
+                if (namedPage != null && namedPage.totalPages > 1) {
+                    item { KudosPaginationBar(namedPage.currentPage, namedPage.totalPages, onPageChange = onNamedPageChange) }
+                }
+                when (namedState) {
+                    is NamedSubscriptionsUiState.Loaded -> {
+                        if (namedState.page.rows.isEmpty()) {
+                            item { EmptyStateCard(namedScope.emptyTitle, namedScope.emptyMessage) }
+                        } else {
+                            items(namedState.page.rows, key = { it.path }) { row ->
+                                NamedSubscriptionRow(row) {
+                                    if (namedScope == AO3NamedSubscriptionsScope.Series) {
+                                        AO3Constants.baseHttpUrl.resolve(row.path)?.let { onOpenSeries(it.toString()) }
+                                    } else {
+                                        AO3Constants.baseHttpUrl.resolve(row.path)?.pathSegments?.getOrNull(1)?.let(onOpenAuthor)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    is NamedSubscriptionsUiState.Failed -> item {
+                        ErrorStateCard("Couldn't load your list", namedState.message,
+                            primaryActionLabel = "Try Again", onPrimaryAction = {
+                                // The composition owns retry too, through the same refresh box below.
+                                retryNamed++
+                            })
+                    }
+                    NamedSubscriptionsUiState.AuthRequired -> item {
+                        EmptyStateCard("AO3 session required", "Your AO3 session needs to be refreshed.",
+                            primaryActionLabel = "Log In Again", onPrimaryAction = onLogin)
+                    }
+                    else -> item { LoadingStateCard("Loading Subscriptions") }
+                }
+                if (namedPage != null && namedPage.totalPages > 1) {
+                    item { KudosPaginationBar(namedPage.currentPage, namedPage.totalPages, onPageChange = onNamedPageChange) }
                 }
             }
-        } else if (scope == "series") {
-            item {
-                EmptyStateCard(
-                    title = "No series subscriptions",
-                    message = "Series you subscribe to on AO3 show up here."
-                )
+        }
+    }
+    if (namedLoader != null) {
+        key(namedLoader) {
+            KudosRefreshBox(onRefresh = { namedLoader.load() }, modifier = Modifier.fillMaxSize()) {
+                listContent()
             }
-        } else {
-            item {
-                EmptyStateCard(
-                    title = "No author subscriptions",
-                    message = "Authors you subscribe to on AO3 show up here."
-                )
+        }
+    } else {
+        listContent()
+    }
+}
+
+@Composable
+private fun NamedSubscriptionRow(row: AO3NamedSubscription, onOpen: () -> Unit) {
+    val tokens = LocalKudosTokens.current
+    Card(
+        onClick = onOpen,
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = tokens.theme.cardSurface),
+        shape = MaterialTheme.shapes.medium
+    ) {
+        Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Text(row.name, color = tokens.primaryInk, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+            if (row.creators.isNotEmpty()) {
+                Text("by " + row.creators.joinToString(", ") { it.displayName },
+                    color = tokens.secondaryInk, fontSize = 12.5.sp)
             }
         }
     }

@@ -632,7 +632,9 @@ fun AppNavHost(
                     onLogin = { navController.navigate(Routes.AccountLogin) },
                     onOpenWork = { work ->
                         navigateToWorkDetail(WorkDetailSource.RemoteSummary(work))
-                    }
+                    },
+                    onOpenSeries = { navController.navigate(Routes.seriesWorks(it)) },
+                    onOpenAuthor = { navController.navigate(Routes.authorProfile(it)) }
                 )
             }
         }
