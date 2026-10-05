@@ -1,32 +1,27 @@
 package io.github.cidy02.kudos.onboarding
 
-import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Folder
-import androidx.compose.material.icons.outlined.WifiOff
-import androidx.compose.material.icons.outlined.SyncProblem
 import androidx.compose.material.icons.outlined.ErrorOutline
+import androidx.compose.material.icons.outlined.Folder
+import androidx.compose.material.icons.outlined.SyncProblem
 import androidx.compose.material.icons.outlined.VerifiedUser
+import androidx.compose.material.icons.outlined.WifiOff
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -41,12 +36,15 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import io.github.cidy02.kudos.app.KudosAppContainer
+import io.github.cidy02.kudos.backup.SyncResult
+import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
+import io.github.cidy02.kudos.ui.subject.SubjectPalette
 import kotlinx.coroutines.launch
 
 @Composable
@@ -59,7 +57,9 @@ fun SyncFolderOnboardingScreen(
     var dontRemindAgain by remember { mutableStateOf(false) }
     var isConnecting by remember { mutableStateOf(false) }
     var connectionError by remember { mutableStateOf<String?>(null) }
-    val context = LocalContext.current
+    androidx.activity.compose.BackHandler {
+        if (!isConnecting) onFinished(dontRemindAgain)
+    }
 
     val launcher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocumentTree()
@@ -70,110 +70,101 @@ fun SyncFolderOnboardingScreen(
         
         scope.launch {
             try {
-                // Must take persistable permission
-                context.contentResolver.takePersistableUriPermission(
-                    uri,
-                    Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
-                )
-                
-                container.settingsRepository.updateSyncFolderUri(uri.toString())
-                container.settingsRepository.updateSyncIsEnabled(true)
-                
-                // Matches the required first-connection flow
-                container.syncRepository.runSync()
-                
+                container.syncRepository.connect(uri)
+                when (val result = container.syncRepository.runSync()) {
+                    is SyncResult.Error -> {
+                        connectionError = result.message
+                        return@launch
+                    }
+                    SyncResult.SkippedAlreadyRunning -> return@launch
+                    is SyncResult.Success -> Unit
+                }
+
                 container.settingsRepository.setHasConfiguredSyncFolder(true)
                 onFinished(false)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
                 connectionError = e.localizedMessage ?: "Unknown error"
+            } finally {
                 isConnecting = false
             }
         }
     }
 
-    Surface(
-        modifier = modifier.fillMaxSize(),
-        color = MaterialTheme.colorScheme.background
-    ) {
-        Column(modifier = Modifier.fillMaxSize()) {
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth()
-                    .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 28.dp)
-                    .padding(top = 44.dp, bottom = 24.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Column(
-                    modifier = Modifier
-                        .widthIn(max = 540.dp)
-                        .fillMaxWidth(),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(28.dp)
-                ) {
-                    SyncFolderHeader()
-                    SyncFolderPoints(connectionError)
-                }
-            }
+    SyncFolderOnboardingContent(
+        dontRemindAgain = dontRemindAgain,
+        onDontRemindAgainChange = { dontRemindAgain = it },
+        isConnecting = isConnecting,
+        connectionError = connectionError,
+        onChooseFolder = { launcher.launch(null) },
+        onNotNow = { onFinished(dontRemindAgain) },
+        modifier = modifier
+    )
+}
 
-            Surface(
-                tonalElevation = 3.dp,
-                color = MaterialTheme.colorScheme.surface
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 28.dp)
-                        .padding(top = 14.dp, bottom = 22.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .widthIn(max = 540.dp)
-                        .fillMaxWidth(),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(14.dp)
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.semantics(mergeDescendants = true) {}
-                        ) {
-                            Checkbox(
-                                checked = dontRemindAgain,
-                                onCheckedChange = { dontRemindAgain = it }
-                            )
-                            Text("Don't remind me again", style = MaterialTheme.typography.bodyMedium)
-                        }
-
-                        Button(
-                            onClick = { launcher.launch(null) },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(52.dp),
-                            enabled = !isConnecting
-                        ) {
-                            if (isConnecting) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(24.dp),
-                                    color = MaterialTheme.colorScheme.onPrimary
-                                )
-                            } else {
-                                Text("Choose Sync Folder", style = MaterialTheme.typography.titleMedium)
-                            }
-                        }
-
-                        TextButton(
-                            onClick = { onFinished(dontRemindAgain) },
-                            enabled = !isConnecting
-                        ) {
-                            Text("Not Now")
-                        }
-                    }
-                }
+@Composable
+fun SyncFolderOnboardingContent(
+    dontRemindAgain: Boolean,
+    onDontRemindAgainChange: (Boolean) -> Unit,
+    isConnecting: Boolean,
+    connectionError: String?,
+    onChooseFolder: () -> Unit,
+    onNotNow: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val tokens = LocalKudosTokens.current
+    OnboardingScaffold(modifier = modifier, content = {
+        SyncFolderHeader()
+        SyncFolderPoints(connectionError)
+    }, footer = {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth().semantics(mergeDescendants = true) {}
+                .toggleable(
+                    value = dontRemindAgain,
+                    role = Role.Checkbox,
+                    onValueChange = onDontRemindAgainChange
+                )
+        ) {
+            Checkbox(
+                checked = dontRemindAgain,
+                onCheckedChange = null,
+                colors = CheckboxDefaults.colors(
+                    checkedColor = tokens.accent,
+                    checkmarkColor = SubjectPalette.label(tokens.accent),
+                    uncheckedColor = tokens.secondaryInk
+                )
+            )
+            Text("Don't remind me again", style = MaterialTheme.typography.bodyMedium,
+                color = tokens.primaryInk, lineHeight = 21.sp)
+        }
+        Button(
+            onClick = onChooseFolder,
+            modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = tokens.accent,
+                contentColor = SubjectPalette.label(tokens.accent),
+                disabledContainerColor = tokens.glassFill(0.12),
+                disabledContentColor = tokens.secondaryInk
+            ),
+            enabled = !isConnecting
+        ) {
+            if (isConnecting) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(24.dp),
+                    color = tokens.accent
+                )
+            } else {
+                Text("Choose Sync Folder", style = MaterialTheme.typography.titleMedium, lineHeight = 24.sp)
             }
         }
-    }
+        TextButton(onClick = onNotNow, enabled = !isConnecting,
+            colors = ButtonDefaults.textButtonColors(contentColor = tokens.accent,
+                disabledContentColor = tokens.secondaryInk)) {
+            Text("Not Now", lineHeight = 20.sp)
+        }
+    })
 }
 
 @Composable
@@ -184,14 +175,14 @@ private fun SyncFolderHeader() {
     ) {
         Surface(
             shape = RoundedCornerShape(24.dp),
-            color = MaterialTheme.colorScheme.primaryContainer,
+            color = LocalKudosTokens.current.glassFill(0.09),
             modifier = Modifier.size(108.dp)
         ) {
             Icon(
                 imageVector = Icons.Outlined.Folder,
                 contentDescription = null,
                 modifier = Modifier.padding(24.dp),
-                tint = MaterialTheme.colorScheme.onPrimaryContainer
+                tint = LocalKudosTokens.current.accent
             )
         }
         Column(
@@ -201,12 +192,15 @@ private fun SyncFolderHeader() {
             Text(
                 text = "Protect Your Library",
                 style = MaterialTheme.typography.headlineLarge,
+                color = LocalKudosTokens.current.primaryInk,
+                lineHeight = 40.sp,
                 textAlign = TextAlign.Center
             )
             Text(
-                text = "Optional — set this up anytime in Settings",
+                text = "Optional. You can set this up anytime in Settings",
                 style = MaterialTheme.typography.titleSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                lineHeight = 20.sp,
+                color = LocalKudosTokens.current.secondaryInk,
                 textAlign = TextAlign.Center
             )
         }
@@ -219,70 +213,36 @@ private fun SyncFolderPoints(error: String?) {
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(22.dp)
     ) {
-        SyncFolderPoint(
+        OnboardingPoint(
             icon = Icons.Outlined.Folder,
             title = "Choose a Folder",
-            body = "Choose a folder where Kudos can safely keep a copy of your library data. " +
-                "If you choose a synced folder (like Google Drive or Syncthing), it will sync across your devices."
+            body = "Choose where Kudos keeps another copy of your library. " +
+                "Use the system folder picker. If the folder belongs to a cloud storage app, " +
+                "that app can keep it up to date on your devices."
         )
-        SyncFolderPoint(
+        OnboardingPoint(
             icon = Icons.Outlined.WifiOff,
             title = "Works Fully Offline",
-            body = "Kudos still works completely offline either way, and you can set this up " +
-                "later in Settings if you'd rather skip it for now."
+            body = "You can use Kudos without an internet connection. If you skip this, " +
+                "you can choose a folder later in Settings."
         )
-        SyncFolderPoint(
+        OnboardingPoint(
             icon = Icons.Outlined.SyncProblem,
-            title = "Not Real-Time Cloud Sync",
-            body = "This uses the existing Kudos backup format written to a folder you choose — " +
-                "it's folder-based sync, not real-time cloud sync."
+            title = "Changes May Take Time",
+            body = "Kudos saves the same kind of file as a backup in your folder. Updates " +
+                "aren't instant."
         )
-        SyncFolderPoint(
+        OnboardingPoint(
             icon = Icons.Outlined.VerifiedUser,
             title = "Using More Than One Device?",
-            body = "Deletes are signed on each device so only devices you've paired can remove " +
-                "things from your library. Pair your devices anytime in Settings → Deletion " +
-                "signing — it takes a few seconds."
+            body = "To let another device remove items from your library, pair it in Settings " +
+                "→ Sync Folder → Deletion signing. Pairing takes a few seconds."
         )
         if (error != null) {
-            SyncFolderPoint(
+            OnboardingPoint(
                 icon = Icons.Outlined.ErrorOutline,
                 title = "Couldn't Connect",
                 body = error
-            )
-        }
-    }
-}
-
-@Composable
-private fun SyncFolderPoint(
-    icon: ImageVector,
-    title: String,
-    body: String
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .semantics(mergeDescendants = true) {},
-        horizontalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.primary,
-            modifier = Modifier
-                .size(28.dp)
-                .padding(top = 2.dp)
-        )
-        Column(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            Text(title, style = MaterialTheme.typography.titleMedium)
-            Text(
-                text = body,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
     }

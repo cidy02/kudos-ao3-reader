@@ -4,13 +4,15 @@ import android.graphics.Bitmap
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -23,21 +25,30 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
 import io.github.cidy02.kudos.network.ao3.AO3Result
+import io.github.cidy02.kudos.network.ao3.DemoNetwork
+import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
+import io.github.cidy02.kudos.ui.subject.SubjectPalette
+import io.github.cidy02.kudos.ui.subject.isAccessibilityFontScale
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 @Composable
 fun AO3WebLoginScreen(
-    authRepository: AO3AuthRepository,
+    authRepository: AO3AuthRepository?,
     onLoginComplete: () -> Unit,
     onCancel: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    demo: Boolean = false
 ) {
-    var loading by remember { mutableStateOf(true) }
+    val largeType = isAccessibilityFontScale()
+    val tokens = LocalKudosTokens.current
+    val networkAllowed = loginNetworkAllowed(demo, DemoNetwork.isActive)
+    var loading by remember { mutableStateOf(networkAllowed) }
     var message by remember {
         mutableStateOf(DefaultMessage)
     }
@@ -51,25 +62,30 @@ fun AO3WebLoginScreen(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        // TopAppBar already says "AO3 Login".
+        // The native host supplies the login title.
         Text(
             text = message,
             style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            lineHeight = 21.sp,
+            color = tokens.secondaryInk
         )
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(onClick = onCancel) {
-                Text("Cancel")
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(onClick = onCancel,
+                border = BorderStroke(1.dp, tokens.accent),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = tokens.accent)) {
+                Text("Cancel", lineHeight = 20.sp)
             }
-            Button(onClick = { webViewRef?.loadUrl(LoginUrl) }) {
-                Text("Reload")
+            Button(onClick = { if (networkAllowed) webViewRef?.loadUrl(LoginUrl) },
+                colors = ButtonDefaults.buttonColors(containerColor = tokens.accent,
+                    contentColor = SubjectPalette.label(tokens.accent))) {
+                Text("Reload", lineHeight = 20.sp)
             }
-            if (loading) CircularProgressIndicator()
+            if (loading) CircularProgressIndicator(color = tokens.accent)
         }
-        AndroidView(
+        if (networkAllowed) AndroidView(
             modifier = Modifier
                 .fillMaxWidth()
-                .weight(1f),
+                .then(if (largeType) Modifier.height(600.dp) else Modifier.weight(1f)),
             factory = { context ->
                 WebView(context).apply {
                     webViewRef = this
@@ -103,10 +119,10 @@ fun AO3WebLoginScreen(
                                 val inspection = AO3WebLoginInspection.parseJavascriptResult(raw)
                                 if (inspection.loggedIn && inspection.username != null) {
                                     scope.launch {
-                                        when (authRepository.acceptWebLogin(inspection.username)) {
+                                        when (requireNotNull(authRepository).acceptWebLogin(inspection.username)) {
                                             is AO3Result.Success -> onLoginComplete()
                                             is AO3Result.Failure -> {
-                                                message = "AO3 login was detected, but the session could not be captured."
+                                                message = "AO3 logged in, but its session cookie could not be captured."
                                             }
                                         }
                                     }
@@ -170,7 +186,7 @@ data class AO3WebLoginInspection(
     }
 }
 
-private const val DefaultMessage = "Log in on AO3's page below. Kudos never sees or stores your password."
+private const val DefaultMessage = "Let's finish logging in on AO3's page below."
 private const val StallMessage = "This is taking a while - try Reload, or check your connection."
 private const val PageLoadTimeoutMs = 25_000L
 private const val LoginUrl = "https://archiveofourown.org/users/login"

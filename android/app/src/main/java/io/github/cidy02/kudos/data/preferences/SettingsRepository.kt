@@ -8,6 +8,9 @@ import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
+import io.github.cidy02.kudos.onboarding.FirstRunState
+import io.github.cidy02.kudos.support.ChangelogEntry
+import io.github.cidy02.kudos.support.Changelog
 import io.github.cidy02.kudos.core.model.AppSettings
 import io.github.cidy02.kudos.core.model.AppThemeSetting
 import io.github.cidy02.kudos.core.model.KudosSettings
@@ -99,6 +102,35 @@ class SettingsRepository(
 
     val hasPermanentlyDismissedSyncFolderOnboarding: Flow<Boolean> = dataStore.data.map { prefs ->
         prefs[Keys.HasPermanentlyDismissedSyncFolderOnboarding] ?: false
+    }
+
+    val firstRunState: Flow<FirstRunState> = dataStore.data.map { prefs ->
+        FirstRunState(
+            welcomeCompleted = prefs[Keys.HasCompletedOnboarding] ?: false,
+            syncConfigured = prefs[Keys.HasConfiguredSyncFolder] ?: false,
+            syncPermanentlyDismissed = prefs[Keys.HasPermanentlyDismissedSyncFolderOnboarding] ?: false,
+            syncConnected = (prefs[Keys.SyncIsEnabled] ?: false) && prefs[Keys.SyncFolderUri] != null
+        )
+    }
+
+    /** Device-local, excluded from KudosSettings and backups, like the welcome flags. */
+    val lastSeenChangelogVersion: Flow<String?> = dataStore.data.map { it[Keys.LastSeenChangelogVersion] }
+
+    suspend fun unseenChangelogEntries(
+        currentVersion: String = Changelog.currentVersion,
+        entries: List<ChangelogEntry> = Changelog.entries
+    ): List<ChangelogEntry> {
+        var unseen = emptyList<ChangelogEntry>()
+        dataStore.edit { prefs ->
+            val lastSeen = prefs[Keys.LastSeenChangelogVersion]
+            unseen = Changelog.unseenEntries(lastSeen, currentVersion, entries)
+            if (lastSeen == null) prefs[Keys.LastSeenChangelogVersion] = currentVersion
+        }
+        return unseen
+    }
+
+    suspend fun markChangelogSeen(currentVersion: String = Changelog.currentVersion) {
+        dataStore.edit { it[Keys.LastSeenChangelogVersion] = currentVersion }
     }
 
     suspend fun snapshot(): KudosSettings {
@@ -535,6 +567,7 @@ class SettingsRepository(
             "autoPreserveSeriesWorkThreshold"
         )
         /** Device-local first-launch flag; not included in backup-compatible settings. */
+        val LastSeenChangelogVersion = stringPreferencesKey("lastSeenChangelogVersion")
         val HasCompletedOnboarding = booleanPreferencesKey("hasCompletedOnboarding")
         val HasConfiguredSyncFolder = booleanPreferencesKey("hasConfiguredSyncFolder")
         val HasPermanentlyDismissedSyncFolderOnboarding = booleanPreferencesKey("hasPermanentlyDismissedSyncFolderOnboarding")
