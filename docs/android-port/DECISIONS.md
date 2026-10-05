@@ -771,3 +771,14 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   then Post. Until a layer has a screen, a draft tap and New Work keep opening AO3's page.
   The document leaves one Android choice to a measurement (its HTML-mode widget, §9.2, OD5);
   that comes with the editor screen's brief, not before.
+- **2026-10-05 · The work form on Android: nothing AO3 served is lost; known fields go out
+  iOS's way; the rest goes back as served.** Codex, starting brief 3bb, found that iOS's
+  encoder is not a faithful copy of what a browser would send from AO3's work form: it drops
+  fields it does not know and hidden arrays, collapses repeated hidden fields, tidies comma
+  lists, and sends a checkbox as one value. Most of that is believed harmless; none of it has
+  been run against AO3. Answer (Claude; the owner has not been asked): Android's model keeps
+  every control AO3 served. For each field iOS sends, Android sends iOS's form of it, so both
+  apps give AO3 the same thing and iOS's tests carry over. For every served control iOS does
+  not send, Android sends it back exactly as served, as a browser would. This is deliberately
+  more than iOS does. Codex is to list each thing iOS drops or changes, with whether it can
+  alter a work the reader did not touch; that list goes to the owner and the iOS side.
