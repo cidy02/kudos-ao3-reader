@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.search
 
+import io.github.cidy02.kudos.network.ao3.search.AO3ChapterCount
 import io.github.cidy02.kudos.network.ao3.search.AO3Completion
 import io.github.cidy02.kudos.network.ao3.search.AO3Language
 import io.github.cidy02.kudos.network.ao3.search.AO3Rating
@@ -68,6 +69,12 @@ internal fun AO3SearchFilters.matchesSummary(work: AO3WorkSummary): Boolean {
         AO3Completion.ANY -> Unit
         AO3Completion.COMPLETE -> if (complete != true) return false
         AO3Completion.IN_PROGRESS -> if (complete != false) return false
+    }
+    // iOS chapterCountMatches: 1/? is a WIP, not a finished one-shot.
+    // Unreadable text (anything without exactly two slash-separated parts) stays visible.
+    if (chapterCount == AO3ChapterCount.SINGLE_CHAPTER) {
+        val parts = work.chapters.split('/')
+        if (parts.size == 2 && (parts[0].trim() != "1" || parts[1].trim() != "1")) return false
     }
     if (language != AO3Language.ANY && !matchesFacetText(listOf(work.language), language.title)) return false
     work.wordCount?.let { words ->

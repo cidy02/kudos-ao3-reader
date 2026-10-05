@@ -157,3 +157,38 @@ Android was left saying it too. Inside a section's own list both apps now show t
 - **B.** Leave both as they are.
 
 Until answered: B.
+
+## 11. Which design rule governs Android: the June Material documents, or the iOS redesign?
+
+Two sets of instructions in the repository pull in different directions.
+
+- **The June documents** (`docs/contracts/KUDOS_ANDROID_INTERFACE_GUIDELINES.md`,
+  `ANDROID_MATERIAL_HIG_TRANSLATION.md`, `CROSS_PLATFORM_UI_BRIDGE.md`, all dated 2026-06-27):
+  keep iOS's behaviour and order of information, but draw it with Material 3's own parts: a
+  standard bottom navigation bar, standard top app bars, Material cards and chips, Material
+  text sizes. They list "literal iOS visual clones", "Apple tab bar visuals" and
+  "Apple-specific translucency" as things to avoid. They do not mention Material You by name,
+  or colours taken from the wallpaper.
+- **This lane's mission** (October): complete redesign parity with iOS, each screen checked
+  against the iOS screen and its artboard.
+
+What the app does today follows the mission, not the June documents: a floating glass tab bar
+with a separate Search circle, no Material top app bar anywhere (29 files use the redesign's
+header instead), the redesign's panels in 31 files against Material cards in 8, no colours from
+the wallpaper, and most text set to explicit sizes. Screens "still in the old Material design"
+have been treated as faults and converted. The June documents also ask for a line in every
+Android brief telling the agent to read them; this lane's briefs have not carried it.
+
+Where the two agree, the lane already complies: Search is a separate action and not a fifth
+tab, filters and sorts open as bottom sheets, confirmations are dialogs, AO3's rating and
+warnings stay visible on cards, system Back and text size are honoured.
+
+- **A.** The redesign governs (as now). The June documents get a note at the top saying the
+  redesign replaced their visual rules, and their behaviour rules stay.
+- **B.** The June documents govern. The redesigned chrome (tab bar, headers, panels) goes back
+  to Material 3 parts, keeping the redesign's layout and content. This is a large change to
+  work already landed.
+- **C.** A mix you name: for example Material's bottom bar and top bars, the redesign's
+  everything else; or colours from the wallpaper as an option in Appearance.
+
+Until answered: A, with no note added to the June documents.

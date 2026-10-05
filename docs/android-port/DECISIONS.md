@@ -419,3 +419,33 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
 - **2026-10-04 · Not ported to the account lists, for lack of anything behind them:** iOS's
   display mode picker (Android has no account-wide display setting) and Clear History (Android
   has no call for AO3's clear-history form). Both are listed in `briefs/3w-result.md`.
+- **2026-10-04 · The search filter sheet is iOS's panel, and sends what iOS sends.** Rows,
+  pickers and sliders in iOS's order; ten sorts with an order; Chapters, After and Before,
+  Title and Creator, and ranges for hits, kudos, comments and bookmarks are new on Android.
+  The AO3 search link gains the parameters iOS already sends for them (`title`, `creators`,
+  `single_chapter`, `hits`, `kudos_count`, `comments_count`, `bookmarks_count`, `date_from`,
+  `date_to`, `sort_direction`). No new kind of AO3 request: tag lookups use the lookup Android
+  already had, after a 300 ms pause and two letters, as on iOS. Reverse:
+  `search/SearchFilterSheet.kt`, `network/ao3/search/AO3SearchUrlBuilder.kt`.
+- **2026-10-04 · A saved search made on Android carries all 37 of iOS's filter keys.** Android
+  refused to save a search that used a choice its saved form could not hold; the owner's
+  standing rule is that the two apps behave the same, so the form was widened and the refusal
+  removed. No key, name or version of the backup changed; the filters object inside a saved
+  search holds more of the keys iOS defines. A value Android cannot show (a sort from a later
+  version, say) is kept and written back unless that one control is changed. A date is a
+  calendar day here and a moment on iOS: Android writes the start of the picked day in iOS's
+  text form and keeps iOS's exact moment when the date is not touched. iOS fails its whole
+  manifest on a value it does not know, so the check is against a saved search iOS wrote:
+  `CrossPlatformRestoreTest.androidWritesASavedSearchsFiltersTheWayIosDoes`. Reverse:
+  `search/SearchFiltersCodec.kt`.
+- **2026-10-04 · The Library filter panel's Done is the accent-filled circle.** iOS draws its
+  confirm that way on both filter panels; Android's search sheet had it and the Library panel
+  did not. The tag pickers' Done stays plain, as on iOS. Reverse: `library/LibraryFilterPanel.kt`.
+- **2026-10-04 · The owner asked for the Material design documents to be found and read.** They
+  are `docs/contracts/KUDOS_ANDROID_INTERFACE_GUIDELINES.md` and
+  `ANDROID_MATERIAL_HIG_TRANSLATION.md` (with `CROSS_PLATFORM_UI_BRIDGE.md`), all from
+  2026-06-27. They say Android keeps iOS's behaviour and order of information but draws it with
+  Material 3's own parts. The lane's mission, written in October, says match the iOS redesign
+  screen for screen, and the lane has been replacing Material parts with the redesign's. Nothing
+  was changed on the strength of the reading; the lane goes on under its mission until the
+  owner says otherwise. It is owner question 11.
