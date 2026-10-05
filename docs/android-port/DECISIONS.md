@@ -672,3 +672,9 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   `network/ao3/account/AO3CollectionForm.kt`, `saveCollection` and `deleteCollection` in
   `network/ao3/writes/AO3WriteRepository.kt`, and `SubjectTextFieldRow` in
   `settings/SettingsChrome.kt`.
+- **2026-10-05 · Known gap: Manage › Moderation opens the items screen, not iOS's Moderation
+  screen.** Brief 3as built iOS's collection items screen and wired it to the Moderation row.
+  On iOS that row opens a different screen (the review queue with one-tap Approve and Reject,
+  membership requests, reveal and anonymity), from which the items screen is reached. The
+  mistake was in Claude's brief. Until brief 3aw lands, Android's row keeps opening the items
+  screen, which does the item decisions; membership requests and reveal are done on AO3's page.
