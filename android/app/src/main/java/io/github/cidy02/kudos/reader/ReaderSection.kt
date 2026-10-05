@@ -38,6 +38,15 @@ data class ReaderSection(
 val List<ReaderSection>.storyChapterCount: Int
     get() = count { it.kind == ReaderSectionKind.CHAPTER }
 
+/** iOS's chapter-aware Comments mapping, including front/back matter. */
+internal fun List<ReaderSection>.commentsChapter(spineIndex: Int?): Int? {
+    if (spineIndex == null || isEmpty()) return null
+    if (spineIndex !in indices) return 1
+    return this[spineIndex].storyChapterIndex
+        ?: take(spineIndex + 1).lastOrNull { it.kind == ReaderSectionKind.CHAPTER }?.storyChapterIndex
+        ?: 1
+}
+
 /**
  * Reconciles an EPUB's own (possibly incomplete) table of contents against its
  * full spine into normalized [ReaderSection]s. Pure and engine-agnostic: callers

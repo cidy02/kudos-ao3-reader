@@ -25,7 +25,7 @@ data class EndOfWorkActions(
             val canAutoFinish = work.isComplete && !work.isFinished
             return EndOfWorkActions(
                 canMarkFinished = canAutoFinish,
-                workId = sourceUrl?.let(WorkTags::ao3WorkIdFromUrl),
+                workId = work.ao3WorkID?.toLong() ?: sourceUrl?.let(WorkTags::ao3WorkIdFromUrl),
                 sourceUrl = sourceUrl,
                 seriesUrl = work.seriesUrl.ifBlank { null }
             )

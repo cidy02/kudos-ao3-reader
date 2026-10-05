@@ -11,6 +11,8 @@ import io.github.cidy02.kudos.core.model.ReadingAnnotation
 import io.github.cidy02.kudos.core.model.ReaderMode
 import io.github.cidy02.kudos.data.preferences.SettingsRepository
 import io.github.cidy02.kudos.network.ao3.AO3Result
+import io.github.cidy02.kudos.network.ao3.AO3Error
+import io.github.cidy02.kudos.network.ao3.displayMessage
 import io.github.cidy02.kudos.network.ao3.writes.AO3WriteRepository
 import io.github.cidy02.kudos.reader.settings.ReaderColorTheme
 import io.github.cidy02.kudos.reader.settings.ReaderPreferences
@@ -21,6 +23,17 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+
+/** iOS reader AO3 alert words; the existing repository still owns dispatch and rejection. */
+internal fun readerKudosErrorMessage(error: AO3Error): String = when (error) {
+    AO3Error.AuthenticationRequired -> "Log in to AO3 first."
+    AO3Error.Forbidden -> "AO3 refused the request (HTTP 403). Wait a while before trying again."
+    AO3Error.NotFound -> "That work or page couldn't be found (it may be restricted)."
+    is AO3Error.RateLimited -> "AO3 is rate-limiting requests. Wait a moment and try again."
+    is AO3Error.Server -> "AO3 had a server problem (HTTP ${error.statusCode}). Try again shortly."
+    is AO3Error.Http -> "AO3 returned an unexpected response (HTTP ${error.statusCode})."
+    else -> error.displayMessage()
+}
 
 /**
  * Drives the reader screen: resolves the work, exposes [ReaderUiState], and
@@ -40,6 +53,9 @@ class ReaderViewModel(
 
     private val _writeMessage = MutableStateFlow<String?>(null)
     val writeMessage: StateFlow<String?> = _writeMessage.asStateFlow()
+
+    private val _kudosWorking = MutableStateFlow(false)
+    val kudosWorking: StateFlow<Boolean> = _kudosWorking.asStateFlow()
 
     private var autoFinishedThisSession = false
     private var spineCountForEof = 0
@@ -238,21 +254,26 @@ class ReaderViewModel(
     }
 
     fun giveKudos() {
-        val ao3Id = (_state.value as? ReaderUiState.Reading)?.endOfWork?.workId ?: return
+        val reading = _state.value as? ReaderUiState.Reading ?: return
+        if (_kudosWorking.value || reading.work.hasGivenKudos) return
+        val ao3Id = reading.endOfWork.workId ?: return
         val writes = writeRepository ?: return
+        // Set before launching so two taps before recomposition cannot start two writes.
+        _kudosWorking.value = true
         viewModelScope.launch {
-            when (val result = writes.giveKudos(ao3Id)) {
-                is AO3Result.Success -> {
-                    _writeMessage.value = result.value.message
-                    repository.markKudosGiven(workId)
+            try {
+                when (val result = writes.giveKudos(ao3Id)) {
+                    is AO3Result.Success -> {
+                        _writeMessage.value = result.value.message
+                        val updated = repository.markKudosGiven(workId)
+                        updateReading { current ->
+                            current.copy(work = updated ?: current.work.copy(hasGivenKudos = true))
+                        }
+                    }
+                    is AO3Result.Failure -> _writeMessage.value = readerKudosErrorMessage(result.error)
                 }
-                is AO3Result.Failure -> _writeMessage.value = when (val err = result.error) {
-                    is io.github.cidy02.kudos.network.ao3.AO3Error.Network -> err.message
-                    is io.github.cidy02.kudos.network.ao3.AO3Error.Validation -> err.message
-                    is io.github.cidy02.kudos.network.ao3.AO3Error.AuthenticationRequired ->
-                        "Sign in to give kudos."
-                    else -> "Couldn't give kudos."
-                }
+            } finally {
+                _kudosWorking.value = false
             }
         }
     }

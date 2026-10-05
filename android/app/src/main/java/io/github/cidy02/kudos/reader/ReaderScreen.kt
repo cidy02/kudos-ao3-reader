@@ -51,21 +51,13 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.BookmarkBorder
-import androidx.compose.material.icons.filled.BorderColor
-import androidx.compose.material.icons.filled.ChatBubbleOutline
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.ScreenLockRotation
 import androidx.compose.material.icons.filled.ScreenRotation
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Share
-import androidx.compose.material.icons.filled.TextFields
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -117,6 +109,7 @@ import io.github.cidy02.kudos.reader.settings.ReaderSettingsMapper
 import io.github.cidy02.kudos.reader.settings.backgroundColor
 import io.github.cidy02.kudos.reader.settings.ReaderSpeechPreferences
 import io.github.cidy02.kudos.reader.speech.ReaderSpeechController
+import io.github.cidy02.kudos.works.shareWork
 import io.github.cidy02.kudos.reader.speech.SpeechStatus
 import io.github.cidy02.kudos.ui.components.DestructiveConfirmation
 import io.github.cidy02.kudos.ui.components.ReaderPageSkeleton
@@ -220,6 +213,7 @@ private fun ReaderReading(
     val speechStatus by speechController.status.collectAsState()
     val spokenText by speechController.spokenText.collectAsState()
     val writeMessage by viewModel.writeMessage.collectAsState()
+    val kudosWorking by viewModel.kudosWorking.collectAsState()
 
     val readerTheme = when (state.preferences.theme) {
         ReaderColorTheme.Light -> ReaderTheme.Light
@@ -439,170 +433,58 @@ private fun ReaderReading(
                         modifier = Modifier.align(Alignment.TopEnd)
                     ) {
                         val ao3Id = state.endOfWork.workId
-                        val isBookmarked = state.bookmarks.any {
-                            it.spineIndex == (state.liveProgress?.spineIndex ?: -1)
+                        val isBookmarked = readerIsBookmarked(state.bookmarks, state.liveProgress)
+
+                        fun annotateSelection(asNote: Boolean) {
+                            scope.launch {
+                                val selection = navigatorController.currentSelection() ?: return@launch
+                                val locator = selection.locator
+                                annotateDialog = AnnotateDialogState(
+                                    locatorJson = locator.toJSON().toString(),
+                                    selectedText = locator.text.highlight.orEmpty(),
+                                    progression = locator.locations.totalProgression
+                                        ?: locator.locations.progression ?: 0.0,
+                                    spineIndex = state.liveProgress?.spineIndex ?: 0,
+                                    asNote = asNote
+                                )
+                                navigatorController.clearSelection()
+                            }
                         }
 
-                        // Pills
-                        val pills = buildList {
-                            val percent = (currentProgress * 100).toInt()
-                            add(
-                                ReaderFanMenuPill(
-                                    id = "contents",
-                                    title = if (percent > 0) "Contents · $percent%" else "Contents",
-                                    icon = Icons.AutoMirrored.Filled.List,
-                                    action = {
-                                        tocInitialTab = 0
-                                        showTocSheet = true
-                                    }
-                                )
-                            )
-                            add(
-                                ReaderFanMenuPill(
-                                    id = "bookmarks",
-                                    title = "Bookmarks & Highlights",
-                                    icon = Icons.Filled.Bookmark,
-                                    action = {
-                                        tocInitialTab = 1
-                                        showTocSheet = true
-                                    }
-                                )
-                            )
-                            add(
-                                ReaderFanMenuPill(
-                                    id = "find",
-                                    title = "Find in Work",
-                                    icon = Icons.Filled.Search,
-                                    isEnabled = ReaderSearch.isAvailable(publication),
-                                    action = { showSearchSheet = true }
-                                )
-                            )
-                            if (ao3Id != null && state.endOfWork.commentsAvailable) {
-                                add(
-                                    ReaderFanMenuPill(
-                                        id = "comments",
-                                        title = "Comments",
-                                        icon = Icons.Filled.ChatBubbleOutline,
-                                        action = {
-                                            onOpenComments(
-                                                ao3Id,
-                                                state.liveProgress?.spineIndex?.plus(1)
-                                            )
-                                        }
-                                    )
-                                )
-                            }
-                            add(
-                                ReaderFanMenuPill(
-                                    id = "settings",
-                                    title = "Themes & Settings",
-                                    icon = Icons.Filled.TextFields,
-                                    action = { showDisplaySheet = true }
-                                )
-                            )
-                            add(
-                                ReaderFanMenuPill(
-                                    id = "markFinished",
-                                    title = if (state.finished) "Finished" else "Mark finished",
-                                    icon = Icons.Filled.Check,
-                                    isEnabled = !state.finished,
-                                    action = { viewModel.markFinished() }
-                                )
-                            )
-                            add(
-                                ReaderFanMenuPill(
-                                    id = "highlightSelection",
-                                    title = "Highlight selection",
-                                    icon = Icons.Filled.BorderColor,
-                                    action = {
-                                        scope.launch {
-                                            val selection = navigatorController.currentSelection()
-                                            if (selection == null) {
-                                                viewModel.clearWriteMessage()
-                                                annotateDialog = null
-                                            } else {
-                                                val locator = selection.locator
-                                                val text = locator.text.highlight.orEmpty()
-                                                annotateDialog = AnnotateDialogState(
-                                                    locatorJson = locator.toJSON().toString(),
-                                                    selectedText = text,
-                                                    progression = locator.locations.totalProgression
-                                                        ?: locator.locations.progression
-                                                        ?: 0.0,
-                                                    spineIndex = state.liveProgress?.spineIndex ?: 0,
-                                                    asNote = false
-                                                )
-                                                navigatorController.clearSelection()
-                                            }
-                                        }
-                                    }
-                                )
-                            )
-                            add(
-                                ReaderFanMenuPill(
-                                    id = "noteSelection",
-                                    title = "Add note to selection",
-                                    icon = Icons.Filled.Edit,
-                                    action = {
-                                        scope.launch {
-                                            val selection = navigatorController.currentSelection()
-                                            if (selection != null) {
-                                                val locator = selection.locator
-                                                annotateDialog = AnnotateDialogState(
-                                                    locatorJson = locator.toJSON().toString(),
-                                                    selectedText = locator.text.highlight.orEmpty(),
-                                                    progression = locator.locations.totalProgression
-                                                        ?: locator.locations.progression
-                                                        ?: 0.0,
-                                                    spineIndex = state.liveProgress?.spineIndex ?: 0,
-                                                    asNote = true
-                                                )
-                                                navigatorController.clearSelection()
-                                            }
-                                        }
-                                    }
-                                )
-                            )
-                        }
+                        val pills = readerFanPills(
+                            percent = state.liveProgress?.totalProgression?.let { (it * 100).roundToInt() },
+                            searchable = ReaderSearch.isAvailable(publication),
+                            ao3WorkId = ao3Id,
+                            commentsChapter = sections.commentsChapter(state.liveProgress?.spineIndex),
+                            onContents = { tab ->
+                                tocInitialTab = tab
+                                showTocSheet = true
+                            },
+                            onFind = { showSearchSheet = true },
+                            onComments = onOpenComments,
+                            onSettings = { showDisplaySheet = true },
+                            onHighlightSelection = { annotateSelection(asNote = false) },
+                            onNoteSelection = { annotateSelection(asNote = true) }
+                        )
 
                         // Round Actions
                         val roundActions = buildList {
-                            // Share
-                            add(
-                                ReaderFanRoundAction(
+                            // Reuse Work Detail's share entry point for links. Android has
+                            // no existing EPUB-sharing entry point for linkless imports.
+                            readerShareUrl(state.work)?.let { shareUrl ->
+                                add(ReaderFanRoundAction(
                                     id = "share",
                                     icon = Icons.Filled.Share,
                                     accessibilityLabel = "Share",
-                                    action = {
-                                        val shareUrl = if (ao3Id != null) {
-                                            "https://archiveofourown.org/works/$ao3Id"
-                                        } else {
-                                            state.work.title
-                                        }
-                                        val sendIntent = Intent(Intent.ACTION_SEND).apply {
-                                            putExtra(Intent.EXTRA_TEXT, shareUrl)
-                                            type = "text/plain"
-                                        }
-                                        context.startActivity(
-                                            Intent.createChooser(sendIntent, "Share work link")
-                                        )
-                                    }
-                                )
-                            )
-
-                            // Kudos
-                            if (ao3Id != null) {
-                                add(
-                                    ReaderFanRoundAction(
-                                        id = "kudos",
-                                        icon = if (state.work.hasGivenKudos) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
-                                        accessibilityLabel = if (state.work.hasGivenKudos) "Kudos given" else "Give kudos",
-                                        isEnabled = !state.work.hasGivenKudos,
-                                        isEmphasized = state.work.hasGivenKudos,
-                                        action = { viewModel.giveKudos() }
-                                    )
-                                )
+                                    action = { shareWork(context, state.work.title, shareUrl) }
+                                ))
                             }
+                            readerKudosAction(
+                                ao3WorkId = ao3Id,
+                                given = state.work.hasGivenKudos,
+                                working = kudosWorking,
+                                onKudos = viewModel::giveKudos
+                            )?.let { add(it) }
 
                             // Read Aloud
                             val speechActive = speechStatus == SpeechStatus.PLAYING || speechStatus == SpeechStatus.PAUSED
@@ -611,7 +493,7 @@ private fun ReaderReading(
                                     id = "readAloud",
                                     icon = Icons.AutoMirrored.Filled.VolumeUp,
                                     accessibilityLabel = if (speechActive) "Stop reading aloud" else "Read aloud",
-                                    isEnabled = true,
+                                    isEnabled = ReaderContentText.isAvailable(publication),
                                     isEmphasized = speechActive,
                                     action = {
                                         if (speechActive) {
@@ -624,18 +506,7 @@ private fun ReaderReading(
                                                 val from = state.liveProgress?.locatorJson
                                                     ?.let { ReadiumNavigatorController.locatorFromJson(it) }
                                                 val paragraphs = ReaderContentText.paragraphs(publication, from)
-                                                    .ifEmpty {
-                                                        buildList {
-                                                            if (state.work.title.isNotBlank()) add(state.work.title)
-                                                            tocEntries.forEach { e ->
-                                                                if (e.title.isNotBlank()) add(e.title)
-                                                            }
-                                                        }
-                                                    }
-                                                    .ifEmpty {
-                                                        listOf(state.work.title.ifBlank { "No text available." })
-                                                    }
-                                                speechController.startReading(paragraphs)
+                                                if (paragraphs.isNotEmpty()) speechController.startReading(paragraphs)
                                             }
                                         }
                                     },
@@ -668,6 +539,7 @@ private fun ReaderReading(
                                     id = "bookmark",
                                     icon = if (isBookmarked) Icons.Filled.Bookmark else Icons.Filled.BookmarkBorder,
                                     accessibilityLabel = if (isBookmarked) "Remove bookmark" else "Add bookmark",
+                                    isEnabled = readerHasBookmarkPosition(state.liveProgress),
                                     isEmphasized = isBookmarked,
                                     action = {
                                         val progress = state.liveProgress ?: return@ReaderFanRoundAction

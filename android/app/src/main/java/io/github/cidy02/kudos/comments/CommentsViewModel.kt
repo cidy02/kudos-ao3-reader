@@ -39,6 +39,18 @@ sealed interface CommentsUiState {
     data class Error(val message: String) : CommentsUiState
 }
 
+/** The iOS comments destination's access/failure words, including reader-menu entry. */
+internal fun commentsReadErrorMessage(error: AO3Error): String = when (error) {
+    AO3Error.AuthenticationRequired -> "Log in to AO3 to do that."
+    AO3Error.Forbidden -> "AO3 declined the request. The work may be restricted to logged-in users."
+    AO3Error.NotFound -> "AO3 couldn't find these comments — the work may be hidden or deleted."
+    is AO3Error.RateLimited -> "AO3 is asking for a pause. Please try again in a moment."
+    is AO3Error.Network -> if (error.offline) {
+        "You're offline. Comments will load when you're back online."
+    } else error.displayMessage()
+    else -> error.displayMessage()
+}
+
 class CommentsViewModel(
     private val repository: AO3CommentRepository,
     val initialTarget: AO3CommentTarget?,
@@ -138,9 +150,9 @@ class CommentsViewModel(
                 }
                 is AO3Result.Failure -> {
                     _state.value = if (result.error == AO3Error.AuthenticationRequired) {
-                        CommentsUiState.AuthRequired("Log in to AO3 before commenting.")
+                        CommentsUiState.AuthRequired(commentsReadErrorMessage(result.error))
                     } else {
-                        CommentsUiState.Error(result.error.displayMessage())
+                        CommentsUiState.Error(commentsReadErrorMessage(result.error))
                     }
                 }
             }
