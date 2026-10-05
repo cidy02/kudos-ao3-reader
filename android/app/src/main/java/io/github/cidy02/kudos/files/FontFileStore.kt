@@ -34,7 +34,8 @@ class FontFileStore(
     }
 
     suspend fun readAllFontFiles(
-        contentRequiredForFileNames: Set<String> = emptySet()
+        contentRequiredForFileNames: Set<String> = emptySet(),
+        incomingFiles: Map<String, ByteArray> = emptyMap()
     ): Map<String, ByteArray> {
         return withContext(Dispatchers.IO) {
             if (!Files.isDirectory(fontsDirectory)) return@withContext emptyMap()
@@ -69,10 +70,31 @@ class FontFileStore(
                             } else {
                                 null
                             }
+                            // A previous restore's suffixed copy is not in the base-name
+                            // collision set. Read one candidate at a time, size first, and
+                            // retain the incoming array itself only when its digest matches.
+                            val identicalIncoming = if (bytes == null) runCatching {
+                                incomingFiles.entries.firstOrNull { (name, incoming) ->
+                                    BackupPaths.isRestoredFontFileName(fileName, name) &&
+                                        incoming.size.toLong() <= BackupLimits.MAX_FONT_ENTRY_BYTES &&
+                                        Files.size(path) == incoming.size.toLong() &&
+                                        Files.newInputStream(path).use { input ->
+                                            val local = ByteArray(incoming.size + 1)
+                                            var count = 0
+                                            while (count < local.size) {
+                                                val read = input.read(local, count, local.size - count)
+                                                if (read == -1) break
+                                                count += read
+                                            }
+                                            count == incoming.size &&
+                                                BackupPaths.sha256(local.copyOf(count)) == BackupPaths.sha256(incoming)
+                                        }
+                                }?.value
+                            }.getOrNull() else null
                             // Every local file reserves its name. Only names that can
                             // collide with this incoming package have their bytes read,
                             // keeping snapshot memory bounded by the package's 32 MiB cap.
-                            fileName to (bytes ?: ByteArray(0))
+                            fileName to (bytes ?: identicalIncoming ?: ByteArray(0))
                         }.getOrNull()
                     }
                     .toMap(linkedMapOf())

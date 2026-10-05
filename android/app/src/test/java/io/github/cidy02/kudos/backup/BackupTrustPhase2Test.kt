@@ -5,6 +5,11 @@ import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import com.google.crypto.tink.subtle.Ed25519Sign
+import io.github.cidy02.kudos.core.model.Bookmark
+import io.github.cidy02.kudos.core.model.ReadingAnnotation
+import io.github.cidy02.kudos.core.model.ReadingQueue
+import io.github.cidy02.kudos.core.model.SavedWork
+import io.github.cidy02.kudos.core.model.WorkCollection
 import io.github.cidy02.kudos.core.model.SavedSearch
 import io.github.cidy02.kudos.core.model.SyncTombstone
 import io.github.cidy02.kudos.core.model.SyncTombstoneRecordType
@@ -744,6 +749,106 @@ class BackupTrustPhase2Test {
         assertEquals(late, held[PEER_ROW])
         assertEquals(changed, held[TOMBSTONE_ID])
     }
+
+    @Test
+    fun aWorkCreatedAfterCaptureSurvivesReplaceWhileAnOmittedCapturedWorkIsRecoverable() = runTest {
+        val captured = SavedWork(id = WORK_K, title = "Omitted", author = "Author", dateAdded = CLOCK, hasEpub = false)
+        database.workDao().upsert(captured.toEntity())
+        val merge = capturedReplace()
+        val late = captured.copy(id = PEER_ROW, title = "Made while merging")
+        database.workDao().upsert(late.toEntity())
+        backupRepository.applyMergeResult(merge)
+        assertEquals(late, database.workDao().getById(late.id)?.toDomain())
+        val removed = database.workDao().getById(captured.id)!!
+        assertTrue(removed.isDeleted)
+        assertEquals(CLOCK, removed.deletedAt)
+        assertEquals(CLOCK.plus(WorkRepository.RECOVERY_WINDOW), removed.permanentDeletionScheduledAt)
+    }
+
+    @Test
+    fun aBookmarkCreatedOrChangedAfterCaptureSurvivesReplace() = runTest {
+        val captured = Bookmark(id = SWEPT_SEARCH, title = "Omitted", urlString = "https://example.org/one", dateAdded = CLOCK)
+        val changedTarget = captured.copy(id = TOMBSTONE_ID, urlString = "https://example.org/two")
+        database.bookmarkDao().upsert(captured.toEntity())
+        database.bookmarkDao().upsert(changedTarget.toEntity())
+        val merge = capturedReplace()
+        val late = captured.copy(id = PEER_ROW, urlString = "https://example.org/late")
+        val changed = changedTarget.copy(title = "Edited while merging")
+        database.bookmarkDao().upsert(late.toEntity())
+        database.bookmarkDao().upsert(changed.toEntity())
+        backupRepository.applyMergeResult(merge)
+        assertNull(database.bookmarkDao().getById(captured.id))
+        assertEquals(late, database.bookmarkDao().getById(late.id)?.toDomain())
+        assertEquals(changed, database.bookmarkDao().getById(changed.id)?.toDomain())
+    }
+
+    @Test
+    fun aSearchCreatedOrChangedAfterCaptureSurvivesReplace() = runTest {
+        val captured = SavedSearch(id = SWEPT_SEARCH, name = "Omitted", dateAdded = CLOCK)
+        val changedTarget = captured.copy(id = TOMBSTONE_ID)
+        database.savedSearchDao().upsert(captured.toEntity())
+        database.savedSearchDao().upsert(changedTarget.toEntity())
+        val merge = capturedReplace()
+        val late = captured.copy(id = PEER_ROW, name = "Made while merging")
+        val changed = changedTarget.copy(name = "Edited while merging", filtersJson = "{\"query\":\"new\"}")
+        database.savedSearchDao().upsert(late.toEntity())
+        database.savedSearchDao().upsert(changed.toEntity())
+        backupRepository.applyMergeResult(merge)
+        assertNull(database.savedSearchDao().getById(captured.id))
+        assertEquals(late, database.savedSearchDao().getById(late.id)?.toDomain())
+        assertEquals(changed, database.savedSearchDao().getById(changed.id)?.toDomain())
+    }
+
+    @Test
+    fun aCollectionCreatedAfterCaptureSurvivesReplaceWhileAnOmittedCapturedCollectionIsRecoverable() = runTest {
+        val captured = WorkCollection(id = SWEPT_SEARCH, name = "Omitted", dateAdded = CLOCK)
+        database.collectionDao().upsert(captured.toEntity())
+        val merge = capturedReplace()
+        val late = captured.copy(id = PEER_ROW, name = "Made while merging")
+        database.collectionDao().upsert(late.toEntity())
+        backupRepository.applyMergeResult(merge)
+        assertEquals(late.toEntity(), database.collectionDao().getById(late.id))
+        val removed = database.collectionDao().getById(captured.id)!!
+        assertTrue(removed.isDeleted)
+        assertEquals(CLOCK, removed.deletedAt)
+        assertEquals(CLOCK.plus(WorkRepository.RECOVERY_WINDOW), removed.permanentDeletionScheduledAt)
+    }
+
+    @Test
+    fun aCustomQueueCreatedAfterCaptureSurvivesReplaceWhileAnOmittedCapturedQueueIsRecoverable() = runTest {
+        val captured = ReadingQueue(id = SWEPT_SEARCH, name = "Omitted", dateCreated = CLOCK)
+        database.readingQueueDao().upsertQueue(captured.toEntity())
+        val merge = capturedReplace()
+        val late = captured.copy(id = PEER_ROW, name = "Made while merging")
+        database.readingQueueDao().upsertQueue(late.toEntity())
+        backupRepository.applyMergeResult(merge)
+        assertEquals(late.toEntity(), database.readingQueueDao().getQueueById(late.id))
+        val removed = database.readingQueueDao().getQueueById(captured.id)!!
+        assertTrue(removed.isDeleted)
+        assertEquals(CLOCK, removed.deletedAt)
+        assertEquals(CLOCK.plus(WorkRepository.RECOVERY_WINDOW), removed.permanentDeletionScheduledAt)
+    }
+
+    @Test
+    fun anAnnotationCreatedAfterCaptureSurvivesReplaceWhileAnOmittedCapturedAnnotationIsMarked() = runTest {
+        database.workDao().upsert(SavedWork(id = WORK_K, title = "Work", author = "Author", hasEpub = false).toEntity())
+        val captured = ReadingAnnotation(id = SWEPT_SEARCH, workID = WORK_K, kindRaw = "highlight", createdAt = CLOCK)
+        database.annotationDao().upsert(captured.toEntity())
+        val merge = capturedReplace()
+        val late = captured.copy(id = PEER_ROW, kindRaw = "note", note = "Made while merging")
+        database.annotationDao().upsert(late.toEntity())
+        backupRepository.applyMergeResult(merge)
+        assertEquals(late.toEntity(), database.annotationDao().getById(late.id))
+        assertEquals(captured.copy(isPendingDeletion = true, deletedAt = CLOCK).toEntity(),
+            database.annotationDao().getById(captured.id))
+    }
+
+    private suspend fun capturedReplace(): BackupMergeResult = BackupMergeService.merge(
+        backupRepository.captureLibrarySnapshot(),
+        KudosBackupPackage(KudosBackupManifest(version = BackupVersion.CURRENT, exportedAt = CLOCK.toString())),
+        mode = BackupImportMode.REPLACE_LIBRARY,
+        now = CLOCK
+    )
 
     @Test
     fun replaceLibraryDoesNotSweepExistingSearches() = runTest {

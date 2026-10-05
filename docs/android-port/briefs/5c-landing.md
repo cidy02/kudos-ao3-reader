@@ -83,8 +83,8 @@ The demo library, a folder under `Documents/`, `Kudos_Verify` in airplane mode.
 | F4 | Android prunes after reading only `.bak` | **Fixed.** |
 | F5 | Batches refuse later EPUBs | **Fixed** (equal clock replaces; and since 5e only the last batch marks queued works preserved). |
 | F6 | A later tombstone can narrow what is suppressed | **Fixed on Android**, stricter than iOS: owner question 8. |
-| F7 | A saved search made during an import is deleted | **Fixed**, and since 5e for reading sessions, favorites and watermarks. Open: Replace Library's own sweep of omitted rows has the same fault. |
-| F8 | A colliding font is copied once per batch | **Fixed** per sync. Open: repeated restores still add suffixed copies, on both apps. |
+| F7 | A saved search made during an import is deleted | **Fixed**, and since 5e for reading sessions, favorites and watermarks. **Since 5f Replace Library's own sweep too.** Open: a captured row the reader edits while an import runs is still written over by the import; a saved link or search kept that way still carries the Replace's deletion record. |
+| F8 | A colliding font is copied once per batch | **Fixed** per sync. **Since 5f Android reuses an identical copy** when the same backup is restored again. Open on iOS: it still adds one each time. |
 | F9 | Unbounded reads; delete before write | **Partly.** Reads are bounded. Writes still truncate the file they replace. |
 | F10 | Conflict copies discarded early, or ignored | **Partly.** Android deletes after the commit and keeps what it cannot fold. Open: iOS does not read a `manifest (1).json` at all. |
 | F11 | Late files stranded | **Partly.** Fonts not taken stay listed. A font whose file has not arrived at all is not listed again until its owner syncs. |
@@ -92,7 +92,7 @@ The demo library, a folder under `Documents/`, `Kudos_Verify` in airplane mode.
 | F13 | The EPUB check takes the first `.opf` | **Fixed.** |
 | F14 | More than 32 MB of fonts never finishes | **Fixed**, with a test at the real 32 MB limit since 5e. |
 | F15 | File names: Unicode, duplicates, length | **Partly.** Composed form compared. Open: two files of one name on a provider; names over 128 characters. |
-| F16 | Fields lost through Android | **Fixed for the folder** (unknown top-level keys are written back). Open: a backup made on Android holds no pronunciations; unknown keys inside a record are still dropped. |
+| F16 | Fields lost through Android | **Fixed for the folder** (unknown top-level keys are written back). **Since 5f a key Android does not know inside a record is carried too**, from the manifest the sync replaces. Open: a backup file made on Android holds no pronunciations and cannot carry unknown keys (it has no old manifest to carry from). |
 | F17 | Dates are not a safe "has it changed" signal | **Fixed on Android** (bytes compared). Open on iOS: it still skips a read when the date is unchanged. |
 | F18 | A failed write reported as success | **Fixed.** |
 | F19 | Deleted saved links and highlights stay on the peer | Open, both apps: owner question 7. **Queue and collection memberships have the same gap** (found in 5e): a work taken out of a queue on one device stays in it on the other. |
@@ -189,3 +189,32 @@ Found while landing, not in the audit:
 - **A sync that failed in the background left no message on Android.** Fixed in 5d.
 - **Android fetched an EPUB from the folder whatever the manifest's flag said**, so a download
   removed on Android came back at the next sync. Fixed in 5d.
+
+## Brief 5f (2026-10-05)
+
+Codex wrote three parts from `5f-replace-sweep-and-unknown-keys.md` (`5f-result.md`). All three
+landed as written; they compiled and passed first time (gate 1,379, fifteen new tests).
+
+| Part | Outcome |
+|---|---|
+| 1 | **Landed.** Replace Library removes only rows it saw when it started. A work, saved link, saved search, collection, queue, highlight or note made while the import runs is kept. A saved link or search is deleted outright only if unchanged since then. iOS cannot have the fault: its restore runs in one go on the main actor. |
+| 2 | **Landed.** When Android writes the folder's manifest, a key it does not know inside a record (all twelve record lists) is carried over from the manifest it replaces, matched the way the merge matches that kind of record. Known keys are never overwritten, a record Android does not write takes its unknown keys with it, and a signed deletion record's signature is unaffected (neither app signs the JSON object). |
+| 3 | **Landed.** Restoring the same backup twice no longer adds a second "-restored-N" copy of a font whose bytes are identical. |
+
+Checked on landing: with the old sweep of saved links put back for one run,
+`aBookmarkCreatedOrChangedAfterCaptureSurvivesReplace` fails; without it, it passes. Not seen on
+a device: none of this has a screen.
+
+One thing the brief asked for cannot be had: a manifest with a record that does not decode
+still stops the sync and is left untouched (the rule from 5c). Carrying unknown keys only
+happens for a manifest this build can read.
+
+Codex's notes of risks it saw and left alone, for a later brief:
+
+- An import writes every row it captured and kept, whatever happened to it since. An edit made
+  to such a row while the import runs is overwritten.
+- Replace Library records a deletion for a saved link or search the archive omits at the time
+  it merges. If the reader then edits that row and it is kept, the deletion record remains, and
+  a later sync can remove the row.
+- Fields Android writes that iOS does not know: the manifest's `exportedBy`, and three
+  `readiumLocator…` fields on a work that are declared but never filled in today.

@@ -478,6 +478,24 @@ object BackupMergeService {
                         BackupPaths.normalizeIdForComparison(local.id)
                 }
             },
+            removedBookmarks = current.bookmarks.filter { local ->
+                bookmarks.none { it.urlString == local.urlString }
+            },
+            removedCollections = current.collections.filter { local ->
+                collections.none {
+                    BackupPaths.normalizeIdForComparison(it.id) == BackupPaths.normalizeIdForComparison(local.id)
+                }
+            },
+            removedReadingQueues = current.readingQueues.filter { local ->
+                finishedQueues.none {
+                    BackupPaths.normalizeIdForComparison(it.id) == BackupPaths.normalizeIdForComparison(local.id)
+                }
+            },
+            removedAnnotations = current.annotations.filter { local ->
+                annotationMerge.items.none {
+                    BackupPaths.normalizeIdForComparison(it.id) == BackupPaths.normalizeIdForComparison(local.id)
+                }
+            },
             removedReadingSessions = current.readingSessions.filter { local ->
                 readingSessions.none { it.id == local.id }
             },
@@ -815,6 +833,27 @@ object BackupMergeService {
         var updated = 0
 
         fun restoreWithSuffix(archived: BackupFont, incomingBytes: ByteArray) {
+            val reusableName = (currentFontFiles + filesToWrite).entries.firstOrNull { (name, bytes) ->
+                BackupPaths.isRestoredFontFileName(name, archived.fileName) &&
+                    bytes.size == incomingBytes.size && bytes.isNotEmpty() &&
+                    BackupPaths.sha256(bytes) == BackupPaths.sha256(incomingBytes)
+            }?.key
+            if (reusableName != null) {
+                val existing = fontsByName[reusableName]
+                fontsByName[reusableName] = if (existing == null) {
+                    created += 1
+                    archived.toCustomFont(fileNameOverride = reusableName, exportedAt = exportedAt)
+                } else {
+                    updated += 1
+                    existing.copy(name = archived.name, dateAdded = BackupValidator.parseInstant(
+                        archived.dateAdded, "font.dateAdded", exportedAt
+                    ))
+                }
+                val names = fontNamesByFoldedName.getOrPut(BackupPaths.fontFileNameKey(reusableName)) { mutableListOf() }
+                if (reusableName !in names) names.add(reusableName)
+                renamedFonts[archived.fileName] = reusableName
+                return
+            }
             val newFileName = BackupPaths.uniqueSuffixedFontFileName(
                 archived.fileName,
                 fontsByName.keys + currentFontFiles.keys + filesToWrite.keys
@@ -849,7 +888,7 @@ object BackupMergeService {
 
             if (existing == null) {
                 val reusableFile = matchingFiles.singleOrNull()
-                if (reusableFile != null && reusableFile.value.isNotEmpty() &&
+                if (reusableFile != null && reusableFile.value.size == incomingBytes.size && reusableFile.value.isNotEmpty() &&
                     BackupPaths.sha256(reusableFile.value) == BackupPaths.sha256(incomingBytes)
                 ) {
                     val localFileName = reusableFile.key
@@ -907,7 +946,7 @@ object BackupMergeService {
             }
 
             if (
-                exactExistingBytes.isNotEmpty() &&
+                exactExistingBytes.size == incomingBytes.size && exactExistingBytes.isNotEmpty() &&
                 BackupPaths.sha256(exactExistingBytes) == BackupPaths.sha256(incomingBytes)
             ) {
                 fontsByName[canonicalExistingName] = existing.copy(

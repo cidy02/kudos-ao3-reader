@@ -11,9 +11,12 @@ import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import io.github.cidy02.kudos.BuildConfig
+import io.github.cidy02.kudos.core.model.ReadingQueueKind
+import io.github.cidy02.kudos.core.model.SavedWork
 import io.github.cidy02.kudos.data.preferences.SettingsRepository
 import io.github.cidy02.kudos.files.WorkFileStore
 import io.github.cidy02.kudos.files.FontFileStore
+import io.github.cidy02.kudos.works.WorkIdentityIndex
 import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.io.InputStream
@@ -28,7 +31,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject
 
@@ -354,13 +361,14 @@ class SyncRepository(
                 // manifest this build writes. Dropped, as it was, a device that joined the
                 // folder after an Android sync never received it. It is the manifest this
                 // run replaces, read moments ago, so nothing stale is carried.
-                val unknown = if (decodedLive == null) emptyMap() else runCatching {
-                    Json.parseToJsonElement(manifestBytesAtRead!!.toString(Charsets.UTF_8)).jsonObject
-                        .filterKeys { it !in knownManifestKeys }
-                }.getOrDefault(emptyMap())
-                val manifestBytes = BackupJson
-                    .encodeToString(JsonObject.serializer(), JsonObject(manifestJson + unknown))
-                    .toByteArray(Charsets.UTF_8)
+                val replacedJson = if (decodedLive == null) null else runCatching {
+                    Json.parseToJsonElement(manifestBytesAtRead!!.toString(Charsets.UTF_8)) as? JsonObject
+                }.getOrNull()
+                val unknown = replacedJson?.filterKeys { it !in knownManifestKeys }.orEmpty()
+                val manifestBytes = BackupJson.encodeToString(
+                    JsonObject.serializer(),
+                    JsonObject(carryUnknownRecordKeys(manifestJson, replacedJson) + unknown)
+                ).toByteArray(Charsets.UTF_8)
                 writeManifest(syncDir, manifestBytes, backup = manifestBytesAtRead.takeIf { decodedLive != null })
                 foldedConflicts.forEach { it.delete() }
                 // Remembered only when nothing is outstanding (iOS withholds its stamp the same
@@ -796,4 +804,78 @@ sealed interface SyncResult {
      * nothing. Treated as non-failure by lifecycle / WorkManager callers.
      */
     data object SkippedAlreadyRunning : SyncResult
+}
+
+/** Carry only first-level unknown fields of records actually written, from the live manifest. */
+@OptIn(ExperimentalSerializationApi::class)
+internal fun carryUnknownRecordKeys(outgoing: JsonObject, replaced: JsonObject?): JsonObject {
+    if (replaced == null) return outgoing
+    val descriptors = mapOf(
+        "works" to BackupWork.serializer().descriptor,
+        "bookmarks" to BackupBookmark.serializer().descriptor,
+        "fonts" to BackupFont.serializer().descriptor,
+        "collections" to BackupCollection.serializer().descriptor,
+        "savedSearches" to BackupSavedSearch.serializer().descriptor,
+        "readingQueues" to BackupReadingQueue.serializer().descriptor,
+        "readingQueueMemberships" to BackupReadingQueueMembership.serializer().descriptor,
+        "annotations" to BackupAnnotation.serializer().descriptor,
+        "readingSessions" to BackupReadingSession.serializer().descriptor,
+        "readingFavorites" to BackupReadingFavorite.serializer().descriptor,
+        "fandomReadWatermarks" to BackupFandomReadWatermark.serializer().descriptor,
+        // Both apps sign fixed typed fields, not the JSON object. Extra keys do not
+        // change TombstoneSigning.payloadBytes / iOS TombstoneSigning.payload(for:).
+        "tombstones" to BackupTombstone.serializer().descriptor
+    )
+    fun JsonObject.text(key: String): String? =
+        (get(key) as? JsonPrimitive)?.takeIf { it.isString }?.contentOrNull
+    fun JsonObject.id(): String? = text("id")?.let(BackupPaths::normalizeIdForComparison)
+
+    val result = outgoing.toMutableMap()
+    descriptors.forEach { (listName, descriptor) ->
+        val oldRecords = (replaced[listName] as? JsonArray)?.mapNotNull { it as? JsonObject }
+            ?: return@forEach
+        val newRecords = outgoing[listName] as? JsonArray ?: return@forEach
+        val known = (0 until descriptor.elementsCount).mapTo(HashSet()) { descriptor.getElementName(it) }
+        val byId = oldRecords.mapNotNull { record -> record.id()?.let { it to record } }.toMap()
+        // Work UUIDs can be rematched by AO3 identity during merge. Reuse its index.
+        val workIndex = if (listName == "works") WorkIdentityIndex.snapshot(oldRecords.mapNotNull { record ->
+            record.id()?.let { id -> SavedWork(
+                id = id, title = "", author = "", sourceUrl = record.text("sourceURL").orEmpty(), hasEpub = false
+            ) }
+        }) else null
+        val byUrl = if (listName == "bookmarks") oldRecords.associateBy { it.text("urlString") } else emptyMap()
+        val byFont = if (listName == "fonts") oldRecords.groupBy {
+            it.text("fileName")?.let(BackupPaths::fontFileNameKey)
+        } else emptyMap()
+        val byFandom = if (listName == "fandomReadWatermarks") oldRecords.associateBy { it.text("fandomName") }
+            else emptyMap()
+        fun JsonObject.favoriteTarget(): Pair<String, String>? {
+            val kind = text("kindRaw") ?: return null
+            return text("targetKey")?.let { kind to it }
+        }
+        val byTarget = if (listName == "readingFavorites") oldRecords.associateBy { it.favoriteTarget() }
+            else emptyMap()
+        result[listName] = JsonArray(newRecords.map { element ->
+            val record = element as? JsonObject ?: return@map element
+            val old = when (listName) {
+                "works" -> workIndex?.existingWork(
+                    ao3WorkId = (record["ao3WorkID"] as? JsonPrimitive)?.contentOrNull?.toLongOrNull(),
+                    sourceUrl = record.text("sourceURL"), recordId = record.id()
+                )?.let { byId[BackupPaths.normalizeIdForComparison(it.id)] }
+                "bookmarks" -> record.text("urlString")?.let { byUrl[it] }
+                "fonts" -> record.text("fileName")?.let { name ->
+                    val matches = byFont[BackupPaths.fontFileNameKey(name)].orEmpty()
+                    matches.firstOrNull { it.text("fileName") == name } ?: matches.singleOrNull()
+                }
+                "fandomReadWatermarks" -> record.id()?.let { byId[it] } ?: record.text("fandomName")?.let { byFandom[it] }
+                "readingFavorites" -> record.id()?.let { byId[it] } ?: record.favoriteTarget()?.let { byTarget[it] }
+                "readingQueues" -> if (record.text("kindRaw") == ReadingQueueKind.SAVED_FOR_LATER) {
+                    oldRecords.firstOrNull { it.text("kindRaw") == ReadingQueueKind.SAVED_FOR_LATER }
+                } else record.id()?.let { byId[it] }
+                else -> record.id()?.let { byId[it] }
+            }
+            if (old == null) record else JsonObject(record + old.filterKeys { it !in known && it !in record })
+        })
+    }
+    return JsonObject(result)
 }
