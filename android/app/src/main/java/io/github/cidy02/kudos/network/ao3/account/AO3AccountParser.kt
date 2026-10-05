@@ -158,6 +158,37 @@ class AO3AccountParser(
         )
     }
 
+    /** iOS parseNamedSubscriptions: the first link selects the kind, not a byline link. */
+    fun parseNamedSubscriptions(
+        html: String,
+        scope: AO3NamedSubscriptionsScope,
+        page: Int = 1,
+        finalUrl: String? = null
+    ): AO3NamedSubscriptionsPage {
+        if (AO3OverloadDetector.isOverloadPage(html)) throw AO3AccountParseException.Overloaded()
+        if (usernameParser.isLoginRequiredPage(html, finalUrl)) throw AO3AccountParseException.LoginRequired()
+        val document = Jsoup.parse(html, AO3Constants.BASE_URL)
+        val seen = mutableSetOf<String>()
+        val rows = document.select("dl.subscription dt").mapNotNull { heading ->
+            val links = heading.select("a[href]")
+            val first = links.firstOrNull() ?: return@mapNotNull null
+            val url = AO3Constants.baseHttpUrl.resolve(first.attr("href")) ?: return@mapNotNull null
+            val parts = url.pathSegments.filter { it.isNotEmpty() }
+            if (parts.size != 2 || parts[0] != scope.parameter) return@mapNotNull null
+            if (scope == AO3NamedSubscriptionsScope.Series && parts[1].toLongOrNull() == null) return@mapNotNull null
+            val path = url.encodedPath
+            if (!seen.add(path)) return@mapNotNull null
+            val creators = if (scope == AO3NamedSubscriptionsScope.Series) {
+                links.drop(1).filter { it.attr("rel") == "author" }.map {
+                    AO3AuthorIdentity(it.normalizedText(), it.attr("href"))
+                }
+            } else emptyList()
+            AO3NamedSubscription(path, first.normalizedText(), creators)
+        }
+        val currentPage = page.coerceAtLeast(1)
+        return AO3NamedSubscriptionsPage(rows, currentPage, document.parseTotalPages(currentPage))
+    }
+
     private fun workIdFromPath(path: String): Long? {
         val marker = "/works/"
         val start = path.indexOf(marker)

@@ -148,6 +148,19 @@ internal object DemoNetworkRoutes {
     fun fixtureName(path: String): String? =
         routes.firstOrNull { (pattern, _) -> pattern.containsMatchIn(path) }?.second
 
+    /** Subscriptions share a path, so their type query selects the fixture. */
+    fun fixtureName(url: HttpUrl): String? {
+        val path = decodedPath(url)
+        if (Regex("^/users/[^/]+/subscriptions/?$").matches(path)) {
+            return when (url.queryParameter("type")) {
+                "series" -> "ao3_demo_subscriptions_series"
+                "users" -> "ao3_demo_subscriptions_users"
+                else -> "ao3_subscriptions"
+            }
+        }
+        return fixtureName(path)
+    }
+
     /** OkHttp [HttpUrl.pathSegments] are decoded, matching iOS `URL.path`. */
     fun decodedPath(url: HttpUrl): String {
         val segments = url.pathSegments
@@ -171,7 +184,7 @@ internal class DemoNetworkInterceptor(
         if (!DemoNetworkRoutes.isAo3Host(url.host)) return chain.proceed(chain.request())
         val path = DemoNetworkRoutes.decodedPath(url)
         val matchTarget = if (url.queryParameter("show_comments") == "true") "$path/comments" else path
-        val name = DemoNetworkRoutes.fixtureName(matchTarget)
+        val name = if (matchTarget == path) DemoNetworkRoutes.fixtureName(url) else DemoNetworkRoutes.fixtureName(matchTarget)
         val bytes = name?.let { fixtures().read(it) }
         val code = if (bytes == null) 404 else 200
         return Response.Builder()

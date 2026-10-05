@@ -11,6 +11,20 @@ class AO3AccountUrls {
         }
     }
 
+    fun namedSubscriptionsUrl(
+        username: String,
+        scope: AO3NamedSubscriptionsScope,
+        page: Int = 1
+    ): String {
+        val builder = AO3Constants.baseHttpUrl.newBuilder()
+            .addPathSegment("users")
+            .addPathSegment(username.trim())
+            .addPathSegment("subscriptions")
+            .addQueryParameter("type", scope.parameter)
+        if (page > 1) builder.addQueryParameter("page", page.toString())
+        return builder.build().toString()
+    }
+
     /** User collections index: `/users/<name>/collections`. */
     fun collectionsUrl(username: String, page: Int = 1): String {
         val builder = AO3Constants.baseHttpUrl.newBuilder()

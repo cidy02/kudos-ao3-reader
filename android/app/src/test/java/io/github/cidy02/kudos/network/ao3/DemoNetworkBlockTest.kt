@@ -229,6 +229,35 @@ class DemoNetworkBlockTest {
             AO3AccountParser().parseSubscriptionsPage(body, 1).works.map { it.id })
     }
 
+    @Test
+    fun namedSubscriptionsRoutesServeTheirOwnFixturesAndKeepWorkAndDetailRoutes() {
+        val client = bundledDemoClient()
+        val base = "https://archiveofourown.org/users/AO3_Reader/subscriptions"
+        val parser = AO3AccountParser()
+        val seriesHtml = html(client, "$base?type=series")
+        val usersHtml = html(client, "$base/?type=users&page=2")
+        val series = parser.parseNamedSubscriptions(seriesHtml,
+            io.github.cidy02.kudos.network.ao3.account.AO3NamedSubscriptionsScope.Series)
+        assertEquals(listOf("My Series"), series.rows.map { it.name })
+        assertEquals(listOf("/series/999"), series.rows.map { it.path })
+        assertEquals(listOf("seriesauthor"), series.rows.single().creators.map { it.displayName })
+        val users = parser.parseNamedSubscriptions(usersHtml,
+            io.github.cidy02.kudos.network.ao3.account.AO3NamedSubscriptionsScope.Users)
+        assertEquals(listOf("someuser", "seriesauthor"), users.rows.map { it.name })
+        assertTrue(users.rows.all { it.creators.isEmpty() })
+        assertTrue(parser.parseSubscriptionsPage(seriesHtml, 1).works.isEmpty())
+        assertTrue(parser.parseSubscriptionsPage(usersHtml, 1).works.isEmpty())
+        assertEquals("ao3_subscriptions", name("$base?type=works&page=2"))
+        assertEquals("ao3_demo_subscriptions_series", name("$base?page=3&type=series"))
+        assertEquals("ao3_demo_subscriptions_users", name("$base?type=users"))
+        assertEquals("ao3_demo_series", name("https://archiveofourown.org/series/999"))
+        assertEquals("ao3_author_dashboard_demo", name("https://archiveofourown.org/users/someuser"))
+        assertEquals("ao3_author_dashboard_demo", name("https://archiveofourown.org/users/seriesauthor"))
+        html(client, "https://archiveofourown.org/series/999")
+        html(client, "https://archiveofourown.org/users/someuser")
+        html(client, "https://archiveofourown.org/users/seriesauthor")
+    }
+
     private fun bundledDemoClient(): OkHttpClient {
         val fixtures = FixtureSource { fixture ->
             val candidates = listOf(
@@ -251,7 +280,7 @@ class DemoNetworkBlockTest {
         }
 
     private fun name(url: String): String? =
-        DemoNetworkRoutes.fixtureName(DemoNetworkRoutes.decodedPath(url.toHttpUrl()))
+        DemoNetworkRoutes.fixtureName(url.toHttpUrl())
 
     private fun get(url: String): Request = Request.Builder().url(url).build()
 
