@@ -614,3 +614,14 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   13. Never run against AO3. Reverse: `account/AO3CollectionItemsScreen.kt`,
   `account/AO3CollectionItemsState.kt`, `updateCollectionItems` in
   `network/ao3/writes/AO3WriteRepository.kt`.
+- **2026-10-05 · The collection form makes iOS's two extra reads.** Codex asked whether Android
+  should make them, since brief 3at said the form is read only when opened. Yes, as iOS: (1)
+  Create and Save fetch AO3's form page again for a fresh token before the one POST, as every
+  other write on both apps does; (2) while naming a new collection, one check per settled name
+  (600 ms after typing stops, the previous one cancelled) of whether that address is taken. The
+  check is an anonymous read of the collection's public page through the shared paced client,
+  never made for an empty, malformed or reserved name, and a failed check never blocks Save.
+  The networking policy does not forbid it: it is not a logged-in read, not in the background,
+  and bounded to one per settled name. Decided by Claude under "iOS and Android behave the
+  same"; the owner has not been asked. Reverse: the name check in the form's state holder
+  (brief 3at).
