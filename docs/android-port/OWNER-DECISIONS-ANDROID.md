@@ -255,3 +255,24 @@ iOS's Maintainers screen lets you choose "Invite as: Moderator / Owner" before s
 invitation, and then sends the same request whichever you chose (AO3's invitation takes only a
 username). Android's screen, being built on 2026-10-05, copies that. Remove the choice from
 both apps, or keep it? Until answered: shown on both, with no effect on either.
+
+## 16. Challenge Settings reads every assignment page on iOS
+
+Found on 2026-10-05 while briefing the Android screen. On a gift exchange you maintain, opening
+Challenge Settings on iOS reads the challenge form, the collection's profile, the first and
+last page of sign-ups, and then **every page** of the Complete, Open and Defaults assignment
+lists, one after another, with no upper limit, to show three numbers (matched, unmatched,
+defaults and pinch hits). A large exchange is dozens of signed-in page reads for one screen.
+
+`docs/AO3_NETWORKING_POLICY.md` lists every multi-page read the app may make (the Collections
+filter with its 25-page cap, Favorites Authors, the Inbox, Subscriptions' chapter counts).
+This one is not on the list.
+
+- **A.** Neither app reads assignment pages on this screen: the counts go, the row still opens
+  Assignments. (What Android will do until you answer.)
+- **B.** Both apps read only the first and last page of each list (at most six reads): matched
+  and unmatched stay exact; "defaults and pinch hits" loses the pinch-hit part.
+- **C.** Keep iOS's walk, give it a cap as the Collections filter has, and add it to the
+  policy; Android then copies it.
+
+Until answered: iOS unchanged; Android as A.

@@ -753,3 +753,11 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   Work opens AO3's page in the in-app browser until Android has the editor. Reverse:
   `account/WritingDraftsScreen.kt`, `account/WritingDraftsState.kt`,
   `account/WritingDraftsRepository.kt`, `network/ao3/writing/`.
+- **2026-10-05 · Android's Challenge Settings will not read every assignment page, though
+  iOS's does.** Codex, reading iOS for brief 3ba, found that iOS's screen walks every page of
+  three assignment lists on opening, uncapped, to show three counts. The networking policy
+  lists each multi-page read the app may make (each one approved by the owner), and this walk
+  is not listed. "iOS wins" does not reach past the policy, which binds both apps. Until the
+  owner decides (question 16), Android's screen makes at most four reads (the challenge form,
+  the collection's profile, and the first and last page of sign-ups) and shows the Assignments
+  rows without counts. iOS is left as it is: changing what iOS reads is the owner's call.
