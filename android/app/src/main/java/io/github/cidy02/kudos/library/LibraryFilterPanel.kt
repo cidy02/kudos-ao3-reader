@@ -25,6 +25,8 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.material3.FilledIconButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -56,6 +58,7 @@ import io.github.cidy02.kudos.ui.subject.SubjectMetrics
 import io.github.cidy02.kudos.ui.subject.SubjectRowSeparator
 import io.github.cidy02.kudos.ui.subject.SubjectToggle
 import io.github.cidy02.kudos.ui.subject.subjectPanel
+import io.github.cidy02.kudos.ui.subject.SubjectPalette
 import io.github.cidy02.kudos.works.WorkSearchIndex
 
 /** Live local filters, in iOS LibraryFilterPanel's order, with Android's extra controls retained. */
@@ -102,7 +105,14 @@ fun LibraryFilterPanel(
                     "Filters", Modifier.weight(1f), color = tokens.primaryInk,
                     fontSize = 18.sp, fontWeight = FontWeight.SemiBold
                 )
-                IconButton(onClick = onApply) { Icon(Icons.Outlined.Check, "Done", tint = tokens.accent) }
+                // iOS draws this one accent-filled (`.borderedProminent`), as on its search
+                // filter panel: the confirm is the only filled circle, Reset stays plain.
+                FilledIconButton(
+                    onClick = onApply,
+                    colors = IconButtonDefaults.filledIconButtonColors(
+                        containerColor = tokens.accent, contentColor = SubjectPalette.label(tokens.accent)
+                    )
+                ) { Icon(Icons.Outlined.Check, "Done") }
             }
             Column(
                 Modifier.fillMaxWidth().heightIn(max = 520.dp).verticalScroll(rememberScrollState()),

@@ -2,6 +2,12 @@ package io.github.cidy02.kudos.search
 
 import io.github.cidy02.kudos.account.SubscriptionWatermark
 import io.github.cidy02.kudos.account.SubscriptionWatermarks
+import io.github.cidy02.kudos.network.ao3.search.AO3ChapterCount
+import io.github.cidy02.kudos.network.ao3.search.AO3Crossover
+import io.github.cidy02.kudos.network.ao3.search.AO3SearchSort
+import io.github.cidy02.kudos.network.ao3.search.AO3SortDirection
+import io.github.cidy02.kudos.network.ao3.search.AO3Updated
+import java.time.LocalDate
 import io.github.cidy02.kudos.network.ao3.search.AO3Category
 import io.github.cidy02.kudos.network.ao3.search.AO3Completion
 import io.github.cidy02.kudos.network.ao3.search.AO3Language
@@ -96,4 +102,41 @@ class AO3SummaryFilterTest {
         assertEquals("1 of the 1 work on this page matches", refineMatchText(1, 1, 0))
         assertEquals("0 of the 3 works on this page match · 2 not checked yet", refineMatchText(3, 0, 2))
     }
+    @Test
+    fun singleChapterMeansFinishedAtOne() {
+        val filters = AO3SearchFilters(chapterCount = AO3ChapterCount.SINGLE_CHAPTER)
+        assertTrue(filters.matchesSummary(work.copy(chapters = "1/1")))
+        assertTrue(filters.matchesSummary(work.copy(chapters = " 1 / 1 ")))
+        assertFalse(filters.matchesSummary(work.copy(chapters = "1/?")))
+        assertFalse(filters.matchesSummary(work.copy(chapters = "3/3")))
+        assertFalse(filters.matchesSummary(work.copy(chapters = "1/2")))
+        val page = listOf(work.copy(id = 3, chapters = "1/1"), work.copy(id = 1), work.copy(id = 2, chapters = "1/1"))
+        assertEquals(listOf(3L, 2L), page.filter(filters::matchesSummary).map { it.id })
+    }
+
+    @Test
+    fun unreadableChapterTextDoesNotHideAWork() {
+        val filters = AO3SearchFilters(chapterCount = AO3ChapterCount.SINGLE_CHAPTER)
+        assertTrue(filters.matchesSummary(work.copy(chapters = "")))
+        assertTrue(filters.matchesSummary(work.copy(chapters = "unknown")))
+        assertTrue(filters.matchesSummary(work.copy(chapters = "1/1/1")))
+        val sparse = work.copy(rating = "", fandoms = emptyList(), chapters = "")
+        assertTrue(filters.includesAccountWork(sparse, subscriptions = true))
+        assertFalse(filters.includesAccountWork(work, subscriptions = true))
+    }
+
+    @Test
+    fun queryOnlyFacetsDoNotNarrowLoadedPages() {
+        val filters = AO3SearchFilters(
+            query = "not present", title = "not present", creators = "not present",
+            crossover = AO3Crossover.ONLY, updated = AO3Updated.WEEK,
+            dateFrom = LocalDate.of(2099, 1, 1), dateTo = LocalDate.of(1900, 1, 1),
+            hitsFrom = "999999", kudosTo = "1", commentsFrom = "999999", bookmarksTo = "1",
+            sort = AO3SearchSort.TITLE, sortDirection = AO3SortDirection.ASCENDING
+        )
+        assertTrue(filters.matchesSummary(work))
+        assertTrue(AO3SearchFilters(language = AO3Language.FRENCH)
+            .matchesSummary(work.copy(language = "Français")))
+    }
+
 }

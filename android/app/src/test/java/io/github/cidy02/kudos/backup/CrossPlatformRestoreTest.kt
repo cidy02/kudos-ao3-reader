@@ -8,10 +8,12 @@ import io.github.cidy02.kudos.data.local.KudosDatabase
 import io.github.cidy02.kudos.data.preferences.SettingsRepository
 import io.github.cidy02.kudos.files.FontFileStore
 import io.github.cidy02.kudos.files.WorkFileStore
+import io.github.cidy02.kudos.search.SearchFiltersCodec
 import java.io.ByteArrayInputStream
 import java.io.File
 import java.nio.file.Files
 import java.time.Instant
+import java.time.ZoneId
 import java.util.zip.ZipInputStream
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -19,10 +21,13 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import org.junit.After
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -103,6 +108,36 @@ class CrossPlatformRestoreTest {
             roundTrip.close()
         }
     }
+
+    /**
+     * Android's own saved-search writer against a search Swift's encoder wrote: the same 37 keys
+     * and, dates aside, the same values. iOS throws on a value it does not know, and that fails
+     * its whole manifest, so this is the check that an Android-made search cannot stop an iPhone.
+     * A date is an instant on iOS and a calendar day here; same text shape, same day.
+     */
+    @Test
+    fun androidWritesASavedSearchsFiltersTheWayIosDoes() {
+        val ios = BackupImporter.importV2Zip(resourceBytes("cross-platform/ios-export.kudosbackup"))
+            .manifest.savedSearches.single().filters
+        assertEquals(37, ios.size)
+        val decoded = SearchFiltersCodec.decode(ios.toString())
+        val android = BackupJson.parseToJsonElement(
+            SearchFiltersCodec.encode(decoded.copy(preservedFilterValues = emptyMap()))
+        ).jsonObject
+        val dates = setOf("dateFrom", "dateTo")
+        assertEquals(ios.keys, android.keys)
+        assertEquals(ios - dates, android - dates)
+        val shape = Regex("""\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z""")
+        dates.forEach { key ->
+            val theirs = ios.getValue(key).jsonPrimitive.content
+            val ours = android.getValue(key).jsonPrimitive.content
+            assertTrue("$key $theirs", shape.matches(theirs))
+            assertTrue("$key $ours", shape.matches(ours))
+            assertEquals(key, localDay(theirs), localDay(ours))
+        }
+    }
+
+    private fun localDay(instant: String) = Instant.parse(instant).atZone(ZoneId.systemDefault()).toLocalDate()
 
     /** Every `Originals/` file of [pack] is on [device], under the work it names. */
     private suspend fun assertOriginalsRestored(pack: KudosBackupPackage, device: Harness) {

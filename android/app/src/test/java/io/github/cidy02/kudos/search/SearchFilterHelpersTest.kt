@@ -172,7 +172,7 @@ class SearchFilterHelpersTest {
         assertTrue(texts.contains("No Not Rated"))
         assertTrue(texts.contains(AO3Warning.NO_WARNINGS.title))
         assertTrue(texts.contains("−${AO3Category.OTHER.title}"))
-        assertTrue(texts.contains("Crossover: Exclude"))
+        assertTrue(texts.contains("Exclude crossovers"))
         assertTrue(texts.contains("Complete"))
         assertTrue(texts.contains("Words 1000–5000"))
         assertTrue(texts.contains(AO3Updated.WEEK.title))

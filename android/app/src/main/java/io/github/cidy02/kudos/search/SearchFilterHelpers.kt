@@ -2,6 +2,8 @@ package io.github.cidy02.kudos.search
 
 import io.github.cidy02.kudos.core.model.SavedWork
 import io.github.cidy02.kudos.network.ao3.search.AO3Category
+import io.github.cidy02.kudos.network.ao3.search.AO3ChapterCount
+import io.github.cidy02.kudos.network.ao3.search.AO3SortDirection
 import io.github.cidy02.kudos.network.ao3.search.AO3Completion
 import io.github.cidy02.kudos.network.ao3.search.AO3Crossover
 import io.github.cidy02.kudos.network.ao3.search.AO3Language
@@ -129,7 +131,8 @@ fun clearedFiltersPreservingQuery(filters: AO3SearchFilters): AO3SearchFilters {
 fun activeFilterCount(filters: AO3SearchFilters): Int {
     if (!filters.hasActiveFilters) return 0
     val labels = summaryLabels(filters)
-    return if (filters.sort == AO3SearchSort.RELEVANCE) labels.size - 1 else labels.size
+    val facets = if (filters.sort == AO3SearchSort.RELEVANCE) labels.size - 1 else labels.size
+    return facets + if (filters.sortDirection != AO3SortDirection.DESCENDING) 1 else 0
 }
 
 /**
@@ -161,6 +164,9 @@ fun summaryLabels(filters: AO3SearchFilters, excluding: String? = null): List<Su
     addTagField(SummaryLabel.relationshipIcon, filters.relationships, filters.excludedRelationships)
     addTagField(SummaryLabel.freeformIcon, filters.additionalTags, filters.excludedAdditionalTags)
 
+    if (filters.title.isNotBlank()) add("Title: ${filters.title}")
+    if (filters.creators.isNotBlank()) add("By: ${filters.creators}")
+
     if (filters.rating != AO3Rating.ANY) {
         val match = when (filters.ratingMatch) {
             AO3RatingMatch.EXACT -> filters.rating.title
@@ -185,19 +191,30 @@ fun summaryLabels(filters: AO3SearchFilters, excluding: String? = null): List<Su
     AO3Category.entries.filter { it in filters.excludedCategories }.forEach { add("−${it.title}") }
 
     if (filters.crossover != AO3Crossover.ANY) {
-        add("Crossover: ${filters.crossover.title}")
+        add(filters.crossover.title)
     }
     if (filters.completion != AO3Completion.ANY) {
         add(filters.completion.title)
     }
 
-    val from = filters.wordsFrom.trim()
-    val to = filters.wordsTo.trim()
-    when {
-        from.isNotEmpty() && to.isNotEmpty() -> add("Words $from–$to")
-        from.isNotEmpty() -> add("Words ≥ $from")
-        to.isNotEmpty() -> add("Words ≤ $to")
+    if (filters.chapterCount != AO3ChapterCount.ANY) add(filters.chapterCount.title)
+    for ((name, from, to) in listOf(
+        Triple("Words", filters.wordsFrom, filters.wordsTo),
+        Triple("Hits", filters.hitsFrom, filters.hitsTo),
+        Triple("Kudos", filters.kudosFrom, filters.kudosTo),
+        Triple("Comments", filters.commentsFrom, filters.commentsTo),
+        Triple("Bookmarks", filters.bookmarksFrom, filters.bookmarksTo)
+    )) {
+        val lower = from.trim()
+        val upper = to.trim()
+        when {
+            lower.isNotEmpty() && upper.isNotEmpty() -> add("$name $lower–$upper")
+            lower.isNotEmpty() -> add("$name ≥ $lower")
+            upper.isNotEmpty() -> add("$name ≤ $upper")
+        }
     }
+    filters.dateFrom?.let { add("After $it") }
+    filters.dateTo?.let { add("Before $it") }
 
     if (filters.updated != AO3Updated.ANY) {
         add(filters.updated.title)
@@ -375,4 +392,31 @@ fun savedSearchSubtitle(filters: AO3SearchFilters): String? {
     if (filters.completion != AO3Completion.ANY) parts += filters.completion.title
     if (filters.sort != AO3SearchSort.RELEVANCE) parts += filters.sort.title
     return parts.takeIf { it.isNotEmpty() }?.joinToString(" · ")
+}
+
+/** TagSelectField's include/exclude/clear cycle and count, shared by rows and selected capsules. */
+internal fun tagSelection(tag: String, included: String, excluded: String): FilterSelectionState = when (tag) {
+    in AO3SearchFilters.commaSeparatedValues(included) -> FilterSelectionState.INCLUDED
+    in AO3SearchFilters.commaSeparatedValues(excluded) -> FilterSelectionState.EXCLUDED
+    else -> FilterSelectionState.CLEAR
+}
+
+internal fun cycleFilterTag(tag: String, included: String, excluded: String): Pair<String, String> {
+    val includes = AO3SearchFilters.commaSeparatedValues(included).toMutableSet()
+    val excludes = AO3SearchFilters.commaSeparatedValues(excluded).toMutableSet()
+    when (tagSelection(tag, included, excluded).next) {
+        FilterSelectionState.INCLUDED -> { includes += tag; excludes -= tag }
+        FilterSelectionState.EXCLUDED -> { includes -= tag; excludes += tag }
+        FilterSelectionState.CLEAR -> { includes -= tag; excludes -= tag }
+    }
+    return includes.sorted().joinToString(", ") to excludes.sorted().joinToString(", ")
+}
+
+internal fun tagSelectionSummary(included: String, excluded: String): String {
+    val includes = AO3SearchFilters.commaSeparatedValues(included).size
+    val excludes = AO3SearchFilters.commaSeparatedValues(excluded).size
+    return listOfNotNull(
+        if (includes > 0) "$includes included" else null,
+        if (excludes > 0) "$excludes excluded" else null
+    ).joinToString(" · ").ifEmpty { "Any" }
 }

@@ -108,7 +108,7 @@ fun TagWorksScreen(
         }
     }
 
-    LaunchedEffect(tagName, filters) { load() }
+    LaunchedEffect(tagName) { load() }
 
     Column(
         modifier = Modifier
@@ -277,8 +277,8 @@ fun TagWorksScreen(
         SearchFilterSheet(
             filters = filters,
             onFiltersChange = { filters = it },
-            onApply = { showFilterSheet = false },
-            onClear = { filters = AO3SearchFilters() },
+            onApply = { showFilterSheet = false; load() },
+            onClear = { filters = AO3SearchFilters(); load() },
             onDismiss = { showFilterSheet = false },
             localTagSuggestions = localTagSuggestions
         )
