@@ -6,6 +6,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 
@@ -22,7 +23,16 @@ class PushedShellChrome {
     var onBack by mutableStateOf<(() -> Unit)?>(null)
     var trailingContent by mutableStateOf<(@Composable RowScope.() -> Unit)?>(null)
 
+    /**
+     * The screen whose values these are. When one pushed screen opens another, the old one
+     * leaves the composition after the new one has registered; without this its farewell reset
+     * wiped the newcomer's buttons, and a screen whose arguments never change again (so its
+     * registration is not repeated) stayed without them.
+     */
+    internal var owner: Any? = null
+
     fun reset() {
+        owner = null
         mounted = false
         hideTabBar = false
         hasSubjectHeader = null
@@ -43,7 +53,9 @@ fun ProvidePushedShellChrome(
     onBack: (() -> Unit)? = null,
     trailingContent: (@Composable RowScope.() -> Unit)? = null
 ) {
+    val owner = remember { Any() }
     SideEffect {
+        chrome.owner = owner
         chrome.mounted = true
         chrome.hideTabBar = hideTabBar
         chrome.hasSubjectHeader = hasSubjectHeader
@@ -53,7 +65,7 @@ fun ProvidePushedShellChrome(
     }
     DisposableEffect(chrome) {
         onDispose {
-            chrome.reset()
+            if (chrome.owner === owner) chrome.reset()
         }
     }
 }
