@@ -633,3 +633,13 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   only a link, and offers Rebuild from Original, not a viewer. iOS wins: the reader's Share
   falls back to the EPUB when a work has no link, the reader's menu gets the Original icon, and
   the work page is unchanged. Decided by Claude; the owner has not been asked.
+- **2026-10-05 · The reader can hand a work's EPUB, or the file it was converted from, to
+  another app.** Share in the reader's menu falls back to the EPUB when a work has no link, and
+  an Original icon opens the archived original, as on iOS. Two of the app's private folders
+  (`works/`, `originals/`) are now reachable through its file provider, one file at a time and
+  read-only, for the app the reader picks. An address is only ever made from a work, never from
+  a path: only that work's own EPUB or original, never the conversion record beside it, never
+  through a link, never for a work in Recently Deleted. The database, settings and the AO3
+  cookie store are outside both folders. The file's name is the work's title with path
+  separators and control characters removed. Reverse: `reader/ReaderWorkActions.kt` and the
+  two lines in `res/xml/file_paths.xml`.

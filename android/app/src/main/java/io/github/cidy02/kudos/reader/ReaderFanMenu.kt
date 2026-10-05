@@ -33,6 +33,7 @@ import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.ChatBubbleOutline
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
+import androidx.compose.material.icons.filled.FindInPage
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.TextFields
 import androidx.compose.runtime.Composable
@@ -69,7 +70,7 @@ data class ReaderFanMenuPill(
     val action: () -> Unit
 )
 
-/** One round action button in the fan's bottom row (Share, Kudos, Read Aloud, Lock, Bookmark). */
+/** One round action in the fan's bottom row (Share, Kudos, Original, Read Aloud, Lock, Bookmark). */
 data class ReaderFanRoundAction(
     val id: String,
     val icon: ImageVector,
@@ -133,7 +134,7 @@ internal fun readerKudosAction(
     )
 }
 
-/** Best existing Android share target; file sharing needs a separate entry point. */
+/** iOS shareURL's first two choices; ReaderWorkActions supplies the EPUB fallback. */
 internal fun readerShareUrl(work: SavedWork): String? {
     val ao3Id = work.ao3WorkID?.toLong() ?: WorkTags.ao3WorkIdFromUrl(work.sourceUrl)
     if (ao3Id != null) return "https://archiveofourown.org/works/$ao3Id"
@@ -141,6 +142,14 @@ internal fun readerShareUrl(work: SavedWork): String? {
         runCatching { URI(it).scheme?.startsWith("http") == true }.getOrDefault(false)
     }
 }
+
+internal fun readerOriginalAction(available: Boolean, onOriginal: () -> Unit): ReaderFanRoundAction? =
+    if (available) ReaderFanRoundAction(
+        id = "original",
+        icon = Icons.Filled.FindInPage,
+        accessibilityLabel = "View the original file this work was converted from",
+        action = onOriginal
+    ) else null
 
 /** Same near-position condition as AnnotationRepository.removeBookmarkNear. */
 internal fun readerIsBookmarked(bookmarks: List<ReadingAnnotation>, progress: ReaderProgress?): Boolean {
@@ -173,8 +182,8 @@ fun ReaderFanMenu(
     val rowSpacing = 9.dp
 
     // iOS's rule: the pills span the circle row. iOS always has four circles or more. Android
-    // has three for an import with no link (it cannot share a file yet), and three circles'
-    // width cuts the pills' labels, so the pills never go narrower than four.
+    // may have three if the file has gone missing, and three circles' width cuts
+    // the pills' labels, so the pills never go narrower than four.
     val count = maxOf(roundActions.size, 4)
     val pillWidth = (roundActionWidth * count) + (rowSpacing * (count - 1))
 
