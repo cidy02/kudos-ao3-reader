@@ -599,3 +599,18 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   underline (it was drawn as yellow). Reverse: `reader/ReaderNoteEditor.kt`,
   `reader/readium/ReaderHighlightDecorationListener.kt`, and the pill builder in
   `reader/ReaderFanMenu.kt`.
+- **2026-10-05 · A pushed screen that is leaving no longer wipes the next screen's top
+  buttons.** When one pushed screen opens another, the old one leaves the composition after the
+  new one has registered its buttons with the shell, and its farewell reset cleared them. Most
+  screens recovered by registering again; one whose arguments never change did not, and the
+  moderation screen opened from a collection had no Submit or Discard. The shell now remembers
+  which screen the buttons belong to. Reverse: `owner` in `app/PushedShellChrome.kt`.
+- **2026-10-05 · The AO3 collection's moderation screen, as iOS's, with two differences kept
+  for now.** Items awaiting or holding a decision, with approve, reject, unrevealed, anonymous
+  and remove staged per item and sent on Submit, one request per item (see the entry above on
+  that). The differences: Android asks "Submit N staged changes to AO3?" before sending, where
+  iOS sends on the tap; and Android reads the list again after a refusal, where iOS does only
+  after success. Both came from Claude's answer to Codex, not from the owner: owner question
+  13. Never run against AO3. Reverse: `account/AO3CollectionItemsScreen.kt`,
+  `account/AO3CollectionItemsState.kt`, `updateCollectionItems` in
+  `network/ao3/writes/AO3WriteRepository.kt`.

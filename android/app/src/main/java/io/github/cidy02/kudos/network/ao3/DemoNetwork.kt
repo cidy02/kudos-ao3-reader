@@ -117,6 +117,7 @@ internal object DemoNetworkRoutes {
         "^/collections/[^/]+/signups" to "ao3_challenge_signups",
         "^/collections/[^/]+/assignments" to "ao3_challenge_assignments",
         "^/collections/[^/]+/(gift_exchange|prompt_meme)" to "ao3_challenge_settings",
+        "^/collections/winter_exchange/items" to "ao3_demo_collection_items",
         "^/collections/[^/]+/items" to "ao3_collection_items",
         "^/collections/[^/]+/participants" to "ao3_collection_participants",
         "^/collections/[^/]+/profile" to "ao3_collection_show",
@@ -183,12 +184,19 @@ internal class DemoNetworkInterceptor(
     private val fixtures: () -> FixtureSource = { DemoNetwork.fixtures }
 ) : Interceptor {
     private val removedSubscriptions = ConcurrentHashMap.newKeySet<String>()
+    private val collectionItems = DemoCollectionItems()
 
     override fun intercept(chain: Interceptor.Chain): Response {
         if (!isActive()) return chain.proceed(chain.request())
         val url = chain.request().url
         if (!DemoNetworkRoutes.isAo3Host(url.host)) return chain.proceed(chain.request())
         val path = DemoNetworkRoutes.decodedPath(url)
+        if (path == "/collections/winter_exchange/items" || path == "/collections/winter_exchange/items/update_multiple") {
+            val answer = collectionItems.answer(chain.request(), fixtures().read("ao3_demo_collection_items"))
+            return Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1)
+                .code(answer.first).message(if (answer.first == 200) "OK" else "Unprocessable Entity")
+                .header("Content-Type", HTML).body(answer.second.toResponseBody(HTML_TYPE)).build()
+        }
         // A terminal local response, including failures. Never fall through to AO3.
         if (chain.request().method == "POST" && Regex("^/users/[^/]+/subscriptions/[^/]+/?$").matches(path)) {
             val buffer = Buffer()
@@ -244,3 +252,79 @@ internal class DemoNetworkInterceptor(
 
 internal fun OkHttpClient.Builder.installDemoNetworkBlock(): OkHttpClient.Builder =
     addInterceptor(DemoNetworkInterceptor())
+
+/** Mutable local server state is owned by the interceptor, never by production account models. */
+private class DemoCollectionItems {
+    private val changes = mutableMapOf<String, String>()
+    private val removed = mutableSetOf<String>()
+
+    @Synchronized
+    fun answer(request: okhttp3.Request, fixture: ByteArray?): Pair<Int, String> {
+        if (fixture == null) return 404 to ""
+        val doc = Jsoup.parse(fixture.decodeToString())
+        val rows = doc.select("li.collection.item")
+        if (request.method == "POST") {
+            val buffer = Buffer()
+            request.body?.writeTo(buffer)
+            val fields = buffer.readUtf8().split('&').associate { field ->
+                val parts = field.split('=', limit = 2)
+                URLDecoder.decode(parts[0], "UTF-8") to URLDecoder.decode(parts.getOrElse(1) { "" }, "UTF-8")
+            }
+            val edits = fields.filterKeys { it.startsWith("collection_items[") }
+            val ids = edits.keys.mapNotNull { Regex("^collection_items\\[(\\d+)]").find(it)?.groupValues?.get(1) }.distinct()
+            val id = ids.singleOrNull()
+            val row = rows.firstOrNull { it.selectFirst("h4.heading")?.id() == "collection_item_$id" }
+            val controls = row?.select("input, select").orEmpty()
+            val accepted = request.url.encodedPath == "/collections/winter_exchange/items/update_multiple" &&
+                fields["_method"] == "patch" && fields["authenticity_token"] == "demo-items-token" &&
+                id != null && id !in removed && row != null && !row.hasAttr("data-refuse") && edits.isNotEmpty() &&
+                edits.all { (name, value) ->
+                    val control = controls.firstOrNull { it.attr("name") == name && it.attr("type") != "hidden" }
+                    control != null && !control.hasAttr("disabled") &&
+                        (if (control.tagName() == "select") control.select("option").any { it.attr("value") == value }
+                        else value in setOf("0", "1"))
+                }
+            if (!accepted) return 422 to "<div class='flash error'>AO3 couldn't update that collection item.</div>"
+            changes.putAll(edits)
+            if (edits["collection_items[$id][remove]"] == "1") removed.add(id!!)
+            return 200 to "<div class='flash notice'>Collection item updated.</div>"
+        }
+        if (request.method != "GET") return 405 to ""
+        rows.forEach { row ->
+            val id = row.selectFirst("h4.heading")!!.id().removePrefix("collection_item_")
+            row.select("select, input[type=checkbox]").forEach { control ->
+                changes[control.attr("name")]?.let { value ->
+                    if (control.tagName() == "select") control.select("option").forEach { option ->
+                        option.removeAttr("selected")
+                        if (option.attr("value") == value) option.attr("selected", "selected")
+                    } else {
+                        control.removeAttr("checked")
+                        if (value == "1") control.attr("checked", "checked")
+                    }
+                }
+            }
+            fun approval(suffix: String): String = row.select("select").firstOrNull {
+                it.attr("name").endsWith("[$suffix]")
+            }?.selectFirst("option[selected]")?.attr("value").orEmpty()
+            val creator = approval("user_approval_status")
+            val moderator = approval("collection_approval_status")
+            val matches = when (request.url.queryParameter("status")) {
+                "unreviewed_by_user" -> creator == "unreviewed"
+                "rejected_by_collection" -> moderator == "rejected"
+                "approved" -> creator == "approved" && moderator == "approved"
+                else -> moderator == "unreviewed"
+            }
+            if (id in removed || !matches) row.remove()
+        }
+        val remaining = doc.select("li.collection.item")
+        val total = maxOf(1, (remaining.size + 2) / 3)
+        val page = (request.url.queryParameter("page")?.toIntOrNull() ?: 1).coerceAtLeast(1)
+        remaining.forEachIndexed { index, row -> if (index / 3 + 1 != page) row.remove() }
+        val main = doc.selectFirst("#main")!!
+        if (doc.select("li.collection.item").isEmpty()) main.append("<p class='note'>No items found.</p>")
+        if (total > 1) main.append("<ol class='pagination'>" + (1..total).joinToString("") {
+            "<li><a href='?page=$it'>$it</a></li>"
+        } + "</ol>")
+        return 200 to doc.outerHtml()
+    }
+}

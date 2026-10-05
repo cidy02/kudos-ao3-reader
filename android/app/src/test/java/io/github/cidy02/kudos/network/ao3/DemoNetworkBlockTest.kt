@@ -1,6 +1,11 @@
 package io.github.cidy02.kudos.network.ao3
 
 import io.github.cidy02.kudos.network.ao3.account.AO3AccountParser
+import io.github.cidy02.kudos.network.ao3.account.AO3CollectionItemApproval
+import io.github.cidy02.kudos.network.ao3.account.AO3CollectionItemTab
+import io.github.cidy02.kudos.network.ao3.account.AO3CollectionItemDraft
+import io.github.cidy02.kudos.network.ao3.account.AO3CollectionItemsParser
+import io.github.cidy02.kudos.network.ao3.account.AO3CollectionItemsUrls
 import io.github.cidy02.kudos.network.ao3.account.AO3CollectionParser
 import io.github.cidy02.kudos.network.ao3.search.AO3SearchParser
 import io.github.cidy02.kudos.network.ao3.series.AO3SeriesUrls
@@ -281,6 +286,47 @@ class DemoNetworkBlockTest {
         assertEquals(listOf("seriesauthor"), parser.parseNamedSubscriptions(html(client, "$base?type=users"),
             io.github.cidy02.kudos.network.ao3.account.AO3NamedSubscriptionsScope.Users).rows.map { it.name })
         assertEquals(422, post(987))
+    }
+
+    @Test
+    fun winterItemsDemoServesEachFilterAndPageAndPersistsEveryLocalDecision() {
+        val client = bundledDemoClient()
+        val base = "https://archiveofourown.org/collections/winter_exchange/items"
+        val parser = AO3CollectionItemsParser()
+        fun page(tab: AO3CollectionItemTab, number: Int = 1) = parser.parse(
+            html(client, AO3CollectionItemsUrls.page("winter_exchange", tab, number)),
+            "winter_exchange", tab, number
+        )
+        val awaiting = page(AO3CollectionItemTab.Unreviewed)
+        assertEquals(listOf(41, 42, 43), awaiting.items.map { it.id })
+        assertEquals(2, awaiting.totalPages)
+        assertEquals(listOf(44), page(AO3CollectionItemTab.Unreviewed, 2).items.map { it.id })
+        assertEquals(listOf(51, 52, 53), page(AO3CollectionItemTab.Invited).items.map { it.id })
+        assertEquals(listOf(61, 62, 63), page(AO3CollectionItemTab.Rejected).items.map { it.id })
+        assertEquals(listOf(71, 72, 73), page(AO3CollectionItemTab.Approved).items.map { it.id })
+        fun post(draft: AO3CollectionItemDraft, token: String = awaiting.csrfToken): Int {
+            val body = okhttp3.FormBody.Builder().apply {
+                draft.parameters(awaiting.copy(csrfToken = token)).forEach { (key, value) -> add(key, value) }
+            }.build()
+            return client.newCall(Request.Builder().url(awaiting.actionUrl).post(body).build()).execute().use { it.code }
+        }
+        val approve = AO3CollectionItemApproval.Approved
+        assertEquals(422, post(AO3CollectionItemDraft(41, moderatorApproval = approve), "wrong"))
+        assertEquals(200, post(AO3CollectionItemDraft(41, moderatorApproval = approve)))
+        assertEquals(422, post(AO3CollectionItemDraft(42, moderatorApproval = approve)))
+        assertEquals(listOf(42, 43, 44), page(AO3CollectionItemTab.Unreviewed).items.map { it.id })
+        assertEquals(1, page(AO3CollectionItemTab.Unreviewed).totalPages)
+        assertEquals(AO3CollectionItemApproval.Unreviewed, page(AO3CollectionItemTab.Unreviewed).items.first().moderatorApproval)
+        assertEquals(200, post(AO3CollectionItemDraft(43, remove = true)))
+        assertEquals(listOf(42, 44), page(AO3CollectionItemTab.Unreviewed).items.map { it.id })
+        assertEquals(200, post(AO3CollectionItemDraft(44, anonymous = false, unrevealed = false)))
+        val changed = page(AO3CollectionItemTab.Unreviewed).items.last()
+        assertFalse(changed.anonymous)
+        assertFalse(changed.unrevealed)
+        assertEquals(422, post(AO3CollectionItemDraft(44,
+            creatorApproval = AO3CollectionItemApproval.Rejected)))
+        assertEquals("ao3_demo_collection_items", name(base))
+        assertEquals("ao3_collection_items", name("https://archiveofourown.org/collections/other/items"))
     }
 
     private fun bundledDemoClient(): OkHttpClient {

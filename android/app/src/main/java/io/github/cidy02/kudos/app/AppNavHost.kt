@@ -603,6 +603,9 @@ fun AppNavHost(
                     slug = slug,
                     title = title ?: slug,
                     repository = container.collectionDetailRepository,
+                    onOpenModeration = {
+                        navController.navigate(Routes.ao3CollectionItems(slug, title ?: slug))
+                    },
                     settingsRepository = container.settingsRepository,
                     privacyGate = container.privacyGate,
                     onOpenWork = { work ->
@@ -611,6 +614,25 @@ fun AppNavHost(
                     onOpenWebFallback = { url ->
                         navController.navigate(Routes.webFallback(url))
                     }
+                )
+            }
+        }
+        sharedComposable(
+            Routes.AO3CollectionItems,
+            arguments = listOf(
+                Routes.navArgOf("collectionSlug"),
+                navArgument("collectionTitle") { type = NavType.StringType; nullable = true; defaultValue = null }
+            )
+        ) { entry ->
+            val slug = Routes.routeArg(entry, "collectionSlug")
+            if (slug == null) {
+                navController.popBackStack()
+            } else {
+                io.github.cidy02.kudos.account.AO3CollectionItemsScreen(
+                    slug = slug,
+                    title = Routes.routeArg(entry, "collectionTitle") ?: slug,
+                    repository = container.collectionDetailRepository,
+                    writes = container.writeRepository
                 )
             }
         }
