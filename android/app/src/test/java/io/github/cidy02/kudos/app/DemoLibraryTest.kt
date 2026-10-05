@@ -1,10 +1,17 @@
 package io.github.cidy02.kudos.app
 
 import android.content.Context
+import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import io.github.cidy02.kudos.core.model.ReadingQueueKind
+import io.github.cidy02.kudos.account.SubscriptionWatermarks
+import io.github.cidy02.kudos.backup.KeyRevocationReason
+import io.github.cidy02.kudos.backup.KeyRevocationService
+import io.github.cidy02.kudos.backup.TombstoneSigning
+import io.github.cidy02.kudos.backup.TombstoneTrustStore
 import io.github.cidy02.kudos.data.local.KudosDatabase
+import io.github.cidy02.kudos.data.preferences.SettingsRepository
 import io.github.cidy02.kudos.files.WorkFileStore
 import io.github.cidy02.kudos.library.ReadingQueueRepository
 import io.github.cidy02.kudos.works.WorkRepository
@@ -12,9 +19,21 @@ import io.github.cidy02.kudos.library.LibraryFilterState
 import io.github.cidy02.kudos.library.LibraryQuery
 import io.github.cidy02.kudos.library.LibraryRepository
 import io.github.cidy02.kudos.library.LibrarySort
+import io.github.cidy02.kudos.network.ao3.work.AO3WorkMetadataParser
+import io.github.cidy02.kudos.network.ao3.search.AO3WorkSummary
+import io.github.cidy02.kudos.reader.ReaderSectionBuilder
+import io.github.cidy02.kudos.reader.ReaderSectionKind
+import io.github.cidy02.kudos.reader.storyChapterCount
+import io.github.cidy02.kudos.works.converters.EpubBuilder
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Instant
+import java.util.zip.ZipEntry
+import java.util.zip.ZipFile
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.After
@@ -27,6 +46,8 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import org.jsoup.Jsoup
+import org.jsoup.parser.Parser
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
@@ -36,15 +57,25 @@ class DemoLibraryTest {
     private lateinit var queueRepository: ReadingQueueRepository
     private lateinit var fileStore: WorkFileStore
     private lateinit var tempDir: Path
+    private lateinit var context: Context
+    private lateinit var settingsRepository: SettingsRepository
+    private lateinit var settingsScope: CoroutineScope
     private val fixedNow = Instant.parse("2026-07-31T12:00:00Z")
 
     @Before
     fun setUp() {
-        val context = ApplicationProvider.getApplicationContext<Context>()
+        context = ApplicationProvider.getApplicationContext()
+        context.getSharedPreferences("ao3_subscription_watermarks", Context.MODE_PRIVATE).edit().clear().commit()
+        context.getSharedPreferences("kudos_demo_fixtures", Context.MODE_PRIVATE).edit().clear().commit()
         database = Room.inMemoryDatabaseBuilder(context, KudosDatabase::class.java)
             .allowMainThreadQueries()
             .build()
         tempDir = Files.createTempDirectory("kudos-demo-test")
+        settingsScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+        settingsRepository = SettingsRepository(PreferenceDataStoreFactory.create(
+            scope = settingsScope,
+            produceFile = { tempDir.resolve("settings.preferences_pb").toFile() }
+        ))
         fileStore = WorkFileStore(tempDir)
         workRepository = WorkRepository(
             database = database,
@@ -60,7 +91,108 @@ class DemoLibraryTest {
     @After
     fun tearDown() {
         database.close()
+        settingsScope.cancel()
+        TombstoneSigning.resetForTests()
+        context.getSharedPreferences("ao3_subscription_watermarks", Context.MODE_PRIVATE).edit().clear().commit()
+        context.getSharedPreferences("kudos_demo_fixtures", Context.MODE_PRIVATE).edit().clear().commit()
         tempDir.toFile().deleteRecursively()
+    }
+
+    @Test
+    fun searchFixtureHasSeparateChaptersAndOriginalSearchTermsEvenOnAnExistingDemo() = runTest {
+        DemoLibrary.seed(database, workRepository, queueRepository, fileStore, clock = { fixedNow })
+        val works = database.workDao().getAll()
+        val journey = works.single { it.title == "The Long Way Down" }
+        val sodium = works.single { it.title == "Sodium Lights" }
+        assertEquals("7/18", journey.chapters)
+
+        fun verifySearchEpub() {
+            ZipFile(fileStore.workEpubPath(journey.id).toFile()).use { zip ->
+                fun text(name: String) = zip.getInputStream(zip.getEntry(name)).bufferedReader().use { it.readText() }
+                assertEquals("mimetype", zip.entries().nextElement().name)
+                assertEquals(ZipEntry.STORED, zip.getEntry("mimetype").method)
+                val opf = Jsoup.parse(text("OEBPS/content.opf"), "", Parser.xmlParser())
+                val hrefs = opf.select("spine itemref").map { ref ->
+                    opf.selectFirst("manifest item[id=${ref.attr("idref")}]")!!.attr("href")
+                }
+                assertEquals(9, hrefs.size)
+                val nav = Jsoup.parse(text("OEBPS/nav.xhtml"), "", Parser.xmlParser()).select("nav a")
+                assertEquals(hrefs, nav.map { it.attr("href") })
+                val ncx = Jsoup.parse(text("OEBPS/toc.ncx"), "", Parser.xmlParser())
+                assertEquals(hrefs, ncx.select("navPoint content").map { it.attr("src") })
+                val sections = ReaderSectionBuilder.build(
+                    nav.mapIndexed { index, link -> ReaderSectionBuilder.RawTOCEntry(link.text(), index) }, hrefs
+                )
+                assertEquals(7, sections.storyChapterCount)
+                assertEquals(ReaderSectionKind.PREFACE, sections.first().kind)
+                assertEquals(ReaderSectionKind.AFTERWORD, sections.last().kind)
+                assertEquals((1..7).toList(), sections.filter { it.kind == ReaderSectionKind.CHAPTER }.map { it.storyChapterIndex })
+                val bodies = hrefs.map { Jsoup.parse(text("OEBPS/$it")).body().text().lowercase() }
+                assertTrue(bodies.all { Regex("\\blantern\\b").containsMatchIn(it) })
+                assertEquals(listOf(2, 6), bodies.indices.filter { Regex("\\bcompass\\b").containsMatchIn(bodies[it]) })
+                assertTrue(Regex("\\ba\\b").findAll(bodies[3]).count() > 200)
+            }
+        }
+        verifySearchEpub()
+        ZipFile(fileStore.workEpubPath(sodium.id).toFile()).use { zip ->
+            val opf = zip.getInputStream(zip.getEntry("OEBPS/content.opf")).bufferedReader().use { it.readText() }
+            assertEquals(1, Jsoup.parse(opf, "", Parser.xmlParser()).select("spine itemref").size)
+        }
+        // An emulator that already has the old demo must gain the fixture too.
+        fileStore.writeWorkEpub(journey.id, EpubBuilder.buildEpub(journey.title, "<p>Old demo.</p>"))
+        DemoLibrary.seed(database, workRepository, queueRepository, fileStore, clock = { fixedNow })
+        verifySearchEpub()
+        assertEquals(journey.lastSpineIndex, database.workDao().getAll().single { it.id == journey.id }.lastSpineIndex)
+    }
+
+    @Test
+    fun subscriptionFixturesHaveTwoUnreadWorksAndOneSeenWorkAndKeepMarkAllSeen() = runTest {
+        DemoLibrary.seed(database, workRepository, queueRepository, fileStore, context, settingsRepository, { fixedNow })
+        val works = listOf(
+            Triple(45678901L, "ao3_demo_subscription_pink", "5/?"),
+            Triple(12345L, "ao3_demo_subscription_another", "8/12"),
+            Triple(999000002L, "ao3_demo_subscription_cranes", "1/1")
+        ).map { (id, fixture, chapters) ->
+            val html = context.assets.open("fixtures/$fixture.html").bufferedReader().use { it.readText() }
+            val metadata = AO3WorkMetadataParser().parse(html)
+            assertEquals(chapters, metadata.chapters)
+            AO3WorkSummary(id, fixture, emptyList(), metadata.fandoms, metadata.rating, metadata.warnings, metadata.categories,
+                chapters = metadata.chapters)
+        }
+        val namespace = SubscriptionWatermarks.NAMESPACE_SUBSCRIPTIONS
+        val watermarks = SubscriptionWatermarks.baseline(context, namespace, works)
+        assertEquals(listOf(2, 3, 0), works.map { SubscriptionWatermarks.newChapterCount(it, watermarks) })
+        SubscriptionWatermarks.markAllSeen(context, namespace, works)
+        DemoLibrary.seed(database, workRepository, queueRepository, fileStore, context, settingsRepository, { fixedNow })
+        val after = SubscriptionWatermarks.load(context, namespace)
+        assertEquals(listOf(0, 0, 0), works.map { SubscriptionWatermarks.newChapterCount(it, after) })
+    }
+
+    @Test
+    fun pairedDemoDeviceIsDisposableAndRevokeSurvivesReseedingForBothReasons() = runTest {
+        for (reason in KeyRevocationReason.entries) {
+            context.getSharedPreferences("kudos_demo_fixtures", Context.MODE_PRIVATE).edit().clear().commit()
+            DemoLibrary.seed(database, workRepository, queueRepository, fileStore, context, settingsRepository, { fixedNow })
+            val trustStore = TombstoneTrustStore(settingsRepository) { fixedNow }
+            val device = trustStore.trustedDevices().single()
+            assertEquals("Demo reading tablet", device.label)
+            assertEquals(Instant.parse("2026-07-01T12:00:00Z"), device.trustedAt)
+            assertNotNull(TombstoneSigning.normalizePublicKeyHex(device.publicKeyHex))
+            assertFalse(TombstoneSigning.isOwnPublicKey(device.publicKeyHex))
+            assertTrue(trustStore.isTrusted(device.publicKeyHex))
+            assertTrue(java.time.Duration.between(device.trustedAt, fixedNow) > trustStore.undoWindow)
+            DemoLibrary.seed(database, workRepository, queueRepository, fileStore, context, settingsRepository, { fixedNow })
+            assertEquals(listOf(device), trustStore.trustedDevices())
+            val revocation = KeyRevocationService(trustStore, database, workRepository)
+            assertEquals(0, revocation.worksDeletedByCount(device.publicKeyHex))
+            assertTrue(revocation.revoke(device.publicKeyHex, reason))
+            assertEquals(0, revocation.restoreWorksDeletedBy(device.publicKeyHex))
+            assertFalse(trustStore.isTrusted(device.publicKeyHex))
+            assertEquals(reason == KeyRevocationReason.STOLEN_OR_COMPROMISED,
+                device.publicKeyHex in settingsRepository.revokedTombstonePublicKeysSnapshot())
+            DemoLibrary.seed(database, workRepository, queueRepository, fileStore, context, settingsRepository, { fixedNow })
+            assertTrue(trustStore.trustedDevices().isEmpty())
+        }
     }
 
     @Test

@@ -1,19 +1,31 @@
 package io.github.cidy02.kudos.app
 
+import android.content.Context
 import android.content.Intent
 import androidx.room.withTransaction
+import com.google.crypto.tink.subtle.Ed25519Sign
+import io.github.cidy02.kudos.account.SubscriptionWatermark
+import io.github.cidy02.kudos.account.SubscriptionWatermarks
+import io.github.cidy02.kudos.backup.TombstoneTrustStore
+import io.github.cidy02.kudos.backup.toLowerHex
 import io.github.cidy02.kudos.core.model.SavedWork
 import io.github.cidy02.kudos.data.local.KudosDatabase
 import io.github.cidy02.kudos.data.local.entity.QueueTagCrossRef
 import io.github.cidy02.kudos.data.local.entity.TagEntity
 import io.github.cidy02.kudos.data.local.entity.WorkEntity
+import io.github.cidy02.kudos.data.preferences.SettingsRepository
 import io.github.cidy02.kudos.files.WorkFileStore
 import io.github.cidy02.kudos.library.ReadingQueueRepository
 import io.github.cidy02.kudos.works.WorkRepository
 import io.github.cidy02.kudos.works.WorkTags
 import io.github.cidy02.kudos.works.converters.EpubBuilder
+import java.io.ByteArrayOutputStream
 import java.time.Instant
 import java.util.UUID
+import java.util.zip.CRC32
+import java.util.zip.ZipEntry
+import java.util.zip.ZipInputStream
+import java.util.zip.ZipOutputStream
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
@@ -191,6 +203,7 @@ object DemoLibrary {
 
     suspend fun seed(
         container: KudosAppContainer,
+        context: Context,
         clock: () -> Instant = { Instant.now() }
     ) {
         seed(
@@ -198,19 +211,22 @@ object DemoLibrary {
             workRepository = container.workRepository,
             readingQueueRepository = container.readingQueueRepository,
             fileStore = container.workFileStore,
+            context = context,
+            settingsRepository = container.settingsRepository,
             clock = clock
         )
     }
 
     suspend fun seedIfRequested(
         container: KudosAppContainer,
+        context: Context,
         intent: Intent?,
         clock: () -> Instant = { Instant.now() }
     ): Boolean {
         val isRequested = intent?.getBooleanExtra("kudosDemoLibrary", false) == true ||
             intent?.getStringExtra("kudosDemoLibrary").equals("true", ignoreCase = true)
         if (!isRequested) return false
-        seed(container, clock)
+        seed(container, context, clock)
         return true
     }
 
@@ -219,9 +235,13 @@ object DemoLibrary {
         workRepository: WorkRepository,
         readingQueueRepository: ReadingQueueRepository,
         fileStore: WorkFileStore? = null,
+        context: Context? = null,
+        settingsRepository: SettingsRepository? = null,
         clock: () -> Instant = { Instant.now() }
     ) {
         seedMutex.withLock {
+            // Watermarks must precede metadata enrichment's first-visit baseline.
+            if (context != null) seedPreferences(context, settingsRepository)
             database.withTransaction {
                 seedContents(database, workRepository, readingQueueRepository, fileStore, clock)
             }
@@ -237,6 +257,10 @@ object DemoLibrary {
     ) {
         val allWorks = database.workDao().getAllIncludingDeleted()
         if (allWorks.any { it.title == SAMPLES[0].title }) {
+            // Upgrade an already-installed demo's old single-spine search fixture.
+            allWorks.firstOrNull { it.title == "The Long Way Down" && it.hasEpub }?.let {
+                writePlaceholderEpub(it.id, it.title, fileStore)
+            }
             seedRecentlyDeleted(database, workRepository, fileStore, clock)
             return
         }
@@ -435,6 +459,10 @@ object DemoLibrary {
         fileStore: WorkFileStore?
     ) {
         if (fileStore == null) return
+        if (title == "The Long Way Down") {
+            fileStore.writeWorkEpub(workId, buildSearchEpub(title))
+            return
+        }
         val bodyHtml = """
             <p>The city was quiet, but never dark. Streetlamps hummed along the pavement, casting sharp amber shadows across the rain-slicked stones.</p>
             <p>Footsteps echoed in the narrow alleyway between old brick buildings. A solitary breeze carried the faint scent of ozone and diesel fuel.</p>
@@ -442,5 +470,96 @@ object DemoLibrary {
         """.trimIndent()
         val epubBytes = EpubBuilder.buildEpub(title, bodyHtml)
         fileStore.writeWorkEpub(workId, epubBytes)
+    }
+
+    private suspend fun seedPreferences(context: Context, settingsRepository: SettingsRepository?) {
+        val namespace = SubscriptionWatermarks.NAMESPACE_SUBSCRIPTIONS
+        val watermarks = SubscriptionWatermarks.load(context, namespace).toMutableMap()
+        // Metadata fixtures post 5, 8 and 1 chapters respectively. Never reset Mark All as Seen.
+        for ((id, count) in listOf(45678901L to 3, 12345L to 5, 999000002L to 1)) {
+            watermarks.putIfAbsent(id, SubscriptionWatermark(count, Instant.parse("2026-07-01T12:00:00Z").toEpochMilli()))
+        }
+        SubscriptionWatermarks.save(context, namespace, watermarks)
+
+        if (settingsRepository == null) return
+        val prefs = context.getSharedPreferences("kudos_demo_fixtures", Context.MODE_PRIVATE)
+        if (!prefs.getBoolean("pairedDeviceSeeded", false)) {
+            // A fresh peer, never the actual device key. Only its public key survives;
+            // no fixture can sign a deletion or pair another device with its private key.
+            val pair = Ed25519Sign.KeyPair.newKeyPair()
+            val hex = pair.publicKey.toLowerHex()
+            pair.privateKey.fill(0)
+            val store = TombstoneTrustStore(settingsRepository) { Instant.parse("2026-07-01T12:00:00Z") }
+            if (store.trust(hex, "Demo reading tablet")) {
+                // Remembers the seed even after either revoke reason removes the trust row.
+                prefs.edit().putBoolean("pairedDeviceSeeded", true).apply()
+            }
+        }
+    }
+
+    /** Reuse the real builder's XHTML/style/container, with separate demo-only spine items. */
+    private fun buildSearchEpub(title: String): ByteArray {
+        val chapters = listOf(EpubBuilder.Chapter("Preface", "<p>A lantern marks the start of this original practice journey.</p>")) +
+            (1..7).map { number ->
+                val body = "<p>A lantern waits beside platform $number. The keeper checks the clock and records the weather.</p>" +
+                    (if (number == 2 || number == 6) "<p>The compass points toward the quiet stairwell.</p>" else "") +
+                    (if (number == 3) List(240) { "<p>A bell rings. A keeper writes a small note.</p>" }.joinToString("\n") else "")
+                EpubBuilder.Chapter("Chapter $number", body)
+            } + EpubBuilder.Chapter("Afterword", "<p>The lantern is put away. These invented notes close the practice journey.</p>")
+        val entries = linkedMapOf<String, ByteArray>()
+        for ((index, chapter) in chapters.withIndex()) {
+            val generated = EpubBuilder.buildEpub(title, "<h1>${chapter.title}</h1>${chapter.bodyHtml}")
+            ZipInputStream(generated.inputStream()).use { zip ->
+                while (true) {
+                    val entry = zip.nextEntry ?: break
+                    val bytes = zip.readBytes()
+                    if (entry.name == "OEBPS/content.html") {
+                        entries["OEBPS/section-$index.xhtml"] = bytes
+                    } else if (index == 0) {
+                        entries[entry.name] = bytes
+                    }
+                }
+            }
+        }
+        val manifest = chapters.indices.joinToString("\n") {
+            "<item id=\"section-$it\" href=\"section-$it.xhtml\" media-type=\"application/xhtml+xml\"/>"
+        }
+        val spine = chapters.indices.joinToString("\n") { "<itemref idref=\"section-$it\"/>" }
+        entries["OEBPS/content.opf"] = entries.getValue("OEBPS/content.opf").toString(Charsets.UTF_8)
+            .replace("<item id=\"content\" href=\"content.html\" media-type=\"application/xhtml+xml\"/>", manifest +
+                "\n<item id=\"nav\" href=\"nav.xhtml\" media-type=\"application/xhtml+xml\" properties=\"nav\"/>")
+            .replace("<itemref idref=\"content\"/>", spine).toByteArray(Charsets.UTF_8)
+        val navPoints = chapters.mapIndexed { index, chapter ->
+            "<navPoint id=\"section-$index\" playOrder=\"${index + 1}\"><navLabel><text>${chapter.title}</text></navLabel>" +
+                "<content src=\"section-$index.xhtml\"/></navPoint>"
+        }.joinToString("\n")
+        entries["OEBPS/toc.ncx"] = entries.getValue("OEBPS/toc.ncx").toString(Charsets.UTF_8)
+            .replace(Regex("<navMap>[\\s\\S]*?</navMap>"), "<navMap>$navPoints</navMap>").toByteArray(Charsets.UTF_8)
+        val links = chapters.mapIndexed { index, chapter ->
+            "<li><a href=\"section-$index.xhtml\">${chapter.title}</a></li>"
+        }.joinToString("\n")
+        entries["OEBPS/nav.xhtml"] = ("<?xml version=\"1.0\" encoding=\"UTF-8\"?>" +
+            "<html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\">" +
+            "<head><title>Contents</title></head><body><nav epub:type=\"toc\"><ol>$links</ol></nav></body></html>")
+            .toByteArray(Charsets.UTF_8)
+        return ByteArrayOutputStream().use { output ->
+            ZipOutputStream(output).use { zip ->
+                // EPUB requires mimetype first and uncompressed, as in EpubBuilder.
+                val mime = entries.remove("mimetype")!!
+                zip.putNextEntry(ZipEntry("mimetype").apply {
+                    method = ZipEntry.STORED
+                    size = mime.size.toLong()
+                    crc = CRC32().apply { update(mime) }.value
+                })
+                zip.write(mime)
+                zip.closeEntry()
+                for ((name, bytes) in entries) {
+                    zip.putNextEntry(ZipEntry(name))
+                    zip.write(bytes)
+                    zip.closeEntry()
+                }
+            }
+            output.toByteArray()
+        }
     }
 }
