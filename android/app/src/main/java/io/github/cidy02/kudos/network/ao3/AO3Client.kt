@@ -43,6 +43,16 @@ interface AO3Client {
 }
 
 interface AO3FormPostClient {
+    suspend fun postFormChecked(
+        url: String,
+        formFields: List<Pair<String, String>>,
+        headers: Map<String, String>,
+        beforeSend: () -> Unit
+    ): AO3Result<AO3HttpResponse> {
+        beforeSend()
+        return postForm(url, formFields, headers)
+    }
+
     suspend fun postForm(
         url: String,
         formFields: List<Pair<String, String>>,
@@ -139,15 +149,27 @@ class OkHttpAO3Client(
         )
     }
 
+    override suspend fun postFormChecked(
+        url: String,
+        formFields: List<Pair<String, String>>,
+        headers: Map<String, String>,
+        beforeSend: () -> Unit
+    ): AO3Result<AO3HttpResponse> = executeWithRetry(
+        AO3HttpMethod.POST, url.toHttpUrl().toString(), headers,
+        AO3FormEncoding.encode(formFields), beforeSend
+    )
+
     private suspend fun executeWithRetry(
         method: AO3HttpMethod,
         url: String,
         headers: Map<String, String>,
-        formBody: String? = null
+        formBody: String? = null,
+        beforeSend: () -> Unit = {}
     ): AO3Result<AO3HttpResponse> {
         var retryNumber = 0
         while (true) {
             val result = coordinator.coordinate {
+                beforeSend()
                 performOnce(method, url, headers, formBody)
             }
             if (result is AO3Result.Success) return result

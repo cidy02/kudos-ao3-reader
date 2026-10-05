@@ -1,5 +1,7 @@
 # Brief 3am result
 
+**Follow-up:** [Brief 3an](3an-result.md) replaces the Unsubscribe fallback below; its implementation is awaiting Claude’s build/test review. The observations below describe the 3am landing.
+
 **Landing note (Claude, 2026-10-05).** Landed with one change: the Works, Series and Authors
 pills had been redrawn as stock Material filter chips in Material's default lavender; they are
 the page's own pills again, as the row of filters under them. Gate green (1,446 tests). Seen on

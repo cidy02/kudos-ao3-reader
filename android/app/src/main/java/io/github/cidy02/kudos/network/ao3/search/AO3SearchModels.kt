@@ -43,7 +43,9 @@ data class AO3SearchPage(
     /** AO3's own result-count heading, when the page carries one. */
     val summary: AO3ResultSummary? = null,
     val bookmarkDetails: List<io.github.cidy02.kudos.network.ao3.author.AO3AuthorBookmark> = emptyList(),
-    val readingEntries: List<io.github.cidy02.kudos.network.ao3.account.AO3ReadingEntry> = emptyList()
+    val readingEntries: List<io.github.cidy02.kudos.network.ao3.account.AO3ReadingEntry> = emptyList(),
+    /** Actions from each subscription row's adjacent dd, never from a work id. */
+    val unsubscribePaths: Map<Long, String> = emptyMap()
 )
 
 /**

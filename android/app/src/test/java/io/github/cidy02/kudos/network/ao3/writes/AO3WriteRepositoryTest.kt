@@ -241,10 +241,12 @@ internal class FakeAuthenticatedClient(
     private val getQueue = ArrayDeque<AO3Result<AO3HttpResponse>>().apply { addAll(getResults) }
     private val postQueue = ArrayDeque<AO3Result<AO3HttpResponse>>().apply { addAll(postResults) }
     val posts = mutableListOf<RecordedPost>()
+    val gets = mutableListOf<String>()
 
     override fun username(): String? = username
 
     override suspend fun getAuthenticated(url: String): AO3Result<AO3HttpResponse> {
+        gets += url
         return getQueue.removeFirst()
     }
 
