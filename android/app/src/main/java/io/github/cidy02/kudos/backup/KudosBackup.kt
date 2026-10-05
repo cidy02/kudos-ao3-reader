@@ -109,6 +109,11 @@ data class BackupMergeResult(
     val adoptedIncomingTombstoneIds: Set<String> = emptySet(),
     /** Captured rows explicitly swept by merge; later-created searches are never candidates. */
     val removedSavedSearches: List<SavedSearch> = emptyList(),
+    /** Replace omissions from the captured snapshot, never an apply-time database sweep. */
+    val removedBookmarks: List<Bookmark> = emptyList(),
+    val removedCollections: List<WorkCollection> = emptyList(),
+    val removedReadingQueues: List<ReadingQueue> = emptyList(),
+    val removedAnnotations: List<ReadingAnnotation> = emptyList(),
     val removedReadingSessions: List<ReadingSessionEntity> = emptyList(),
     val removedReadingFavorites: List<ReadingFavoriteEntity> = emptyList(),
     val removedFandomReadWatermarks: List<FandomReadWatermarkEntity> = emptyList(),

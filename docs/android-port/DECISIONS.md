@@ -483,3 +483,17 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
 - **2026-10-04 · Owner: push as you go.** Asked whether to push after each landing, the owner
   said "you shoudl push as you go". Working branches only, plain pushes; never `main`, never
   forced, never the security-fixes branches.
+- **2026-10-05 · Replace Library removes only what it saw when it started.** It swept whatever
+  the database held when it finished, so a saved link or search made while it ran was deleted
+  outright, and a work, collection, queue or note made meanwhile went to Recently Deleted. Now
+  the merge names the rows it dropped and only those are touched. Reverse:
+  `removeRecordsAbsentFromReplaceSnapshot` in `backup/BackupRepository.kt`.
+- **2026-10-05 · A field Android does not know inside a record survives an Android sync.** A
+  later iOS version can add a field to a work or a collection; an older Android build rewrote
+  the folder's manifest without it, and iOS then took Android's newer copy of the record with
+  the field at its default. Android now carries such keys over from the manifest it replaces.
+  No format change. A backup file made on Android cannot do this: it has nothing to carry
+  from. Reverse: `carryUnknownRecordKeys` in `backup/SyncRepository.kt`.
+- **2026-10-05 · Restoring the same backup twice does not copy an identical font again.**
+  Android only; iOS still adds a copy each time. Reverse: `mergeFonts` in
+  `backup/BackupMergeService.kt`.

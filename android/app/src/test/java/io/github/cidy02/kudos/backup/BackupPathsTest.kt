@@ -20,6 +20,19 @@ class BackupPathsTest {
         assertTrue(BackupPaths.parseOriginalFileName("ABCDEFAB-ABCD-4BCD-8BCD-ABCDEFABCDEF.pdf") != null)
     }
 
+    @Test
+    fun restoredFamilyMatchesTheCollisionNamesIncludingUnicodeAndLengthCaps() {
+        listOf("reader.otf", "Café.ttf", "x".repeat(124) + ".otf").forEach { original ->
+            val first = BackupPaths.uniqueSuffixedFontFileName(original, setOf(original))
+            val second = BackupPaths.uniqueSuffixedFontFileName(original, setOf(original, first))
+            assertTrue(BackupPaths.isRestoredFontFileName(first, original))
+            assertTrue(BackupPaths.isRestoredFontFileName(second, original))
+            assertFalse(BackupPaths.isRestoredFontFileName(first, "unrelated.otf"))
+            assertFalse(BackupPaths.isRestoredFontFileName(original, original))
+        }
+        assertTrue(BackupPaths.isRestoredFontFileName("Cafe\u0301-restored-1.ttf", "Café.ttf"))
+    }
+
     /**
      * [BackupPaths.uniqueSuffixedFontFileName] is a tight CPU loop with no
      * coroutine suspension points, so [kotlinx.coroutines.withTimeout] cannot

@@ -92,7 +92,7 @@ class BackupRepository(
         withContext(Dispatchers.IO) {
             val pack = BackupImporter.importV2Zip(bytes)
             TombstoneLocalMigration.runIfNeeded(database, settingsRepository)
-            val current = captureLibrarySnapshot(pack.fontFilesByFileName.keys)
+            val current = captureLibrarySnapshot(pack.fontFilesByFileName.keys, pack.fontFilesByFileName)
             val merge = mergePackage(current, pack, mode)
             applyMergeResult(merge)
             restoreOriginals(pack.originalFilesByName, merge.workIdRemap)
@@ -108,7 +108,7 @@ class BackupRepository(
         withContext(Dispatchers.IO) {
             BackupFontValidator.validate(pack.fontFilesByFileName)
             TombstoneLocalMigration.runIfNeeded(database, settingsRepository)
-            val current = captureLibrarySnapshot(pack.fontFilesByFileName.keys)
+            val current = captureLibrarySnapshot(pack.fontFilesByFileName.keys, pack.fontFilesByFileName)
             val merge = mergePackage(current, pack, mode, normalizeQueuePreservation)
             applyMergeResult(merge)
             restoreOriginals(pack.originalFilesByName, merge.workIdRemap)
@@ -225,7 +225,8 @@ class BackupRepository(
     }
 
     suspend fun captureLibrarySnapshot(
-        incomingFontFileNames: Set<String> = emptySet()
+        incomingFontFileNames: Set<String> = emptySet(),
+        incomingFontFiles: Map<String, ByteArray> = emptyMap()
     ): BackupLibrarySnapshot = withContext(Dispatchers.IO) {
         // Include soft-deleted works so export carries Recently Deleted state.
         val works = database.workDao().getAllIncludingDeleted().map { it.toDomain() }
@@ -260,7 +261,7 @@ class BackupRepository(
             .toSet()
         // Include orphan-but-valid local filenames in the collision set. Restore
         // must never overwrite bytes merely because their DB row is missing.
-        val fontFiles = fontFileStore.readAllFontFiles(incomingFontFileNames)
+        val fontFiles = fontFileStore.readAllFontFiles(incomingFontFileNames, incomingFontFiles)
 
         BackupLibrarySnapshot(
             works = works,
@@ -287,7 +288,7 @@ class BackupRepository(
         val snapshot = merge.snapshot
 
         if (merge.mode == BackupImportMode.REPLACE_LIBRARY) {
-            removeRecordsAbsentFromReplaceSnapshot(snapshot)
+            removeRecordsAbsentFromReplaceSnapshot(merge)
         }
 
         // Works first so cross-refs have targets.
@@ -473,46 +474,17 @@ class BackupRepository(
      * tombstones. Omitted collections and custom queues keep their memberships
      * for 90 days; annotations keep their rows marked pending deletion (iOS).
      */
-    private suspend fun removeRecordsAbsentFromReplaceSnapshot(snapshot: BackupLibrarySnapshot) {
+    private suspend fun removeRecordsAbsentFromReplaceSnapshot(merge: BackupMergeResult) {
         val now = clock()
-        val keepWorks = snapshot.works
-            .map { BackupPaths.normalizeIdForComparison(it.id) }
-            .toSet()
-        database.workDao().getAllIncludingDeleted().forEach { entity ->
-            if (BackupPaths.normalizeIdForComparison(entity.id) !in keepWorks) {
-                if (!entity.isDeleted) {
-                    database.workDao().upsert(
-                        entity.copy(
-                            isDeleted = true,
-                            deletedAt = now,
-                            permanentDeletionScheduledAt = now.plus(WorkRepository.RECOVERY_WINDOW)
-                        )
-                    )
-                }
+        // Works are already sent to Recently Deleted by merge. Saved searches use the
+        // existing guarded removal below. Neither needs a second absence sweep here.
+        database.withTransaction {
+            merge.removedBookmarks.forEach { captured ->
+                val held = database.bookmarkDao().getById(captured.id)?.toDomain()
+                if (held == captured) database.bookmarkDao().deleteById(captured.id)
             }
-        }
-
-        val keepBookmarkUrls = snapshot.bookmarks.mapTo(mutableSetOf()) { it.urlString }
-        database.bookmarkDao().getAll().forEach { entity ->
-            if (entity.urlString !in keepBookmarkUrls) {
-                database.bookmarkDao().deleteById(entity.id)
-            }
-        }
-
-        val keepSavedSearches = snapshot.savedSearches
-            .map { BackupPaths.normalizeIdForComparison(it.id) }
-            .toSet()
-        database.savedSearchDao().getAll().forEach { entity ->
-            if (BackupPaths.normalizeIdForComparison(entity.id) !in keepSavedSearches) {
-                database.savedSearchDao().deleteById(entity.id)
-            }
-        }
-
-        val keepCollections = snapshot.collections
-            .map { BackupPaths.normalizeIdForComparison(it.id) }
-            .toSet()
-        database.collectionDao().getAllIncludingDeleted().forEach { entity ->
-            if (BackupPaths.normalizeIdForComparison(entity.id) !in keepCollections) {
+            merge.removedCollections.forEach { captured ->
+                val entity = database.collectionDao().getById(captured.id) ?: return@forEach
                 if (!entity.isDeleted) {
                     database.collectionDao().upsert(entity.copy(
                         isDeleted = true,
@@ -521,29 +493,21 @@ class BackupRepository(
                     ))
                 }
             }
-        }
-
-        val keepQueues = snapshot.readingQueues
-            .map { BackupPaths.normalizeIdForComparison(it.id) }
-            .toSet()
-        database.readingQueueDao().getAllQueues().forEach { entity ->
-            if (entity.kindRaw != ReadingQueueKind.SAVED_FOR_LATER &&
-                BackupPaths.normalizeIdForComparison(entity.id) !in keepQueues && !entity.isDeleted
-            ) {
-                database.readingQueueDao().upsertQueue(entity.copy(
-                    isDeleted = true,
-                    deletedAt = now,
-                    permanentDeletionScheduledAt = now.plus(WorkRepository.RECOVERY_WINDOW)
-                ))
+            merge.removedReadingQueues.forEach { captured ->
+                val entity = database.readingQueueDao().getQueueById(captured.id) ?: return@forEach
+                if (entity.kindRaw != ReadingQueueKind.SAVED_FOR_LATER && !entity.isDeleted) {
+                    database.readingQueueDao().upsertQueue(entity.copy(
+                        isDeleted = true,
+                        deletedAt = now,
+                        permanentDeletionScheduledAt = now.plus(WorkRepository.RECOVERY_WINDOW)
+                    ))
+                }
             }
-        }
-
-        val keepAnnotations = snapshot.annotations
-            .map { BackupPaths.normalizeIdForComparison(it.id) }
-            .toSet()
-        database.annotationDao().getAll().forEach { entity ->
-            if (BackupPaths.normalizeIdForComparison(entity.id) !in keepAnnotations && !entity.isPendingDeletion) {
-                database.annotationDao().upsert(entity.copy(isPendingDeletion = true, deletedAt = now))
+            merge.removedAnnotations.forEach { captured ->
+                val entity = database.annotationDao().getById(captured.id) ?: return@forEach
+                if (!entity.isPendingDeletion) {
+                    database.annotationDao().upsert(entity.copy(isPendingDeletion = true, deletedAt = now))
+                }
             }
         }
     }
