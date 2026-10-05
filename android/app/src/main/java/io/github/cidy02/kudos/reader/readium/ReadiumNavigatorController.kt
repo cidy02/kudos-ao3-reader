@@ -58,7 +58,11 @@ class ReadiumNavigatorController {
             Decoration(
                 id = annotation.id,
                 locator = locator,
-                style = Decoration.Style.Highlight(tint = tint, isActive = false)
+                style = if (annotation.colorRaw.equals("underline", ignoreCase = true)) {
+                    Decoration.Style.Underline(tint = tint, isActive = false)
+                } else {
+                    Decoration.Style.Highlight(tint = tint, isActive = false)
+                }
             )
         }
         withContext(Dispatchers.Main) {
@@ -94,6 +98,7 @@ class ReadiumNavigatorController {
                 "purple" -> Color.parseColor("#CE93D8")
                 "blue" -> Color.parseColor("#64B5F6")
                 "orange" -> Color.parseColor("#FFB74D")
+                "underline" -> Color.rgb(89, 140, 242)
                 else -> Color.parseColor("#FFF59D") // yellow default
             }
         }

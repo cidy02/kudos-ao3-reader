@@ -20,6 +20,8 @@ sealed interface ReaderUiState {
         /** Latest navigator position for bottom progress chrome (not a second save path). */
         val liveProgress: ReaderProgress? = null,
         val bookmarks: List<ReadingAnnotation> = emptyList(),
-        val highlights: List<ReadingAnnotation> = emptyList()
+        val highlights: List<ReadingAnnotation> = emptyList(),
+        /** Resolve against live highlights so colour/note changes do not leave an old snapshot. */
+        val editingAnnotationId: String? = null
     ) : ReaderUiState
 }

@@ -592,3 +592,10 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   client, and the first refusal stops the rest. AO3's own page sends every item in one request,
   which would be lighter on AO3; neither app does that. Noted for the owner, nothing changed
   because of it. (Brief 3as, in progress.)
+- **2026-10-05 · A tap on a highlight opens its editor, and the two selection pills are gone
+  from the reader's menu.** As on iOS: the editor shows the passage, a note to add or edit, the
+  colour (saved at once) and Delete Highlight. Highlight and Add Note are made from the text
+  selection menu, so the reader's menu holds iOS's five pills. An underline is now drawn as an
+  underline (it was drawn as yellow). Reverse: `reader/ReaderNoteEditor.kt`,
+  `reader/readium/ReaderHighlightDecorationListener.kt`, and the pill builder in
+  `reader/ReaderFanMenu.kt`.
