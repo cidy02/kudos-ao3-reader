@@ -38,6 +38,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.TextUnit
 import androidx.lifecycle.viewmodel.compose.viewModel
 import io.github.cidy02.kudos.app.ProvidePushedShellChrome
 import io.github.cidy02.kudos.network.ao3.account.AO3Collection
@@ -57,6 +58,7 @@ import io.github.cidy02.kudos.ui.subject.FilterButton
 import io.github.cidy02.kudos.ui.subject.SubjectKicker
 import io.github.cidy02.kudos.ui.subject.subjectPanel
 import io.github.cidy02.kudos.ui.subject.subjectScreenWash
+import io.github.cidy02.kudos.ui.subject.isAccessibilityFontScale
 
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.KeyboardArrowRight
@@ -274,6 +276,7 @@ fun AO3CollectionCard(
     modifier: Modifier = Modifier
 ) {
     val tokens = LocalKudosTokens.current
+    val accessibility = isAccessibilityFontScale()
     val eyebrow = if (collection.viewerIsOwner) {
         "You own"
     } else if (collection.maintainerNames.firstOrNull { it.isNotBlank() } != null) {
@@ -321,7 +324,16 @@ fun AO3CollectionCard(
             
             Column(verticalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.weight(1f)) {
                 if (eyebrow.isNotEmpty() || statusLabels.isNotEmpty()) {
-                    Row(
+                    if (accessibility) {
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            if (eyebrow.isNotEmpty()) {
+                                SubjectKicker(text = eyebrow, palette = palette, maxLines = Int.MAX_VALUE)
+                            }
+                            statusLabels.forEach { label ->
+                                SubjectChip(text = label, style = SubjectChipStyle.Neutral, palette = palette)
+                            }
+                        }
+                    } else Row(
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                         verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
                     ) {
@@ -338,7 +350,8 @@ fun AO3CollectionCard(
                     fontSize = 19.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = tokens.primaryInk,
-                    maxLines = 2,
+                    lineHeight = if (accessibility) 26.sp else TextUnit.Unspecified,
+                    maxLines = if (accessibility) Int.MAX_VALUE else 2,
                     overflow = TextOverflow.Ellipsis
                 )
             }
@@ -356,7 +369,8 @@ fun AO3CollectionCard(
                 text = "by ${collection.byline.ifEmpty { collection.maintainerNames.joinToString(", ") }}",
                 fontSize = 12.5.sp,
                 color = tokens.secondaryInk,
-                maxLines = 1,
+                lineHeight = if (accessibility) 18.sp else TextUnit.Unspecified,
+                maxLines = if (accessibility) Int.MAX_VALUE else 1,
                 overflow = TextOverflow.Ellipsis
             )
         }
@@ -366,13 +380,33 @@ fun AO3CollectionCard(
                 text = collection.summary,
                 fontSize = 12.5.sp,
                 color = tokens.secondaryInk,
-                maxLines = 2,
+                lineHeight = if (accessibility) 18.sp else TextUnit.Unspecified,
+                maxLines = if (accessibility) Int.MAX_VALUE else 2,
                 overflow = TextOverflow.Ellipsis
             )
         }
 
         if (metaFacts.isNotEmpty() || collection.updatedAtText.isNotBlank()) {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (accessibility) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (metaFacts.isNotEmpty()) {
+                        Text(
+                            text = metaFacts.joinToString(" · "),
+                            fontSize = 11.5.sp,
+                            lineHeight = 17.sp,
+                            color = tokens.secondaryInk
+                        )
+                    }
+                    if (collection.updatedAtText.isNotBlank()) {
+                        Text(
+                            text = collection.updatedAtText,
+                            fontSize = 11.5.sp,
+                            lineHeight = 17.sp,
+                            color = tokens.secondaryInk
+                        )
+                    }
+                }
+            } else Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 // The facts take the flexible width and may wrap; the date never wraps.
                 Text(
                     text = metaFacts.joinToString(" · "),
