@@ -41,13 +41,18 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
@@ -76,6 +81,7 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -84,13 +90,17 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalView
+import io.github.cidy02.kudos.ui.theme.setLightSystemBars
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
@@ -149,7 +159,25 @@ fun ReaderScreen(
         ?.preferences?.theme?.backgroundColor()
         ?: MaterialTheme.colorScheme.background
 
-    Surface(modifier = Modifier.fillMaxSize(), color = backgroundColor) {
+    // The reader owns the whole window, as on iOS: its page colour runs under the status and
+    // navigation bars, and everything inside keeps clear of them once. The shell used to pad
+    // the reader, so the app's ground showed in both strips, and the controls, which pad
+    // themselves, sat a bar's height too far in (iOS had and fixed the same double inset).
+    // The bars' icons follow the page while the reader is open; the app's theme takes them
+    // back when it closes.
+    val view = LocalView.current
+    val lightPage = backgroundColor.luminance() > 0.5f
+    val lightApp by rememberUpdatedState(!LocalKudosTokens.current.theme.isDarkFamily)
+    if (!view.isInEditMode) {
+        SideEffect { view.setLightSystemBars(lightPage) }
+        DisposableEffect(view) { onDispose { view.setLightSystemBars(lightApp) } }
+    }
+
+    Surface(
+        modifier = Modifier.fillMaxSize().background(backgroundColor)
+            .windowInsetsPadding(WindowInsets.systemBars.only(WindowInsetsSides.Vertical)),
+        color = backgroundColor
+    ) {
         when (val state = uiState) {
             ReaderUiState.Loading -> ReaderPageSkeleton(message = "Opening…")
             is ReaderUiState.Error -> ReaderErrorView(
@@ -752,42 +780,49 @@ private fun ReaderReading(
 
             if (showTocSheet) {
                 val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)
+                // The reader's theme, as its other sheets. Left to itself the sheet took
+                // Material's own lavender and its rows the app's colours.
                 ModalBottomSheet(
                     onDismissRequest = { showTocSheet = false },
-                    sheetState = sheetState
+                    sheetState = sheetState,
+                    containerColor = tokens.background,
+                    contentColor = tokens.primaryInk,
+                    dragHandle = { BottomSheetDefaults.DragHandle(color = tokens.secondaryInk) }
                 ) {
-                    ReaderContentsSheet(
-                        entries = tocEntries,
-                        bookmarks = state.bookmarks,
-                        highlights = state.highlights,
-                        initialTab = tocInitialTab,
-                        onSelectEntry = { entry ->
-                            val link = ReadiumTocAdapter.resolveLink(publication, entry)
-                            if (link != null) {
-                                navigatorController.go(link, animated = true)
+                    CompositionLocalProvider(LocalKudosTokens provides tokens) {
+                        ReaderContentsSheet(
+                            entries = tocEntries,
+                            bookmarks = state.bookmarks,
+                            highlights = state.highlights,
+                            initialTab = tocInitialTab,
+                            onSelectEntry = { entry ->
+                                val link = ReadiumTocAdapter.resolveLink(publication, entry)
+                                if (link != null) {
+                                    navigatorController.go(link, animated = true)
+                                }
+                                scope.launch {
+                                    sheetState.hide()
+                                    showTocSheet = false
+                                }
+                            },
+                            onSelectAnnotation = { annotation ->
+                                val locator = ReadiumNavigatorController.locatorFromJson(
+                                    annotation.locatorString
+                                )
+                                if (locator != null) {
+                                    navigatorController.go(locator, animated = true)
+                                }
+                                scope.launch {
+                                    sheetState.hide()
+                                    showTocSheet = false
+                                    viewModel.openHighlight(annotation.id)
+                                }
+                            },
+                            onDeleteAnnotation = { annotation ->
+                                showDeleteNoteConfirm = annotation
                             }
-                            scope.launch {
-                                sheetState.hide()
-                                showTocSheet = false
-                            }
-                        },
-                        onSelectAnnotation = { annotation ->
-                            val locator = ReadiumNavigatorController.locatorFromJson(
-                                annotation.locatorString
-                            )
-                            if (locator != null) {
-                                navigatorController.go(locator, animated = true)
-                            }
-                            scope.launch {
-                                sheetState.hide()
-                                showTocSheet = false
-                                viewModel.openHighlight(annotation.id)
-                            }
-                        },
-                        onDeleteAnnotation = { annotation ->
-                            showDeleteNoteConfirm = annotation
-                        }
-                    )
+                        )
+                    }
                 }
             }
 
