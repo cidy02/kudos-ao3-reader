@@ -67,7 +67,7 @@ class MainActivity : FragmentActivity() {
             if (isDemoRequested || onboardingExtra || syncOnboardingExtra) {
                 (application as KudosApplication).launchIo {
                     if (isDemoRequested) {
-                        DemoLibrary.seed(container)
+                        DemoLibrary.seed(container, applicationContext)
                     }
                     if (isDemoRequested || onboardingExtra) {
                         container.settingsRepository.setHasCompletedOnboarding(true)
@@ -102,7 +102,7 @@ class MainActivity : FragmentActivity() {
                 DemoNetwork.activate(applicationContext.assets)
                 val container = (application as KudosApplication).container
                 (application as KudosApplication).launchIo {
-                    DemoLibrary.seed(container)
+                    DemoLibrary.seed(container, applicationContext)
                     container.settingsRepository.setHasCompletedOnboarding(true)
                     container.settingsRepository.setHasPermanentlyDismissedSyncFolderOnboarding(true)
                 }
