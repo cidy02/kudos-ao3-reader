@@ -30,6 +30,7 @@ object Routes {
     const val Search = "search"
     const val AccountLogin = "account-login"
     const val AO3Collections = "ao3-collections"
+    const val WritingDrafts = "writing-drafts"
     const val Settings = "settings"
     const val Backup = "backup"
     const val QueueStorage = "queue_storage"
@@ -227,6 +228,7 @@ object Routes {
             AccountLogin -> "AO3 Login"
             AccountList -> "Account List"
             AO3Collections -> "My Collections"
+            WritingDrafts -> "Drafts"
             AO3CollectionItems -> "Collection items"
             AO3UserCollectionItems -> "Collection items"
             AO3CollectionModeration -> "Moderation"
@@ -289,6 +291,7 @@ object Routes {
         if (route == null) return false
         val base = route.substringBefore("?").substringBefore("/")
         return base == ReadingQueues.substringBefore("?").substringBefore("/") ||
+            base == WritingDrafts ||
             base == QueueDetail.substringBefore("?").substringBefore("/") ||
             base == Collections.substringBefore("?").substringBefore("/") ||
             base == CollectionDetail.substringBefore("?").substringBefore("/") ||
@@ -311,7 +314,7 @@ object Routes {
      * collection, Home and Library section lists), so those keep it.
      */
     private val tabBarHiddenBases: Set<String> = listOf(
-        AO3Collections, SeriesWorks, AuthorProfile, AuthorWorks, Comments, Reader,
+        AO3Collections, WritingDrafts, SeriesWorks, AuthorProfile, AuthorWorks, Comments, Reader,
         WorkDetail, // WorkDetailView
         BrowseFandoms, BrowseWorks, TagWorks, // FandomListView, NativeBrowseView
         Settings, Backup, QueueStorage, AvailabilitySweep, About, BugReport, // SettingsPageForm
