@@ -718,3 +718,10 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   Answer (Claude; the owner has not been asked): include it, as iOS has it; until Android has
   the work editor it opens AO3's new-work page in the in-app browser, as a tap on a draft opens
   that draft's edit page.
+- **2026-10-05 · The drafts notice says only what is true on Android.** iOS's notice reads
+  "AO3 deletes an unposted draft 30 days after you create it. Recovery copies stay on this
+  device and aren't deleted with it." Android keeps no recovery copies yet, so its notice has
+  the first sentence only, until it does. A deliberate, temporary difference from iOS's words
+  (answer to Codex on brief 3az; Claude's, the owner has not been asked). Rule for the port:
+  where iOS's words describe something Android does not have yet, those words are left out
+  and listed, not reworded.
