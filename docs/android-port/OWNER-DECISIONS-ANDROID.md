@@ -143,3 +143,17 @@ rather than remove anything without you:
 - **B.** Keep them.
 
 Until answered: kept.
+
+## 10. An emptied section on the Library's front page (both apps)
+
+Turn on a filter that hides every work in a section, and the Library's front page says, for
+that section, "You haven't saved any works for later. Add a work to Saved for Later to see it
+here." That is not true: the works are there, hidden by the filter. **iOS says the same**, so
+Android was left saying it too. Inside a section's own list both apps now show the proper card
+("Nothing matches this filter", how many works are hidden, which filter to drop).
+
+- **A.** On both apps, an emptied section on the front page says its works are hidden by the
+  filters.
+- **B.** Leave both as they are.
+
+Until answered: B.
