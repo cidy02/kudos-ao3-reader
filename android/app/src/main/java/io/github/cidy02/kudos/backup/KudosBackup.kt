@@ -13,6 +13,7 @@ import io.github.cidy02.kudos.core.model.WorkCollection
 import io.github.cidy02.kudos.data.local.entity.FandomReadWatermarkEntity
 import io.github.cidy02.kudos.data.local.entity.ReadingFavoriteEntity
 import io.github.cidy02.kudos.data.local.entity.ReadingSessionEntity
+import java.time.Instant
 
 data class KudosBackupPackage(
     val manifest: KudosBackupManifest,
@@ -94,12 +95,24 @@ data class BackupRestoreSummary(
     val membershipsSuppressed: Int = 0,
     val annotationsCreated: Int = 0,
     val annotationsUpdated: Int = 0,
-    val annotationsSuppressed: Int = 0
+    val annotationsSuppressed: Int = 0,
+    /** Apply-time conflicts; not part of the backup manifest. */
+    val concurrentRowsChanged: Int = 0,
+    /** Clockless, equal-clock or progress conflict: the archive value was deferred. */
+    val concurrentRowsDeferred: Int = 0
 )
 
 data class BackupMergeResult(
     val snapshot: BackupLibrarySnapshot,
     val summary: BackupRestoreSummary,
+    /** In-memory apply context only; never serialized into the backup. */
+    val capturedSnapshot: BackupLibrarySnapshot,
+    val sourceManifest: KudosBackupManifest,
+    val mergedAt: Instant,
+    /** Preserve the sync batch's existing final-batch normalization decision. */
+    val normalizeQueuePreservationForApply: Boolean = true,
+    /** IDs minted by this Replace's omissions, excluding local and adopted archive deletions. */
+    val replaceOmissionTombstoneIds: Set<String> = emptySet(),
     val epubFilesToWriteByWorkId: Map<String, ByteArray> = emptyMap(),
     val fontFilesToWriteByFileName: Map<String, ByteArray> = emptyMap(),
     val mode: BackupImportMode = BackupImportMode.RECONCILE,
