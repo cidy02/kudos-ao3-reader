@@ -46,7 +46,12 @@ internal object DemoNetwork {
             else -> DemoNetworkRoutes.fixtureName(url)
         }
         val bytes = name?.let { source.read(it) }
-        return bytes?.let { if (DemoNetworkRoutes.isDraftsPath(path)) demoDraftsPage(it, clock) else it }
+        return bytes?.let {
+            when {
+                DemoNetworkRoutes.isDraftsPath(path) -> demoDraftsPage(it, clock)
+                else -> demoChallengeCollectionPage(it, path)
+            }
+        }
     }
 
     const val EXTRA = "kudosDemoLibrary"
@@ -178,6 +183,15 @@ internal object DemoNetworkRoutes {
     /** Subscriptions share a path, so their type query selects the fixture. */
     fun fixtureName(url: HttpUrl): String? {
         val path = decodedPath(url)
+        // One answer per address for both OkHttp and the demo's read-only WebView.
+        if (path.trimEnd('/') == "/collections/summer_meme/gift_exchange/edit") return null // local 404 probes the meme
+        if (path.trimEnd('/') in setOf("/collections/summer_meme/prompt_meme", "/collections/summer_meme/prompt_meme/edit"))
+            return "ao3_demo_meme_settings"
+        if (path.trimEnd('/') in setOf("/collections/summer_meme", "/collections/summer_meme/profile"))
+            return "ao3_collection_show"
+        if (path.trimEnd('/') in setOf("/collections/rare_pairs", "/collections/rare_pairs/profile"))
+            return "ao3_demo_maintainers_show"
+        if (path.trimEnd('/') == "/collections/rare_pairs/signups") return null // one failed count, never a fake zero
         if (isDraftsPath(path)) return if (url.queryParameter("page") == "2") "ao3_demo_drafts_2" else "ao3_demo_drafts_1"
         if (Regex("^/users/[^/]+/subscriptions/?$").matches(path)) {
             return when (url.queryParameter("type")) {
@@ -279,8 +293,9 @@ internal class DemoNetworkInterceptor(
         val matchTarget = if (url.queryParameter("show_comments") == "true") "$path/comments" else path
         val name = if (matchTarget == path) DemoNetworkRoutes.fixtureName(url) else DemoNetworkRoutes.fixtureName(matchTarget)
         var bytes = name?.let { fixtures().read(it) }
-        if (bytes != null && chain.request().method == "GET" && DemoNetworkRoutes.isDraftsPath(path)) {
-            bytes = demoDraftsPage(bytes, clock)
+        if (bytes != null && chain.request().method == "GET") {
+            bytes = if (DemoNetworkRoutes.isDraftsPath(path)) demoDraftsPage(bytes, clock)
+                else demoChallengeCollectionPage(bytes, path.trimEnd('/'))
         }
         if (bytes != null && chain.request().method == "GET" &&
             Regex("^/users/[^/]+/subscriptions/?$").matches(path)
@@ -405,6 +420,20 @@ private class DemoCollectionForms {
     private fun refusal() = 422 to "<div class='flash error'>AO3 couldn't save the collection.</div>"
 }
 
+/** Reuse the existing collection answers, identically in the HTTP and browser demo paths. */
+private fun demoChallengeCollectionPage(bytes: ByteArray, path: String): ByteArray = when (path) {
+    "/collections/rare_pairs", "/collections/rare_pairs/profile" -> bytes.decodeToString()
+        .replace("winter_exchange", "rare_pairs").replace("Winter Exchange 2026", "Rare Pairs Week").encodeToByteArray()
+    "/collections/summer_meme", "/collections/summer_meme/profile" -> bytes.decodeToString()
+        .replace("winter_exchange", "summer_meme").replace("Winter Exchange 2026", "Summer Prompt Meme")
+        .replace("Gift Exchange", "Prompt Meme").replace("gift_exchange", "prompt_meme")
+        .replace("Winter Exchange Tags", "Summer Prompt Tags")
+        .replace("      <li><a href=\"/tag_sets/43\">Snowbound Characters</a></li>\n", "")
+        .replace("Sign-ups are open until February.", "Leave a summer prompt about an imaginary seaside town.")
+        .encodeToByteArray()
+    else -> bytes
+}
+
 /** One participant server page per collection, shared by membership decisions, invitation and leaving. */
 private class DemoCollectionParticipants {
     private val pages = mutableMapOf<String, String>()
@@ -419,8 +448,7 @@ private class DemoCollectionParticipants {
         // Winter's show stays with DemoCollectionForms so reveal/deletion mutations still work.
         if (slug == "rare_pairs" && request.method == "GET" && path in setOf(root, "$root/profile")) {
             val source = fixtures.read("ao3_demo_maintainers_show") ?: return 404 to ""
-            return 200 to source.decodeToString().replace("winter_exchange", slug)
-                .replace("Winter Exchange 2026", "Rare Pairs Week")
+            return 200 to demoChallengeCollectionPage(source, path).decodeToString()
         }
         if (path != participants && !path.startsWith("$participants/")) return null
         val source = fixtures.read(if (slug == "winter_exchange") "ao3_demo_moderation_participants" else "ao3_demo_maintainers_last_owner")

@@ -1,8 +1,9 @@
 package io.github.cidy02.kudos.network.ao3.account
 
-enum class AO3ChallengeKind(val displayName: String) {
-    GiftExchange("Gift Exchange"),
-    PromptMeme("Prompt Meme")
+/** [fieldPrefix] is the kind's segment in AO3's addresses and the prefix of its form's field names. */
+enum class AO3ChallengeKind(val displayName: String, val fieldPrefix: String) {
+    GiftExchange("Gift Exchange", "gift_exchange"),
+    PromptMeme("Prompt Meme", "prompt_meme")
 }
 
 data class AO3AuthorIdentity(

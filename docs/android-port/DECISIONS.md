@@ -782,3 +782,13 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   not send, Android sends it back exactly as served, as a browser would. This is deliberately
   more than iOS does. Codex is to list each thing iOS drops or changes, with whether it can
   alter a work the reader did not touch; that list goes to the owner and the iOS side.
+- **2026-10-05 · Challenge Settings is a native, read-only screen.** Manage › Challenge
+  Settings opened AO3's page; it now opens iOS's screen: the kind, the five dates as AO3 prints
+  them, the sign-up or prompt requirements, tag sets, the sign-up count, and the rows that lead
+  on. It reads at most four pages and sends nothing. Two rows show no value where iOS shows a
+  count, because Android does not make iOS's walk over every assignment page (the entry above,
+  and owner question 16). Five rows open AO3's page in the in-app browser until their own
+  screens exist (edit settings, prompts, tag set, sign-ups, assignments). Reverse:
+  `account/AO3ChallengeSettingsScreen.kt`, `account/AO3ChallengeSettingsState.kt`,
+  `network/ao3/account/AO3ChallengeSettings.kt`, `getChallengeSettings` in
+  `account/AO3CollectionDetailRepository.kt`.

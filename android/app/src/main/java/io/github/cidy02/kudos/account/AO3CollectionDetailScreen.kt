@@ -90,7 +90,8 @@ fun AO3CollectionDetailScreen(
     onOpenWebFallback: (String) -> Unit,
     onOpenModeration: (Boolean) -> Unit,
     onOpenSettings: () -> Unit,
-    onOpenMaintainers: () -> Unit
+    onOpenMaintainers: () -> Unit,
+    onOpenChallengeSettings: (Boolean) -> Unit
 ) {
     var show by remember(slug) { mutableStateOf<AO3CollectionShow?>(null) }
     var segment by remember(slug) { mutableStateOf(AO3CollectionSegment.Works) }
@@ -295,7 +296,8 @@ fun AO3CollectionDetailScreen(
                                 if (index > 0) SubjectRowSeparator()
                                 CollectionManageRow(action.label, action.url,
                                     { onOpenModeration(collectionShow.collection.viewerIsOwner) },
-                                    onOpenSettings, onOpenMaintainers, onOpenWebFallback)
+                                    onOpenSettings, onOpenMaintainers, onOpenWebFallback,
+                                    { onOpenChallengeSettings(collectionShow.collection.viewerIsOwner) })
                             }
                         }
                     }
@@ -374,12 +376,14 @@ fun AO3CollectionDetailScreen(
 
 @Composable
 internal fun CollectionManageRow(label: String, url: String, onOpenModeration: () -> Unit,
-    onOpenSettings: () -> Unit, onOpenMaintainers: () -> Unit, onOpenWebFallback: (String) -> Unit) {
+    onOpenSettings: () -> Unit, onOpenMaintainers: () -> Unit, onOpenWebFallback: (String) -> Unit,
+    onOpenChallengeSettings: () -> Unit = { onOpenWebFallback(url) }) {
     SubjectFormRow(label = label, showsDisclosure = true, onClick = {
         when (label) {
             "Moderation" -> onOpenModeration()
             "Collection Settings" -> onOpenSettings()
             "Maintainers" -> onOpenMaintainers()
+            "Challenge Settings" -> onOpenChallengeSettings()
             else -> onOpenWebFallback(url)
         }
     })

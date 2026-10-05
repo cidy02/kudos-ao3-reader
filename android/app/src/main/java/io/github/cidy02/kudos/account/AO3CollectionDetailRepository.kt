@@ -24,6 +24,12 @@ import io.github.cidy02.kudos.network.ao3.account.collectionNameFormatIsValid
 import io.github.cidy02.kudos.network.ao3.account.reservedCollectionNames
 import io.github.cidy02.kudos.network.ao3.search.AO3SearchPage
 import io.github.cidy02.kudos.network.ao3.search.AO3SearchParser
+import io.github.cidy02.kudos.network.ao3.account.AO3ChallengeKind
+import io.github.cidy02.kudos.network.ao3.account.AO3ChallengeSettingsPage
+import io.github.cidy02.kudos.network.ao3.account.AO3ChallengeSettingsParser
+import io.github.cidy02.kudos.network.ao3.account.ChallengeSettingsDestinations
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
@@ -42,6 +48,55 @@ class AO3CollectionDetailRepository(
      */
     private val parseDispatcher: CoroutineDispatcher = Dispatchers.Default
 ) {
+    /** Corrected 3ba: at most four sequential page reads; never read any assignment page. */
+    suspend fun getChallengeSettings(slug: String): AO3Result<AO3ChallengeSettingsPage> {
+        val generation = authRepository.generation.value
+        val parser = AO3ChallengeSettingsParser()
+        fun checkSession() {
+            if (generation != authRepository.generation.value) throw CancellationException()
+        }
+        val gift = fetch(ChallengeSettingsDestinations.challengeSettingsEditView(slug, AO3ChallengeKind.GiftExchange)) {
+            parser.parseSettings(it, AO3ChallengeKind.GiftExchange)
+        }
+        checkSession()
+        val settings = when (gift) {
+            is AO3Result.Success -> gift.value
+            is AO3Result.Failure -> {
+                if (gift.error != AO3Error.NotFound && gift.error !is AO3Error.Parse) return gift
+                when (val meme = fetch(ChallengeSettingsDestinations.challengeSettingsEditView(slug, AO3ChallengeKind.PromptMeme)) {
+                    parser.parseSettings(it, AO3ChallengeKind.PromptMeme)
+                }) {
+                    is AO3Result.Failure -> return meme
+                    is AO3Result.Success -> meme.value
+                }
+            }
+        }
+        checkSession()
+        val tags = when (val result = fetch(ChallengeSettingsDestinations.profile(slug), parser::parseTagSets)) {
+            is AO3Result.Success -> result.value
+            is AO3Result.Failure -> emptyList()
+        }
+        checkSession()
+        var count: Int? = null
+        if (settings.kind == AO3ChallengeKind.GiftExchange) {
+            val first = fetch(ChallengeSettingsDestinations.signUpPage(slug)) { parser.parseSignUpCount(it) }
+            checkSession()
+            if (first is AO3Result.Success) {
+                count = if (first.value.totalPages == 1) first.value.count else {
+                    val lastPage = first.value.totalPages
+                    when (val last = fetch(ChallengeSettingsDestinations.signUpPage(slug, lastPage)) {
+                        parser.parseSignUpCount(it, lastPage)
+                    }) {
+                        is AO3Result.Failure -> null
+                        is AO3Result.Success -> first.value.count * (lastPage - 1) + last.value.count
+                    }
+                }
+            }
+        }
+        checkSession()
+        return AO3Result.Success(AO3ChallengeSettingsPage(settings, tags, count))
+    }
+
     /** iOS collectionModeration: items, participants, show; sequential, no profile or prefetch. */
     suspend fun getModeration(slug: String): AO3Result<AO3CollectionModeration> {
         val generation = authRepository.generation.value
@@ -127,6 +182,7 @@ class AO3CollectionDetailRepository(
 
     /** Signed-in GET, as [AccountListRepository] does it; a parser throw becomes a parse error. */
     private suspend fun <T> fetch(url: String, parse: (String) -> T): AO3Result<T> {
+        currentCoroutineContext().ensureActive()
         val generation = authRepository.generation.value
         val headers = when (val result = authRepository.authenticatedHeaders(url)) {
             is AO3Result.Failure -> return result
