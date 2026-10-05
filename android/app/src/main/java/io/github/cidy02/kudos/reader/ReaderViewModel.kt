@@ -40,12 +40,6 @@ class ReaderViewModel(
     private val _writeMessage = MutableStateFlow<String?>(null)
     val writeMessage: StateFlow<String?> = _writeMessage.asStateFlow()
 
-    private val _searchHits = MutableStateFlow<List<ReaderSearchHit>>(emptyList())
-    val searchHits: StateFlow<List<ReaderSearchHit>> = _searchHits.asStateFlow()
-
-    private val _searchLoading = MutableStateFlow(false)
-    val searchLoading: StateFlow<Boolean> = _searchLoading.asStateFlow()
-
     private var autoFinishedThisSession = false
     private var spineCountForEof = 0
     private var sessionLifecycleJob: Job? = null
@@ -259,18 +253,6 @@ class ReaderViewModel(
 
     fun clearWriteMessage() {
         _writeMessage.value = null
-    }
-
-    fun runSearch(publication: org.readium.r2.shared.publication.Publication, query: String) {
-        viewModelScope.launch {
-            _searchLoading.value = true
-            _searchHits.value = ReaderSearch.search(publication, query)
-            _searchLoading.value = false
-        }
-    }
-
-    fun clearSearch() {
-        _searchHits.value = emptyList()
     }
 
     fun setFontSizePercent(percent: Int) {

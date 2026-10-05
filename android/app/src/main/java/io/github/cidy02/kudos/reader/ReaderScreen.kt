@@ -39,7 +39,6 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -49,8 +48,6 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
@@ -210,7 +207,6 @@ private fun ReaderReading(
     var tocInitialTab by remember { mutableIntStateOf(0) }
     var showDisplaySheet by remember { mutableStateOf(false) }
     var showSearchSheet by remember { mutableStateOf(false) }
-    var searchQuery by remember { mutableStateOf("") }
     var annotateDialog by remember { mutableStateOf<AnnotateDialogState?>(null) }
     var noteEditor by remember { mutableStateOf<ReadingAnnotation?>(null) }
     var showDeleteNoteConfirm by remember { mutableStateOf<ReadingAnnotation?>(null) }
@@ -223,8 +219,6 @@ private fun ReaderReading(
     val speechStatus by speechController.status.collectAsState()
     val spokenText by speechController.spokenText.collectAsState()
     val writeMessage by viewModel.writeMessage.collectAsState()
-    val searchHits by viewModel.searchHits.collectAsState()
-    val searchLoading by viewModel.searchLoading.collectAsState()
 
     val readerTheme = when (state.preferences.theme) {
         ReaderColorTheme.Light -> ReaderTheme.Light
@@ -478,6 +472,7 @@ private fun ReaderReading(
                                     id = "find",
                                     title = "Find in Work",
                                     icon = Icons.Filled.Search,
+                                    isEnabled = ReaderSearch.isAvailable(publication),
                                     action = { showSearchSheet = true }
                                 )
                             )
@@ -789,29 +784,33 @@ private fun ReaderReading(
 
             // Sheets & Dialogs
             if (showSearchSheet) {
-                val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-                ModalBottomSheet(
-                    onDismissRequest = {
-                        showSearchSheet = false
-                        viewModel.clearSearch()
-                    },
-                    sheetState = sheetState
-                ) {
-                    ReaderSearchSheet(
-                        query = searchQuery,
-                        onQueryChange = { searchQuery = it },
-                        loading = searchLoading,
-                        hits = searchHits,
-                        onSearch = { viewModel.runSearch(publication, searchQuery) },
-                        onSelectHit = { hit ->
-                            navigatorController.go(hit.locator, animated = true)
-                            scope.launch {
-                                sheetState.hide()
-                                showSearchSheet = false
-                            }
-                        }
-                    )
+                val currentLocator = state.liveProgress?.locatorJson
+                    ?.let(ReadiumNavigatorController::locatorFromJson) ?: initialLocator
+                // Match the live href against sections, exactly as grouping does.
+                // A position-list index can drift when a spine item has no positions.
+                val currentSpineIndex = currentLocator?.let { locator ->
+                    val key = ReaderSectionBuilder.hrefKey(locator.href.toString())
+                    sections.firstOrNull { ReaderSectionBuilder.hrefKey(it.href) == key }?.spineIndex
                 }
+                ReaderSearchSheet(
+                    publication = publication,
+                    sections = sections,
+                    currentSpineIndex = currentSpineIndex,
+                    tokens = tokens,
+                    onDismiss = { showSearchSheet = false },
+                    onSelectHit = { hit -> navigatorController.go(hit.locator, animated = true) },
+                    onBookmarkHit = { hit ->
+                        val key = ReaderSectionBuilder.hrefKey(hit.locator.href.toString())
+                        val section = sections.firstOrNull { ReaderSectionBuilder.hrefKey(it.href) == key }
+                        val progress = ReadiumProgressAdapter.toReaderProgress(publication, hit.locator)
+                            .copy(spineIndex = section?.spineIndex ?: 0)
+                        viewModel.addBookmarkAtProgress(
+                            progress = progress,
+                            locatorString = progress.locatorJson.orEmpty(),
+                            chapterTitle = section?.title ?: hit.chapterTitle
+                        )
+                    }
+                )
             }
 
             annotateDialog?.let { dialog ->
@@ -1169,66 +1168,6 @@ private fun ReaderDisplaySheet(
                         }
                     }
                 )
-            }
-        }
-    }
-}
-
-@Composable
-private fun ReaderSearchSheet(
-    query: String,
-    onQueryChange: (String) -> Unit,
-    loading: Boolean,
-    hits: List<ReaderSearchHit>,
-    onSearch: () -> Unit,
-    onSelectHit: (ReaderSearchHit) -> Unit
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .navigationBarsPadding()
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        Text("Find in work", style = MaterialTheme.typography.titleLarge)
-        OutlinedTextField(
-            value = query,
-            onValueChange = onQueryChange,
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
-            label = { Text("Search") },
-            trailingIcon = {
-                TextButton(onClick = onSearch, enabled = query.isNotBlank() && !loading) {
-                    Text(if (loading) "…" else "Search")
-                }
-            }
-        )
-        if (loading) {
-            Text("Searching…", color = MaterialTheme.colorScheme.onSurfaceVariant)
-        } else if (hits.isEmpty() && query.isNotBlank()) {
-            Text("No matches.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-        } else {
-            LazyColumn(
-                modifier = Modifier.height(360.dp),
-                contentPadding = PaddingValues(bottom = 16.dp)
-            ) {
-                items(hits, key = { "${it.locator.href}-${it.snippet.hashCode()}" }) { hit ->
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { onSelectHit(hit) }
-                            .padding(vertical = 10.dp)
-                    ) {
-                        if (hit.chapterTitle.isNotBlank()) {
-                            Text(
-                                hit.chapterTitle,
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                        }
-                        Text(hit.snippet, style = MaterialTheme.typography.bodyMedium, maxLines = 3)
-                    }
-                }
             }
         }
     }
