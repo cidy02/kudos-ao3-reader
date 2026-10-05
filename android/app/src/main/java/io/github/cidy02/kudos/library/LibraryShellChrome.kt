@@ -8,7 +8,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.List
 import androidx.compose.material.icons.filled.FilterList
-import androidx.compose.material.icons.filled.MoreHoriz
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.outlined.BarChart
@@ -133,16 +133,12 @@ fun LibraryToolbarActions(chrome: LibraryShellChrome) {
                 isAccented = chrome.filtersActive,
                 badge = if (chrome.filterBadgeCount > 0) chrome.filterBadgeCount.toString() else null
             ) {
-                Icon(
-                    imageVector = Icons.Filled.FilterList,
-                    contentDescription = null,
-                    tint = if (chrome.filtersActive) tokens.accent else tokens.primaryInk
-                )
+                Icon(imageVector = Icons.Filled.FilterList, contentDescription = null)
             }
             var open by remember { mutableStateOf(false) }
             Box {
                 ToolbarCircleButton(onClick = { open = true }, accessibilityName = "More") {
-                    Icon(Icons.Filled.MoreHoriz, contentDescription = null)
+                    Icon(Icons.Filled.MoreVert, contentDescription = null)
                 }
                 DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
                     if (chrome.showPrivacyToggle) {

@@ -140,7 +140,7 @@ fun AuthorProfileScreen(
                     accessibilityName = "Menu",
                     palette = palette
                 ) {
-                    Icon(Icons.Default.MoreVert, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Icon(Icons.Default.MoreVert, contentDescription = null)
                 }
                 DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
                     if (isDashboard) {

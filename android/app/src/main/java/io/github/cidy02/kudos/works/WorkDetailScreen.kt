@@ -1310,8 +1310,7 @@ private fun WorkDetailContent(
                 Icon(
                     imageVector = if (isFavorite) Icons.Filled.Star else Icons.Outlined.StarBorder,
                     contentDescription = null,
-                    tint = if (isFavorite) Color(0xFFFFCC00) else tokens.secondaryInk, // iOS: .yellow
-                    modifier = Modifier.size(18.dp)
+                    tint = if (isFavorite) Color(0xFFFFCC00) else tokens.secondaryInk // iOS: .yellow
                 )
             }
 
@@ -1324,8 +1323,7 @@ private fun WorkDetailContent(
                     Icon(
                         imageVector = Icons.Filled.MoreVert,
                         contentDescription = null,
-                        tint = tokens.secondaryInk,
-                        modifier = Modifier.size(18.dp)
+                        tint = tokens.secondaryInk
                     )
                 }
 

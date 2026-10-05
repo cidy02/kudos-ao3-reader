@@ -40,6 +40,24 @@ class ScrollAwayTopChromeTest {
     }
 
     @Test
+    fun aListThatHasLeftTheTopCountsAsScrolledUntilItReturns() {
+        val chrome = ShellChromeState()
+        assertFalse(chrome.isScrolled(Routes.AccountList))
+        chrome.onContentDelta(Routes.AccountList, deltaDp = 6f, atTop = false)
+        assertFalse(chrome.isScrolled(Routes.AccountList))
+        chrome.onContentDelta(Routes.AccountList, deltaDp = 6f, atTop = false)
+        assertTrue(chrome.isScrolled(Routes.AccountList))
+        // Shown again part-way down a list: still scrolled, which is when the buttons need a ground.
+        chrome.onContentDelta(Routes.AccountList, deltaDp = 300f, atTop = false)
+        chrome.onContentDelta(Routes.AccountList, deltaDp = -20f, atTop = false)
+        assertFalse(chrome.isHidden(Routes.AccountList))
+        assertTrue(chrome.isScrolled(Routes.AccountList))
+        chrome.onContentDelta(Routes.AccountList, deltaDp = 0f, atTop = true)
+        assertFalse(chrome.isScrolled(Routes.AccountList))
+        assertFalse(chrome.isScrolled(Routes.Home))
+    }
+
+    @Test
     fun nestedScrollUsesContentOffsetNotTheInset() {
         val chrome = ShellChromeState()
         // density 2: -20px is 10dp down, still inside the top band.

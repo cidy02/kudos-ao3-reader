@@ -6,7 +6,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.MoreHoriz
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.DropdownMenu
@@ -104,7 +104,7 @@ fun HomeToolbarActions(chrome: HomeShellChrome) {
                         onClick = { open = true },
                         accessibilityName = "More"
                     ) {
-                        Icon(Icons.Filled.MoreHoriz, contentDescription = null)
+                        Icon(Icons.Filled.MoreVert, contentDescription = null)
                     }
                     DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
                         if (chrome.showPrivacy) {

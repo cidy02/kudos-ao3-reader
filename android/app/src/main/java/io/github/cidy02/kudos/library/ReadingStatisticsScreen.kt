@@ -20,7 +20,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.MoreHoriz
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -192,7 +192,7 @@ fun ReadingStatisticsScreen(
                     onClick = { periodMenuOpen = true },
                     accessibilityName = "More"
                 ) {
-                    Icon(Icons.Filled.MoreHoriz, contentDescription = null)
+                    Icon(Icons.Filled.MoreVert, contentDescription = null)
                 }
                 DropdownMenu(
                     expanded = periodMenuOpen,

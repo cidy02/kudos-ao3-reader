@@ -5,7 +5,7 @@ import kotlin.math.abs
 
 /**
  * T-349. Scrolling down hides the top chrome; scrolling back up, or returning to
- * the top, shows it. The tab bar reads the same flag.
+ * the top, shows it. Android's navigation bar stays put (iOS's tab bar shrinks on the same flag).
  *
  * Offsets are in one unit. Callers pass dp so the `44` threshold matches iOS
  * points. Direction uses the raw delta, not a value adjusted for insets: on iOS
@@ -23,9 +23,12 @@ object ScrollAwayTopChrome {
 }
 
 /**
- * One scroll-direction flag per shell route, shared by the floating bar and the
- * top chrome. [revision] is what Compose observes.
+ * One scroll-direction flag per shell route for the top chrome, and how far the content has
+ * moved. [revision] is what Compose observes.
  */
+/** Content this far from the top counts as scrolled. Small drift in the running sum stays under it. */
+private const val SCROLLED_DP = 8f
+
 class ShellChromeState {
     private val offsetDp = HashMap<String, Float>()
     private val hiddenByRoute = HashMap<String, Boolean>()
@@ -35,6 +38,13 @@ class ShellChromeState {
         if (revisionState.intValue < 0) return false
         if (route == null) return false
         return hiddenByRoute[route] == true
+    }
+
+    /** True once the content has left the top: a list is running under the top chrome. */
+    fun isScrolled(route: String?): Boolean {
+        if (revisionState.intValue < 0) return false
+        if (route == null) return false
+        return (offsetDp[route] ?: 0f) > SCROLLED_DP
     }
 
     /**
@@ -47,7 +57,8 @@ class ShellChromeState {
         val fromTop = if (atTop) 0f else to
         offsetDp[route] = to
         val next = ScrollAwayTopChrome.hides(hiddenByRoute[route] == true, from, to, fromTop)
-        if (hiddenByRoute[route] == next) return
+        val scrolledChanged = (from > SCROLLED_DP) != (to > SCROLLED_DP)
+        if (hiddenByRoute[route] == next && !scrolledChanged) return
         hiddenByRoute[route] = next
         revisionState.intValue = revisionState.intValue + 1
     }

@@ -13,11 +13,9 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -30,17 +28,29 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.FilledIconButton
+import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.LocalContentColor
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.Text
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -54,13 +64,13 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
@@ -76,9 +86,6 @@ object SubjectMetrics {
     val headerGutter = 26.dp
     val panelGutter = 22.dp
     val accountGutter = 16.dp
-    val chromeButton = 34.dp
-    /** Tab-root toolbar circle. iOS draws a 44pt glass circle with a 17pt glyph. */
-    val toolbarCircle = 44.dp
     val kickerRuleWidth = 22.dp
     val pageRuleWidth = 26.dp
     val kickerRuleHeight = 2.5.dp
@@ -128,6 +135,16 @@ fun Modifier.subjectScreenWash(
     palette: SubjectPalette,
     washHeight: Dp = SubjectMetrics.defaultWashHeight
 ): Modifier {
+    val washes = LocalShellWashes.current
+    val key = remember { Any() }
+    SideEffect { washes.put(key, ShellWash(palette, washHeight)) }
+    DisposableEffect(washes) { onDispose { washes.remove(key) } }
+    return subjectWash(palette, washHeight)
+}
+
+/** The wash alone. The shell repaints a page's top with it, and that must not count as a page's wash. */
+@Composable
+fun Modifier.subjectWash(palette: SubjectPalette, washHeight: Dp): Modifier {
     val heightPx = with(LocalDensity.current) { washHeight.toPx() }
     val backdrop = palette.theme.cardBackdrop
     val brush = palette.wash(heightPx)
@@ -136,6 +153,29 @@ fun Modifier.subjectScreenWash(
         drawRect(brush = brush, size = Size(size.width, heightPx))
     }
 }
+
+/** A wash a screen has painted: what [subjectScreenWash] was given. */
+data class ShellWash(val palette: SubjectPalette, val height: Dp)
+
+/**
+ * The washes on screen, oldest first, so a page's own comes before that of a sheet over it.
+ * The shell reads [page] to paint its top bar in the page's wash when a list runs under it.
+ */
+class ShellWashes {
+    private val entries = mutableStateListOf<Pair<Any, ShellWash>>()
+    val page: ShellWash? get() = entries.firstOrNull()?.second
+
+    fun put(key: Any, wash: ShellWash) {
+        val index = entries.indexOfFirst { it.first === key }
+        if (index < 0) entries.add(key to wash) else if (entries[index].second != wash) entries[index] = key to wash
+    }
+
+    fun remove(key: Any) {
+        entries.removeAll { it.first === key }
+    }
+}
+
+val LocalShellWashes = staticCompositionLocalOf { ShellWashes() }
 
 /** Glass ground behind a form group or a figure strip. */
 @Composable
@@ -714,72 +754,12 @@ fun AccentIconSquare(
     }
 }
 
-/** 34dp glass circle used for back, filter, and overflow chrome. */
-@Composable
-fun GlassCircleButton(
-    onClick: () -> Unit,
-    accessibilityName: String,
-    modifier: Modifier = Modifier,
-    isAccented: Boolean = false,
-    palette: SubjectPalette? = null,
-    badge: String? = null,
-    diameter: Dp = SubjectMetrics.chromeButton,
-    content: @Composable () -> Unit
-) {
-    val tokens = LocalKudosTokens.current
-    val accent = palette?.accent ?: tokens.accent
-    val fill = if (isAccented) accent.withOpacity(0.30) else tokens.glassFill()
-    val stroke = if (isAccented) accent.withOpacity(0.60) else tokens.glassStroke()
-    val foreground = if (isAccented) palette?.accentOnFill ?: tokens.accent else tokens.primaryInk
-    val glyph = 17.sp.asDp()
-    Box(
-        modifier
-            .size(diameter)
-            .semantics { contentDescription = accessibilityName }
-            .clickable(onClick = onClick),
-        contentAlignment = Alignment.Center
-    ) {
-        Box(
-            Modifier
-                .fillMaxSize()
-                .background(fill, CircleShape)
-                .border(0.5.dp, stroke, CircleShape),
-            contentAlignment = Alignment.Center
-        ) {
-            CompositionLocalProvider(LocalContentColor provides foreground) {
-                Box(Modifier.size(glyph), contentAlignment = Alignment.Center) {
-                    content()
-                }
-            }
-        }
-        if (badge != null) {
-            Box(
-                Modifier
-                    .align(Alignment.TopEnd)
-                    .offset(x = 2.dp, y = (-2).dp)
-                    .defaultMinSize(minWidth = 16.dp, minHeight = 16.dp)
-                    .background(accent, RoundedCornerShape(percent = 50))
-                    .border(1.5.dp, tokens.background, RoundedCornerShape(percent = 50))
-                    .padding(horizontal = 4.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = badge,
-                    color = tokens.background,
-                    fontSize = 9.5.sp,
-                    fontWeight = FontWeight.Bold,
-                    style = TextStyle(fontFeatureSettings = "tnum"),
-                    textAlign = TextAlign.Center,
-                    maxLines = 1
-                )
-            }
-        }
-    }
-}
-
 /**
- * 44dp glass circle used for root-tab toolbar chrome (Home, Library, Account).
- * Matches iOS 44pt toolbar glass circle with 17sp glyph.
+ * A toolbar button: Material's plain icon button (48dp to touch, a ripple, no container), where
+ * iOS draws a glass circle. Owner, 2026-10-04: one product on both platforms, but Android is not
+ * to look like a copy of iOS. [isAccented] is Material's tonal icon button: an accent-tinted
+ * container under a glyph that reads on it in every theme (the bare accent does not on Dark).
+ * The name is the glass design's; it stays until the owner has seen this look.
  */
 @Composable
 fun ToolbarCircleButton(
@@ -791,16 +771,40 @@ fun ToolbarCircleButton(
     badge: String? = null,
     content: @Composable () -> Unit
 ) {
-    GlassCircleButton(
-        onClick = onClick,
-        accessibilityName = accessibilityName,
-        modifier = modifier,
-        isAccented = isAccented,
-        palette = palette,
-        badge = badge,
-        diameter = SubjectMetrics.toolbarCircle,
-        content = content
-    )
+    val tokens = LocalKudosTokens.current
+    val accent = palette?.accent ?: tokens.accent
+    val named = modifier.semantics { contentDescription = accessibilityName }
+    val glyph: @Composable () -> Unit = {
+        if (badge == null) content() else BadgedBox(badge = { ToolbarBadge(badge, accent) }) { content() }
+    }
+    if (isAccented) {
+        FilledTonalIconButton(
+            onClick = onClick,
+            modifier = named,
+            colors = IconButtonDefaults.filledTonalIconButtonColors(
+                containerColor = accent.withOpacity(AccentContainerOpacity),
+                contentColor = (palette ?: LocalSubjectPalette.current).accentOnFill
+            ),
+            content = glyph
+        )
+    } else {
+        IconButton(
+            onClick = onClick,
+            modifier = named,
+            colors = IconButtonDefaults.iconButtonColors(contentColor = tokens.primaryInk),
+            content = glyph
+        )
+    }
+}
+
+/** How strongly the accent tints a container under an on-accent glyph: toolbar buttons, the selected tab. */
+const val AccentContainerOpacity = 0.24
+
+@Composable
+private fun ToolbarBadge(text: String, accent: Color) {
+    Badge(containerColor = accent, contentColor = SubjectPalette.label(accent)) {
+        Text(text, style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum"), maxLines = 1)
+    }
 }
 
 /**
@@ -850,8 +854,8 @@ fun WorkSelectionBubble(
 }
 
 /**
- * 44dp "+" in the toolbar. Glass with an accent glyph, as iOS's `ToolbarIconButton`; [prominent]
- * fills it with the accent (iOS `.glassProminent`, which iOS uses only for the queue page's Add Works).
+ * "+" in the toolbar: a plain icon button with an accent glyph. [prominent] is Material's filled
+ * icon button in the accent (iOS `.glassProminent`, which iOS uses only for the queue page's Add Works).
  */
 @Composable
 fun ToolbarAddButton(
@@ -861,38 +865,30 @@ fun ToolbarAddButton(
     palette: SubjectPalette? = null,
     prominent: Boolean = false
 ) {
-    val tokens = LocalKudosTokens.current
-    val accent = palette?.accent ?: tokens.accent
-    val glyph = 17.sp.asDp()
     if (!prominent) {
-        ToolbarCircleButton(onClick = onClick, accessibilityName = accessibilityName, modifier = modifier, palette = palette) {
-            Icon(Icons.Filled.Add, contentDescription = null, tint = accent, modifier = Modifier.size(glyph))
+        ToolbarCircleButton(
+            onClick = onClick, accessibilityName = accessibilityName, modifier = modifier,
+            isAccented = true, palette = palette
+        ) {
+            Icon(Icons.Filled.Add, contentDescription = null)
         }
         return
     }
-    val fill = palette?.tint ?: tokens.accent // iOS .tint(subjectPalette.tint)
-    Box(
-        modifier
-            .size(SubjectMetrics.toolbarCircle)
-            .semantics { contentDescription = accessibilityName }
-            .clip(CircleShape)
-            .background(fill)
-            .clickable(onClick = onClick),
-        contentAlignment = Alignment.Center
-    ) {
-        Icon(
-            imageVector = Icons.Filled.Add,
-            contentDescription = null,
-            tint = SubjectPalette.label(fill), // iOS .prominentLabel()
-            modifier = Modifier.size(glyph)
+    val fill = palette?.tint ?: LocalKudosTokens.current.accent // iOS .tint(subjectPalette.tint)
+    FilledIconButton(
+        onClick = onClick,
+        modifier = modifier.semantics { contentDescription = accessibilityName },
+        colors = IconButtonDefaults.filledIconButtonColors(
+            containerColor = fill, contentColor = SubjectPalette.label(fill) // iOS .prominentLabel()
         )
+    ) {
+        Icon(Icons.Filled.Add, contentDescription = null)
     }
 }
 
 /**
- * Filter control and its count badge. Active tint is the exact accent.
- * Material has no `line.3.horizontal.decrease.circle.fill`, so the active state
- * is the accent-tinted list icon plus the numeric badge.
+ * Filter control and its count badge: a plain Material icon button. Active, it is the tonal
+ * one (an accent-tinted container) with the numeric badge.
  */
 @Composable
 fun FilterButton(
@@ -903,13 +899,19 @@ fun FilterButton(
     onClearFilters: (() -> Unit)? = null
 ) {
     val tokens = LocalKudosTokens.current
-    val tint = if (filtersActive) tokens.accent else tokens.primaryInk
+    val tint = if (filtersActive) LocalSubjectPalette.current.accentOnFill else tokens.primaryInk
     var menuOpen by remember { mutableStateOf(false) }
     val label = if (badgeCount > 0) "Filter, $badgeCount active" else "Filter"
     Box(modifier) {
         Box(
             Modifier
+                // Material's icon button written out: that one has no long press, and this clears.
+                .minimumInteractiveComponentSize()
+                .size(40.dp)
+                .clip(CircleShape)
+                .background(if (filtersActive) tokens.accent.withOpacity(AccentContainerOpacity) else Color.Transparent)
                 .combinedClickable(
+                    role = Role.Button,
                     onClick = onClick,
                     onLongClick = if (filtersActive && onClearFilters != null) {
                         { menuOpen = true }
@@ -917,39 +919,13 @@ fun FilterButton(
                         null
                     }
                 )
-                .semantics { contentDescription = label }
-                // A glass toolbar circle, as every iOS toolbar filter is.
-                .size(SubjectMetrics.toolbarCircle)
-                .background(tokens.glassFill(), CircleShape)
-                .border(0.5.dp, tokens.glassStroke(), CircleShape),
+                .semantics { contentDescription = label },
             contentAlignment = Alignment.Center
         ) {
-            Icon(
-                imageVector = Icons.Filled.FilterList,
-                contentDescription = null,
-                tint = tint,
-                modifier = Modifier.size(17.sp.asDp())
-            )
-            if (badgeCount > 0) {
-                val badge = if (badgeCount > 99) "99+" else badgeCount.toString()
-                Box(
-                    Modifier
-                        .align(Alignment.TopEnd)
-                        .offset(x = 2.dp, y = (-2).dp)
-                        .defaultMinSize(minWidth = 15.dp, minHeight = 15.dp)
-                        .background(tokens.accent, CircleShape)
-                        .padding(horizontal = 3.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = badge,
-                        color = Color.White,
-                        fontSize = 9.sp,
-                        fontWeight = FontWeight.Bold,
-                        style = TextStyle(fontFeatureSettings = "tnum"),
-                        maxLines = 1
-                    )
-                }
+            BadgedBox(badge = {
+                if (badgeCount > 0) ToolbarBadge(if (badgeCount > 99) "99+" else badgeCount.toString(), tokens.accent)
+            }) {
+                Icon(imageVector = Icons.Filled.FilterList, contentDescription = null, tint = tint)
             }
         }
         DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
