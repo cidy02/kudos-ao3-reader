@@ -78,6 +78,12 @@ class AO3CollectionDetailRepository(
             AO3CollectionItemsParser().parse(it, slug, tab, page)
         }
 
+    suspend fun getUserCollectionItems(username: String, tab: AO3CollectionItemTab, page: Int): AO3Result<AO3CollectionItemsPage> {
+        val url = AO3CollectionItemsUrls.userPage(username, tab, page)
+            ?: return AO3Result.Failure(AO3Error.Parse("AO3 didn't give a collection-items page for this account."))
+        return fetch(url) { AO3CollectionItemsParser().parseUser(it, username, tab, page) }
+    }
+
     /** Signed-in GET, as [AccountListRepository] does it; a parser throw becomes a parse error. */
     private suspend fun <T> fetch(url: String, parse: (String) -> T): AO3Result<T> {
         val generation = authRepository.generation.value

@@ -79,7 +79,7 @@ import kotlinx.coroutines.launch
 
 @Composable
 fun AO3CollectionItemsScreen(
-    slug: String,
+    slug: String?,
     title: String,
     repository: AO3CollectionDetailRepository,
     writes: AO3WriteRepository
@@ -90,7 +90,8 @@ fun AO3CollectionItemsScreen(
     // Key the state on auth before rendering: replacement sessions never see old private rows/forms.
     val model = remember(slug, generation, authState.isSignedIn) { AO3CollectionItemsState(slug, repository, writes) }
     val state by model.state.collectAsState()
-    var tab by remember(slug) { mutableStateOf(AO3CollectionItemTab.Unreviewed) }
+    val defaultTab = AO3CollectionItemTab.defaultTab(slug)
+    var tab by remember(slug) { mutableStateOf(defaultTab) }
     var confirming by remember(slug, generation, authState.isSignedIn) { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val tokens = LocalKudosTokens.current
@@ -171,7 +172,8 @@ fun AO3CollectionItemsScreen(
                         " · page ${it.currentPage} of ${it.totalPages}"
                     }.orEmpty()
                     SubjectHeaderBlock(kicker = "AO3 Account › Collections", title = "Collection items",
-                        subtitle = "$title · $tally$paging", palette = palette, gutter = SubjectMetrics.accountGutter)
+                        subtitle = "${if (slug == null) "Your works in AO3 collections" else title} · $tally$paging",
+                        palette = palette, gutter = SubjectMetrics.accountGutter)
                     Row(Modifier.padding(top = 14.dp).horizontalScroll(rememberScrollState())
                         .padding(horizontal = SubjectMetrics.accountGutter), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         AO3CollectionItemTab.entries.forEach { option ->
@@ -179,9 +181,9 @@ fun AO3CollectionItemsScreen(
                                 modifier = Modifier.clickable(enabled = !submitting && !confirming) { tab = option })
                         }
                         SubjectChip("Reset", style = SubjectChipStyle.Pill(false), leadingIcon = Icons.Filled.Close,
-                            modifier = Modifier.alpha(if (tab == AO3CollectionItemTab.Unreviewed) 0.45f else 0.7f)
-                                .clickable(enabled = tab != AO3CollectionItemTab.Unreviewed && !submitting && !confirming) {
-                                    tab = AO3CollectionItemTab.Unreviewed
+                            modifier = Modifier.alpha(if (tab == defaultTab) 0.45f else 0.7f)
+                                .clickable(enabled = tab != defaultTab && !submitting && !confirming) {
+                                    tab = defaultTab
                                 }.semantics { contentDescription = "Reset filters" })
                     }
                 }

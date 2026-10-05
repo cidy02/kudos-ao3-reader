@@ -31,14 +31,15 @@ internal data class AO3CollectionItemsUiState(
 
 /** Owned by one visible screen/session; no jobs or requests survive it. */
 internal class AO3CollectionItemsState(
-    private val slug: String,
+    private val slug: String?,
     private val repository: AO3CollectionDetailRepository,
     private val writes: AO3WriteRepository
 ) {
     private val auth = repository.authRepository
     private val generation = auth.generation.value
+    private val username = auth.username()
     private var loadGeneration = 0
-    private val mutableState = MutableStateFlow(AO3CollectionItemsUiState())
+    private val mutableState = MutableStateFlow(AO3CollectionItemsUiState(tab = AO3CollectionItemTab.defaultTab(slug)))
     val state = mutableState.asStateFlow()
     private fun ownsSession() = generation == auth.generation.value && auth.state.value.isSignedIn
 
@@ -75,7 +76,9 @@ internal class AO3CollectionItemsState(
             page = previous.page.takeIf { previous.tab == tab },
             phase = AO3CollectionItemsUiState.Phase.Loading, loadError = null)
         try {
-            val result = repository.getCollectionItems(slug, tab, page)
+            val result = if (slug != null) repository.getCollectionItems(slug, tab, page)
+                else if (username != null) repository.getUserCollectionItems(username, tab, page)
+                else AO3Result.Failure(AO3Error.AuthenticationRequired)
             currentCoroutineContext().ensureActive()
             if (!ownsSession() || request != loadGeneration) return
             val state = mutableState.value
@@ -100,7 +103,9 @@ internal class AO3CollectionItemsState(
         ++loadGeneration // Retire an older load before any POST can complete.
         mutableState.value = previous.copy(phase = AO3CollectionItemsUiState.Phase.Submitting, submitError = null)
         try {
-            val result = writes.updateCollectionItems(slug, drafts, generation)
+            val result = if (slug != null) writes.updateCollectionItems(slug, drafts, generation)
+                else if (username != null) writes.updateUserCollectionItems(username, drafts, generation)
+                else AO3Result.Failure(AO3Error.AuthenticationRequired)
             currentCoroutineContext().ensureActive()
             if (!ownsSession()) return
             val state = mutableState.value

@@ -7,12 +7,22 @@ import org.jsoup.Jsoup
 import org.jsoup.nodes.Element
 import okhttp3.HttpUrl.Companion.toHttpUrl
 
-/** Collection scope only: AO3's collection default differs from its account-wide default. */
+/** The four visible iOS tabs. The account and collection pages have different default queries. */
 enum class AO3CollectionItemTab(val status: String?, val title: String) {
     Unreviewed(null, "Awaiting collection"),
     Invited("unreviewed_by_user", "Awaiting you"),
     Rejected("rejected_by_collection", "Rejected"),
-    Approved("approved", "Approved")
+    Approved("approved", "Approved");
+
+    fun accountStatus(): String? = when (this) {
+        Unreviewed -> "unreviewed_by_collection"
+        Invited -> null
+        else -> status
+    }
+
+    companion object {
+        fun defaultTab(slug: String?) = if (slug == null) Invited else Unreviewed
+    }
 }
 
 enum class AO3CollectionItemApproval(val value: String, val title: String) {
@@ -109,13 +119,32 @@ object AO3CollectionItemsUrls {
                 tab.status?.let { addQueryParameter("status", it) }
                 if (page > 1) addQueryParameter("page", page.toString())
             }.build().toString()
+
+    fun userPage(username: String, tab: AO3CollectionItemTab, page: Int): String? = userRoot(username)?.newBuilder()?.apply {
+        tab.accountStatus()?.let { addQueryParameter("status", it) }
+        if (page > 1) addQueryParameter("page", page.toString())
+    }?.build()?.toString()
+
+    fun userUpdate(username: String): String? = userRoot(username)?.newBuilder()
+        ?.addPathSegment("update_multiple")?.build()?.toString()
+
+    private fun userRoot(username: String): okhttp3.HttpUrl? {
+        val name = username.trim()
+        if (name.isEmpty() || name.contains('/')) return null
+        return AO3Constants.BASE_URL.toHttpUrl().newBuilder().addPathSegment("users")
+            .addPathSegment(name).addPathSegment("collection_items").build()
+    }
 }
 
 class AO3CollectionItemsParser {
-    fun parse(html: String, slug: String, tab: AO3CollectionItemTab, page: Int): AO3CollectionItemsPage {
+    fun parseUser(html: String, username: String, tab: AO3CollectionItemTab, page: Int): AO3CollectionItemsPage =
+        parse(html, "", tab, page, requireNotNull(AO3CollectionItemsUrls.userUpdate(username)),
+            requireNotNull(AO3CollectionItemsUrls.userPage(username, tab, page)))
+
+    fun parse(html: String, slug: String, tab: AO3CollectionItemTab, page: Int,
+        fallbackAction: String? = null, pageUrl: String = AO3CollectionItemsUrls.page(slug, tab, page)): AO3CollectionItemsPage {
         require(!AO3OverloadDetector.isOverloadPage(html)) { "AO3 is busy. Try again shortly." }
-        val url = AO3CollectionItemsUrls.page(slug, tab, page)
-        val doc = Jsoup.parse(html, url)
+        val doc = Jsoup.parse(html, pageUrl)
         require(doc.selectFirst("form#new_user, form[action='/users/login']") == null) {
             "Log in to AO3 to manage collection items."
         }
@@ -131,7 +160,7 @@ class AO3CollectionItemsParser {
             }
         }
         val action = form?.takeIf { it.attr("action").isNotBlank() }?.attr("abs:action")?.takeIf { it.isNotBlank() }
-            ?: "${AO3Constants.BASE_URL}/collections/$slug/items/update_multiple"
+            ?: fallbackAction ?: "${AO3Constants.BASE_URL}/collections/$slug/items/update_multiple"
         require(AO3RedirectCookieRelay.isTrustedUrl(action)) { "AO3 returned an untrusted form address." }
         val csrf = doc.selectFirst("meta[name=csrf-token]")?.attr("content")?.takeIf { it.isNotBlank() }
             ?: form?.selectFirst("input[name=authenticity_token]")?.attr("value").orEmpty()
@@ -159,8 +188,11 @@ class AO3CollectionItemsParser {
         val anonymous = box("anonymous")
         val byline = li.selectFirst("h5.heading")?.text().orEmpty()
         val role = listOf("Member", "Owner", "Moderator").lastOrNull { byline.contains("($it)", true) }.orEmpty()
+        val collectionLink = li.selectFirst("span.collection a, h5.heading a[href*='/collections/']")
+        val linkedSlug = collectionLink?.attr("href")?.substringAfter("/collections/", "")
+            ?.trimStart('/')?.substringBefore('/')?.substringBefore('?')?.substringBefore('#')?.takeIf { it.isNotEmpty() }
         return AO3CollectionItem(id,
-            li.selectFirst("span.collection a, h5.heading a[href*='/collections/']")?.text()?.ifBlank { slug } ?: slug,
+            collectionLink?.text()?.ifBlank { linkedSlug ?: slug } ?: slug,
             li.selectFirst("h4.heading a")?.text().orEmpty(), role, byline,
             li.selectFirst("p.datetime")?.text().orEmpty(), approval(user), approval(moderator),
             unrevealed?.hasAttr("checked") == true, anonymous?.hasAttr("checked") == true,
