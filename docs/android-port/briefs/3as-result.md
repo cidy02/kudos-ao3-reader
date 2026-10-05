@@ -19,6 +19,10 @@ The screen's Submit and Discard did not show at first. That was a fault in share
 in its own commit: a pushed screen that is leaving wiped the top buttons of the screen that
 replaced it.
 
+Checked later the same day on the emulator: a switch and a removal staged, Keep, Discard, the
+other three tabs, the second page, and going back and forward between the list, the collection
+and this screen with each one's top buttons intact.
+
 ## iOS reference (read-only)
 
 Read `/Users/cidy02/kudos-ios-polish/kudos-ao3-reader/Features/Account/AO3CollectionItemsView.swift`, `AO3CollectionItemStaging.swift`, `AO3CollectionScreenDecisions.swift`, `AO3CollectionSessionReload.swift`, `Models/AO3CollectionDetailModels.swift`, `Services/AO3Client+Collections.swift`, and `Services/AO3CollectionActions.swift`.

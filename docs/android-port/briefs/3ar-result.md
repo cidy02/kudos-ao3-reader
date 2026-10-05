@@ -5,8 +5,10 @@ Gate green (1,507 tests). Seen on the emulator with a real page: a tap on a high
 opens the editor ("Add Note", the passage, a note field, six colours) and does not toggle the
 reader's controls; choosing Blue and typing a note, then Done, stored both and the word is
 drawn blue; a tap elsewhere toggles the controls as before; the reader's menu holds iOS's
-pills only. Not exercised: Delete Highlight, Underline, Cancel after a colour change, and the
-Contents list opening the editor.
+pills only. Checked later the same day: Underline is drawn as an underline; Cancel after a
+colour change keeps the colour (it is saved at once, as on iOS); a row in the reader's
+Highlights list opens the same editor; Delete Highlight asks first, Cancel keeps it, Delete
+removes it from the page and leaves a deletion record for sync.
 
 Status: implementation complete; compilation, tests and device review pending on `android/agent-codex-3ar`, only in this worktree. No commits, pushes, branch switches, TASKS edits, sign-in, AO3 traffic or build/test execution.
 

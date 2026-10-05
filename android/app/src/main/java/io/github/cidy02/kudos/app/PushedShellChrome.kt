@@ -24,15 +24,28 @@ class PushedShellChrome {
     var trailingContent by mutableStateOf<(@Composable RowScope.() -> Unit)?>(null)
 
     /**
-     * The screen whose values these are. When one pushed screen opens another, the old one
-     * leaves the composition after the new one has registered; without this its farewell reset
-     * wiped the newcomer's buttons, and a screen whose arguments never change again (so its
-     * registration is not repeated) stayed without them.
+     * The screens composed now, in order of arrival, each with how to show its values. During a
+     * transition two pushed screens are composed at once: the newer one holds the row whatever
+     * the older does on its way out, and gets nothing wiped when the older leaves. A single
+     * shared slot let the leaving screen clear the newcomer's buttons, and a screen whose
+     * arguments never change again (so it never registered twice) stayed without them.
+     * Re-putting a key keeps its place, so an update does not make an older screen the newest.
      */
-    internal var owner: Any? = null
+    private val screens = LinkedHashMap<Any, () -> Unit>()
 
-    fun reset() {
-        owner = null
+    internal fun register(screen: Any, show: () -> Unit) {
+        screens[screen] = show
+        showNewest()
+    }
+
+    internal fun leave(screen: Any) {
+        screens.remove(screen)
+        showNewest()
+    }
+
+    private fun showNewest() = screens.values.lastOrNull()?.invoke() ?: reset()
+
+    private fun reset() {
         mounted = false
         hideTabBar = false
         hasSubjectHeader = null
@@ -53,19 +66,18 @@ fun ProvidePushedShellChrome(
     onBack: (() -> Unit)? = null,
     trailingContent: (@Composable RowScope.() -> Unit)? = null
 ) {
-    val owner = remember { Any() }
+    val screen = remember { Any() }
     SideEffect {
-        chrome.owner = owner
-        chrome.mounted = true
-        chrome.hideTabBar = hideTabBar
-        chrome.hasSubjectHeader = hasSubjectHeader
-        chrome.customTitle = customTitle
-        chrome.onBack = onBack
-        chrome.trailingContent = trailingContent
+        chrome.register(screen) {
+            chrome.mounted = true
+            chrome.hideTabBar = hideTabBar
+            chrome.hasSubjectHeader = hasSubjectHeader
+            chrome.customTitle = customTitle
+            chrome.onBack = onBack
+            chrome.trailingContent = trailingContent
+        }
     }
     DisposableEffect(chrome) {
-        onDispose {
-            if (chrome.owner === owner) chrome.reset()
-        }
+        onDispose { chrome.leave(screen) }
     }
 }

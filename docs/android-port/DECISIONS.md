@@ -603,8 +603,11 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   buttons.** When one pushed screen opens another, the old one leaves the composition after the
   new one has registered its buttons with the shell, and its farewell reset cleared them. Most
   screens recovered by registering again; one whose arguments never change did not, and the
-  moderation screen opened from a collection had no Submit or Discard. The shell now remembers
-  which screen the buttons belong to. Reverse: `owner` in `app/PushedShellChrome.kt`.
+  moderation screen opened from a collection had no Submit or Discard. The shell now keeps the
+  screens that are on screen in order of arrival: the newest holds the button row whatever an
+  older one does on its way out, and when the newest leaves (a back gesture that is cancelled,
+  for one) the screen underneath gets the row back. Reverse: `screens` in
+  `app/PushedShellChrome.kt`.
 - **2026-10-05 · The AO3 collection's moderation screen, as iOS's, with two differences kept
   for now.** Items awaiting or holding a decision, with approve, reject, unrevealed, anonymous
   and remove staged per item and sent on Submit, one request per item (see the entry above on
