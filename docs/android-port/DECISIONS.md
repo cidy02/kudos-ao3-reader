@@ -713,3 +713,8 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   changes. This closes a way the rule "the demo must never reach AO3" could be broken on a
   device with a connection; the emulator here has always been in airplane mode. Reverse:
   `shouldInterceptRequest` in `web/AO3WebViewFallbackScreen.kt`.
+- **2026-10-05 · The drafts list has iOS's New Work button, opening AO3's page for now.** Brief
+  3az asked for the drafts list only. Codex found a New Work button on iOS's screen and asked.
+  Answer (Claude; the owner has not been asked): include it, as iOS has it; until Android has
+  the work editor it opens AO3's new-work page in the in-app browser, as a tap on a draft opens
+  that draft's edit page.
