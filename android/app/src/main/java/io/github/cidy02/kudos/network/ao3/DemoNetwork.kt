@@ -191,12 +191,18 @@ internal class DemoNetworkInterceptor(
     private val collectionItems = DemoCollectionItems()
     private val userCollectionItems = DemoCollectionItems(account = true)
     private val collectionForms = DemoCollectionForms()
+    private val collectionMaintainers = DemoCollectionMaintainers()
 
     override fun intercept(chain: Interceptor.Chain): Response {
         if (!isActive()) return chain.proceed(chain.request())
         val url = chain.request().url
         if (!DemoNetworkRoutes.isAo3Host(url.host)) return chain.proceed(chain.request())
         val path = DemoNetworkRoutes.decodedPath(url)
+        collectionMaintainers.answer(chain.request(), fixtures())?.let { answer ->
+            return Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1)
+                .code(answer.first).message("Local maintainers answer").header("Content-Type", HTML)
+                .body(answer.second.toResponseBody(HTML_TYPE)).build()
+        }
         collectionForms.answer(chain.request(), fixtures())?.let { answer ->
             return Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1)
                 .code(answer.first).message("Local collection answer").header("Content-Type", HTML)
@@ -264,6 +270,75 @@ internal class DemoNetworkInterceptor(
     private companion object {
         const val HTML = "text/html; charset=utf-8"
         val HTML_TYPE = HTML.toMediaType()
+    }
+}
+
+/** Original fixture-only participants/invite/leave responses, including terminal missing-asset failures. */
+private class DemoCollectionMaintainers {
+    private val pages = mutableMapOf<String, String>()
+
+    @Synchronized
+    fun answer(request: okhttp3.Request, fixtures: FixtureSource): Pair<Int, String>? {
+        val path = DemoNetworkRoutes.decodedPath(request.url).trimEnd('/')
+        val slug = request.url.pathSegments.getOrNull(1) ?: return null
+        if (slug !in setOf("winter_exchange", "rare_pairs") || !path.startsWith("/collections/")) return null
+        val root = "/collections/$slug"
+        val participants = "$root/participants"
+        val show = path == root || (slug == "rare_pairs" && path == "$root/profile")
+        if (!show && path != participants && !path.startsWith("$participants/")) return null
+        if (show && request.method == "GET") {
+            val source = fixtures.read("ao3_demo_maintainers_show") ?: return 404 to ""
+            return 200 to source.decodeToString().replace("winter_exchange", slug)
+                .replace("Winter Exchange 2026", if (slug == "rare_pairs") "Rare Pairs Week" else "Winter Exchange 2026")
+        }
+        // Other writes to show still belong to the existing collection-form demo.
+        if (show) return null
+        val fixture = if (slug == "rare_pairs") "ao3_demo_maintainers_last_owner" else "ao3_demo_maintainers"
+        val source = fixtures.read(fixture) ?: return 404 to ""
+        val doc = Jsoup.parse(pages[slug] ?: source.decodeToString())
+        if (request.method == "GET" && path == participants) return 200 to doc.outerHtml()
+        if (request.method != "POST") return 405 to ""
+        val buffer = Buffer()
+        request.body?.writeTo(buffer)
+        val fields = buffer.readUtf8().split('&').associate { field ->
+            val parts = field.split('=', limit = 2)
+            URLDecoder.decode(parts[0], "UTF-8") to URLDecoder.decode(parts.getOrElse(1) { "" }, "UTF-8")
+        }
+        fun refusal(message: String): Pair<Int, String> {
+            val error = org.jsoup.nodes.Element("div").addClass("flash").addClass("error").text(message)
+            // Duplicate representations of the same refusal exercise the single displayed message.
+            return 422 to (error.outerHtml() + "<div class='error'><p>${error.html()}</p></div>")
+        }
+        if (path == "$participants/add") {
+            if (fields.keys != setOf("authenticity_token", "participants_to_invite") ||
+                fields["authenticity_token"] != "demo-maintainers-token") return refusal("AO3 couldn't invite that maintainer.")
+            val name = fields["participants_to_invite"].orEmpty()
+            if (name != "lanternkeeper") return refusal("We couldn't find an account named $name.")
+            if (doc.select("li[id^=participant_]").any { it.selectFirst("span.byline a")?.text() == name })
+                return refusal("That account has already been invited.")
+            val row = doc.selectFirst("ul.participant.index")!!.appendElement("li").attr("id", "participant_109")
+            row.appendElement("span").addClass("byline").appendElement("a")
+                .attr("href", "/users/$name").text(name)
+            row.appendElement("form").attr("action", "$participants/109").attr("method", "post")
+                .appendElement("select").attr("name", "collection_participant[participant_role]")
+                .appendElement("option").attr("value", "Invited").attr("selected", "selected").text("Invited")
+            pages[slug] = doc.outerHtml()
+            return 200 to "<div class='flash notice'>Invitation sent.</div>"
+        }
+        if (path == "$participants/101") {
+            if (fixtures.read("ao3_demo_maintainers_show") == null) return 404 to ""
+            if (fields != mapOf("authenticity_token" to "demo-maintainers-show-token", "_method" to "delete"))
+                return refusal("AO3 couldn't leave that collection.")
+            val owners = doc.select("li[id^=participant_]").count {
+                it.selectFirst("option[selected]")?.attr("value") == "Owner"
+            }
+            if (owners <= 1) return refusal("You're the last owner. Appoint another owner before you step down.")
+            val reader = doc.selectFirst("#participant_101") ?: return refusal("AO3 couldn't leave that collection.")
+            reader.remove()
+            pages[slug] = doc.outerHtml()
+            return 200 to "<div class='flash notice'>You have left the collection.</div>"
+        }
+        return refusal("AO3 couldn't change that participant.")
     }
 }
 

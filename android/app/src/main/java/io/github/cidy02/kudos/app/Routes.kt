@@ -152,12 +152,15 @@ object Routes {
     private const val ARG_AO3_COLLECTION_TITLE = "collectionTitle"
     const val AO3CollectionDetail = "ao3-collection-detail/{$ARG_AO3_COLLECTION_SLUG}?title={$ARG_AO3_COLLECTION_TITLE}"
     const val AO3CollectionItems = "ao3-collection-items/{$ARG_AO3_COLLECTION_SLUG}?title={$ARG_AO3_COLLECTION_TITLE}"
+    const val AO3CollectionMaintainers = "ao3-collection-maintainers/{$ARG_AO3_COLLECTION_SLUG}?title={$ARG_AO3_COLLECTION_TITLE}"
     const val AO3UserCollectionItems = "ao3-user-collection-items"
     const val AO3CollectionForm = "ao3-collection-form?slug={$ARG_AO3_COLLECTION_SLUG}"
     fun ao3CollectionForm(slug: String? = null) = if (slug == null) "ao3-collection-form"
         else "ao3-collection-form?slug=${encode(slug)}"
     fun ao3CollectionItems(slug: String, title: String) =
         "ao3-collection-items/${encode(slug)}?title=${encode(title)}"
+    fun ao3CollectionMaintainers(slug: String, title: String) =
+        "ao3-collection-maintainers/${encode(slug)}?title=${encode(title)}"
     fun ao3CollectionDetail(slug: String, title: String? = null) =
         if (title.isNullOrBlank()) "ao3-collection-detail/${encode(slug)}"
         else "ao3-collection-detail/${encode(slug)}?title=${encode(title)}"
@@ -224,6 +227,7 @@ object Routes {
             AccountList -> "Account List"
             AO3Collections -> "My Collections"
             AO3CollectionItems -> "Collection items"
+            AO3CollectionMaintainers -> "Maintainers"
             AO3UserCollectionItems -> "Collection items"
             AO3CollectionForm -> "Collection settings"
             Settings -> "Settings"
@@ -288,6 +292,7 @@ object Routes {
             base == Collections.substringBefore("?").substringBefore("/") ||
             base == CollectionDetail.substringBefore("?").substringBefore("/") ||
             base == AO3CollectionItems.substringBefore("?").substringBefore("/") ||
+            base == AO3CollectionMaintainers.substringBefore("?").substringBefore("/") ||
             base == AO3UserCollectionItems ||
             base == AO3CollectionForm.substringBefore("?") ||
             base == AO3CollectionDetail.substringBefore("?").substringBefore("/") ||
@@ -309,7 +314,7 @@ object Routes {
         WorkDetail, // WorkDetailView
         BrowseFandoms, BrowseWorks, TagWorks, // FandomListView, NativeBrowseView
         Settings, Backup, QueueStorage, AvailabilitySweep, About, BugReport, // SettingsPageForm
-        AO3Preferences, AO3Dashboard, AccountList, AccountMoreOnAO3, AccountInbox, AO3CollectionDetail, AO3CollectionItems, AO3UserCollectionItems, AO3CollectionForm, // Account screens and AO3 lists
+        AO3Preferences, AO3Dashboard, AccountList, AccountMoreOnAO3, AccountInbox, AO3CollectionDetail, AO3CollectionItems, AO3CollectionMaintainers, AO3UserCollectionItems, AO3CollectionForm, // Account screens and AO3 lists
         Collections, // LibraryEntityGridView
         QueueDetail, // ReadingQueueSettingsView
         ReadingStatistics // ReadingInsightsView
