@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Summer Prompt Meme Settings</title><meta name="csrf-token" content="csrf-challenge"></head>
+<body>
+<form action="/collections/summer_meme/prompt_meme" method="post">
+  <input type="hidden" name="_method" value="put">
+  <input type="hidden" name="authenticity_token" value="csrf-challenge">
+  <input type="checkbox" name="prompt_meme[signup_open]" value="1" checked>
+  <select name="prompt_meme[time_zone]"><option value="UTC" selected>UTC</option></select>
+  <input name="prompt_meme[signups_open_at_string]" value="2026-06-01 00:00:00">
+  <input name="prompt_meme[signups_close_at_string]" value="2026-06-30 00:00:00">
+  <input name="prompt_meme[assignments_due_at_string]" value="2026-07-15 00:00:00">
+  <input name="prompt_meme[works_reveal_at_string]" value="2026-07-20 00:00:00">
+  <input name="prompt_meme[authors_reveal_at_string]" value="2026-07-21 00:00:00">
+  <input name="prompt_meme[requests_num_required]" value="1">
+  <input name="prompt_meme[requests_num_allowed]" value="3">
+  <input name="prompt_meme[offers_num_required]" value="1">
+  <input name="prompt_meme[offers_num_allowed]" value="2">
+  <input name="prompt_meme[request_restriction_attributes][fandom_num_required]" value="1">
+  <input name="prompt_meme[request_restriction_attributes][fandom_num_allowed]" value="3">
+  <input name="prompt_meme[request_restriction_attributes][relationship_num_required]" value="0">
+  <input name="prompt_meme[request_restriction_attributes][relationship_num_allowed]" value="2">
+  <input name="prompt_meme[request_restriction_attributes][character_num_required]" value="0">
+  <input name="prompt_meme[request_restriction_attributes][character_num_allowed]" value="4">
+  <input type="checkbox" name="prompt_meme[request_restriction_attributes][optional_tags_allowed]" checked>
+  <input type="checkbox" name="prompt_meme[request_restriction_attributes][allow_any_character]" checked>
+  <input type="checkbox" name="prompt_meme[anonymous]" checked>
+</form>
+</body>
+</html>
