@@ -511,3 +511,18 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   back: "N item(s) you changed during the import kept your version; import again to take the
   backup's". Reverse: `refreshForApply` in `backup/BackupMergeService.kt` and
   `applyMergeResult` in `backup/BackupRepository.kt`.
+- **2026-10-05 · Settings › Listening is iOS's page, as far as Android's speech engine goes.**
+  Audition Voice (sample text, speed, three speed shortcuts, Play Sample), the voice pack's
+  state, and Read Aloud (voice, speed, reset). Left out, because Android's engine has nothing
+  behind them: the engine choice, the model and compute choices, Read author's notes,
+  Pronunciations, Developer Settings and Pitch (`briefs/3ak-result.md` lists what each would
+  take). Two changes of behaviour come with it: **read-aloud speed stops at 1.5x, as on iOS**
+  (Android's went to 2.0x), and **the chosen voice and speed are now kept between sessions**
+  (they were forgotten when the reader closed). They are kept on the device, outside backups,
+  as on iOS. Reverse: `settings/SettingsListeningPage.kt`,
+  `reader/settings/ReaderSpeechPreferences.kt`, and the speech keys in
+  `data/preferences/SettingsRepository.kt`.
+- **2026-10-05 · The page's own colour stays under the status bar on a scrolled page.** With
+  the top buttons scrolled away, text ran under the clock. The wash-coloured ground that sits
+  behind the buttons now shrinks to the status bar's height instead of going away. Reverse:
+  the `fadeHeight` lines in `app/MainScaffold.kt`.

@@ -364,14 +364,21 @@ fun MainScaffold(
 
         if (isPushedSubject) {
             // Plain icon buttons cannot be read with a list running under them. While one does,
-            // the top of the screen is painted again in the page's own wash.
+            // the top of the screen is painted again in the page's own wash. With the buttons
+            // scrolled away the same ground stays under the status bar alone, so the clock is
+            // never drawn over a line of text.
+            val fadeHeight by animateDpAsState(
+                insets.calculateTopPadding() + if (chromeHidden) 0.dp else TopChromeHeight,
+                ChromeDpMotion,
+                label = "topChromeFade"
+            )
             AnimatedVisibility(
-                visible = !chromeHidden && chrome.isScrolled(activeRoute),
+                visible = chrome.isScrolled(activeRoute),
                 modifier = Modifier.align(Alignment.TopCenter),
                 enter = fadeIn(ChromeMotion),
                 exit = fadeOut(ChromeMotion)
             ) {
-                TopChromeFade(insets.calculateTopPadding() + TopChromeHeight)
+                TopChromeFade(fadeHeight)
             }
             AnimatedVisibility(
                 visible = !chromeHidden,
