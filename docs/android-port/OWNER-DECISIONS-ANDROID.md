@@ -248,3 +248,10 @@ Settings). Never run against AO3 on either app.
   the message that it was created. A second tap on Create Collection asks AO3 to create it
   again (AO3 refuses, because the name is now taken). Should the form close, or turn into the
   edit form, after a successful create? Until answered: it stays open, as iOS.
+
+## 15. The Maintainers screen: "Invite as" does nothing on iOS
+
+iOS's Maintainers screen lets you choose "Invite as: Moderator / Owner" before sending an
+invitation, and then sends the same request whichever you chose (AO3's invitation takes only a
+username). Android's screen, being built on 2026-10-05, copies that. Remove the choice from
+both apps, or keep it? Until answered: shown on both, with no effect on either.
