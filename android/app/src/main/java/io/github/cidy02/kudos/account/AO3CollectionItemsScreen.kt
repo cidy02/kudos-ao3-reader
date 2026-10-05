@@ -82,7 +82,8 @@ fun AO3CollectionItemsScreen(
     slug: String,
     title: String,
     repository: AO3CollectionDetailRepository,
-    writes: AO3WriteRepository
+    writes: AO3WriteRepository,
+    initialTab: AO3CollectionItemTab = AO3CollectionItemTab.Unreviewed
 ) {
     val auth = repository.authRepository
     val generation by auth.generation.collectAsState()
@@ -90,7 +91,7 @@ fun AO3CollectionItemsScreen(
     // Key the state on auth before rendering: replacement sessions never see old private rows/forms.
     val model = remember(slug, generation, authState.isSignedIn) { AO3CollectionItemsState(slug, repository, writes) }
     val state by model.state.collectAsState()
-    var tab by remember(slug) { mutableStateOf(AO3CollectionItemTab.Unreviewed) }
+    var tab by remember(slug, initialTab) { mutableStateOf(initialTab) }
     var confirming by remember(slug, generation, authState.isSignedIn) { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val tokens = LocalKudosTokens.current

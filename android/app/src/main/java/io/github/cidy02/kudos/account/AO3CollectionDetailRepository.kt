@@ -9,6 +9,9 @@ import io.github.cidy02.kudos.network.ao3.account.AO3CollectionItemTab
 import io.github.cidy02.kudos.network.ao3.account.AO3CollectionItemsPage
 import io.github.cidy02.kudos.network.ao3.account.AO3CollectionItemsParser
 import io.github.cidy02.kudos.network.ao3.account.AO3CollectionItemsUrls
+import io.github.cidy02.kudos.network.ao3.account.AO3CollectionModeration
+import io.github.cidy02.kudos.network.ao3.account.AO3CollectionModerationUrls
+import io.github.cidy02.kudos.network.ao3.account.AO3CollectionParticipantsParser
 import io.github.cidy02.kudos.network.ao3.account.AO3CollectionParser
 import io.github.cidy02.kudos.network.ao3.account.AO3CollectionPeoplePage
 import io.github.cidy02.kudos.network.ao3.account.AO3CollectionShow
@@ -30,6 +33,32 @@ class AO3CollectionDetailRepository(
     private val collectionParser: AO3CollectionParser = AO3CollectionParser(),
     private val searchParser: AO3SearchParser = AO3SearchParser()
 ) {
+    /** iOS collectionModeration: items, participants, show; sequential, no profile or prefetch. */
+    suspend fun getModeration(slug: String): AO3Result<AO3CollectionModeration> {
+        val generation = authRepository.generation.value
+        val items = when (val result = getCollectionItems(slug, AO3CollectionItemTab.Unreviewed, 1)) {
+            is AO3Result.Failure -> return result
+            is AO3Result.Success -> result.value
+        }
+        if (generation != authRepository.generation.value) throw CancellationException()
+        val participants = when (val result = fetch(AO3CollectionModerationUrls.participants(slug)) {
+            AO3CollectionParticipantsParser().parse(it)
+        }) {
+            is AO3Result.Failure -> return result
+            is AO3Result.Success -> result.value
+        }
+        if (generation != authRepository.generation.value) throw CancellationException()
+        val show = when (val result = fetch(AO3CollectionFormUrls.show(slug)) {
+            collectionParser.parseCollectionShow(it, slug)
+        }) {
+            is AO3Result.Failure -> return result
+            is AO3Result.Success -> result.value
+        }
+        if (generation != authRepository.generation.value) throw CancellationException()
+        return AO3Result.Success(AO3CollectionModeration(items, participants.filter { it.isMembershipRequest },
+            participants.count { it.isMaintainer }, show.collection.isUnrevealed, show.collection.isAnonymous))
+    }
+
     suspend fun getCollectionForm(slug: String?): AO3Result<AO3CollectionForm> =
         fetch(AO3CollectionFormUrls.form(slug)) { AO3CollectionFormParser().parse(it, slug) }
 

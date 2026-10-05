@@ -38,7 +38,9 @@ data class AO3CollectionItem(
     val moderatorEditable: Boolean,
     val unrevealedEditable: Boolean,
     val anonymousEditable: Boolean,
-    val removeEditable: Boolean
+    val removeEditable: Boolean,
+    val workId: Long? = null,
+    val itemType: String = "Work"
 )
 
 data class AO3CollectionItemsPage(
@@ -164,6 +166,9 @@ class AO3CollectionItemsParser {
             li.selectFirst("h4.heading a")?.text().orEmpty(), role, byline,
             li.selectFirst("p.datetime")?.text().orEmpty(), approval(user), approval(moderator),
             unrevealed?.hasAttr("checked") == true, anonymous?.hasAttr("checked") == true,
-            editable(user), editable(moderator), editable(unrevealed), editable(anonymous), editable(box("remove")))
+            editable(user), editable(moderator), editable(unrevealed), editable(anonymous), editable(box("remove")),
+            li.selectFirst("h4.heading a[href*='/works/']")?.attr("href")?.let {
+                Regex("/works/(\\d+)(?:[/?#]|$)").find(it)?.groupValues?.get(1)?.toLongOrNull()
+            }, if (li.selectFirst("blockquote.bookmark") != null) "Bookmark" else "Work")
     }
 }

@@ -325,7 +325,8 @@ private fun SubtitleText(subtitle: String) {
         text = subtitle,
         color = LocalKudosTokens.current.secondaryInk,
         fontSize = 15.5.sp,
-        maxLines = 2,
+        lineHeight = 22.sp,
+        maxLines = if (isAccessibilityFontScale()) Int.MAX_VALUE else 2,
         overflow = TextOverflow.Ellipsis
     )
 }
@@ -359,6 +360,7 @@ fun SectionRuleHeader(
             text = title.uppercase(),
             color = tokens.secondaryInk,
             fontSize = labelSize,
+            lineHeight = 16.sp,
             fontWeight = FontWeight.Bold,
             letterSpacing = (11f * 0.127f).sp,
             maxLines = if (accessibilityFontScale) Int.MAX_VALUE else 1,
@@ -371,6 +373,7 @@ fun SectionRuleHeader(
                 text = figure,
                 color = tokens.tertiaryInk,
                 fontSize = labelSize,
+                lineHeight = 16.sp,
                 fontWeight = FontWeight.Medium,
                 fontFamily = FontFamily.Monospace,
                 maxLines = 1
@@ -381,6 +384,7 @@ fun SectionRuleHeader(
                 text = "· $note",
                 color = tokens.tertiaryInk,
                 fontSize = labelSize,
+                lineHeight = 16.sp,
                 fontWeight = FontWeight.Medium,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
