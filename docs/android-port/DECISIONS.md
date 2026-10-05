@@ -761,3 +761,13 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   owner decides (question 16), Android's screen makes at most four reads (the challenge form,
   the collection's profile, and the first and last page of sign-ups) and shows the Assignments
   rows without counts. iOS is left as it is: changing what iOS reads is the owner's call.
+- **2026-10-05 · Android's work editor is built from the bottom, and follows the editor
+  design document.** `docs/WRITING_EDITOR_ARCHITECTURE.md` is the single design for both
+  platforms; what iOS ships today is its native HTML mode with a formatting toolbar, a
+  read-only preview, AO3's word count and the recovery store (the shared rich-text package it
+  describes was never built). Posting a work cannot be taken back, so Android gets the layers
+  in order, each proved by iOS's own tests before the next: AO3's work form as data (brief
+  3bb), the recovery store and the word count (3bc), then the editor's screens, then Save,
+  then Post. Until a layer has a screen, a draft tap and New Work keep opening AO3's page.
+  The document leaves one Android choice to a measurement (its HTML-mode widget, §9.2, OD5);
+  that comes with the editor screen's brief, not before.
