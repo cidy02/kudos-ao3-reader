@@ -29,10 +29,15 @@ import java.time.Instant
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import org.junit.After
 import org.junit.Assert.assertArrayEquals
@@ -497,6 +502,224 @@ class SyncRepositoryTest {
         // What this build does know is its own: the exporter is this device, not theirs.
         assertTrue(written["works"].toString().contains(WORK_A, ignoreCase = true))
         assertFalse(written["exportedBy"].toString().contains("\"test\""))
+    }
+
+    @Test
+    fun unknownRecordFieldsSurviveSyncWithLocalChangesAndTheSecondSyncIsByteIdentical() = runTest {
+        val date = "2026-01-01T00:00:00Z"
+        val theirs = remoteManifest(listOf(remoteBackupWork(WORK_A, "Old title", false).copy(
+            sourceURL = "", lastModifiedAt = date
+        )), date).copy(
+            collections = listOf(BackupCollection(ANDROID_ONE, "Collection", date)),
+            bookmarks = listOf(BackupBookmark("Link", "https://example.org/link", date, ANDROID_TWO))
+        )
+        val raw = BackupJson.encodeToJsonElement(KudosBackupManifest.serializer(), theirs).jsonObject.toMutableMap()
+        val extras = mapOf(
+            "works" to Json.parseToJsonElement("""{"later":{"array":[1,null,true,"exact"]}}"""),
+            "collections" to Json.parseToJsonElement("""["future",{"n":2.75}]"""),
+            "bookmarks" to Json.parseToJsonElement("null")
+        )
+        extras.forEach { (list, extra) ->
+            raw[list] = JsonArray(raw.getValue(list).jsonArray.map { JsonObject(it.jsonObject + ("futureField" to extra)) })
+        }
+        val kudos = ensureKudosLibrary()
+        writeChild(kudos, BackupPaths.MANIFEST, "application/json",
+            BackupJson.encodeToString(JsonObject.serializer(), JsonObject(raw)).toByteArray())
+        val local = SavedWork(id = WORK_A, title = "Android title", author = "Android author", sourceUrl = "",
+            dateAdded = FIXED_CLOCK, lastModifiedAt = FIXED_CLOCK, lastSpineIndex = 7,
+            lastScrollFraction = 0.75, lastReadDate = FIXED_CLOCK, progressModifiedAt = FIXED_CLOCK,
+            isSaved = true, hasEpub = false)
+        database.workDao().upsert(local.toEntity())
+
+        assertTrue(syncRepository.runSync() is SyncResult.Success)
+
+        val first = readDocument(requireKudosLibrary().findFile(BackupPaths.MANIFEST)!!)
+        val written = Json.parseToJsonElement(first.toString(Charsets.UTF_8)).jsonObject
+        extras.forEach { (list, extra) ->
+            assertEquals(extra, written.getValue(list).jsonArray.single().jsonObject["futureField"])
+        }
+        val work = written.getValue("works").jsonArray.single().jsonObject
+        assertEquals(JsonPrimitive(local.title), work["title"])
+        assertEquals(JsonPrimitive(local.author), work["author"])
+        assertEquals(JsonPrimitive(7), work["lastSpineIndex"])
+        assertEquals(JsonPrimitive(0.75), work["lastScrollFraction"])
+        assertEquals(BackupPaths.sha256(first), settingsRepository.settings.first().sync.lastManifestDigest)
+
+        assertTrue(syncRepository.runSync() is SyncResult.Success)
+        assertArrayEquals(first, readDocument(requireKudosLibrary().findFile(BackupPaths.MANIFEST)!!))
+    }
+
+    @Test
+    fun unknownKeysDoNotRecreateADeletedRecordOnSync() = runTest {
+        val date = "2026-01-01T00:00:00Z"
+        val theirs = remoteManifest(emptyList(), date).copy(
+            savedSearches = listOf(BackupSavedSearch(ANDROID_ONE, "Omitted", date))
+        )
+        val raw = BackupJson.encodeToJsonElement(KudosBackupManifest.serializer(), theirs).jsonObject
+        val search = raw.getValue("savedSearches").jsonArray.single().jsonObject
+        val withExtra = JsonObject(raw + ("savedSearches" to JsonArray(listOf(
+            JsonObject(search + ("futureField" to JsonPrimitive("never resurrect")))
+        ))))
+        writeChild(ensureKudosLibrary(), BackupPaths.MANIFEST, "application/json",
+            BackupJson.encodeToString(JsonObject.serializer(), withExtra).toByteArray())
+        database.syncTombstoneDao().upsert(io.github.cidy02.kudos.core.model.SyncTombstone(
+            id = ANDROID_TWO, recordID = ANDROID_ONE,
+            recordTypeRaw = io.github.cidy02.kudos.core.model.SyncTombstoneRecordType.SAVED_SEARCH,
+            createdAt = FIXED_CLOCK, lastModifiedAt = FIXED_CLOCK
+        ).toEntity())
+
+        assertTrue(syncRepository.runSync() is SyncResult.Success)
+        val written = Json.parseToJsonElement(readDocument(
+            requireKudosLibrary().findFile(BackupPaths.MANIFEST)!!).toString(Charsets.UTF_8)).jsonObject
+        assertTrue(written.getValue("savedSearches").jsonArray.isEmpty())
+        assertNull(database.savedSearchDao().getById(ANDROID_ONE))
+    }
+
+    @Test
+    fun unknownKeyCarryIgnoresMalformedOldRecordsAndListsAndNeverOverwritesKnownKeys() {
+        val outgoing = Json.parseToJsonElement("""{
+            "works":[{"id":"$WORK_A","title":"Android"}],
+            "collections":[{"id":"$ANDROID_ONE","name":"Android collection"}],
+            "fonts":[{"name":"Android font","fileName":"reader.otf","dateAdded":"now"}]
+        }""").jsonObject
+        val malformed = Json.parseToJsonElement("""{
+            "works":[null,7,[],{"id":"$WORK_A","title":"Old","downloadedAt":"old","extra":[1,null]}],
+            "collections":{"id":"$ANDROID_ONE","extra":true},
+            "fonts":false
+        }""").jsonObject
+        val carried = carryUnknownRecordKeys(outgoing, malformed)
+        val work = carried.getValue("works").jsonArray.single().jsonObject
+        assertEquals(JsonPrimitive("Android"), work["title"])
+        assertFalse("A known nullable key absent from outgoing must not be copied", "downloadedAt" in work)
+        assertEquals(Json.parseToJsonElement("[1,null]"), work["extra"])
+        assertEquals(outgoing["collections"], carried["collections"])
+        assertEquals(outgoing["fonts"], carried["fonts"])
+    }
+
+    @Test
+    fun unknownKeyCarryCoversEveryRecordListAndMergeIdentityFallbacks() {
+        val date = "2026-01-01T00:00:00Z"
+        val manifest = remoteManifest(listOf(remoteBackupWork(WORK_A, "Work", false)), date).copy(
+            bookmarks = listOf(BackupBookmark("Link", "https://example.org/link", date, WORK_A)),
+            fonts = listOf(BackupFont("Font", "Café.otf", date)),
+            collections = listOf(BackupCollection(WORK_A, "Collection", date)),
+            savedSearches = listOf(BackupSavedSearch(WORK_A, "Search", date)),
+            readingQueues = listOf(BackupReadingQueue(WORK_A, kindRaw = ReadingQueueKind.SAVED_FOR_LATER)),
+            readingQueueMemberships = listOf(BackupReadingQueueMembership(WORK_A, WORK_A, WORK_A)),
+            annotations = listOf(BackupAnnotation(WORK_A, WORK_A)),
+            readingSessions = listOf(BackupReadingSession(WORK_A)),
+            readingFavorites = listOf(BackupReadingFavorite(WORK_A, kindRaw = "fandom", targetKey = "Fandom")),
+            fandomReadWatermarks = listOf(BackupFandomReadWatermark(WORK_A, fandomName = "Fandom")),
+            tombstones = listOf(BackupTombstone(WORK_A, WORK_A))
+        )
+        val raw = BackupJson.encodeToJsonElement(KudosBackupManifest.serializer(), manifest).jsonObject
+        val extra = Json.parseToJsonElement("""{"future":[null,1,"x"]}""")
+        val replaced = JsonObject(raw.mapValues { (_, value) ->
+            if (value is JsonArray) JsonArray(value.map { element ->
+                JsonObject(element.jsonObject + ("futureField" to extra))
+            }) else value
+        })
+        val outgoing = JsonObject(raw.mapValues { (list, value) ->
+            if (value !is JsonArray) value else JsonArray(value.map { element ->
+                val record = element.jsonObject
+                when (list) {
+                    // The merge preserves a different local UUID for these identities.
+                    "works", "bookmarks", "readingQueues", "readingFavorites", "fandomReadWatermarks" ->
+                        JsonObject(record + ("id" to JsonPrimitive(WORK_REMOTE)))
+                    "fonts" -> JsonObject(record + ("fileName" to JsonPrimitive("Cafe\u0301.otf")))
+                    else -> JsonObject(record + ("id" to JsonPrimitive(WORK_A.uppercase())))
+                }
+            })
+        })
+        val carried = carryUnknownRecordKeys(outgoing, replaced)
+        outgoing.forEach { (list, value) ->
+            if (value is JsonArray) {
+                assertEquals(list, extra, carried.getValue(list).jsonArray.single().jsonObject["futureField"])
+            }
+        }
+    }
+
+    @Test
+    fun restoringTheSameArchiveTwiceLeavesOneFontFile() = runTest {
+        settingsRepository.updateReaderFontId("custom:reader.otf")
+        val incoming = context.assets.open("readium/fonts/OpenDyslexic-Regular.otf").use { it.readBytes() }
+        val pack = KudosBackupPackage(
+            remoteManifest(emptyList(), "2026-01-01T00:00:00Z").copy(
+                fonts = listOf(BackupFont("Font", "reader.otf", "2026-01-01T00:00:00Z")),
+                settings = BackupSettingsPayload(readerFontID = "custom:reader.otf")
+            ), fontFilesByFileName = mapOf("reader.otf" to incoming)
+        )
+        val zip = BackupExporter.exportV2(pack)
+        backupRepository.importV2ZipBytes(zip)
+        backupRepository.importV2ZipBytes(zip)
+        assertEquals(listOf("reader.otf"), fontFileStore.readAllFontFiles().keys.toList())
+        assertEquals(listOf("reader.otf"), database.customFontDao().getAll().map { it.fileName })
+        assertArrayEquals(incoming, fontFileStore.readFont("reader.otf"))
+        assertEquals("custom:reader.otf", settingsRepository.snapshot().reader.readerFontId)
+    }
+
+    @Test
+    fun restoringTheSameCollidingArchiveTwiceReusesTheSuffixedFontAndRetainsTheLocalSelector() = runTest {
+        val incoming = context.assets.open("readium/fonts/OpenDyslexic-Regular.otf").use { it.readBytes() }
+        val local = "different local font".toByteArray()
+        settingsRepository.updateReaderFontId("custom:reader.otf")
+        fontFileStore.writeFont("reader.otf", local)
+        database.customFontDao().upsert(CustomFont(name = "Local", fileName = "reader.otf", dateAdded = FIXED_CLOCK).toEntity())
+        val pack = KudosBackupPackage(
+            remoteManifest(emptyList(), "2026-01-01T00:00:00Z").copy(
+                fonts = listOf(BackupFont("Remote", "reader.otf", "2026-01-01T00:00:00Z")),
+                settings = BackupSettingsPayload(readerFontID = "custom:reader.otf")
+            ), fontFilesByFileName = mapOf("reader.otf" to incoming)
+        )
+        val zip = BackupExporter.exportV2(pack)
+        backupRepository.importV2ZipBytes(zip)
+        backupRepository.importV2ZipBytes(zip)
+        // One incoming copy alongside the original, which must also survive.
+        assertEquals(setOf("reader.otf", "reader-restored-1.otf"), fontFileStore.readAllFontFiles().keys)
+        assertEquals(2, database.customFontDao().getAll().size)
+        assertArrayEquals(local, fontFileStore.readFont("reader.otf"))
+        assertArrayEquals(incoming, fontFileStore.readFont("reader-restored-1.otf"))
+        assertEquals("custom:reader.otf", settingsRepository.snapshot().reader.readerFontId)
+        assertTrue(database.customFontDao().getAll().all { fontFileStore.fontExists(it.fileName) })
+        val repeated = BackupMergeService.merge(
+            backupRepository.captureLibrarySnapshot(pack.fontFilesByFileName.keys, pack.fontFilesByFileName), pack
+        )
+        assertEquals("custom:reader-restored-1.otf", repeated.snapshot.settings.readerFontID)
+        assertTrue(repeated.fontFilesToWriteByFileName.isEmpty())
+    }
+
+    @Test
+    fun carryingAnUnknownTombstoneKeyKeepsItsSignatureValid() {
+        val pair = com.google.crypto.tink.subtle.Ed25519Sign.KeyPair.newKeyPair()
+        val signed = TombstoneSigning.signWithRawKey(
+            io.github.cidy02.kudos.core.model.SyncTombstone(
+                id = ANDROID_ONE, recordID = WORK_A, recordTypeRaw = "savedWork",
+                createdAt = FIXED_CLOCK, lastModifiedAt = FIXED_CLOCK
+            ), pair.privateKey, pair.publicKey.toLowerHex()
+        )
+        val raw = BackupJson.encodeToJsonElement(KudosBackupManifest.serializer(),
+            remoteManifest(emptyList(), FIXED_CLOCK.toString()).copy(tombstones = listOf(signed.toBackupTombstone()))
+        ).jsonObject
+        val tombstone = raw.getValue("tombstones").jsonArray.single().jsonObject
+        val replaced = JsonObject(raw + ("tombstones" to JsonArray(listOf(
+            JsonObject(tombstone + ("futureField" to JsonPrimitive("unsigned extra")))
+        ))))
+        val carried = carryUnknownRecordKeys(raw, replaced)
+        val decoded = BackupJson.decodeFromJsonElement(KudosBackupManifest.serializer(), carried)
+        assertEquals(signed.signature, decoded.tombstones.single().signature)
+        assertTrue(TombstoneSigning.verify(decoded.tombstones.single().toSyncTombstone()))
+    }
+
+    @Test
+    fun aCoercibleMalformedListInTheOldManifestDoesNotStopSync() = runTest {
+        // Null on a defaulted list decodes as empty with BackupJson.coerceInputValues.
+        val raw = BackupJson.encodeToJsonElement(KudosBackupManifest.serializer(),
+            remoteManifest(emptyList(), "2026-01-01T00:00:00Z")).jsonObject
+        writeChild(ensureKudosLibrary(), BackupPaths.MANIFEST, "application/json",
+            BackupJson.encodeToString(JsonObject.serializer(), JsonObject(raw +
+                ("fonts" to Json.parseToJsonElement("null")))).toByteArray())
+        assertTrue(syncRepository.runSync() is SyncResult.Success)
+        assertNotNull(requireKudosLibrary().findFile(BackupPaths.MANIFEST))
     }
 
     @Test

@@ -150,24 +150,31 @@ object BackupPaths {
         val foldedExistingNames = existingNames.mapTo(mutableSetOf()) { fontFileNameKey(it) }
         if (fontFileNameKey(safeName) !in foldedExistingNames) return safeName
 
-        val dotIndex = safeName.lastIndexOf('.').takeIf { it > 0 }
-        val originalBase = dotIndex?.let { safeName.substring(0, it) } ?: safeName
-        val extension = dotIndex?.let { safeName.substring(it) }.orEmpty()
-
         var index = 1
         while (true) {
-            val suffix = "-restored-$index"
-            // Suffix room comes out of the 128-char cap; otherwise a valid
-            // occupied name of length 118–128 can never produce a safe candidate.
-            val budget = (MAX_FONT_FILE_NAME_LENGTH - suffix.length).coerceAtLeast(0)
-            val extensionToUse = extension.take(budget)
-            val baseToUse = originalBase.take(budget - extensionToUse.length)
-            val candidate = "$baseToUse$suffix$extensionToUse"
+            val candidate = restoredFontFileName(safeName, index)
             if (fontFileNameKey(candidate) !in foldedExistingNames && isSafeFontFileName(candidate)) {
                 return candidate
             }
             index += 1
         }
+    }
+
+    private fun restoredFontFileName(fileName: String, index: Int): String {
+        val dotIndex = fileName.lastIndexOf('.').takeIf { it > 0 }
+        val base = dotIndex?.let { fileName.substring(0, it) } ?: fileName
+        val extension = dotIndex?.let { fileName.substring(it) }.orEmpty()
+        val suffix = "-restored-$index"
+        val budget = (MAX_FONT_FILE_NAME_LENGTH - suffix.length).coerceAtLeast(0)
+        val extensionToUse = extension.take(budget)
+        return "${base.take(budget - extensionToUse.length)}$suffix$extensionToUse"
+    }
+
+    /** Includes only copies named by our collision path, including its 128-character cap. */
+    fun isRestoredFontFileName(candidate: String, original: String): Boolean {
+        val index = Regex("-restored-([1-9][0-9]*)").findAll(candidate).lastOrNull()
+            ?.groupValues?.get(1)?.toIntOrNull() ?: return false
+        return fontFileNameKey(candidate) == fontFileNameKey(restoredFontFileName(sanitizeFontFileName(original), index))
     }
 
     // iOS `KudosBackupService.restore` uses Swift String equality, which treats
