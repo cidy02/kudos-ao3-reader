@@ -45,6 +45,7 @@ import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
 import io.github.cidy02.kudos.ui.subject.SubjectHeaderBlock
 import io.github.cidy02.kudos.ui.subject.SubjectWorkCardMetrics
 import io.github.cidy02.kudos.ui.subject.subjectScreenWash
+import io.github.cidy02.kudos.ui.subject.isAccessibilityFontScale
 import io.github.cidy02.kudos.works.WorkRepository
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -141,7 +142,8 @@ fun CollectionsScreen(
         KudosRefreshBox(onRefresh = { refresh() }, modifier = Modifier.fillMaxSize()) {
             val topInset = WindowInsets.systemBars.asPaddingValues().calculateTopPadding()
             LazyVerticalGrid(
-                columns = GridCells.Adaptive(SubjectWorkCardMetrics.width),
+                columns = if (isAccessibilityFontScale()) GridCells.Fixed(1)
+                    else GridCells.Adaptive(SubjectWorkCardMetrics.width),
                 contentPadding = PaddingValues(
                     start = 16.dp,
                     end = 16.dp,
