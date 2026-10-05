@@ -1,8 +1,11 @@
 package io.github.cidy02.kudos.reader.readium
 
+import androidx.compose.ui.graphics.toArgb
 import io.github.cidy02.kudos.reader.settings.CustomFontDeclaration
 import io.github.cidy02.kudos.reader.settings.ReaderColorTheme
 import io.github.cidy02.kudos.reader.settings.ReaderPreferences
+import io.github.cidy02.kudos.reader.settings.backgroundColor
+import io.github.cidy02.kudos.reader.settings.textColor
 import org.readium.r2.navigator.epub.EpubNavigatorFragment
 import org.readium.r2.navigator.epub.EpubPreferences
 import org.readium.r2.navigator.preferences.Color
@@ -24,22 +27,19 @@ import org.readium.r2.shared.ExperimentalReadiumApi
  */
 @OptIn(ExperimentalReadiumApi::class)
 object ReadiumSettingsAdapter {
-    /** True-black page for OLED; matches iOS `ReaderTheme.oled.backgroundHex`. */
-    private val OledBackground = Color(android.graphics.Color.BLACK)
-
     fun toEpubPreferences(prefs: ReaderPreferences): EpubPreferences {
         return EpubPreferences(
-            // Readium has no OLED case; use DARK chrome + explicit pure-black page
-            // for Oled so the shell and the page stay true-black together.
+            // Readium has no OLED case; Oled is DARK with its own black page.
             theme = when (prefs.theme) {
                 ReaderColorTheme.Light -> Theme.LIGHT
                 ReaderColorTheme.Sepia -> Theme.SEPIA
                 ReaderColorTheme.Dark, ReaderColorTheme.Oled -> Theme.DARK
             },
-            backgroundColor = when (prefs.theme) {
-                ReaderColorTheme.Oled -> OledBackground
-                else -> null
-            },
+            // Every theme's exact page and text colours, as iOS gives them
+            // (`ReadiumReaderStyleMapper`). Left to its own, Readium draws Dark on pure black,
+            // the same as OLED, and no theme's page matched the ground around it.
+            backgroundColor = Color(prefs.theme.backgroundColor().toArgb()),
+            textColor = Color(prefs.theme.textColor().toArgb()),
             scroll = prefs.scroll,
             columnCount = if (!prefs.scroll && prefs.columnCount >= 2) ColumnCount.TWO else ColumnCount.AUTO,
             fontSize = prefs.fontSizePercent / 100.0,

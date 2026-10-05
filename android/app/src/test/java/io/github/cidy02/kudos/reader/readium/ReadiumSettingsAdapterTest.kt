@@ -19,6 +19,21 @@ import org.robolectric.annotation.Config
 @Config(sdk = [35])
 class ReadiumSettingsAdapterTest {
 
+    /** iOS `ReaderTheme.backgroundHex` and `textHex`. Left to its own, Readium's Dark is OLED's black. */
+    @Test
+    fun everyThemeGivesReadiumIosPageAndTextColours() {
+        mapOf(
+            ReaderColorTheme.Light to (0xFFFFFFFF to 0xFF1E1E1E),
+            ReaderColorTheme.Sepia to (0xFFFBF0D9 to 0xFF5B4636),
+            ReaderColorTheme.Dark to (0xFF16161A to 0xFFCFCFD4),
+            ReaderColorTheme.Oled to (0xFF000000 to 0xFFCFCFD4)
+        ).forEach { (theme, colours) ->
+            val prefs = ReadiumSettingsAdapter.toEpubPreferences(ReaderPreferences().copy(theme = theme))
+            assertEquals("$theme page", colours.first.toInt(), prefs.backgroundColor?.int)
+            assertEquals("$theme text", colours.second.toInt(), prefs.textColor?.int)
+        }
+    }
+
     @Test
     fun toEpubPreferencesMapsFontFamilyWhenPresent() {
         val prefs = ReaderPreferences(
