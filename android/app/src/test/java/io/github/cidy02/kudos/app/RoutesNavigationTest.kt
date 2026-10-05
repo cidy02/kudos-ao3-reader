@@ -43,6 +43,10 @@ class RoutesNavigationTest {
                 Routes.AccountList,
                 arguments = listOf(Routes.navArgOf("listType"))
             ) { }
+            composable(Routes.AO3ChallengeSettings, arguments = listOf(
+                Routes.navArgOf("collectionSlug"), Routes.navArgOf("collectionTitle"),
+                navArgument("owner") { type = NavType.BoolType; defaultValue = false }
+            )) { }
             composable(Routes.AO3CollectionModeration, arguments = listOf(
                 Routes.navArgOf("collectionSlug"), Routes.navArgOf("collectionTitle"),
                 navArgument("owner") { type = NavType.BoolType; defaultValue = false }
@@ -96,6 +100,18 @@ class RoutesNavigationTest {
         assertEquals("approved", Routes.routeArg(navController.currentBackStackEntry!!, "tab"))
         navController.navigate(Routes.ao3CollectionItems("winter_exchange", "Winter + Letters / 2026"))
         assertEquals(null, Routes.routeArg(navController.currentBackStackEntry!!, "tab"))
+    }
+
+    @Test fun challengeSettingsArgumentsRoundTripWithOwnerAndSubjectChrome() {
+        navController.navigate(Routes.ao3ChallengeSettings("snow/letters", "Winter + Letters / 2026", true))
+        val entry = navController.currentBackStackEntry!!
+        assertEquals(Routes.AO3ChallengeSettings, entry.destination.route)
+        assertEquals("snow/letters", Routes.routeArg(entry, "collectionSlug"))
+        assertEquals("Winter + Letters / 2026", Routes.routeArg(entry, "collectionTitle"))
+        assertEquals(true, entry.arguments?.getBoolean("owner"))
+        assertEquals("Challenge", Routes.titleFor(entry.destination.route))
+        assertEquals(true, Routes.hasSubjectHeader(entry.destination.route))
+        assertEquals(true, Routes.hidesTabBar(entry.destination.route))
     }
 
     @Test fun messageCreatorOpensNativeCommentsWithComposerRequested() {
