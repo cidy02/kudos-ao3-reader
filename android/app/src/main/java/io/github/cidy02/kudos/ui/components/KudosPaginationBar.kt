@@ -20,6 +20,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.layout.Column
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -49,7 +50,8 @@ fun KudosPaginationBar(
     totalPages: Int,
     onPageChange: (Int) -> Unit,
     modifier: Modifier = Modifier,
-    enabled: Boolean = true
+    enabled: Boolean = true,
+    stacked: Boolean = false
 ) {
     if (totalPages <= 1) return
 
@@ -64,50 +66,50 @@ fun KudosPaginationBar(
         )
     }
 
-    Row(
-        modifier = modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
+    val leading: @Composable () -> Unit = {
         Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            IconButton(
-                onClick = { onPageChange(1) },
-                enabled = enabled && currentPage > 1
-            ) {
+            IconButton(onClick = { onPageChange(1) }, enabled = enabled && currentPage > 1) {
                 Icon(Icons.Outlined.FirstPage, contentDescription = "First Page")
             }
-            IconButton(
-                onClick = { onPageChange(currentPage - 1) },
-                enabled = enabled && currentPage > 1
-            ) {
+            IconButton(onClick = { onPageChange(currentPage - 1) }, enabled = enabled && currentPage > 1) {
                 Icon(Icons.AutoMirrored.Outlined.KeyboardArrowLeft, contentDescription = "Previous Page")
             }
         }
-
-        TextButton(
-            onClick = { showScrubber = true },
-            enabled = enabled && totalPages > 1
-        ) {
+    }
+    val position: @Composable () -> Unit = {
+        TextButton(onClick = { showScrubber = true }, enabled = enabled && totalPages > 1) {
             Text(
                 text = "Page $currentPage of $totalPages",
+                lineHeight = 20.sp,
                 style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
                 color = MaterialTheme.colorScheme.onSurface
             )
         }
-
+    }
+    val trailing: @Composable () -> Unit = {
         Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            IconButton(
-                onClick = { onPageChange(currentPage + 1) },
-                enabled = enabled && currentPage < totalPages
-            ) {
+            IconButton(onClick = { onPageChange(currentPage + 1) }, enabled = enabled && currentPage < totalPages) {
                 Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, contentDescription = "Next Page")
             }
-            IconButton(
-                onClick = { onPageChange(totalPages) },
-                enabled = enabled && currentPage < totalPages
-            ) {
+            IconButton(onClick = { onPageChange(totalPages) }, enabled = enabled && currentPage < totalPages) {
                 Icon(Icons.AutoMirrored.Outlined.LastPage, contentDescription = "Last Page")
             }
+        }
+    }
+    if (stacked) {
+        Column(modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+            position()
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                leading()
+                trailing()
+            }
+        }
+    } else {
+        Row(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically) {
+            leading()
+            position()
+            trailing()
         }
     }
 }
@@ -143,10 +145,12 @@ private fun PageScrubberSheet(
         ) {
             Text(
                 text = "$draftPage",
+                lineHeight = 40.sp,
                 style = MaterialTheme.typography.displaySmall.copy(fontWeight = FontWeight.SemiBold)
             )
             Text(
                 text = "of $totalPages",
+                lineHeight = 20.sp,
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -168,13 +172,13 @@ private fun PageScrubberSheet(
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 TextButton(onClick = { draft = 1f }, enabled = draftPage > 1) {
-                    Text("First")
+                    Text("First", lineHeight = 20.sp)
                 }
                 TextButton(
                     onClick = { draft = maxOf(totalPages, 1).toFloat() },
                     enabled = draftPage < totalPages
                 ) {
-                    Text("Last")
+                    Text("Last", lineHeight = 20.sp)
                 }
             }
 
@@ -183,7 +187,7 @@ private fun PageScrubberSheet(
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f)) {
-                    Text("Cancel")
+                    Text("Cancel", lineHeight = 20.sp)
                 }
                 Button(
                     onClick = {
@@ -193,7 +197,7 @@ private fun PageScrubberSheet(
                     enabled = draftPage != currentPage,
                     modifier = Modifier.weight(1f)
                 ) {
-                    Text("Go")
+                    Text("Go", lineHeight = 20.sp)
                 }
             }
         }

@@ -87,7 +87,8 @@ fun AO3CollectionDetailScreen(
     settingsRepository: SettingsRepository,
     privacyGate: PrivacyGate,
     onOpenWork: (AO3WorkSummary) -> Unit,
-    onOpenWebFallback: (String) -> Unit
+    onOpenWebFallback: (String) -> Unit,
+    onOpenModeration: () -> Unit
 ) {
     var show by remember(slug) { mutableStateOf<AO3CollectionShow?>(null) }
     var segment by remember(slug) { mutableStateOf(AO3CollectionSegment.Works) }
@@ -293,7 +294,10 @@ fun AO3CollectionDetailScreen(
                                 SubjectFormRow(
                                     label = action.label,
                                     showsDisclosure = true,
-                                    onClick = { onOpenWebFallback(action.url) }
+                                    onClick = {
+                                        if (action.label == "Moderation") onOpenModeration()
+                                        else onOpenWebFallback(action.url)
+                                    }
                                 )
                             }
                         }

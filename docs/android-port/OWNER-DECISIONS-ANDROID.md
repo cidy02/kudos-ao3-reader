@@ -213,3 +213,19 @@ that left open.
 - **The bar stays in place when a list scrolls.** iOS's shrinks to one button to give the list
   room; Material allows a bar that slides away on the way down and returns on the way up. Until
   answered: it stays.
+
+## 13. The collection moderation screen: three things
+
+Built on 2026-10-05 to match iOS's (Account › Collections › a collection you maintain › Manage ›
+Moderation). It has never been run against AO3 on either app.
+
+- **A question before sending.** iOS sends the staged changes when Submit is tapped. Android
+  first asks "Submit N staged changes to AO3?". The staged changes can remove a work from a
+  collection, and Android's Submit is a small tick in the top corner. Keep the question on
+  Android, add it to iOS too, or drop it? Until answered: Android asks, iOS does not.
+- **One request per item.** Both apps send one request for each item you changed, one after
+  another. AO3's own page sends them all in one. One would be lighter on AO3 and either all or
+  none would go through. Change both apps to send one? Until answered: one per item, as iOS.
+- **After AO3 refuses one.** Android reads the list again so it shows what AO3 took before the
+  refusal; iOS leaves the list as it was until you refresh. Make iOS do the same? Until
+  answered: they differ.

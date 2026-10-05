@@ -1,21 +1,92 @@
 package io.github.cidy02.kudos.network.ao3.writes
 
+import io.github.cidy02.kudos.account.AccountListType
 import io.github.cidy02.kudos.network.ao3.AO3Error
 import io.github.cidy02.kudos.network.ao3.AO3HttpResponse
-import io.github.cidy02.kudos.network.ao3.AO3Result
-import io.github.cidy02.kudos.account.AccountListType
-import io.github.cidy02.kudos.network.ao3.account.AO3AccountUrls
 import io.github.cidy02.kudos.network.ao3.AO3OverloadDetector
 import io.github.cidy02.kudos.network.ao3.AO3RedirectCookieRelay
+import io.github.cidy02.kudos.network.ao3.AO3Result
+import io.github.cidy02.kudos.network.ao3.account.AO3AccountUrls
+import io.github.cidy02.kudos.network.ao3.account.AO3CollectionItemDraft
+import io.github.cidy02.kudos.network.ao3.account.AO3CollectionItemTab
+import io.github.cidy02.kudos.network.ao3.account.AO3CollectionItemsParser
+import io.github.cidy02.kudos.network.ao3.account.AO3CollectionItemsUrls
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 
 class AO3WriteRepository(
     private val client: AO3AuthenticatedClient,
     private val parser: AO3WriteFormParser = AO3WriteFormParser()
 ) {
+    /** iOS updateCollectionItems: one fresh form, sequential single-shot POSTs, stop on first refusal. */
+    suspend fun updateCollectionItems(
+        slug: String,
+        drafts: List<AO3CollectionItemDraft>,
+        expectedGeneration: Int
+    ): AO3Result<Unit> {
+        fun requireSession() {
+            if (client.sessionGeneration() != expectedGeneration) throw CancellationException()
+        }
+        requireSession()
+        if (client.username() == null) return AO3Result.Failure(AO3Error.AuthenticationRequired)
+        if (drafts.isEmpty()) return AO3Result.Success(Unit)
+        val referer = AO3CollectionItemsUrls.page(
+            slug, AO3CollectionItemTab.Unreviewed, 1
+        )
+        val html = when (val result = client.getAuthenticated(referer)) {
+            is AO3Result.Failure -> return result
+            is AO3Result.Success -> result.value.body
+        }
+        requireSession()
+        val page = try {
+            withContext(Dispatchers.Default) {
+                AO3CollectionItemsParser().parse(
+                    html, slug, AO3CollectionItemTab.Unreviewed, 1
+                )
+            }
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            return AO3Result.Failure(AO3Error.Parse(error.message ?: "Couldn't read AO3's items form."))
+        }
+        if (page.csrfToken.isBlank()) return AO3Result.Failure(AO3Error.Validation(
+            "Couldn't prepare the request. Try again, or open the collection on AO3."
+        ))
+        for (draft in drafts) {
+            currentCoroutineContext().ensureActive()
+            requireSession()
+            val response = withContext(NonCancellable) {
+                client.postAuthenticatedInSession(
+                    page.actionUrl, draft.parameters(page), writeHeaders(page.csrfToken, referer), expectedGeneration
+                )
+            }
+            requireSession()
+            when (response) {
+                is AO3Result.Failure -> return response
+                is AO3Result.Success -> {
+                    val body = response.value.body
+                    val error = parser.writeErrorMessage(body)
+                    when {
+                        error != null -> return AO3Result.Failure(AO3Error.Validation(error))
+                        AO3OverloadDetector.isOverloadPage(body) -> return AO3Result.Failure(
+                            AO3Error.Overloaded(response.value.statusCode, null)
+                        )
+                        parser.writeSuccessMessage(body) != null || response.value.statusCode in 300..399 -> Unit
+                        response.value.statusCode in 200..299 -> return AO3Result.Failure(AO3Error.Validation(
+                            "AO3 replied but didn't confirm the change went through. Check on AO3 before trying again."
+                        ))
+                        else -> return AO3Result.Failure(AO3Error.Validation("AO3 couldn't update that collection item."))
+                    }
+                }
+            }
+        }
+        return AO3Result.Success(Unit)
+    }
+
     suspend fun giveKudos(workId: Long): AO3Result<AO3WriteOutcome> {
         val workUrl = AO3WriteUrls.workUrl(workId)
         val html = when (val page = client.getAuthenticated(workUrl)) {

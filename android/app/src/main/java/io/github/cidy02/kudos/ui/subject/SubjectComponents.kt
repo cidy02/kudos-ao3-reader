@@ -477,6 +477,7 @@ fun SubjectChip(
                 text = text,
                 color = foreground,
                 fontSize = 13.sp,
+                lineHeight = 18.sp,
                 fontWeight = fontWeight ?: if (style == SubjectChipStyle.Tinted) FontWeight.Medium else FontWeight.Normal,
                 style = TextStyle(fontFeatureSettings = "tnum"),
                 maxLines = 1,
