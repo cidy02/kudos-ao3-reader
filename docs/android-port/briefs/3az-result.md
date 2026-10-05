@@ -12,8 +12,9 @@ Seen on the emulator in airplane mode against the demo's two pages, in Light, Da
 at double text size: the list from Account › Writing › Drafts; "29 days left", "7 days left",
 "1 day left" and "Last day" chips, and a draft with no deletion notice showing neither a chip
 nor a Created date; the tally line on each page; page 2; a tap on a draft and the New Work
-button each opening the in-app browser, which in the demo shows a bundled page. Not checked:
-OLED after the header fix, the signed-out state, and the list on a day change.
+button each opening the in-app browser, which in the demo shows a bundled page. OLED was looked at
+later the same day, after the header fix. Not checked: the signed-out state, and the list on
+a day change.
 
 Until Android has the work editor, a draft tap and New Work open AO3's pages in the in-app
 browser; both addresses are in `WritingWorkDestination` in `account/WritingDraftsState.kt`.

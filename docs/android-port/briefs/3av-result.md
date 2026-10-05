@@ -13,7 +13,7 @@ submitted and accepted; three staged with the first accepted, the second refused
 update that collection item.") and the third left staged and unsent; a long press on a
 collection's row offers Edit Collection and Manage Items, and both open. Checked later the
 same day: the other three tabs (Awaiting collection, Rejected, Approved), each with its own
-item and count. Not checked: large text.
+item and count; and the screen in Dark. Not checked: large text.
 
 As on iOS, the two row actions are offered on every collection, including ones the reader
 cannot edit; AO3's answer decides. (In the demo, editing a collection other than Winter
