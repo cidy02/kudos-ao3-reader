@@ -119,8 +119,8 @@ internal fun readerFanPills(
         id = "settings", title = "Themes & Settings", icon = Icons.Filled.TextFields,
         action = onSettings
     ))
-    // Android has no Highlight/Add Note text-selection actions yet. Keep its
-    // only creation entry points after the iOS pills until that integration exists.
+    // Keep these fallback entry points until the native selection toolbar is
+    // checked on an emulator (brief 3ap).
     add(ReaderFanMenuPill(
         id = "highlightSelection", title = "Highlight selection", icon = Icons.Filled.BorderColor,
         action = onHighlightSelection

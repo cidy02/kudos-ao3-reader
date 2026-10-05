@@ -3,6 +3,7 @@ package io.github.cidy02.kudos.reader.readium
 import android.content.Context
 import android.content.ContextWrapper
 import android.view.View
+import android.widget.FrameLayout
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -50,6 +51,8 @@ fun ReadiumNavigatorHost(
     preferences: EpubPreferences,
     onLocatorChanged: (Locator) -> Unit,
     onExternalLink: (String) -> Unit,
+    onHighlightSelection: (() -> Unit) -> Unit,
+    onAddNoteSelection: (() -> Unit) -> Unit,
     modifier: Modifier = Modifier,
     controller: ReadiumNavigatorController? = null,
     onContentTap: (() -> Unit)? = null,
@@ -62,6 +65,8 @@ fun ReadiumNavigatorHost(
     val currentOnLocatorChanged by rememberUpdatedState(onLocatorChanged)
     val currentOnExternalLink by rememberUpdatedState(onExternalLink)
     val currentOnContentTap by rememberUpdatedState(onContentTap)
+    val currentOnHighlightSelection by rememberUpdatedState(onHighlightSelection)
+    val currentOnAddNoteSelection by rememberUpdatedState(onAddNoteSelection)
     val currentController by rememberUpdatedState(controller)
     val currentOnNavigatorReady by rememberUpdatedState(onNavigatorReady)
 
@@ -87,7 +92,21 @@ fun ReadiumNavigatorHost(
 
     AndroidView(
         modifier = modifier,
-        factory = { ctx -> FragmentContainerView(ctx).apply { id = containerId } }
+        factory = { ctx ->
+            ReaderSelectionContainer(
+                ctx,
+                onHighlight = { complete -> currentOnHighlightSelection(complete) },
+                onAddNote = { complete -> currentOnAddNoteSelection(complete) }
+            ).apply {
+                addView(
+                    FragmentContainerView(ctx).apply { id = containerId },
+                    FrameLayout.LayoutParams(
+                        FrameLayout.LayoutParams.MATCH_PARENT,
+                        FrameLayout.LayoutParams.MATCH_PARENT
+                    )
+                )
+            }
+        }
     )
 
     DisposableEffect(fragmentFactory) {

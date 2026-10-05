@@ -66,7 +66,7 @@ class ReaderFanMenuTest {
                 "Highlight selection", "Add note to selection"),
             menu.map { it.title }
         )
-        // Highlight and Add Note stay reachable: Android has no selection-menu equivalents.
+        // Keep the fallback pills until the native selection toolbar passes emulator review.
         menu.forEach { it.action() }
         assertEquals(listOf("contents:0", "contents:1", "find", Routes.comments(123, chapterPosition = 2),
             "settings", "highlight", "note"), calls)
