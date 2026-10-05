@@ -1,6 +1,9 @@
 package io.github.cidy02.kudos.settings
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -33,6 +36,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -45,6 +52,9 @@ import io.github.cidy02.kudos.ui.subject.LocalSubjectPalette
 import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
 import io.github.cidy02.kudos.ui.subject.SubjectHeaderBlock
 import io.github.cidy02.kudos.ui.subject.SubjectMetrics
+import io.github.cidy02.kudos.ui.subject.SubjectFormRow
+import io.github.cidy02.kudos.ui.subject.SubjectPalette
+import io.github.cidy02.kudos.ui.subject.isAccessibilityFontScale
 import io.github.cidy02.kudos.ui.subject.subjectPanel
 import io.github.cidy02.kudos.ui.subject.subjectScreenWash
 
@@ -55,6 +65,8 @@ import io.github.cidy02.kudos.ui.subject.subjectScreenWash
 @Composable
 fun SettingsPage(
     title: String,
+    kicker: String = "SETTINGS",
+    subtitle: String? = null,
     content: LazyListScope.() -> Unit
 ) {
     val chrome = LocalPushedShellChrome.current
@@ -72,13 +84,56 @@ fun SettingsPage(
         item {
             Spacer(Modifier.height(WindowInsets.systemBars.asPaddingValues().calculateTopPadding() + 56.dp))
             SubjectHeaderBlock(
-                kicker = "SETTINGS",
+                kicker = kicker,
                 title = title,
+                subtitle = subtitle,
                 palette = palette,
                 gutter = SubjectMetrics.accountGutter
             )
         }
         content()
+    }
+}
+
+/** Plain text entry on the same tokens as the note editor; no Material text-field chrome. */
+@Composable
+fun SubjectTextFieldRow(
+    label: String,
+    value: String,
+    placeholder: String,
+    onValueChange: (String) -> Unit,
+    multiline: Boolean = false,
+    enabled: Boolean = true,
+    error: String? = null,
+    autocorrect: Boolean = true
+) {
+    val tokens = LocalKudosTokens.current
+    val stacked = multiline || isAccessibilityFontScale()
+    val style = TextStyle(color = if (enabled) tokens.primaryInk else tokens.secondaryInk,
+        fontSize = 14.5.sp, lineHeight = 20.sp, textAlign = if (stacked) TextAlign.Start else TextAlign.End)
+    val input: @Composable () -> Unit = {
+        BasicTextField(value = value, onValueChange = onValueChange, enabled = enabled,
+            singleLine = !multiline, minLines = if (multiline) 2 else 1, maxLines = if (multiline) 6 else 1,
+            textStyle = style, cursorBrush = SolidColor(tokens.accent),
+            keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.None, autoCorrectEnabled = autocorrect),
+            modifier = Modifier.fillMaxWidth().semantics { contentDescription = label },
+            decorationBox = { inner ->
+                Box {
+                    if (value.isEmpty()) Text(placeholder, color = tokens.tertiaryInk, style = style,
+                        modifier = Modifier.fillMaxWidth())
+                    inner()
+                }
+            })
+    }
+    Column {
+        if (stacked) Column(Modifier.fillMaxWidth().padding(horizontal = 13.dp, vertical = 11.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text(label, color = tokens.primaryInk, fontSize = 14.5.sp, lineHeight = 20.sp)
+            input()
+        } else SubjectFormRow(label, trailing = { Box(Modifier.fillMaxWidth(0.55f)) { input() } })
+        if (!error.isNullOrEmpty()) Text(error, color = SubjectPalette.fromHue(0.0, tokens.theme).accent,
+            fontSize = 11.5.sp, lineHeight = 17.sp,
+            modifier = Modifier.padding(horizontal = 13.dp).padding(bottom = 8.dp))
     }
 }
 

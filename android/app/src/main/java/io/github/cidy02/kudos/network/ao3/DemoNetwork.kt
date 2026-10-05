@@ -113,6 +113,9 @@ internal object DemoNetworkRoutes {
         "edit_multiple" to "ao3_edit_multiple",
         "^/series/\\d+/edit" to "ao3_series_edit",
         "^/series/999/?$" to "ao3_demo_series",
+        "^/collections/new/?$" to "ao3_demo_collection_new",
+        "^/collections/winter_exchange/edit/?$" to "ao3_demo_collection_edit",
+        "^/collections/winter_exchange/confirm_delete/?$" to "ao3_demo_collection_destroy",
         "^/collections/[^/]+/signups/\\d+" to "ao3_challenge_signup",
         "^/collections/[^/]+/signups" to "ao3_challenge_signups",
         "^/collections/[^/]+/assignments" to "ao3_challenge_assignments",
@@ -185,12 +188,18 @@ internal class DemoNetworkInterceptor(
 ) : Interceptor {
     private val removedSubscriptions = ConcurrentHashMap.newKeySet<String>()
     private val collectionItems = DemoCollectionItems()
+    private val collectionForms = DemoCollectionForms()
 
     override fun intercept(chain: Interceptor.Chain): Response {
         if (!isActive()) return chain.proceed(chain.request())
         val url = chain.request().url
         if (!DemoNetworkRoutes.isAo3Host(url.host)) return chain.proceed(chain.request())
         val path = DemoNetworkRoutes.decodedPath(url)
+        collectionForms.answer(chain.request(), fixtures())?.let { answer ->
+            return Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1)
+                .code(answer.first).message("Local collection answer").header("Content-Type", HTML)
+                .body(answer.second.toResponseBody(HTML_TYPE)).build()
+        }
         if (path == "/collections/winter_exchange/items" || path == "/collections/winter_exchange/items/update_multiple") {
             val answer = collectionItems.answer(chain.request(), fixtures().read("ao3_demo_collection_items"))
             return Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1)
@@ -248,6 +257,76 @@ internal class DemoNetworkInterceptor(
         const val HTML = "text/html; charset=utf-8"
         val HTML_TYPE = HTML.toMediaType()
     }
+}
+
+/** Original fixture-only new/edit/delete answers. Missing assets and unknown writes never dispatch a socket. */
+private class DemoCollectionForms {
+    private var edited: String? = null
+    private var deleted = false
+    private val created = mutableSetOf<String>()
+
+    @Synchronized
+    fun answer(request: okhttp3.Request, fixtures: FixtureSource): Pair<Int, String>? {
+        val path = DemoNetworkRoutes.decodedPath(request.url).trimEnd('/')
+        if (request.method == "GET") {
+            if (path == "/collections/lantern_archive" || path == "/collections/refused_name") {
+                return if (path.substringAfterLast('/') in created) 200 to "<h2>Original demo collection</h2>" else 404 to ""
+            }
+            if (path == "/collections/taken_name") return 200 to "<h2>Original occupied demo name</h2>"
+            val fixture = when (path) {
+                "/collections/new" -> "ao3_demo_collection_new"
+                "/collections/winter_exchange/edit" -> if (deleted) return 404 to "" else "ao3_demo_collection_edit"
+                "/collections/winter_exchange/confirm_delete" -> if (deleted) return 404 to "" else "ao3_demo_collection_destroy"
+                else -> return null
+            }
+            return fixtures.read(fixture)?.let { 200 to (if (fixture.endsWith("_edit")) edited ?: it.decodeToString() else it.decodeToString()) }
+                ?: (404 to "")
+        }
+        if (request.method != "POST" || path !in setOf("/collections", "/collections/winter_exchange")) return null
+        val buffer = Buffer()
+        request.body?.writeTo(buffer)
+        val pairs = buffer.readUtf8().split('&').map { part ->
+            val pair = part.split('=', limit = 2)
+            URLDecoder.decode(pair[0], "UTF-8") to URLDecoder.decode(pair.getOrElse(1) { "" }, "UTF-8")
+        }
+        val fields = pairs.toMap()
+        if (path == "/collections/winter_exchange" && fields["_method"] == "delete") {
+            if (fixtures.read("ao3_demo_collection_destroy") == null || deleted ||
+                fields["authenticity_token"] != "demo-collection-destroy-token") return refusal()
+            deleted = true
+            return 200 to "<div class='flash notice'>Collection deleted.</div>"
+        }
+        val isEdit = path == "/collections/winter_exchange"
+        val expected = if (isEdit) "demo-collection-edit-token" else "demo-collection-new-token"
+        if (fields["authenticity_token"] != expected || (isEdit && (deleted || fields["_method"] != "patch"))) return refusal()
+        val name = fields["collection[name]"].orEmpty()
+        val invalid = !isEdit && (name == "refused_name" || name == "taken_name" || name in created)
+        val source = fixtures.read(if (invalid) "ao3_demo_collection_invalid" else if (isEdit) "ao3_demo_collection_edit" else "ao3_demo_collection_new")
+            ?: return 404 to ""
+        val doc = Jsoup.parse(source.decodeToString())
+        fields.forEach { (name, value) ->
+            doc.select("input, textarea, select").filter { it.attr("name") == name }.forEach { control ->
+                when {
+                    control.tagName() == "textarea" -> control.text(value)
+                    control.tagName() == "select" -> control.select("option").forEach { option ->
+                        val selected = if (name == "owner_pseuds[]") pairs.filter { it.first == name }.map { it.second }
+                            else listOf(value)
+                        option.removeAttr("selected"); if (option.attr("value") in selected) option.attr("selected", "selected")
+                    }
+                    control.attr("type") == "checkbox" -> {
+                        control.removeAttr("checked"); if (value == "1") control.attr("checked", "checked")
+                    }
+                    else -> control.attr("value", value)
+                }
+            }
+        }
+        if (invalid) return 422 to doc.outerHtml()
+        if (isEdit) edited = doc.outerHtml() else created.add(name)
+        doc.selectFirst("#main")!!.prepend("<div class='flash notice'>Collection was successfully ${if (isEdit) "updated" else "created"}.</div>")
+        return 200 to doc.outerHtml()
+    }
+
+    private fun refusal() = 422 to "<div class='flash error'>AO3 couldn't save the collection.</div>"
 }
 
 internal fun OkHttpClient.Builder.installDemoNetworkBlock(): OkHttpClient.Builder =
