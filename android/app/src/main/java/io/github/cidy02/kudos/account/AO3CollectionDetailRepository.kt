@@ -10,11 +10,12 @@ import io.github.cidy02.kudos.network.ao3.account.AO3CollectionItemsPage
 import io.github.cidy02.kudos.network.ao3.account.AO3CollectionItemsParser
 import io.github.cidy02.kudos.network.ao3.account.AO3CollectionItemsUrls
 import io.github.cidy02.kudos.network.ao3.account.AO3CollectionModeration
-import io.github.cidy02.kudos.network.ao3.account.AO3CollectionModerationUrls
 import io.github.cidy02.kudos.network.ao3.account.AO3CollectionParticipantsParser
 import io.github.cidy02.kudos.network.ao3.account.AO3CollectionParser
 import io.github.cidy02.kudos.network.ao3.account.AO3CollectionPeoplePage
 import io.github.cidy02.kudos.network.ao3.account.AO3CollectionShow
+import io.github.cidy02.kudos.network.ao3.account.AO3CollectionParticipant
+import io.github.cidy02.kudos.network.ao3.account.AO3CollectionParticipantsUrls
 import io.github.cidy02.kudos.network.ao3.account.AO3CollectionForm
 import io.github.cidy02.kudos.network.ao3.account.AO3CollectionFormParser
 import io.github.cidy02.kudos.network.ao3.account.AO3CollectionFormUrls
@@ -49,9 +50,7 @@ class AO3CollectionDetailRepository(
             is AO3Result.Success -> result.value
         }
         if (generation != authRepository.generation.value) throw CancellationException()
-        val participants = when (val result = fetch(AO3CollectionModerationUrls.participants(slug)) {
-            AO3CollectionParticipantsParser().parse(it)
-        }) {
+        val participants = when (val result = getCollectionParticipants(slug)) {
             is AO3Result.Failure -> return result
             is AO3Result.Success -> result.value
         }
@@ -66,6 +65,11 @@ class AO3CollectionDetailRepository(
         return AO3Result.Success(AO3CollectionModeration(items, participants.filter { it.isMembershipRequest },
             participants.count { it.isMaintainer }, show.collection.isUnrevealed, show.collection.isAnonymous))
     }
+
+    suspend fun getCollectionParticipants(slug: String): AO3Result<List<AO3CollectionParticipant>> =
+        fetch(AO3CollectionParticipantsUrls.page(slug)) {
+            AO3CollectionParticipantsParser().parse(it)
+        }
 
     suspend fun getCollectionForm(slug: String?): AO3Result<AO3CollectionForm> =
         fetch(AO3CollectionFormUrls.form(slug)) { AO3CollectionFormParser().parse(it, slug) }

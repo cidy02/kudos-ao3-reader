@@ -735,3 +735,13 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   account" and "Forgot your password?". How signing in works is unchanged. Reverse:
   `onboarding/`, `support/WhatsNew.kt`, `auth/AO3NativeLoginScreen.kt`,
   `auth/AO3WebLoginScreen.kt`, and the first-run block in `app/KudosApp.kt`.
+- **2026-10-05 · The collection's Maintainers screen.** Manage › Maintainers, and the
+  Moderation screen's two maintainers rows, now open iOS's screen: owners and moderators, an
+  invitation by username, and stepping down or leaving behind a confirmation, with the rule
+  that the last owner cannot step down. Each action is one request to AO3. As on iOS, pending
+  invitations are not listed, and "Invite as" does not change what is sent (owner question
+  15). One sentence differs from iOS on purpose: a failed token read says "open the
+  collection on AO3", where iOS says "the work". Never run against AO3. Reverse:
+  `account/AO3CollectionMaintainersScreen.kt`, `account/AO3CollectionMaintainersState.kt`,
+  `network/ao3/account/AO3CollectionParticipants.kt`, `inviteMaintainer` and `leaveCollection`
+  in `network/ao3/writes/AO3WriteRepository.kt`.

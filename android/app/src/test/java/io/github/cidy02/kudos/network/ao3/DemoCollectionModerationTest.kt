@@ -14,7 +14,7 @@ class DemoCollectionModerationTest {
         val source = FixtureSource { name -> listOf("src/debug/assets/fixtures", "app/src/debug/assets/fixtures", "android/app/src/debug/assets/fixtures")
             .map { File(it, "$name.html") }.firstOrNull { it.isFile }?.readBytes() }
         val body = DemoNetwork.webFixture("https://archiveofourown.org/collections/winter_exchange/participants".toHttpUrl(), source)!!.decodeToString()
-        assertEquals(2, AO3CollectionParticipantsParser().parse(body).count { it.isMaintainer })
+        assertEquals(4, AO3CollectionParticipantsParser().parse(body).count { it.isMaintainer })
         assertNull(DemoNetwork.webFixture("https://example.com/collections/winter_exchange/participants".toHttpUrl(), source))
         assertNull(DemoNetwork.webFixture("https://archiveofourown.org/assets/unknown-script.js".toHttpUrl(), source))
         assertNull(DemoNetwork.webFixture("https://archiveofourown.org/collections/winter_exchange/participants".toHttpUrl(), FixtureSource { null }))
@@ -45,7 +45,11 @@ class DemoCollectionModerationTest {
         assertEquals(AO3CollectionItemApproval.Unreviewed, queue(1).items.first { it.id == 42 }.moderatorApproval)
         assertFalse(queue(1).items.any { it.id == 41 })
         val participantParser = AO3CollectionParticipantsParser()
-        assertEquals(2, participantParser.parse(read("$root/participants")).count { it.isMembershipRequest })
+        val originalPeople = participantParser.parse(read("$root/participants"))
+        assertEquals(listOf("mapfold", "ashletter"), originalPeople.filter { it.isMembershipRequest }.map { it.pseud })
+        assertEquals(2, originalPeople.count { it.isMembershipRequest })
+        assertEquals(4, originalPeople.count { it.isMaintainer })
+        assertEquals(originalPeople.size, originalPeople.map { it.pseud }.distinct().size)
         assertEquals(422, post("$root/participants/105", listOf("_method" to "patch", "authenticity_token" to "wrong",
             "collection_participant[participant_role]" to "Member")).first)
         assertEquals(200, post("$root/participants/105", listOf("_method" to "patch", "authenticity_token" to "demo-participants-token",
@@ -53,7 +57,7 @@ class DemoCollectionModerationTest {
         assertEquals(200, post("$root/participants/106", listOf("_method" to "delete", "authenticity_token" to "demo-participants-token")).first)
         val people = participantParser.parse(read("$root/participants"))
         assertTrue(people.none { it.isMembershipRequest }); assertEquals("Member", people.first { it.id == 105 }.role)
-        assertTrue(people.none { it.id == 106 }); assertEquals(2, people.count { it.isMaintainer })
+        assertTrue(people.none { it.id == 106 }); assertEquals(4, people.count { it.isMaintainer })
         val showParser = AO3CollectionParser()
         val initial = showParser.parseCollectionShow(read(root), "winter_exchange")
         assertTrue(initial.collection.isUnrevealed && initial.collection.isAnonymous)
@@ -66,5 +70,18 @@ class DemoCollectionModerationTest {
         assertEquals(200, post(root, unanon.parameters()).first)
         assertFalse(showParser.parseCollectionShow(read(root), "winter_exchange").collection.isAnonymous)
         assertFalse(formParser.parse(read("$root/edit"), "winter_exchange")[AO3CollectionFields.preference("unrevealed")] == "1")
+        // Invite and leave operate on the same server state as the two membership decisions.
+        assertEquals(200, post("$root/participants/add", listOf("authenticity_token" to "demo-participants-token",
+            "participants_to_invite" to "lanternkeeper")).first)
+        val showToken = io.github.cidy02.kudos.network.ao3.writes.AO3WriteFormParser()
+            .parseAuthenticityToken(read(root), metaOnly = true)!!
+        assertEquals(200, post("$root/participants/101", listOf("_method" to "delete", "authenticity_token" to showToken)).first)
+        val finalPeople = participantParser.parse(read("$root/participants"))
+        assertTrue(finalPeople.none { it.isMembershipRequest || it.id == 101 || it.id == 106 })
+        assertEquals("Member", finalPeople.first { it.id == 105 }.role)
+        assertEquals(3, finalPeople.count { it.isMaintainer })
+        assertEquals(listOf("snowink", "lanternkeeper"), finalPeople.filter { it.role == "Invited" }.map { it.pseud })
+        val finalShow = showParser.parseCollectionShow(read(root), "winter_exchange")
+        assertFalse(finalShow.collection.isUnrevealed || finalShow.collection.isAnonymous)
     }
 }
