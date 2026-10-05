@@ -226,10 +226,13 @@ class ReaderViewModel(
         chapterTitle: String = "",
         asNote: Boolean = false
     ) {
+        // A selection hands over a bare Readium locator; a bookmark already hands over the
+        // envelope. Stored bare, the highlight could not be drawn or gone to.
+        val stored = ReaderLocatorCodec.forStorage(locatorString) ?: return
         viewModelScope.launch {
             annotationRepository.addOrRecolorHighlight(
                 workId = workId,
-                locatorString = locatorString,
+                locatorString = stored,
                 selectedText = selectedText,
                 color = color,
                 note = note,
