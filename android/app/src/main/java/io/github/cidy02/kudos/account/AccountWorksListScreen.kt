@@ -53,6 +53,8 @@ import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -112,6 +114,8 @@ import io.github.cidy02.kudos.works.CanonicalWork
 import io.github.cidy02.kudos.works.WorkRepository
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.launch
+import io.github.cidy02.kudos.network.ao3.writes.AO3WriteRepository
 
 /**
  * Top-level screen for AO3 Account Work Lists (Marked for Later, Bookmarks, History, Subscriptions, Collections).
@@ -121,6 +125,7 @@ import kotlinx.coroutines.ensureActive
 fun AccountWorksListScreen(
     type: AccountListType,
     repository: AccountListRepository,
+    writeRepository: AO3WriteRepository,
     workRepository: WorkRepository,
     settingsRepository: SettingsRepository,
     privacyGate: PrivacyGate,
@@ -150,6 +155,7 @@ fun AccountWorksListScreen(
     var subscriptionsScope by remember(type) { mutableStateOf("works") }
     var subscriptionsPage by remember(type, subscriptionsScope) { mutableStateOf(1) }
     val generation by repository.authRepository.generation.collectAsState()
+    LaunchedEffect(viewModel, generation) { viewModel.ensureSessionLoaded() }
     val namedScope = AO3NamedSubscriptionsScope.entries.firstOrNull { it.parameter == subscriptionsScope }
     val namedLoader = remember(repository, namedScope, subscriptionsPage, generation) {
         namedScope?.let { NamedSubscriptionsLoader(repository, it, subscriptionsPage) }
@@ -159,7 +165,9 @@ fun AccountWorksListScreen(
     }
     val loaded = state as? AccountListUiState.Loaded
     val pageWorks = loaded?.page?.works.orEmpty()
-    var unsubscribedIds by remember(type, pageWorks, authState) { mutableStateOf(setOf<Long>()) }
+    val unsubscribeState = remember(writeRepository, generation) {
+        SubscriptionUnsubscribeState(writeRepository, repository.authRepository)
+    }
     var enrichedSubscriptions by remember(type, pageWorks, authState) {
         mutableStateOf(emptyMap<Long, AO3WorkSummary>())
     }
@@ -183,10 +191,9 @@ fun AccountWorksListScreen(
             }
         }
     }
-    val refinedWorks = remember(loaded?.canonicalWorks, filters, enrichedSubscriptions, unsubscribedIds, type) {
+    val refinedWorks = remember(loaded?.canonicalWorks, filters, enrichedSubscriptions, type) {
         loaded?.canonicalWorks.orEmpty().mapNotNull { entry ->
             val subscriptions = type == AccountListType.Subscriptions
-            if (subscriptions && entry.remote.id in unsubscribedIds) return@mapNotNull null
             val known = if (subscriptions) enrichedSubscriptions[entry.remote.id] ?: entry.remote else entry.remote
             if (filters.includesAccountWork(known, subscriptions)) entry.copy(remote = known) else null
         }
@@ -290,7 +297,9 @@ fun AccountWorksListScreen(
                         watermarks = subscriptionWatermarks,
                         scope = subscriptionsScope,
                         onScopeChange = { subscriptionsScope = it },
-                        onUnsubscribeWork = { unsubscribedIds = unsubscribedIds + it.remote.id },
+                        onUnsubscribeWork = { viewModel.removeSubscription(it.remote.id, loaded?.page?.currentPage ?: 1) },
+                        unsubscribePaths = loaded?.page?.unsubscribePaths.orEmpty(),
+                        unsubscribeState = unsubscribeState,
                         currentPage = loaded?.page?.currentPage ?: 1,
                         totalPages = loaded?.page?.totalPages ?: 1,
                         expandAll = expandAll,
@@ -949,8 +958,14 @@ internal fun SubscriptionsBrowser(
     onNamedPageChange: (Int) -> Unit,
     onLogin: () -> Unit,
     onOpenSeries: (String) -> Unit,
-    onOpenAuthor: (String) -> Unit
+    onOpenAuthor: (String) -> Unit,
+    unsubscribePaths: Map<Long, String> = emptyMap(),
+    unsubscribeState: SubscriptionUnsubscribeState? = null
 ) {
+    val writeScope = rememberCoroutineScope()
+    val busyPath = unsubscribeState?.busyPath?.collectAsState()?.value
+    val writeError = unsubscribeState?.error?.collectAsState()?.value
+    val visibleKey by rememberUpdatedState(Triple(scope, currentPage, namedLoader))
     var retryNamed by remember(namedLoader) { mutableStateOf(0) }
     // Activation, retry and refresh all die with the visible tab's composition.
     LaunchedEffect(namedLoader, retryNamed) { namedLoader?.load() }
@@ -958,7 +973,16 @@ internal fun SubscriptionsBrowser(
     val namedState = key(namedLoader) { namedLoader?.uiState?.collectAsState()?.value }
     val namedPage = (namedState as? NamedSubscriptionsUiState.Loaded)?.page
     var filter by remember { mutableStateOf("all") }
-    var pendingUnsubscribe by remember { mutableStateOf<CanonicalWork?>(null) }
+    var pendingUnsubscribe by remember(unsubscribeState, scope, currentPage, namedLoader) {
+        mutableStateOf<PendingSubscriptionUnsubscribe?>(null)
+    }
+    fun stageWork(work: CanonicalWork) {
+        val path = unsubscribePaths[work.remote.id] ?: return
+        if (busyPath != null) return
+        pendingUnsubscribe = PendingSubscriptionUnsubscribe(
+            path, work.remote.title, currentPage, false
+        ) { onUnsubscribeWork(work) }
+    }
     val activeWorks = works
 
     val updatedWorks = remember(activeWorks, watermarks) {
@@ -972,21 +996,48 @@ internal fun SubscriptionsBrowser(
 
     DestructiveConfirmation(
         show = pendingUnsubscribe != null,
+        palette = palette,
         title = "Unsubscribe?",
-        text = if (pendingUnsubscribe?.remote?.title.isNullOrBlank()) {
-            "This removes the work from your AO3 subscriptions. The work stays on AO3."
-        } else {
-            "“${pendingUnsubscribe?.remote?.title}” will be removed from your AO3 subscriptions. The work stays on AO3."
-        },
+        text = pendingUnsubscribe?.let { pending ->
+            if (pending.named) {
+                "“${pending.name}” will be removed from your AO3 subscriptions. " +
+                    "You will stop getting update emails for it."
+            } else if (pending.name.isBlank()) {
+                "This removes the work from your AO3 subscriptions. The work stays on AO3."
+            } else {
+                "“${pending.name}” will be removed from your AO3 subscriptions. The work stays on AO3."
+            }
+        }.orEmpty(),
         confirmText = "Unsubscribe",
         confirmBeforeDelete = true,
         onConfirm = {
             val pending = pendingUnsubscribe ?: return@DestructiveConfirmation
             pendingUnsubscribe = null
-            onUnsubscribeWork(pending)
+            val writer = unsubscribeState ?: return@DestructiveConfirmation
+            val requested = visibleKey
+            writeScope.launch {
+                writer.confirm(pending.path, pending.page) {
+                    pending.onSuccess(visibleKey == requested)
+                }
+            }
         },
         onDismissRequest = { pendingUnsubscribe = null }
     )
+
+    if (writeError != null) {
+        val tokens = LocalKudosTokens.current
+        AlertDialog(
+            onDismissRequest = { unsubscribeState?.dismissError() },
+            title = { Text("Couldn't unsubscribe", color = tokens.primaryInk) },
+            text = { Text(writeError, color = tokens.secondaryInk) },
+            containerColor = tokens.theme.cardSurface,
+            confirmButton = {
+                TextButton(onClick = { unsubscribeState?.dismissError() }) {
+                    Text("OK", color = palette.accent)
+                }
+            }
+        )
+    }
 
     val subtitle = if (namedScope != null) {
         namedPage?.let { namedScope.subtitle(it.rows.size, it.currentPage, it.totalPages) }.orEmpty()
@@ -1092,7 +1143,9 @@ internal fun SubscriptionsBrowser(
                             palette = palette,
                             newCount = SubscriptionWatermarks.newChapterCount(work.remote, watermarks),
                             onOpenWork = onOpenWork,
-                            onUnsubscribe = { pendingUnsubscribe = work }
+                            unsubscribePath = unsubscribePaths[work.remote.id],
+                            busyPath = busyPath,
+                            onUnsubscribe = { stageWork(work) }
                         )
                     }
 
@@ -1108,7 +1161,9 @@ internal fun SubscriptionsBrowser(
                                 palette = palette,
                                 newCount = 0,
                                 onOpenWork = onOpenWork,
-                                onUnsubscribe = { pendingUnsubscribe = work }
+                                unsubscribePath = unsubscribePaths[work.remote.id],
+                                busyPath = busyPath,
+                                onUnsubscribe = { stageWork(work) }
                             )
                         }
                     }
@@ -1120,7 +1175,9 @@ internal fun SubscriptionsBrowser(
                             palette = palette,
                             newCount = SubscriptionWatermarks.newChapterCount(work.remote, watermarks),
                             onOpenWork = onOpenWork,
-                            onUnsubscribe = { pendingUnsubscribe = work }
+                            unsubscribePath = unsubscribePaths[work.remote.id],
+                            busyPath = busyPath,
+                            onUnsubscribe = { stageWork(work) }
                         )
                     }
                 }
@@ -1149,7 +1206,21 @@ internal fun SubscriptionsBrowser(
                             item { EmptyStateCard(namedScope.emptyTitle, namedScope.emptyMessage) }
                         } else {
                             items(namedState.page.rows, key = { it.path }) { row ->
-                                NamedSubscriptionRow(row) {
+                                NamedSubscriptionRow(
+                                    row = row, palette = palette, busyPath = busyPath,
+                                    onUnsubscribe = {
+                                        val path = row.unsubscribePath
+                                        if (path != null && busyPath == null) {
+                                            pendingUnsubscribe = PendingSubscriptionUnsubscribe(
+                                                path, row.name, namedState.page.currentPage, true
+                                            ) { stillVisible ->
+                                                if (namedLoader?.removeSubscription(row.path) == true && stillVisible) {
+                                                    onNamedPageChange(namedState.page.currentPage - 1)
+                                                }
+                                            }
+                                        }
+                                    }
+                                ) {
                                     if (namedScope == AO3NamedSubscriptionsScope.Series) {
                                         AO3Constants.baseHttpUrl.resolve(row.path)?.let { onOpenSeries(it.toString()) }
                                     } else {
@@ -1190,7 +1261,13 @@ internal fun SubscriptionsBrowser(
 }
 
 @Composable
-private fun NamedSubscriptionRow(row: AO3NamedSubscription, onOpen: () -> Unit) {
+private fun NamedSubscriptionRow(
+    row: AO3NamedSubscription,
+    palette: SubjectPalette,
+    busyPath: String?,
+    onUnsubscribe: () -> Unit,
+    onOpen: () -> Unit
+) {
     val tokens = LocalKudosTokens.current
     Card(
         onClick = onOpen,
@@ -1204,6 +1281,11 @@ private fun NamedSubscriptionRow(row: AO3NamedSubscription, onOpen: () -> Unit) 
                 Text("by " + row.creators.joinToString(", ") { it.displayName },
                     color = tokens.secondaryInk, fontSize = 12.5.sp)
             }
+            row.unsubscribePath?.let { path ->
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    SubscriptionUnsubscribeChip(path, busyPath, palette, onUnsubscribe)
+                }
+            }
         }
     }
 }
@@ -1215,6 +1297,8 @@ private fun SubscriptionWorkRow(
     palette: SubjectPalette,
     newCount: Int,
     onOpenWork: (AO3WorkSummary) -> Unit,
+    unsubscribePath: String?,
+    busyPath: String?,
     onUnsubscribe: () -> Unit
 ) {
     val tokens = LocalKudosTokens.current
@@ -1242,15 +1326,35 @@ private fun SubscriptionWorkRow(
                 Spacer(modifier = Modifier.width(1.dp))
             }
 
-            SubjectChip(
-                text = "Unsubscribe",
-                style = SubjectChipStyle.Neutral,
-                leadingIcon = Icons.Outlined.NotificationsOff,
-                palette = palette,
-                modifier = Modifier.clickable(onClick = onUnsubscribe)
-            )
+            unsubscribePath?.let { path ->
+                SubscriptionUnsubscribeChip(path, busyPath, palette, onUnsubscribe)
+            }
         }
     }
+}
+
+private data class PendingSubscriptionUnsubscribe(
+    val path: String,
+    val name: String,
+    val page: Int,
+    val named: Boolean,
+    val onSuccess: (Boolean) -> Unit
+)
+
+@Composable
+private fun SubscriptionUnsubscribeChip(
+    path: String,
+    busyPath: String?,
+    palette: SubjectPalette,
+    onClick: () -> Unit
+) {
+    SubjectChip(
+        text = if (busyPath == path) "Unsubscribing…" else "Unsubscribe",
+        style = SubjectChipStyle.Neutral,
+        leadingIcon = Icons.Outlined.NotificationsOff,
+        palette = palette,
+        modifier = Modifier.clickable(enabled = busyPath == null, onClick = onClick)
+    )
 }
 
 // endregion

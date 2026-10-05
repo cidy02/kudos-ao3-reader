@@ -5,6 +5,8 @@ import android.content.res.AssetManager
 import java.io.IOException
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.ConcurrentHashMap
+import java.net.URLDecoder
 import okhttp3.HttpUrl
 import okhttp3.Interceptor
 import okhttp3.MediaType.Companion.toMediaType
@@ -12,6 +14,8 @@ import okhttp3.OkHttpClient
 import okhttp3.Protocol
 import okhttp3.Response
 import okhttp3.ResponseBody.Companion.toResponseBody
+import okio.Buffer
+import org.jsoup.Jsoup
 
 /**
  * Local stand-in for iOS `DemoNetworkBlock`. While the debug demo extra is on,
@@ -178,14 +182,49 @@ internal class DemoNetworkInterceptor(
     private val isActive: () -> Boolean = { DemoNetwork.isActive },
     private val fixtures: () -> FixtureSource = { DemoNetwork.fixtures }
 ) : Interceptor {
+    private val removedSubscriptions = ConcurrentHashMap.newKeySet<String>()
+
     override fun intercept(chain: Interceptor.Chain): Response {
         if (!isActive()) return chain.proceed(chain.request())
         val url = chain.request().url
         if (!DemoNetworkRoutes.isAo3Host(url.host)) return chain.proceed(chain.request())
         val path = DemoNetworkRoutes.decodedPath(url)
+        // A terminal local response, including failures. Never fall through to AO3.
+        if (chain.request().method == "POST" && Regex("^/users/[^/]+/subscriptions/[^/]+/?$").matches(path)) {
+            val buffer = Buffer()
+            chain.request().body?.writeTo(buffer)
+            val fields = buffer.readUtf8().split('&').associate { field ->
+                val parts = field.split('=', limit = 2)
+                URLDecoder.decode(parts[0], "UTF-8") to URLDecoder.decode(parts.getOrElse(1) { "" }, "UTF-8")
+            }
+            val id = url.pathSegments.lastOrNull()?.toIntOrNull()
+            val accepted = fields["_method"] == "delete" &&
+                fields["authenticity_token"] == "demo-subscriptions-token" &&
+                id != null && id in setOf(1, 3, 4, 5) && removedSubscriptions.add(path)
+            return Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1)
+                .code(if (accepted) 200 else 422).message(if (accepted) "OK" else "Unprocessable Entity")
+                .header("Content-Type", HTML)
+                .body((if (accepted) "<div class='flash notice'>Unsubscribed.</div>" else
+                    "<div class='flash error'>Couldn't unsubscribe.</div>").toResponseBody(HTML_TYPE))
+                .build()
+        }
         val matchTarget = if (url.queryParameter("show_comments") == "true") "$path/comments" else path
         val name = if (matchTarget == path) DemoNetworkRoutes.fixtureName(url) else DemoNetworkRoutes.fixtureName(matchTarget)
-        val bytes = name?.let { fixtures().read(it) }
+        var bytes = name?.let { fixtures().read(it) }
+        if (bytes != null && chain.request().method == "GET" &&
+            Regex("^/users/[^/]+/subscriptions/?$").matches(path)
+        ) {
+            val document = Jsoup.parse(bytes.decodeToString())
+            for (heading in document.select("dl.subscription dt")) {
+                val details = heading.nextElementSibling()?.takeIf { it.tagName() == "dd" } ?: continue
+                val action = details.selectFirst("form")?.attr("action")
+                if (action != null && action in removedSubscriptions) {
+                    heading.remove()
+                    details.remove()
+                }
+            }
+            bytes = document.outerHtml().encodeToByteArray()
+        }
         val code = if (bytes == null) 404 else 200
         return Response.Builder()
             .request(chain.request())

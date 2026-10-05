@@ -3,6 +3,12 @@ package io.github.cidy02.kudos.network.ao3.writes
 import io.github.cidy02.kudos.network.ao3.AO3Error
 import io.github.cidy02.kudos.network.ao3.AO3HttpResponse
 import io.github.cidy02.kudos.network.ao3.AO3Result
+import io.github.cidy02.kudos.account.AccountListType
+import io.github.cidy02.kudos.network.ao3.account.AO3AccountUrls
+import io.github.cidy02.kudos.network.ao3.AO3OverloadDetector
+import io.github.cidy02.kudos.network.ao3.AO3RedirectCookieRelay
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -98,6 +104,51 @@ class AO3WriteRepository(
                     } else {
                         response.toOutcome(AO3WriteActionKind.Subscribe, "Subscribed.", "Couldn't subscribe.")
                     }
+                }
+            }
+        }
+    }
+
+    /** iOS unsubscribe(path:page:): captured index action, fresh Works-index CSRF, one POST. */
+    suspend fun unsubscribe(path: String, page: Int): AO3Result<AO3WriteOutcome> {
+        val generation = client.sessionGeneration()
+        val username = client.username() ?: return AO3Result.Failure(AO3Error.AuthenticationRequired)
+        val endpoint = AO3WriteUrls.absoluteUrl(path)
+            ?.takeIf { AO3RedirectCookieRelay.isTrustedUrl(it) }
+            ?: return AO3Result.Failure(AO3Error.Validation("Couldn't build the subscription address."))
+        val referer = AO3AccountUrls().url(AccountListType.Subscriptions, username, page.coerceAtLeast(1))
+        val html = when (val result = client.getAuthenticated(referer)) {
+            is AO3Result.Failure -> return result
+            is AO3Result.Success -> result.value.body
+        }
+        if (client.sessionGeneration() != generation) throw CancellationException()
+        val token = withContext(Dispatchers.Default) { parser.parseAuthenticityToken(html, metaOnly = true) }
+            ?: return AO3Result.Failure(
+                AO3Error.Validation("Couldn't prepare the request. Try again, or open the work on AO3.")
+            )
+        // A view may disappear after sending. Finish that single write; never retry it.
+        val response = withContext(NonCancellable) {
+            client.postAuthenticatedInSession(
+                endpoint, listOf("_method" to "delete", "authenticity_token" to token),
+                writeHeaders(token, referer), generation
+            )
+        }
+        if (client.sessionGeneration() != generation) throw CancellationException()
+        return when (response) {
+            is AO3Result.Failure -> response
+            is AO3Result.Success -> {
+                val body = response.value.body
+                val error = parser.writeErrorMessage(body)
+                when {
+                    error != null -> AO3Result.Failure(AO3Error.Validation(error))
+                    AO3OverloadDetector.isOverloadPage(body) ->
+                        AO3Result.Failure(AO3Error.Overloaded(response.value.statusCode, null))
+                    parser.writeSuccessMessage(body) != null || response.value.statusCode in 300..399 ->
+                        success(AO3WriteActionKind.Unsubscribe, "Unsubscribed.")
+                    response.value.statusCode in 200..399 -> AO3Result.Failure(AO3Error.Validation(
+                        "AO3 replied but didn't confirm the change went through. Check on AO3 before trying again."
+                    ))
+                    else -> rejected(body, "Couldn't unsubscribe.")
                 }
             }
         }

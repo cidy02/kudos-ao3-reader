@@ -1,9 +1,9 @@
 <!doctype html>
-<html><body>
+<html><head><meta name="csrf-token" content="demo-subscriptions-token"></head><body>
 <dl class="subscription index group">
   <dt><a href="/users/someuser">someuser</a></dt>
-  <dd><form action="/users/me/subscriptions/4" method="post"></form></dd>
+  <dd><form action="/users/me/subscriptions/4" method="post"><input type="hidden" name="_method" value="delete"><input type="hidden" name="authenticity_token" value="demo-subscriptions-token"></form></dd>
   <dt><a href="/users/seriesauthor">seriesauthor</a></dt>
-  <dd><form action="/users/me/subscriptions/6" method="post"></form></dd>
+  <dd><form action="/users/me/subscriptions/6" method="post"><input type="hidden" name="_method" value="delete"><input type="hidden" name="authenticity_token" value="demo-subscriptions-token"></form></dd>
 </dl>
 </body></html>

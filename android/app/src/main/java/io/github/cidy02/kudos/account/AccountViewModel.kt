@@ -181,12 +181,20 @@ class AccountListViewModel(
     private val repository: AccountListRepository,
     private val workRepository: WorkRepository
 ) : ViewModel() {
+    private var loadRequest = 0
+    private var loadJob: Job? = null
+    private var requestedGeneration: Int? = null
+    private val loadedGeneration = MutableStateFlow<Int?>(null)
     private val mutableState = MutableStateFlow<AccountListUiState>(AccountListUiState.Loading)
     val uiState: StateFlow<AccountListUiState> = combine(
         mutableState,
-        workRepository.observeLibraryWorks()
-    ) { state, local ->
-        if (state is AccountListUiState.Loaded) {
+        workRepository.observeLibraryWorks(),
+        loadedGeneration,
+        repository.authRepository.generation
+    ) { state, local, loadedSession, session ->
+        if (loadedSession != session) {
+            AccountListUiState.Loading
+        } else if (state is AccountListUiState.Loaded) {
             state.copy(
                 canonicalWorks = CanonicalWorkMerge.remoteLed(state.page.works, local)
             )
@@ -203,10 +211,25 @@ class AccountListViewModel(
         load(1)
     }
 
+    /** Called by the visible composition, never by a background session observer. */
+    fun ensureSessionLoaded() {
+        if (requestedGeneration != repository.authRepository.generation.value) load(1)
+    }
+
     fun load(page: Int) {
-        viewModelScope.launch {
-            mutableState.value = AccountListUiState.Loading
+        val requested = ++loadRequest
+        val generation = repository.authRepository.generation.value
+        requestedGeneration = generation
+        loadJob?.cancel()
+        loadJob = viewModelScope.launch {
+            val previous = mutableState.value as? AccountListUiState.Loaded
+            if (previous?.page?.currentPage != page || loadedGeneration.value != generation) {
+                mutableState.value = AccountListUiState.Loading
+            }
             val result = repository.load(type, page)
+            currentCoroutineContext().ensureActive()
+            if (requested != loadRequest || generation != repository.authRepository.generation.value) return@launch
+            loadedGeneration.value = generation
             mutableState.value = when (result) {
                 is AO3Result.Success -> {
                     // Update the counts cache whenever a list page is loaded (Item 9).
@@ -232,6 +255,19 @@ class AccountListViewModel(
                 }
             }
         }
+    }
+
+    fun removeSubscription(workId: Long, page: Int) {
+        val loaded = mutableState.value as? AccountListUiState.Loaded ?: return
+        if (type != AccountListType.Subscriptions || loaded.page.currentPage != page) return
+        ++loadRequest
+        loadJob?.cancel()
+        val updated = loaded.page.copy(
+            works = loaded.page.works.filterNot { it.id == workId },
+            unsubscribePaths = loaded.page.unsubscribePaths - workId
+        )
+        mutableState.value = loaded.copy(page = updated)
+        if (updated.works.isEmpty() && page > 1) load(page - 1)
     }
 
     companion object {

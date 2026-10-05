@@ -258,6 +258,31 @@ class DemoNetworkBlockTest {
         html(client, "https://archiveofourown.org/users/seriesauthor")
     }
 
+    @Test
+    fun demoUnsubscribeSuccessChangesSubsequentIndexesAndFailureKeepsTheRow() {
+        val client = bundledDemoClient()
+        val base = "https://archiveofourown.org/users/AO3_Reader/subscriptions"
+        fun post(id: Int, token: String = "demo-subscriptions-token"): Int {
+            val body = okhttp3.FormBody.Builder().add("_method", "delete")
+                .add("authenticity_token", token).build()
+            return client.newCall(Request.Builder().url("https://archiveofourown.org/users/me/subscriptions/$id")
+                .post(body).build()).execute().use { response -> response.code }
+        }
+        assertEquals(422, post(1, "wrong-token"))
+        assertEquals(200, post(1))
+        assertEquals(422, post(2))
+        val parser = AO3AccountParser()
+        assertEquals(listOf(12345L, 999000002L), parser.parseSubscriptionsPage(html(client, "$base?type=works"), 1).works.map { it.id })
+        assertEquals(200, post(3))
+        assertTrue(parser.parseNamedSubscriptions(html(client, "$base?type=series"),
+            io.github.cidy02.kudos.network.ao3.account.AO3NamedSubscriptionsScope.Series).rows.isEmpty())
+        assertEquals(200, post(4))
+        assertEquals(422, post(6))
+        assertEquals(listOf("seriesauthor"), parser.parseNamedSubscriptions(html(client, "$base?type=users"),
+            io.github.cidy02.kudos.network.ao3.account.AO3NamedSubscriptionsScope.Users).rows.map { it.name })
+        assertEquals(422, post(987))
+    }
+
     private fun bundledDemoClient(): OkHttpClient {
         val fixtures = FixtureSource { fixture ->
             val candidates = listOf(

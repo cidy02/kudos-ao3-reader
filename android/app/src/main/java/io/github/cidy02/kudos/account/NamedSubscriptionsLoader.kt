@@ -27,10 +27,21 @@ internal class NamedSubscriptionsLoader(
     val uiState = mutableState.asStateFlow()
     private var request = 0
 
+    /** Invalidate older GETs so they cannot resurrect a confirmed removal. */
+    fun removeSubscription(path: String): Boolean {
+        val loaded = mutableState.value as? NamedSubscriptionsUiState.Loaded ?: return false
+        request++
+        val page = loaded.page.copy(rows = loaded.page.rows.filterNot { it.path == path })
+        mutableState.value = NamedSubscriptionsUiState.Loaded(page)
+        return page.rows.isEmpty() && page.currentPage > 1
+    }
+
     suspend fun load() {
         val requested = ++request
         val generation = repository.authRepository.generation.value
-        mutableState.value = NamedSubscriptionsUiState.Loading
+        if (mutableState.value !is NamedSubscriptionsUiState.Loaded) {
+            mutableState.value = NamedSubscriptionsUiState.Loading
+        }
         val result = repository.loadNamedSubscriptions(scope, page)
         currentCoroutineContext().ensureActive()
         if (requested != request || generation != repository.authRepository.generation.value) return

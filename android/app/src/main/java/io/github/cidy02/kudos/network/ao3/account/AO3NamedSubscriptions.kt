@@ -19,7 +19,8 @@ enum class AO3NamedSubscriptionsScope(val parameter: String, val title: String) 
 data class AO3NamedSubscription(
     val path: String,
     val name: String,
-    val creators: List<AO3AuthorIdentity> = emptyList()
+    val creators: List<AO3AuthorIdentity> = emptyList(),
+    val unsubscribePath: String? = null
 )
 
 data class AO3NamedSubscriptionsPage(

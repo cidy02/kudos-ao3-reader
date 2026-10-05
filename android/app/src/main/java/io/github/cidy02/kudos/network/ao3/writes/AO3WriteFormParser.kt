@@ -5,8 +5,11 @@ import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
 
 class AO3WriteFormParser {
-    fun parseAuthenticityToken(html: String, formSelector: String? = null): String? {
+    fun parseAuthenticityToken(html: String, formSelector: String? = null, metaOnly: Boolean = false): String? {
         val document = Jsoup.parse(html)
+        // iOS fetchCSRFPage uses the page's csrf-token meta, not another row's input.
+        if (metaOnly) return document.selectFirst("meta[name=csrf-token]")?.attr("content")?.trim()
+            ?.takeIf { it.isNotEmpty() }
         if (formSelector != null) {
             document.selectFirst(formSelector)?.authenticityToken()?.let { return it }
         }
@@ -113,6 +116,9 @@ class AO3WriteFormParser {
             )
         }
     }
+
+    fun writeSuccessMessage(html: String): String? = Jsoup.parse(html)
+        .selectFirst(".flash.comment_notice, .flash.notice")?.normalizedText()?.takeIf { it.isNotBlank() }
 
     fun writeErrorMessage(html: String): String? {
         val document = Jsoup.parse(html)

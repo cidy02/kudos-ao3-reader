@@ -30,6 +30,7 @@ class AccountListRepository(
     val countsCache: AO3AccountListCountsCache? = null
 ) {
     suspend fun load(type: AccountListType, page: Int = 1): AO3Result<AO3SearchPage> {
+        val generation = authRepository.generation.value
         val username = authRepository.username()
             ?: return AO3Result.Failure(AO3Error.AuthenticationRequired)
         val url = urls.url(type, username, page)
@@ -38,13 +39,19 @@ class AccountListRepository(
             is AO3Result.Success -> result.value
         }
 
-        return when (val result = client.get(url, headers)) {
+        val response = client.get(url, headers)
+        currentCoroutineContext().ensureActive()
+        if (generation != authRepository.generation.value) throw CancellationException()
+        return when (val result = response) {
             is AO3Result.Failure -> {
-                if (result.error == AO3Error.AuthenticationRequired) authRepository.sessionDidExpire()
+                if (result.error == AO3Error.AuthenticationRequired) authRepository.sessionDidExpire(generation)
                 result
             }
             is AO3Result.Success -> {
-                val parsed = parse(type, result.value.body, result.value.url, result.value.statusCode, page)
+                val parsed = parse(type, result.value.body, result.value.url, result.value.statusCode, page, generation)
+                if (parsed is AO3Result.Success && generation != authRepository.generation.value) {
+                    throw CancellationException()
+                }
                 if (parsed is AO3Result.Success) {
                     countsCache?.put(
                         type,
@@ -155,7 +162,8 @@ class AccountListRepository(
         html: String,
         finalUrl: String,
         statusCode: Int,
-        page: Int
+        page: Int,
+        generation: Int
     ): AO3Result<AO3SearchPage> {
         return try {
             AO3Result.Success(
@@ -164,10 +172,12 @@ class AccountListRepository(
                 }
             )
         } catch (error: AO3AccountParseException.LoginRequired) {
-            authRepository.sessionDidExpire()
+            authRepository.sessionDidExpire(generation)
             AO3Result.Failure(AO3Error.AuthenticationRequired)
         } catch (error: AO3AccountParseException.Overloaded) {
             AO3Result.Failure(AO3Error.Overloaded(statusCode, retryAfterMillis = null))
+        } catch (error: CancellationException) {
+            throw error
         } catch (error: AO3AccountParseException) {
             AO3Result.Failure(AO3Error.Parse(error.message ?: "AO3 account page could not be parsed."))
         } catch (error: Exception) {
