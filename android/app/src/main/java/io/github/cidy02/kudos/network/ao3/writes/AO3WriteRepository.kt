@@ -18,6 +18,7 @@ import io.github.cidy02.kudos.network.ao3.account.AO3CollectionFormParser
 import io.github.cidy02.kudos.network.ao3.account.AO3CollectionFormUrls
 import io.github.cidy02.kudos.network.ao3.account.AO3CollectionSaveOutcome
 import io.github.cidy02.kudos.network.ao3.account.AO3CollectionModerationUrls
+import io.github.cidy02.kudos.network.ao3.account.AO3CollectionParticipantsUrls
 import io.github.cidy02.kudos.network.ao3.account.collectionNameFormatIsValid
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -78,6 +79,52 @@ class AO3WriteRepository(
                     outcome.form.generalErrors.firstOrNull() ?: if (removeAnonymity) "Couldn't un-anon the collection." else "Couldn't reveal the collection."))
             }
         }
+    }
+
+    /** iOS inviteMaintainer intentionally sends no role, even though its screen offers a role choice. */
+    suspend fun inviteMaintainer(slug: String, byline: String, expectedGeneration: Int): AO3Result<Unit> {
+        requireCollectionSession(expectedGeneration)
+        if (client.username() == null) return AO3Result.Failure(AO3Error.AuthenticationRequired)
+        val invite = byline.trim()
+        if (invite.isEmpty()) return AO3Result.Failure(AO3Error.Validation("Name someone to invite."))
+        val referer = AO3CollectionParticipantsUrls.page(slug)
+        val html = when (val result = client.getAuthenticated(referer)) {
+            is AO3Result.Failure -> return result
+            is AO3Result.Success -> result.value.body
+        }
+        requireCollectionSession(expectedGeneration)
+        val token = parser.parseAuthenticityToken(html, metaOnly = true)
+            ?: return AO3Result.Failure(AO3Error.Validation("Couldn't prepare the request. Try again, or open the collection on AO3."))
+        currentCoroutineContext().ensureActive()
+        val response = withContext(NonCancellable) {
+            client.postAuthenticatedInSession(AO3CollectionParticipantsUrls.add(slug),
+                listOf("authenticity_token" to token, "participants_to_invite" to invite),
+                writeHeaders(token, referer), expectedGeneration)
+        }
+        requireCollectionSession(expectedGeneration)
+        return collectionWriteVerdict(response, "AO3 couldn't invite that maintainer.")
+    }
+
+    /** iOS leaveCollection takes the fresh meta token from show, not the participants page. */
+    suspend fun leaveCollection(slug: String, participantId: Int, expectedGeneration: Int): AO3Result<Unit> {
+        requireCollectionSession(expectedGeneration)
+        if (client.username() == null) return AO3Result.Failure(AO3Error.AuthenticationRequired)
+        val referer = AO3CollectionFormUrls.show(slug)
+        val html = when (val result = client.getAuthenticated(referer)) {
+            is AO3Result.Failure -> return result
+            is AO3Result.Success -> result.value.body
+        }
+        requireCollectionSession(expectedGeneration)
+        val token = parser.parseAuthenticityToken(html, metaOnly = true)
+            ?: return AO3Result.Failure(AO3Error.Validation("Couldn't prepare the request. Try again, or open the collection on AO3."))
+        currentCoroutineContext().ensureActive()
+        val response = withContext(NonCancellable) {
+            client.postAuthenticatedInSession(AO3CollectionParticipantsUrls.participant(slug, participantId),
+                listOf("_method" to "delete", "authenticity_token" to token),
+                writeHeaders(token, referer), expectedGeneration)
+        }
+        requireCollectionSession(expectedGeneration)
+        return collectionWriteVerdict(response, "AO3 couldn't leave that collection.")
     }
 
     /** iOS createCollection/updateCollection: fresh token, original action/fields, one POST. */

@@ -9,6 +9,7 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.emptyPreferences
 import io.github.cidy02.kudos.app.PrivacyGate
+import io.github.cidy02.kudos.app.Routes
 import io.github.cidy02.kudos.auth.AO3AuthRepository
 import io.github.cidy02.kudos.auth.MemoryCookieStore
 import io.github.cidy02.kudos.auth.MemorySessionStore
@@ -32,6 +33,7 @@ import org.robolectric.annotation.Config
 class AO3CollectionModerationScreenTest {
     @get:Rule val compose = createComposeRule()
     private lateinit var client: ModerationClient
+    private val maintainerRoutes = mutableListOf<String>()
 
     private fun show(owner: Boolean, theme: KudosThemeMode, fromDetail: Boolean = false) {
         val auth = AO3AuthRepository(MemorySessionStore(testSession()), MemoryCookieStore())
@@ -54,11 +56,17 @@ class AO3CollectionModerationScreenTest {
                 when (screen) {
                     "detail" -> AO3CollectionDetailScreen("winter_exchange", "Winter Exchange 2026", repository,
                         SettingsRepository(prefs), PrivacyGate(), onOpenWork = {}, onOpenWebFallback = {},
-                        onOpenModeration = { isOwner = it; screen = "moderation" }, onOpenSettings = {})
+                        onOpenModeration = { isOwner = it; screen = "moderation" }, onOpenSettings = {},
+                        onOpenMaintainers = { screen = "maintainers" })
                     "moderation" -> AO3CollectionModerationScreen("winter_exchange", "Winter Exchange 2026", isOwner,
-                        repository, writes, onRecentlyDecided = { screen = "items" }, onMaintainers = {}, onMessageCreator = {})
+                        repository, writes, onRecentlyDecided = { screen = "items" }, onMaintainers = {
+                            maintainerRoutes += Routes.ao3CollectionMaintainers("winter_exchange", "Winter Exchange 2026")
+                            screen = "maintainers"
+                        }, onMessageCreator = {})
                     "items" -> AO3CollectionItemsScreen("winter_exchange", "Winter Exchange 2026", repository, writes,
                         initialTab = AO3CollectionItemTab.Approved)
+                    "maintainers" -> AO3CollectionMaintainersScreen("winter_exchange", "Winter Exchange 2026",
+                        repository, writes, onLeft = { screen = "moderation" })
                 }
             }
         }
@@ -93,6 +101,21 @@ class AO3CollectionModerationScreenTest {
         compose.waitForIdle()
         assertTrue(client.posts.isEmpty()); assertEquals(3, client.gets.size)
     }
+
+    private fun assertNativeMaintainers(row: String) {
+        show(true, KudosThemeMode.Light)
+        awaitText("The Lantern Ledger")
+        compose.onNode(hasScrollAction()).performScrollToNode(hasText(row))
+        compose.onNodeWithText(row).performClick()
+        awaitText("Maintainers")
+        awaitText("Step down as owner")
+        compose.onNodeWithText("Winter Exchange 2026 · 4 people").assertExists()
+        assertEquals(listOf("ao3-collection-maintainers/winter_exchange?title=Winter%20Exchange%202026"), maintainerRoutes)
+        assertTrue(client.posts.isEmpty())
+    }
+
+    @Test fun ownersAndModeratorsRowAsksForTheNativeMaintainersRoute() = assertNativeMaintainers("Owners and moderators")
+    @Test fun inviteMaintainerRowAsksForTheNativeMaintainersRoute() = assertNativeMaintainers("Invite a maintainer")
 
     private fun assertNonOwner(theme: KudosThemeMode) {
         show(false, theme)
