@@ -141,7 +141,9 @@ fun AccountWorksListScreen(
 ) {
     val state by viewModel.uiState.collectAsState()
     val tokens = LocalKudosTokens.current
-    val palette = remember(tokens.theme) { SubjectPalette.fromHue(210.0, tokens.theme) }
+    // The reader's accent, or Sepia's own brown: iOS `theme.scopePalette`. This was
+    // `fromHue(210.0)`; a hue is a 0 to 1 fraction, so 210 wrapped to red whatever the accent.
+    val palette = tokens.scopePalette
 
     var expandAll by remember { mutableStateOf(false) }
     val settings by settingsRepository.settings.collectAsState(initial = KudosSettings.Defaults)

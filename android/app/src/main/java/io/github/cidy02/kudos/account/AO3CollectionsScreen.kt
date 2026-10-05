@@ -81,7 +81,9 @@ fun AO3CollectionsScreen(
     val filters by viewModel.filters.collectAsState()
     var showingFilters by remember { mutableStateOf(false) }
     val tokens = LocalKudosTokens.current
-    val palette = remember(tokens.theme) { SubjectPalette.fromHue(210.0, tokens.theme) }
+    // The reader's accent, or Sepia's own brown: iOS `theme.scopePalette`. This was
+    // `fromHue(210.0)`; a hue is a 0 to 1 fraction, so 210 wrapped to red whatever the accent.
+    val palette = tokens.scopePalette
     DisposableEffect(viewModel) {
         viewModel.onAppear()
         onDispose { viewModel.onDisappear() }

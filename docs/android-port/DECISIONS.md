@@ -678,3 +678,10 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   membership requests, reveal and anonymity), from which the items screen is reached. The
   mistake was in Claude's brief. Until brief 3aw lands, Android's row keeps opening the items
   screen, which does the item decisions; membership requests and reveal are done on AO3's page.
+- **2026-10-05 · AO3 Collections and the account lists take the reader's accent, as on iOS.**
+  Both pages asked for a fixed colour by a number on the wrong scale (210, where a hue is a
+  fraction from 0 to 1), which came out red whatever accent the reader had picked, and red in
+  Sepia, where every other page is Sepia's brown. They now use the same accent as the Account
+  page and iOS's `theme.scopePalette`. With the default dark-red accent the pages look as they
+  did. Reverse: the `palette` line in `account/AO3CollectionsScreen.kt` and
+  `account/AccountWorksListScreen.kt`.
