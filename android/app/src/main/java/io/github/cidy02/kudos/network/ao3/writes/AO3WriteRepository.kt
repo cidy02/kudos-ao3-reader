@@ -11,6 +11,12 @@ import io.github.cidy02.kudos.network.ao3.account.AO3CollectionItemDraft
 import io.github.cidy02.kudos.network.ao3.account.AO3CollectionItemTab
 import io.github.cidy02.kudos.network.ao3.account.AO3CollectionItemsParser
 import io.github.cidy02.kudos.network.ao3.account.AO3CollectionItemsUrls
+import io.github.cidy02.kudos.network.ao3.account.AO3CollectionFields
+import io.github.cidy02.kudos.network.ao3.account.AO3CollectionForm
+import io.github.cidy02.kudos.network.ao3.account.AO3CollectionFormParser
+import io.github.cidy02.kudos.network.ao3.account.AO3CollectionFormUrls
+import io.github.cidy02.kudos.network.ao3.account.AO3CollectionSaveOutcome
+import io.github.cidy02.kudos.network.ao3.account.collectionNameFormatIsValid
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
@@ -22,6 +28,90 @@ class AO3WriteRepository(
     private val client: AO3AuthenticatedClient,
     private val parser: AO3WriteFormParser = AO3WriteFormParser()
 ) {
+    /** iOS createCollection/updateCollection: fresh token, original action/fields, one POST. */
+    suspend fun saveCollection(form: AO3CollectionForm, expectedGeneration: Int): AO3Result<AO3CollectionSaveOutcome> {
+        requireCollectionSession(expectedGeneration)
+        if (client.username() == null) return AO3Result.Failure(AO3Error.AuthenticationRequired)
+        if (form.slug == null && !collectionNameFormatIsValid(form[AO3CollectionFields.NAME])) {
+            return AO3Result.Success(AO3CollectionSaveOutcome.Invalid(form.copy(
+                fieldErrors = form.fieldErrors + (AO3CollectionFields.NAME to AO3CollectionFields.INVALID_NAME))))
+        }
+        val referer = AO3CollectionFormUrls.form(form.slug)
+        val html = when (val result = client.getAuthenticated(referer)) {
+            is AO3Result.Failure -> return result
+            is AO3Result.Success -> result.value.body
+        }
+        requireCollectionSession(expectedGeneration)
+        val token = parser.parseAuthenticityToken(html, metaOnly = true)
+            ?: return AO3Result.Failure(AO3Error.Validation("Couldn't prepare the request. Try again, or open the collection on AO3."))
+        val posted = form.copy(csrfToken = token)
+        val response = withContext(NonCancellable) {
+            client.postAuthenticatedInSession(posted.actionUrl, posted.parameters(), writeHeaders(token, referer), expectedGeneration)
+        }
+        requireCollectionSession(expectedGeneration)
+        return when (response) {
+            is AO3Result.Failure -> response
+            is AO3Result.Success -> withContext(Dispatchers.Default) {
+                val body = response.value.body
+                val parsed = try { AO3CollectionFormParser().parse(body, form.slug) } catch (_: Exception) { null }
+                val error = parser.writeErrorMessage(body)
+                val notice = parser.writeSuccessMessage(body)
+                    ?: "Collection was successfully created.".takeIf { body.contains("successfully created", true) }
+                    ?: "Collection was successfully updated.".takeIf { body.contains("successfully updated", true) }
+                when {
+                    error != null -> AO3Result.Success(AO3CollectionSaveOutcome.Invalid((parsed ?: posted).copy(
+                        generalErrors = (listOf(error) + parsed?.generalErrors.orEmpty()).distinct())))
+                    notice != null -> AO3Result.Success(AO3CollectionSaveOutcome.Saved(parsed ?: posted, notice))
+                    response.value.statusCode in 300..399 -> AO3Result.Success(AO3CollectionSaveOutcome.Saved(posted,
+                        if (form.slug == null) "Collection created." else "Collection updated."))
+                    response.value.statusCode in 200..299 && parsed != null &&
+                        (parsed.generalErrors.isNotEmpty() || parsed.fieldErrors.isNotEmpty()) ->
+                        AO3Result.Success(AO3CollectionSaveOutcome.Invalid(parsed))
+                    else -> AO3Result.Failure(AO3Error.Validation(AO3CollectionFields.UNCONFIRMED))
+                }
+            }
+        }
+    }
+
+    /** Owner-offered delete: token from the confirmation form (not its meta), then one method-override POST. */
+    suspend fun deleteCollection(slug: String, expectedGeneration: Int): AO3Result<Unit> {
+        requireCollectionSession(expectedGeneration)
+        if (client.username() == null) return AO3Result.Failure(AO3Error.AuthenticationRequired)
+        val referer = AO3CollectionFormUrls.confirmDelete(slug)
+        val html = when (val result = client.getAuthenticated(referer)) {
+            is AO3Result.Failure -> return result
+            is AO3Result.Success -> result.value.body
+        }
+        requireCollectionSession(expectedGeneration)
+        if (parser.parseAuthenticityToken(html, metaOnly = true) == null) return AO3Result.Failure(
+            AO3Error.Validation("Couldn't prepare the request. Try again, or open the collection on AO3."))
+        val token = AO3CollectionFormParser().destroyToken(html)
+            ?: return AO3Result.Failure(AO3Error.Validation("AO3 did not offer the collection delete confirmation. It was not deleted."))
+        val response = withContext(NonCancellable) {
+            client.postAuthenticatedInSession(AO3CollectionFormUrls.show(slug),
+                listOf("_method" to "delete", "authenticity_token" to token), writeHeaders(token, referer), expectedGeneration)
+        }
+        requireCollectionSession(expectedGeneration)
+        return collectionWriteVerdict(response, "AO3 couldn't delete that collection.")
+    }
+
+    private fun requireCollectionSession(generation: Int) {
+        if (client.sessionGeneration() != generation) throw CancellationException()
+    }
+
+    private fun collectionWriteVerdict(response: AO3Result<AO3HttpResponse>, fallback: String): AO3Result<Unit> = when (response) {
+        is AO3Result.Failure -> response
+        is AO3Result.Success -> {
+            val error = parser.writeErrorMessage(response.value.body)
+            when {
+                error != null -> AO3Result.Failure(AO3Error.Validation(error))
+                parser.writeSuccessMessage(response.value.body) != null || response.value.statusCode in 300..399 -> AO3Result.Success(Unit)
+                response.value.statusCode in 200..299 -> AO3Result.Failure(AO3Error.Validation(AO3CollectionFields.UNCONFIRMED))
+                else -> AO3Result.Failure(AO3Error.Validation(fallback))
+            }
+        }
+    }
+
     /** iOS updateCollectionItems: one fresh form, sequential single-shot POSTs, stop on first refusal. */
     suspend fun updateCollectionItems(
         slug: String,

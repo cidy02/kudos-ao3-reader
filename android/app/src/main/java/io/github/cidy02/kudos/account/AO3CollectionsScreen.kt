@@ -71,6 +71,7 @@ fun AO3CollectionsScreen(
     repository: AccountListRepository,
     onLogin: () -> Unit,
     onOpenCollection: (AO3Collection) -> Unit,
+    onNewCollection: () -> Unit,
     modifier: Modifier = Modifier,
     viewModel: AO3CollectionsViewModel = viewModel(
         factory = AO3CollectionsViewModel.factory(repository)
@@ -121,7 +122,7 @@ fun AO3CollectionsScreen(
         trailingContent = {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 ToolbarAddButton(
-                    onClick = { /* TODO: New Collection */ },
+                    onClick = onNewCollection,
                     accessibilityName = "New Collection",
                     palette = palette
                 )
