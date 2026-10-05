@@ -123,7 +123,7 @@ fun FandomWorksScreen(
         }
     }
 
-    LaunchedEffect(fandomName, filters) { load() }
+    LaunchedEffect(fandomName) { load() }
 
     ProvidePushedShellChrome(
         hasSubjectHeader = true,
@@ -132,7 +132,7 @@ fun FandomWorksScreen(
                 filtersActive = narrowed,
                 onClick = { showFilterSheet = true },
                 badgeCount = if (narrowed) activeFilters else 0,
-                onClearFilters = { filters = browseDefault }
+                onClearFilters = { filters = browseDefault; load() }
             )
             Box {
                 ToolbarCircleButton(
@@ -207,7 +207,7 @@ fun FandomWorksScreen(
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
                         primaryActionLabel = if (narrowed) "Clear Filters" else null,
                         onPrimaryAction = if (narrowed) {
-                            { filters = browseDefault }
+                            { filters = browseDefault; load() }
                         } else {
                             null
                         }
@@ -322,9 +322,11 @@ fun FandomWorksScreen(
         SearchFilterSheet(
             filters = filters,
             allowsRelevanceSort = false,
+            showFandomPicker = false,
+            canReset = narrowed,
             onFiltersChange = { filters = it },
-            onApply = { showFilterSheet = false },
-            onClear = { filters = AO3BrowseRepository.browseBaseline() },
+            onApply = { showFilterSheet = false; load() },
+            onClear = { filters = AO3BrowseRepository.browseBaseline(); load() },
             onDismiss = { showFilterSheet = false },
             localTagSuggestions = localTagSuggestions,
             autocompleteRepository = autocompleteRepository

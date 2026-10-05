@@ -74,6 +74,8 @@ class AO3SearchUrlBuilder {
         }
 
         add("work_search[query]", filters.searchQuery)
+        add("work_search[title]", filters.title)
+        add("work_search[creators]", filters.creators)
         add("work_search[fandom_names]", filters.fandom)
         add("work_search[character_names]", filters.characters)
         add("work_search[relationship_names]", filters.relationships)
@@ -94,20 +96,34 @@ class AO3SearchUrlBuilder {
 
         add("work_search[crossover]", filters.crossover.ao3Value)
         add("work_search[complete]", filters.completion.ao3Value)
+        add("work_search[single_chapter]", filters.chapterCount.ao3Value)
         add("work_search[word_count]", wordCountExpression(filters))
+        add("work_search[hits]", rangeExpression(filters.hitsFrom, filters.hitsTo))
+        add("work_search[kudos_count]", rangeExpression(filters.kudosFrom, filters.kudosTo))
+        add("work_search[comments_count]", rangeExpression(filters.commentsFrom, filters.commentsTo))
+        add("work_search[bookmarks_count]", rangeExpression(filters.bookmarksFrom, filters.bookmarksTo))
+        add("work_search[date_from]", filters.dateFrom?.toString())
+        add("work_search[date_to]", filters.dateTo?.toString())
         add("work_search[revised_at]", filters.updated.ao3Value)
         add("work_search[language_id]", filters.language.code)
         add("work_search[sort_column]", filters.sort.sortColumn)
+        // iOS: never carry Ascending back onto Best Match (worst match first).
+        if (filters.sort.sortColumn != null) {
+            add("work_search[sort_direction]", filters.sortDirection.ao3Value)
+        }
         builder.addQueryParameter("page", page.coerceAtLeast(1).toString())
     }
 
-    fun wordCountExpression(filters: AO3SearchFilters): String? {
+    fun wordCountExpression(filters: AO3SearchFilters): String? =
+        rangeExpression(filters.wordsFrom, filters.wordsTo)
+
+    fun rangeExpression(lower: String, upper: String): String? {
         // Pass the trimmed values through verbatim to mirror Apple (which trims and
         // forwards the raw strings). This preserves inputs like "10,000" that a
         // numeric coercion would silently drop, keeping the AO3 query identical
         // across platforms. Blank sides are treated as absent.
-        val from = filters.wordsFrom.trim().takeIf { it.isNotEmpty() }
-        val to = filters.wordsTo.trim().takeIf { it.isNotEmpty() }
+        val from = lower.trim().takeIf { it.isNotEmpty() }
+        val to = upper.trim().takeIf { it.isNotEmpty() }
         return when {
             from != null && to != null -> "$from-$to"
             from != null -> "> $from"
