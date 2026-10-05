@@ -497,3 +497,9 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
 - **2026-10-05 · Restoring the same backup twice does not copy an identical font again.**
   Android only; iOS still adds a copy each time. Reverse: `mergeFonts` in
   `backup/BackupMergeService.kt`.
+- **2026-10-05 · The reader's Find in Work is iOS's, and the brief was wrong about two things.**
+  iOS has no "this chapter / whole work" choice (the brief asked for one): "This Chapter" is the
+  first group of results. And iOS searches on one letter. Codex followed iOS. Left as gaps, in
+  `briefs/3ai-result.md`: tapping Bookmark twice on one result stores two bookmarks (iOS returns
+  the first); a result's context is what Android's search engine returns, not a whole sentence.
+  Reverse: `reader/ReaderSearchSheet.kt`, `reader/ReaderSearch.kt`.
