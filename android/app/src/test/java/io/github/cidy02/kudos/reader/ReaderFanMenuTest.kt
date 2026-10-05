@@ -121,7 +121,7 @@ class ReaderFanMenuTest {
     }
 
     @Test
-    fun shareUsesStoredAo3IdentityThenSourceLinkAndOmitsUnavailableFileSharing() {
+    fun shareLinkUsesStoredAo3IdentityThenSourceLink() {
         val work = SavedWork(title = "Import", author = "Author")
         assertEquals("https://archiveofourown.org/works/789",
             readerShareUrl(work.copy(ao3WorkID = 789, sourceUrl = "https://archiveofourown.org/works/123")))
