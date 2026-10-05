@@ -34,8 +34,9 @@ row stays); Reject behind its confirmation, cancelled once and then confirmed; A
 behind its confirmation; Reveal now and Remove anonymity, each behind its own confirmation,
 the summary rows changing and the two actions disappearing; "Recently decided" opening the
 items screen on Approved; "Message creator" opening the work's comments with the composer up
-and nothing sent. Not checked on the emulator: the maintainers rows (they open the browser
-page until brief 3ay's screen lands), the queue's second page, a maintainer who is not the
+and nothing sent. Checked later the same day: the maintainers rows opening the native
+Maintainers screen (brief 3ay); the queue's second page, and approving its only row, after
+which the queue reloads as one page. Not checked on the emulator: a maintainer who is not the
 owner (covered by tests in all four themes).
 
 ## iOS reference inventory (read before implementation)

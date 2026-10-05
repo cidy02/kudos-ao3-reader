@@ -23,9 +23,9 @@ screen from Manage › Maintainers (two owners, two moderators, "4 people"); an 
 accepted ("Invitation sent to lanternkeeper.", the field cleared); one refused ("We couldn't
 find an account named unknown_username.", said once, the field kept); Step down as owner
 behind its confirmation, cancelled; on a collection with one owner, "Cannot Step Down"; and
-the Moderation screen's maintainers row opening this screen, with its count now four. Not
-checked: confirming Step down (the screen should close), a moderator's view ("Leave
-collection"), large text.
+the Moderation screen's maintainers row opening this screen, with its count now four.
+Checked later the same day: confirming Step down closes the screen and returns to the
+collection. Not checked: a moderator's view ("Leave collection"), large text.
 
 ## iOS reference, read from code before implementation
 
