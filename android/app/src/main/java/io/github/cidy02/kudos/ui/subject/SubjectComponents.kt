@@ -215,7 +215,8 @@ fun SubjectKicker(
     trailingCount: Int = 0,
     size: TextUnit = 10.sp,
     ruleWidth: Dp = SubjectMetrics.kickerRuleWidth,
-    ruleSpacing: Dp = 6.dp
+    ruleSpacing: Dp = 6.dp,
+    maxLines: Int = 1
 ) {
     val tokens = LocalKudosTokens.current
     Column(modifier, verticalArrangement = Arrangement.spacedBy(ruleSpacing)) {
@@ -227,7 +228,7 @@ fun SubjectKicker(
                 lineHeight = (size.value * 1.4f).sp,
                 fontWeight = FontWeight.Bold,
                 letterSpacing = (size.value * 0.11f).sp,
-                maxLines = 1,
+                maxLines = maxLines,
                 overflow = TextOverflow.Ellipsis
             )
             if (trailingCount > 0) {

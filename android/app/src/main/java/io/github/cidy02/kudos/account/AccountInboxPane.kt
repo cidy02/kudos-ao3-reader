@@ -51,11 +51,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.TextUnit
 import androidx.lifecycle.viewmodel.compose.viewModel
 import io.github.cidy02.kudos.app.ProvidePushedShellChrome
 import io.github.cidy02.kudos.core.model.KudosSettings
@@ -89,6 +92,7 @@ import io.github.cidy02.kudos.ui.subject.ToolbarCircleButton
 import io.github.cidy02.kudos.ui.subject.WorkSelectionBubble
 import io.github.cidy02.kudos.ui.subject.subjectPanel
 import io.github.cidy02.kudos.ui.subject.subjectScreenWash
+import io.github.cidy02.kudos.ui.subject.isAccessibilityFontScale
 import java.text.NumberFormat
 
 /** Account › Activity › Inbox, drawn with the shared subject-page language. */
@@ -639,7 +643,7 @@ private fun AccountInboxFilterSheet(
 }
 
 @Composable
-private fun InboxItemCard(
+internal fun InboxItemCard(
     item: AO3InboxItem,
     workAuthors: List<AO3CommentWorkAuthor>,
     currentUsername: String?,
@@ -659,6 +663,7 @@ private fun InboxItemCard(
     onDelete: () -> Unit
 ) {
     val tokens = LocalKudosTokens.current
+    val accessibility = isAccessibilityFontScale()
     val role = item.participantRole(
         workAuthors = workAuthors.map { it.displayName },
         workAuthorUsernames = workAuthors.mapNotNull { it.username },
@@ -740,7 +745,8 @@ private fun InboxItemCard(
                             text = item.excerpt,
                             color = tokens.primaryInk,
                             fontSize = 14.sp,
-                            maxLines = 3,
+                            lineHeight = if (accessibility) 20.sp else TextUnit.Unspecified,
+                            maxLines = if (accessibility) Int.MAX_VALUE else 3,
                             overflow = TextOverflow.Ellipsis
                         )
                     }
@@ -785,6 +791,59 @@ private fun InboxByline(
     role: AO3CommentParticipantRole
 ) {
     val tokens = LocalKudosTokens.current
+    if (isAccessibilityFontScale()) {
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                if (item.isUnread) {
+                    Box(
+                        Modifier.size(8.dp).clip(CircleShape)
+                            .background(LocalSubjectPalette.current.accent)
+                    )
+                }
+                Text(
+                    text = item.commenterName,
+                    color = tokens.primaryInk,
+                    fontSize = 14.sp,
+                    lineHeight = 20.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+            SubjectChip(
+                text = role.label,
+                modifier = Modifier.semantics {
+                    contentDescription = when (role) {
+                        AO3CommentParticipantRole.Me -> "Your comment"
+                        AO3CommentParticipantRole.Author -> "Work author"
+                        else -> role.label
+                    }
+                },
+                style = if (role == AO3CommentParticipantRole.Me ||
+                    role == AO3CommentParticipantRole.Author
+                ) SubjectChipStyle.Tinted else SubjectChipStyle.Neutral,
+                palette = LocalSubjectPalette.current
+            )
+            if (item.isReplied) {
+                SubjectChip(
+                    text = "Replied",
+                    style = SubjectChipStyle.Tinted,
+                    palette = LocalSubjectPalette.current
+                )
+            }
+            if (item.postedAgo.isNotEmpty()) {
+                Text(
+                    text = item.postedAgo,
+                    color = tokens.tertiaryInk,
+                    fontSize = 11.sp,
+                    lineHeight = 16.sp
+                )
+            }
+        }
+        return
+    }
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -823,15 +882,30 @@ private fun InboxByline(
 @Composable
 private fun InboxSubjectLine(item: AO3InboxItem) {
     val tokens = LocalKudosTokens.current
+    val accessibility = isAccessibilityFontScale()
     val chapter = item.chapterIndicatorTitle
     if (chapter == null) {
         Text(
             text = "on ${item.subjectTitle}",
             color = tokens.secondaryInk,
             fontSize = 12.sp,
-            maxLines = 2,
+            lineHeight = if (accessibility) 17.sp else TextUnit.Unspecified,
+            maxLines = if (accessibility) Int.MAX_VALUE else 2,
             overflow = TextOverflow.Ellipsis
         )
+        return
+    }
+    if (accessibility) {
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text("on", color = tokens.secondaryInk, fontSize = 12.sp, lineHeight = 17.sp)
+            SubjectChip(text = chapter, palette = LocalSubjectPalette.current)
+            Text(
+                text = "of ${item.workTitle}",
+                color = tokens.secondaryInk,
+                fontSize = 12.sp,
+                lineHeight = 17.sp
+            )
+        }
         return
     }
     Row(
