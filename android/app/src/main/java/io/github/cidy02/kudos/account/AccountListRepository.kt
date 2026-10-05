@@ -1,6 +1,7 @@
 package io.github.cidy02.kudos.account
 
 import io.github.cidy02.kudos.auth.AO3AuthRepository
+import io.github.cidy02.kudos.auth.isSignedIn
 import io.github.cidy02.kudos.network.ao3.AO3Client
 import io.github.cidy02.kudos.network.ao3.AO3Error
 import io.github.cidy02.kudos.network.ao3.AO3Result
@@ -11,6 +12,8 @@ import io.github.cidy02.kudos.network.ao3.account.AO3AccountUrls
 import io.github.cidy02.kudos.network.ao3.account.AO3Collection
 import io.github.cidy02.kudos.network.ao3.account.AO3CollectionsIndexPage
 import io.github.cidy02.kudos.network.ao3.search.AO3SearchPage
+import io.github.cidy02.kudos.network.ao3.account.AO3NamedSubscriptionsScope
+import io.github.cidy02.kudos.network.ao3.account.AO3NamedSubscriptionsPage
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
@@ -53,6 +56,50 @@ class AccountListRepository(
                     )
                 }
                 parsed
+            }
+        }
+    }
+
+    /** One foreground account-index GET, with the same auth and paced client as Works. */
+    suspend fun loadNamedSubscriptions(
+        scope: AO3NamedSubscriptionsScope,
+        page: Int = 1
+    ): AO3Result<AO3NamedSubscriptionsPage> {
+        if (!authRepository.state.value.isSignedIn) {
+            return AO3Result.Failure(AO3Error.AuthenticationRequired)
+        }
+        val generation = authRepository.generation.value
+        val username = authRepository.username()
+            ?: return AO3Result.Failure(AO3Error.AuthenticationRequired)
+        val url = urls.namedSubscriptionsUrl(username, scope, page)
+        val headers = when (val result = authRepository.authenticatedHeaders(url)) {
+            is AO3Result.Failure -> return result
+            is AO3Result.Success -> result.value
+        }
+        if (generation != authRepository.generation.value) throw CancellationException()
+        val response = client.get(url, headers)
+        currentCoroutineContext().ensureActive()
+        if (generation != authRepository.generation.value) throw CancellationException()
+        return when (response) {
+            is AO3Result.Failure -> {
+                if (response.error == AO3Error.AuthenticationRequired) authRepository.sessionDidExpire(generation)
+                response
+            }
+            is AO3Result.Success -> try {
+                val parsed = withContext(Dispatchers.Default) {
+                    parser.parseNamedSubscriptions(response.value.body, scope, page, response.value.url)
+                }
+                if (generation != authRepository.generation.value) throw CancellationException()
+                AO3Result.Success(parsed)
+            } catch (error: AO3AccountParseException.LoginRequired) {
+                authRepository.sessionDidExpire(generation)
+                AO3Result.Failure(AO3Error.AuthenticationRequired)
+            } catch (error: AO3AccountParseException.Overloaded) {
+                AO3Result.Failure(AO3Error.Overloaded(response.value.statusCode, retryAfterMillis = null))
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                AO3Result.Failure(AO3Error.Parse(error.message ?: "AO3 subscriptions page could not be parsed."))
             }
         }
     }

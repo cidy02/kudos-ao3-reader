@@ -139,6 +139,9 @@ checks action/other-author route precedence. Actual blur rendering remains manua
 
 ## 4. Series and Authors subscriptions: no supported new-item display
 
+**Superseded by [brief 3am](3am-result.md):** named lists now load on demand. The
+finding below describes the pre-3am code; named rows still have no unread badge.
+
 Android's `SubscriptionsBrowser` in `AccountWorksListScreen.kt` renders an
 unconditional empty state for both Series and Authors. Switching those pills
 does not issue a request. `AccountListRepository`/`AO3AccountUrls` load only
