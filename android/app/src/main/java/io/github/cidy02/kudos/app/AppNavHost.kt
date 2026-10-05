@@ -582,9 +582,23 @@ fun AppNavHost(
             AO3CollectionsScreen(
                 repository = container.accountListRepository,
                 onLogin = { navController.navigate(Routes.AccountLogin) },
+                onNewCollection = { navController.navigate(Routes.ao3CollectionForm()) },
                 onOpenCollection = { collection ->
                     navController.navigate(Routes.ao3CollectionDetail(collection.name, collection.title))
                 }
+            )
+        }
+        sharedComposable(
+            Routes.AO3CollectionForm,
+            arguments = listOf(navArgument("collectionSlug") { type = NavType.StringType; nullable = true; defaultValue = null })
+        ) { entry ->
+            io.github.cidy02.kudos.account.AO3CollectionFormScreen(
+                slug = Routes.routeArg(entry, "collectionSlug"),
+                repository = container.collectionDetailRepository,
+                writes = container.writeRepository,
+                onClose = { navController.popBackStack() },
+                onDeleted = { navController.popBackStack(Routes.AO3Collections, inclusive = false) },
+                onOpenWeb = { navController.navigate(Routes.webFallback(it)) }
             )
         }
         sharedComposable(
@@ -606,6 +620,7 @@ fun AppNavHost(
                     onOpenModeration = {
                         navController.navigate(Routes.ao3CollectionItems(slug, title ?: slug))
                     },
+                    onOpenSettings = { navController.navigate(Routes.ao3CollectionForm(slug)) },
                     settingsRepository = container.settingsRepository,
                     privacyGate = container.privacyGate,
                     onOpenWork = { work ->

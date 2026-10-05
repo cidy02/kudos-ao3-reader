@@ -152,6 +152,9 @@ object Routes {
     private const val ARG_AO3_COLLECTION_TITLE = "collectionTitle"
     const val AO3CollectionDetail = "ao3-collection-detail/{$ARG_AO3_COLLECTION_SLUG}?title={$ARG_AO3_COLLECTION_TITLE}"
     const val AO3CollectionItems = "ao3-collection-items/{$ARG_AO3_COLLECTION_SLUG}?title={$ARG_AO3_COLLECTION_TITLE}"
+    const val AO3CollectionForm = "ao3-collection-form?slug={$ARG_AO3_COLLECTION_SLUG}"
+    fun ao3CollectionForm(slug: String? = null) = if (slug == null) "ao3-collection-form"
+        else "ao3-collection-form?slug=${encode(slug)}"
     fun ao3CollectionItems(slug: String, title: String) =
         "ao3-collection-items/${encode(slug)}?title=${encode(title)}"
     fun ao3CollectionDetail(slug: String, title: String? = null) =
@@ -220,6 +223,7 @@ object Routes {
             AccountList -> "Account List"
             AO3Collections -> "My Collections"
             AO3CollectionItems -> "Collection items"
+            AO3CollectionForm -> "Collection settings"
             Settings -> "Settings"
             Backup -> "Backup"
             AvailabilitySweep -> "Check Availability"
@@ -282,6 +286,7 @@ object Routes {
             base == Collections.substringBefore("?").substringBefore("/") ||
             base == CollectionDetail.substringBefore("?").substringBefore("/") ||
             base == AO3CollectionItems.substringBefore("?").substringBefore("/") ||
+            base == AO3CollectionForm.substringBefore("?") ||
             base == AO3CollectionDetail.substringBefore("?").substringBefore("/") ||
             base == BrowseWorks.substringBefore("?").substringBefore("/") ||
             base == SeriesWorks.substringBefore("?").substringBefore("/") ||
@@ -301,7 +306,7 @@ object Routes {
         WorkDetail, // WorkDetailView
         BrowseFandoms, BrowseWorks, TagWorks, // FandomListView, NativeBrowseView
         Settings, Backup, QueueStorage, AvailabilitySweep, About, BugReport, // SettingsPageForm
-        AO3Preferences, AO3Dashboard, AccountList, AccountMoreOnAO3, AccountInbox, AO3CollectionDetail, AO3CollectionItems, // Account screens and AO3 lists
+        AO3Preferences, AO3Dashboard, AccountList, AccountMoreOnAO3, AccountInbox, AO3CollectionDetail, AO3CollectionItems, AO3CollectionForm, // Account screens and AO3 lists
         Collections, // LibraryEntityGridView
         QueueDetail, // ReadingQueueSettingsView
         ReadingStatistics // ReadingInsightsView

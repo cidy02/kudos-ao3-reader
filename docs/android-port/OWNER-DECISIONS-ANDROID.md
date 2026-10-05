@@ -229,3 +229,16 @@ Moderation). It has never been run against AO3 on either app.
 - **After AO3 refuses one.** Android reads the list again so it shows what AO3 took before the
   refusal; iOS leaves the list as it was until you refresh. Make iOS do the same? Until
   answered: they differ.
+
+## 14. The collection form: two things iOS does that Android now copies
+
+Built on 2026-10-05 (Account › Collections › "+", and a collection's Manage › Collection
+Settings). Never run against AO3 on either app.
+
+- **"Header image alt text".** Both apps show this field and let you type in it, and neither
+  sends it to AO3 (as far as I can tell AO3's form has no such field). Remove the row from both
+  apps? Until answered: shown on both, sent by neither.
+- **After creating a collection.** The form stays open, still titled "New collection", with
+  the message that it was created. A second tap on Create Collection asks AO3 to create it
+  again (AO3 refuses, because the name is now taken). Should the form close, or turn into the
+  edit form, after a successful create? Until answered: it stays open, as iOS.

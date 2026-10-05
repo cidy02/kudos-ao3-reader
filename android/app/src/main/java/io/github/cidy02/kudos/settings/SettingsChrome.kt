@@ -1,6 +1,13 @@
 package io.github.cidy02.kudos.settings
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.width
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -33,6 +40,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -45,6 +58,9 @@ import io.github.cidy02.kudos.ui.subject.LocalSubjectPalette
 import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
 import io.github.cidy02.kudos.ui.subject.SubjectHeaderBlock
 import io.github.cidy02.kudos.ui.subject.SubjectMetrics
+import io.github.cidy02.kudos.ui.subject.SubjectFormRow
+import io.github.cidy02.kudos.ui.subject.SubjectPalette
+import io.github.cidy02.kudos.ui.subject.isAccessibilityFontScale
 import io.github.cidy02.kudos.ui.subject.subjectPanel
 import io.github.cidy02.kudos.ui.subject.subjectScreenWash
 
@@ -55,6 +71,8 @@ import io.github.cidy02.kudos.ui.subject.subjectScreenWash
 @Composable
 fun SettingsPage(
     title: String,
+    kicker: String = "SETTINGS",
+    subtitle: String? = null,
     content: LazyListScope.() -> Unit
 ) {
     val chrome = LocalPushedShellChrome.current
@@ -72,13 +90,75 @@ fun SettingsPage(
         item {
             Spacer(Modifier.height(WindowInsets.systemBars.asPaddingValues().calculateTopPadding() + 56.dp))
             SubjectHeaderBlock(
-                kicker = "SETTINGS",
+                kicker = kicker,
                 title = title,
+                subtitle = subtitle,
                 palette = palette,
                 gutter = SubjectMetrics.accountGutter
             )
         }
         content()
+    }
+}
+
+/** Plain text entry on the same tokens as the note editor; no Material text-field chrome. */
+@Composable
+fun SubjectTextFieldRow(
+    label: String,
+    value: String,
+    placeholder: String,
+    onValueChange: (String) -> Unit,
+    multiline: Boolean = false,
+    enabled: Boolean = true,
+    error: String? = null,
+    autocorrect: Boolean = true,
+    /** The label above the field rather than beside it; for a narrow place such as a dialog. */
+    stackedLabel: Boolean = false
+) {
+    val tokens = LocalKudosTokens.current
+    val stacked = multiline || stackedLabel || isAccessibilityFontScale()
+    val style = TextStyle(color = if (enabled) tokens.primaryInk else tokens.secondaryInk,
+        fontSize = 14.5.sp, lineHeight = 20.sp, textAlign = if (stacked) TextAlign.Start else TextAlign.End)
+    val focus = remember { FocusRequester() }
+    val measurer = rememberTextMeasurer()
+    val density = LocalDensity.current
+    val hug = remember(value, placeholder, style, density) {
+        // Room for the cursor after the last character.
+        with(density) { measurer.measure(value.ifEmpty { placeholder }, style, softWrap = false, maxLines = 1).size.width.toDp() } + 3.dp
+    }
+    val input: @Composable () -> Unit = {
+        // A single-line field lays its text out unbounded and scrolls, so it ignores the
+        // alignment: the value sat at the left of its box while the placeholder sat at the
+        // right. The field is instead as wide as its text and the box places it at the end, as
+        // iOS's trailing fields; a long value still scrolls. A tap anywhere in the box reaches it.
+        // The width is measured here: the field's own intrinsic width runs one edit behind and
+        // cut the last character.
+        Box(Modifier.fillMaxWidth().clickable(remember { MutableInteractionSource() }, indication = null,
+            enabled = enabled) { focus.requestFocus() },
+            contentAlignment = if (stacked) Alignment.CenterStart else Alignment.CenterEnd) {
+            BasicTextField(value = value, onValueChange = onValueChange, enabled = enabled,
+                singleLine = !multiline, minLines = if (multiline) 2 else 1, maxLines = if (multiline) 6 else 1,
+                textStyle = style, cursorBrush = SolidColor(tokens.accent),
+                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.None, autoCorrectEnabled = autocorrect),
+                modifier = (if (stacked) Modifier.fillMaxWidth() else Modifier.width(hug))
+                    .focusRequester(focus).semantics { contentDescription = label },
+                decorationBox = { inner ->
+                    Box {
+                        if (value.isEmpty()) Text(placeholder, color = tokens.tertiaryInk, style = style)
+                        inner()
+                    }
+                })
+        }
+    }
+    Column {
+        if (stacked) Column(Modifier.fillMaxWidth().padding(horizontal = 13.dp, vertical = 11.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text(label, color = tokens.primaryInk, fontSize = 14.5.sp, lineHeight = 20.sp)
+            input()
+        } else SubjectFormRow(label, trailing = { Box(Modifier.fillMaxWidth(0.55f)) { input() } })
+        if (!error.isNullOrEmpty()) Text(error, color = SubjectPalette.fromHue(0.0, tokens.theme).accent,
+            fontSize = 11.5.sp, lineHeight = 17.sp,
+            modifier = Modifier.padding(horizontal = 13.dp).padding(bottom = 8.dp))
     }
 }
 

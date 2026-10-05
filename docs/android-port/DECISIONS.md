@@ -661,3 +661,14 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   #16161A with #CFCFD4, OLED #000000 with #CFCFD4. Readers will see Dark and Sepia change.
   Reverse: `reader/settings/ReaderColorTheme.kt` and the two colour lines in
   `reader/readium/ReadiumSettingsAdapter.kt`.
+- **2026-10-05 · The AO3 collection form: new, edit and delete, as iOS's.** The "+" on AO3
+  Collections and Manage › Collection Settings now open iOS's form. Create and Save send the
+  served form with the reader's changes in one request; Delete Collection asks for the
+  collection's name to be typed, then sends one request. Each fetches a fresh token first and is
+  never retried. Android differs from iOS in three small ways, all Claude's: AO3's refusal is
+  said once, "Name is available" does not stay beside it, and there are no extra top buttons.
+  "Your items" is not built yet. Never run against AO3. Reverse:
+  `account/AO3CollectionFormScreen.kt`, `account/AO3CollectionFormState.kt`,
+  `network/ao3/account/AO3CollectionForm.kt`, `saveCollection` and `deleteCollection` in
+  `network/ao3/writes/AO3WriteRepository.kt`, and `SubjectTextFieldRow` in
+  `settings/SettingsChrome.kt`.
