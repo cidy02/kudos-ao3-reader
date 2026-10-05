@@ -18,6 +18,7 @@ import io.github.cidy02.kudos.reader.settings.ReaderSettingsMapper
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
@@ -55,6 +56,11 @@ class ReaderViewModel(
 
     init {
         load()
+        viewModelScope.launch {
+            settingsRepository.speechPreferences.collect { speech ->
+                updatePreferences { speech.applyTo(it) }
+            }
+        }
     }
 
     fun load() {
@@ -66,7 +72,7 @@ class ReaderViewModel(
                     work = result.work,
                     epubPath = result.epubPath,
                     restoreTarget = result.restoreTarget,
-                    preferences = result.preferences,
+                    preferences = settingsRepository.speechPreferences.first().applyTo(result.preferences),
                     endOfWork = EndOfWorkActions.forWork(result.work),
                     finished = result.work.isFinished
                 )
@@ -334,12 +340,11 @@ class ReaderViewModel(
     }
 
     fun setSpeechRate(rate: Float) {
-        val clamped = rate.coerceIn(0.5f, 2.0f)
-        updatePreferences { it.copy(speechRate = clamped) }
+        viewModelScope.launch { settingsRepository.updateSpeechRate(rate) }
     }
 
     fun setSpeechVoiceIdentifier(id: String?) {
-        updatePreferences { it.copy(speechVoiceIdentifier = id) }
+        viewModelScope.launch { settingsRepository.updateSpeechVoiceIdentifier(id) }
     }
 
     fun setSpeechPitch(pitch: Float) {

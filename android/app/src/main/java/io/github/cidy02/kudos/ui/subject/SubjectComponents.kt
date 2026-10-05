@@ -224,6 +224,7 @@ fun SubjectKicker(
                 text = text.uppercase(),
                 color = palette.accent,
                 fontSize = size,
+                lineHeight = (size.value * 1.4f).sp,
                 fontWeight = FontWeight.Bold,
                 letterSpacing = (size.value * 0.11f).sp,
                 maxLines = 1,
@@ -234,6 +235,7 @@ fun SubjectKicker(
                     text = "+$trailingCount",
                     color = tokens.secondaryInk,
                     fontSize = size,
+                    lineHeight = (size.value * 1.4f).sp,
                     fontWeight = FontWeight.Bold,
                     maxLines = 1
                 )
@@ -279,6 +281,7 @@ fun SubjectHeaderBlock(
             text = title,
             color = tokens.primaryInk,
             fontSize = 32.sp,
+            lineHeight = 38.sp,
             fontWeight = FontWeight.Bold,
             letterSpacing = (-0.6).sp,
             style = TextStyle(fontFeatureSettings = "tnum"),

@@ -10,10 +10,13 @@ import com.k2fsa.sherpa.onnx.OfflineTts
 import com.k2fsa.sherpa.onnx.OfflineTtsConfig
 import com.k2fsa.sherpa.onnx.OfflineTtsKokoroModelConfig
 import com.k2fsa.sherpa.onnx.OfflineTtsModelConfig
+import io.github.cidy02.kudos.reader.settings.ReaderSpeechPreferences
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -23,8 +26,9 @@ import kotlinx.coroutines.withContext
 import java.io.File
 
 class KokoroTTSController(private val context: Context) : TTSService {
-    private val scope = CoroutineScope(Dispatchers.Default + Job())
+    private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
     private var tts: OfflineTts? = null
+    @Volatile private var disposed = false
     
     private val _status = MutableStateFlow(SpeechStatus.UNAVAILABLE)
     override val status: StateFlow<SpeechStatus> = _status.asStateFlow()
@@ -35,10 +39,11 @@ class KokoroTTSController(private val context: Context) : TTSService {
     private val _availableVoices = MutableStateFlow<List<TTSVoice>>(emptyList())
     override val availableVoices: StateFlow<List<TTSVoice>> = _availableVoices.asStateFlow()
 
+    private val audioLock = Any()
     private var audioTrack: AudioTrack? = null
     private var synthesisJob: Job? = null
-    private var currentRate: Float = 1.0f
-    private var currentVoiceId: Int = 0
+    @Volatile private var currentRate: Float = 1.0f
+    @Volatile private var currentVoiceId: Int = 0
 
     init {
         initEngine()
@@ -96,13 +101,17 @@ class KokoroTTSController(private val context: Context) : TTSService {
     }
 
     override suspend fun speak(text: String) {
+        if (disposed) return
         if (tts == null) {
             initEngine()
             if (tts == null) return
         }
         
-        stop() // Stop any current speech
-        
+        val previous = synthesisJob
+        stop()
+        previous?.join() // Native generate may finish after cancellation; never run two generations together.
+        if (disposed) return
+
         _status.value = SpeechStatus.PLAYING
         
         synthesisJob = scope.launch {
@@ -133,8 +142,10 @@ class KokoroTTSController(private val context: Context) : TTSService {
                 .setTransferMode(AudioTrack.MODE_STREAM)
                 .build()
                 
-            audioTrack = track
-            track.play()
+            synchronized(audioLock) {
+                audioTrack = track
+                track.play()
+            }
 
             try {
                 for (chunk in chunks) {
@@ -158,12 +169,14 @@ class KokoroTTSController(private val context: Context) : TTSService {
                     }
                 }
             } finally {
-                track.stop()
-                track.release()
-                if (audioTrack == track) {
-                    audioTrack = null
-                    if (_status.value == SpeechStatus.PLAYING) {
-                        _status.value = SpeechStatus.STOPPED
+                synchronized(audioLock) {
+                    track.stop()
+                    track.release()
+                    if (audioTrack == track) {
+                        audioTrack = null
+                        if (_status.value == SpeechStatus.PLAYING) {
+                            _status.value = SpeechStatus.STOPPED
+                        }
                     }
                 }
             }
@@ -173,34 +186,52 @@ class KokoroTTSController(private val context: Context) : TTSService {
 
     override fun pause() {
         if (_status.value == SpeechStatus.PLAYING) {
-            audioTrack?.pause()
+            synchronized(audioLock) { audioTrack?.pause() }
             _status.value = SpeechStatus.PAUSED
         }
     }
 
     override fun resume() {
         if (_status.value == SpeechStatus.PAUSED) {
-            audioTrack?.play()
+            synchronized(audioLock) { audioTrack?.play() }
             _status.value = SpeechStatus.PLAYING
         }
     }
 
     override fun stop() {
         synthesisJob?.cancel()
-        synthesisJob = null
-        audioTrack?.stop()
-        audioTrack?.release()
-        audioTrack = null
+        synchronized(audioLock) {
+            audioTrack?.stop()
+            // The synthesis job's finally owns release; releasing here races its write/finally.
+            audioTrack = null
+        }
         _status.value = SpeechStatus.STOPPED
         _spokenText.value = ""
     }
 
+    /** Wait for outstanding native synthesis before releasing the model. No new work after disposal. */
+    fun shutdown() {
+        if (disposed) return
+        disposed = true
+        val job = synthesisJob
+        stop()
+        scope.launch {
+            job?.cancelAndJoin()
+            try {
+                tts?.release()
+                tts = null
+            } finally {
+                scope.cancel()
+            }
+        }
+    }
+
     override fun setVoice(id: String) {
-        currentVoiceId = id.toIntOrNull() ?: 0
+        currentVoiceId = availableVoices.value.firstOrNull { it.id == id }?.id?.toIntOrNull() ?: 0
     }
 
     override fun setRate(rate: Float) {
-        currentRate = rate.coerceIn(0.5f, 2.0f)
+        currentRate = ReaderSpeechPreferences.clampRate(rate)
     }
 
     override fun setPitch(pitch: Float) {
