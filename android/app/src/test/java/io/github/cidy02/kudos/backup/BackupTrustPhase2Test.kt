@@ -25,6 +25,7 @@ import io.github.cidy02.kudos.data.preferences.SettingsRepository
 import io.github.cidy02.kudos.files.FontFileStore
 import io.github.cidy02.kudos.files.WorkFileStore
 import io.github.cidy02.kudos.works.WorkRepository
+import io.github.cidy02.kudos.works.converters.EpubBuilder
 import java.io.File
 import java.nio.file.Files
 import java.time.Instant
@@ -34,6 +35,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.test.runTest
 import org.junit.After
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -853,6 +855,231 @@ class BackupTrustPhase2Test {
             database.annotationDao().getById(captured.id))
     }
 
+    @Test
+    fun aWorkPreservedBetweenMergeAndApplyKeepsItsBytes() = runTest {
+        // Replace's forced archive preference must also yield to a new reader edit.
+        for (mode in listOf(BackupImportMode.RECONCILE, BackupImportMode.REPLACE_LIBRARY)) {
+            seedAssetWork()
+            val merge = plannedAssetMerge(mode)
+            val held = database.workDao().getById(WORK_K)!!
+            database.workDao().upsert(held.copy(epubPreservationStatusRaw = "preserved",
+                preservedAt = CLOCK.minusSeconds(10), lastModifiedAt = CLOCK.minusSeconds(10)))
+
+            val summary = backupRepository.applyMergeResult(merge)
+
+            assertArrayEquals(LOCAL_EPUB, Files.readAllBytes(workFileStore.workEpubPath(WORK_K)))
+            assertTrue(database.workDao().getById(WORK_K)!!.hasEpub)
+            assertFalse(database.workDao().getById(WORK_K)!!.remoteEpubPending)
+            assertEquals(1, summary.concurrentRowsDeferred)
+            assertTrue(summary.toUserMessage().contains("import again to take the backup's"))
+        }
+    }
+
+    @Test
+    fun aDownloadRemovedBetweenMergeAndApplyStaysRemovedAndIsStillOwed() = runTest {
+        for (mode in listOf(BackupImportMode.RECONCILE, BackupImportMode.REPLACE_LIBRARY)) {
+            seedAssetWork()
+            val merge = plannedAssetMerge(mode)
+            workRepository.deleteLocalEpub(WORK_K)
+
+            val summary = backupRepository.applyMergeResult(merge)
+
+            assertFalse(workFileStore.workEpubExists(WORK_K))
+            val held = database.workDao().getById(WORK_K)!!
+            assertFalse(held.hasEpub)
+            assertTrue(held.remoteEpubPending)
+            assertTrue(held.toDomain().toBackupWork().hasEPUB)
+            assertEquals(1, summary.concurrentRowsDeferred)
+        }
+    }
+
+    @Test
+    fun aWorkDeletedBetweenMergeAndApplyGetsNeitherEpubNorOriginalNorRecord() = runTest {
+        for (mode in listOf(BackupImportMode.RECONCILE, BackupImportMode.REPLACE_LIBRARY)) {
+            seedAssetWork()
+            val merge = plannedAssetMerge(mode)
+            workRepository.hardDelete(WORK_K)
+
+            val summary = backupRepository.applyMergeResult(merge, incomingOriginals())
+
+            assertNull(database.workDao().getById(WORK_K))
+            assertFalse(workFileStore.workEpubExists(WORK_K))
+            assertNull(workFileStore.originalFile(WORK_K))
+            assertFalse(workFileStore.conversionRecordExists(WORK_K))
+            assertTrue(summary.concurrentRowsDeferred > 0)
+        }
+    }
+
+    @Test
+    fun aWorkSoftDeletedBetweenMergeAndApplyKeepsItsOldBytesAndGetsNoOriginal() = runTest {
+        seedAssetWork()
+        val merge = plannedAssetMerge(BackupImportMode.RECONCILE)
+        workRepository.softDelete(WORK_K)
+
+        backupRepository.applyMergeResult(merge, incomingOriginals())
+
+        assertTrue(database.workDao().getById(WORK_K)!!.isDeleted)
+        assertArrayEquals(LOCAL_EPUB, Files.readAllBytes(workFileStore.workEpubPath(WORK_K)))
+        assertNull(workFileStore.originalFile(WORK_K))
+        assertFalse(workFileStore.conversionRecordExists(WORK_K))
+    }
+
+    @Test
+    fun anUntouchedWorkStillReceivesItsPlannedBytesAndOriginalRecord() = runTest {
+        for (mode in listOf(BackupImportMode.RECONCILE, BackupImportMode.REPLACE_LIBRARY, BackupImportMode.MERGE)) {
+            // File Merge fills gaps only, as in iOS.
+            seedAssetWork(hasFile = mode != BackupImportMode.MERGE)
+            val merge = plannedAssetMerge(mode)
+
+            val summary = backupRepository.applyMergeResult(merge, incomingOriginals())
+
+            assertArrayEquals(INCOMING_EPUB, Files.readAllBytes(workFileStore.workEpubPath(WORK_K)))
+            val held = database.workDao().getById(WORK_K)!!
+            assertTrue(held.hasEpub)
+            assertFalse(held.remoteEpubPending)
+            assertArrayEquals(ORIGINAL, Files.readAllBytes(workFileStore.originalFile(WORK_K)!!))
+            assertArrayEquals(RECORD, workFileStore.readConversionRecord(WORK_K))
+            assertEquals(0, summary.concurrentRowsDeferred)
+            workFileStore.deleteOriginal(WORK_K)
+        }
+    }
+
+    @Test
+    fun anUntouchedQueuedWorkDoesNotRejectItsOwnPreservationNormalization() = runTest {
+        seedAssetWork()
+        val queue = ReadingQueue(id = PEER_ROW, name = "Queue", dateCreated = CLOCK.minusSeconds(100))
+        database.readingQueueDao().upsertQueue(queue.toEntity())
+        database.readingQueueDao().upsertMembership(ReadingQueueMembership(
+            id = SWEPT_SEARCH, queueID = queue.id, workID = WORK_K, queuedAt = queue.dateCreated
+        ).toEntity())
+        val merge = plannedAssetMerge(BackupImportMode.RECONCILE)
+        assertEquals("preserved", merge.snapshot.works.single().epubPreservationStatusRaw)
+
+        val summary = backupRepository.applyMergeResult(merge)
+
+        assertArrayEquals(INCOMING_EPUB, Files.readAllBytes(workFileStore.workEpubPath(WORK_K)))
+        assertEquals("preserved", database.workDao().getById(WORK_K)!!.epubPreservationStatusRaw)
+        assertEquals(0, summary.concurrentRowsDeferred)
+    }
+
+    @Test
+    fun anOriginalInstalledMeanwhileIsKeptAndNeverGetsTheOtherOriginalsRecord() = runTest {
+        seedAssetWork()
+        val merge = plannedAssetMerge(BackupImportMode.RECONCILE)
+        val readerOriginal = "Reader's PDF".toByteArray()
+        workFileStore.writeOriginal(WORK_K, "pdf", readerOriginal)
+
+        val summary = backupRepository.applyMergeResult(merge, incomingOriginals())
+
+        assertArrayEquals(readerOriginal, Files.readAllBytes(workFileStore.originalFile(WORK_K)!!))
+        assertTrue(workFileStore.originalFile(WORK_K)!!.fileName.toString().endsWith(".pdf"))
+        assertFalse(workFileStore.conversionRecordExists(WORK_K))
+        assertTrue(summary.concurrentRowsDeferred > 0)
+    }
+
+    @Test
+    fun aFontDeletedBetweenMergeAndApplyGetsNoOrphanBytes() = runTest {
+        val font = CustomFont(id = PEER_ROW, name = "Missing file", fileName = "reader.ttf", dateAdded = CLOCK)
+        database.customFontDao().upsert(font.toEntity())
+        val pack = KudosBackupPackage(KudosBackupManifest(version = BackupVersion.CURRENT,
+            exportedAt = CLOCK.toString(), fonts = listOf(BackupFont("Backup", font.fileName, CLOCK.toString()))),
+            fontFilesByFileName = mapOf(font.fileName to byteArrayOf(1, 2, 3)))
+        val merge = BackupMergeService.merge(backupRepository.captureLibrarySnapshot(), pack, now = CLOCK)
+        assertTrue(font.fileName in merge.fontFilesToWriteByFileName)
+        database.customFontDao().deleteById(font.id)
+
+        val summary = backupRepository.applyMergeResult(merge)
+
+        assertNull(database.customFontDao().getById(font.id))
+        assertFalse(workFileStore.fontExists(font.fileName))
+        assertTrue(summary.concurrentRowsDeferred > 0)
+    }
+
+    @Test
+    fun aNewWorkStillGetsItsIncomingFileInEveryImportMode() = runTest {
+        for (mode in BackupImportMode.entries) {
+            database.workDao().deleteById(WORK_K)
+            workFileStore.deleteWorkEpub(WORK_K)
+            val merge = plannedAssetMerge(mode)
+
+            val summary = backupRepository.applyMergeResult(merge)
+
+            assertArrayEquals(INCOMING_EPUB, Files.readAllBytes(workFileStore.workEpubPath(WORK_K)))
+            assertTrue(database.workDao().getById(WORK_K)!!.hasEpub)
+            assertFalse(database.workDao().getById(WORK_K)!!.remoteEpubPending)
+            assertEquals(0, summary.concurrentRowsDeferred)
+        }
+    }
+
+    @Test
+    fun aNewerLocalFileInstalledMeanwhileIsKept() = runTest {
+        seedAssetWork(hasFile = false)
+        val merge = plannedAssetMerge(BackupImportMode.RECONCILE)
+        workFileStore.writeWorkEpub(WORK_K, LOCAL_EPUB)
+        database.workDao().upsert(database.workDao().getById(WORK_K)!!.copy(
+            hasEpub = true, lastModifiedAt = CLOCK.plusSeconds(1)
+        ))
+
+        val summary = backupRepository.applyMergeResult(merge)
+
+        assertArrayEquals(LOCAL_EPUB, Files.readAllBytes(workFileStore.workEpubPath(WORK_K)))
+        assertTrue(database.workDao().getById(WORK_K)!!.hasEpub)
+        assertTrue(summary.concurrentRowsDeferred > 0)
+    }
+
+    @Test
+    fun aMissingFilesPromiseClearedMeanwhileIsKeptPendingWithoutInstalling() = runTest {
+        seedAssetWork(hasFile = false)
+        database.workDao().upsert(database.workDao().getById(WORK_K)!!.copy(remoteEpubPending = true))
+        val merge = plannedAssetMerge(BackupImportMode.RECONCILE)
+        workRepository.deleteLocalEpub(WORK_K)
+
+        backupRepository.applyMergeResult(merge)
+
+        assertFalse(workFileStore.workEpubExists(WORK_K))
+        assertFalse(database.workDao().getById(WORK_K)!!.hasEpub)
+        assertTrue(database.workDao().getById(WORK_K)!!.remoteEpubPending)
+    }
+
+    @Test
+    fun anOriginalAndRecordRemovedMeanwhileAreNotRecreated() = runTest {
+        seedAssetWork()
+        workFileStore.writeOriginal(WORK_K, "html", ORIGINAL)
+        workFileStore.writeConversionRecord(WORK_K, RECORD)
+        val merge = plannedAssetMerge(BackupImportMode.RECONCILE)
+        workFileStore.deleteOriginal(WORK_K)
+
+        val summary = backupRepository.applyMergeResult(merge, incomingOriginals())
+
+        assertNull(workFileStore.originalFile(WORK_K))
+        assertFalse(workFileStore.conversionRecordExists(WORK_K))
+        assertTrue(summary.concurrentRowsDeferred > 0)
+    }
+
+    private suspend fun seedAssetWork(hasFile: Boolean = true) {
+        val work = SavedWork(id = WORK_K, title = "Local", author = "Author",
+            sourceUrl = "https://archiveofourown.org/works/4242", dateAdded = CLOCK.minusSeconds(100),
+            lastModifiedAt = CLOCK.minusSeconds(100), hasEpub = hasFile)
+        database.workDao().upsert(work.toEntity())
+        if (hasFile) workFileStore.writeWorkEpub(WORK_K, LOCAL_EPUB) else workFileStore.deleteWorkEpub(WORK_K)
+    }
+
+    private suspend fun plannedAssetMerge(mode: BackupImportMode): BackupMergeResult {
+        val pack = KudosBackupPackage(KudosBackupManifest(version = BackupVersion.CURRENT,
+            exportedAt = CLOCK.toString(), works = listOf(BackupWork(
+                id = WORK_K, title = "Backup", author = "Author",
+                sourceURL = "https://archiveofourown.org/works/4242", dateAdded = EARLIER,
+                lastModifiedAt = CLOCK.toString(), hasEPUB = true
+            ))), epubFilesByWorkId = mapOf(WORK_K to INCOMING_EPUB))
+        return BackupMergeService.merge(backupRepository.captureLibrarySnapshot(), pack, mode, now = CLOCK)
+            .also { assertTrue(WORK_K in it.epubFilesToWriteByWorkId) }
+    }
+
+    private fun incomingOriginals(): Map<String, ByteArray> = mapOf(
+        BackupPaths.iosOriginalFileName(WORK_K, "html") to ORIGINAL,
+        BackupPaths.iosConversionRecordFileName(WORK_K) to RECORD
+    )
+
     private suspend fun capturedReplace(): BackupMergeResult = BackupMergeService.merge(
         backupRepository.captureLibrarySnapshot(),
         KudosBackupPackage(KudosBackupManifest(version = BackupVersion.CURRENT, exportedAt = CLOCK.toString())),
@@ -1351,6 +1578,10 @@ class BackupTrustPhase2Test {
     }
 
     companion object {
+        private val LOCAL_EPUB = EpubBuilder.buildEpub("Local", "<p>Local bytes.</p>")
+        private val INCOMING_EPUB = EpubBuilder.buildEpub("Incoming", "<p>Incoming bytes.</p>")
+        private val ORIGINAL = "<p>Incoming original</p>".toByteArray()
+        private val RECORD = "{\"converterVersion\":1}".toByteArray()
         private val CLOCK: Instant = Instant.parse("2026-06-26T12:00:00Z")
         private const val WORK_K = "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
         private const val SWEPT_SEARCH = "66666666-6666-4666-8666-666666666666"

@@ -1844,6 +1844,39 @@ class SyncRepositoryTest {
     }
 
     @Test
+    fun aSyncAfterAWriteSkippedForRemovalFetchesTheStillPromisedFile() = runTest {
+        seedLocalWork(WORK_A, "Local", EpubBuilder.buildEpub("Old", "<p>Old bytes.</p>"))
+        val entry = remoteBackupWork(WORK_A, "Incoming", hasEpub = true)
+            .copy(lastModifiedAt = FIXED_CLOCK.toString())
+        val works = seedFolder(entry, exportedAt = FIXED_CLOCK.toString())
+        writeChild(works, BackupPaths.iosEpubAssetIdentifier(WORK_A), "application/epub+zip", REMOTE_EPUB)
+        val manifest = BackupValidator.decodeManifest(
+            readDocument(requireKudosLibrary().findFile(BackupPaths.MANIFEST)!!)
+        )
+        val merge = BackupMergeService.merge(backupRepository.captureLibrarySnapshot(),
+            KudosBackupPackage(manifest, epubFilesByWorkId = mapOf(WORK_A to REMOTE_EPUB)), now = FIXED_CLOCK)
+        assertTrue(WORK_A in merge.epubFilesToWriteByWorkId)
+        WorkRepository(database, workFileStore, clock = { clockInstant }).deleteLocalEpub(WORK_A)
+        backupRepository.applyMergeResult(merge)
+        assertFalse(workFileStore.workEpubExists(WORK_A))
+        assertTrue(database.workDao().getById(WORK_A)!!.remoteEpubPending)
+
+        // Publish the promise without the bytes, as the tail of the interrupted import's
+        // sync would do. It must not record a settled own-manifest stamp.
+        writeChild(requireKudosLibrary(), BackupPaths.MANIFEST, "application/json",
+            BackupJson.encodeToString(backupRepository.captureLibrarySnapshot().toV2Manifest(
+                exportedAt = FIXED_CLOCK, appVersion = "test"
+            )).toByteArray())
+        settingsRepository.updateSyncLastManifestDigest(null)
+        assertTrue(syncRepository.runSync() is SyncResult.Success)
+
+        val held = database.workDao().getById(WORK_A)!!
+        assertTrue(held.hasEpub)
+        assertFalse(held.remoteEpubPending)
+        assertArrayEquals(REMOTE_EPUB, Files.readAllBytes(workFileStore.workEpubPath(WORK_A)))
+    }
+
+    @Test
     fun aFailedEpubInstallationKeepsThePromiseUntilTheWriteSucceeds() = runTest {
         val pack = KudosBackupPackage(
             remoteManifest(listOf(remoteBackupWork(WORK_REMOTE, "Promised", hasEpub = true)),
