@@ -449,3 +449,37 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   screen for screen, and the lane has been replacing Material parts with the redesign's. Nothing
   was changed on the strength of the reading; the lane goes on under its mission until the
   owner says otherwise. It is owner question 11.
+- **2026-10-04 · Owner: Android is the same product as iOS, not a copy of it; its tab bar and
+  chrome buttons are Android's own.** In the owner's words: "while i want the Kudos app to feel
+  like one cohesive product across platforms, i also don't want android to look like an attempt
+  to clone iOS. let's give Android native feeling tab bar and chrome buttons". This answers
+  question 11 with a mix. The redesign's layout, content, order of information and behaviour
+  stay in step with iOS; navigation and chrome controls are Material 3's. The owner named the
+  tab bar and the chrome buttons only, so panels, headers, sheets and the reader are unchanged.
+- **2026-10-05 · What "native" was taken to mean** (landed; each choice is Claude's and can be
+  reversed on its own):
+  - *Tab bar:* Material 3's short navigation bar across the bottom edge, in place of the
+    floating glass capsule and Search circle. Five destinations, Search the fifth. It stays put
+    when a list scrolls (iOS's shrinks). **Search now keeps the bar**: it hid it before, which
+    made the Search item a button dressed as a tab. A page opened from a tab keeps that tab
+    marked. Labels stop growing at 1.3 times the text size, since five do not fit beyond that.
+  - *Chrome buttons:* Material's plain icon button (48dp to touch, a ripple, no circle) in
+    place of the glass circle. An accented button (the "+", Account's gear, a filter that is
+    on) is Material's tonal icon button: an accent-tinted container under a glyph that reads on
+    it. The queue page's prominent "+" is Material's filled icon button. The overflow is
+    Android's vertical dots. The filter count is Material's badge.
+  - *A list under the buttons:* plain icons cannot be read over text, so while a list runs
+    under them the top of the screen is painted again in the page's own wash, fading out at its
+    lower edge. It is Material's top bar that turns solid on scroll, in the page's colour.
+  - *The accent on Dark:* the selected tab and accented buttons draw a glyph made to sit on the
+    accent (`accentOnFill`) over an accent-tinted container, not the bare accent. That settles
+    the tab bar and toolbar part of owner question 2 on Android; action rows in Settings and a
+    sheet's selected tab are as they were.
+  - *Not done:* the reader's controls are still glass (owner question 12). The functions keep
+    their names (`ToolbarCircleButton`) until the owner has seen the look.
+  Reverse: `ShellNavigationBar` and `TopChromeFade` in `app/MainScaffold.kt`;
+  `ToolbarCircleButton`, `ToolbarAddButton`, `FilterButton` and `ShellWashes` in
+  `ui/subject/SubjectComponents.kt`; the tab bar rule in `search/SearchScreen.kt`.
+- **2026-10-04 · Owner: push as you go.** Asked whether to push after each landing, the owner
+  said "you shoudl push as you go". Working branches only, plain pushes; never `main`, never
+  forced, never the security-fixes branches.

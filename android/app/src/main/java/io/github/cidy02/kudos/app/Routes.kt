@@ -250,7 +250,7 @@ object Routes {
     fun isTopLevel(route: String?): Boolean =
         topLevelDestinations.any { it.route == route }
 
-    /** The four tabs plus Search. Pushed screens are not roots, so the floating bar hides. */
+    /** The four tabs plus Search. Pushed screens are not roots, so the navigation bar hides. */
     fun isShellRoot(route: String?): Boolean = route == Search || isTopLevel(route)
 
     /**

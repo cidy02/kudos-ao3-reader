@@ -16,6 +16,10 @@ Until answered: the two differ.
 
 ## 2. The default accent on dark chrome
 
+*2026-10-05: on Android the tab bar and the toolbar no longer show this. The new navigation bar
+and buttons draw a lighter glyph on an accent-tinted ground (see question 11). What is left on
+Android is the action rows in Settings and a sheet's selected tab; iOS is unchanged.*
+
 In Dark and OLED the default accent (AO3 red, `#990000`) is hard to read wherever it is text or a
 glyph on the dark page: the tab bar's selected tab, the toolbar's "+", action rows in Settings
 ("Customize Theme…", "Add Font…", "Check Availability…", "Pair a Device", "Import Files") and a
@@ -191,4 +195,21 @@ warnings stay visible on cards, system Back and text size are honoured.
 - **C.** A mix you name: for example Material's bottom bar and top bars, the redesign's
   everything else; or colours from the wallpaper as an option in Appearance.
 
-Until answered: A, with no note added to the June documents.
+**Answered 2026-10-04: a mix.** "while i want the Kudos app to feel like one cohesive product
+across platforms, i also don't want android to look like an attempt to clone iOS. let's give
+Android native feeling tab bar and chrome buttons". Done on 2026-10-05: a Material navigation
+bar and Material icon buttons; everything else as the redesign has it. A picture of before and
+after is at `~/kudos-tools/out/android-native-chrome-before-after.png`. Question 12 holds what
+that left open.
+
+## 12. After the native tab bar and buttons: three things to say yes or no to
+
+- **The reader's controls** (the round back and menu buttons, the title capsule, the page card)
+  are still drawn as glass, iOS's way. Make them Android's too? Until answered: left as they
+  are.
+- **Search is the fifth tab**, and its page now keeps the bar like the other four. The June
+  documents wanted Search as a separate action instead (a floating button, or an icon at the
+  top of each tab). Until answered: a tab.
+- **The bar stays in place when a list scrolls.** iOS's shrinks to one button to give the list
+  room; Material allows a bar that slides away on the way down and returns on the way up. Until
+  answered: it stays.

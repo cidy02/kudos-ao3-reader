@@ -18,6 +18,12 @@ class SubjectPalette private constructor(
     val theme: ReaderTheme,
     private val picked: Color?
 ) {
+    // Value equality: screens build the same palette afresh on every pass.
+    override fun equals(other: Any?): Boolean =
+        other is SubjectPalette && hue == other.hue && theme == other.theme && picked == other.picked
+
+    override fun hashCode(): Int = 31 * (31 * hue.hashCode() + theme.hashCode()) + (picked?.hashCode() ?: 0)
+
     /**
      * Control tint. A picked colour is used exactly, on every theme (T-348).
      * A derived subject uses [accent] instead, so a fandom's buttons are that

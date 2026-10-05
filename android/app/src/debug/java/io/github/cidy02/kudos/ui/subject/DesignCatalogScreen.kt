@@ -247,17 +247,17 @@ private fun PaletteSpecimen(title: String, palette: SubjectPalette) {
             WorkProgressRing(progress = 0.62, state = "Reading", tint = palette.accent)
             WorkProgressRing(progress = 1.0, state = "Finished")
             AccentIconSquare(icon = Icons.Filled.Star, contentDescription = "History", accent = palette.tint)
-            GlassCircleButton(onClick = {}, accessibilityName = "Back") {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null, modifier = Modifier.fillMaxSize())
+            ToolbarCircleButton(onClick = {}, accessibilityName = "Back") {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
             }
-            GlassCircleButton(
+            ToolbarCircleButton(
                 onClick = {},
                 accessibilityName = "Filter",
                 isAccented = true,
                 palette = palette,
                 badge = "3"
             ) {
-                Icon(Icons.Filled.FilterList, contentDescription = null, modifier = Modifier.fillMaxSize())
+                Icon(Icons.Filled.FilterList, contentDescription = null)
             }
             FilterButton(filtersActive = false, onClick = {})
             FilterButton(filtersActive = true, onClick = {}, badgeCount = 3, onClearFilters = {})

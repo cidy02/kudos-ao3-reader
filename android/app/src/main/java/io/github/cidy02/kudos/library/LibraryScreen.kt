@@ -119,7 +119,6 @@ import io.github.cidy02.kudos.works.WorkTags
 import io.github.cidy02.kudos.works.DownloadQueue
 import io.github.cidy02.kudos.ui.components.KudosRefreshBox
 import io.github.cidy02.kudos.ui.subject.FilterButton
-import io.github.cidy02.kudos.ui.subject.GlassCircleButton
 import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
 import io.github.cidy02.kudos.ui.subject.SectionRuleHeader
 import io.github.cidy02.kudos.ui.subject.SubjectChip

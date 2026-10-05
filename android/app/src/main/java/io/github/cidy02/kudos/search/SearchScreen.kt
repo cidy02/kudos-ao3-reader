@@ -147,8 +147,11 @@ fun SearchScreen(
     val query = filters.query.trim()
     val showsLocal = state is SearchUiState.Idle && query.isNotEmpty()
 
-    DisposableEffect(Unit) {
-        overlay.hidesTabBar = true
+    // Search is a destination in the navigation bar, so the bar stays, as on every tab. It
+    // hides only while works are being selected, as in the Library.
+    val selecting = remoteSelection.isSelecting || localSelecting
+    DisposableEffect(selecting) {
+        overlay.hidesTabBar = selecting
         onDispose { overlay.hidesTabBar = false }
     }
 

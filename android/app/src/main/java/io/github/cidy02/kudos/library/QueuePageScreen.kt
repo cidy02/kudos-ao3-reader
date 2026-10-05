@@ -19,7 +19,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.MoreHoriz
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.AlertDialog
@@ -60,7 +60,6 @@ import io.github.cidy02.kudos.core.model.SavedWork
 import io.github.cidy02.kudos.data.preferences.SettingsRepository
 import io.github.cidy02.kudos.ui.components.KudosRefreshBox
 import io.github.cidy02.kudos.ui.subject.FilterButton
-import io.github.cidy02.kudos.ui.subject.GlassCircleButton
 import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
 import io.github.cidy02.kudos.ui.subject.SubjectWorkCoverCard
 import io.github.cidy02.kudos.ui.subject.ToolbarAddButton
@@ -529,7 +528,7 @@ private fun PageToolbarActions(
         )
         Box {
             ToolbarCircleButton(onClick = onMenu, accessibilityName = "More") {
-                Icon(Icons.Filled.MoreHoriz, contentDescription = null)
+                Icon(Icons.Filled.MoreVert, contentDescription = null)
             }
             DropdownMenu(expanded = menuOpen, onDismissRequest = onDismissMenu) {
                 if (showMatureToggle) {

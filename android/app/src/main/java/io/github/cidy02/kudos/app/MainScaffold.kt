@@ -1,5 +1,19 @@
 package io.github.cidy02.kudos.app
 
+import androidx.compose.material3.ShortNavigationBar
+import androidx.compose.material3.ShortNavigationBarItem
+import androidx.compose.material3.ShortNavigationBarItemDefaults
+import androidx.compose.ui.graphics.compositeOver
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.layout.onSizeChanged
+import io.github.cidy02.kudos.ui.subject.AccentContainerOpacity
+import io.github.cidy02.kudos.ui.subject.LocalShellWashes
+import io.github.cidy02.kudos.ui.subject.subjectWash
 import androidx.compose.runtime.collectAsState
 import io.github.cidy02.kudos.ui.subject.subjectScreenWash
 import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
@@ -10,8 +24,6 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,7 +33,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.asPaddingValues
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -30,8 +41,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Search
@@ -50,21 +59,15 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.role
-import androidx.compose.ui.semantics.selected
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -76,9 +79,7 @@ import io.github.cidy02.kudos.home.HomeShellChrome
 import io.github.cidy02.kudos.home.HomeToolbarActions
 import io.github.cidy02.kudos.library.LibraryShellChrome
 import io.github.cidy02.kudos.library.LibraryToolbarActions
-import io.github.cidy02.kudos.ui.subject.GlassCircleButton
 import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
-import io.github.cidy02.kudos.ui.subject.SubjectMetrics
 import io.github.cidy02.kudos.ui.subject.ToolbarCircleButton
 import io.github.cidy02.kudos.search.LocalTagSearch
 import io.github.cidy02.kudos.search.SearchTagRequests
@@ -86,11 +87,13 @@ import io.github.cidy02.kudos.ui.subject.withOpacity
 import io.github.cidy02.kudos.ui.theme.KudosThemeMode
 import io.github.cidy02.kudos.works.DownloadQueueBanner
 
-private val ShellBarButton = 56.dp
-private val ShellBarMargin = 10.dp
-private val ShellBarClearance = ShellBarButton + ShellBarMargin
-private val ShellTitleReserve = 52.dp
-private val ShellGearReserve = 48.dp
+/** Material's short navigation bar, until it has been measured. */
+private val ShellBarHeight = 64.dp
+/** The top chrome row: 6dp, a 48dp icon button, 6dp. */
+private val TopChromeHeight = 60.dp
+private val TopChromeFadeEdge = 16.dp
+private val ShellTitleReserve = 56.dp
+private val ShellGearReserve = 54.dp
 private val ChromeMotion = tween<Float>(durationMillis = 220, easing = EaseInOut)
 private val ChromeDpMotion = tween<Dp>(durationMillis = 220, easing = EaseInOut)
 
@@ -106,8 +109,8 @@ val LocalShellOverlayState = staticCompositionLocalOf { ShellOverlayState() }
  */
 val LocalSearchExit = staticCompositionLocalOf<(() -> Unit)?> { null }
 
-// Chrome policy: Search is its own shell root, in a circle beside the four tabs.
-// Theme cycling stays on Account and Settings. Pushed screens hide the floating bar.
+// Chrome policy: Search is its own shell root, the fifth destination in the navigation bar.
+// Theme cycling stays on Account and Settings. Pushed screens hide the navigation bar.
 
 @Composable
 fun MainScaffold(
@@ -136,8 +139,11 @@ fun MainScaffold(
     val librarySelecting = onLibrary && libraryChrome.hideTabBar
     val overlay = remember { ShellOverlayState() }
     var searchReturnTab by remember { mutableStateOf(Routes.Home) }
+    // The destination a pushed page was opened from stays marked in the navigation bar.
+    var lastRoot by remember { mutableStateOf(Routes.Home) }
     SideEffect {
         if (Routes.isTopLevel(currentRoute)) searchReturnTab = currentRoute ?: Routes.Home
+        if (Routes.isShellRoot(currentRoute)) lastRoot = currentRoute ?: Routes.Home
     }
     val pushedSelecting = pushedChrome.mounted && pushedChrome.hideTabBar
     val selectionHidesBar = homeSelecting || librarySelecting || overlay.hidesTabBar || pushedSelecting
@@ -180,7 +186,14 @@ fun MainScaffold(
         reader -> insets.calculateTopPadding()
         else -> 0.dp
     }
-    val bottomPad = insets.calculateBottomPadding() + if (showTabBar) ShellBarClearance else 0.dp
+    // The bar is measured (its labels grow with the text size); it includes the system inset.
+    val density = LocalDensity.current
+    var barHeight by remember { mutableStateOf(0.dp) }
+    val bottomPad = when {
+        !showTabBar -> insets.calculateBottomPadding()
+        barHeight > 0.dp -> barHeight
+        else -> insets.calculateBottomPadding() + ShellBarHeight
+    }
     val page = if (shell) tokens.background else MaterialTheme.colorScheme.background
 
     val backDispatcher = LocalOnBackPressedDispatcherOwner.current?.onBackPressedDispatcher
@@ -273,9 +286,9 @@ fun MainScaffold(
             }
             val titleEnd = when {
                 onHome && homeSelecting -> 200.dp
-                onHome -> 96.dp
+                onHome -> 108.dp
                 onLibrary && librarySelecting -> 160.dp
-                onLibrary -> 144.dp
+                onLibrary -> 160.dp
                 else -> 0.dp
             }
             AnimatedVisibility(
@@ -350,13 +363,23 @@ fun MainScaffold(
         }
 
         if (isPushedSubject) {
+            // Plain icon buttons cannot be read with a list running under them. While one does,
+            // the top of the screen is painted again in the page's own wash.
+            AnimatedVisibility(
+                visible = !chromeHidden && chrome.isScrolled(activeRoute),
+                modifier = Modifier.align(Alignment.TopCenter),
+                enter = fadeIn(ChromeMotion),
+                exit = fadeOut(ChromeMotion)
+            ) {
+                TopChromeFade(insets.calculateTopPadding() + TopChromeHeight)
+            }
             AnimatedVisibility(
                 visible = !chromeHidden,
                 modifier = Modifier
                     .fillMaxWidth()
                     .align(Alignment.TopCenter)
                     .windowInsetsPadding(WindowInsets.systemBars.only(WindowInsetsSides.Top))
-                    .padding(start = 8.dp, end = 8.dp, top = 6.dp),
+                    .padding(start = 4.dp, end = 4.dp, top = 6.dp),
                 enter = fadeIn(ChromeMotion),
                 exit = fadeOut(ChromeMotion)
             ) {
@@ -400,11 +423,12 @@ fun MainScaffold(
         )
 
         if (showTabBar) {
-            FloatingTabBar(
-                currentRoute = currentRoute,
-                minimized = chromeHidden,
+            ShellNavigationBar(
+                currentRoute = if (shell) currentRoute else lastRoot,
                 onNavigate = { route -> navController.navigateShellRoot(route) },
-                modifier = Modifier.align(Alignment.BottomCenter)
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .onSizeChanged { barHeight = with(density) { it.height.toDp() } }
             )
         }
     }
@@ -428,7 +452,7 @@ private fun PushedTopBar(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 8.dp, vertical = 6.dp),
+                .padding(horizontal = 4.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             ToolbarCircleButton(onClick = onBack, accessibilityName = "Back") {
@@ -471,136 +495,90 @@ private fun PushedTopBar(
     }
 }
 
+/**
+ * The tab bar, drawn the Android way: Material 3's navigation bar across the bottom edge, where
+ * iOS floats a glass capsule with a Search circle beside it (owner, 2026-10-04: one product on
+ * both platforms, but Android is not to look like a copy of iOS). Search is the fifth
+ * destination; it is a shell root on both. The bar stays put when a list scrolls.
+ */
 @Composable
-private fun FloatingTabBar(
-    currentRoute: String?,
-    minimized: Boolean,
-    onNavigate: (String) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val searchSelected = currentRoute == Routes.Search
-    val selectedTab = Routes.topLevelDestinations.firstOrNull { destination ->
-        currentRoute == destination.route
-    }
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .windowInsetsPadding(WindowInsets.systemBars.only(WindowInsetsSides.Bottom))
-            .padding(start = 12.dp, end = 12.dp, bottom = ShellBarMargin),
-        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        if (!minimized) {
-            TabCapsule(
-                currentRoute = currentRoute,
-                onNavigate = onNavigate,
-                modifier = Modifier.weight(1f)
-            )
-        } else if (selectedTab != null) {
-            ShellGlassCircle(
-                onClick = { onNavigate(selectedTab.route) },
-                name = selectedTab.label,
-                selected = true,
-                icon = selectedTab.selectedIcon,
-                diameter = 44.dp
-            )
-        }
-        ShellGlassCircle(
-            onClick = { onNavigate(Routes.Search) },
-            name = "Search",
-            selected = searchSelected,
-            icon = Icons.Filled.Search,
-            diameter = ShellBarButton
-        )
-    }
-}
-
-@Composable
-private fun TabCapsule(
+private fun ShellNavigationBar(
     currentRoute: String?,
     onNavigate: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val tokens = LocalKudosTokens.current
-    val shape = RoundedCornerShape(percent = 50)
-    Row(
-        modifier = modifier
-            .height(ShellBarButton)
-            .clip(shape)
-            .background(tokens.glassFill(), shape)
-            .border(0.5.dp, tokens.glassStroke(), shape)
-            .padding(4.dp),
-        verticalAlignment = Alignment.CenterVertically
+    // The selected tab is an accent-tinted pill under a glyph that reads on it in every theme
+    // (the bare accent, AO3 red by default, does not on Dark: owner question 2).
+    val onAccent = io.github.cidy02.kudos.ui.subject.LocalSubjectPalette.current.accentOnFill
+    val colors = ShortNavigationBarItemDefaults.colors(
+        selectedIconColor = onAccent,
+        selectedTextColor = onAccent,
+        selectedIndicatorColor = tokens.accent.withOpacity(AccentContainerOpacity),
+        unselectedIconColor = tokens.secondaryInk,
+        unselectedTextColor = tokens.secondaryInk
+    )
+    // Five labels do not fit across a phone at the largest text sizes: they stop growing at 1.3x.
+    val density = LocalDensity.current
+    CompositionLocalProvider(
+        LocalDensity provides Density(density.density, minOf(density.fontScale, 1.3f))
+    ) {
+    ShortNavigationBar(
+        modifier = modifier,
+        // Material's "surface container": the page colour, one step raised.
+        containerColor = tokens.glassFill(0.08).compositeOver(tokens.background),
+        contentColor = tokens.primaryInk
     ) {
         Routes.topLevelDestinations.forEach { destination ->
             val selected = currentRoute == destination.route
-            val tint = if (selected) tokens.accent else tokens.primaryInk
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxHeight()
-                    .clip(shape)
-                    .background(if (selected) tokens.accent.withOpacity(0.18) else Color.Transparent)
-                    .clickable(role = Role.Tab, onClick = { onNavigate(destination.route) })
-                    .semantics(mergeDescendants = true) { this.selected = selected },
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
-            ) {
-                Icon(
-                    imageVector = if (selected) destination.selectedIcon else destination.unselectedIcon,
-                    contentDescription = null,
-                    tint = tint,
-                    modifier = Modifier.size(20.dp)
-                )
-                Text(
-                    text = destination.label,
-                    color = if (selected) tokens.accent else tokens.secondaryInk,
-                    // iOS's tab bar keeps its label size at every text size; a scaled label is
-                    // cut off by the bar. The line height and letter spacing are in sp as well.
-                    fontSize = with(LocalDensity.current) { 11.dp.toSp() },
-                    lineHeight = with(LocalDensity.current) { 24.dp.toSp() },
-                    letterSpacing = with(LocalDensity.current) { 0.5.dp.toSp() },
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
+            ShortNavigationBarItem(
+                selected = selected,
+                onClick = { onNavigate(destination.route) },
+                icon = {
+                    Icon(
+                        imageVector = if (selected) destination.selectedIcon else destination.unselectedIcon,
+                        contentDescription = null
+                    )
+                },
+                label = { Text(destination.label, maxLines = 1) },
+                colors = colors
+            )
         }
+        ShortNavigationBarItem(
+            selected = currentRoute == Routes.Search,
+            onClick = { onNavigate(Routes.Search) },
+            icon = { Icon(Icons.Filled.Search, contentDescription = null) },
+            label = { Text("Search", maxLines = 1) },
+            colors = colors
+        )
+    }
     }
 }
 
+/**
+ * The top [height] of the screen painted again in the page's own wash, fading out over a last
+ * 16dp: Material's top bar that turns solid when a list runs under it, in the page's colour.
+ */
 @Composable
-private fun ShellGlassCircle(
-    onClick: () -> Unit,
-    name: String,
-    selected: Boolean,
-    icon: ImageVector,
-    diameter: Dp,
-    modifier: Modifier = Modifier
-) {
+private fun TopChromeFade(height: Dp) {
     val tokens = LocalKudosTokens.current
-    val fill = if (selected) tokens.accent.withOpacity(0.30) else tokens.glassFill()
-    val stroke = if (selected) tokens.accent.withOpacity(0.60) else tokens.glassStroke()
+    val wash = LocalShellWashes.current.page
     Box(
-        modifier
-            .size(diameter)
-            .semantics {
-                role = Role.Button
-                this.selected = selected
-                contentDescription = name
+        Modifier
+            .fillMaxWidth()
+            .height(height + TopChromeFadeEdge)
+            .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+            .drawWithContent {
+                drawContent()
+                val solid = 1f - TopChromeFadeEdge.toPx() / size.height
+                drawRect(
+                    Brush.verticalGradient(0f to Color.Black, solid to Color.Black, 1f to Color.Transparent),
+                    blendMode = BlendMode.DstIn
+                )
             }
-            .clip(CircleShape)
-            .background(fill, CircleShape)
-            .border(0.5.dp, stroke, CircleShape)
-            .clickable(onClick = onClick),
-        contentAlignment = Alignment.Center
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            tint = if (selected) tokens.accent else tokens.primaryInk,
-            modifier = Modifier.size(if (diameter < 50.dp) 20.dp else 24.dp)
-        )
-    }
+            .clipToBounds()
+            .then(wash?.let { Modifier.subjectWash(it.palette, it.height) } ?: Modifier.background(tokens.background))
+    )
 }
 
 private class ShellScrollBridge {

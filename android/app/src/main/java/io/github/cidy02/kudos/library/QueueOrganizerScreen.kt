@@ -25,7 +25,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.MoreHoriz
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
@@ -54,7 +54,6 @@ import io.github.cidy02.kudos.app.ProvidePushedShellChrome
 import io.github.cidy02.kudos.core.model.ReadingQueue
 import io.github.cidy02.kudos.core.model.ReadingQueueKind
 import io.github.cidy02.kudos.core.model.SavedWork
-import io.github.cidy02.kudos.ui.subject.GlassCircleButton
 import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
 import io.github.cidy02.kudos.ui.subject.SectionRuleHeader
 import io.github.cidy02.kudos.ui.subject.SubjectChip
@@ -352,7 +351,7 @@ private fun OrganizerToolbarActions(
                 onClick = onMenu,
                 accessibilityName = "More"
             ) {
-                Icon(Icons.Filled.MoreHoriz, contentDescription = null)
+                Icon(Icons.Filled.MoreVert, contentDescription = null)
             }
             DropdownMenu(expanded = menuOpen, onDismissRequest = onDismissMenu) {
                 DropdownMenuItem(text = { Text("Select") }, onClick = { onDismissMenu(); onSelect() })
