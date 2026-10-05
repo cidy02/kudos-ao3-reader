@@ -18,6 +18,7 @@ import java.util.Locale
 // navigator can be hosted via supportFragmentManager (see ReadiumNavigatorHost).
 class MainActivity : FragmentActivity() {
     private val debugRoute = mutableStateOf<String?>(null)
+    private val debugRouteRequest = mutableStateOf(0)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         // Before super, and before the startup metadata refresh can leave the device.
@@ -84,7 +85,8 @@ class MainActivity : FragmentActivity() {
                 container = container,
                 sessionTheme = sessionTheme,
                 skipOnboarding = skipOnboarding,
-                debugRoute = debugRoute.value
+                debugRoute = debugRoute.value,
+                debugRouteRequest = debugRouteRequest.value
             )
         }
     }
@@ -114,6 +116,8 @@ class MainActivity : FragmentActivity() {
     }
 
     private fun publishDebugRoute(intent: Intent?) {
+        // A second request for the same preview should reopen it after dismissal.
+        if (BuildConfig.DEBUG) debugRouteRequest.value++
         debugRoute.value = if (BuildConfig.DEBUG) intent?.getStringExtra(DebugRoutes.EXTRA) else null
     }
 }

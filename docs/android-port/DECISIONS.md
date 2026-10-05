@@ -725,3 +725,13 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   (answer to Codex on brief 3az; Claude's, the owner has not been asked). Rule for the port:
   where iOS's words describe something Android does not have yet, those words are left out
   and listed, not reworded.
+- **2026-10-05 · First run, What's New and the login screen say what iOS's say.** Welcome and
+  the sync-folder setup now carry iOS's text word for word, except where iOS names an
+  Apple-only thing: "iCloud Drive" became "a cloud storage app", because Android's folder
+  picker shows whatever storage apps are installed and Kudos cannot promise any one of them.
+  Android gains What's New (shown once after an update; the entries live in
+  `support/WhatsNew.kt`; its first entry says "native Android reader" where iOS says
+  "native SwiftUI reader"). The login screen has iOS's layout and words, with "Create an AO3
+  account" and "Forgot your password?". How signing in works is unchanged. Reverse:
+  `onboarding/`, `support/WhatsNew.kt`, `auth/AO3NativeLoginScreen.kt`,
+  `auth/AO3WebLoginScreen.kt`, and the first-run block in `app/KudosApp.kt`.

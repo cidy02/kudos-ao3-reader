@@ -18,7 +18,9 @@ Until answered: the two differ.
 
 *2026-10-05, later: more places seen on Android in OLED, where the default accent is close to
 unreadable: the Backup page's "Export Backup…", "Import Backup…" and "Rename"; the links on the
-About page; and the selected tab of the reader's Contents sheet.*
+About page; and the selected tab of the reader's Contents sheet. Also the first screens a new
+reader sees in Dark or OLED: "View on GitHub" on Welcome, "Not Now" on the sync-folder setup,
+and "Cancel", "Create an AO3 account" and "Forgot your password?" on the login screen.*
 
 *2026-10-05: on Android the tab bar and the toolbar no longer show this. The new navigation bar
 and buttons draw a lighter glyph on an accent-tinted ground (see question 11). What is left on
