@@ -1,10 +1,16 @@
 package io.github.cidy02.kudos.library
 
 import io.github.cidy02.kudos.app.PrivacyRevealState
+import io.github.cidy02.kudos.browse.FandomDisplayName
 import io.github.cidy02.kudos.core.model.PrivacySettings
 import io.github.cidy02.kudos.core.model.SavedWork
 import io.github.cidy02.kudos.core.model.WorkCollection
 import io.github.cidy02.kudos.core.model.readingProgress
+import io.github.cidy02.kudos.network.ao3.search.AO3Warning
+import io.github.cidy02.kudos.search.filterWordBound
+import io.github.cidy02.kudos.search.matchesFacetText
+import io.github.cidy02.kudos.search.matchesRatingText
+import io.github.cidy02.kudos.search.matchesWarningText
 import java.time.Instant
 
 object LibraryQuery {
@@ -247,12 +253,30 @@ object LibraryQuery {
         if (!containsAllIds(item.userTags.map { it.id }, filters.userTagIds)) return false
         if (!containsAllIds(item.collections.map { it.id }, filters.collectionIds)) return false
         if (!matchesTextSet(listOf(work.rating), filters.ratings)) return false
-        if (!matchesTextSet(tagSource(work.workWarnings, work.workTags), filters.warnings)) return false
-        if (!matchesTextSet(tagSource(work.workCategories, work.workTags), filters.categories)) return false
-        if (!matchesTextSet(tagSource(work.workFandoms, work.workTags), filters.fandoms)) return false
-        if (!matchesTextSet(tagSource(work.workRelationships, work.workTags), filters.relationships)) return false
-        if (!matchesTextSet(tagSource(work.workCharacters, work.workTags), filters.characters)) return false
-        if (!matchesTextSet(tagSource(work.workFreeforms, work.workTags), filters.freeforms)) return false
+        if (!filters.rating.matchesRatingText(work.rating)) return false
+        val warnings = tagSource(work.workWarnings, work.workTags)
+        if (!filters.warnings.all { title ->
+                val warning = AO3Warning.entries.firstOrNull { it.title.equals(title, ignoreCase = true) }
+                warning?.matchesWarningText(warnings) ?: matchesFacetText(warnings, title)
+            }) return false
+        if (!filters.categories.all { matchesFacetText(tagSource(work.workCategories, work.workTags), it) }) return false
+        // iOS compares fandom families, and other tag categories as exact set members.
+        if (filters.fandoms.isNotEmpty()) {
+            val fandoms = tagSource(work.workFandoms, work.workTags).map { FandomDisplayName.bareTitle(it) }.toSet()
+            if (!filters.fandoms.all { FandomDisplayName.bareTitle(it) in fandoms }) return false
+        }
+        if (!tagSource(work.workRelationships, work.workTags).containsAll(filters.relationships)) return false
+        if (!tagSource(work.workCharacters, work.workTags).containsAll(filters.characters)) return false
+        if (!tagSource(work.workFreeforms, work.workTags).containsAll(filters.freeforms)) return false
+        if (filters.excludeTags.any { it in work.workTags }) return false
+        if (filters.language.isNotEmpty() && !matchesFacetText(listOf(work.language), filters.language)) return false
+        // A local count <= 0 is unknown. Bounds must never hide an unrefreshed work.
+        if (work.wordCount > 0) {
+            val from = filterWordBound(filters.wordsFrom)
+            val to = filterWordBound(filters.wordsTo)
+            if (from != null && work.wordCount < from) return false
+            if (to != null && work.wordCount > to) return false
+        }
         return true
     }
 

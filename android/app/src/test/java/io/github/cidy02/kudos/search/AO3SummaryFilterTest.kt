@@ -73,6 +73,17 @@ class AO3SummaryFilterTest {
     }
 
     @Test
+    fun sharedLibraryMatchersPreserveExactFacetsAndBothUnderageSpellings() {
+        val filters = AO3SearchFilters(warnings = setOf(AO3Warning.UNDERAGE), categories = setOf(AO3Category.FF))
+        assertTrue(filters.matchesSummary(work.copy(warnings = listOf("UNDERAGE SEX"), categories = listOf("f/f"))))
+        assertTrue(filters.matchesSummary(work))
+        assertFalse(filters.matchesSummary(work.copy(warnings = listOf("Underage Sex Mentioned"))))
+        assertFalse(filters.matchesSummary(work.copy(categories = listOf("F/F Relationship"))))
+        assertTrue(filters.copy(wordsFrom = "abc", wordsTo = "99999999999999999999999999").matchesSummary(work))
+        assertFalse(filters.copy(wordsFrom = "2147483648").matchesSummary(work))
+    }
+
+    @Test
     fun unknownChapterCountsCannotBecomeSeenWatermarks() {
         assertFalse(work.copy(chapters = "").hasPostedChapterCount())
         assertFalse(work.copy(chapters = "?/10").hasPostedChapterCount())
