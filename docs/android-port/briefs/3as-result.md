@@ -19,6 +19,13 @@ The screen's Submit and Discard did not show at first. That was a fault in share
 in its own commit: a pushed screen that is leaving wiped the top buttons of the screen that
 replaced it.
 
+**Found later the same day (Claude): the row leads to the wrong screen.** On iOS, Manage ›
+Moderation opens the Moderation screen (`CollectionModerationView`: the review queue with
+Approve and Reject, membership requests, the maintainers summary, reveal and anonymity), and
+this items screen is reached from inside it ("Recently decided") and from the collections
+list. Brief 3as called the items screen "the moderation screen", so Android opens it straight
+from the row and has no Moderation screen. Brief 3aw builds it and moves the row.
+
 Checked later the same day on the emulator: a switch and a removal staged, Keep, Discard, the
 other three tabs, the second page, and going back and forward between the list, the collection
 and this screen with each one's top buttons intact.
