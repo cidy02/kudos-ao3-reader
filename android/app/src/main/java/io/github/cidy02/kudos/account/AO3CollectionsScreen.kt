@@ -1,6 +1,7 @@
 package io.github.cidy02.kudos.account
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Arrangement
@@ -20,6 +21,10 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.windowInsetsTopHeight
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Inbox
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.AlertDialog
@@ -39,6 +44,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.TextUnit
+import io.github.cidy02.kudos.app.Routes
 import androidx.lifecycle.viewmodel.compose.viewModel
 import io.github.cidy02.kudos.app.ProvidePushedShellChrome
 import io.github.cidy02.kudos.network.ao3.account.AO3Collection
@@ -72,6 +78,8 @@ fun AO3CollectionsScreen(
     onLogin: () -> Unit,
     onOpenCollection: (AO3Collection) -> Unit,
     onNewCollection: () -> Unit,
+    onYourItems: () -> Unit,
+    onOpenRowAction: (String) -> Unit,
     modifier: Modifier = Modifier,
     viewModel: AO3CollectionsViewModel = viewModel(
         factory = AO3CollectionsViewModel.factory(repository)
@@ -161,7 +169,8 @@ fun AO3CollectionsScreen(
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         SubjectChip("Collections", style = SubjectChipStyle.Pill(isSelected = true), palette = palette)
-                        SubjectChip("Your items", style = SubjectChipStyle.Pill(isSelected = false), palette = palette)
+                        SubjectChip("Your items", style = SubjectChipStyle.Pill(isSelected = false), palette = palette,
+                            modifier = Modifier.clickable(onClick = onYourItems))
                     }
                 }
                 if (filters.hasActiveFilters) {
@@ -243,8 +252,8 @@ fun AO3CollectionsScreen(
                             } else {
                                 // AO3's demo can repeat a slug on several pages; preserve every incoming row.
                                 items(visible) { collection ->
-                                    AO3CollectionCard(
-                                        collection, onClick = { onOpenCollection(collection) }, palette = palette,
+                                    AO3CollectionRow(
+                                        collection, onClick = { onOpenCollection(collection) }, onAction = onOpenRowAction, palette = palette,
                                         modifier = Modifier.padding(horizontal = SubjectMetrics.headerGutter)
                                     )
                                 }
@@ -271,12 +280,40 @@ fun AO3CollectionsScreen(
     }
 }
 
+internal data class AO3CollectionRowAction(val label: String, val route: String)
+
+/** iOS collectionRow offers both actions on every row; AO3 governs access on the destination. */
+internal fun ao3CollectionRowActions(collection: AO3Collection) = listOf(
+    AO3CollectionRowAction("Edit Collection", Routes.ao3CollectionForm(collection.name)),
+    AO3CollectionRowAction("Manage Items", Routes.ao3CollectionItems(collection.name, collection.title))
+)
+
+@Composable
+internal fun AO3CollectionRow(collection: AO3Collection, onClick: () -> Unit, onAction: (String) -> Unit,
+    palette: SubjectPalette, modifier: Modifier = Modifier) {
+    var menuOpen by remember(collection.name) { mutableStateOf(false) }
+    val tokens = LocalKudosTokens.current
+    Box(modifier) {
+        AO3CollectionCard(collection, onClick, palette, onLongClick = { menuOpen = true })
+        DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }, containerColor = tokens.cardFill) {
+            ao3CollectionRowActions(collection).forEachIndexed { index, action ->
+                DropdownMenuItem(text = { Text(action.label, color = tokens.primaryInk, fontSize = 14.5.sp, lineHeight = 20.sp) },
+                    leadingIcon = { Icon(if (index == 0) Icons.Filled.Edit else Icons.Filled.Inbox,
+                        contentDescription = null, tint = palette.accent) },
+                    onClick = { menuOpen = false; onAction(action.route) })
+            }
+        }
+    }
+}
+
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 fun AO3CollectionCard(
     collection: AO3Collection,
     onClick: () -> Unit,
     palette: SubjectPalette,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onLongClick: (() -> Unit)? = null
 ) {
     val tokens = LocalKudosTokens.current
     val accessibility = isAccessibilityFontScale()
@@ -303,7 +340,7 @@ fun AO3CollectionCard(
         modifier = modifier
             .fillMaxWidth()
             .subjectPanel()
-            .clickable(onClick = onClick)
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick, onLongClickLabel = "Collection actions")
             .padding(horizontal = 14.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {

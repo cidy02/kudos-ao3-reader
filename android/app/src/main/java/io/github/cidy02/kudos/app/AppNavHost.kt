@@ -583,6 +583,8 @@ fun AppNavHost(
                 repository = container.accountListRepository,
                 onLogin = { navController.navigate(Routes.AccountLogin) },
                 onNewCollection = { navController.navigate(Routes.ao3CollectionForm()) },
+                onYourItems = { navController.navigate(Routes.AO3UserCollectionItems) },
+                onOpenRowAction = { navController.navigate(it) },
                 onOpenCollection = { collection ->
                     navController.navigate(Routes.ao3CollectionDetail(collection.name, collection.title))
                 }
@@ -631,6 +633,14 @@ fun AppNavHost(
                     }
                 )
             }
+        }
+        sharedComposable(Routes.AO3UserCollectionItems) {
+            io.github.cidy02.kudos.account.AO3CollectionItemsScreen(
+                slug = null,
+                title = "Your items",
+                repository = container.collectionDetailRepository,
+                writes = container.writeRepository
+            )
         }
         sharedComposable(
             Routes.AO3CollectionItems,

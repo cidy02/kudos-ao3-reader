@@ -131,6 +131,7 @@ internal object DemoNetworkRoutes {
         "^/collections/winter_exchange/people/?$" to "ao3_demo_collection_people",
         "^/collections/[^/]+/?$" to "ao3_collection_show",
         "^/users/[^/]+/collections" to "ao3_collections_index",
+        "^/users/[^/]+/collection_items" to "ao3_demo_user_collection_items",
         "^/tag_sets/\\d+" to "ao3_tag_set",
         "^/media/[^/]+/fandoms" to "ao3_media_fandoms",
         "^/media/?$" to "ao3_media",
@@ -188,6 +189,7 @@ internal class DemoNetworkInterceptor(
 ) : Interceptor {
     private val removedSubscriptions = ConcurrentHashMap.newKeySet<String>()
     private val collectionItems = DemoCollectionItems()
+    private val userCollectionItems = DemoCollectionItems(account = true)
     private val collectionForms = DemoCollectionForms()
 
     override fun intercept(chain: Interceptor.Chain): Response {
@@ -204,6 +206,12 @@ internal class DemoNetworkInterceptor(
             val answer = collectionItems.answer(chain.request(), fixtures().read("ao3_demo_collection_items"))
             return Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1)
                 .code(answer.first).message(if (answer.first == 200) "OK" else "Unprocessable Entity")
+                .header("Content-Type", HTML).body(answer.second.toResponseBody(HTML_TYPE)).build()
+        }
+        if (Regex("^/users/[^/]+/collection_items(?:/update_multiple)?/?$").matches(path)) {
+            val answer = userCollectionItems.answer(chain.request(), fixtures().read("ao3_demo_user_collection_items"))
+            return Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1)
+                .code(answer.first).message(if (answer.first == 200) "OK" else "Local refusal")
                 .header("Content-Type", HTML).body(answer.second.toResponseBody(HTML_TYPE)).build()
         }
         // A terminal local response, including failures. Never fall through to AO3.
@@ -333,7 +341,7 @@ internal fun OkHttpClient.Builder.installDemoNetworkBlock(): OkHttpClient.Builde
     addInterceptor(DemoNetworkInterceptor())
 
 /** Mutable local server state is owned by the interceptor, never by production account models. */
-private class DemoCollectionItems {
+private class DemoCollectionItems(private val account: Boolean = false) {
     private val changes = mutableMapOf<String, String>()
     private val removed = mutableSetOf<String>()
 
@@ -354,8 +362,11 @@ private class DemoCollectionItems {
             val id = ids.singleOrNull()
             val row = rows.firstOrNull { it.selectFirst("h4.heading")?.id() == "collection_item_$id" }
             val controls = row?.select("input, select").orEmpty()
-            val accepted = request.url.encodedPath == "/collections/winter_exchange/items/update_multiple" &&
-                fields["_method"] == "patch" && fields["authenticity_token"] == "demo-items-token" &&
+            val endpointMatches = if (account) Regex("^/users/[^/]+/collection_items/update_multiple/?$")
+                .matches(DemoNetworkRoutes.decodedPath(request.url)) else
+                request.url.encodedPath == "/collections/winter_exchange/items/update_multiple"
+            val accepted = endpointMatches && fields["_method"] == "patch" &&
+                fields["authenticity_token"] == (if (account) "demo-user-items-token" else "demo-items-token") &&
                 id != null && id !in removed && row != null && !row.hasAttr("data-refuse") && edits.isNotEmpty() &&
                 edits.all { (name, value) ->
                     val control = controls.firstOrNull { it.attr("name") == name && it.attr("type") != "hidden" }
@@ -389,9 +400,10 @@ private class DemoCollectionItems {
             val moderator = approval("collection_approval_status")
             val matches = when (request.url.queryParameter("status")) {
                 "unreviewed_by_user" -> creator == "unreviewed"
+                "unreviewed_by_collection" -> moderator == "unreviewed" && (!account || creator == "approved")
                 "rejected_by_collection" -> moderator == "rejected"
                 "approved" -> creator == "approved" && moderator == "approved"
-                else -> moderator == "unreviewed"
+                else -> if (account) creator == "unreviewed" else moderator == "unreviewed"
             }
             if (id in removed || !matches) row.remove()
         }

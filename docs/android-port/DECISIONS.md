@@ -685,3 +685,14 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   page and iOS's `theme.scopePalette`. With the default dark-red accent the pages look as they
   did. Reverse: the `palette` line in `account/AO3CollectionsScreen.kt` and
   `account/AccountWorksListScreen.kt`.
+- **2026-10-05 · "Your items", and two actions on a collection's row.** The "Your items" chip
+  on AO3 Collections opens the items screen for the reader's own works across collections, as
+  on iOS: it starts on Awaiting you, the reader can approve, reject or remove their own items,
+  and the moderators' side is shown but cannot be changed. Changes are sent one request per
+  item, as iOS (owner question 13 covers whether that should be one). A long press on a
+  collection's row offers Edit Collection and Manage Items; iOS offers the same two from a
+  context menu and a swipe, and Android uses its long-press menu for row actions. Never run
+  against AO3. Reverse: `updateUserCollectionItems` in
+  `network/ao3/writes/AO3WriteRepository.kt`, the account scope in
+  `account/AO3CollectionItemsScreen.kt` and `account/AO3CollectionItemsState.kt`, and the row
+  menu in `account/AO3CollectionsScreen.kt`.
