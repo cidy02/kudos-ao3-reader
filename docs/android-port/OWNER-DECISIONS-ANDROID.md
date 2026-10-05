@@ -16,6 +16,10 @@ Until answered: the two differ.
 
 ## 2. The default accent on dark chrome
 
+*2026-10-05, later: more places seen on Android in OLED, where the default accent is close to
+unreadable: the Backup page's "Export Backup…", "Import Backup…" and "Rename"; the links on the
+About page; and the selected tab of the reader's Contents sheet.*
+
 *2026-10-05: on Android the tab bar and the toolbar no longer show this. The new navigation bar
 and buttons draw a lighter glyph on an accent-tinted ground (see question 11). What is left on
 Android is the action rows in Settings and a sheet's selected tab; iOS is unchanged.*
