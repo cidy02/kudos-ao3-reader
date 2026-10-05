@@ -563,3 +563,13 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   (iOS shows it only when the conversion is out of date, which Android cannot tell), and
   sharing a work that has no link. How the menu is drawn is unchanged (owner question 12).
   Reverse: `reader/ReaderFanMenu.kt`.
+- **2026-10-05 · Highlight and Add Note join the system's text selection menu by wrapping it,
+  not through the reader toolkit's own hook.** Readium 3.3.0's `selectionActionModeCallback`
+  replaces the menu, so setting it would lose Copy and every other system action. Codex asked;
+  the answer was a small container view that wraps the callback the WebView starts, passes
+  everything through, and adds the two items. The two pills stay in the reader's menu until
+  the real menu has been seen on a device. (Brief 3ap, in progress.)
+- **2026-10-05 · At the largest text size Android reflows three screens that iOS does not.**
+  iOS keeps the Inbox byline on one line and the local collection covers as a scaled mosaic;
+  on Android at font scale 2.0 they cut or crowd their text, so Android stacks and wraps there
+  (brief 3aq, in progress). Nothing changes at ordinary sizes.
