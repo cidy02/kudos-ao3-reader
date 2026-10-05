@@ -119,11 +119,12 @@ fun SubjectFormRow(
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(2.dp)
             ) {
-                Text(text = label, color = tokens.primaryInk, fontSize = 14.5.sp)
+                Text(text = label, color = tokens.primaryInk, fontSize = 14.5.sp, lineHeight = 20.sp)
                 Text(
                     text = value.orEmpty(),
                     color = tokens.secondaryInk,
                     fontSize = 14.5.sp,
+                    lineHeight = 20.sp,
                     maxLines = valueMaxLines,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -137,7 +138,8 @@ fun SubjectFormRow(
                 text = label,
                 modifier = if (hasValue) Modifier else Modifier.weight(1f),
                 color = tokens.primaryInk,
-                fontSize = 14.5.sp
+                fontSize = 14.5.sp,
+                lineHeight = 20.sp
             )
             if (trailing != null) {
                 trailing()
@@ -147,6 +149,7 @@ fun SubjectFormRow(
                     modifier = Modifier.weight(1f),
                     color = tokens.secondaryInk,
                     fontSize = 14.5.sp,
+                    lineHeight = 20.sp,
                     textAlign = TextAlign.End,
                     maxLines = valueMaxLines,
                     overflow = TextOverflow.Ellipsis

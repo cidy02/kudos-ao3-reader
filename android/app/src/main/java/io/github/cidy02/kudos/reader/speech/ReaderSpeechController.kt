@@ -129,9 +129,7 @@ class ReaderSpeechController(
     fun configure(preferences: ReaderPreferences, title: String = workTitle) {
         currentPreferences = preferences
         workTitle = title.ifBlank { "Kudos" }
-        tts.setRate(preferences.speechRate)
-        tts.setPitch(preferences.speechPitch)
-        applyVoicePreference()
+        tts.applySpeechPreferences(preferences)
         updateMetadata()
     }
 
@@ -160,13 +158,6 @@ class ReaderSpeechController(
             speakCurrent()
         } else if (currentQueue.isNotEmpty()) {
             speakCurrent()
-        }
-    }
-
-    private fun applyVoicePreference() {
-        val id = currentPreferences.speechVoiceIdentifier
-        if (id != null) {
-            tts.setVoice(id)
         }
     }
 
@@ -226,7 +217,7 @@ class ReaderSpeechController(
     fun shutdown() {
         currentSpeakJob?.cancel()
         scope.cancel()
-        tts.stop()
+        tts.shutdown()
         mediaSession.isActive = false
         mediaSession.release()
     }

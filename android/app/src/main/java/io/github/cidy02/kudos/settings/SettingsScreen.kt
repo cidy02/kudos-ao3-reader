@@ -53,7 +53,7 @@ fun SettingsScreen(
             SettingsReaderPage(repository, settings)
         }
         composable("listening") {
-            SettingsListeningPage()
+            SettingsListeningPage(repository)
         }
         composable("downloads") {
             SettingsDownloadsPage(repository, settings)

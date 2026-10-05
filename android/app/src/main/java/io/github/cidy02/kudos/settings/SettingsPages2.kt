@@ -188,20 +188,6 @@ fun SettingsPreservationPage(onOpenAvailabilitySweep: () -> Unit) {
 }
 
 @Composable
-fun SettingsListeningPage() {
-    SettingsPage(title = "Listening") {
-        item {
-            SettingsSection(
-                footnote = "Voice, speed, and the Kokoro voice pack are chosen in the reader. " +
-                    "This page does not change them yet."
-            ) {
-                SubjectFormRow("Start Read Aloud from the reader's More menu.")
-            }
-        }
-    }
-}
-
-@Composable
 fun SettingsAccountPage(authRepository: AO3AuthRepository?, onLogin: () -> Unit) {
     val scope = rememberCoroutineScope()
     var confirmingLogOut by remember { mutableStateOf(false) }

@@ -339,33 +339,6 @@ internal fun TextSizeSlider(
 }
 
 @Composable
-fun SubjectSliderRow(
-    label: String,
-    value: Float,
-    valueRange: ClosedFloatingPointRange<Float>,
-    steps: Int,
-    formatValue: (Float) -> String,
-    onValueChangeFinished: (Float) -> Unit
-) {
-    val tokens = LocalKudosTokens.current
-    var sliderValue by remember(value) { mutableStateOf(value) }
-    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 13.dp, vertical = 8.dp)) {
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text(text = label, color = tokens.primaryInk, fontSize = 16.sp)
-            Text(text = formatValue(sliderValue), color = tokens.secondaryInk, fontSize = 15.sp)
-        }
-        Slider(
-            value = sliderValue,
-            onValueChange = { sliderValue = it },
-            onValueChangeFinished = { onValueChangeFinished(sliderValue) },
-            valueRange = valueRange,
-            steps = steps.coerceAtLeast(0),
-            colors = accentSliderColors()
-        )
-    }
-}
-
-@Composable
 private fun accentSliderColors() = SliderDefaults.colors(
     thumbColor = Color.White,
     activeTrackColor = LocalKudosTokens.current.accent,

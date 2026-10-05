@@ -22,14 +22,21 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -84,7 +91,8 @@ fun SettingsGroupLabel(text: String, modifier: Modifier = Modifier) {
             .padding(horizontal = SubjectMetrics.accountGutter)
             .padding(bottom = 8.dp),
         color = LocalKudosTokens.current.secondaryInk,
-        fontSize = 15.sp
+        fontSize = 15.sp,
+        lineHeight = 21.sp
     )
 }
 
@@ -224,6 +232,43 @@ private fun SettingsIconRow(
         if (icon != null) {
             Icon(icon, contentDescription = null, tint = iconTint, modifier = Modifier.size(22.dp))
         }
-        Text(text = label, color = color, fontSize = 16.sp)
+        Text(text = label, color = color, fontSize = 16.sp, lineHeight = 22.sp)
+    }
+}
+
+/** Single-value slider beside the settings rows, using the same tokens as FilterRangeSlider. */
+@Composable
+fun SubjectSliderRow(
+    label: String,
+    value: Float,
+    valueRange: ClosedFloatingPointRange<Float>,
+    steps: Int,
+    formatValue: (Float) -> String,
+    onValueChangeFinished: (Float) -> Unit,
+    accessibilityLabel: String = label
+) {
+    val tokens = LocalKudosTokens.current
+    var sliderValue by remember(value) { mutableStateOf(value) }
+    Column(Modifier.fillMaxWidth().padding(horizontal = 13.dp, vertical = 8.dp)) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text(label, color = tokens.primaryInk, fontSize = 16.sp, lineHeight = 22.sp)
+            Text(formatValue(sliderValue), color = tokens.secondaryInk, fontSize = 15.sp, lineHeight = 21.sp)
+        }
+        Slider(
+            value = sliderValue,
+            onValueChange = { sliderValue = it },
+            onValueChangeFinished = { onValueChangeFinished(sliderValue) },
+            valueRange = valueRange,
+            steps = steps.coerceAtLeast(0),
+            colors = SliderDefaults.colors(
+                thumbColor = tokens.accent,
+                activeTrackColor = tokens.accent,
+                inactiveTrackColor = tokens.glassFill(0.18)
+            ),
+            modifier = Modifier.fillMaxWidth().semantics {
+                contentDescription = accessibilityLabel
+                stateDescription = formatValue(sliderValue)
+            }
+        )
     }
 }
