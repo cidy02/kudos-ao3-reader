@@ -16,6 +16,10 @@ object ReaderContentText {
     private const val MAX_CHARS = 80_000
     private const val CHUNK = 350
 
+    /** iOS disables Read aloud when Readium has no extractable content service. */
+    fun isAvailable(publication: Publication): Boolean =
+        runCatching { publication.content() != null }.getOrDefault(false)
+
     suspend fun paragraphs(
         publication: Publication,
         from: Locator? = null

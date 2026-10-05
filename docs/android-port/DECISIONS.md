@@ -542,3 +542,24 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   unsubscribe.** It hides the work's row on the device, in memory, and sends AO3 nothing; the
   subscription is still there on AO3 and the row is back at the next visit. iOS posts AO3's own
   form. Brief 3an.
+- **2026-10-05 · Unsubscribe on the Subscriptions page unsubscribes on AO3.** For works, series
+  and authors: the reader taps Unsubscribe and confirms; Kudos fetches the subscriptions page
+  for a fresh token and posts AO3's own form for that row, once, through the paced client; the
+  row leaves the list only when AO3's answer confirms it, and a refusal says "Couldn't
+  unsubscribe" and leaves the row. It is iOS's flow line for line, and the networking policy
+  allows a write the reader starts and confirms. The row hidden only on the device is gone.
+  It has not been run against AO3 (neither have iOS's write actions): a release check on a real
+  phone. Reverse: `unsubscribe` in `network/ao3/writes/AO3WriteRepository.kt` and
+  `account/SubscriptionUnsubscribeState.kt`.
+- **2026-10-05 · A signed-in page read that finishes after the account changed is dropped.**
+  It was returned to its caller, which could show one account's page under another. Reverse:
+  `getAuthenticated` in `network/ao3/writes/AO3AuthenticatedClient.kt`.
+- **2026-10-05 · The reader's menu holds what iOS's holds.** Contents, Bookmarks & Highlights,
+  Find in Work, Comments (an AO3 work only), Themes & Settings; then Share, Give kudos (an AO3
+  work only), Read aloud, Lock rotation, Add bookmark. **Mark finished left the menu**: iOS
+  has it on the work's page, and so does Android. Kept though iOS has them elsewhere:
+  Highlight selection and Add note to selection, because Android's text selection menu cannot
+  make them yet. Left out for lack of anything behind them: Original, Rebuild from Original
+  (iOS shows it only when the conversion is out of date, which Android cannot tell), and
+  sharing a work that has no link. How the menu is drawn is unchanged (owner question 12).
+  Reverse: `reader/ReaderFanMenu.kt`.
