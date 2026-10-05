@@ -6,8 +6,10 @@ import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import com.google.crypto.tink.subtle.Ed25519Sign
 import io.github.cidy02.kudos.core.model.Bookmark
+import io.github.cidy02.kudos.core.model.CustomFont
 import io.github.cidy02.kudos.core.model.ReadingAnnotation
 import io.github.cidy02.kudos.core.model.ReadingQueue
+import io.github.cidy02.kudos.core.model.ReadingQueueMembership
 import io.github.cidy02.kudos.core.model.SavedWork
 import io.github.cidy02.kudos.core.model.WorkCollection
 import io.github.cidy02.kudos.core.model.SavedSearch
@@ -780,6 +782,10 @@ class BackupTrustPhase2Test {
         assertNull(database.bookmarkDao().getById(captured.id))
         assertEquals(late, database.bookmarkDao().getById(late.id)?.toDomain())
         assertEquals(changed, database.bookmarkDao().getById(changed.id)?.toDomain())
+        assertOnlyUneditedOmissionIsStored(merge, SyncTombstoneRecordType.BOOKMARK, captured.id, changed.id)
+        reconcileEmptyArchive()
+        assertEquals(changed, database.bookmarkDao().getById(changed.id)?.toDomain())
+        assertNull(database.bookmarkDao().getById(captured.id))
     }
 
     @Test
@@ -797,6 +803,10 @@ class BackupTrustPhase2Test {
         assertNull(database.savedSearchDao().getById(captured.id))
         assertEquals(late, database.savedSearchDao().getById(late.id)?.toDomain())
         assertEquals(changed, database.savedSearchDao().getById(changed.id)?.toDomain())
+        assertOnlyUneditedOmissionIsStored(merge, SyncTombstoneRecordType.SAVED_SEARCH, captured.id, changed.id)
+        reconcileEmptyArchive()
+        assertEquals(changed, database.savedSearchDao().getById(changed.id)?.toDomain())
+        assertNull(database.savedSearchDao().getById(captured.id))
     }
 
     @Test
@@ -849,6 +859,286 @@ class BackupTrustPhase2Test {
         mode = BackupImportMode.REPLACE_LIBRARY,
         now = CLOCK
     )
+
+    private suspend fun assertOnlyUneditedOmissionIsStored(
+        merge: BackupMergeResult, type: String, removedId: String, keptId: String
+    ) {
+        val expected = merge.snapshot.tombstones.single { it.recordTypeRaw == type && it.recordID == removedId }
+        assertTrue(expected.id in merge.replaceOmissionTombstoneIds)
+        val stored = database.syncTombstoneDao().getAll().map { it.toDomain() }
+        assertEquals(expected, stored.single { it.recordTypeRaw == type && it.recordID == removedId })
+        assertFalse(stored.any { it.recordTypeRaw == type && it.recordID == keptId })
+    }
+
+    private suspend fun reconcileEmptyArchive() {
+        val next = BackupMergeService.merge(backupRepository.captureLibrarySnapshot(),
+            KudosBackupPackage(KudosBackupManifest(version = BackupVersion.CURRENT, exportedAt = CLOCK.toString())),
+            now = CLOCK)
+        backupRepository.applyMergeResult(next)
+    }
+
+    @Test
+    fun replaceCancelsOnlyItsOwnOmissionNotAnArchivedOrPreviouslyStoredDeletion() = runTest {
+        val search = SavedSearch(id = SWEPT_SEARCH, name = "Edited search", dateAdded = Instant.parse(EARLIER))
+        database.savedSearchDao().upsert(search.toEntity())
+        val peer = Ed25519Sign.KeyPair.newKeyPair()
+        val pub = peer.publicKey.toLowerHex()
+        val incoming = signedTypedTombstone(search.id, SyncTombstoneRecordType.SAVED_SEARCH,
+            peer.privateKey, pub, tombstoneId = PEER_ROW)
+        val local = SyncTombstone(id = TOMBSTONE_ID, recordID = search.id,
+            recordTypeRaw = SyncTombstoneRecordType.SAVED_SEARCH,
+            createdAt = Instant.parse(EARLIER), lastModifiedAt = Instant.parse(EARLIER))
+        database.syncTombstoneDao().upsert(local.toEntity())
+        val captured = backupRepository.captureLibrarySnapshot()
+        val merge = BackupMergeService.merge(captured, KudosBackupPackage(KudosBackupManifest(
+            version = BackupVersion.CURRENT, exportedAt = CLOCK.toString(), tombstones = listOf(incoming))),
+            mode = BackupImportMode.REPLACE_LIBRARY, now = CLOCK, trustedPublicKeys = setOf(pub))
+        val adopted = merge.snapshot.tombstones.single { it.signerPublicKey == pub }
+        assertFalse(adopted.id in merge.replaceOmissionTombstoneIds)
+        assertFalse(local.id in merge.replaceOmissionTombstoneIds)
+        val edited = search.copy(name = "Changed while replacing", filtersJson = "{\"query\":\"reader\"}")
+        database.savedSearchDao().upsert(edited.toEntity())
+        backupRepository.applyMergeResult(merge)
+        assertEquals(edited, database.savedSearchDao().getById(search.id)?.toDomain())
+        val stored = database.syncTombstoneDao().getAll().map { it.toDomain() }
+        assertEquals(setOf(local, adopted), stored.toSet())
+        assertTrue(TombstoneSigning.verify(stored.single { it.signerPublicKey == pub }))
+    }
+
+    @Test
+    fun changedReadingLogOmissionsKeepTheirRowsWithoutPoisoningTheNextReconcile() = runTest {
+        val early = Instant.parse(EARLIER)
+        val session = ReadingSessionEntity(id = SWEPT_SEARCH, workID = WORK_K,
+            startedAt = early, endedAt = early, lastModifiedAt = early)
+        val favorite = ReadingFavoriteEntity(id = SWEPT_SEARCH, kindRaw = "fandom", targetKey = "A fandom",
+            createdAt = early, lastModifiedAt = early)
+        val watermark = FandomReadWatermarkEntity(id = SWEPT_SEARCH, fandomName = "A fandom",
+            lastVisitedAt = early, lastModifiedAt = early)
+        database.readingLogDao().upsertSession(session)
+        database.readingLogDao().upsertSession(session.copy(id = TOMBSTONE_ID))
+        database.readingLogDao().upsertFavorite(favorite)
+        database.readingLogDao().upsertFavorite(favorite.copy(id = TOMBSTONE_ID, targetKey = "Another fandom"))
+        database.readingLogDao().upsertWatermark(watermark)
+        database.readingLogDao().upsertWatermark(watermark.copy(id = TOMBSTONE_ID, fandomName = "Another fandom"))
+        val merge = capturedReplace()
+        val changedSession = session.copy(durationSeconds = 42.0, lastModifiedAt = CLOCK)
+        val changedFavorite = favorite.copy(displayName = "Edited", lastModifiedAt = CLOCK)
+        val changedWatermark = watermark.copy(lastVisitedAt = CLOCK, lastModifiedAt = CLOCK)
+        database.readingLogDao().upsertSession(changedSession)
+        database.readingLogDao().upsertFavorite(changedFavorite)
+        database.readingLogDao().upsertWatermark(changedWatermark)
+        backupRepository.applyMergeResult(merge)
+        listOf(SyncTombstoneRecordType.READING_SESSION, SyncTombstoneRecordType.READING_FAVORITE,
+            SyncTombstoneRecordType.FANDOM_READ_WATERMARK).forEach { type ->
+            assertOnlyUneditedOmissionIsStored(merge, type, TOMBSTONE_ID, SWEPT_SEARCH)
+        }
+        reconcileEmptyArchive()
+        assertEquals(listOf(changedSession), database.readingLogDao().getAllSessions())
+        assertEquals(listOf(changedFavorite), database.readingLogDao().getAllFavorites())
+        assertEquals(listOf(changedWatermark), database.readingLogDao().getAllWatermarks())
+    }
+
+    @Test
+    fun keptRowsEditedDuringReconcileSurviveAndUntouchedRowsTakeTheArchive() = runTest {
+        assertKeptRowEdits(BackupImportMode.RECONCILE)
+    }
+
+    @Test
+    fun keptRowsEditedDuringReplaceSurviveAndUntouchedRowsTakeTheArchive() = runTest {
+        assertKeptRowEdits(BackupImportMode.REPLACE_LIBRARY)
+    }
+
+    @Test
+    fun keptRowsEditedDuringFileMergeSurviveWithoutChangingItsAddOnlyRules() = runTest {
+        assertKeptRowEdits(BackupImportMode.MERGE)
+    }
+
+    @Test
+    fun aConcurrentEditWinsAnEqualArchiveClockWithoutDroppingIndependentFills() = runTest {
+        assertKeptRowEdits(BackupImportMode.RECONCILE, archiveTime = CLOCK)
+    }
+
+    /** Each kind has an edited row and an untouched control in the same import. */
+    private suspend fun assertKeptRowEdits(mode: BackupImportMode, archiveTime: Instant = Instant.parse(LATER)) {
+        val early = Instant.parse(EARLIER)
+        val work = SavedWork(id = WORK_K, title = "Captured", author = "Author", dateAdded = early,
+            lastModifiedAt = early, progressModifiedAt = early, lastReadDate = early,
+            lastSpineIndex = 1, lastScrollFraction = 0.1, hasEpub = false)
+        val controlWork = work.copy(id = PEER_ROW)
+        val collection = WorkCollection(id = SWEPT_SEARCH, name = "Captured collection", dateAdded = early,
+            lastModifiedAt = early)
+        val controlCollection = collection.copy(id = TOMBSTONE_ID, name = "Control collection")
+        val annotation = ReadingAnnotation(id = SWEPT_SEARCH, workID = WORK_K, kindRaw = "note",
+            note = "Captured note", createdAt = early, lastModifiedAt = early)
+        val controlAnnotation = annotation.copy(id = TOMBSTONE_ID, workID = PEER_ROW)
+        val search = SavedSearch(id = SWEPT_SEARCH, name = "Captured search", dateAdded = early,
+            filtersJson = "{\"query\":\"captured\"}")
+        val controlSearch = search.copy(id = TOMBSTONE_ID, name = "Control search")
+        val queue = ReadingQueue(id = PEER_ROW, name = "Queue", dateCreated = early, dateUpdated = early)
+        val membership = ReadingQueueMembership(id = SWEPT_SEARCH, queueID = queue.id, workID = WORK_K,
+            queuedAt = early, lastModifiedAt = early, sortOrderInQueue = 1)
+        val controlMembership = membership.copy(id = TOMBSTONE_ID, workID = PEER_ROW)
+        listOf(work, controlWork).forEach { database.workDao().upsert(it.toEntity()) }
+        listOf(collection, controlCollection).forEach { database.collectionDao().upsert(it.toEntity()) }
+        listOf(annotation, controlAnnotation).forEach { database.annotationDao().upsert(it.toEntity()) }
+        listOf(search, controlSearch).forEach { database.savedSearchDao().upsert(it.toEntity()) }
+        database.readingQueueDao().upsertQueue(queue.toEntity())
+        listOf(membership, controlMembership).forEach { database.readingQueueDao().upsertMembership(it.toEntity()) }
+        val captured = backupRepository.captureLibrarySnapshot()
+        val incoming = captured.copy(
+            works = captured.works.map { it.copy(title = "Archive title", lastModifiedAt = archiveTime,
+                lastSpineIndex = 3, lastScrollFraction = 0.3, lastReadDate = archiveTime, progressModifiedAt = archiveTime) },
+            collections = captured.collections.map { it.copy(name = "Archive ${it.id}", lastModifiedAt = archiveTime,
+                hue = 0.4) },
+            annotations = captured.annotations.map { it.copy(note = "Archive note", lastModifiedAt = archiveTime) },
+            savedSearches = captured.savedSearches.map { it.copy(filtersJson = "{\"query\":\"archive\"}", dateAdded = archiveTime) },
+            readingQueueMemberships = captured.readingQueueMemberships.map {
+                it.copy(sortOrderInQueue = 3, note = "Archive membership note", lastModifiedAt = archiveTime)
+            }
+        )
+        val merge = BackupMergeService.merge(captured, KudosBackupPackage(incoming.toV2Manifest(CLOCK)), mode, now = CLOCK)
+        // Progress-only save: metadata lastModifiedAt deliberately stays at capture.
+        val editedWork = work.copy(lastSpineIndex = 8, lastScrollFraction = 0.8,
+            lastReadDate = CLOCK, progressModifiedAt = CLOCK)
+        val editedCollection = collection.copy(name = "Reader's collection", lastModifiedAt = CLOCK)
+        val editedAnnotation = annotation.copy(note = "Reader's note", lastModifiedAt = CLOCK)
+        val editedSearch = search.copy(filtersJson = "{\"query\":\"reader\"}")
+        val editedMembership = membership.copy(sortOrderInQueue = 8, lastModifiedAt = CLOCK)
+        database.workDao().upsert(editedWork.toEntity())
+        database.collectionDao().upsert(editedCollection.toEntity())
+        database.annotationDao().upsert(editedAnnotation.toEntity())
+        database.savedSearchDao().upsert(editedSearch.toEntity())
+        database.readingQueueDao().upsertMembership(editedMembership.toEntity())
+        val summary = backupRepository.applyMergeResult(merge)
+
+        val heldWork = database.workDao().getById(WORK_K)!!.toDomain()
+        assertEquals(8, heldWork.lastSpineIndex)
+        assertEquals(0.8, heldWork.lastScrollFraction, 0.0)
+        assertEquals(CLOCK, heldWork.progressModifiedAt)
+        // Re-merge also keeps independent archive metadata, rather than skipping the work.
+        assertEquals(if (mode == BackupImportMode.MERGE) "Captured" else "Archive title", heldWork.title)
+        assertEquals("Reader's collection", database.collectionDao().getById(SWEPT_SEARCH)!!.name)
+        // The local-wins collection merge still takes a missing archive color.
+        assertEquals(0.4, database.collectionDao().getById(SWEPT_SEARCH)!!.hue!!, 0.0)
+        assertEquals("Reader's note", database.annotationDao().getById(SWEPT_SEARCH)!!.note)
+        assertEquals(editedSearch.filtersJson, database.savedSearchDao().getById(SWEPT_SEARCH)!!.filtersJson)
+        assertEquals(8, database.readingQueueDao().getMembershipById(SWEPT_SEARCH)!!.sortOrderInQueue)
+        val addOnly = mode == BackupImportMode.MERGE
+        assertEquals(if (addOnly) 1 else 3, database.workDao().getById(PEER_ROW)!!.lastSpineIndex)
+        assertEquals(if (addOnly) "Control collection" else "Archive $TOMBSTONE_ID",
+            database.collectionDao().getById(TOMBSTONE_ID)!!.name)
+        assertEquals(if (addOnly) "Captured note" else "Archive note", database.annotationDao().getById(TOMBSTONE_ID)!!.note)
+        // iOS and the existing merge overwrite unedited saved searches even in File Merge.
+        assertEquals("{\"query\":\"archive\"}", database.savedSearchDao().getById(TOMBSTONE_ID)!!.filtersJson)
+        assertEquals(if (addOnly) 1 else 3, database.readingQueueDao().getMembershipById(TOMBSTONE_ID)!!.sortOrderInQueue)
+        assertEquals(2, database.workDao().getAllIncludingDeleted().size)
+        assertEquals(2, database.collectionDao().getAllIncludingDeleted().size)
+        assertEquals(2, database.annotationDao().getAll().size)
+        assertEquals(2, database.savedSearchDao().getAll().size)
+        assertEquals(2, database.readingQueueDao().getAllMemberships().size)
+        assertEquals(1, database.readingQueueDao().getAllQueues().size)
+        assertEquals(5, summary.concurrentRowsChanged)
+        assertEquals(if (archiveTime == CLOCK) 5 else 1, summary.concurrentRowsDeferred)
+        assertTrue(summary.toUserMessage().contains("kept your version; import again"))
+    }
+
+    @Test
+    fun progressSavedOnTheSameClockTickDuringReplaceCannotMoveBack() = runTest {
+        val work = SavedWork(id = WORK_K, title = "Work", author = "Author", hasEpub = false,
+            dateAdded = CLOCK, lastModifiedAt = CLOCK, lastReadDate = CLOCK,
+            progressModifiedAt = CLOCK, lastSpineIndex = 1, lastScrollFraction = 0.1)
+        database.workDao().upsert(work.toEntity())
+        val captured = backupRepository.captureLibrarySnapshot()
+        val archive = captured.copy(works = listOf(work.copy(lastSpineIndex = 2, lastScrollFraction = 0.2)))
+        val merge = BackupMergeService.merge(captured, KudosBackupPackage(archive.toV2Manifest(CLOCK)),
+            mode = BackupImportMode.REPLACE_LIBRARY, now = CLOCK)
+        val edited = work.copy(lastSpineIndex = 9, lastScrollFraction = 0.9,
+            readiumLocator = "{\"href\":\"chapter.xhtml\",\"locations\":{\"totalProgression\":0.9}}")
+        database.workDao().upsert(edited.toEntity())
+        backupRepository.applyMergeResult(merge)
+        val held = database.workDao().getById(WORK_K)!!.toDomain()
+        assertEquals(9, held.lastSpineIndex)
+        assertEquals(0.9, held.lastScrollFraction, 0.0)
+        assertEquals(edited.readiumLocator, held.readiumLocator)
+        assertEquals(1, database.workDao().getAllIncludingDeleted().size)
+    }
+
+    @Test
+    fun keptClocklessLinkAndFontNamesAreProtectedWithoutInventingAnEditClock() = runTest {
+        val link = Bookmark(id = SWEPT_SEARCH, title = "Captured link", urlString = "https://example.org/link",
+            dateAdded = Instant.parse(EARLIER))
+        val font = CustomFont(id = TOMBSTONE_ID, name = "Captured font", fileName = "Existing.ttf",
+            dateAdded = Instant.parse(EARLIER))
+        database.bookmarkDao().upsert(link.toEntity())
+        database.customFontDao().upsert(font.toEntity())
+        val captured = backupRepository.captureLibrarySnapshot()
+        val incoming = captured.copy(bookmarks = listOf(link.copy(title = "Archive link", dateAdded = Instant.parse(LATER))))
+        val merge = BackupMergeService.merge(captured, KudosBackupPackage(incoming.toV2Manifest(CLOCK)), now = CLOCK)
+        val editedLink = link.copy(title = "Reader link")
+        val editedFont = font.copy(name = "Reader font")
+        database.bookmarkDao().upsert(editedLink.toEntity())
+        database.customFontDao().upsert(editedFont.toEntity())
+        val summary = backupRepository.applyMergeResult(merge)
+        assertEquals(listOf(editedLink.toEntity()), database.bookmarkDao().getAll())
+        assertEquals(listOf(editedFont.toEntity()), database.customFontDao().getAll())
+        assertEquals(2, summary.concurrentRowsDeferred)
+    }
+
+    @Test
+    fun replaceKeepsAMembershipCreatedOrReorderedSinceCaptureButRemovesAnUntouchedOmission() = runTest {
+        val early = Instant.parse(EARLIER)
+        val works = listOf(WORK_K, PEER_ROW, TOMBSTONE_ID).map {
+            SavedWork(id = it, title = "Work", author = "Author", hasEpub = false, dateAdded = early)
+        }
+        works.forEach { database.workDao().upsert(it.toEntity()) }
+        val queue = ReadingQueue(id = WORK_K, name = "Queue", dateCreated = early)
+        database.readingQueueDao().upsertQueue(queue.toEntity())
+        val membership = ReadingQueueMembership(id = SWEPT_SEARCH, queueID = queue.id, workID = WORK_K,
+            queuedAt = early, lastModifiedAt = early)
+        val untouched = membership.copy(id = TOMBSTONE_ID, workID = TOMBSTONE_ID)
+        database.readingQueueDao().upsertMembership(membership.toEntity())
+        database.readingQueueDao().upsertMembership(untouched.toEntity())
+        val captured = backupRepository.captureLibrarySnapshot()
+        val incoming = captured.copy(readingQueueMemberships = emptyList())
+        val merge = BackupMergeService.merge(captured, KudosBackupPackage(incoming.toV2Manifest(CLOCK)),
+            mode = BackupImportMode.REPLACE_LIBRARY, now = CLOCK)
+        val reordered = membership.copy(sortOrderInQueue = 9, lastModifiedAt = CLOCK)
+        val created = membership.copy(id = PEER_ROW, workID = PEER_ROW, queuedAt = CLOCK, lastModifiedAt = CLOCK)
+        database.readingQueueDao().upsertMembership(reordered.toEntity())
+        database.readingQueueDao().upsertMembership(created.toEntity())
+        backupRepository.applyMergeResult(merge)
+        assertEquals(setOf(reordered.toEntity(), created.toEntity()), database.readingQueueDao().getAllMemberships().toSet())
+        assertNull(database.readingQueueDao().getMembershipById(untouched.id))
+    }
+
+    @Test
+    fun remergeUsesCapturedWorkIdentityWhenTwoArchiveIdsResolveToOneEditedLocalWork() = runTest {
+        val early = Instant.parse(EARLIER)
+        // A work is matched by the AO3 number in its address, not by the `ao3WorkID` field alone.
+        val work = SavedWork(id = WORK_K, title = "Captured", author = "Author", hasEpub = false,
+            sourceUrl = "https://archiveofourown.org/works/42",
+            ao3WorkID = 42, dateAdded = early, lastModifiedAt = early,
+            lastReadDate = early, progressModifiedAt = early, lastSpineIndex = 1)
+        database.workDao().upsert(work.toEntity())
+        val captured = backupRepository.captureLibrarySnapshot()
+        val archiveWork = work.copy(id = PEER_ROW, title = "Archive", lastModifiedAt = Instant.parse(LATER))
+        val manifest = captured.toV2Manifest(CLOCK).copy(works = listOf(
+            archiveWork.toBackupWork(), archiveWork.copy(id = TOMBSTONE_ID).toBackupWork()
+        ))
+        val merge = BackupMergeService.merge(captured, KudosBackupPackage(manifest), now = CLOCK)
+        assertEquals(setOf(WORK_K), merge.workIdRemap.values.toSet())
+        val edited = work.copy(sourceUrl = "https://archiveofourown.org/works/43",
+            ao3WorkID = 43, lastModifiedAt = CLOCK, lastSpineIndex = 9,
+            lastReadDate = CLOCK, progressModifiedAt = CLOCK)
+        database.workDao().upsert(edited.toEntity())
+        backupRepository.applyMergeResult(merge)
+        val stored = database.workDao().getAllIncludingDeleted().single().toDomain()
+        assertEquals(WORK_K, stored.id)
+        assertEquals(43, stored.ao3WorkID)
+        assertEquals(9, stored.lastSpineIndex)
+        assertNull(database.workDao().getById(PEER_ROW))
+        assertNull(database.workDao().getById(TOMBSTONE_ID))
+    }
 
     @Test
     fun replaceLibraryDoesNotSweepExistingSearches() = runTest {

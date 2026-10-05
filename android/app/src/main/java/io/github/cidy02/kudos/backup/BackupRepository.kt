@@ -94,9 +94,9 @@ class BackupRepository(
             TombstoneLocalMigration.runIfNeeded(database, settingsRepository)
             val current = captureLibrarySnapshot(pack.fontFilesByFileName.keys, pack.fontFilesByFileName)
             val merge = mergePackage(current, pack, mode)
-            applyMergeResult(merge)
+            val summary = applyMergeResult(merge)
             restoreOriginals(pack.originalFilesByName, merge.workIdRemap)
-            merge.summary
+            summary
         }
     }
 
@@ -110,9 +110,9 @@ class BackupRepository(
             TombstoneLocalMigration.runIfNeeded(database, settingsRepository)
             val current = captureLibrarySnapshot(pack.fontFilesByFileName.keys, pack.fontFilesByFileName)
             val merge = mergePackage(current, pack, mode, normalizeQueuePreservation)
-            applyMergeResult(merge)
+            val summary = applyMergeResult(merge)
             restoreOriginals(pack.originalFilesByName, merge.workIdRemap)
-            merge.summary
+            summary
         }
     }
 
@@ -228,6 +228,30 @@ class BackupRepository(
         incomingFontFileNames: Set<String> = emptySet(),
         incomingFontFiles: Map<String, ByteArray> = emptyMap()
     ): BackupLibrarySnapshot = withContext(Dispatchers.IO) {
+        val stored = captureStoredRows()
+        val works = stored.works
+        val settings = BackupSettings.fromSettings(settingsRepository.snapshot())
+        // iOS `KudosBackupService.mayReplaceEPUB` protects preserved local files;
+        // a stale false flag must not hide real bytes from that protection.
+        val epubWorkIds = works
+            .map { BackupPaths.normalizeIdForComparison(it.id) }
+            .filter { id ->
+                runCatching { Files.isRegularFile(workFileStore.workEpubPath(id)) }.getOrDefault(false)
+            }
+            .toSet()
+        // Include orphan-but-valid local filenames in the collision set. Restore
+        // must never overwrite bytes merely because their DB row is missing.
+        val fontFiles = fontFileStore.readAllFontFiles(incomingFontFileNames, incomingFontFiles)
+
+        stored.copy(
+            settings = settings,
+            epubWorkIds = epubWorkIds,
+            fontFilesByFileName = fontFiles
+        )
+    }
+
+    /** Database reads only: safe to call inside apply's Room transaction. */
+    private suspend fun captureStoredRows(): BackupLibrarySnapshot {
         // Include soft-deleted works so export carries Recently Deleted state.
         val works = database.workDao().getAllIncludingDeleted().map { it.toDomain() }
         val userTagsByWorkId = works.associate { work ->
@@ -250,41 +274,62 @@ class BackupRepository(
         val queueTagNamesByQueueId = database.readingLogDao().getAllQueueTags()
             .groupBy({ it.queueId }, { tagNamesById[it.tagId] })
             .mapValues { (_, names) -> names.filterNotNull() }
-        val settings = BackupSettings.fromSettings(settingsRepository.snapshot())
-        // iOS `KudosBackupService.mayReplaceEPUB` protects preserved local files;
-        // a stale false flag must not hide real bytes from that protection.
-        val epubWorkIds = works
-            .map { BackupPaths.normalizeIdForComparison(it.id) }
-            .filter { id ->
-                runCatching { Files.isRegularFile(workFileStore.workEpubPath(id)) }.getOrDefault(false)
-            }
-            .toSet()
-        // Include orphan-but-valid local filenames in the collision set. Restore
-        // must never overwrite bytes merely because their DB row is missing.
-        val fontFiles = fontFileStore.readAllFontFiles(incomingFontFileNames, incomingFontFiles)
-
-        BackupLibrarySnapshot(
-            works = works,
-            userTagsByWorkId = userTagsByWorkId,
-            bookmarks = bookmarks,
-            fonts = fonts,
-            collections = collections,
-            savedSearches = savedSearches,
-            settings = settings,
-            epubWorkIds = epubWorkIds,
-            fontFilesByFileName = fontFiles,
-            tombstones = tombstones,
-            readingQueues = readingQueues,
-            readingQueueMemberships = memberships,
-            annotations = annotations,
-            readingSessions = readingSessions,
-            readingFavorites = readingFavorites,
-            fandomReadWatermarks = fandomReadWatermarks,
-            queueTagNamesByQueueId = queueTagNamesByQueueId
+        return BackupLibrarySnapshot(
+            works = works, userTagsByWorkId = userTagsByWorkId, bookmarks = bookmarks,
+            fonts = fonts, collections = collections, savedSearches = savedSearches,
+            tombstones = tombstones, readingQueues = readingQueues,
+            readingQueueMemberships = memberships, annotations = annotations,
+            readingSessions = readingSessions, readingFavorites = readingFavorites,
+            fandomReadWatermarks = fandomReadWatermarks, queueTagNamesByQueueId = queueTagNamesByQueueId
         )
     }
 
-    internal suspend fun applyMergeResult(merge: BackupMergeResult) {
+    internal suspend fun applyMergeResult(merge: BackupMergeResult): BackupRestoreSummary {
+        val applied = database.withTransaction {
+            val refreshed = BackupMergeService.refreshForApply(merge, captureStoredRows())
+            applyStoredMerge(refreshed)
+            refreshed
+        }
+        val snapshot = applied.snapshot
+        val installedWorkIds = snapshot.works.mapTo(mutableSetOf()) { it.id }
+
+        applied.epubFilesToWriteByWorkId.forEach { (workId, bytes) ->
+            if (workId !in installedWorkIds) return@forEach
+            val write = workFileStore.writeWorkEpub(workId, bytes)
+            // The flag follows the file on disk, whatever the write did.
+            val hasFile = workFileStore.workEpubExists(workId)
+            database.withTransaction {
+                database.workDao().getById(workId)?.let { entity ->
+                    database.workDao().upsert(entity.copy(
+                        hasEpub = hasFile,
+                        remoteEpubPending = when {
+                            write is FileWriteResult.Success -> false
+                            !hasFile -> true // Failed installation still owes the promised bytes.
+                            else -> entity.remoteEpubPending
+                        }
+                    ))
+                }
+            }
+            // A write that failed kept the old bytes, under a row that now carries the
+            // incoming clock. Reported as a success, as it was, the next sync uploaded
+            // those old bytes as the newest copy and every other device took them. Failing
+            // here stops that upload; the same EPUB is offered again on the next import,
+            // and an equal clock still lets it in.
+            write.orThrow()
+        }
+
+        applied.fontFilesToWriteByFileName.forEach { (fileName, bytes) ->
+            fontFileStore.writeFont(fileName, bytes).orThrow()
+        }
+
+        if (applied.mode != BackupImportMode.REPLACE_LIBRARY) {
+            settingsRepository.replaceAll(snapshot.settings.toSettings())
+        }
+        return applied.summary
+    }
+
+    /** Caller holds the Room transaction across refresh, checks and writes. */
+    private suspend fun applyStoredMerge(merge: BackupMergeResult) {
         val snapshot = merge.snapshot
 
         if (merge.mode == BackupImportMode.REPLACE_LIBRARY) {
@@ -294,28 +339,6 @@ class BackupRepository(
         // Works first so cross-refs have targets.
         snapshot.works.forEach { work ->
             database.workDao().upsert(work.toEntity())
-        }
-
-        merge.epubFilesToWriteByWorkId.forEach { (workId, bytes) ->
-            val write = workFileStore.writeWorkEpub(workId, bytes)
-            // The flag follows the file on disk, whatever the write did.
-            val hasFile = workFileStore.workEpubExists(workId)
-            database.workDao().getById(workId)?.let { entity ->
-                database.workDao().upsert(entity.copy(
-                    hasEpub = hasFile,
-                    remoteEpubPending = when {
-                        write is FileWriteResult.Success -> false
-                        !hasFile -> true // Failed installation still owes the promised bytes.
-                        else -> entity.remoteEpubPending
-                    }
-                ))
-            }
-            // A write that failed kept the old bytes, under a row that now carries the
-            // incoming clock. Reported as a success, as it was, the next sync uploaded
-            // those old bytes as the newest copy and every other device took them. Failing
-            // here stops that upload; the same EPUB is offered again on the next import,
-            // and an equal clock still lets it in.
-            write.orThrow()
         }
 
         // User tags (merge-add only).
@@ -336,9 +359,6 @@ class BackupRepository(
         snapshot.bookmarks.forEach { database.bookmarkDao().upsert(it.toEntity()) }
 
         snapshot.fonts.forEach { database.customFontDao().upsert(it.toEntity()) }
-        merge.fontFilesToWriteByFileName.forEach { (fileName, bytes) ->
-            fontFileStore.writeFont(fileName, bytes).orThrow()
-        }
 
         snapshot.collections.forEach { collection ->
             database.collectionDao().upsert(collection.toEntity())
@@ -429,9 +449,11 @@ class BackupRepository(
             val replacedQueueIds = snapshot.readingQueues
                 .filter { it.kindRaw != ReadingQueueKind.SAVED_FOR_LATER }
                 .mapTo(HashSet()) { BackupPaths.normalizeIdForComparison(it.id) }
+            val capturedMemberships = merge.capturedSnapshot.readingQueueMemberships.associateBy { it.id }
             database.readingQueueDao().getAllMemberships().forEach { membership ->
                 if (BackupPaths.normalizeIdForComparison(membership.queueID) in replacedQueueIds &&
-                    BackupPaths.normalizeIdForComparison(membership.id) !in keepMemberships
+                    BackupPaths.normalizeIdForComparison(membership.id) !in keepMemberships &&
+                    membership.toDomain() == capturedMemberships[membership.id]
                 ) {
                     database.readingQueueDao().deleteMembershipById(membership.id)
                 }
@@ -461,10 +483,6 @@ class BackupRepository(
         snapshot.readingSessions.forEach { database.readingLogDao().upsertSession(it) }
         snapshot.readingFavorites.forEach { database.readingLogDao().upsertFavorite(it) }
         snapshot.fandomReadWatermarks.forEach { database.readingLogDao().upsertWatermark(it) }
-
-        if (merge.mode != BackupImportMode.REPLACE_LIBRARY) {
-            settingsRepository.replaceAll(snapshot.settings.toSettings())
-        }
     }
 
     /**
@@ -542,6 +560,11 @@ fun BackupRestoreSummary.toUserMessage(): String {
         }
         if (annotationsSuppressed > 0) {
             add("$annotationsSuppressed deleted annotation(s) skipped")
+        }
+        // A row changed while the import ran and merged again needs no telling. One whose backup
+        // value was held back does: a backup file is not read again unless the reader asks.
+        if (concurrentRowsDeferred > 0) {
+            add("$concurrentRowsDeferred item(s) you changed during the import kept your version; import again to take the backup's")
         }
     }
     return if (parts.isEmpty()) {
