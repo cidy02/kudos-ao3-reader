@@ -23,6 +23,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 /** iOS reader AO3 alert words; the existing repository still owns dispatch and rejection. */
 internal fun readerKudosErrorMessage(error: AO3Error): String = when (error) {
@@ -56,6 +58,9 @@ class ReaderViewModel(
 
     private val _kudosWorking = MutableStateFlow(false)
     val kudosWorking: StateFlow<Boolean> = _kudosWorking.asStateFlow()
+
+    // Room reads suspend: serialize editor writes so rapid Colour → Done cannot overwrite either field.
+    private val annotationEditMutex = Mutex()
 
     private var autoFinishedThisSession = false
     private var spineCountForEof = 0
@@ -104,6 +109,9 @@ class ReaderViewModel(
             annotationRepository.observeForWork(workId).collect { annotations ->
                 updateReading { state ->
                     state.copy(
+                        editingAnnotationId = state.editingAnnotationId?.takeIf { id ->
+                            annotations.any { it.id == id }
+                        },
                         bookmarks = annotations.filter {
                             it.kindRaw.equals("bookmark", ignoreCase = true)
                         },
@@ -244,15 +252,36 @@ class ReaderViewModel(
         }
     }
 
-    fun deleteAnnotation(id: String) {
+    /** Page decorations and Contents share the same editor; bookmarks only navigate. */
+    fun openHighlight(id: String) {
+        updateReading { reading ->
+            if (reading.highlights.any { it.id == id }) reading.copy(editingAnnotationId = id)
+            else reading
+        }
+    }
+
+    fun closeNoteEditor() {
+        updateReading { it.copy(editingAnnotationId = null) }
+    }
+
+    fun recolorHighlight(id: String, color: String) {
         viewModelScope.launch {
-            annotationRepository.deleteAnnotation(id)
+            annotationEditMutex.withLock {
+                annotationRepository.addOrRecolorHighlight(id = id, color = color)
+            }
+        }
+    }
+
+    fun deleteAnnotation(id: String) {
+        updateReading { if (it.editingAnnotationId == id) it.copy(editingAnnotationId = null) else it }
+        viewModelScope.launch {
+            annotationEditMutex.withLock { annotationRepository.deleteAnnotation(id) }
         }
     }
 
     fun updateNote(id: String, note: String) {
         viewModelScope.launch {
-            annotationRepository.updateNote(id, note)
+            annotationEditMutex.withLock { annotationRepository.updateNote(id, note) }
         }
     }
 

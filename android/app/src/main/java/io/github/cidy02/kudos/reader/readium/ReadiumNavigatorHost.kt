@@ -53,6 +53,7 @@ fun ReadiumNavigatorHost(
     onExternalLink: (String) -> Unit,
     onHighlightSelection: (() -> Unit) -> Unit,
     onAddNoteSelection: (() -> Unit) -> Unit,
+    onHighlightTap: (String) -> Unit,
     modifier: Modifier = Modifier,
     controller: ReadiumNavigatorController? = null,
     onContentTap: (() -> Unit)? = null,
@@ -65,6 +66,7 @@ fun ReadiumNavigatorHost(
     val currentOnLocatorChanged by rememberUpdatedState(onLocatorChanged)
     val currentOnExternalLink by rememberUpdatedState(onExternalLink)
     val currentOnContentTap by rememberUpdatedState(onContentTap)
+    val currentOnHighlightTap by rememberUpdatedState(onHighlightTap)
     val currentOnHighlightSelection by rememberUpdatedState(onHighlightSelection)
     val currentOnAddNoteSelection by rememberUpdatedState(onAddNoteSelection)
     val currentController by rememberUpdatedState(controller)
@@ -151,10 +153,15 @@ fun ReadiumNavigatorHost(
                 return true
             }
         }
+        val highlightListener = ReaderHighlightDecorationListener { currentOnHighlightTap(it) }
+        navigator.addDecorationListener(
+            ReadiumNavigatorController.DECORATION_GROUP_HIGHLIGHTS, highlightListener
+        )
         navigator.addInputListener(tapListener)
         try {
             navigator.currentLocator.collect { currentOnLocatorChanged(it) }
         } finally {
+            navigator.removeDecorationListener(highlightListener)
             navigator.removeInputListener(tapListener)
             currentController?.attach(null)
         }

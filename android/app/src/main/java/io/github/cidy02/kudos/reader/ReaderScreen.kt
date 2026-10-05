@@ -60,6 +60,7 @@ import androidx.compose.material.icons.filled.ScreenRotation
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
@@ -202,7 +203,6 @@ private fun ReaderReading(
     var showDisplaySheet by remember { mutableStateOf(false) }
     var showSearchSheet by remember { mutableStateOf(false) }
     var annotateDialog by remember { mutableStateOf<AnnotateDialogState?>(null) }
-    var noteEditor by remember { mutableStateOf<ReadingAnnotation?>(null) }
     var showDeleteNoteConfirm by remember { mutableStateOf<ReadingAnnotation?>(null) }
     var isOrientationLocked by remember { mutableStateOf(false) }
     var showTtsControls by remember { mutableStateOf(false) }
@@ -265,18 +265,21 @@ private fun ReaderReading(
         value = opener.open(state.epubPath.toFile())
     }
 
-    DestructiveConfirmation(
-        show = showDeleteNoteConfirm != null,
-        title = "Delete annotation?",
-        text = "This will permanently remove this bookmark or highlight.",
-        confirmBeforeDelete = settings.app.confirmBeforeDelete,
-        onConfirm = {
-            val id = showDeleteNoteConfirm?.id ?: return@DestructiveConfirmation
-            showDeleteNoteConfirm = null
-            viewModel.deleteAnnotation(id)
-        },
-        onDismissRequest = { showDeleteNoteConfirm = null }
-    )
+    CompositionLocalProvider(LocalKudosTokens provides tokens) {
+        DestructiveConfirmation(
+            show = showDeleteNoteConfirm != null,
+            title = "Delete annotation?",
+            text = "This will permanently remove this bookmark or highlight.",
+            confirmBeforeDelete = settings.app.confirmBeforeDelete,
+            onConfirm = {
+                val id = showDeleteNoteConfirm?.id ?: return@DestructiveConfirmation
+                showDeleteNoteConfirm = null
+                viewModel.deleteAnnotation(id)
+            },
+            onDismissRequest = { showDeleteNoteConfirm = null },
+            palette = tokens.scopePalette
+        )
+    }
 
     when (val result = opening) {
         null -> ReaderPageSkeleton(
@@ -368,6 +371,7 @@ private fun ReaderReading(
                         controller = navigatorController,
                         onHighlightSelection = { complete -> annotateSelection(false, complete) },
                         onAddNoteSelection = { complete -> annotateSelection(true, complete) },
+                        onHighlightTap = viewModel::openHighlight,
                         onContentTap = {
                             if (fanMenuOpen) {
                                 fanMenuOpen = false
@@ -470,9 +474,7 @@ private fun ReaderReading(
                             },
                             onFind = { showSearchSheet = true },
                             onComments = onOpenComments,
-                            onSettings = { showDisplaySheet = true },
-                            onHighlightSelection = { annotateSelection(asNote = false) },
-                            onNoteSelection = { annotateSelection(asNote = true) }
+                            onSettings = { showDisplaySheet = true }
                         )
 
                         // Round Actions
@@ -713,51 +715,30 @@ private fun ReaderReading(
                 )
             }
 
-            noteEditor?.let { annotation ->
-                var editNote by remember(annotation.id) { mutableStateOf(annotation.note) }
-                AlertDialog(
-                    onDismissRequest = { noteEditor = null },
-                    title = { Text("Edit note") },
-                    text = {
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            if (annotation.selectedText.isNotBlank()) {
-                                Text(
-                                    annotation.selectedText,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    maxLines = 4,
-                                    overflow = TextOverflow.Ellipsis
-                                )
+            state.highlights.firstOrNull { it.id == state.editingAnnotationId }?.let { annotation ->
+                ModalBottomSheet(
+                    onDismissRequest = viewModel::closeNoteEditor,
+                    sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+                    containerColor = tokens.background,
+                    contentColor = tokens.primaryInk,
+                    dragHandle = { BottomSheetDefaults.DragHandle(color = tokens.secondaryInk) }
+                ) {
+                    CompositionLocalProvider(LocalKudosTokens provides tokens) {
+                        ReaderNoteEditor(
+                            annotation = annotation,
+                            onCancel = viewModel::closeNoteEditor,
+                            onDone = { note ->
+                                viewModel.updateNote(annotation.id, note)
+                                viewModel.closeNoteEditor()
+                            },
+                            onColorChange = { color -> viewModel.recolorHighlight(annotation.id, color) },
+                            onDelete = {
+                                viewModel.closeNoteEditor()
+                                showDeleteNoteConfirm = annotation
                             }
-                            OutlinedTextField(
-                                value = editNote,
-                                onValueChange = { editNote = it },
-                                label = { Text("Note") },
-                                modifier = Modifier.fillMaxWidth(),
-                                minLines = 3
-                            )
-                        }
-                    },
-                    confirmButton = {
-                        TextButton(
-                            onClick = {
-                                viewModel.updateNote(annotation.id, editNote)
-                                noteEditor = null
-                            }
-                        ) { Text("Save") }
-                    },
-                    dismissButton = {
-                        Row {
-                            TextButton(
-                                onClick = {
-                                    val annotationToDelete = annotation
-                                    noteEditor = null
-                                    showDeleteNoteConfirm = annotationToDelete
-                                }
-                            ) { Text("Delete") }
-                            TextButton(onClick = { noteEditor = null }) { Text("Cancel") }
-                        }
+                        )
                     }
-                )
+                }
             }
 
             if (showTocSheet) {
@@ -788,14 +769,10 @@ private fun ReaderReading(
                             if (locator != null) {
                                 navigatorController.go(locator, animated = true)
                             }
-                            if (annotation.kindRaw.equals("note", ignoreCase = true) ||
-                                annotation.note.isNotBlank()
-                            ) {
-                                noteEditor = annotation
-                            }
                             scope.launch {
                                 sheetState.hide()
                                 showTocSheet = false
+                                viewModel.openHighlight(annotation.id)
                             }
                         },
                         onDeleteAnnotation = { annotation ->

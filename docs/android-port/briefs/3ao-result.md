@@ -1,5 +1,8 @@
 # Brief 3ao result: what the reader's menu holds
 
+*Later the same day (briefs 3ap and 3ar): Highlight and Add Note moved to the text selection
+menu and the two selection pills left this menu.*
+
 **Landing note (Claude, 2026-10-05).** Landed as written, with one change: the pills take their
 width from the row of round buttons, as on iOS, and an import with no link has only three of
 them on Android (there is no file sharing yet), which was too narrow for the labels; the pills
