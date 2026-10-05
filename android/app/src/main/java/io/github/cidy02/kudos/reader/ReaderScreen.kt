@@ -115,6 +115,7 @@ import io.github.cidy02.kudos.reader.settings.ReaderColorTheme
 import io.github.cidy02.kudos.reader.settings.ReaderPreferences
 import io.github.cidy02.kudos.reader.settings.ReaderSettingsMapper
 import io.github.cidy02.kudos.reader.settings.backgroundColor
+import io.github.cidy02.kudos.reader.settings.ReaderSpeechPreferences
 import io.github.cidy02.kudos.reader.speech.ReaderSpeechController
 import io.github.cidy02.kudos.reader.speech.SpeechStatus
 import io.github.cidy02.kudos.ui.components.DestructiveConfirmation
@@ -1126,6 +1127,11 @@ private fun ReaderDisplaySheet(
                         .padding(horizontal = 13.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
+                    FilterChip(
+                        selected = preferences.speechVoiceIdentifier == null,
+                        onClick = { onSpeechVoiceChange(null) },
+                        label = { Text("Automatic (best available)", lineHeight = 20.sp) }
+                    )
                     availableVoices.forEach { voice ->
                         FilterChip(
                             selected = preferences.speechVoiceIdentifier == voice.id,
@@ -1139,8 +1145,8 @@ private fun ReaderDisplaySheet(
             SubjectSliderRow(
                 label = "Speed",
                 value = preferences.speechRate,
-                valueRange = 0.5f..2.0f,
-                steps = 0,
+                valueRange = ReaderSpeechPreferences.RATE_RANGE,
+                steps = ReaderSpeechPreferences.RATE_STEPS,
                 formatValue = { "%.1f×".format(it) },
                 onValueChangeFinished = onSpeechRateChange
             )

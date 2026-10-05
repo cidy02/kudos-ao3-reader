@@ -1,6 +1,7 @@
 package io.github.cidy02.kudos.reader.speech
 
 import kotlinx.coroutines.flow.StateFlow
+import io.github.cidy02.kudos.reader.settings.ReaderPreferences
 
 data class TTSVoice(val id: String, val name: String)
 
@@ -16,4 +17,11 @@ interface TTSService {
     fun setVoice(id: String)
     fun setRate(rate: Float)
     fun setPitch(pitch: Float)
+}
+
+/** Shared application path for the reader and Settings' sample playback. */
+fun TTSService.applySpeechPreferences(preferences: ReaderPreferences) {
+    setRate(preferences.speechRate)
+    setPitch(preferences.speechPitch)
+    setVoice(preferences.speechVoiceIdentifier ?: "0")
 }

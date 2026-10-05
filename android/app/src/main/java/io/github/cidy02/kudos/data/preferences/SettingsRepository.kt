@@ -4,6 +4,7 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.doublePreferencesKey
+import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
@@ -16,6 +17,7 @@ import io.github.cidy02.kudos.core.model.ReaderMode
 import io.github.cidy02.kudos.core.model.ReaderSettings
 import io.github.cidy02.kudos.core.model.ReaderThemeSetting
 import io.github.cidy02.kudos.core.model.SyncSettings
+import io.github.cidy02.kudos.reader.settings.ReaderSpeechPreferences
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -53,6 +55,34 @@ class SettingsRepository(
     private val dataStore: DataStore<Preferences>
 ) {
     val settings: Flow<KudosSettings> = dataStore.data.map(::settingsFromPreferences)
+
+    /** Speech is device-local, outside KudosSettings and the backup settings contract. */
+    val speechPreferences: Flow<ReaderSpeechPreferences> = dataStore.data.map { prefs ->
+        ReaderSpeechPreferences(
+            rate = ReaderSpeechPreferences.clampRate(
+                prefs[Keys.SpeechRate] ?: ReaderSpeechPreferences.DEFAULT_RATE
+            ),
+            voiceIdentifier = prefs[Keys.SpeechVoiceIdentifier]?.takeIf { it.isNotBlank() }
+        )
+    }
+
+    suspend fun updateSpeechRate(rate: Float) {
+        dataStore.edit { it[Keys.SpeechRate] = ReaderSpeechPreferences.clampRate(rate) }
+    }
+
+    suspend fun updateSpeechVoiceIdentifier(id: String?) {
+        dataStore.edit { prefs ->
+            if (id.isNullOrBlank()) prefs.remove(Keys.SpeechVoiceIdentifier)
+            else prefs[Keys.SpeechVoiceIdentifier] = id
+        }
+    }
+
+    suspend fun resetSpeechPreferences() {
+        dataStore.edit {
+            it.remove(Keys.SpeechRate)
+            it.remove(Keys.SpeechVoiceIdentifier)
+        }
+    }
 
     /**
      * First-launch onboarding gate (iOS `@AppStorage("hasCompletedOnboarding")`).
@@ -475,6 +505,8 @@ class SettingsRepository(
     }
 
     private object Keys {
+        val SpeechRate = floatPreferencesKey("readerSpeechRate")
+        val SpeechVoiceIdentifier = stringPreferencesKey("readerSpeechVoiceID")
         val ReaderFontId = stringPreferencesKey("readerFontID")
         val ReaderMode = stringPreferencesKey("readerMode")
         val ReaderTwoPage = booleanPreferencesKey("readerTwoPage")
