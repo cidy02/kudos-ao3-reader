@@ -555,6 +555,7 @@ fun LibraryScreen(
             sort = state.sort,
             userTags = state.userTags,
             collections = state.collections,
+            works = state.collectionMembers.map { it.item.work },
             onFiltersChange = viewModel::updateFilters,
             onSortChange = viewModel::updateSort,
             onApply = { showFilters = false },

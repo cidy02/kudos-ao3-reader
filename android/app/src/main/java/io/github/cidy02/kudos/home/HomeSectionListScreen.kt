@@ -68,6 +68,7 @@ import io.github.cidy02.kudos.library.leadingSwipeActions
 import io.github.cidy02.kudos.library.queuePreviews
 import io.github.cidy02.kudos.library.readingProgressFraction
 import io.github.cidy02.kudos.library.trailingSwipeActions
+import io.github.cidy02.kudos.network.ao3.search.AO3Rating
 import io.github.cidy02.kudos.ui.components.EmptyStateCard
 import io.github.cidy02.kudos.ui.components.KudosRefreshBox
 import io.github.cidy02.kudos.ui.components.DestructiveConfirmation
@@ -82,6 +83,7 @@ import io.github.cidy02.kudos.ui.subject.SubjectWorkCardMetrics
 import io.github.cidy02.kudos.ui.subject.SwipeActionRow
 import io.github.cidy02.kudos.ui.subject.ToolbarCircleButton
 import io.github.cidy02.kudos.ui.subject.WorkLedgerRow
+import io.github.cidy02.kudos.ui.subject.compactCount
 import io.github.cidy02.kudos.ui.subject.defaultWorkSignals
 import io.github.cidy02.kudos.ui.subject.subjectScreenWash
 import io.github.cidy02.kudos.works.DownloadQueue
@@ -526,6 +528,7 @@ fun HomeSectionListScreen(
             sort = sort,
             userTags = snapshot?.userTags.orEmpty(),
             collections = snapshot?.collections.orEmpty(),
+            works = sectionItems.map { it.item.work },
             onFiltersChange = { filters = it },
             onSortChange = { sort = it },
             onApply = { showFilters = false },
@@ -889,10 +892,20 @@ private fun homeFilterSummaryLabels(
     filters.userTagIds.mapTo(this) { tagNames[it] ?: it }
     filters.collectionIds.mapTo(this) { collectionNames[it] ?: it }
     addAll(filters.ratings.sorted())
+    if (filters.rating != AO3Rating.ANY) add(filters.rating.title)
     addAll(filters.warnings.sorted())
     addAll(filters.categories.sorted())
     addAll(filters.fandoms.sorted())
     addAll(filters.relationships.sorted())
     addAll(filters.characters.sorted())
     addAll(filters.freeforms.sorted())
+    filters.excludeTags.sorted().forEach { add("−$it") }
+    if (filters.language.isNotEmpty()) add(filters.language)
+    val lower = filters.wordsFrom.trim()
+    val upper = filters.wordsTo.trim()
+    when {
+        lower.isNotEmpty() && upper.isNotEmpty() -> add("Words $lower–$upper")
+        lower.isNotEmpty() -> add(lower.toIntOrNull()?.let { "${it.compactCount()}+ words" } ?: "Words ≥ $lower")
+        upper.isNotEmpty() -> add("Words ≤ $upper")
+    }
 }

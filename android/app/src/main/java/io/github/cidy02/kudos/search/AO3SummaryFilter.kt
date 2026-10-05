@@ -8,6 +8,24 @@ import io.github.cidy02.kudos.network.ao3.search.AO3SearchFilters
 import io.github.cidy02.kudos.network.ao3.search.AO3Warning
 import io.github.cidy02.kudos.network.ao3.search.AO3WorkSummary
 
+/** Shared with LibraryFilters: exact facet text, lenient rating text, and typed bounds. */
+internal fun matchesFacetText(values: List<String>, value: String): Boolean =
+    values.any { it.equals(value, ignoreCase = true) }
+
+internal fun AO3Warning.matchesWarningText(values: List<String>): Boolean =
+    matchesFacetText(values, title) || (this == AO3Warning.UNDERAGE && matchesFacetText(values, "Underage"))
+
+internal fun AO3Rating.matchesRatingText(text: String): Boolean = when (this) {
+    AO3Rating.ANY -> true
+    AO3Rating.GENERAL -> text.contains("general", ignoreCase = true)
+    AO3Rating.TEEN -> text.contains("teen", ignoreCase = true)
+    AO3Rating.MATURE -> text.contains("mature", ignoreCase = true)
+    AO3Rating.EXPLICIT -> text.contains("explicit", ignoreCase = true)
+    AO3Rating.NOT_RATED -> text.contains("not rated", ignoreCase = true)
+}
+
+internal fun filterWordBound(text: String): Long? = text.filter(Char::isDigit).toLongOrNull()
+
 /** iOS AO3SummaryFilter: refine the loaded page without searching or changing AO3's order. */
 internal fun AO3SearchFilters.matchesSummary(work: AO3WorkSummary): Boolean {
     fun contains(value: String, tags: List<String>) = tags.any { it.contains(value, ignoreCase = true) }
@@ -21,13 +39,12 @@ internal fun AO3SearchFilters.matchesSummary(work: AO3WorkSummary): Boolean {
         .flatMap { AO3SearchFilters.commaSeparatedValues(it) }
     if (excluded.any { contains(it, everyTag) }) return false
 
-    if (work.rating.contains("not rated", ignoreCase = true)) {
+    if (AO3Rating.NOT_RATED.matchesRatingText(work.rating)) {
         if (!includeNotRated) return false
     } else if (rating != AO3Rating.ANY) {
         val ladder = listOf(AO3Rating.GENERAL, AO3Rating.TEEN, AO3Rating.MATURE, AO3Rating.EXPLICIT)
         val wanted = ladder.indexOf(rating)
-        val found = listOf("general", "teen", "mature", "explicit")
-            .indexOfFirst { work.rating.contains(it, ignoreCase = true) }
+        val found = ladder.indexOfFirst { it.matchesRatingText(work.rating) }
         if (wanted < 0 || found < 0) return false
         val matches = when (ratingMatch) {
             AO3RatingMatch.EXACT -> found == wanted
@@ -37,12 +54,9 @@ internal fun AO3SearchFilters.matchesSummary(work: AO3WorkSummary): Boolean {
         if (!matches) return false
     }
 
-    fun hasWarning(warning: AO3Warning): Boolean {
-        val names = if (warning == AO3Warning.UNDERAGE) listOf(warning.title, "Underage") else listOf(warning.title)
-        return names.any { name -> work.warnings.any { it.equals(name, ignoreCase = true) } }
-    }
+    fun hasWarning(warning: AO3Warning) = warning.matchesWarningText(work.warnings)
     if (!warnings.all(::hasWarning) || excludedWarnings.any(::hasWarning)) return false
-    fun hasCategory(title: String) = work.categories.any { it.equals(title, ignoreCase = true) }
+    fun hasCategory(title: String) = matchesFacetText(work.categories, title)
     if (!categories.all { hasCategory(it.title) } || excludedCategories.any { hasCategory(it.title) }) return false
     // The subscriptions metadata type carries posted/total, without an isComplete field.
     val complete = work.isComplete ?: work.chapters.split('/').takeIf { it.size == 2 }?.let { parts ->
@@ -55,10 +69,10 @@ internal fun AO3SearchFilters.matchesSummary(work: AO3WorkSummary): Boolean {
         AO3Completion.COMPLETE -> if (complete != true) return false
         AO3Completion.IN_PROGRESS -> if (complete != false) return false
     }
-    if (language != AO3Language.ANY && !work.language.equals(language.title, ignoreCase = true)) return false
+    if (language != AO3Language.ANY && !matchesFacetText(listOf(work.language), language.title)) return false
     work.wordCount?.let { words ->
-        val from = wordsFrom.filter(Char::isDigit).toIntOrNull()
-        val to = wordsTo.filter(Char::isDigit).toIntOrNull()
+        val from = filterWordBound(wordsFrom)
+        val to = filterWordBound(wordsTo)
         if (from != null && words < from) return false
         if (to != null && words > to) return false
     }
