@@ -586,3 +586,9 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   no field for a caret, and with nothing selected either action does nothing. The two pills
   are still in the reader's menu; they go next. Reverse: `addActions` in
   `reader/readium/ReaderSelectionContainer.kt`.
+- **2026-10-05 · The collection moderation screen sends one request per staged item, as iOS
+  does.** The brief said one for all (an old survey note); iOS's code is deliberate about it:
+  each item is its own write, one after another, never in parallel, each through the paced
+  client, and the first refusal stops the rest. AO3's own page sends every item in one request,
+  which would be lighter on AO3; neither app does that. Noted for the owner, nothing changed
+  because of it. (Brief 3as, in progress.)
