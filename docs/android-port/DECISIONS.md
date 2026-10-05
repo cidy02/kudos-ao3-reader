@@ -625,3 +625,8 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   and bounded to one per settled name. Decided by Claude under "iOS and Android behave the
   same"; the owner has not been asked. Reverse: the name check in the form's state holder
   (brief 3at).
+- **2026-10-05 · Sharing a work's file is the reader's only, as on iOS.** Brief 3au asked for
+  the file fallback on the work page too. Codex read iOS and stopped: iOS's work page shares
+  only a link, and offers Rebuild from Original, not a viewer. iOS wins: the reader's Share
+  falls back to the EPUB when a work has no link, the reader's menu gets the Original icon, and
+  the work page is unchanged. Decided by Claude; the owner has not been asked.

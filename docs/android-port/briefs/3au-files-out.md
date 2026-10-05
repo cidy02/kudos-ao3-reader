@@ -1,5 +1,10 @@
 # Brief 3au: sharing a work's file, and opening an imported original
 
+**Corrected 2026-10-05 (Claude), after Codex read iOS:** iOS's work page shares only a link and
+has no way to view an original; only the reader has the file fallback and the Original icon. So
+on Android the work page is left as it is and both additions are the reader's only. Where the
+text below says "the work page's Share" or "offer it on the work page too", iOS's code wins.
+
 Rules (binding): work only in this worktree; don't commit, push, or switch branches; never sign in
 and never contact archiveofourown.org; no stub files; no helper scripts or `.orig` files left
 behind; **don't edit `TASKS.md`**. Don't change the backup format or a Room schema. Your sandbox
