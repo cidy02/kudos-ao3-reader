@@ -1,6 +1,9 @@
 package io.github.cidy02.kudos.network.ao3
 
 import io.github.cidy02.kudos.network.ao3.account.AO3AccountParser
+import io.github.cidy02.kudos.network.ao3.account.AO3CollectionParser
+import io.github.cidy02.kudos.network.ao3.search.AO3SearchParser
+import io.github.cidy02.kudos.network.ao3.series.AO3SeriesUrls
 import io.github.cidy02.kudos.network.ao3.work.AO3DownloadUrlBuilder
 import io.github.cidy02.kudos.network.ao3.work.AO3WorkMetadataParser
 import java.io.File
@@ -16,6 +19,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.jsoup.Jsoup
 
 class DemoNetworkBlockTest {
     @Test
@@ -115,24 +119,9 @@ class DemoNetworkBlockTest {
 
     @Test
     fun subscriptionPageAndItsMetadataLookupsAreAnsweredByBundledDemoFixtures() {
-        val fixtures = FixtureSource { fixture ->
-            val candidates = listOf(
-                File("src/debug/assets/fixtures/$fixture.html"),
-                File("app/src/debug/assets/fixtures/$fixture.html"),
-                File("android/app/src/debug/assets/fixtures/$fixture.html")
-            )
-            candidates.firstOrNull(File::isFile)?.readBytes()
-        }
-        val client = OkHttpClient.Builder()
-            .addInterceptor(DemoNetworkInterceptor(isActive = { true }, fixtures = { fixtures }))
-            .addInterceptor { error("Demo fixture lookup must never reach the network") }
-            .build()
-        fun html(url: String): String = client.newCall(get(url)).execute().use { response ->
-            assertEquals(200, response.code)
-            response.body.string()
-        }
+        val client = bundledDemoClient()
         val page = AO3AccountParser().parseSubscriptionsPage(
-            html("https://archiveofourown.org/users/AO3_Reader/subscriptions?type=works&page=1"), 1
+            html(client, "https://archiveofourown.org/users/AO3_Reader/subscriptions?type=works&page=1"), 1
         )
         assertEquals(listOf(45678901L, 12345L, 999000002L), page.works.map { it.id })
         assertEquals(listOf("A Study in Pink", "Another Fic", "Paper Cranes"), page.works.map { it.title })
@@ -141,7 +130,7 @@ class DemoNetworkBlockTest {
         val metadata = page.works.map { work ->
             val url = urls.workMetadataUrl(work.id)
             assertEquals("true", url.toHttpUrl().queryParameter("view_adult"))
-            AO3WorkMetadataParser().parse(html(url))
+            AO3WorkMetadataParser().parse(html(client, url))
         }
         assertEquals(listOf("5/?", "8/12", "1/1"), metadata.map { it.chapters })
         assertTrue(metadata.all { !it.isEmpty && it.rating.isNotEmpty() })
@@ -151,6 +140,115 @@ class DemoNetworkBlockTest {
         assertEquals("ao3_chapter_navigate", name("https://archiveofourown.org/works/45678901/navigate"))
         assertEquals("ao3_comments_page", name("https://archiveofourown.org/works/999000002/comments"))
     }
+
+    @Test
+    fun demoSeriesPageHasFourOrderedWorksAndKeepsEditRouting() {
+        val client = bundledDemoClient()
+        val url = AO3SeriesUrls.seriesPageUrl("https://archiveofourown.org/series/999", 1)!!
+        val body = html(client, url)
+        val page = AO3SearchParser().parseSearchPage(body, 1)
+        assertEquals(listOf(999000005L, 999000003L, 999000002L, 999000004L), page.works.map { it.id })
+        assertEquals(listOf("Sodium Lights", "Ashfall", "Paper Cranes", "The Long Way Down"), page.works.map { it.title })
+        assertEquals(listOf(1, 2, 3, 4), page.works.map { it.seriesPosition })
+        assertTrue(page.works.all { it.seriesTitle == "My Series" && it.seriesUrl == url })
+        assertEquals(listOf(true, false, true, false), page.works.map { it.isComplete })
+        assertEquals(listOf(false, false, true, false), page.works.map { it.isRestricted })
+        assertEquals(listOf("1/1", "9/?", "1/1", "7/18"), page.works.map { it.chapters })
+        assertEquals(1, page.totalPages)
+        val doc = Jsoup.parse(body)
+        assertFalse(doc.select("dl.series.meta blockquote.userstuff").text().isBlank())
+        assertEquals("190,114", doc.selectFirst("dl.series.meta dd.words")!!.text())
+        assertEquals(190114, page.works.sumOf { it.wordCount ?: 0 })
+        assertEquals("4", doc.selectFirst("dl.series.meta dd.works")!!.text())
+        assertEquals("No", doc.selectFirst("dl.series.meta dd.complete")!!.text())
+        assertEquals("7", doc.selectFirst("dl.series.meta dd.bookmarks")!!.text())
+        assertEquals("ao3_series_edit", name("https://archiveofourown.org/series/999/edit"))
+        assertEquals(body, html(client, "$url/?page=1"))
+    }
+
+    @Test
+    fun winterCollectionTabsAreAnsweredWithBookmarksAndPeople() {
+        val client = bundledDemoClient()
+        val base = "https://archiveofourown.org/collections/winter_exchange"
+        val parser = AO3CollectionParser()
+        val show = parser.parseCollectionShow(html(client, "$base/profile"), "winter_exchange")
+        assertEquals("Winter Exchange 2026", show.collection.title)
+        assertEquals(18, show.collection.bookmarksCount)
+        val search = AO3SearchParser()
+        assertFalse(search.parseSearchPage(html(client, "$base/works?page=1"), 1).works.isEmpty())
+        val bookmarks = search.parseWorksListPage(html(client, "$base/bookmarks?page=1"), 1, "li.bookmark.blurb")
+        assertEquals(show.collection.bookmarksCount, bookmarks.works.size)
+        assertEquals((999001001L..999001018L).toList(), bookmarks.works.map { it.id })
+        assertTrue(bookmarks.works.all { it.summary.isNotBlank() && it.chapters == "1/1" })
+        assertEquals(1, bookmarks.totalPages)
+        val peopleHtml = html(client, "$base/people?page=1")
+        val people = parser.parseCollectionPeoplePage(peopleHtml, 1)
+        assertEquals(listOf("AO3_Reader", "comod", "saltandsilver", "meridian", "tidewrack"),
+            people.people.map { it.identity.displayName })
+        assertEquals(listOf(2, 1, 3, 1, 0), people.people.map { it.workCount })
+        assertTrue(people.people.map { it.identity.displayName }.containsAll(show.collection.maintainerNames))
+        assertEquals(listOf("Owner", "Maintainer", "Owner", "Moderator", "Member"),
+            Jsoup.parse(peopleHtml).select("li.pseud.blurb p.role").map { it.text() })
+        assertEquals(1, people.totalPages)
+        assertEquals("ao3_collection_participants", name("$base/participants"))
+    }
+
+    @Test
+    fun demoAccountBookmarksAndAshfallMetadataHaveTheSameIdentity() {
+        val client = bundledDemoClient()
+        val body = html(client, "https://archiveofourown.org/users/AO3_Reader/bookmarks")
+        // Ashfall joins the page's two older demo bookmarks; their paging and chips stay to be seen.
+        val works = AO3SearchParser().parseWorksListPage(body, 1, "li.bookmark.blurb").works
+        assertEquals(3, works.size)
+        val work = works.single { it.id == 999000003L }
+        assertEquals("Ashfall", work.title)
+        assertEquals(listOf("TempusFugit"), work.authors)
+        assertEquals("Mature", work.rating)
+        assertEquals(41780, work.wordCount)
+        assertEquals("9/?", work.chapters)
+        val metadata = AO3WorkMetadataParser().parse(html(client, AO3DownloadUrlBuilder().workMetadataUrl(work.id)))
+        assertEquals(work.rating, metadata.rating)
+        assertEquals(work.wordCount, metadata.words)
+        assertEquals(work.chapters, metadata.chapters)
+        assertEquals(work.fandoms, metadata.fandoms)
+        assertEquals(work.categories, metadata.categories)
+        assertEquals("ao3_work_edit", name("${work.workUrl}/edit"))
+        assertEquals("ao3_comments_page", name("${work.workUrl}/comments"))
+        assertEquals("ao3_author_bookmarks", name("https://archiveofourown.org/users/OtherReader/bookmarks"))
+    }
+
+    @Test
+    fun subscriptionIndexRetainsIosSeriesAndAuthorLinksWithoutTreatingThemAsWorks() {
+        val body = html(bundledDemoClient(), "https://archiveofourown.org/users/AO3_Reader/subscriptions?type=works")
+        val doc = Jsoup.parse(body)
+        val series = doc.selectFirst("dl.subscription dt a[href=/series/999]")!!
+        assertEquals("My Series", series.text())
+        assertEquals("seriesauthor", series.parent()!!.select("a[rel=author]").text())
+        assertEquals("someuser", doc.selectFirst("dl.subscription dt a[href=/users/someuser]")!!.text())
+        assertEquals(listOf(45678901L, 12345L, 999000002L),
+            AO3AccountParser().parseSubscriptionsPage(body, 1).works.map { it.id })
+    }
+
+    private fun bundledDemoClient(): OkHttpClient {
+        val fixtures = FixtureSource { fixture ->
+            val candidates = listOf(
+                File("src/debug/assets/fixtures/$fixture.html"),
+                File("app/src/debug/assets/fixtures/$fixture.html"),
+                File("android/app/src/debug/assets/fixtures/$fixture.html")
+            )
+            candidates.firstOrNull(File::isFile)?.readBytes()
+        }
+        return OkHttpClient.Builder()
+            .addInterceptor(DemoNetworkInterceptor(isActive = { true }, fixtures = { fixtures }))
+            .addInterceptor { error("Demo fixture lookup must never reach the network") }
+            .build()
+    }
+
+    private fun html(client: OkHttpClient, url: String): String =
+        client.newCall(get(url)).execute().use { response ->
+            assertEquals(200, response.code)
+            response.body.string()
+        }
 
     private fun name(url: String): String? =
         DemoNetworkRoutes.fixtureName(DemoNetworkRoutes.decodedPath(url.toHttpUrl()))

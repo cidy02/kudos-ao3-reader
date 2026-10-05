@@ -5,6 +5,10 @@ import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import io.github.cidy02.kudos.core.model.ReadingQueueKind
+import io.github.cidy02.kudos.core.model.MatureContentMode
+import io.github.cidy02.kudos.core.model.PrivacySettings
+import io.github.cidy02.kudos.account.AccountListType
+import io.github.cidy02.kudos.account.visibleEntries
 import io.github.cidy02.kudos.account.SubscriptionWatermarks
 import io.github.cidy02.kudos.backup.KeyRevocationReason
 import io.github.cidy02.kudos.backup.KeyRevocationService
@@ -19,12 +23,18 @@ import io.github.cidy02.kudos.library.LibraryFilterState
 import io.github.cidy02.kudos.library.LibraryQuery
 import io.github.cidy02.kudos.library.LibraryRepository
 import io.github.cidy02.kudos.library.LibrarySort
+import io.github.cidy02.kudos.library.LibraryPrivacy
+import io.github.cidy02.kudos.library.LibraryPrivacyVisibility
+import io.github.cidy02.kudos.network.ao3.DemoNetworkRoutes
+import io.github.cidy02.kudos.network.ao3.account.AO3AccountParser
+import io.github.cidy02.kudos.network.ao3.search.AO3SearchParser
 import io.github.cidy02.kudos.network.ao3.work.AO3WorkMetadataParser
 import io.github.cidy02.kudos.network.ao3.search.AO3WorkSummary
 import io.github.cidy02.kudos.reader.ReaderSectionBuilder
 import io.github.cidy02.kudos.reader.ReaderSectionKind
 import io.github.cidy02.kudos.reader.storyChapterCount
 import io.github.cidy02.kudos.works.converters.EpubBuilder
+import io.github.cidy02.kudos.works.CanonicalWorkMerge
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Instant
@@ -96,6 +106,80 @@ class DemoLibraryTest {
         context.getSharedPreferences("ao3_subscription_watermarks", Context.MODE_PRIVATE).edit().clear().commit()
         context.getSharedPreferences("kudos_demo_fixtures", Context.MODE_PRIVATE).edit().clear().commit()
         tempDir.toFile().deleteRecursively()
+    }
+
+    @Test
+    fun demoListLinksUpgradeExistingRowsAndKeepReadingState() = runTest {
+        DemoLibrary.seed(database, workRepository, queueRepository, fileStore, clock = { fixedNow })
+        val rows = database.workDao().getAll()
+        val sodium = workRepository.getWork(rows.single { it.title == "Sodium Lights" }.id)!!
+        val ashfall = workRepository.getWork(rows.single { it.title == "Ashfall" }.id)!!
+        assertEquals("My Series", sodium.seriesTitle)
+        assertEquals(1, sodium.seriesPosition)
+        assertEquals(999, sodium.ao3SeriesID)
+        assertEquals("https://archiveofourown.org/series/999", sodium.seriesUrl)
+        val fixture = DemoNetworkRoutes.fixtureName("/series/999")!!
+        val html = context.assets.open("fixtures/$fixture.html").bufferedReader().use { it.readText() }
+        val first = AO3SearchParser().parseSearchPage(html, 1).works.first()
+        assertEquals(sodium.title, first.title)
+        assertEquals(sodium.seriesUrl, first.seriesUrl)
+        assertEquals(sodium.seriesPosition, first.seriesPosition)
+        assertEquals("https://archiveofourown.org/works/999000003", ashfall.sourceUrl)
+        assertEquals(999000003, ashfall.ao3WorkID)
+
+        // Emulate 3aj's installed demo, with later reading changes that must survive the upgrade.
+        val oldSodium = workRepository.upsert(sodium.copy(
+            seriesTitle = "", seriesPosition = 0, seriesUrl = "", ao3SeriesID = null,
+            lastScrollFraction = 0.87, legacyReaderProgress = 0.87, isFavorite = false
+        ))
+        val oldAshfall = workRepository.upsert(ashfall.copy(
+            sourceUrl = "", ao3WorkID = null, isFinished = true, knownChapterCount = 9
+        ))
+        DemoLibrary.seed(database, workRepository, queueRepository, fileStore, clock = { fixedNow })
+        val linkedSodium = workRepository.getWork(sodium.id)!!
+        val linkedAshfall = workRepository.getWork(ashfall.id)!!
+        assertEquals(oldSodium.copy(
+            seriesTitle = sodium.seriesTitle, seriesPosition = sodium.seriesPosition,
+            seriesUrl = sodium.seriesUrl, ao3SeriesID = sodium.ao3SeriesID,
+            searchText = sodium.searchText // The repository rebuilds its derived series search text.
+        ), linkedSodium)
+        assertEquals(oldAshfall.copy(
+            sourceUrl = ashfall.sourceUrl, ao3WorkID = ashfall.ao3WorkID, hasAo3WorkId = true
+        ), linkedAshfall)
+        DemoLibrary.seed(database, workRepository, queueRepository, fileStore, clock = { fixedNow })
+        assertEquals(linkedSodium, workRepository.getWork(sodium.id))
+        assertEquals(linkedAshfall, workRepository.getWork(ashfall.id))
+        assertEquals(16, database.workDao().getAllIncludingDeleted().size)
+        assertEquals(4, queueRepository.listQueues().size)
+    }
+
+    @Test
+    fun demoBookmarkPairsWithTheMatureLibraryWorkAndBlursUntilRevealed() = runTest {
+        DemoLibrary.seed(database, workRepository, queueRepository, fileStore, clock = { fixedNow })
+        val local = database.workDao().getAll().map { workRepository.getWork(it.id)!! }
+        val path = "/users/AO3_Reader/bookmarks"
+        val fixture = DemoNetworkRoutes.fixtureName(path)!!
+        val html = context.assets.open("fixtures/$fixture.html").bufferedReader().use { it.readText() }
+        val page = AO3AccountParser().parseAccountList(html, 1, AccountListType.Bookmarks)
+        val paired = CanonicalWorkMerge.remoteLed(page.works, local).single { it.local != null }
+        val work = paired.local!!
+        assertEquals("Ashfall", work.title)
+        assertEquals("Mature", work.rating)
+        assertEquals(999000003L, paired.remote.id)
+        assertEquals(work.chapters, paired.remote.chapters)
+        assertEquals(work.wordCount, paired.remote.wordCount)
+        assertTrue(work.hasEpub && work.isSaved && work.hasAo3WorkId)
+        assertTrue(fileStore.workEpubExists(work.id))
+        assertEquals(7, work.knownChapterCount)
+        assertEquals(0.63, work.lastScrollFraction, 0.0)
+        val privacy = PrivacySettings(hideMatureContent = true, matureContentMode = MatureContentMode.Obscure)
+        val visible = visibleEntries(listOf(paired), privacy, PrivacyRevealState()).single()
+        assertEquals(work.id, visible.local!!.id)
+        assertEquals(LibraryPrivacyVisibility.Obscured, LibraryPrivacy.visibility(work, privacy))
+        assertEquals(LibraryPrivacyVisibility.Visible, LibraryPrivacy.visibility(
+            work, privacy, PrivacyRevealState(revealedIds = setOf(work.id))
+        ))
+        assertTrue(page.bookmarkDetails.any { it.id == 503L })
     }
 
     @Test
