@@ -575,7 +575,12 @@ fun AppNavHost(
             AO3NativeLoginScreen(
                 authRepository = container.authRepository,
                 onLoginComplete = { navController.popBackStack(Routes.Account, inclusive = false) },
-                onCancel = { navController.popBackStack() }
+                onCancel = { navController.popBackStack() },
+                onOpenAO3 = { url ->
+                    navController.popBackStack()
+                    navController.navigateShellRoot(Routes.Browse)
+                    navController.navigate(Routes.webFallback(url))
+                }
             )
         }
         sharedComposable(Routes.AO3Collections) {
@@ -965,7 +970,12 @@ fun AppNavHost(
             AO3NativeLoginScreen(
                 authRepository = container.authRepository,
                 onLoginComplete = { navController.popBackStack(Routes.Account, inclusive = false) },
-                onCancel = { navController.popBackStack() }
+                onCancel = { navController.popBackStack() },
+                onOpenAO3 = { url ->
+                    navController.popBackStack()
+                    navController.navigateShellRoot(Routes.Browse)
+                    navController.navigate(Routes.webFallback(url))
+                }
             )
         }
     }

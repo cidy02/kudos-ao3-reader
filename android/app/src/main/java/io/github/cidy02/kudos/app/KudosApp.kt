@@ -11,6 +11,12 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.material3.MaterialTheme
+import io.github.cidy02.kudos.onboarding.FirstRunState
+import io.github.cidy02.kudos.onboarding.firstRunDemoScreen
+import io.github.cidy02.kudos.onboarding.FirstRunDemoDestination
+import io.github.cidy02.kudos.support.ChangelogEntry
+import io.github.cidy02.kudos.support.WhatsNewSheet
+import io.github.cidy02.kudos.network.ao3.DemoNetwork
 import io.github.cidy02.kudos.BuildConfig
 import io.github.cidy02.kudos.core.model.AppThemeSetting
 import io.github.cidy02.kudos.ui.subject.DebugDestination
@@ -92,7 +98,8 @@ fun KudosApp(
     container: KudosAppContainer,
     sessionTheme: KudosThemeMode? = null,
     skipOnboarding: Boolean = false,
-    debugRoute: String? = null
+    debugRoute: String? = null,
+    debugRouteRequest: Int = 0
 ) {
     // The catalog has to open before onboarding, or the adb extra never lands
     // on a screen. Release builds compile a stub that always returns false.
@@ -107,20 +114,14 @@ fun KudosApp(
             settings.privacy.requireBiometricToReveal
     }
     // null until DataStore emits — avoids flashing Welcome at returning users.
-    val hasCompletedOnboarding by remember(container.settingsRepository) {
-        container.settingsRepository.hasCompletedOnboarding.map<Boolean, Boolean?> { completed -> completed }
+    val firstRunState by remember(container.settingsRepository) {
+        container.settingsRepository.firstRunState.map<FirstRunState, FirstRunState?> { it }
     }.collectAsState(initial = null)
-
-    val hasConfiguredSyncFolder by remember(container.settingsRepository) {
-        container.settingsRepository.hasConfiguredSyncFolder
-    }.collectAsState(initial = false)
-
-    val hasPermanentlyDismissedSyncFolderOnboarding by remember(container.settingsRepository) {
-        container.settingsRepository.hasPermanentlyDismissedSyncFolderOnboarding
-    }.collectAsState(initial = false)
-
-    val effectiveCompletedOnboarding = if (skipOnboarding) true else hasCompletedOnboarding
-    val effectiveDismissedSyncFolder = if (skipOnboarding) true else hasPermanentlyDismissedSyncFolderOnboarding
+    val effectiveCompletedOnboarding = if (skipOnboarding) true else firstRunState?.welcomeCompleted
+    val preview = firstRunDemoScreen(
+        debugRoute, BuildConfig.DEBUG, DemoNetwork.isActive
+    )
+    var previewClosed by remember(debugRoute, debugRouteRequest) { androidx.compose.runtime.mutableStateOf(false) }
 
     val persistedThemeMode = settings.app.appTheme.toThemeMode()
     var sessionThemeState by remember(sessionTheme) { androidx.compose.runtime.mutableStateOf(sessionTheme) }
@@ -130,6 +131,31 @@ fun KudosApp(
     // Survives recomposition but not process death, on purpose: "Not Now" means
     // "not this launch", while the checkbox means "never again" (persisted).
     var syncOnboardingDismissedThisSession by remember { androidx.compose.runtime.mutableStateOf(false) }
+
+    // Keep an offered setup mounted while connect() publishes the folder URI,
+    // until its initial merge/write finishes (or reports an error).
+    var offeredSyncThisLaunch by remember { androidx.compose.runtime.mutableStateOf<Boolean?>(null) }
+    androidx.compose.runtime.LaunchedEffect(firstRunState, skipOnboarding) {
+        val state = firstRunState ?: return@LaunchedEffect
+        if (!skipOnboarding && state.welcomeCompleted && offeredSyncThisLaunch == null) {
+            offeredSyncThisLaunch = state.showsSync(false)
+        }
+    }
+
+    var checkedChangelogThisLaunch by remember { androidx.compose.runtime.mutableStateOf(false) }
+    var whatsNewEntries by remember {
+        androidx.compose.runtime.mutableStateOf<List<ChangelogEntry>>(emptyList())
+    }
+    androidx.compose.runtime.LaunchedEffect(firstRunState, skipOnboarding, preview) {
+        val state = firstRunState ?: return@LaunchedEffect
+        if (checkedChangelogThisLaunch || skipOnboarding || preview != null) return@LaunchedEffect
+        checkedChangelogThisLaunch = true
+        if (state.welcomeCompleted) {
+            scope.launch {
+                whatsNewEntries = container.settingsRepository.unseenChangelogEntries()
+            }
+        }
+    }
 
     // "Open with Kudos" / "Share to Kudos": MainActivity queues the incoming
     // URIs, we import them and report the outcome. Held until onboarding is
@@ -159,6 +185,10 @@ fun KudosApp(
     }
 
     KudosTheme(themeMode = themeMode, accentColorHex = settings.app.accentColorHex) {
+        if (preview != null && !previewClosed) {
+            FirstRunDemoDestination(preview) { previewClosed = true }
+            return@KudosTheme
+        }
         if (pendingImports.isNotEmpty()) {
             io.github.cidy02.kudos.works.DownloadDateImportConfirmation(
                 imports = pendingImports,
@@ -225,10 +255,8 @@ fun KudosApp(
                 }
             )
             true -> {
-                if (!hasConfiguredSyncFolder &&
-                    !effectiveDismissedSyncFolder &&
-                    !syncOnboardingDismissedThisSession
-                ) {
+                if (!skipOnboarding && !syncOnboardingDismissedThisSession &&
+                    (offeredSyncThisLaunch ?: firstRunState?.showsSync(false)) == true) {
                     SyncFolderOnboardingScreen(
                         container = container,
                         onFinished = { permanentlyDismissed ->
@@ -253,21 +281,33 @@ fun KudosApp(
                         io.github.cidy02.kudos.ui.components.LocalShowsZeroStats provides
                             settings.app.showsZeroStats
                     ) {
-                    MainScaffold(
-                        container = container,
-                        themeMode = themeMode,
-                        startRoute = debugRoute?.takeIf { it.startsWith(DebugRoutes.NAV_PREFIX) }
-                            ?.removePrefix(DebugRoutes.NAV_PREFIX),
-                        onCycleTheme = {
-                            if (sessionThemeState != null) {
-                                sessionThemeState = sessionThemeState?.next()
-                            } else {
-                                scope.launch {
-                                    container.settingsRepository.updateAppTheme(themeMode.next().toAppTheme())
+                        if (whatsNewEntries.isNotEmpty()) {
+                            WhatsNewSheet(
+                                entries = whatsNewEntries,
+                                onDone = {
+                                    scope.launch {
+                                        container.settingsRepository.markChangelogSeen()
+                                        whatsNewEntries = emptyList()
+                                    }
+                                },
+                                onDismiss = { whatsNewEntries = emptyList() }
+                            )
+                        }
+                        MainScaffold(
+                            container = container,
+                            themeMode = themeMode,
+                            startRoute = debugRoute?.takeIf { BuildConfig.DEBUG && preview == null && it.startsWith(DebugRoutes.NAV_PREFIX) }
+                                ?.removePrefix(DebugRoutes.NAV_PREFIX),
+                            onCycleTheme = {
+                                if (sessionThemeState != null) {
+                                    sessionThemeState = sessionThemeState?.next()
+                                } else {
+                                    scope.launch {
+                                        container.settingsRepository.updateAppTheme(themeMode.next().toAppTheme())
+                                    }
                                 }
                             }
-                        }
-                    )
+                        )
                     }
                 }
             }
