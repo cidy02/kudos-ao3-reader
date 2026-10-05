@@ -110,7 +110,6 @@ import io.github.cidy02.kudos.reader.settings.ReaderSettingsMapper
 import io.github.cidy02.kudos.reader.settings.backgroundColor
 import io.github.cidy02.kudos.reader.settings.ReaderSpeechPreferences
 import io.github.cidy02.kudos.reader.speech.ReaderSpeechController
-import io.github.cidy02.kudos.works.shareWork
 import io.github.cidy02.kudos.reader.speech.SpeechStatus
 import io.github.cidy02.kudos.ui.components.DestructiveConfirmation
 import io.github.cidy02.kudos.ui.components.ReaderPageSkeleton
@@ -179,6 +178,15 @@ private fun ReaderReading(
     settings: io.github.cidy02.kudos.core.model.KudosSettings
 ) {
     val context = LocalContext.current
+    val workActions = remember(context) { ReaderWorkActions(context) }
+    // Keyed on what decides the answer, not on the whole work: its reading position changes
+    // with every page, and both answers look at the disk.
+    val canShare = remember(state.work.id, state.work.isDeleted, state.work.hasEpub, readerShareUrl(state.work)) {
+        workActions.shareIntent(state.work) != null
+    }
+    val hasOriginal = remember(state.work.id, state.work.isDeleted) {
+        workActions.originalIntent(state.work) != null
+    }
     val haptics = LocalHapticFeedback.current
     val opener = remember { ReadiumPublicationOpener(context) }
     val linkHandler = remember { ReaderLinkHandler() }
@@ -479,14 +487,12 @@ private fun ReaderReading(
 
                         // Round Actions
                         val roundActions = buildList {
-                            // Reuse Work Detail's share entry point for links. Android has
-                            // no existing EPUB-sharing entry point for linkless imports.
-                            readerShareUrl(state.work)?.let { shareUrl ->
+                            if (canShare) {
                                 add(ReaderFanRoundAction(
                                     id = "share",
                                     icon = Icons.Filled.Share,
                                     accessibilityLabel = "Share",
-                                    action = { shareWork(context, state.work.title, shareUrl) }
+                                    action = { viewModel.shareWork(context) }
                                 ))
                             }
                             readerKudosAction(
@@ -495,6 +501,9 @@ private fun ReaderReading(
                                 working = kudosWorking,
                                 onKudos = viewModel::giveKudos
                             )?.let { add(it) }
+
+                            readerOriginalAction(hasOriginal) { viewModel.openOriginal(context) }
+                                ?.let { add(it) }
 
                             // Read Aloud
                             val speechActive = speechStatus == SpeechStatus.PLAYING || speechStatus == SpeechStatus.PAUSED

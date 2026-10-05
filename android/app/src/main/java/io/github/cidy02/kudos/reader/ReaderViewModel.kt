@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.reader
 
+import android.content.Context
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.map
 import androidx.lifecycle.ViewModel
@@ -312,6 +313,20 @@ class ReaderViewModel(
 
     fun clearWriteMessage() {
         _writeMessage.value = null
+    }
+
+    fun shareWork(context: Context) {
+        viewModelScope.launch {
+            val work = repository.currentWork(workId) ?: return@launch
+            if (!work.isDeleted) _writeMessage.value = ReaderWorkActions(context).share(work)
+        }
+    }
+
+    fun openOriginal(context: Context) {
+        viewModelScope.launch {
+            val work = repository.currentWork(workId) ?: return@launch
+            if (!work.isDeleted) _writeMessage.value = ReaderWorkActions(context).openOriginal(work)
+        }
     }
 
     fun setFontSizePercent(percent: Int) {
