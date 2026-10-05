@@ -10,6 +10,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -54,5 +55,42 @@ class PushedShellChromeTest {
             assertNull(chrome.customTitle)
             assertFalse(chrome.mounted)
         }
+    }
+
+    /** A back gesture that is cancelled composes the screen underneath for a moment, then drops it. */
+    @Test
+    fun theNewestScreenHoldsTheRowAndHandsItBackWhenItLeaves() {
+        val chrome = PushedShellChrome()
+        var oldTitle by mutableStateOf("Old")
+        var showOld by mutableStateOf(true)
+        var showNew by mutableStateOf(false)
+        compose.setContent {
+            CompositionLocalProvider(LocalPushedShellChrome provides chrome) {
+                if (showOld) ProvidePushedShellChrome(customTitle = oldTitle)
+                if (showNew) ProvidePushedShellChrome(customTitle = "New", trailingContent = {})
+            }
+        }
+        showNew = true
+        compose.waitForIdle()
+
+        // The older screen updates itself while the newer one is up: it must not take the row.
+        oldTitle = "Old, loaded"
+        compose.waitForIdle()
+        compose.runOnIdle {
+            assertEquals("New", chrome.customTitle)
+            assertNotNull(chrome.trailingContent)
+        }
+
+        showNew = false
+        compose.waitForIdle()
+        compose.runOnIdle {
+            assertEquals("Old, loaded", chrome.customTitle)
+            assertNull(chrome.trailingContent)
+            assertTrue(chrome.mounted)
+        }
+
+        showOld = false
+        compose.waitForIdle()
+        compose.runOnIdle { assertFalse(chrome.mounted) }
     }
 }
