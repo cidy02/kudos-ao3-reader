@@ -327,6 +327,28 @@ private fun ReaderReading(
                 viewModel.setSpineCount(publication.readingOrder.size)
             }
 
+            fun annotateSelection(asNote: Boolean, onComplete: () -> Unit = {}) {
+                scope.launch {
+                    try {
+                        val selection = navigatorController.currentSelection() ?: return@launch
+                        val locator = selection.locator
+                        annotateDialog = AnnotateDialogState(
+                            locatorJson = locator.toJSON().toString(),
+                            selectedText = locator.text.highlight.orEmpty(),
+                            progression = locator.locations.totalProgression
+                                ?: locator.locations.progression ?: 0.0,
+                            spineIndex = state.liveProgress?.spineIndex ?: 0,
+                            asNote = asNote
+                        )
+                        navigatorController.clearSelection()
+                    } finally {
+                        // Finishing the native mode earlier can erase the selected range
+                        // before Readium's JavaScript selection read returns.
+                        onComplete()
+                    }
+                }
+            }
+
             CompositionLocalProvider(LocalKudosTokens provides tokens) {
                 Box(
                     modifier = Modifier
@@ -344,6 +366,8 @@ private fun ReaderReading(
                         initialLocator = initialLocator,
                         preferences = epubPreferences,
                         controller = navigatorController,
+                        onHighlightSelection = { complete -> annotateSelection(false, complete) },
+                        onAddNoteSelection = { complete -> annotateSelection(true, complete) },
                         onContentTap = {
                             if (fanMenuOpen) {
                                 fanMenuOpen = false
@@ -434,22 +458,6 @@ private fun ReaderReading(
                     ) {
                         val ao3Id = state.endOfWork.workId
                         val isBookmarked = readerIsBookmarked(state.bookmarks, state.liveProgress)
-
-                        fun annotateSelection(asNote: Boolean) {
-                            scope.launch {
-                                val selection = navigatorController.currentSelection() ?: return@launch
-                                val locator = selection.locator
-                                annotateDialog = AnnotateDialogState(
-                                    locatorJson = locator.toJSON().toString(),
-                                    selectedText = locator.text.highlight.orEmpty(),
-                                    progression = locator.locations.totalProgression
-                                        ?: locator.locations.progression ?: 0.0,
-                                    spineIndex = state.liveProgress?.spineIndex ?: 0,
-                                    asNote = asNote
-                                )
-                                navigatorController.clearSelection()
-                            }
-                        }
 
                         val pills = readerFanPills(
                             percent = state.liveProgress?.totalProgression?.let { (it * 100).roundToInt() },
