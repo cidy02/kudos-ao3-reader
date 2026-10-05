@@ -16,6 +16,10 @@ import okhttp3.Response
 import okhttp3.ResponseBody.Companion.toResponseBody
 import okio.Buffer
 import org.jsoup.Jsoup
+import java.time.Clock
+import java.time.LocalDate
+import java.time.format.TextStyle
+import java.util.Locale
 
 /**
  * Local stand-in for iOS `DemoNetworkBlock`. While the debug demo extra is on,
@@ -33,7 +37,7 @@ internal fun interface FixtureSource {
 
 internal object DemoNetwork {
     /** Read-only browser fallback also stays local; unknown pages/subresources get a terminal 404. */
-    fun webFixture(url: HttpUrl, source: FixtureSource = fixtures): ByteArray? {
+    fun webFixture(url: HttpUrl, source: FixtureSource = fixtures, clock: Clock? = null): ByteArray? {
         if (!DemoNetworkRoutes.isAo3Host(url.host)) return null
         val path = DemoNetworkRoutes.decodedPath(url).trimEnd('/')
         val name = when (path) {
@@ -41,7 +45,8 @@ internal object DemoNetwork {
             "/collections/winter_exchange" -> "ao3_demo_moderation_show"
             else -> DemoNetworkRoutes.fixtureName(url)
         }
-        return name?.let { source.read(it) }
+        val bytes = name?.let { source.read(it) }
+        return bytes?.let { if (DemoNetworkRoutes.isDraftsPath(path)) demoDraftsPage(it, clock) else it }
     }
 
     const val EXTRA = "kudosDemoLibrary"
@@ -149,6 +154,7 @@ internal object DemoNetworkRoutes {
         "^/media/?$" to "ao3_media",
         "^/tags/[^/]+/works" to "ao3_tag_works",
         "^/works/search" to "ao3_tag_works",
+        "^/users/[^/]+/works/drafts/?$" to "ao3_demo_drafts_1",
         "^/users/[^/]+/(pseuds/[^/]+/)?works" to "ao3_author_works",
         "^/users/[^/]+/(pseuds/[^/]+/)?gifts" to "ao3_author_works",
         "^/users/[^/]+/(pseuds/[^/]+/)?series" to "ao3_author_series",
@@ -172,6 +178,7 @@ internal object DemoNetworkRoutes {
     /** Subscriptions share a path, so their type query selects the fixture. */
     fun fixtureName(url: HttpUrl): String? {
         val path = decodedPath(url)
+        if (isDraftsPath(path)) return if (url.queryParameter("page") == "2") "ao3_demo_drafts_2" else "ao3_demo_drafts_1"
         if (Regex("^/users/[^/]+/subscriptions/?$").matches(path)) {
             return when (url.queryParameter("type")) {
                 "series" -> "ao3_demo_subscriptions_series"
@@ -193,11 +200,29 @@ internal object DemoNetworkRoutes {
         val lower = host.lowercase()
         return lower == AO3Constants.WORKS_HOST || lower.endsWith(".${AO3Constants.WORKS_HOST}")
     }
+
+    fun isDraftsPath(path: String): Boolean = Regex("^/users/[^/]+/works/drafts/?$").matches(path)
+}
+
+/** Only the drafts fixtures are rebased to today. Tests pin the same clock used by the chips. */
+internal fun demoDraftsPage(bytes: ByteArray, clock: Clock? = null): ByteArray {
+    val document = Jsoup.parse(bytes.decodeToString())
+    val today = if (clock == null) LocalDate.now() else LocalDate.now(clock)
+    for (notice in document.select("p.caution.notice[data-demo-days-left]")) {
+        val offset = notice.attr("data-demo-days-left").toLongOrNull() ?: continue
+        val date = today.plusDays(offset)
+        notice.selectFirst("span.date")?.text(date.dayOfMonth.toString())
+        notice.selectFirst("abbr.month")?.attr("title", date.month.getDisplayName(TextStyle.FULL, Locale.ENGLISH))
+            ?.text(date.month.getDisplayName(TextStyle.SHORT, Locale.ENGLISH))
+        notice.selectFirst("span.year")?.text(date.year.toString())
+    }
+    return document.outerHtml().encodeToByteArray()
 }
 
 internal class DemoNetworkInterceptor(
     private val isActive: () -> Boolean = { DemoNetwork.isActive },
-    private val fixtures: () -> FixtureSource = { DemoNetwork.fixtures }
+    private val fixtures: () -> FixtureSource = { DemoNetwork.fixtures },
+    private val clock: Clock? = null
 ) : Interceptor {
     private val removedSubscriptions = ConcurrentHashMap.newKeySet<String>()
     private val collectionItems = DemoCollectionItems()
@@ -254,6 +279,9 @@ internal class DemoNetworkInterceptor(
         val matchTarget = if (url.queryParameter("show_comments") == "true") "$path/comments" else path
         val name = if (matchTarget == path) DemoNetworkRoutes.fixtureName(url) else DemoNetworkRoutes.fixtureName(matchTarget)
         var bytes = name?.let { fixtures().read(it) }
+        if (bytes != null && chain.request().method == "GET" && DemoNetworkRoutes.isDraftsPath(path)) {
+            bytes = demoDraftsPage(bytes, clock)
+        }
         if (bytes != null && chain.request().method == "GET" &&
             Regex("^/users/[^/]+/subscriptions/?$").matches(path)
         ) {
