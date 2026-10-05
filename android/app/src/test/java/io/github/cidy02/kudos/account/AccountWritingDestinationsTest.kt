@@ -8,7 +8,7 @@ import org.junit.Test
 
 /**
  * Unit-testable destinations for Account → Writing tabs that are not plain
- * [AccountListType] loads (Series is author-profile series; Drafts is web).
+ * [AccountListType] loads (Series is author-profile series; Drafts has its own native list).
  */
 class AccountWritingDestinationsTest {
 
@@ -35,7 +35,7 @@ class AccountWritingDestinationsTest {
     @Test
     fun writingSeriesAndDraftsHaveNoAccountListType() {
         // Signed-out and these kinds share the same gate: no list-type load path.
-        // Series uses author series parser; Drafts uses [userDraftsUrl] + web fallback.
+        // Series uses author series parser; Drafts uses WritingDraftsRepository.
         assertNull(AccountWritingKind.Series.toAccountListType())
         assertNull(AccountWritingKind.Drafts.toAccountListType())
         assertEquals(AccountListType.MyWorks, AccountWritingKind.Works.toAccountListType())

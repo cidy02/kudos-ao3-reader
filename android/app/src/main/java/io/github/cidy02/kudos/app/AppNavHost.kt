@@ -472,6 +472,7 @@ fun AppNavHost(
                     navController.navigate(Routes.accountList(NavArgCodecs.encodeAccountListType(type)))
                 },
                 onOpenAO3Collections = { navController.navigate(Routes.AO3Collections) },
+                onOpenDrafts = { navController.navigate(Routes.WritingDrafts) },
                 onOpenDashboard = { navController.navigate(Routes.AO3Dashboard) },
                 onOpenWeb = { url ->
                     when (url) {
@@ -581,6 +582,12 @@ fun AppNavHost(
                     navController.navigateShellRoot(Routes.Browse)
                     navController.navigate(Routes.webFallback(url))
                 }
+            )
+        }
+        sharedComposable(Routes.WritingDrafts) {
+            io.github.cidy02.kudos.account.WritingDraftsScreen(
+                repository = container.writingDraftsRepository,
+                onOpenWeb = { navController.navigate(Routes.webFallback(it)) }
             )
         }
         sharedComposable(Routes.AO3Collections) {

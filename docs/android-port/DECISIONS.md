@@ -745,3 +745,11 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   `account/AO3CollectionMaintainersScreen.kt`, `account/AO3CollectionMaintainersState.kt`,
   `network/ao3/account/AO3CollectionParticipants.kt`, `inviteMaintainer` and `leaveCollection`
   in `network/ao3/writes/AO3WriteRepository.kt`.
+- **2026-10-05 · Writing › Drafts is a native list.** The Account page's Drafts row opened
+  AO3's page in the browser. It now opens iOS's list: each draft with how many days AO3 will
+  keep it and when it was created, both taken from the deletion date AO3 prints, the tally of
+  drafts expiring this week, and New Work. As on iOS the list has no Post and no Delete. Two
+  differences, both recorded above: the notice has only its first sentence, and a draft or New
+  Work opens AO3's page in the in-app browser until Android has the editor. Reverse:
+  `account/WritingDraftsScreen.kt`, `account/WritingDraftsState.kt`,
+  `account/WritingDraftsRepository.kt`, `network/ao3/writing/`.

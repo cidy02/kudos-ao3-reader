@@ -168,6 +168,7 @@ fun AccountScreen(
     onLogin: () -> Unit,
     onOpenList: (AccountListType) -> Unit,
     onOpenAO3Collections: () -> Unit = {},
+    onOpenDrafts: () -> Unit = {},
     onOpenDashboard: () -> Unit = {},
     onOpenWeb: (String) -> Unit = {},
     onOpenWork: (AO3WorkSummary) -> Unit = {},
@@ -279,12 +280,7 @@ fun AccountScreen(
                         onClick = { username?.let { onOpenSeries("https://archiveofourown.org/users/$it/series") } }
                     )
                     HorizontalDivider(modifier = Modifier.padding(start = 50.dp))
-                    AccountScopeRow(
-                        title = "Drafts",
-                        subtitle = "Deleted by AO3 after 30 days",
-                        icon = Icons.Outlined.Drafts,
-                        onClick = { username?.let { onOpenWeb("https://archiveofourown.org/users/$it/works/drafts") } }
-                    )
+                    AccountDraftsRow(onOpenDrafts)
                 }
             }
 
@@ -986,6 +982,12 @@ private fun SignedOutPreviewSection() {
             AccountScopeRow(title = "Inbox", icon = Icons.Outlined.Inbox, onClick = {})
         }
     }
+}
+
+@Composable
+internal fun AccountDraftsRow(onOpen: () -> Unit) {
+    AccountScopeRow(title = "Drafts", subtitle = "Deleted by AO3 after 30 days",
+        icon = Icons.Outlined.Drafts, onClick = onOpen)
 }
 
 @Composable

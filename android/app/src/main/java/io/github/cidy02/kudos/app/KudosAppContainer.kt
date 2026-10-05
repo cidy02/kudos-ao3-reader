@@ -124,6 +124,10 @@ class KudosAppContainer(
         )
     }
 
+    val writingDraftsRepository: io.github.cidy02.kudos.account.WritingDraftsRepository by lazy {
+        io.github.cidy02.kudos.account.WritingDraftsRepository(authenticatedClient, authRepository)
+    }
+
     val accountListRepository: AccountListRepository by lazy {
         AccountListRepository(
             client = ao3Client,

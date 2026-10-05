@@ -137,8 +137,8 @@ object AO3AuthorUrls {
 
     /**
      * Drafts index on AO3 (`/users/<username>/works/drafts`).
-     * There is no native drafts surface — iOS and Android open this in the in-app
-     * web view (Account → Writing → Drafts, and "More on AO3").
+     * Writing's native drafts list reads this index. "More on AO3" can still open
+     * the same address in the in-app browser.
      */
     fun userDraftsUrl(username: String): String? {
         val name = username.trim()
