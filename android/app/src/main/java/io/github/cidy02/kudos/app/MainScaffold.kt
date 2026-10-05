@@ -181,15 +181,17 @@ fun MainScaffold(
         else -> 0.dp
     }
     val reserve by animateDpAsState(reserveTarget, ChromeDpMotion, label = "chromeReserve")
+    // The reader is not padded: it owns the whole window and keeps clear of the bars itself, so
+    // its page colour, not the app's, is what shows behind them (iOS's reader is full bleed).
     val topPad = when {
         shell -> insets.calculateTopPadding() + reserve
-        reader -> insets.calculateTopPadding()
         else -> 0.dp
     }
     // The bar is measured (its labels grow with the text size); it includes the system inset.
     val density = LocalDensity.current
     var barHeight by remember { mutableStateOf(0.dp) }
     val bottomPad = when {
+        reader -> 0.dp
         !showTabBar -> insets.calculateBottomPadding()
         barHeight > 0.dp -> barHeight
         else -> insets.calculateBottomPadding() + ShellBarHeight

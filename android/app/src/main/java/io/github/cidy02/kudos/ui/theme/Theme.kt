@@ -1,6 +1,7 @@
 package io.github.cidy02.kudos.ui.theme
 
 import android.app.Activity
+import android.view.View
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
@@ -96,6 +97,15 @@ private val SepiaScheme = lightColorScheme(
     surfaceContainerHighest = ColorTokens.SepiaVariant
 )
 
+/** Dark icons in the status and navigation bars when the ground drawn behind them is light. */
+internal fun View.setLightSystemBars(light: Boolean) {
+    val window = (context as? Activity)?.window ?: return
+    WindowCompat.getInsetsController(window, this).apply {
+        isAppearanceLightStatusBars = light
+        isAppearanceLightNavigationBars = light
+    }
+}
+
 @Composable
 fun KudosTheme(
     themeMode: KudosThemeMode,
@@ -132,13 +142,7 @@ fun KudosTheme(
     // a dark clock on a Dark or OLED page whenever the phone is in light mode, and the reverse.
     val view = LocalView.current
     if (!view.isInEditMode) {
-        SideEffect {
-            val window = (view.context as? Activity)?.window ?: return@SideEffect
-            WindowCompat.getInsetsController(window, view).apply {
-                isAppearanceLightStatusBars = !readerTheme.isDarkFamily
-                isAppearanceLightNavigationBars = !readerTheme.isDarkFamily
-            }
-        }
+        SideEffect { view.setLightSystemBars(!readerTheme.isDarkFamily) }
     }
 
     CompositionLocalProvider(
