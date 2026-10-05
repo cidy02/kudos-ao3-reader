@@ -643,3 +643,21 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   cookie store are outside both folders. The file's name is the work's title with path
   separators and control characters removed. Reverse: `reader/ReaderWorkActions.kt` and the
   two lines in `res/xml/file_paths.xml`.
+- **2026-10-05 · The reader owns its whole window.** The shell padded the reader below the
+  status bar and above the navigation bar and painted the app's colour in both strips; the
+  reader's controls, which keep clear of the bars themselves, then sat a bar's height too far
+  in (iOS had and fixed the same double inset). Now the reader's page colour runs under both
+  bars, everything inside is inset once (the controls sit just under the status bar and no
+  longer cover the first line), and the bars' icons follow the page while the reader is open
+  (light icons on a Dark page in a Light app, and the reverse); the app's theme takes them back
+  when the reader closes. The reader's Contents sheet also takes the reader's theme; it was on
+  Material's stock lavender. Reverse: the `Surface` at the top of `reader/ReaderScreen.kt` and
+  the reader's two paddings in `app/MainScaffold.kt`.
+- **2026-10-05 · The reader's four themes draw iOS's exact page and text colours.** Android
+  told the page view only which theme to use and let it pick the colours, so Dark was pure
+  black (the same as OLED), Sepia a different cream with near-black text, and no theme's page
+  matched the ground around it. iOS gives the page view the colours outright, and Android now
+  gives the same ones: Light #FFFFFF with #1E1E1E text, Sepia #FBF0D9 with #5B4636, Dark
+  #16161A with #CFCFD4, OLED #000000 with #CFCFD4. Readers will see Dark and Sepia change.
+  Reverse: `reader/settings/ReaderColorTheme.kt` and the two colour lines in
+  `reader/readium/ReadiumSettingsAdapter.kt`.

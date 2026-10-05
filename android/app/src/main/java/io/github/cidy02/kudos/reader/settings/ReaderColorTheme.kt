@@ -1,23 +1,29 @@
 package io.github.cidy02.kudos.reader.settings
 
 import androidx.compose.ui.graphics.Color
-import io.github.cidy02.kudos.ui.theme.Paper
-import io.github.cidy02.kudos.ui.theme.PaperWarm
-import io.github.cidy02.kudos.ui.theme.SurfaceDark
-import io.github.cidy02.kudos.ui.theme.SurfaceOled
 
 /**
  * Engine-agnostic reader colour theme. Mapped to Readium's EPUB theme in the
- * adapter. [Oled] is true-black chrome (and page background override); Readium
- * has no OLED case of its own so the adapter uses Readium DARK plus an explicit
- * black background — same split as iOS `ReaderTheme.readiumTheme`.
+ * adapter. Readium has no OLED case of its own, so [Oled] is Readium DARK with a black
+ * page — same split as iOS `ReaderTheme.readiumTheme`.
  */
 enum class ReaderColorTheme { Light, Sepia, Dark, Oled }
 
-/** Matches the same tone KudosTheme uses for this theme's app-wide background. */
+/**
+ * The page itself, and the reader's ground around it: iOS `ReaderTheme.backgroundHex`. Readium
+ * is given this colour too, so the page and what surrounds it (the strips behind the system
+ * bars, the gap while the reader is dragged away) are one colour.
+ */
 fun ReaderColorTheme.backgroundColor(): Color = when (this) {
-    ReaderColorTheme.Light -> Paper
-    ReaderColorTheme.Sepia -> PaperWarm
-    ReaderColorTheme.Dark -> SurfaceDark
-    ReaderColorTheme.Oled -> SurfaceOled
+    ReaderColorTheme.Light -> Color(0xFFFFFFFF)
+    ReaderColorTheme.Sepia -> Color(0xFFFBF0D9)
+    ReaderColorTheme.Dark -> Color(0xFF16161A)
+    ReaderColorTheme.Oled -> Color(0xFF000000)
+}
+
+/** Body text: iOS `ReaderTheme.textHex`. */
+fun ReaderColorTheme.textColor(): Color = when (this) {
+    ReaderColorTheme.Light -> Color(0xFF1E1E1E)
+    ReaderColorTheme.Sepia -> Color(0xFF5B4636)
+    ReaderColorTheme.Dark, ReaderColorTheme.Oled -> Color(0xFFCFCFD4)
 }
