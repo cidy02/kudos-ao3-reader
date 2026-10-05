@@ -17,6 +17,7 @@ import io.github.cidy02.kudos.network.ao3.account.AO3CollectionForm
 import io.github.cidy02.kudos.network.ao3.account.AO3CollectionFormParser
 import io.github.cidy02.kudos.network.ao3.account.AO3CollectionFormUrls
 import io.github.cidy02.kudos.network.ao3.account.AO3CollectionSaveOutcome
+import io.github.cidy02.kudos.network.ao3.account.AO3CollectionModerationUrls
 import io.github.cidy02.kudos.network.ao3.account.collectionNameFormatIsValid
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -29,6 +30,56 @@ class AO3WriteRepository(
     private val client: AO3AuthenticatedClient,
     private val parser: AO3WriteFormParser = AO3WriteFormParser()
 ) {
+    /** One participants CSRF read and one tap-triggered, generation-fenced POST. */
+    suspend fun decideCollectionMember(slug: String, id: Int, accept: Boolean, expectedGeneration: Int): AO3Result<Unit> {
+        requireCollectionSession(expectedGeneration)
+        if (client.username() == null) return AO3Result.Failure(AO3Error.AuthenticationRequired)
+        val referer = AO3CollectionModerationUrls.participants(slug)
+        val html = when (val result = client.getAuthenticated(referer)) {
+            is AO3Result.Failure -> return result
+            is AO3Result.Success -> result.value.body
+        }
+        requireCollectionSession(expectedGeneration)
+        val token = parser.parseAuthenticityToken(html, metaOnly = true) ?: return AO3Result.Failure(
+            AO3Error.Validation("Couldn't prepare the request. Try again, or open the collection on AO3."))
+        val fields = buildList {
+            add("_method" to if (accept) "patch" else "delete")
+            add("authenticity_token" to token)
+            if (accept) add("collection_participant[participant_role]" to "Member")
+        }
+        currentCoroutineContext().ensureActive()
+        val response = withContext(NonCancellable) {
+            client.postAuthenticatedInSession(AO3CollectionModerationUrls.participant(slug, id), fields,
+                writeHeaders(token, referer), expectedGeneration)
+        }
+        requireCollectionSession(expectedGeneration)
+        return collectionWriteVerdict(response, if (accept) "AO3 couldn't update that member." else "AO3 couldn't decline that member.")
+    }
+
+    /** iOS revealCollection/unanonCollection: whole edit form, fresh meta token, one POST. */
+    suspend fun revealCollection(slug: String, removeAnonymity: Boolean, expectedGeneration: Int): AO3Result<Unit> {
+        requireCollectionSession(expectedGeneration)
+        if (client.username() == null) return AO3Result.Failure(AO3Error.AuthenticationRequired)
+        val html = when (val result = client.getAuthenticated(AO3CollectionFormUrls.form(slug))) {
+            is AO3Result.Failure -> return result
+            is AO3Result.Success -> result.value.body
+        }
+        requireCollectionSession(expectedGeneration)
+        val form = try { withContext(Dispatchers.Default) { AO3CollectionFormParser().parse(html, slug) } }
+        catch (error: CancellationException) { throw error }
+        catch (error: Exception) { return AO3Result.Failure(AO3Error.Parse(error.message ?: "Couldn't read AO3's collection form.")) }
+        requireCollectionSession(expectedGeneration)
+        return when (val result = saveCollection(form.changed(
+            AO3CollectionFields.preference(if (removeAnonymity) "anonymous" else "unrevealed"), "0"), expectedGeneration)) {
+            is AO3Result.Failure -> result
+            is AO3Result.Success -> when (val outcome = result.value) {
+                is AO3CollectionSaveOutcome.Saved -> AO3Result.Success(Unit)
+                is AO3CollectionSaveOutcome.Invalid -> AO3Result.Failure(AO3Error.Validation(
+                    outcome.form.generalErrors.firstOrNull() ?: if (removeAnonymity) "Couldn't un-anon the collection." else "Couldn't reveal the collection."))
+            }
+        }
+    }
+
     /** iOS createCollection/updateCollection: fresh token, original action/fields, one POST. */
     suspend fun saveCollection(form: AO3CollectionForm, expectedGeneration: Int): AO3Result<AO3CollectionSaveOutcome> {
         requireCollectionSession(expectedGeneration)
@@ -46,6 +97,7 @@ class AO3WriteRepository(
         val token = parser.parseAuthenticityToken(html, metaOnly = true)
             ?: return AO3Result.Failure(AO3Error.Validation("Couldn't prepare the request. Try again, or open the collection on AO3."))
         val posted = form.copy(csrfToken = token)
+        currentCoroutineContext().ensureActive()
         val response = withContext(NonCancellable) {
             client.postAuthenticatedInSession(posted.actionUrl, posted.parameters(), writeHeaders(token, referer), expectedGeneration)
         }
@@ -133,20 +185,20 @@ class AO3WriteRepository(
             is AO3Result.Success -> result.value.body
         }
         requireSession()
+        // fetchCSRFPage on iOS requires the page meta, even when the items parser can read an input.
+        val token = parser.parseAuthenticityToken(html, metaOnly = true) ?: return AO3Result.Failure(
+            AO3Error.Validation("Couldn't prepare the request. Try again, or open the collection on AO3."))
         val page = try {
             withContext(Dispatchers.Default) {
                 AO3CollectionItemsParser().parse(
                     html, slug, AO3CollectionItemTab.Unreviewed, 1
-                )
+                ).copy(csrfToken = token)
             }
         } catch (error: CancellationException) {
             throw error
         } catch (error: Exception) {
             return AO3Result.Failure(AO3Error.Parse(error.message ?: "Couldn't read AO3's items form."))
         }
-        if (page.csrfToken.isBlank()) return AO3Result.Failure(AO3Error.Validation(
-            "Couldn't prepare the request. Try again, or open the collection on AO3."
-        ))
         return submitCollectionItemDrafts(page, referer, drafts, expectedGeneration)
     }
 

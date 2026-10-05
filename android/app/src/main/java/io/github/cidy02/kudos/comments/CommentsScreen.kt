@@ -110,6 +110,7 @@ fun CommentsScreen(
     settingsRepository: SettingsRepository? = null,
     focusedCommentId: Long? = null,
     initialChapterPosition: Int? = null,
+    initialComposes: Boolean = false,
     chapterIndexRepository: AO3ChapterIndexRepository? = null,
     isModal: Boolean = false,
     onRequestExpand: (() -> Unit)? = null,
@@ -119,6 +120,10 @@ fun CommentsScreen(
         key = target?.workId?.toString(),
         factory = CommentsViewModel.factory(repository, target, draftStore, currentUsername)
     )
+
+    LaunchedEffect(viewModel, initialComposes) {
+        if (initialComposes) viewModel.openComposer()
+    }
 
     // Deep link focus (e.g. Inbox notification)
     LaunchedEffect(focusedCommentId) {

@@ -696,3 +696,20 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   `network/ao3/writes/AO3WriteRepository.kt`, the account scope in
   `account/AO3CollectionItemsScreen.kt` and `account/AO3CollectionItemsState.kt`, and the row
   menu in `account/AO3CollectionsScreen.kt`.
+- **2026-10-05 · The collection's Moderation screen, and the gap is closed.** Manage ›
+  Moderation now opens iOS's Moderation screen: the review queue with Approve and Reject,
+  "Recently decided" (which opens the items screen on Approved), membership requests with
+  Accept and Decline, a maintainers summary, and Reveal now and Remove anonymity for the
+  owner. Reject, Decline, Reveal and Remove anonymity ask first, in iOS's words; Approve and
+  Accept do not, as on iOS. Each tap is one request to AO3. The maintainers rows open AO3's
+  page until brief 3ay lands. Never run against AO3. Reverse:
+  `account/AO3CollectionModerationScreen.kt`, `account/AO3CollectionModerationState.kt`,
+  `network/ao3/account/AO3CollectionModeration.kt`, `decideCollectionMember` and
+  `revealCollection` in `network/ao3/writes/AO3WriteRepository.kt`.
+- **2026-10-05 · In the demo, the in-app browser no longer reaches the network.** The demo's
+  block covered the app's own AO3 requests; a page opened in the in-app browser (More on AO3,
+  a collection's Maintainers, "Open on AO3") went straight out. In the demo that browser now
+  gets bundled pages or a local "not found", for every address. Outside the demo nothing
+  changes. This closes a way the rule "the demo must never reach AO3" could be broken on a
+  device with a connection; the emulator here has always been in airplane mode. Reverse:
+  `shouldInterceptRequest` in `web/AO3WebViewFallbackScreen.kt`.

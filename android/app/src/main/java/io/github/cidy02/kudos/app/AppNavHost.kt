@@ -619,8 +619,8 @@ fun AppNavHost(
                     slug = slug,
                     title = title ?: slug,
                     repository = container.collectionDetailRepository,
-                    onOpenModeration = {
-                        navController.navigate(Routes.ao3CollectionItems(slug, title ?: slug))
+                    onOpenModeration = { owner ->
+                        navController.navigate(Routes.ao3CollectionModeration(slug, title ?: slug, owner))
                     },
                     onOpenSettings = { navController.navigate(Routes.ao3CollectionForm(slug)) },
                     settingsRepository = container.settingsRepository,
@@ -643,10 +643,32 @@ fun AppNavHost(
             )
         }
         sharedComposable(
+            Routes.AO3CollectionModeration,
+            arguments = listOf(
+                Routes.navArgOf("collectionSlug"),
+                navArgument("collectionTitle") { type = NavType.StringType; nullable = true; defaultValue = null },
+                navArgument("owner") { type = NavType.BoolType; defaultValue = false }
+            )
+        ) { entry ->
+            val slug = Routes.routeArg(entry, "collectionSlug")
+            if (slug == null) navController.popBackStack() else {
+                val title = Routes.routeArg(entry, "collectionTitle") ?: slug
+                io.github.cidy02.kudos.account.AO3CollectionModerationScreen(
+                    slug = slug, title = title, viewerIsOwner = entry.arguments?.getBoolean("owner") == true,
+                    repository = container.collectionDetailRepository, writes = container.writeRepository,
+                    onRecentlyDecided = { navController.navigate(Routes.ao3CollectionItems(slug, title, "approved")) },
+                    onMaintainers = { navController.navigate(Routes.webFallback(
+                        io.github.cidy02.kudos.network.ao3.account.AO3CollectionModerationUrls.participants(slug))) },
+                    onMessageCreator = { navController.navigate(Routes.comments(it, composes = true)) }
+                )
+            }
+        }
+        sharedComposable(
             Routes.AO3CollectionItems,
             arguments = listOf(
                 Routes.navArgOf("collectionSlug"),
-                navArgument("collectionTitle") { type = NavType.StringType; nullable = true; defaultValue = null }
+                navArgument("collectionTitle") { type = NavType.StringType; nullable = true; defaultValue = null },
+                navArgument("tab") { type = NavType.StringType; nullable = true; defaultValue = null }
             )
         ) { entry ->
             val slug = Routes.routeArg(entry, "collectionSlug")
@@ -657,7 +679,10 @@ fun AppNavHost(
                     slug = slug,
                     title = Routes.routeArg(entry, "collectionTitle") ?: slug,
                     repository = container.collectionDetailRepository,
-                    writes = container.writeRepository
+                    writes = container.writeRepository,
+                    initialTab = io.github.cidy02.kudos.network.ao3.account.AO3CollectionItemTab.entries.firstOrNull {
+                        it.status == Routes.routeArg(entry, "tab")
+                    } ?: io.github.cidy02.kudos.network.ao3.account.AO3CollectionItemTab.Unreviewed
                 )
             }
         }
@@ -809,7 +834,8 @@ fun AppNavHost(
             arguments = listOf(
                 Routes.navArgOf("commentWorkId"),
                 navArgument("focused") { type = NavType.StringType; nullable = true },
-                navArgument("chapterPosition") { type = NavType.StringType; nullable = true }
+                navArgument("chapterPosition") { type = NavType.StringType; nullable = true },
+                navArgument("compose") { type = NavType.BoolType; defaultValue = false }
             )
         ) { backStackEntry ->
             val workId = Routes.routeArg(backStackEntry, "commentWorkId")?.toLongOrNull()
@@ -829,6 +855,7 @@ fun AppNavHost(
                 },
                 focusedCommentId = focusedId,
                 initialChapterPosition = chapterPosition,
+                initialComposes = backStackEntry.arguments?.getBoolean("compose") == true,
                 chapterIndexRepository = container.chapterIndexRepository,
                 draftStore = container.commentDraftStore,
                 settingsRepository = container.settingsRepository

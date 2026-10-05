@@ -90,17 +90,18 @@ object Routes {
     private const val ARG_COMMENT_CHAPTER_POSITION = "chapterPosition"
     const val Comments =
         "comments/{$ARG_COMMENT_WORK_ID}?focused={$ARG_COMMENT_FOCUSED_ID}" +
-            "&chapter={$ARG_COMMENT_CHAPTER_POSITION}"
+            "&chapter={$ARG_COMMENT_CHAPTER_POSITION}&compose={compose}"
 
     /**
      * [chapterPosition] is a 1-based AO3 story-chapter (iOS
      * `CommentsModel.initialChapterPosition`), sent by the reader's Comments
      * button so the thread opens on the chapter being read.
      */
-    fun comments(workId: Long, focusedCommentId: Long? = null, chapterPosition: Int? = null): String {
+    fun comments(workId: Long, focusedCommentId: Long? = null, chapterPosition: Int? = null, composes: Boolean = false): String {
         val query = buildList {
             focusedCommentId?.let { add("focused=$it") }
             chapterPosition?.let { add("chapter=$it") }
+            if (composes) add("compose=true")
         }
         return "comments/$workId" + if (query.isEmpty()) "" else "?" + query.joinToString("&")
     }
@@ -151,13 +152,16 @@ object Routes {
     private const val ARG_AO3_COLLECTION_SLUG = "collectionSlug"
     private const val ARG_AO3_COLLECTION_TITLE = "collectionTitle"
     const val AO3CollectionDetail = "ao3-collection-detail/{$ARG_AO3_COLLECTION_SLUG}?title={$ARG_AO3_COLLECTION_TITLE}"
-    const val AO3CollectionItems = "ao3-collection-items/{$ARG_AO3_COLLECTION_SLUG}?title={$ARG_AO3_COLLECTION_TITLE}"
+    const val AO3CollectionItems = "ao3-collection-items/{$ARG_AO3_COLLECTION_SLUG}?title={$ARG_AO3_COLLECTION_TITLE}&tab={tab}"
     const val AO3UserCollectionItems = "ao3-user-collection-items"
+    const val AO3CollectionModeration = "ao3-collection-moderation/{$ARG_AO3_COLLECTION_SLUG}?title={$ARG_AO3_COLLECTION_TITLE}&owner={owner}"
     const val AO3CollectionForm = "ao3-collection-form?slug={$ARG_AO3_COLLECTION_SLUG}"
     fun ao3CollectionForm(slug: String? = null) = if (slug == null) "ao3-collection-form"
         else "ao3-collection-form?slug=${encode(slug)}"
-    fun ao3CollectionItems(slug: String, title: String) =
-        "ao3-collection-items/${encode(slug)}?title=${encode(title)}"
+    fun ao3CollectionItems(slug: String, title: String, tab: String? = null) =
+        "ao3-collection-items/${encode(slug)}?title=${encode(title)}" + if (tab == null) "" else "&tab=${encode(tab)}"
+    fun ao3CollectionModeration(slug: String, title: String, viewerIsOwner: Boolean) =
+        "ao3-collection-moderation/${encode(slug)}?title=${encode(title)}&owner=$viewerIsOwner"
     fun ao3CollectionDetail(slug: String, title: String? = null) =
         if (title.isNullOrBlank()) "ao3-collection-detail/${encode(slug)}"
         else "ao3-collection-detail/${encode(slug)}?title=${encode(title)}"
@@ -225,6 +229,7 @@ object Routes {
             AO3Collections -> "My Collections"
             AO3CollectionItems -> "Collection items"
             AO3UserCollectionItems -> "Collection items"
+            AO3CollectionModeration -> "Moderation"
             AO3CollectionForm -> "Collection settings"
             Settings -> "Settings"
             Backup -> "Backup"
@@ -289,6 +294,7 @@ object Routes {
             base == CollectionDetail.substringBefore("?").substringBefore("/") ||
             base == AO3CollectionItems.substringBefore("?").substringBefore("/") ||
             base == AO3UserCollectionItems ||
+            base == AO3CollectionModeration.substringBefore("?").substringBefore("/") ||
             base == AO3CollectionForm.substringBefore("?") ||
             base == AO3CollectionDetail.substringBefore("?").substringBefore("/") ||
             base == BrowseWorks.substringBefore("?").substringBefore("/") ||
@@ -309,7 +315,7 @@ object Routes {
         WorkDetail, // WorkDetailView
         BrowseFandoms, BrowseWorks, TagWorks, // FandomListView, NativeBrowseView
         Settings, Backup, QueueStorage, AvailabilitySweep, About, BugReport, // SettingsPageForm
-        AO3Preferences, AO3Dashboard, AccountList, AccountMoreOnAO3, AccountInbox, AO3CollectionDetail, AO3CollectionItems, AO3UserCollectionItems, AO3CollectionForm, // Account screens and AO3 lists
+        AO3Preferences, AO3Dashboard, AccountList, AccountMoreOnAO3, AccountInbox, AO3CollectionDetail, AO3CollectionItems, AO3UserCollectionItems, AO3CollectionModeration, AO3CollectionForm, // Account screens and AO3 lists
         Collections, // LibraryEntityGridView
         QueueDetail, // ReadingQueueSettingsView
         ReadingStatistics // ReadingInsightsView

@@ -32,6 +32,18 @@ internal fun interface FixtureSource {
 }
 
 internal object DemoNetwork {
+    /** Read-only browser fallback also stays local; unknown pages/subresources get a terminal 404. */
+    fun webFixture(url: HttpUrl, source: FixtureSource = fixtures): ByteArray? {
+        if (!DemoNetworkRoutes.isAo3Host(url.host)) return null
+        val path = DemoNetworkRoutes.decodedPath(url).trimEnd('/')
+        val name = when (path) {
+            "/collections/winter_exchange/participants" -> "ao3_demo_moderation_participants"
+            "/collections/winter_exchange" -> "ao3_demo_moderation_show"
+            else -> DemoNetworkRoutes.fixtureName(url)
+        }
+        return name?.let { source.read(it) }
+    }
+
     const val EXTRA = "kudosDemoLibrary"
     /** `--ez kudosDemoSignedIn true` with the demo: a local session as iOS `-KudosDemoSignedIn YES`. */
     const val SIGNED_IN_EXTRA = "kudosDemoSignedIn"
@@ -191,12 +203,19 @@ internal class DemoNetworkInterceptor(
     private val collectionItems = DemoCollectionItems()
     private val userCollectionItems = DemoCollectionItems(account = true)
     private val collectionForms = DemoCollectionForms()
+    private val collectionParticipants = DemoCollectionParticipants()
 
     override fun intercept(chain: Interceptor.Chain): Response {
         if (!isActive()) return chain.proceed(chain.request())
         val url = chain.request().url
         if (!DemoNetworkRoutes.isAo3Host(url.host)) return chain.proceed(chain.request())
         val path = DemoNetworkRoutes.decodedPath(url)
+        if (path == "/collections/winter_exchange/participants" || path.startsWith("/collections/winter_exchange/participants/")) {
+            val answer = collectionParticipants.answer(chain.request(), fixtures().read("ao3_demo_moderation_participants"))
+            return Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1)
+                .code(answer.first).message("Local participants answer").header("Content-Type", HTML)
+                .body(answer.second.toResponseBody(HTML_TYPE)).build()
+        }
         collectionForms.answer(chain.request(), fixtures())?.let { answer ->
             return Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1)
                 .code(answer.first).message("Local collection answer").header("Content-Type", HTML)
@@ -277,6 +296,21 @@ private class DemoCollectionForms {
     fun answer(request: okhttp3.Request, fixtures: FixtureSource): Pair<Int, String>? {
         val path = DemoNetworkRoutes.decodedPath(request.url).trimEnd('/')
         if (request.method == "GET") {
+            // The show page only, which Moderation reads. The collection's own page reads
+            // /profile, and keeps the fixture it had (its counts are what that page shows).
+            if (path == "/collections/winter_exchange") {
+                val source = fixtures.read("ao3_demo_moderation_show") ?: return 404 to ""
+                if (deleted) return 404 to ""
+                val doc = Jsoup.parse(source.decodeToString())
+                val form = edited?.let { Jsoup.parse(it) }
+                fun flag(name: String) = form?.select("input[type=checkbox]")?.firstOrNull {
+                    it.attr("name") == "collection[collection_preference_attributes][$name]"
+                }?.hasAttr("checked") ?: true
+                doc.selectFirst("p.type")?.text("(Open, Moderated" +
+                    (if (flag("unrevealed")) ", Unrevealed" else "") +
+                    (if (flag("anonymous")) ", Anonymous" else "") + ", Gift Exchange Challenge)")
+                return 200 to doc.outerHtml()
+            }
             if (path == "/collections/lantern_archive" || path == "/collections/refused_name") {
                 return if (path.substringAfterLast('/') in created) 200 to "<h2>Original demo collection</h2>" else 404 to ""
             }
@@ -287,7 +321,14 @@ private class DemoCollectionForms {
                 "/collections/winter_exchange/confirm_delete" -> if (deleted) return 404 to "" else "ao3_demo_collection_destroy"
                 else -> return null
             }
-            return fixtures.read(fixture)?.let { 200 to (if (fixture.endsWith("_edit")) edited ?: it.decodeToString() else it.decodeToString()) }
+            return fixtures.read(fixture)?.let { bytes ->
+                val body = if (fixture.endsWith("_edit")) edited ?: Jsoup.parse(bytes.decodeToString()).apply {
+                    select("input[type=checkbox]").firstOrNull {
+                        it.attr("name") == "collection[collection_preference_attributes][unrevealed]"
+                    }?.attr("checked", "checked")
+                }.outerHtml() else bytes.decodeToString()
+                200 to body
+            }
                 ?: (404 to "")
         }
         if (request.method != "POST" || path !in setOf("/collections", "/collections/winter_exchange")) return null
@@ -335,6 +376,39 @@ private class DemoCollectionForms {
     }
 
     private fun refusal() = 422 to "<div class='flash error'>AO3 couldn't save the collection.</div>"
+}
+
+/** Only the two original requests can be decided; missing assets and refusals are terminal locally. */
+private class DemoCollectionParticipants {
+    private val accepted = mutableSetOf<Int>()
+    private val declined = mutableSetOf<Int>()
+
+    @Synchronized
+    fun answer(request: okhttp3.Request, source: ByteArray?): Pair<Int, String> {
+        if (source == null) return 404 to ""
+        val doc = Jsoup.parse(source.decodeToString())
+        if (request.method == "GET") {
+            for (id in declined) doc.getElementById("participant_$id")?.remove()
+            for (id in accepted) doc.getElementById("participant_$id")?.select("option")?.forEach {
+                it.removeAttr("selected"); if (it.attr("value") == "Member") it.attr("selected", "selected")
+            }
+            return 200 to doc.outerHtml()
+        }
+        val buffer = Buffer()
+        request.body?.writeTo(buffer)
+        val fields = buffer.readUtf8().split('&').associate { part ->
+            val pair = part.split('=', limit = 2)
+            URLDecoder.decode(pair[0], "UTF-8") to URLDecoder.decode(pair.getOrElse(1) { "" }, "UTF-8")
+        }
+        val id = request.url.pathSegments.lastOrNull()?.toIntOrNull()
+        val accept = fields["_method"] == "patch" && fields["collection_participant[participant_role]"] == "Member"
+        val decline = fields["_method"] == "delete" && !fields.containsKey("collection_participant[participant_role]")
+        if (request.method != "POST" || id !in setOf(105, 106) || id in accepted || id in declined ||
+            fields["authenticity_token"] != "demo-participants-token" || (!accept && !decline))
+            return 422 to "<div class='flash error'>That membership request could not be changed.</div>"
+        if (accept) accepted.add(id!!) else declined.add(id!!)
+        return 200 to "<div class='flash notice'>Membership request updated.</div>"
+    }
 }
 
 internal fun OkHttpClient.Builder.installDemoNetworkBlock(): OkHttpClient.Builder =

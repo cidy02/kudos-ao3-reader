@@ -23,6 +23,17 @@ class AO3CollectionItemsTest {
     private val parser = AO3CollectionItemsParser()
     private fun page(html: String = fixture()) = parser.parse(html, "winter_exchange", AO3CollectionItemTab.Unreviewed, 1)
 
+    @Test fun itemWriteRequiresMetaCsrfAsIosFetchCsrfPageDoesEvenWithAnInputToken() = runTest {
+        val (_, client, state) = setup()
+        state.load()
+        state.stage(state.state.value.page!!.items.first()) { it.copy(moderatorApproval = AO3CollectionItemApproval.Approved) }
+        client.html = fixture().replace(Regex("<meta name=\"csrf-token\"[^>]*>"), "")
+        assertTrue(page(client.html).csrfToken.isNotBlank()) // Parser input fallback remains valid for reading.
+        state.confirmSubmit()
+        assertTrue(client.posts.isEmpty())
+        assertEquals("Couldn't prepare the request. Try again, or open the collection on AO3.", state.state.value.submitError)
+    }
+
     @Test fun parsesOriginalFixtureControlsIdentityTokenMethodAndPaging() {
         val page = page()
         assertEquals(13, page.items.size)

@@ -6,6 +6,7 @@ import android.net.Uri
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.activity.compose.BackHandler
@@ -35,6 +36,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import io.github.cidy02.kudos.core.model.AppThemeSetting
+import io.github.cidy02.kudos.network.ao3.DemoNetwork
+import io.github.cidy02.kudos.network.ao3.DemoNetworkRoutes
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 
 /**
  * Read-only AO3 WebView fallback for pages not yet native. AO3 https pages load
@@ -142,6 +146,17 @@ fun AO3WebViewFallbackScreen(
                     settings.javaScriptEnabled = true
                     settings.domStorageEnabled = true
                     webViewClient = object : WebViewClient() {
+                        override fun shouldInterceptRequest(view: WebView?, request: WebResourceRequest?): WebResourceResponse? {
+                            if (!DemoNetwork.isActive) return super.shouldInterceptRequest(view, request)
+                            // WebView bypasses OkHttp. Demo reads/subresources must terminate locally too.
+                            val target = request?.url?.toString()?.toHttpUrlOrNull()
+                            val bytes = if (request?.method == "GET" && target != null && DemoNetworkRoutes.isAo3Host(target.host))
+                                DemoNetwork.webFixture(target) else null
+                            return WebResourceResponse("text/html", "UTF-8", if (bytes == null) 404 else 200,
+                                if (bytes == null) "Local demo page unavailable" else "OK", emptyMap(),
+                                (bytes ?: ByteArray(0)).inputStream())
+                        }
+
                         override fun shouldOverrideUrlLoading(
                             view: WebView?,
                             request: WebResourceRequest?
