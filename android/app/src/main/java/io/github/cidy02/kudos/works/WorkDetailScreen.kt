@@ -1727,7 +1727,7 @@ private fun downloadActionLabel(action: WorkDownloadAction?, downloaded: Boolean
     null -> if (downloaded) "Downloaded" else "Download"
 }
 
-private fun shareWork(context: Context, title: String, url: String) {
+internal fun shareWork(context: Context, title: String, url: String) {
     val sendIntent = Intent().apply {
         this.action = Intent.ACTION_SEND
         putExtra(Intent.EXTRA_SUBJECT, title)

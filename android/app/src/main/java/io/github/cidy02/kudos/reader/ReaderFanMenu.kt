@@ -27,6 +27,16 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.filled.Bookmark
+import androidx.compose.material.icons.filled.BorderColor
+import androidx.compose.material.icons.filled.ChatBubbleOutline
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.TextFields
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -45,6 +55,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
+import io.github.cidy02.kudos.core.model.SavedWork
+import io.github.cidy02.kudos.core.model.ReadingAnnotation
+import io.github.cidy02.kudos.works.WorkTags
+import io.github.cidy02.kudos.reader.readium.ReadiumNavigatorController
+import java.net.URI
+import kotlin.math.abs
 
 /** One labelled menu pill in the fanned-out menu (Contents, Find, Themes…). */
 data class ReaderFanMenuPill(
@@ -66,6 +82,93 @@ data class ReaderFanRoundAction(
     val longPressAction: (() -> Unit)? = null
 )
 
+/** Menu contents only; the glass composables below stay unchanged. */
+internal fun readerFanPills(
+    percent: Int?,
+    searchable: Boolean,
+    ao3WorkId: Long?,
+    commentsChapter: Int?,
+    onContents: (Int) -> Unit,
+    onFind: () -> Unit,
+    onComments: (Long, Int?) -> Unit,
+    onSettings: () -> Unit,
+    onHighlightSelection: () -> Unit,
+    onNoteSelection: () -> Unit
+): List<ReaderFanMenuPill> = buildList {
+    add(ReaderFanMenuPill(
+        id = "contents",
+        title = percent?.let { "Contents · $it%" } ?: "Contents",
+        icon = Icons.AutoMirrored.Filled.List,
+        action = { onContents(0) }
+    ))
+    add(ReaderFanMenuPill(
+        id = "bookmarks", title = "Bookmarks & Highlights", icon = Icons.Filled.Bookmark,
+        action = { onContents(1) }
+    ))
+    add(ReaderFanMenuPill(
+        id = "find", title = "Find in Work", icon = Icons.Filled.Search,
+        isEnabled = searchable, action = onFind
+    ))
+    if (ao3WorkId != null) {
+        add(ReaderFanMenuPill(
+            id = "comments", title = "Comments", icon = Icons.Filled.ChatBubbleOutline,
+            action = { onComments(ao3WorkId, commentsChapter) }
+        ))
+    }
+    add(ReaderFanMenuPill(
+        id = "settings", title = "Themes & Settings", icon = Icons.Filled.TextFields,
+        action = onSettings
+    ))
+    // Android has no Highlight/Add Note text-selection actions yet. Keep its
+    // only creation entry points after the iOS pills until that integration exists.
+    add(ReaderFanMenuPill(
+        id = "highlightSelection", title = "Highlight selection", icon = Icons.Filled.BorderColor,
+        action = onHighlightSelection
+    ))
+    add(ReaderFanMenuPill(
+        id = "noteSelection", title = "Add note to selection", icon = Icons.Filled.Edit,
+        action = onNoteSelection
+    ))
+}
+
+internal fun readerKudosAction(
+    ao3WorkId: Long?,
+    given: Boolean,
+    working: Boolean,
+    onKudos: () -> Unit
+): ReaderFanRoundAction? = ao3WorkId?.let {
+    ReaderFanRoundAction(
+        id = "kudos",
+        icon = if (given) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
+        accessibilityLabel = if (given) "Kudos given" else "Give kudos",
+        isEnabled = !working && !given,
+        isEmphasized = given,
+        action = onKudos
+    )
+}
+
+/** Best existing Android share target; file sharing needs a separate entry point. */
+internal fun readerShareUrl(work: SavedWork): String? {
+    val ao3Id = work.ao3WorkID?.toLong() ?: WorkTags.ao3WorkIdFromUrl(work.sourceUrl)
+    if (ao3Id != null) return "https://archiveofourown.org/works/$ao3Id"
+    return work.sourceUrl.takeIf {
+        runCatching { URI(it).scheme?.startsWith("http") == true }.getOrDefault(false)
+    }
+}
+
+/** Same near-position condition as AnnotationRepository.removeBookmarkNear. */
+internal fun readerIsBookmarked(bookmarks: List<ReadingAnnotation>, progress: ReaderProgress?): Boolean {
+    if (progress == null || !readerHasBookmarkPosition(progress)) return false
+    val progression = progress.totalProgression ?: progress.scrollFraction
+    return bookmarks.any {
+        it.spineIndex == progress.spineIndex && abs(it.progression - progression) <= 0.02
+    }
+}
+
+/** iOS requires an actual locator position, not just fallback spine/scroll progress. */
+internal fun readerHasBookmarkPosition(progress: ReaderProgress?): Boolean =
+    progress?.locatorJson?.let { ReadiumNavigatorController.locatorFromJson(it) }?.locations?.position != null
+
 /**
  * Top-right reading options button that fans open into menu pills plus a row of round quick actions.
  * Matching iOS `ReaderFanMenu.swift`.
@@ -83,7 +186,10 @@ fun ReaderFanMenu(
     val roundActionHeight = 46.dp
     val rowSpacing = 9.dp
 
-    val count = maxOf(roundActions.size, 1)
+    // iOS's rule: the pills span the circle row. iOS always has four circles or more. Android
+    // has three for an import with no link (it cannot share a file yet), and three circles'
+    // width cuts the pills' labels, so the pills never go narrower than four.
+    val count = maxOf(roundActions.size, 4)
     val pillWidth = (roundActionWidth * count) + (rowSpacing * (count - 1))
 
     Box(

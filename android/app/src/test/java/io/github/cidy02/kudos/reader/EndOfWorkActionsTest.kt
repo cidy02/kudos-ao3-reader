@@ -1,10 +1,25 @@
 package io.github.cidy02.kudos.reader
 
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertEquals
+import io.github.cidy02.kudos.core.model.SavedWork
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class EndOfWorkActionsTest {
+    @Test
+    fun readerAo3ActionsPreferStoredIdentityThenSourceUrl() {
+        val work = SavedWork(title = "Import", author = "Author")
+        assertEquals(789L, EndOfWorkActions.forWork(work.copy(ao3WorkID = 789)).workId)
+        assertEquals(789L, EndOfWorkActions.forWork(work.copy(
+            ao3WorkID = 789, sourceUrl = "https://archiveofourown.org/works/123"
+        )).workId)
+        assertEquals(123L, EndOfWorkActions.forWork(work.copy(
+            sourceUrl = "https://archiveofourown.org/works/123"
+        )).workId)
+        assertEquals(null, EndOfWorkActions.forWork(work).workId)
+    }
+
     @Test
     fun endDetectedByTotalProgression() {
         val progress = ReaderProgress(
