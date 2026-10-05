@@ -19,7 +19,7 @@ enum class LibrarySectionKind(
     Collections(
         "collections",
         "Collections",
-        "You have no collections yet. Use + above to create one."
+        "You have no collections yet. Create one from your Library to group works together."
     ),
     Downloaded(
         "downloaded",
@@ -29,12 +29,12 @@ enum class LibrarySectionKind(
     History(
         "history",
         "Reading History",
-        "Works you open appear here with your reading progress."
+        "Works you open appear here with your reading time, reread count, and any new chapters."
     ),
     Favorites(
         "favorites",
         "Favorites",
-        "To add a favorite, use a work's menu or tap the star on its page."
+        "To add a favorite, swipe a work in your Library or tap the star on its page."
     );
 
     /**
@@ -52,6 +52,17 @@ enum class LibrarySectionKind(
         Downloaded -> state.downloaded
         History -> state.readingHistory
         Favorites -> state.favorites
+    }
+
+    /** iOS `items`: section membership after privacy, before the filter panel. */
+    fun unfilteredItems(state: LibraryUiState): List<LibraryDisplayItem> = when (this) {
+        ReadingNow -> LibraryQuery.continueReading(state.collectionMembers)
+        SavedForLater -> LibraryQuery.savedForLater(state.collectionMembers)
+        Finished -> LibraryQuery.finished(state.collectionMembers)
+        Downloaded -> LibraryQuery.downloaded(state.collectionMembers)
+        History -> LibraryQuery.readingHistory(state.collectionMembers)
+        Favorites -> state.collectionMembers.filter { it.item.work.isFavorite }
+        Collections -> emptyList()
     }
 
     companion object {

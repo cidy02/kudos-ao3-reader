@@ -21,6 +21,8 @@ import androidx.compose.foundation.lazy.grid.items as gridItems
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.outlined.AutoAwesome
+import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -69,7 +71,8 @@ import io.github.cidy02.kudos.library.queuePreviews
 import io.github.cidy02.kudos.library.readingProgressFraction
 import io.github.cidy02.kudos.library.trailingSwipeActions
 import io.github.cidy02.kudos.network.ao3.search.AO3Rating
-import io.github.cidy02.kudos.ui.components.EmptyStateCard
+import io.github.cidy02.kudos.library.LibraryFilterCollisionCard
+import io.github.cidy02.kudos.library.LibraryPlainEmptyState
 import io.github.cidy02.kudos.ui.components.KudosRefreshBox
 import io.github.cidy02.kudos.ui.components.DestructiveConfirmation
 import io.github.cidy02.kudos.ui.components.WorkBulkActionBar
@@ -357,7 +360,7 @@ fun HomeSectionListScreen(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(top = topInset + 72.dp, start = 16.dp, end = 16.dp)
             ) {
-                item { EmptyStateCard(title = "Nothing here yet", message = "") }
+                item { LibraryPlainEmptyState(title = "Nothing here yet", icon = HomeEmptyIcons.collections) }
             }
         } else if (displayMode == HomeSectionDisplayMode.Compact) {
             KudosRefreshBox(
@@ -373,6 +376,7 @@ fun HomeSectionListScreen(
                     filteredItems = filteredItems,
                     visibleItems = visibleItems,
                     filters = filters,
+                    sort = sort,
                     updatePill = updatePill,
                     snapshot = snapshot,
                     cardActions = cardActions,
@@ -381,6 +385,7 @@ fun HomeSectionListScreen(
                     onFiltersChange = { filters = it },
                     onUpdatePillChange = { updatePill = it },
                     onEditFilters = { showFilters = true },
+                    onClearFilters = { filters = LibraryFilterState(); sort = LibrarySort.Natural },
                     bottomPadding = if (isSelecting) 100.dp else 18.dp
                 )
             }
@@ -452,17 +457,19 @@ fun HomeSectionListScreen(
                                 )
                             }
                         }
-                        filters.hasActiveFilters -> item {
+                        updatePill != HomeUpdatePill.All && filteredItems.isNotEmpty() -> item {
+                            HomeUpdatePillEmptyState(updatePill) { updatePill = HomeUpdatePill.All }
+                        }
+                        filters.hasActiveFilters || sort != LibrarySort.Natural -> item {
                             HomeFilterCollisionCard(
                                 kind = kind,
-                                hiddenCount = sectionItems.size,
-                                activeCount = filters.activeCount,
-                                onClear = { filters = LibraryFilterState() },
+                                works = sectionItems,
+                                filters = filters,
+                                snapshot = snapshot,
+                                onFiltersChange = { filters = it },
+                                onClear = { filters = LibraryFilterState(); sort = LibrarySort.Natural },
                                 onEdit = { showFilters = true }
                             )
-                        }
-                        kind == HomeSectionKind.RecentlyUpdated && updatePill != HomeUpdatePill.All -> item {
-                            HomeUpdatePillEmptyState(updatePill) { updatePill = HomeUpdatePill.All }
                         }
                     }
                 }
@@ -562,6 +569,7 @@ private fun HomeSectionCompactGrid(
     filteredItems: List<LibraryDisplayItem>,
     visibleItems: List<LibraryDisplayItem>,
     filters: LibraryFilterState,
+    sort: LibrarySort,
     updatePill: HomeUpdatePill,
     snapshot: LibrarySnapshot?,
     cardActions: LibraryCardActions,
@@ -570,6 +578,7 @@ private fun HomeSectionCompactGrid(
     onFiltersChange: (LibraryFilterState) -> Unit,
     onUpdatePillChange: (HomeUpdatePill) -> Unit,
     onEditFilters: () -> Unit,
+    onClearFilters: () -> Unit,
     bottomPadding: Dp
 ) {
     val topInset = WindowInsets.systemBars.asPaddingValues().calculateTopPadding()
@@ -629,19 +638,16 @@ private fun HomeSectionCompactGrid(
                     )
                 }
             }
-            filters.hasActiveFilters -> item(span = { GridItemSpan(maxLineSpan) }) {
+            filters.hasActiveFilters || sort != LibrarySort.Natural -> item(span = { GridItemSpan(maxLineSpan) }) {
                 HomeFilterCollisionCard(
                     kind = kind,
-                    hiddenCount = sectionItems.size,
-                    activeCount = filters.activeCount,
-                    onClear = { onFiltersChange(LibraryFilterState()) },
+                    works = sectionItems,
+                    filters = filters,
+                    snapshot = snapshot,
+                    onFiltersChange = onFiltersChange,
+                    onClear = onClearFilters,
                     onEdit = onEditFilters
                 )
-            }
-            kind == HomeSectionKind.RecentlyUpdated && updatePill != HomeUpdatePill.All -> item(
-                span = { GridItemSpan(maxLineSpan) }
-            ) {
-                HomeUpdatePillEmptyState(updatePill) { onUpdatePillChange(HomeUpdatePill.All) }
             }
         }
     }
@@ -798,43 +804,33 @@ private fun HomeSectionLedgerRow(
 @Composable
 private fun HomeFilterCollisionCard(
     kind: HomeSectionKind,
-    hiddenCount: Int,
-    activeCount: Int,
+    works: List<LibraryDisplayItem>,
+    filters: LibraryFilterState,
+    snapshot: LibrarySnapshot?,
+    onFiltersChange: (LibraryFilterState) -> Unit,
     onClear: () -> Unit,
     onEdit: () -> Unit
 ) {
-    val title = when (activeCount) {
-        0 -> "Nothing matches."
-        1 -> "Nothing matches this filter."
-        2 -> "Nothing matches both filters."
-        3 -> "Nothing matches all three filters."
-        4 -> "Nothing matches all four filters."
-        5 -> "Nothing matches all five filters."
-        else -> "Nothing matches all $activeCount filters."
-    }
-    val message = if (hiddenCount == 1) {
-        "Your 1 work in ${kind.title} is hidden by this filter."
-    } else {
-        "All $hiddenCount of your works in ${kind.title} are hidden by these filters."
-    }
-    EmptyStateCard(
-        title = title,
-        message = message,
-        primaryActionLabel = "Clear all filters",
-        onPrimaryAction = onClear,
-        secondaryActionLabel = "Edit",
-        onSecondaryAction = onEdit,
+    LibraryFilterCollisionCard(
+        sectionTitle = kind.title,
+        works = works,
+        filters = filters,
+        userTagNames = snapshot?.userTags.orEmpty().associate { it.id to it.name },
+        collectionNames = snapshot?.collections.orEmpty().associate { it.id to it.name },
+        onFiltersChange = onFiltersChange,
+        onClear = onClear,
+        onEdit = onEdit,
         modifier = Modifier.padding(horizontal = 16.dp)
     )
 }
 
 @Composable
 private fun HomeUpdatePillEmptyState(pill: HomeUpdatePill, onShowAll: () -> Unit) {
-    EmptyStateCard(
+    LibraryPlainEmptyState(
         title = "No ${pill.title.lowercase()} works",
-        message = "",
-        primaryActionLabel = "Show All",
-        onPrimaryAction = onShowAll,
+        icon = if (pill == HomeUpdatePill.Unread) Icons.Outlined.AutoAwesome else Icons.Outlined.Download,
+        actionLabel = "Show All",
+        onAction = onShowAll,
         modifier = Modifier.padding(horizontal = 16.dp)
     )
 }

@@ -54,6 +54,7 @@ import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.DownloadDone
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Queue
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.Star
@@ -492,6 +493,7 @@ fun LibraryScreen(
             ).apply()
         },
         onShowFilters = { showFilters = true },
+        onFiltersChange = viewModel::updateFilters,
         onUpdateSearchQuery = viewModel::updateSearchQuery,
         onUpdateSort = viewModel::updateSort,
         onSetFandomFilter = viewModel::setFandomFilter,
@@ -574,6 +576,7 @@ private fun LibraryContent(
     dashboardLayout: WorkSectionLayout,
     onLayoutChange: (WorkSectionLayout) -> Unit,
     onShowFilters: () -> Unit,
+    onFiltersChange: (LibraryFilterState) -> Unit,
     onUpdateSearchQuery: (String) -> Unit,
     onUpdateSort: (LibrarySort) -> Unit,
     onSetFandomFilter: (String?) -> Unit,
@@ -651,6 +654,11 @@ private fun LibraryContent(
             state = state,
             cardActions = cardActions,
             onShowFilters = onShowFilters,
+            onFiltersChange = onFiltersChange,
+            onClearFilters = {
+                onClearFilters()
+                onUpdateSort(LibrarySort.Natural)
+            },
             onCompletionFilterChange = onCompletionFilterChange,
             onTogglePrivacy = onTogglePrivacy,
             onEnterSelection = onEnterSelection,
@@ -1143,12 +1151,25 @@ internal fun LibraryWorkMenu(
     }
 }
 
+private val LibrarySectionKind.emptyStateIcon: ImageVector
+    get() = when (this) {
+        LibrarySectionKind.ReadingNow -> Icons.AutoMirrored.Outlined.MenuBook
+        LibrarySectionKind.SavedForLater -> Icons.Outlined.Schedule
+        LibrarySectionKind.Finished -> Icons.Outlined.CheckCircle
+        LibrarySectionKind.Collections -> Icons.Outlined.CollectionsBookmark
+        LibrarySectionKind.Downloaded -> Icons.Outlined.Download
+        LibrarySectionKind.History -> Icons.Outlined.History
+        LibrarySectionKind.Favorites -> Icons.Outlined.Star
+    }
+
 @Composable
 private fun LibrarySectionContent(
     kind: LibrarySectionKind,
     state: LibraryUiState,
     cardActions: LibraryCardActions,
     onShowFilters: () -> Unit,
+    onFiltersChange: (LibraryFilterState) -> Unit,
+    onClearFilters: () -> Unit,
     onCompletionFilterChange: (LibraryCompletionFilter) -> Unit,
     onTogglePrivacy: () -> Unit,
     onEnterSelection: () -> Unit,
@@ -1172,6 +1193,9 @@ private fun LibrarySectionContent(
 ) {
     val tokens = LocalKudosTokens.current
     val baseItems = kind.items(state)
+    val unfilteredItems = kind.unfilteredItems(state)
+    // Search is an Android-only control. Hold it fixed when offering predicate drops.
+    val collisionItems = LibraryQuery.filterOnly(unfilteredItems, state.searchQuery)
     val quickFilters = kind.quickFilters()
     val context = LocalContext.current
     val preferences = remember(context) {
@@ -1290,8 +1314,8 @@ private fun LibrarySectionContent(
                     SubjectHeaderBlock(
                         kicker = "Library",
                         title = kind.title,
-                        subtitle = if (state.hasActiveQueryOrFilters && sectionItems.isEmpty()) {
-                            "${baseItems.size} ${if (baseItems.size == 1) "work" else "works"} · none match the current filters"
+                        subtitle = if (state.hasActiveQueryOrFilters && sectionItems.isEmpty() && unfilteredItems.isNotEmpty()) {
+                            "${unfilteredItems.size} ${if (unfilteredItems.size == 1) "work" else "works"} · none match the current filters"
                         } else {
                             val sortLabel = if (state.hasActiveQueryOrFilters) null else {
                                 if (state.sort != LibrarySort.Natural) state.sort.label else when (kind) {
@@ -1353,8 +1377,30 @@ private fun LibrarySectionContent(
                     state.error != null -> item {
                         ErrorStateCard(kind.title, state.error, Modifier.padding(horizontal = 16.dp))
                     }
-                    sectionItems.isEmpty() -> item {
-                        EmptyStateCard("Nothing here yet", kind.emptyMessage, Modifier.padding(horizontal = 16.dp))
+                    unfilteredItems.isEmpty() -> item {
+                        LibraryPlainEmptyState(
+                            kind.title, kind.emptyMessage, Modifier.padding(horizontal = 16.dp),
+                            icon = kind.emptyStateIcon
+                        )
+                    }
+                    sectionItems.isEmpty() && (state.filters.hasActiveFilters || state.sort != LibrarySort.Natural) && collisionItems.isNotEmpty() -> item {
+                        LibraryFilterCollisionCard(
+                            sectionTitle = kind.title,
+                            works = collisionItems,
+                            filters = state.filters,
+                            onFiltersChange = onFiltersChange,
+                            onClear = onClearFilters,
+                            onEdit = onShowFilters,
+                            userTagNames = state.userTags.associate { it.id to it.name },
+                            collectionNames = state.collections.associate { it.id to it.name },
+                            modifier = Modifier.padding(horizontal = 16.dp)
+                        )
+                    }
+                    sectionItems.isEmpty() && state.searchQuery.isNotBlank() -> item {
+                        LibraryPlainEmptyState(
+                            kind.title, kind.emptyMessage, Modifier.padding(horizontal = 16.dp),
+                            icon = kind.emptyStateIcon
+                        )
                     }
                     else -> items(sectionItems, key = { "${kind.id}-${it.item.work.id}" }) { display ->
                         LibrarySubjectLedgerRow(
