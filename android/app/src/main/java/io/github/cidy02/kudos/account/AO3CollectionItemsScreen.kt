@@ -49,6 +49,7 @@ import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.cidy02.kudos.app.ProvidePushedShellChrome
@@ -293,9 +294,12 @@ private fun CollectionItemPanel(
                 }
             }
         }
-        val footer: @Composable () -> Unit = {
-            if (item.creatorByline.isNotBlank()) Text(item.creatorByline, color = tokens.secondaryInk,
-                fontSize = 11.5.sp, lineHeight = 17.sp, maxLines = if (accessibility) Int.MAX_VALUE else 1)
+        val byline: @Composable (Modifier) -> Unit = { modifier ->
+            if (item.creatorByline.isNotBlank()) Text(item.creatorByline, modifier = modifier, color = tokens.secondaryInk,
+                fontSize = 11.5.sp, lineHeight = 17.sp, maxLines = if (accessibility) Int.MAX_VALUE else 1,
+                overflow = TextOverflow.Ellipsis)
+        }
+        val action: @Composable () -> Unit = {
             if (item.removeEditable || draft.remove) {
                 TextButton(onClick = onRemove, enabled = enabled, contentPadding = PaddingValues(0.dp)) {
                     Text(if (draft.remove) "Keep" else "Remove from collection", lineHeight = 17.sp, fontSize = 12.sp,
@@ -303,11 +307,21 @@ private fun CollectionItemPanel(
                             SubjectPalette.fromHue(0.0, tokens.theme).accent)
                 }
             }
+        }
+        val date: @Composable () -> Unit = {
             if (item.dateText.isNotBlank()) Text(item.dateText, color = tokens.secondaryInk, fontSize = 11.5.sp, lineHeight = 17.sp)
         }
-        if (accessibility) Column { footer() } else {
-            // FlowRow allows a long byline or narrow phone to wrap without starving the action/date.
-            androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) { footer() }
+        if (accessibility) Column { byline(Modifier); action(); date() } else {
+            // One centred line, as on iOS: the byline, the action beside it, the date at the end.
+            // Only the byline gives way (one line, ellipsis); the action and the date never do.
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    byline(Modifier.weight(1f, fill = false))
+                    action()
+                }
+                date()
+            }
         }
     }
 }
