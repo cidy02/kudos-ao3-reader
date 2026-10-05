@@ -1,5 +1,25 @@
 # Brief 3ba: Challenge Settings, the read-only screen
 
+**Corrected 2026-10-05 (Claude), binding over the text below.** On a Gift Exchange, iOS's
+screen reads every page of the Complete, Open and Defaults assignment lists when it opens
+(`allChallengeAssignments`, no cap) to show three counts. `docs/AO3_NETWORKING_POLICY.md`
+names every multi-page read the app may make, and this is not one of them. **Android does not
+make it.** Until the owner decides (owner question 16):
+
+- This screen reads, for one opening or refresh, in iOS's order: the challenge's edit form;
+  the collection's profile (for tag sets; a failure leaves the section out, as on iOS); and,
+  for a Gift Exchange only, the first page of sign-ups plus the last page when there is more
+  than one (iOS's `signUpTotal`). At most four reads. **No assignment page is read here.**
+- The Assignments section keeps its rows and what they open, but shows no tallies: where iOS
+  prints a count or a summary computed from the walk, Android prints nothing in the value
+  place. Do not print "Couldn't load" there (nothing failed) and do not invent a sentence.
+- List in the result, at the top, each iOS value this leaves out, and quote iOS's code for the
+  walk so the owner can read it.
+
+Everything else in this brief stands, including "where iOS's words say something that is not
+true on Android, leave those words out and list them" (you already found the assignments
+footnote that promises native viewing and pinch-hitter requests).
+
 Rules (binding): work only in this worktree; don't commit, push, or switch branches; never sign in
 and never contact archiveofourown.org; no stub files; no helper scripts or `.orig` files left
 behind; **don't edit `TASKS.md`**. Don't change the backup format or a Room schema. Your sandbox
