@@ -82,7 +82,8 @@ fun AO3CollectionItemsScreen(
     slug: String?,
     title: String,
     repository: AO3CollectionDetailRepository,
-    writes: AO3WriteRepository
+    writes: AO3WriteRepository,
+    initialTab: AO3CollectionItemTab? = null
 ) {
     val auth = repository.authRepository
     val generation by auth.generation.collectAsState()
@@ -91,7 +92,8 @@ fun AO3CollectionItemsScreen(
     val model = remember(slug, generation, authState.isSignedIn) { AO3CollectionItemsState(slug, repository, writes) }
     val state by model.state.collectAsState()
     val defaultTab = AO3CollectionItemTab.defaultTab(slug)
-    var tab by remember(slug) { mutableStateOf(defaultTab) }
+    // The scope's own default, unless the caller names a tab (Moderation opens Approved).
+    var tab by remember(slug, initialTab) { mutableStateOf(initialTab ?: defaultTab) }
     var confirming by remember(slug, generation, authState.isSignedIn) { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val tokens = LocalKudosTokens.current

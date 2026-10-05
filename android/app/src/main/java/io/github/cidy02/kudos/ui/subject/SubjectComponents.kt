@@ -325,7 +325,7 @@ private fun SubtitleText(subtitle: String) {
         text = subtitle,
         color = LocalKudosTokens.current.secondaryInk,
         fontSize = 15.5.sp,
-        maxLines = 2,
+        maxLines = if (isAccessibilityFontScale()) Int.MAX_VALUE else 2,
         overflow = TextOverflow.Ellipsis
     )
 }

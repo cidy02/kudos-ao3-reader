@@ -88,7 +88,7 @@ fun AO3CollectionDetailScreen(
     privacyGate: PrivacyGate,
     onOpenWork: (AO3WorkSummary) -> Unit,
     onOpenWebFallback: (String) -> Unit,
-    onOpenModeration: () -> Unit,
+    onOpenModeration: (Boolean) -> Unit,
     onOpenSettings: () -> Unit
 ) {
     var show by remember(slug) { mutableStateOf<AO3CollectionShow?>(null) }
@@ -296,7 +296,7 @@ fun AO3CollectionDetailScreen(
                                     label = action.label,
                                     showsDisclosure = true,
                                     onClick = {
-                                        if (action.label == "Moderation") onOpenModeration()
+                                        if (action.label == "Moderation") onOpenModeration(collectionShow.collection.viewerIsOwner)
                                         else if (action.label == "Collection Settings") onOpenSettings()
                                         else onOpenWebFallback(action.url)
                                     }
