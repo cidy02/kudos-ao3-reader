@@ -10,6 +10,7 @@ import io.github.cidy02.kudos.network.ao3.account.AO3AccountUrls
 import io.github.cidy02.kudos.network.ao3.account.AO3CollectionItemDraft
 import io.github.cidy02.kudos.network.ao3.account.AO3CollectionItemTab
 import io.github.cidy02.kudos.network.ao3.account.AO3CollectionItemsParser
+import io.github.cidy02.kudos.network.ao3.account.AO3CollectionItemsPage
 import io.github.cidy02.kudos.network.ao3.account.AO3CollectionItemsUrls
 import io.github.cidy02.kudos.network.ao3.account.AO3CollectionFields
 import io.github.cidy02.kudos.network.ao3.account.AO3CollectionForm
@@ -146,6 +147,54 @@ class AO3WriteRepository(
         if (page.csrfToken.isBlank()) return AO3Result.Failure(AO3Error.Validation(
             "Couldn't prepare the request. Try again, or open the collection on AO3."
         ))
+        return submitCollectionItemDrafts(page, referer, drafts, expectedGeneration)
+    }
+
+    /** iOS updateUserCollectionItems: account-default CSRF page, then one ordered single-shot POST per draft. */
+    suspend fun updateUserCollectionItems(
+        username: String,
+        drafts: List<AO3CollectionItemDraft>,
+        expectedGeneration: Int
+    ): AO3Result<Unit> {
+        requireCollectionSession(expectedGeneration)
+        if (client.username() == null) return AO3Result.Failure(AO3Error.AuthenticationRequired)
+        if (drafts.isEmpty()) return AO3Result.Success(Unit)
+        val referer = AO3CollectionItemsUrls.userPage(username, AO3CollectionItemTab.Invited, 1)
+        val fallbackAction = AO3CollectionItemsUrls.userUpdate(username)
+        if (referer == null || fallbackAction == null) return AO3Result.Failure(AO3Error.Validation(
+            "AO3 didn't give a collection-items page for this account."
+        ))
+        val response = client.getAuthenticated(referer)
+        requireCollectionSession(expectedGeneration)
+        val html = when (response) {
+            is AO3Result.Failure -> return response
+            is AO3Result.Success -> response.value.body
+        }
+        val page = withContext(Dispatchers.Default) {
+            val token = parser.parseAuthenticityToken(html, metaOnly = true) ?: return@withContext null
+            val parsed = try {
+                AO3CollectionItemsParser().parseUser(html, username, AO3CollectionItemTab.Invited, 1)
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Exception) {
+                null // iOS try? parse: a valid fresh meta token still permits the account fallback endpoint.
+            }
+            (parsed ?: AO3CollectionItemsPage(emptyList(), AO3CollectionItemTab.Invited, 1, 1,
+                fallbackAction, token, "patch")).copy(csrfToken = token)
+        } ?: return AO3Result.Failure(AO3Error.Validation(
+            "Couldn't prepare the request. Try again, or open the collection on AO3."
+        ))
+        return submitCollectionItemDrafts(page, referer, drafts, expectedGeneration)
+    }
+
+    /** The existing moderation dispatch loop is shared by both scopes; it does not reorder its caller's drafts. */
+    private suspend fun submitCollectionItemDrafts(
+        page: AO3CollectionItemsPage,
+        referer: String,
+        drafts: List<AO3CollectionItemDraft>,
+        expectedGeneration: Int
+    ): AO3Result<Unit> {
+        fun requireSession() = requireCollectionSession(expectedGeneration)
         for (draft in drafts) {
             currentCoroutineContext().ensureActive()
             requireSession()
