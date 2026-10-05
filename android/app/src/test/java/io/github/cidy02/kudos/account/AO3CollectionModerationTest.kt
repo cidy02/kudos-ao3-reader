@@ -31,8 +31,11 @@ class AO3CollectionModerationTest {
 
     @Test fun parsesOriginalParticipantsRolesItemsAndShowFlags() {
         val participants = AO3CollectionParticipantsParser().parse(moderationFixture("ao3_demo_moderation_participants"))
-        assertEquals(listOf("mapfold", "emberpost"), participants.filter { it.isMembershipRequest }.map { it.pseud })
-        assertEquals(2, participants.count { it.isMaintainer })
+        assertEquals(listOf("mapfold", "ashletter"), participants.filter { it.isMembershipRequest }.map { it.pseud })
+        assertEquals(4, participants.count { it.isMaintainer })
+        assertEquals(listOf("AO3_Reader", "frostledger"), participants.filter { it.role == "Owner" }.map { it.pseud })
+        assertEquals(listOf("emberpost", "duskatlas"), participants.filter { it.role == "Moderator" }.map { it.pseud })
+        assertEquals(participants.size, participants.map { it.pseud }.distinct().size)
         assertEquals("Invited", participants.last().role)
         val formId = AO3CollectionParticipantsParser().parse("<ul class='participant index'><li><span class='byline'><a href='/users/test'>test</a></span>" +
             "<form action='/collections/winter_exchange/participants/222'><select name='collection_participant[participant_role]'>" +
@@ -56,7 +59,7 @@ class AO3CollectionModerationTest {
         val root = AO3CollectionFormUrls.show("winter_exchange")
         assertEquals(listOf("$root/items", "$root/participants", root), client.gets)
         assertEquals(2, model.state.value.data!!.requests.size)
-        assertEquals(2, model.state.value.data!!.maintainerCount)
+        assertEquals(4, model.state.value.data!!.maintainerCount)
         model.loadPage(2)
         assertEquals("$root/items?page=2", client.gets.last())
         assertEquals(4, client.gets.size)
@@ -99,11 +102,11 @@ class AO3CollectionModerationTest {
             "collection_participant[participant_role]" to "Member"), client.posts.single().fields)
         assertEquals("${AO3CollectionModerationUrls.participants("winter_exchange")}/105", client.posts.single().url)
         assertEquals(AO3CollectionModerationUrls.participants("winter_exchange"), client.posts.single().headers["Referer"])
-        model.choose(ModerationDecision(ModerationAction.Decline, 106, "emberpost"))
-        assertEquals("Decline emberpost?", model.state.value.pending!!.title)
-        assertEquals("This removes emberpost's membership request. They will need to apply again.", model.state.value.pending!!.message)
+        model.choose(ModerationDecision(ModerationAction.Decline, 106, "ashletter"))
+        assertEquals("Decline ashletter?", model.state.value.pending!!.title)
+        assertEquals("This removes ashletter's membership request. They will need to apply again.", model.state.value.pending!!.message)
         model.cancel(); assertEquals(1, client.posts.size)
-        model.choose(ModerationDecision(ModerationAction.Decline, 106, "emberpost")); model.confirm()
+        model.choose(ModerationDecision(ModerationAction.Decline, 106, "ashletter")); model.confirm()
         assertEquals(listOf("_method" to "delete", "authenticity_token" to "demo-participants-token"), client.posts.last().fields)
         assertTrue(model.state.value.data!!.requests.isEmpty())
         assertEquals(5, client.gets.size)

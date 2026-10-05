@@ -89,7 +89,8 @@ fun AO3CollectionDetailScreen(
     onOpenWork: (AO3WorkSummary) -> Unit,
     onOpenWebFallback: (String) -> Unit,
     onOpenModeration: (Boolean) -> Unit,
-    onOpenSettings: () -> Unit
+    onOpenSettings: () -> Unit,
+    onOpenMaintainers: () -> Unit
 ) {
     var show by remember(slug) { mutableStateOf<AO3CollectionShow?>(null) }
     var segment by remember(slug) { mutableStateOf(AO3CollectionSegment.Works) }
@@ -292,15 +293,9 @@ fun AO3CollectionDetailScreen(
                         ) {
                             actions.forEachIndexed { index, action ->
                                 if (index > 0) SubjectRowSeparator()
-                                SubjectFormRow(
-                                    label = action.label,
-                                    showsDisclosure = true,
-                                    onClick = {
-                                        if (action.label == "Moderation") onOpenModeration(collectionShow.collection.viewerIsOwner)
-                                        else if (action.label == "Collection Settings") onOpenSettings()
-                                        else onOpenWebFallback(action.url)
-                                    }
-                                )
+                                CollectionManageRow(action.label, action.url,
+                                    { onOpenModeration(collectionShow.collection.viewerIsOwner) },
+                                    onOpenSettings, onOpenMaintainers, onOpenWebFallback)
                             }
                         }
                     }
@@ -375,6 +370,19 @@ fun AO3CollectionDetailScreen(
             }
         }
     }
+}
+
+@Composable
+internal fun CollectionManageRow(label: String, url: String, onOpenModeration: () -> Unit,
+    onOpenSettings: () -> Unit, onOpenMaintainers: () -> Unit, onOpenWebFallback: (String) -> Unit) {
+    SubjectFormRow(label = label, showsDisclosure = true, onClick = {
+        when (label) {
+            "Moderation" -> onOpenModeration()
+            "Collection Settings" -> onOpenSettings()
+            "Maintainers" -> onOpenMaintainers()
+            else -> onOpenWebFallback(url)
+        }
+    })
 }
 
 private fun androidx.compose.foundation.lazy.LazyListScope.collectionSegmentContent(
