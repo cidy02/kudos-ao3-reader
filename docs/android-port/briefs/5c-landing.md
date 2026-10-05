@@ -239,3 +239,22 @@ Still open, from Codex's notes:
   work marked to keep offline, or a download removed, while the import runs can still get the
   bytes the import planned.
 - Settings changed while an import runs are outside this (they are not rows).
+
+## Brief 5h (2026-10-05)
+
+Codex wrote it from `5h-import-file-writes.md` (`5h-result.md`): the files risk above.
+
+**Landed.** Which EPUBs, originals and fonts an import writes is now decided when each is
+written, from the work's row as it is then, by the same rule the merge used. A work the reader
+marked to keep while the import ran keeps its bytes; a download removed meanwhile stays removed
+and the work still says a copy is owed, so a later sync fetches it if the row wants it; a work
+deleted meanwhile gets no file and no original. A file held back this way is counted in the
+import's one line ("N item(s) you changed during the import kept your version…").
+
+Corrected on landing: "unchanged since the import wrote it" is judged against the row read
+back from the database, not the row the merge planned (see the result file's landing note).
+
+Still open: file writers outside an import (a download, Remove Copy, the importer) do not hold
+the import's gate, so a change made in the instant between the check and the write can still
+slip through; Codex's result file says where. Settings changed during an import are not rows
+or files and are outside all of this.

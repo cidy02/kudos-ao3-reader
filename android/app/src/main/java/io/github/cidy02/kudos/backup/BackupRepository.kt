@@ -3,6 +3,7 @@ package io.github.cidy02.kudos.backup
 import androidx.room.withTransaction
 import io.github.cidy02.kudos.core.model.BackupSettings
 import io.github.cidy02.kudos.core.model.ReadingQueueKind
+import io.github.cidy02.kudos.core.model.SavedWork
 import io.github.cidy02.kudos.data.local.KudosDatabase
 import io.github.cidy02.kudos.data.local.entity.CollectionWorkCrossRef
 import io.github.cidy02.kudos.data.local.entity.QueueTagCrossRef
@@ -94,9 +95,7 @@ class BackupRepository(
             TombstoneLocalMigration.runIfNeeded(database, settingsRepository)
             val current = captureLibrarySnapshot(pack.fontFilesByFileName.keys, pack.fontFilesByFileName)
             val merge = mergePackage(current, pack, mode)
-            val summary = applyMergeResult(merge)
-            restoreOriginals(pack.originalFilesByName, merge.workIdRemap)
-            summary
+            applyMergeResultLocked(merge, pack.originalFilesByName)
         }
     }
 
@@ -110,9 +109,7 @@ class BackupRepository(
             TombstoneLocalMigration.runIfNeeded(database, settingsRepository)
             val current = captureLibrarySnapshot(pack.fontFilesByFileName.keys, pack.fontFilesByFileName)
             val merge = mergePackage(current, pack, mode, normalizeQueuePreservation)
-            val summary = applyMergeResult(merge)
-            restoreOriginals(pack.originalFilesByName, merge.workIdRemap)
-            summary
+            applyMergeResultLocked(merge, pack.originalFilesByName)
         }
     }
 
@@ -141,12 +138,13 @@ class BackupRepository(
      */
     internal suspend fun importOriginalFiles(manifest: KudosBackupManifest, files: Map<String, ByteArray>) =
         persistenceGate.withLock {
-            val identity = WorkIdentityIndex.snapshot(database.workDao().getAllIncludingDeleted().map { it.toDomain() })
+            val works = database.workDao().getAllIncludingDeleted().map { it.toDomain() }
+            val identity = WorkIdentityIndex.snapshot(works)
             val remap = manifest.works.mapNotNull { archived ->
                 identity.existingWork(archived.ao3WorkID?.toLong(), archived.sourceURL, archived.id)
                     ?.let { BackupPaths.normalizeIdForComparison(archived.id) to it.id }
             }.toMap()
-            restoreOriginals(files, remap)
+            restoreOriginals(files, remap, expectedWorks = works.associateBy { it.id })
         }
 
     /**
@@ -161,28 +159,67 @@ class BackupRepository(
      * a record can arrive after its original. iOS takes a late record without that check,
      * which can attach one device's record to another device's different original.
      */
-    private suspend fun restoreOriginals(files: Map<String, ByteArray>, workIdRemap: Map<String, String>) {
-        val matchingOriginals = mutableSetOf<String>()
+    private suspend fun restoreOriginals(
+        files: Map<String, ByteArray>,
+        workIdRemap: Map<String, String>,
+        blockedWorkIds: Set<String> = emptySet(),
+        expectedWorks: Map<String, SavedWork> = emptyMap(),
+        captured: BackupLibrarySnapshot? = null
+    ): Set<String> {
+        val deferred = mutableSetOf<String>()
+        val originalsById = files.mapNotNull { (name, bytes) ->
+            BackupPaths.parseOriginalFileName(name)?.takeIf { !it.second }?.let { it.first to bytes }
+        }.groupBy({ it.first }, { it.second })
         files.entries.sortedBy { BackupPaths.parseOriginalFileName(it.key)?.second == true }.forEach { (name, bytes) ->
             val (archivedId, isRecord) = BackupPaths.parseOriginalFileName(name) ?: return@forEach
             val workId = workIdRemap[archivedId] ?: return@forEach
-            if (isRecord) {
-                if (archivedId in matchingOriginals && !workFileStore.conversionRecordExists(workId) &&
-                    !workFileStore.writeConversionRecord(workId, bytes)
-                ) throw IOException("Could not write conversion record for $workId")
-            } else {
+            database.withTransaction {
+                // Remapping at merge time is not proof that the work still exists.
+                val entity = database.workDao().getById(workId)
+                val originalRemoved = captured != null && workId in captured.originalWorkIds &&
+                    workFileStore.originalFile(workId) == null
+                val downloadRemoved = captured != null && workId in captured.epubWorkIds &&
+                    !workFileStore.workEpubExists(workId)
+                if (workId in blockedWorkIds || entity == null || originalRemoved || downloadRemoved ||
+                    (entity.isDeleted && expectedWorks[workId]?.isDeleted == false)
+                ) {
+                    deferred += workId
+                    return@withTransaction
+                }
                 val local = workFileStore.originalFile(workId)
-                if (local == null) {
+                if (isRecord) {
+                    if (workFileStore.conversionRecordExists(workId)) {
+                        if (captured != null && workId !in captured.conversionRecordWorkIds &&
+                            workFileStore.readConversionRecord(workId)?.contentEquals(bytes) != true
+                        ) deferred += workId
+                        return@withTransaction
+                    }
+                    if (captured != null && workId in captured.conversionRecordWorkIds) {
+                        deferred += workId // A captured record removed meanwhile stays removed.
+                        return@withTransaction
+                    }
+                    // Re-check the original at the record's write, not once in the earlier
+                    // original loop: an ungated importer may have changed it in between.
+                    val matches = local != null && originalsById[archivedId].orEmpty().any { originalBytes ->
+                        runCatching {
+                            Files.size(local) == originalBytes.size.toLong() &&
+                                BackupPaths.sha256(Files.readAllBytes(local)) == BackupPaths.sha256(originalBytes)
+                        }.getOrDefault(false)
+                    }
+                    if (matches && !workFileStore.writeConversionRecord(workId, bytes)) {
+                        throw IOException("Could not write conversion record for $workId")
+                    }
+                } else if (local == null) {
                     workFileStore.writeOriginal(workId, name.substringAfterLast('.', ""), bytes).orThrow()
-                    matchingOriginals += archivedId
-                } else if (!workFileStore.conversionRecordExists(workId) && runCatching {
+                } else if (captured != null && workId !in captured.originalWorkIds && !runCatching {
                     Files.size(local) == bytes.size.toLong() &&
                         BackupPaths.sha256(Files.readAllBytes(local)) == BackupPaths.sha256(bytes)
                 }.getOrDefault(false)) {
-                    matchingOriginals += archivedId
+                    deferred += workId
                 }
             }
         }
+        return deferred
     }
 
     private fun FileWriteResult.orThrow() {
@@ -243,8 +280,14 @@ class BackupRepository(
         // must never overwrite bytes merely because their DB row is missing.
         val fontFiles = fontFileStore.readAllFontFiles(incomingFontFileNames, incomingFontFiles)
 
+        val originalWorkIds = works.filter { workFileStore.originalFile(it.id) != null }
+            .mapTo(mutableSetOf()) { it.id }
+        val conversionRecordWorkIds = works.filter { workFileStore.conversionRecordExists(it.id) }
+            .mapTo(mutableSetOf()) { it.id }
         stored.copy(
             settings = settings,
+            originalWorkIds = originalWorkIds,
+            conversionRecordWorkIds = conversionRecordWorkIds,
             epubWorkIds = epubWorkIds,
             fontFilesByFileName = fontFiles
         )
@@ -284,48 +327,124 @@ class BackupRepository(
         )
     }
 
-    internal suspend fun applyMergeResult(merge: BackupMergeResult): BackupRestoreSummary {
-        val applied = database.withTransaction {
-            val refreshed = BackupMergeService.refreshForApply(merge, captureStoredRows())
+    internal suspend fun applyMergeResult(
+        merge: BackupMergeResult,
+        originalFiles: Map<String, ByteArray> = emptyMap()
+    ): BackupRestoreSummary = persistenceGate.withLock {
+        applyMergeResultLocked(merge, originalFiles)
+    }
+
+    /** Public import entry points already hold the non-reentrant gate. */
+    private suspend fun applyMergeResultLocked(
+        merge: BackupMergeResult,
+        originalFiles: Map<String, ByteArray>
+    ): BackupRestoreSummary {
+        val (applied, beforeApply, writtenWorks) = database.withTransaction {
+            val stored = captureStoredRows()
+            val refreshed = BackupMergeService.refreshForApply(merge, stored)
             applyStoredMerge(refreshed)
-            refreshed
+            // "Unchanged since this import wrote it" is judged against the row as stored, read
+            // back here, not as planned: the two differ wherever the write normalizes a field,
+            // and a planned row that never equals the stored one made every last-batch EPUB of
+            // a queued work look edited, and so refused.
+            val written = refreshed.epubFilesToWriteByWorkId.keys.mapNotNull { id ->
+                database.workDao().getById(id)?.toDomain()
+            }.associateBy { it.id }
+            Triple(refreshed, stored.works.associateBy { it.id }, written)
         }
         val snapshot = applied.snapshot
-        val installedWorkIds = snapshot.works.mapTo(mutableSetOf()) { it.id }
+        val installedWorks = snapshot.works.associateBy { it.id }
+        val capturedWorks = merge.capturedSnapshot.works.associateBy { it.id }
+        val deferredFiles = mutableSetOf<String>()
+        val blockedWorkIds = beforeApply.values.filter {
+            it.isDeleted && capturedWorks[it.id]?.isDeleted == false
+        }.mapTo(mutableSetOf()) { it.id }
 
         applied.epubFilesToWriteByWorkId.forEach { (workId, bytes) ->
-            if (workId !in installedWorkIds) return@forEach
-            val write = workFileStore.writeWorkEpub(workId, bytes)
-            // The flag follows the file on disk, whatever the write did.
-            val hasFile = workFileStore.workEpubExists(workId)
+            // One transaction per file closes the DB check/write window. Ordinary file
+            // writers do not hold the gate/transaction; see 5h-result.md for that window.
             database.withTransaction {
-                database.workDao().getById(workId)?.let { entity ->
-                    database.workDao().upsert(entity.copy(
-                        hasEpub = hasFile,
-                        remoteEpubPending = when {
-                            write is FileWriteResult.Success -> false
-                            !hasFile -> true // Failed installation still owes the promised bytes.
-                            else -> entity.remoteEpubPending
-                        }
-                    ))
+                val expected = writtenWorks[workId] ?: installedWorks[workId]
+                val entity = database.workDao().getById(workId)
+                if (expected == null || entity == null) {
+                    deferredFiles += "work:$workId"
+                    blockedWorkIds += workId
+                    return@withTransaction null
                 }
-            }
-            // A write that failed kept the old bytes, under a row that now carries the
-            // incoming clock. Reported as a success, as it was, the next sync uploaded
-            // those old bytes as the newest copy and every other device took them. Failing
-            // here stops that upload; the same EPUB is offered again on the next import,
-            // and an equal clock still lets it in.
-            write.orThrow()
+                val live = entity.toDomain()
+                val before = beforeApply[workId]
+                val captured = capturedWorks[workId]
+                val hasFile = workFileStore.workEpubExists(workId)
+                val removedMeanwhile = !hasFile && (workId in merge.capturedSnapshot.epubWorkIds ||
+                    (expected.hasEpub && !live.hasEpub && !live.remoteEpubPending) ||
+                    (captured != null && (captured.hasEpub || captured.remoteEpubPending) &&
+                        before != null && !before.hasEpub && !before.remoteEpubPending))
+                val deletedMeanwhile = workId in blockedWorkIds || (live.isDeleted && !expected.isDeleted)
+                // Row merge has already advanced clocks and normalized preservation. Those
+                // import-owned changes must not reject the same restore's pending file.
+                // Retain the pre-apply policy fields only where our written value is still
+                // present; an edit after commit uses the freshly read value instead.
+                val policyLocal = if (before == null && live == expected) null else live.copy(
+                    lastModifiedAt = if (live.lastModifiedAt == expected.lastModifiedAt && before != null) {
+                        before.effectiveLastModifiedAt
+                    } else live.lastModifiedAt,
+                    epubPreservationStatusRaw = if (live == expected) {
+                        before?.epubPreservationStatusRaw
+                    } else live.epubPreservationStatusRaw
+                )
+                val mode = if (applied.mode == BackupImportMode.REPLACE_LIBRARY &&
+                    (before != captured || live != expected)
+                ) BackupImportMode.RECONCILE else applied.mode
+                val allowed = !removedMeanwhile && !deletedMeanwhile && mayRestoreEpub(
+                    policyLocal, hasFile, mode, applied.epubIncomingModifiedAtByWorkId[workId]
+                )
+                val write = if (allowed) workFileStore.writeWorkEpub(workId, bytes) else null
+                if (!allowed) {
+                    deferredFiles += "work:$workId"
+                    if (removedMeanwhile || deletedMeanwhile) blockedWorkIds += workId
+                }
+                val hasInstalledFile = workFileStore.workEpubExists(workId)
+                database.workDao().upsert(entity.copy(
+                    hasEpub = hasInstalledFile,
+                    remoteEpubPending = when {
+                        write is FileWriteResult.Success -> false
+                        !hasInstalledFile -> true // A skipped/failed install still owes the promised bytes.
+                        else -> entity.remoteEpubPending
+                    }
+                ))
+                // Commit accurate flags even on failure, then stop before sync uploads old bytes.
+                write
+            }?.orThrow()
         }
 
         applied.fontFilesToWriteByFileName.forEach { (fileName, bytes) ->
-            fontFileStore.writeFont(fileName, bytes).orThrow()
+            val fontId = merge.snapshot.fonts.first { it.fileName == fileName }.id
+            val deferredKey = "font:${BackupPaths.normalizeIdForComparison(fontId)}"
+            database.withTransaction {
+                // Font merge only fills unoccupied names; never overwrite a newly arrived
+                // local file, or recreate bytes for a font row removed since capture.
+                if (database.customFontDao().getByFileName(fileName) == null) {
+                    deferredFiles += deferredKey
+                } else if (fontFileStore.fontExists(fileName)) {
+                    if (fontFileStore.readFont(fileName)?.contentEquals(bytes) != true) {
+                        deferredFiles += deferredKey
+                    }
+                } else {
+                    fontFileStore.writeFont(fileName, bytes).orThrow()
+                }
+            }
         }
+        deferredFiles += restoreOriginals(
+            originalFiles, applied.workIdRemap, blockedWorkIds, installedWorks, merge.capturedSnapshot
+        ).map { "work:$it" }
 
         if (applied.mode != BackupImportMode.REPLACE_LIBRARY) {
             settingsRepository.replaceAll(snapshot.settings.toSettings())
         }
-        return applied.summary
+        return applied.summary.copy(
+            concurrentRowsDeferred = applied.summary.concurrentRowsDeferred +
+                (deferredFiles - applied.deferredRecordKeysForApply).size
+        )
     }
 
     /** Caller holds the Room transaction across refresh, checks and writes. */

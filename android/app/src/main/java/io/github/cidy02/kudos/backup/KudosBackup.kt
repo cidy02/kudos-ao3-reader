@@ -36,6 +36,9 @@ data class BackupLibrarySnapshot(
         .map { BackupPaths.normalizeIdForComparison(it.id) }
         .toSet(),
     val fontFilesByFileName: Map<String, ByteArray> = emptyMap(),
+    /** Device-local apply context; not serialized. */
+    val originalWorkIds: Set<String> = emptySet(),
+    val conversionRecordWorkIds: Set<String> = emptySet(),
     val tombstones: List<SyncTombstone> = emptyList(),
     val readingQueues: List<ReadingQueue> = emptyList(),
     val readingQueueMemberships: List<ReadingQueueMembership> = emptyList(),
@@ -113,7 +116,11 @@ data class BackupMergeResult(
     val normalizeQueuePreservationForApply: Boolean = true,
     /** IDs minted by this Replace's omissions, excluding local and adopted archive deletions. */
     val replaceOmissionTombstoneIds: Set<String> = emptySet(),
+    /** Deduplicates a held-back row and its assets in the import's item count. */
+    val deferredRecordKeysForApply: Set<String> = emptySet(),
     val epubFilesToWriteByWorkId: Map<String, ByteArray> = emptyMap(),
+    /** Clock of the archive entry that supplied each planned EPUB; apply context only. */
+    val epubIncomingModifiedAtByWorkId: Map<String, Instant?> = emptyMap(),
     val fontFilesToWriteByFileName: Map<String, ByteArray> = emptyMap(),
     val mode: BackupImportMode = BackupImportMode.RECONCILE,
     /** Verified-but-untrusted-signer tombstone ids from this merge — count-only badge source. */

@@ -61,6 +61,7 @@ object BackupMergeService {
 
         var summary = BackupRestoreSummary()
         val epubFilesToWrite = linkedMapOf<String, ByteArray>()
+        val epubIncomingModifiedAt = linkedMapOf<String, Instant?>()
 
         // Phase 1: unsigned incoming still drop. Phase 2: verify + already-trusted
         // signer → adopt into the local store and this batch's TombstoneIndex.
@@ -173,32 +174,7 @@ object BackupMergeService {
             // has nothing to protect, and "a work with no local file can always be
             // filled in" (iOS marks such a work `.missingFile` at launch).
             val existingHasFile = targetId in currentEpubIds
-            val mayReplace = if (mode == BackupImportMode.MERGE && existing != null && !existing.isDeleted) {
-                // File Merge leaves an active overlap alone and only fills a gap
-                // (iOS `mergeRefillsAnEPUBThatWentMissingLocally`).
-                !existingHasFile
-            } else {
-                mayReplaceEpub(
-                    hasLocalFile = existingHasFile,
-                    isPreserved = existing?.epubPreservationStatusRaw == "preserved",
-                    // Replace treats the snapshot as this device's library, so a file
-                    // that actually carries the EPUB wins even when clocks are equal.
-                    isNewRecord = existing == null || mode == BackupImportMode.REPLACE_LIBRARY,
-                    // Only replace a local EPUB when the archive's copy is genuinely
-                    // the newer one. Writing it whenever the archive carried a file
-                    // means folder sync *destroys* a locally changed EPUB rather than
-                    // merely failing to propagate it: sync-down runs before sync-up,
-                    // so the stale remote copy is restored over the fresh local file
-                    // and then exported back out.
-                    //
-                    // iOS `KudosBackupService.mayReplaceEPUB` uses shouldApplyIncoming
-                    // (>=). A prior asset batch already merged this record's clock;
-                    // rejecting equality would discard its later batch's corrected EPUB.
-                    incomingIsNewer = existing != null && SyncMerge.shouldApplyIncoming(
-                        existing.effectiveLastModifiedAt, incomingModifiedAt
-                    )
-                )
-            }
+            val mayReplace = mayRestoreEpub(existing, existingHasFile, mode, incomingModifiedAt)
             // Check only what would be written, and never let bytes that are not a
             // readable EPUB replace a file or claim one. iOS stages and inspects the
             // asset the same way and skips an invalid one, leaving the existing
@@ -251,7 +227,10 @@ object BackupMergeService {
             )
             identity.index(worksById.getValue(targetId))
 
-            if (incomingEpub != null) epubFilesToWrite[targetId] = incomingEpub
+            if (incomingEpub != null) {
+                epubFilesToWrite[targetId] = incomingEpub
+                epubIncomingModifiedAt[targetId] = incomingModifiedAt
+            }
 
             val mergedTags = if (mode == BackupImportMode.REPLACE_LIBRARY) {
                 archived.userTags.normalizedNames()
@@ -476,6 +455,7 @@ object BackupMergeService {
             normalizeQueuePreservationForApply = normalizeQueuePreservation,
             replaceOmissionTombstoneIds = tombstonesById.keys - tombstoneIdsBeforeOmissions,
             epubFilesToWriteByWorkId = epubFilesToWrite,
+            epubIncomingModifiedAtByWorkId = epubIncomingModifiedAt,
             fontFilesToWriteByFileName = fontMerge.filesToWrite,
             mode = mode,
             unknownSignerTombstoneIds = unknownSignerIds,
@@ -723,6 +703,7 @@ object BackupMergeService {
         }
         return refreshed.copy(
             snapshot = refreshed.snapshot.copy(tombstones = keptTombstones),
+            deferredRecordKeysForApply = deferred,
             summary = result.summary.copy(
                 concurrentRowsChanged = conflicts.size, concurrentRowsDeferred = deferred.size
             )
@@ -2576,3 +2557,22 @@ internal fun mayReplaceEpub(
     isNewRecord: Boolean,
     incomingIsNewer: Boolean
 ): Boolean = isNewRecord || !hasLocalFile || (!isPreserved && incomingIsNewer)
+
+/** Shared merge/install policy, including iOS File Merge's add-only overlap rule. */
+internal fun mayRestoreEpub(
+    local: SavedWork?,
+    hasLocalFile: Boolean,
+    mode: BackupImportMode,
+    incomingModifiedAt: Instant?
+): Boolean = if (mode == BackupImportMode.MERGE && local != null && !local.isDeleted) {
+    !hasLocalFile
+} else {
+    mayReplaceEpub(
+        hasLocalFile = hasLocalFile,
+        isPreserved = local?.epubPreservationStatusRaw == "preserved",
+        isNewRecord = local == null || mode == BackupImportMode.REPLACE_LIBRARY,
+        incomingIsNewer = local != null && SyncMerge.shouldApplyIncoming(
+            local.effectiveLastModifiedAt, incomingModifiedAt
+        )
+    )
+}
