@@ -31,6 +31,14 @@ object ReaderLocatorCodec {
 
     private val json = Json { ignoreUnknownKeys = true }
 
+    /**
+     * The form a locator made on this device is stored in: the envelope. One already in it comes
+     * back as it is; a bare Readium locator is wrapped. The page draws, and goes to, only a
+     * locator in the envelope, so a highlight stored bare was saved and never shown.
+     */
+    fun forStorage(rawOrEnvelope: String): String? =
+        if (decodeCompatibleLocator(rawOrEnvelope) != null) rawOrEnvelope else encodeEnvelope(rawOrEnvelope)
+
     /** Wrap a raw Readium locator JSON string. Returns null if it is not valid JSON. */
     fun encodeEnvelope(rawLocatorJson: String): String? {
         val inner = runCatching { json.parseToJsonElement(rawLocatorJson) }.getOrNull()

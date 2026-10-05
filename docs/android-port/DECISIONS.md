@@ -573,3 +573,16 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   iOS keeps the Inbox byline on one line and the local collection covers as a scaled mosaic;
   on Android at font scale 2.0 they cut or crowd their text, so Android stacks and wraps there
   (brief 3aq, in progress). Nothing changes at ordinary sizes.
+- **2026-10-05 · A highlight made on Android is stored in the form its page can draw.** It was
+  stored with a bare Readium locator; the page draws, and goes to, only a locator in this
+  reader's envelope (the rule that keeps an iPhone's locators from being followed into the
+  wrong place). So a highlight or a note made from selected text was saved and never shown,
+  since those two pieces of code were written. `ReaderViewModel.addHighlight` now stores the
+  envelope, as bookmarks always did. Highlights already stored bare stay undrawn: nothing tells
+  them from an iPhone's. Reverse: `ReaderLocatorCodec.forStorage`.
+- **2026-10-05 · The selection menu's two actions are added whenever the system's menu holds
+  anything.** Not "when it holds Copy": the WebView's Copy cannot be found by Android's Copy
+  id, which the first version looked for, and so added nothing on a device. A book's page has
+  no field for a caret, and with nothing selected either action does nothing. The two pills
+  are still in the reader's menu; they go next. Reverse: `addActions` in
+  `reader/readium/ReaderSelectionContainer.kt`.
