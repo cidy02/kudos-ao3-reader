@@ -99,6 +99,40 @@ class AnnotationTombstoneTest {
     }
 
     @Test
+    fun searchResultBookmarkUsesReaderBookmarkRecordAndCompatiblePassageLocator() = runTest {
+        database.workDao().upsert(SavedWork(id = WORK_ID, title = "Work", author = "Author").toEntity())
+        val locator = org.readium.r2.shared.publication.Locator.fromJSON(
+            org.json.JSONObject(
+                """{"href":"ch5.xhtml","type":"application/xhtml+xml",
+                    "locations":{"progression":0.4,"totalProgression":0.6},
+                    "text":{"before":"A ","highlight":"match","after":" here."}}"""
+            )
+        )!!
+        val envelope = checkNotNull(ReaderLocatorCodec.encodeEnvelope(locator.toJSON().toString()))
+        // Both the reader's own action and the result action call addBookmark.
+        val bookmark = annotationRepository.addBookmark(
+            workId = WORK_ID,
+            locatorString = envelope,
+            progression = 0.6,
+            spineIndex = 4,
+            chapterTitle = "Chapter 5"
+        )
+        val saved = database.annotationDao().getById(bookmark.id)!!
+        assertEquals("bookmark", saved.kindRaw)
+        assertEquals(WORK_ID, saved.workID)
+        assertEquals(4, saved.spineIndex)
+        assertEquals(0.6, saved.progression, 0.0)
+        assertEquals("Chapter 5", saved.chapterTitle)
+        assertEquals(envelope, saved.locatorString)
+        assertEquals("", saved.selectedText)
+        val restored = io.github.cidy02.kudos.reader.readium.ReadiumNavigatorController
+            .locatorFromJson(saved.locatorString)!!
+        assertEquals(locator.href, restored.href)
+        assertEquals("match", restored.text.highlight)
+        assertEquals(0.4, restored.locations.progression!!, 0.0)
+    }
+
+    @Test
     fun deleteAnnotationMintsTombstoneAndFolderSyncDoesNotResurrect() = runTest {
         database.workDao().upsert(
             SavedWork(
