@@ -1,6 +1,7 @@
 package io.github.cidy02.kudos.account
 
 import androidx.lifecycle.ViewModelStore
+import androidx.lifecycle.viewModelScope
 import io.github.cidy02.kudos.auth.AO3AuthRepository
 import io.github.cidy02.kudos.auth.MemoryCookieStore
 import io.github.cidy02.kudos.auth.MemorySessionStore
@@ -13,11 +14,16 @@ import io.github.cidy02.kudos.network.ao3.account.AO3AccountParser
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.job
+import kotlinx.coroutines.joinAll
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
+import kotlinx.coroutines.withTimeoutOrNull
 import org.junit.After
 import org.junit.Assert.*
 import org.junit.Before
@@ -28,10 +34,15 @@ import org.junit.Test
 class AO3CollectionsViewModelTest {
     private val dispatcher = UnconfinedTestDispatcher()
     private val stores = mutableListOf<ViewModelStore>()
+    private val scopes = mutableListOf<Job>()
 
     @Before fun setUp() { Dispatchers.setMain(dispatcher) }
     @After fun tearDown() {
         stores.forEach { it.clear() }
+        // A page is parsed on a real thread, and an unconfined Main carries on from there: a
+        // cancelled model can still be unwinding on that thread. Let it finish before Main goes,
+        // or its last step lands on no Main at all and fails whichever test starts next.
+        runBlocking { withTimeoutOrNull(5_000) { scopes.joinAll() } }
         Dispatchers.resetMain()
     }
 
@@ -40,6 +51,7 @@ class AO3CollectionsViewModelTest {
         auth.restoreSession()
         val model = AO3CollectionsViewModel(AccountListRepository(client = client, authRepository = auth))
         stores.add(ViewModelStore().apply { put("collections", model) })
+        scopes.add(model.viewModelScope.coroutineContext.job)
         model.onAppear()
         model.uiState.first { it is AO3CollectionsUiState.Loaded }
         return model to auth
