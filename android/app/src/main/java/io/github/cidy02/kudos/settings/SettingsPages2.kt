@@ -714,8 +714,7 @@ fun SettingsFolderSyncPage(repository: SettingsRepository, settings: KudosSettin
                 PairingCard(
                     settingsRepository = container.settingsRepository,
                     database = container.database,
-                    workRepository = container.workRepository,
-                    backupChrome = true
+                    workRepository = container.workRepository
                 )
             }
         }
