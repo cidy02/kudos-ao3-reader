@@ -50,7 +50,9 @@ object BackupMergeService {
          * Marked after an earlier batch, a queued work's old EPUB was protected from the
          * corrected one a later batch carried.
          */
-        normalizeQueuePreservation: Boolean = true
+        normalizeQueuePreservation: Boolean = true,
+        /** Apply-only identity decisions from capture; does not rewrite archive record IDs. */
+        workIdRemapForApply: Map<String, String> = emptyMap()
     ): BackupMergeResult {
         val manifest = BackupValidator.validateManifest(backup.manifest, now)
         val exportedAt = parseOptionalInstant(manifest.exportedAt)
@@ -128,6 +130,9 @@ object BackupMergeService {
             exportedAt = exportedAt,
             now = now
         )
+        // Provenance before any Replace omission mints a deletion. Captured and
+        // adopted records must never be cancelled by an apply-time keep decision.
+        val tombstoneIdsBeforeOmissions = tombstonesById.keys.toSet()
 
         val worksById = current.works
             .associateByTo(linkedMapOf()) { BackupPaths.normalizeIdForComparison(it.id) }
@@ -141,7 +146,7 @@ object BackupMergeService {
 
         manifest.works.forEach { archived ->
             val archivedId = BackupPaths.canonicalUuid(archived.id, "work.id")
-            val existing = identity.existingWork(
+            val existing = workIdRemapForApply[archivedId]?.let { worksById[it] } ?: identity.existingWork(
                 ao3WorkId = archived.ao3WorkID?.toLong(),
                 sourceUrl = archived.sourceURL,
                 recordId = archivedId
@@ -465,6 +470,11 @@ object BackupMergeService {
                 queueTagNamesByQueueId = queueMerge.queueTagNamesByQueueId
             ),
             summary = summary,
+            capturedSnapshot = current,
+            sourceManifest = manifest,
+            mergedAt = now,
+            normalizeQueuePreservationForApply = normalizeQueuePreservation,
+            replaceOmissionTombstoneIds = tombstonesById.keys - tombstoneIdsBeforeOmissions,
             epubFilesToWriteByWorkId = epubFilesToWrite,
             fontFilesToWriteByFileName = fontMerge.filesToWrite,
             mode = mode,
@@ -506,6 +516,216 @@ object BackupMergeService {
                 fandomReadWatermarks.none { it.id == local.id }
             },
             workIdRemap = workIdRemap
+        )
+    }
+
+    /**
+     * Called with the database locked by apply. Reuse the original archive (not the
+     * already-merged rows, which contain stale local values) for clocked conflicts.
+     * Replace becomes reconcile only for changed rows; unchanged rows still replace.
+     */
+    internal fun refreshForApply(result: BackupMergeResult, stored: BackupLibrarySnapshot): BackupMergeResult {
+        val captured = result.capturedSnapshot
+        val fresh = stored.copy(
+            settings = captured.settings,
+            epubWorkIds = captured.epubWorkIds + result.epubFilesToWriteByWorkId.keys,
+            fontFilesByFileName = captured.fontFilesByFileName
+        )
+        val conflicts = mutableSetOf<String>()
+        val deferred = mutableSetOf<String>()
+        // Assets have already been planned. This pass only resolves database rows;
+        // it neither installs bytes nor creates another restored-font identity.
+        val remerged by lazy {
+            merge(
+                current = fresh.copy(tombstones = if (result.mode == BackupImportMode.REPLACE_LIBRARY) {
+                    emptyList()
+                } else result.snapshot.tombstones),
+                backup = KudosBackupPackage(result.sourceManifest.copy(fonts = emptyList(), tombstones = emptyList())),
+                mode = if (result.mode == BackupImportMode.MERGE) result.mode else BackupImportMode.RECONCILE,
+                now = result.mergedAt,
+                normalizeQueuePreservation = result.normalizeQueuePreservationForApply,
+                workIdRemapForApply = result.workIdRemap
+            ).snapshot
+        }
+        fun <T> retain(
+            kind: String, originals: List<T>, merged: List<T>, held: List<T>,
+            id: (T) -> String, resolve: (T) -> T = { it }
+        ): List<T> {
+            val before = originals.associateBy { BackupPaths.normalizeIdForComparison(id(it)) }
+            val current = held.associateBy { BackupPaths.normalizeIdForComparison(id(it)) }
+            return merged.mapNotNull { row ->
+                val key = BackupPaths.normalizeIdForComparison(id(row))
+                val original = before[key]
+                val live = current[key]
+                when {
+                    live == original -> row
+                    live == null -> null // Deleted since capture: do not resurrect it.
+                    else -> {
+                        conflicts += "$kind:$key"
+                        if (kind in setOf("bookmark", "search", "font", "tombstone")) deferred += "$kind:$key"
+                        if (original == null) live else resolve(live)
+                    }
+                }
+            }
+        }
+        fun <T> unchanged(kind: String, removed: List<T>, held: List<T>, id: (T) -> String): List<T> {
+            val current = held.associateBy { BackupPaths.normalizeIdForComparison(id(it)) }
+            return removed.filter {
+                val key = BackupPaths.normalizeIdForComparison(id(it))
+                val live = current[key]
+                if (live != null && live != it) conflicts += "$kind:$key"
+                live == it
+            }
+        }
+        fun <T> resolved(
+            kind: String, rows: List<T>, live: T, id: (T) -> String,
+            clock: (T) -> Instant?, onTie: () -> T = { live }
+        ): T {
+            val candidate = rows.firstOrNull {
+                BackupPaths.normalizeIdForComparison(id(it)) == BackupPaths.normalizeIdForComparison(id(live))
+            } ?: live
+            // The existing >= rule is right for an unchanged row, but an edit made
+            // during this import owns an equal clock tick. Retain existing fills.
+            if (clock(live) != null && clock(candidate) == clock(live)) {
+                val kept = onTie()
+                if (kept != candidate) deferred += "$kind:${BackupPaths.normalizeIdForComparison(id(live))}"
+                return kept
+            }
+            return candidate
+        }
+
+        val snapshot = result.snapshot.copy(
+            works = retain("work", captured.works, result.snapshot.works, fresh.works, { it.id }) { live ->
+                var merged = remerged.works.firstOrNull {
+                    BackupPaths.normalizeIdForComparison(it.id) == BackupPaths.normalizeIdForComparison(live.id)
+                } ?: live
+                val original = captured.works.firstOrNull {
+                    BackupPaths.normalizeIdForComparison(it.id) == BackupPaths.normalizeIdForComparison(live.id)
+                }
+                val archived = result.sourceManifest.works.firstOrNull {
+                    result.workIdRemap[BackupPaths.normalizeIdForComparison(it.id)] ==
+                        BackupPaths.normalizeIdForComparison(live.id)
+                }
+                if (original != null && archived != null && live.copy(
+                    progressModifiedAt = original.progressModifiedAt, lastReadDate = original.lastReadDate,
+                    readiumLocator = original.readiumLocator, lastSpineIndex = original.lastSpineIndex,
+                    lastScrollFraction = original.lastScrollFraction, legacyReaderProgress = original.legacyReaderProgress
+                ) != original && resolveIncomingLastModifiedAt(archived.lastModifiedAt, archived.dateAdded,
+                    parseOptionalInstant(result.sourceManifest.exportedAt), result.mergedAt) == live.effectiveLastModifiedAt
+                ) {
+                    val kept = mergeWork(live, merged, archived, incomingModifiedAtOverride = null,
+                        exportedAt = parseOptionalInstant(result.sourceManifest.exportedAt))
+                    if (kept != merged) deferred += "work:${BackupPaths.normalizeIdForComparison(live.id)}"
+                    merged = kept
+                }
+                // Progress saves can leave lastModifiedAt alone, or share a clock tick.
+                // A position saved during this import must never move back, in any mode.
+                if (original != null && (live.progressModifiedAt != original.progressModifiedAt ||
+                    live.lastReadDate != original.lastReadDate || live.readiumLocator != original.readiumLocator ||
+                    live.lastSpineIndex != original.lastSpineIndex || live.lastScrollFraction != original.lastScrollFraction ||
+                    live.legacyReaderProgress != original.legacyReaderProgress)
+                ) {
+                    if (merged.progressModifiedAt != live.progressModifiedAt || merged.lastReadDate != live.lastReadDate ||
+                        merged.readiumLocator != live.readiumLocator || merged.lastSpineIndex != live.lastSpineIndex ||
+                        merged.lastScrollFraction != live.lastScrollFraction || merged.legacyReaderProgress != live.legacyReaderProgress
+                    ) deferred += "work:${BackupPaths.normalizeIdForComparison(live.id)}"
+                    merged.copy(
+                        progressModifiedAt = live.progressModifiedAt, lastReadDate = live.lastReadDate,
+                        readiumLocator = live.readiumLocator, lastSpineIndex = live.lastSpineIndex,
+                        lastScrollFraction = live.lastScrollFraction, legacyReaderProgress = live.legacyReaderProgress
+                    )
+                } else merged
+            },
+            bookmarks = retain("bookmark", captured.bookmarks, result.snapshot.bookmarks, fresh.bookmarks, { it.id }),
+            fonts = retain("font", captured.fonts, result.snapshot.fonts, fresh.fonts, { it.id }),
+            savedSearches = retain("search", captured.savedSearches, result.snapshot.savedSearches, fresh.savedSearches, { it.id }),
+            collections = retain("collection", captured.collections, result.snapshot.collections, fresh.collections, { it.id }) {
+                val live = it
+                resolved("collection", remerged.collections, live, { row -> row.id }, { row -> row.lastModifiedAt ?: row.dateAdded }) {
+                    result.sourceManifest.collections.firstOrNull { archived ->
+                        BackupPaths.normalizeIdForComparison(archived.id) == BackupPaths.normalizeIdForComparison(live.id)
+                    }?.let { archived -> fillCollectionFields(live, archived, incomingWins = false,
+                        exportedAt = parseOptionalInstant(result.sourceManifest.exportedAt)) } ?: live
+                }
+            },
+            readingQueues = retain("queue", captured.readingQueues, result.snapshot.readingQueues, fresh.readingQueues, { it.id }) {
+                val live = it
+                resolved("queue", remerged.readingQueues, live, { row -> row.id }, { row ->
+                    SyncMerge.effectiveQueueModifiedAt(row.dateUpdated, row.lastMembershipChangedAt,
+                        fresh.readingQueueMemberships.filter { member -> member.queueID == row.id }
+                            .map { member -> member.lastModifiedAt ?: member.queuedAt })
+                }) {
+                    result.sourceManifest.readingQueues.firstOrNull { archived ->
+                        BackupPaths.normalizeIdForComparison(archived.id) == BackupPaths.normalizeIdForComparison(live.id) ||
+                            (live.kindRaw == ReadingQueueKind.SAVED_FOR_LATER && archived.kindRaw == live.kindRaw)
+                    }?.let { archived -> fillQueueFields(live, archived, incomingWins = false) } ?: live
+                }
+            },
+            readingQueueMemberships = retain("membership", captured.readingQueueMemberships,
+                result.snapshot.readingQueueMemberships, fresh.readingQueueMemberships, { it.id }) {
+                resolved("membership", remerged.readingQueueMemberships, it, { row -> row.id }, { row -> row.lastModifiedAt ?: row.queuedAt })
+            },
+            annotations = retain("annotation", captured.annotations, result.snapshot.annotations, fresh.annotations, { it.id }) {
+                resolved("annotation", remerged.annotations, it, { row -> row.id }, { row -> row.effectiveLastModifiedAt })
+            },
+            readingSessions = retain("session", captured.readingSessions, result.snapshot.readingSessions, fresh.readingSessions, { it.id }) {
+                resolved("session", remerged.readingSessions, it, { row -> row.id }, { row -> row.lastModifiedAt })
+            },
+            readingFavorites = retain("favorite", captured.readingFavorites, result.snapshot.readingFavorites, fresh.readingFavorites, { it.id }) {
+                resolved("favorite", remerged.readingFavorites, it, { row -> row.id }, { row -> row.lastModifiedAt })
+            },
+            fandomReadWatermarks = retain("watermark", captured.fandomReadWatermarks,
+                result.snapshot.fandomReadWatermarks, fresh.fandomReadWatermarks, { it.id }) {
+                resolved("watermark", remerged.fandomReadWatermarks, it, { row -> row.id }, { row -> row.lastModifiedAt })
+            },
+            // Adopted archive deletions are not local apply conflicts to cancel.
+            tombstones = retain("tombstone", captured.tombstones, result.snapshot.tombstones.filterNot {
+                BackupPaths.normalizeIdForComparison(it.id) in result.adoptedIncomingTombstoneIds
+            }, fresh.tombstones, { it.id }) + result.snapshot.tombstones.filter {
+                BackupPaths.normalizeIdForComparison(it.id) in result.adoptedIncomingTombstoneIds
+            },
+            userTagsByWorkId = result.snapshot.userTagsByWorkId.mapValues { (id, names) ->
+                val before = captured.userTagsByWorkId[id].orEmpty()
+                val live = fresh.userTagsByWorkId[id].orEmpty()
+                if (before == live) names else (live + (names - before.toSet())).normalizedNames()
+            },
+            queueTagNamesByQueueId = result.snapshot.queueTagNamesByQueueId.mapValues { (id, names) ->
+                val before = captured.queueTagNamesByQueueId[id].orEmpty()
+                val live = fresh.queueTagNamesByQueueId[id].orEmpty()
+                if (before == live) names else (live + (names - before.toSet())).normalizedNames()
+            }
+        )
+        val refreshed = result.copy(
+            snapshot = snapshot,
+            removedBookmarks = unchanged("bookmark", result.removedBookmarks, fresh.bookmarks) { it.id },
+            removedSavedSearches = unchanged("search", result.removedSavedSearches, fresh.savedSearches) { it.id },
+            removedCollections = unchanged("collection", result.removedCollections, fresh.collections) { it.id },
+            removedReadingQueues = unchanged("queue", result.removedReadingQueues, fresh.readingQueues) { it.id },
+            removedAnnotations = unchanged("annotation", result.removedAnnotations, fresh.annotations) { it.id },
+            removedReadingSessions = unchanged("session", result.removedReadingSessions, fresh.readingSessions) { it.id },
+            removedReadingFavorites = unchanged("favorite", result.removedReadingFavorites, fresh.readingFavorites) { it.id },
+            removedFandomReadWatermarks = unchanged("watermark", result.removedFandomReadWatermarks, fresh.fandomReadWatermarks) { it.id }
+        )
+        val omissionKinds = mapOf(
+            SyncTombstoneRecordType.BOOKMARK to "bookmark",
+            SyncTombstoneRecordType.SAVED_SEARCH to "search",
+            SyncTombstoneRecordType.READING_SESSION to "session",
+            SyncTombstoneRecordType.READING_FAVORITE to "favorite",
+            SyncTombstoneRecordType.FANDOM_READ_WATERMARK to "watermark"
+        )
+        val keptTombstones = refreshed.snapshot.tombstones.filterNot { tombstone ->
+            val id = BackupPaths.normalizeIdForComparison(tombstone.id)
+            val recordId = BackupPaths.normalizeIdForComparison(tombstone.recordID)
+            // Only this merge's own omission records. An archive or another device's
+            // deletion for the very same row remains intact, including its signature.
+            id in result.replaceOmissionTombstoneIds &&
+                "${omissionKinds[tombstone.recordTypeRaw]}:$recordId" in conflicts
+        }
+        return refreshed.copy(
+            snapshot = refreshed.snapshot.copy(tombstones = keptTombstones),
+            summary = result.summary.copy(
+                concurrentRowsChanged = conflicts.size, concurrentRowsDeferred = deferred.size
+            )
         )
     }
 

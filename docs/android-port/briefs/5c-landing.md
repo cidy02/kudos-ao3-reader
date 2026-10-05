@@ -211,10 +211,31 @@ happens for a manifest this build can read.
 
 Codex's notes of risks it saw and left alone, for a later brief:
 
-- An import writes every row it captured and kept, whatever happened to it since. An edit made
-  to such a row while the import runs is overwritten.
-- Replace Library records a deletion for a saved link or search the archive omits at the time
-  it merges. If the reader then edits that row and it is kept, the deletion record remains, and
-  a later sync can remove the row.
+- (Fixed in 5g.) An import wrote every row it captured and kept, whatever happened to it since.
+- (Fixed in 5g.) Replace Library kept its deletion record for a saved link or search the reader
+  edited while it ran.
 - Fields Android writes that iOS does not know: the manifest's `exportedBy`, and three
   `readiumLocator…` fields on a work that are declared but never filled in today.
+
+## Brief 5g (2026-10-05)
+
+Codex wrote both parts from `5g-import-overwrites.md` (`5g-result.md`): the two risks above.
+
+| Part | Outcome |
+|---|---|
+| 1 | **Landed.** An import no longer writes over what the reader did while it ran. Just before writing, inside the same database write, it reads the library again and compares every row with what it captured. A row that changed is merged again with the backup's record by the ordinary rules (the newer wins); a reading position saved meanwhile is never moved back; a saved link, saved search or font name, which carry no edit time, keep the reader's version. A row deleted meanwhile is not brought back. |
+| 2 | **Landed.** When Replace Library keeps a row the reader edited, the deletion record it made for that row is not stored. Deletion records from the backup or from another device are untouched. |
+
+Also fixed on the way: Replace's clean-up of queue memberships read the live table and could
+remove one made or reordered while it ran.
+
+When a backup's value is held back to keep the reader's, the import says so: "N item(s) you
+changed during the import kept your version; import again to take the backup's". A sync needs
+no telling, since it runs again.
+
+Still open, from Codex's notes:
+
+- **Files, not rows.** Which EPUBs an import may write is decided from the state it captured. A
+  work marked to keep offline, or a download removed, while the import runs can still get the
+  bytes the import planned.
+- Settings changed while an import runs are outside this (they are not rows).

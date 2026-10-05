@@ -503,3 +503,11 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   `briefs/3ai-result.md`: tapping Bookmark twice on one result stores two bookmarks (iOS returns
   the first); a result's context is what Android's search engine returns, not a whole sentence.
   Reverse: `reader/ReaderSearchSheet.kt`, `reader/ReaderSearch.kt`.
+- **2026-10-05 · An import does not write over what the reader did while it ran.** Before
+  writing, inside the same database write, it reads the library again; a row that changed since
+  the import began is merged again with the backup's record (the newer wins, a reading position
+  saved meanwhile never moves back), and a row deleted meanwhile stays deleted. iOS cannot meet
+  this: its restore runs in one go. Android says one new thing when a backup's value was held
+  back: "N item(s) you changed during the import kept your version; import again to take the
+  backup's". Reverse: `refreshForApply` in `backup/BackupMergeService.kt` and
+  `applyMergeResult` in `backup/BackupRepository.kt`.
