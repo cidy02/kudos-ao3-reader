@@ -1,5 +1,9 @@
 package io.github.cidy02.kudos.network.ao3
 
+import io.github.cidy02.kudos.network.ao3.account.AO3AccountParser
+import io.github.cidy02.kudos.network.ao3.work.AO3DownloadUrlBuilder
+import io.github.cidy02.kudos.network.ao3.work.AO3WorkMetadataParser
+import java.io.File
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -107,6 +111,45 @@ class DemoNetworkBlockTest {
         val client = OkHttpAO3Client.defaultOkHttpClient()
         assertTrue(client.interceptors.first() is DemoNetworkInterceptor)
         assertTrue(client.interceptors[1] is AO3RedirectCookieRelayInterceptor)
+    }
+
+    @Test
+    fun subscriptionPageAndItsMetadataLookupsAreAnsweredByBundledDemoFixtures() {
+        val fixtures = FixtureSource { fixture ->
+            val candidates = listOf(
+                File("src/debug/assets/fixtures/$fixture.html"),
+                File("app/src/debug/assets/fixtures/$fixture.html"),
+                File("android/app/src/debug/assets/fixtures/$fixture.html")
+            )
+            candidates.firstOrNull(File::isFile)?.readBytes()
+        }
+        val client = OkHttpClient.Builder()
+            .addInterceptor(DemoNetworkInterceptor(isActive = { true }, fixtures = { fixtures }))
+            .addInterceptor { error("Demo fixture lookup must never reach the network") }
+            .build()
+        fun html(url: String): String = client.newCall(get(url)).execute().use { response ->
+            assertEquals(200, response.code)
+            response.body.string()
+        }
+        val page = AO3AccountParser().parseSubscriptionsPage(
+            html("https://archiveofourown.org/users/AO3_Reader/subscriptions?type=works&page=1"), 1
+        )
+        assertEquals(listOf(45678901L, 12345L, 999000002L), page.works.map { it.id })
+        assertEquals(listOf("A Study in Pink", "Another Fic", "Paper Cranes"), page.works.map { it.title })
+        assertTrue(page.works.all { it.chapters.isEmpty() }) // Enrichment still takes the real lookup path.
+        val urls = AO3DownloadUrlBuilder()
+        val metadata = page.works.map { work ->
+            val url = urls.workMetadataUrl(work.id)
+            assertEquals("true", url.toHttpUrl().queryParameter("view_adult"))
+            AO3WorkMetadataParser().parse(html(url))
+        }
+        assertEquals(listOf("5/?", "8/12", "1/1"), metadata.map { it.chapters })
+        assertTrue(metadata.all { !it.isEmpty && it.rating.isNotEmpty() })
+        assertEquals(2210, metadata.last().words)
+        // Specific metadata routes must not swallow the established action fixtures.
+        assertEquals("ao3_work_edit", name("https://archiveofourown.org/works/12345/edit"))
+        assertEquals("ao3_chapter_navigate", name("https://archiveofourown.org/works/45678901/navigate"))
+        assertEquals("ao3_comments_page", name("https://archiveofourown.org/works/999000002/comments"))
     }
 
     private fun name(url: String): String? =
