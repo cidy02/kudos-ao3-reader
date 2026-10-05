@@ -103,6 +103,16 @@ class AnnotationRepository(
         return true
     }
 
+    /** Editor recolouring uses identity, not the selection path’s same-passage matcher. */
+    suspend fun addOrRecolorHighlight(id: String, color: String) {
+        val existing = dao.getById(id)?.toDomain() ?: return
+        if (existing.isPendingDeletion ||
+            (!existing.kindRaw.equals("highlight", ignoreCase = true) &&
+                !existing.kindRaw.equals("note", ignoreCase = true))
+        ) return
+        saveAnnotation(existing.copy(colorRaw = color))
+    }
+
     /**
      * Creates a highlight/note, or recolors an existing same-passage highlight.
      */

@@ -32,7 +32,7 @@ class ReaderFanMenuUiTest {
     @get:Rule val compose = createComposeRule()
 
     @Test
-    fun commentsAndRetainedSelectionPillsDispatchAndDisabledActionsCannotBeTapped() {
+    fun commentsDispatchAndDisabledActionsCannotBeTapped() {
         val calls = mutableListOf<String>()
         compose.setContent {
             MaterialTheme {
@@ -43,8 +43,7 @@ class ReaderFanMenuUiTest {
                         percent = null, searchable = false, ao3WorkId = 123, commentsChapter = 2,
                         onContents = {}, onFind = { calls += "find" },
                         onComments = { id, chapter -> calls += Routes.comments(id, chapterPosition = chapter) },
-                        onSettings = {}, onHighlightSelection = { calls += "highlight" },
-                        onNoteSelection = { calls += "note" }
+                        onSettings = {}
                     ),
                     roundActions = listOf(readerKudosAction(123, given = false, working = true) { calls += "kudos" }!!)
                 )
@@ -53,10 +52,7 @@ class ReaderFanMenuUiTest {
         compose.onNodeWithContentDescription("Find in Work").assertHasNoClickAction()
         compose.onNodeWithContentDescription("Give kudos").assertHasNoClickAction()
         compose.onNodeWithContentDescription("Comments").performClick()
-        compose.onNodeWithContentDescription("Highlight selection").performClick()
-        compose.onNodeWithContentDescription("Add note to selection").performClick()
-        assertEquals(listOf("close:false", Routes.comments(123, chapterPosition = 2),
-            "close:false", "highlight", "close:false", "note"), calls)
+        assertEquals(listOf("close:false", Routes.comments(123, chapterPosition = 2)), calls)
     }
 
     @Test

@@ -49,34 +49,30 @@ class ReaderFanMenuTest {
             onContents = { calls += "contents:$it" },
             onFind = { calls += "find" },
             onComments = { id, position -> calls += Routes.comments(id, chapterPosition = position) },
-            onSettings = { calls += "settings" },
-            onHighlightSelection = { calls += "highlight" },
-            onNoteSelection = { calls += "note" }
+            onSettings = { calls += "settings" }
         )
 
     @Test
     fun iosPillsKeepTheirOrderAndDispatchTheExistingDestinations() {
         val menu = pills(chapter = 2)
         assertEquals(
-            listOf("contents", "bookmarks", "find", "comments", "settings", "highlightSelection", "noteSelection"),
+            listOf("contents", "bookmarks", "find", "comments", "settings"),
             menu.map { it.id }
         )
         assertEquals(
-            listOf("Contents", "Bookmarks & Highlights", "Find in Work", "Comments", "Themes & Settings",
-                "Highlight selection", "Add note to selection"),
+            listOf("Contents", "Bookmarks & Highlights", "Find in Work", "Comments", "Themes & Settings"),
             menu.map { it.title }
         )
-        // Keep the fallback pills until the native selection toolbar passes emulator review.
         menu.forEach { it.action() }
         assertEquals(listOf("contents:0", "contents:1", "find", Routes.comments(123, chapterPosition = 2),
-            "settings", "highlight", "note"), calls)
+            "settings"), calls)
         // Mark finished remains on the existing work page, reached through title-tap.
         assertFalse(menu.any { it.id == "markFinished" })
     }
 
     @Test
     fun anImportWithoutAo3IdentityOmitsCommentsAndKudosButKeepsLocalActions() {
-        assertEquals(listOf("contents", "bookmarks", "find", "settings", "highlightSelection", "noteSelection"),
+        assertEquals(listOf("contents", "bookmarks", "find", "settings"),
             pills(workId = null).map { it.id })
         assertNull(readerKudosAction(null, given = false, working = false) { calls += "kudos" })
         assertTrue(calls.isEmpty())

@@ -30,9 +30,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Bookmark
-import androidx.compose.material.icons.filled.BorderColor
 import androidx.compose.material.icons.filled.ChatBubbleOutline
-import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Search
@@ -91,9 +89,7 @@ internal fun readerFanPills(
     onContents: (Int) -> Unit,
     onFind: () -> Unit,
     onComments: (Long, Int?) -> Unit,
-    onSettings: () -> Unit,
-    onHighlightSelection: () -> Unit,
-    onNoteSelection: () -> Unit
+    onSettings: () -> Unit
 ): List<ReaderFanMenuPill> = buildList {
     add(ReaderFanMenuPill(
         id = "contents",
@@ -118,16 +114,6 @@ internal fun readerFanPills(
     add(ReaderFanMenuPill(
         id = "settings", title = "Themes & Settings", icon = Icons.Filled.TextFields,
         action = onSettings
-    ))
-    // Keep these fallback entry points until the native selection toolbar is
-    // checked on an emulator (brief 3ap).
-    add(ReaderFanMenuPill(
-        id = "highlightSelection", title = "Highlight selection", icon = Icons.Filled.BorderColor,
-        action = onHighlightSelection
-    ))
-    add(ReaderFanMenuPill(
-        id = "noteSelection", title = "Add note to selection", icon = Icons.Filled.Edit,
-        action = onNoteSelection
     ))
 }
 
