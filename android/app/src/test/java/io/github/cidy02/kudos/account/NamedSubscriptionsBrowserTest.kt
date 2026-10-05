@@ -14,6 +14,15 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeDown
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.isDialog
+import androidx.compose.ui.test.assertIsNotEnabled
+import io.github.cidy02.kudos.network.ao3.AO3FormPostClient
+import io.github.cidy02.kudos.network.ao3.writes.AO3WriteRepository
+import io.github.cidy02.kudos.network.ao3.writes.DefaultAO3AuthenticatedClient
+import io.github.cidy02.kudos.network.ao3.search.AO3WorkSummary
+import io.github.cidy02.kudos.works.CanonicalWork
 import io.github.cidy02.kudos.auth.AO3AuthRepository
 import io.github.cidy02.kudos.auth.MemoryCookieStore
 import io.github.cidy02.kudos.auth.MemorySessionStore
@@ -46,21 +55,28 @@ class NamedSubscriptionsBrowserTest {
     private var openedSeries: String? = null
     private var openedAuthor: String? = null
 
-    private fun show(signedIn: Boolean = true) {
-        val auth = AO3AuthRepository(MemorySessionStore(if (signedIn) testSession() else null), MemoryCookieStore())
+    private lateinit var auth: AO3AuthRepository
+
+    private fun show(signedIn: Boolean = true, initialScope: String = "works", initialPage: Int = 1, withWork: Boolean = false) {
+        auth = AO3AuthRepository(MemorySessionStore(if (signedIn) testSession() else null), MemoryCookieStore())
         runBlocking { auth.restoreSession() }
         val repository = AccountListRepository(client, auth)
+        val writer = SubscriptionUnsubscribeState(AO3WriteRepository(DefaultAO3AuthenticatedClient(client, client, auth)), auth)
         compose.setContent {
             MaterialTheme {
-                var scope by remember { mutableStateOf("works") }
-                var page by remember(scope) { mutableStateOf(1) }
+                var scope by remember { mutableStateOf(initialScope) }
+                var page by remember(scope) { mutableStateOf(initialPage) }
                 val namedScope = AO3NamedSubscriptionsScope.entries.firstOrNull { it.parameter == scope }
                 val loader = remember(namedScope, page) {
                     namedScope?.let { NamedSubscriptionsLoader(repository, it, page) }
                 }
+                var workRows by remember { mutableStateOf(if (withWork) listOf(CanonicalWork(null,
+                    AO3WorkSummary(123, "Work subscription", emptyList(), emptyList(), "", emptyList(), emptyList(), chapters = "1/1")
+                )) else emptyList()) }
                 SubscriptionsBrowser(
-                    works = emptyList(), watermarks = emptyMap(), scope = scope,
-                    onScopeChange = { scope = it }, onUnsubscribeWork = {},
+                    works = workRows, watermarks = emptyMap(), scope = scope,
+                    onScopeChange = { scope = it }, onUnsubscribeWork = { work -> workRows = workRows.filterNot { it.id == work.id } },
+                    unsubscribePaths = mapOf(123L to "/users/me/subscriptions/987"), unsubscribeState = writer,
                     currentPage = 1, totalPages = 1, expandAll = false,
                     palette = SubjectPalette.fromHue(210.0, ReaderTheme.Light),
                     onLoadPage = {}, onOpenWork = {},
@@ -141,10 +157,82 @@ class NamedSubscriptionsBrowserTest {
         compose.onNodeWithText("0 authors").assertExists()
         assertEquals(2, client.requests.size)
     }
+
+    private fun confirm() {
+        compose.onNode(hasText("Unsubscribe") and hasAnyAncestor(isDialog())).performClick()
+    }
+
+    @Test fun namedConfirmationIsRequiredAndCancelNeverPosts() {
+        show(initialScope = "series")
+        waitForText("My Series")
+        assertTrue(client.posts.isEmpty())
+        compose.onNodeWithText("Unsubscribe").performClick()
+        waitForText("Unsubscribe?")
+        compose.onNodeWithText("“My Series” will be removed from your AO3 subscriptions. You will stop getting update emails for it.").assertExists()
+        assertTrue(client.posts.isEmpty())
+        compose.onNodeWithText("Cancel").performClick()
+        compose.waitForIdle()
+        assertTrue(client.posts.isEmpty())
+        compose.onNodeWithText("My Series").assertExists()
+    }
+
+    @Test fun seriesSuccessRemovesLastRowAndStepsBackFromLaterPage() {
+        show(initialScope = "series", initialPage = 2)
+        waitForText("1 series · page 2 of 3")
+        compose.onNodeWithText("Unsubscribe").performClick()
+        confirm()
+        waitForText("0 series · page 1 of 3")
+        compose.onNodeWithText("My Series").assertDoesNotExist()
+        assertEquals(1, client.posts.size)
+        assertEquals(null, client.requests.last().toHttpUrl().queryParameter("page"))
+    }
+
+    @Test fun authorFailureKeepsRowAndShowsIosAlert() {
+        client.failWrite = true
+        show(initialScope = "users")
+        waitForText("someuser")
+        compose.onNodeWithText("Unsubscribe").performClick()
+        confirm()
+        waitForText("Couldn't unsubscribe")
+        compose.onNodeWithText("someuser").assertExists()
+        assertEquals(1, client.posts.size)
+        compose.onNodeWithText("OK").performClick()
+        compose.onNodeWithText("Unsubscribe").assertExists()
+    }
+
+    @Test fun workConfirmationPostsOnceShowsBusyAndRemovesOnlyAfterConfirmationFromAo3() {
+        val reply = CompletableDeferred<Unit>()
+        client.postGate = reply
+        show(withWork = true)
+        waitForText("Work subscription")
+        compose.onNodeWithText("Unsubscribe").performClick()
+        compose.onNodeWithText("“Work subscription” will be removed from your AO3 subscriptions. The work stays on AO3.").assertExists()
+        assertTrue(client.posts.isEmpty())
+        confirm()
+        waitForText("Unsubscribing…")
+        compose.onNodeWithText("Unsubscribing…").assertIsNotEnabled()
+        compose.onNodeWithText("Work subscription").assertExists()
+        assertEquals(1, client.posts.size)
+        reply.complete(Unit)
+        waitForText("No subscriptions")
+        compose.onNodeWithText("Work subscription").assertDoesNotExist()
+        assertEquals(1, client.posts.size)
+    }
+
 }
 
 /** This is the terminal client; no request can leave the test process. */
-private class NamedTabClient : AO3Client {
+private class NamedTabClient : AO3Client, AO3FormPostClient {
+    val posts = CopyOnWriteArrayList<String>()
+    @Volatile var failWrite = false
+    @Volatile var postGate: CompletableDeferred<Unit>? = null
+    override suspend fun postForm(url: String, formFields: List<Pair<String, String>>, headers: Map<String, String>): AO3Result<AO3HttpResponse> {
+        posts.add(url)
+        postGate?.await()
+        if (!failWrite) empty = true
+        return AO3Result.Success(AO3HttpResponse(url, if (failWrite) 422 else 200, emptyMap(),
+            if (failWrite) "<div class='flash error'>Couldn't unsubscribe.</div>" else "<div class='flash notice'>Unsubscribed.</div>"))
+    }
     val requests = CopyOnWriteArrayList<String>()
     @Volatile var fail = false
     @Volatile var empty = false
@@ -153,12 +241,13 @@ private class NamedTabClient : AO3Client {
         requests.add(url)
         gate?.await()
         if (fail) return AO3Result.Failure(AO3Error.Network("Test failure"))
-        val body = if (empty) "<p class='notes'>You have no subscriptions.</p>" else
+        val body = if (empty) "<p class='notes'>You have no subscriptions.</p>" +
+            (if (url.toHttpUrl().queryParameter("type") == "series") "<ol class='pagination'><li>1</li><li>2</li><li>3</li></ol>" else "") else
             if (url.toHttpUrl().queryParameter("type") == "series") {
                 """<dl class="subscription"><dt><a href="/series/999">My Series</a>
-                    by <a rel="author" href="/users/seriesauthor/pseuds/seriesauthor">seriesauthor</a></dt></dl>
+                    by <a rel="author" href="/users/seriesauthor/pseuds/seriesauthor">seriesauthor</a></dt><dd><form action="/users/me/subscriptions/987"></form></dd></dl>
                     <ol class="pagination"><li>1</li><li>2</li><li>3</li></ol>"""
-            } else "<dl class='subscription'><dt><a href='/users/someuser'>someuser</a></dt></dl>"
-        return AO3Result.Success(AO3HttpResponse(url, 200, emptyMap(), body))
+            } else "<dl class='subscription'><dt><a href='/users/someuser'>someuser</a></dt><dd><form action='/users/me/subscriptions/987'></form></dd></dl>"
+        return AO3Result.Success(AO3HttpResponse(url, 200, emptyMap(), "<meta name='csrf-token' content='fresh-test-token'>" + body))
     }
 }

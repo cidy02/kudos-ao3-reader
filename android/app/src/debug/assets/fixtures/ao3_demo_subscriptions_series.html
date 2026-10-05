@@ -1,7 +1,7 @@
 <!doctype html>
-<html><body>
+<html><head><meta name="csrf-token" content="demo-subscriptions-token"></head><body>
 <dl class="subscription index group">
   <dt><a href="/series/999">My Series</a> by <a href="/users/seriesauthor/pseuds/seriesauthor" rel="author">seriesauthor</a></dt>
-  <dd><form action="/users/me/subscriptions/3" method="post"></form></dd>
+  <dd><form action="/users/me/subscriptions/3" method="post"><input type="hidden" name="_method" value="delete"><input type="hidden" name="authenticity_token" value="demo-subscriptions-token"></form></dd>
 </dl>
 </body></html>

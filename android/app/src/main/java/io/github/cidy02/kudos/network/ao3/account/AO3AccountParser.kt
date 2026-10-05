@@ -133,9 +133,11 @@ class AO3AccountParser(
         if (usernameParser.isLoginRequiredPage(html)) throw AO3AccountParseException.LoginRequired()
 
         val document = Jsoup.parse(html, AO3Constants.BASE_URL)
+        val paths = mutableMapOf<Long, String>()
         val works = document.select("dl.subscription dt").mapNotNull { element ->
             val workLink = element.selectFirst("a[href*=/works/]") ?: return@mapNotNull null
             val workId = workIdFromPath(workLink.attr("href")) ?: return@mapNotNull null
+            element.unsubscribeAction()?.let { paths.putIfAbsent(workId, it) }
             val title = workLink.normalizedText().ifBlank { "Untitled" }
             val authors = element.select("a[href*=/users/]").map { it.normalizedText() }
                 .filter { it.isNotBlank() }
@@ -154,7 +156,8 @@ class AO3AccountParser(
         return AO3SearchPage(
             works = works,
             currentPage = page.coerceAtLeast(1),
-            totalPages = document.parseTotalPages(page.coerceAtLeast(1))
+            totalPages = document.parseTotalPages(page.coerceAtLeast(1)),
+            unsubscribePaths = paths
         )
     }
 
@@ -183,7 +186,7 @@ class AO3AccountParser(
                     AO3AuthorIdentity(it.normalizedText(), it.attr("href"))
                 }
             } else emptyList()
-            AO3NamedSubscription(path, first.normalizedText(), creators)
+            AO3NamedSubscription(path, first.normalizedText(), creators, heading.unsubscribeAction())
         }
         val currentPage = page.coerceAtLeast(1)
         return AO3NamedSubscriptionsPage(rows, currentPage, document.parseTotalPages(currentPage))
@@ -197,6 +200,12 @@ class AO3AccountParser(
             .takeWhile(Char::isDigit)
             .toLongOrNull()
     }
+}
+
+/** Same adjacent-dd action lookup as iOS unsubscribeAction(after:). */
+private fun org.jsoup.nodes.Element.unsubscribeAction(): String? {
+    val details = nextElementSibling()?.takeIf { it.tagName() == "dd" } ?: return null
+    return details.selectFirst("form")?.attr("action")?.trim()?.takeIf { it.isNotEmpty() }
 }
 
 private fun org.jsoup.nodes.Document.parseTotalPages(currentPage: Int): Int {

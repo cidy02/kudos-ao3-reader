@@ -626,6 +626,7 @@ fun AppNavHost(
                 AccountWorksListScreen(
                     type = type,
                     repository = container.accountListRepository,
+                    writeRepository = container.writeRepository,
                     workRepository = container.workRepository,
                     settingsRepository = container.settingsRepository,
                     privacyGate = container.privacyGate,

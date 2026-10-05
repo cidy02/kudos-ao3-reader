@@ -1,11 +1,14 @@
 package io.github.cidy02.kudos.ui.components
 
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.AlertDialogDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
+import io.github.cidy02.kudos.ui.subject.SubjectPalette
 
 @Composable
 fun DestructiveConfirmation(
@@ -16,8 +19,10 @@ fun DestructiveConfirmation(
     dismissText: String = "Cancel",
     confirmBeforeDelete: Boolean,
     onConfirm: () -> Unit,
-    onDismissRequest: () -> Unit
+    onDismissRequest: () -> Unit,
+    palette: SubjectPalette? = null
 ) {
+    val tokens = LocalKudosTokens.current
     if (show) {
         if (!confirmBeforeDelete) {
             LaunchedEffect(Unit) {
@@ -25,6 +30,9 @@ fun DestructiveConfirmation(
             }
         } else {
             AlertDialog(
+                containerColor = if (palette != null) tokens.theme.cardSurface else AlertDialogDefaults.containerColor,
+                titleContentColor = if (palette != null) tokens.primaryInk else AlertDialogDefaults.titleContentColor,
+                textContentColor = if (palette != null) tokens.secondaryInk else AlertDialogDefaults.textContentColor,
                 onDismissRequest = onDismissRequest,
                 title = { Text(title) },
                 text = { Text(text) },
@@ -32,13 +40,13 @@ fun DestructiveConfirmation(
                     TextButton(onClick = onConfirm) {
                         Text(
                             text = confirmText,
-                            color = MaterialTheme.colorScheme.error
+                            color = palette?.accent ?: MaterialTheme.colorScheme.error
                         )
                     }
                 },
                 dismissButton = {
                     TextButton(onClick = onDismissRequest) {
-                        Text(dismissText)
+                        Text(dismissText, color = palette?.accent ?: MaterialTheme.colorScheme.primary)
                     }
                 }
             )
