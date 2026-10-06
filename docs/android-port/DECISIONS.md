@@ -792,3 +792,27 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   `account/AO3ChallengeSettingsScreen.kt`, `account/AO3ChallengeSettingsState.kt`,
   `network/ao3/account/AO3ChallengeSettings.kt`, `getChallengeSettings` in
   `account/AO3CollectionDetailRepository.kt`.
+- **2026-10-05 · The work form as data and the editor's foundations are landed; three choices
+  made on landing.** (1) Android reads a text area whole (summary, notes, chapter text), where
+  iOS trims its ends: an untouched Save then sends back what AO3 served, as a browser does.
+  Reverse: `textarea()` in `network/ao3/writing/AO3WorkFormParser.kt`. (2) Where AO3 serves a
+  list with nothing marked as chosen, Android's known fields follow iOS (nothing is sent), not
+  the browser (the first choice): the two apps must send AO3 the same thing, and whether iOS
+  should change is owner question 17. Not reachable on AO3's pages today. (3) The recovery
+  copies are written with iOS's values and file names but are this device's only; no iOS file
+  was read on Android and none needs to be. iOS evidence: `AO3Client+Works.swift`
+  (`parseWorkForm`, `parseSelect`, `textareaValue`), `AO3WritingModels.swift`
+  (`parameters(submit:)`), `WritingTextRecovery.swift`. Commits `0da4dfb9`, `452f1f6a`.
+- **2026-10-05 · The text editor arrives before anything opens it.** Brief 3bd builds the
+  writing text editor (iOS's `WritingTextEditor`, HTML mode) as a screen that edits one string
+  and hands it back. Until the work form's screen and Save exist, only a demo route opens it,
+  and a draft tap keeps opening AO3's page: an editor that cannot save would be worse than the
+  browser. Its text widget is chosen by Codex on argument and then measured by Claude on a
+  device against the design document's B1 and B6 with the 510,000-character chapter; a failed
+  measurement replaces one file. Reverse: delete the screen and its demo route.
+- **2026-10-05 · A challenge's tag set is a native screen that only reads (brief 3be).** iOS's
+  screen has two writes (the four tag-name fields and rejecting a nomination). Android gets
+  the reading screen first and the writes in a later brief, read against iOS line by line, as
+  Unsubscribe was (3an). Where iOS draws a control only for a write, Android shows the value.
+  If iOS turns out to read page after page there without a cap the networking policy names,
+  Android reads the first page only (as owner question 16).
