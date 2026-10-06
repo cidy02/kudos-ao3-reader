@@ -1,114 +1,114 @@
 <!DOCTYPE html>
-<html><head><meta name="csrf-token" content="draft-csrf=="><title>Post New Work | Archive of Our Own</title></head>
+<html><head><meta name="csrf-token" content="demo-work-995006=="><title>Edit Work | Archive of Our Own</title></head>
 <body class="logged-in"><div id="main">
-  <h2 class="heading">Post New Work</h2>
-  <form id="work-form" class="verbose post work" action="/works" method="post" accept-charset="UTF-8">
+  <h2 class="heading">Edit Work</h2>
+  <form id="work-form" class="verbose post work" action="/works/995006" method="post" accept-charset="UTF-8">
     <input type="hidden" name="utf8" value="✓">
-    <input type="hidden" name="authenticity_token" value="draft-csrf==">
+    <input type="hidden" name="authenticity_token" value="demo-work-995006==">
+    <input type="hidden" name="_method" value="patch">
     <fieldset><legend>Tags</legend>
     <select name="work[rating_string]">
-      <option value="" selected="selected">Please select a rating</option>
+      <option value="">Please select a rating</option>
       <option value="Not Rated">Not Rated</option>
       <option value="General Audiences">General Audiences</option>
-      <option value="Teen And Up Audiences">Teen And Up Audiences</option>
+      <option value="Teen And Up Audiences" selected="selected">Teen And Up Audiences</option>
       <option value="Mature">Mature</option>
       <option value="Explicit">Explicit</option>
     </select>
-    <input type="hidden" name="work[archive_warning_strings][]" value="">
     <input type="checkbox" name="work[archive_warning_strings][]" value="Choose Not To Use Archive Warnings" id="warning_0">
     <label for="warning_0">Choose Not To Use Archive Warnings</label>
     <input type="checkbox" name="work[archive_warning_strings][]" value="Graphic Depictions Of Violence" id="warning_1">
     <label for="warning_1">Graphic Depictions Of Violence</label>
     <input type="checkbox" name="work[archive_warning_strings][]" value="Major Character Death" id="warning_2">
     <label for="warning_2">Major Character Death</label>
-    <input type="checkbox" name="work[archive_warning_strings][]" value="No Archive Warnings Apply" id="warning_3">
+    <input type="checkbox" name="work[archive_warning_strings][]" value="No Archive Warnings Apply" checked="checked" id="warning_3">
     <label for="warning_3">No Archive Warnings Apply</label>
     <input type="checkbox" name="work[archive_warning_strings][]" value="Rape/Non-Con" id="warning_4">
     <label for="warning_4">Rape/Non-Con</label>
     <input type="checkbox" name="work[archive_warning_strings][]" value="Underage" id="warning_5">
     <label for="warning_5">Underage</label>
-    <input type="hidden" name="work[category_strings][]" value="">
     <input type="checkbox" name="work[category_strings][]" value="F/F" id="category_0">
     <label for="category_0">F/F</label>
     <input type="checkbox" name="work[category_strings][]" value="F/M" id="category_1">
     <label for="category_1">F/M</label>
-    <input type="checkbox" name="work[category_strings][]" value="Gen" id="category_2">
+    <input type="checkbox" name="work[category_strings][]" value="Gen" checked="checked" id="category_2">
     <label for="category_2">Gen</label>
     <input type="checkbox" name="work[category_strings][]" value="M/M" id="category_3">
     <label for="category_3">M/M</label>
-    <input type="checkbox" name="work[category_strings][]" value="Multi" id="category_4">
+    <input type="checkbox" name="work[category_strings][]" value="Multi" checked="checked" id="category_4">
     <label for="category_4">Multi</label>
     <input type="checkbox" name="work[category_strings][]" value="Other" id="category_5">
     <label for="category_5">Other</label>
-    <input type="text" name="work[fandom_string]" value="">
-    <input type="text" name="work[relationship_string]" value="">
-    <input type="text" name="work[character_string]" value="">
-    <input type="text" name="work[freeform_string]" value="">
+    <input type="text" name="work[fandom_string]" value="Mill Lantern Chronicles,  星の地図">
+    <input type="text" name="work[relationship_string]" value="Mira &amp; Sol, 河 / 海">
+    <input type="text" name="work[character_string]" value="Mira &quot;Mapmaker&quot;, Sol &amp; Echo">
+    <input type="text" name="work[freeform_string]" value="Maps,  &quot;Wait &amp; See&quot;, 夜の約束">
     </fieldset><fieldset><legend>Preface</legend>
-    <input type="text" name="work[title]" value="">
+    <input type="text" name="work[title]" value="The Cartographer’s &quot;Second&quot; Tide &amp; 星">
     <select name="work[author_attributes][ids][]" multiple="multiple">
       <option value="101" selected="selected">AO3_Reader</option>
       <option value="202">LanternMaker</option>
     </select>
     <input type="text" name="work[author_attributes][byline]" value="">
-    <textarea name="work[summary]"></textarea>
-    <input type="checkbox" name="front-notes-options-show" value="on">
-    <textarea name="work[notes]"></textarea>
-    <input type="checkbox" name="end-notes-options-show" value="on">
-    <textarea name="work[endnotes]"></textarea>
+    <input type="hidden" name="work[author_attributes][coauthors][]" value="303">
+    <input type="hidden" name="work[author_attributes][coauthors][]" value="404">
+    <textarea name="work[summary]">&lt;p&gt;A map for the tide, a promise for the night. 星 &amp; light.&lt;/p&gt;</textarea>
+    <input type="checkbox" name="front-notes-options-show" value="on" checked="checked">
+    <textarea name="work[notes]">&lt;p&gt;For the keepers of the mill.&lt;/p&gt;</textarea>
+    <input type="checkbox" name="end-notes-options-show" value="on" checked="checked">
+    <textarea name="work[endnotes]">&lt;p&gt;The next lantern waits.&lt;/p&gt;</textarea>
     </fieldset><fieldset><legend>Associations</legend>
-    <input type="text" name="work[collection_names]" value="">
-    <input type="text" name="work[recipients]" value="">
-    <input type="checkbox" name="series-options-show" value="on">
+    <input type="text" name="work[collection_names]" value="lantern_exchange,  star_atlas">
+    <input type="text" name="work[recipients]" value="PaperNavigator">
+    <input type="checkbox" name="series-options-show" value="on" checked="checked">
     <select name="work[series_attributes][id]">
       <option value="" selected="selected">Please select</option>
       <option value="77">Lantern Voyages</option>
       <option value="88">Mill Maps</option>
     </select>
     <input type="text" name="work[series_attributes][title]" value="">
+    <dt>Current Series</dt><dd><ul><li><a href="/series/77">Lantern Voyages</a></li><li><a href="/serial_works/5501" data-method="delete">Remove Work From Series</a></li></ul></dd>
     <div id="parent-options">
-    <input type="text" name="work[parent_work_relationships_attributes][0][url]" value="">
-    <input type="text" name="work[parent_work_relationships_attributes][0][title]" value="">
-    <input type="text" name="work[parent_work_relationships_attributes][0][author]" value="">
-    <input type="text" name="work[parent_work_relationships_attributes][0][language_id]" value="">
+    <input type="text" name="work[parent_work_relationships_attributes][0][url]" value="https://archiveofourown.org/works/990001">
+    <input type="text" name="work[parent_work_relationships_attributes][0][title]" value="A Small &quot;North&quot; &amp; 南">
+    <input type="text" name="work[parent_work_relationships_attributes][0][author]" value="QuietNavigator">
+    <input type="text" name="work[parent_work_relationships_attributes][0][language_id]" value="1">
     <input type="hidden" name="work[parent_work_relationships_attributes][0][translation]" value="0">
     <input type="checkbox" name="work[parent_work_relationships_attributes][0][translation]" value="1" id="translation">
     <label for="translation">translation</label>
+<a href="/works/990001">A Small North</a><a href="/related_works/901">Remove</a>
     </div>
-    <input type="checkbox" name="chapters-options-show" value="on" id="chapters-options-show">
-    <input type="text" name="work[wip_length]" value="1">
+    <input type="checkbox" name="chapters-options-show" value="on" checked="checked" id="chapters-options-show">
+    <input type="text" name="work[wip_length]" value="5">
     <select name="work[language_id]">
-      <option value="" selected="selected">Please select a language</option>
-      <option value="1">English</option>
+      <option value="">Please select a language</option>
+      <option value="1" selected="selected">English</option>
       <option value="2">Español</option>
       <option value="3">日本語</option>
     </select>
     </fieldset><fieldset><legend>Text and publication</legend>
-    <input type="text" name="work[chapter_attributes][title]" value="">
-    <textarea name="work[chapter_attributes][summary]"></textarea>
-    <textarea name="work[chapter_attributes][content]"></textarea>
     <select name="work[chapter_attributes][published_at(1i)]">
-      <option value="2026" selected="selected">2026</option>
-      <option value="2024">2024</option>
-      <option value="2019">2019</option>
+      <option value="2026">2026</option>
+      <option value="2019" selected="selected">2019</option>
     </select>
     <select name="work[chapter_attributes][published_at(2i)]">
-      <option value="3">March</option>
-      <option value="10" selected="selected">October</option>
-      <option value="11">November</option>
+      <option value="10">October</option>
+      <option value="11" selected="selected">November</option>
     </select>
     <select name="work[chapter_attributes][published_at(3i)]">
       <option value="5" selected="selected">5</option>
       <option value="7">7</option>
     </select>
+    <input type="hidden" name="work[chapter_attributes][id]" value="775006">
+<p><a href="/works/995006/chapters/775006/edit">Chapter 1</a> <a href="/works/995006/chapters/775007/edit">Chapter 2</a></p>
     <input type="hidden" name="work[backdate]" value="0">
-    <input type="checkbox" name="work[backdate]" value="1" id="backdate">
+    <input type="checkbox" name="work[backdate]" value="1" checked="checked" id="backdate">
     <label for="backdate">backdate</label>
     <input type="hidden" name="work[restricted]" value="0">
     <input type="checkbox" name="work[restricted]" value="1" id="restricted">
     <label for="restricted">restricted</label>
     <input type="hidden" name="work[moderated_commenting_enabled]" value="0">
-    <input type="checkbox" name="work[moderated_commenting_enabled]" value="1" id="moderated_commenting_enabled">
+    <input type="checkbox" name="work[moderated_commenting_enabled]" value="1" checked="checked" id="moderated_commenting_enabled">
     <label for="moderated_commenting_enabled">moderated commenting enabled</label>
     <input type="hidden" name="work[anonymous]" value="0">
     <input type="checkbox" name="work[anonymous]" value="1" id="anonymous">
@@ -116,21 +116,20 @@
     <input type="hidden" name="work[collection_inbox]" value="0">
     <input type="checkbox" name="work[collection_inbox]" value="1" checked="checked" id="collection_inbox">
     <label for="collection_inbox">collection inbox</label>
-    <input type="radio" name="work[comment_permissions]" value="enable_all" checked="checked" id="enable_all">
+    <input type="radio" name="work[comment_permissions]" value="enable_all" id="enable_all">
 <label for="enable_all">Registered users and guests</label>
-    <input type="radio" name="work[comment_permissions]" value="disable_anon" id="disable_anon">
+    <input type="radio" name="work[comment_permissions]" value="disable_anon" checked="checked" id="disable_anon">
 <label for="disable_anon">Only registered users</label>
     <input type="radio" name="work[comment_permissions]" value="disable_all" id="disable_all">
 <label for="disable_all">No one</label>
     <select name="work[work_skin_id]">
-      <option value="" selected="selected">Default</option>
-      <option value="55">Tidal Ink &amp; 星</option>
+      <option value="">Default</option>
+      <option value="55" selected="selected">Tidal Ink &amp; 星</option>
       <option value="66">Mill Ledger</option>
     </select>
     </fieldset><fieldset><legend>Post</legend>
-    <input type="submit" name="save_button" value="Save As Draft">
     <input type="submit" name="preview_button" value="Preview">
-    <input type="submit" name="post_button" value="Post">
+    <input type="submit" name="update_button" value="Post">
     </fieldset>
   </form>
 </div></body></html>
