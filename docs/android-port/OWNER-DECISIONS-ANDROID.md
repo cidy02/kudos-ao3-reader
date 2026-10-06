@@ -276,3 +276,35 @@ This one is not on the list.
   policy; Android then copies it.
 
 Until answered: iOS unchanged; Android as A.
+
+## 17. Saving a work on iOS leaves out some of what AO3's own page would send
+
+Found on 2026-10-05 while building Android's work form (the full table, row by row, opens
+`briefs/3bb-result.md`). All of it is read from iOS's code. **None of it has been tried
+against AO3**, so whether anything is actually lost on a real work is not known.
+
+When you save a work in a browser, the browser sends back every field on AO3's page. iOS
+sends the fields it knows, plus the page's hidden fields (one of each name). The differences
+that could matter:
+
+1. **Co-creators and other hidden lists.** If AO3's page carries a hidden list (the work's
+   co-creators, "collections to remove", or any list AO3 adds later), iOS does not send it
+   back. Whether AO3 then keeps a co-creator is the thing nobody has tried.
+2. **Fields the app does not know.** A field AO3 adds to the form next year is not sent back.
+3. **A posted work's date** is not sent when the form has no chapter text on it.
+4. **A list with nothing chosen** (language, work skin, the inspired-by work's language): a
+   browser sends the first line, iOS sends nothing, which for a skin means "remove it". AO3's
+   pages today start these lists with a blank line or mark the current choice, so this does
+   not happen now.
+
+Android's form keeps every field AO3 served and sends back, untouched, whatever iOS does not
+handle (DECISIONS, 2026-10-05). Android cannot save a work yet.
+
+- **A.** Bring iOS in line with Android: Save sends back every served field the app did not
+  change, and takes the first line of a list with nothing chosen. Tested against saved pages,
+  then tried once by you on a draft of your own before it ships.
+- **B.** Leave iOS as it is. Android stays the more careful of the two.
+- **C.** Try first: save a co-authored draft from the iPhone and look at it on AO3; decide
+  after.
+
+Until answered: iOS unchanged. Android, once it can save, sends everything back.
