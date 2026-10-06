@@ -30,9 +30,11 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -130,6 +132,15 @@ class AnnotationTombstoneTest {
         assertEquals(locator.href, restored.href)
         assertEquals("match", restored.text.highlight)
         assertEquals(0.4, restored.locations.progression!!, 0.0)
+
+        // iOS addBookmark(at:): the same result bookmarked again gives back the first.
+        val again = annotationRepository.addBookmark(WORK_ID, envelope, 0.6, 4, "Chapter 5")
+        assertEquals(bookmark.id, again.id)
+        assertEquals(1, annotationRepository.observeForWork(WORK_ID).first().size)
+        // A deleted bookmark does not stand in the way of a new one at the same place.
+        annotationRepository.deleteAnnotation(bookmark.id)
+        val fresh = annotationRepository.addBookmark(WORK_ID, envelope, 0.6, 4, "Chapter 5")
+        assertNotEquals(bookmark.id, fresh.id)
     }
 
     @Test
