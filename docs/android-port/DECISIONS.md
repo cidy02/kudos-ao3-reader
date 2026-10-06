@@ -816,3 +816,9 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   Unsubscribe was (3an). Where iOS draws a control only for a write, Android shows the value.
   If iOS turns out to read page after page there without a cap the networking policy names,
   Android reads the first page only (as owner question 16).
+- **2026-10-05 · A signed-out reader can open a tag set (answer to Codex on brief 3be).** iOS's
+  `TagSetView.loadTagSet()` makes one anonymous read of `/tag_sets/{id}` when nobody is signed
+  in; the brief had said a signed-out screen reads nothing. iOS wins: a tag set's page is
+  public, so Android makes that one read through its client for public AO3 pages and none of
+  the signed-in reads (the edit form, the nominations). Answered by Claude; the owner has not
+  been asked. Reverse: refuse the screen when signed out.
