@@ -42,7 +42,7 @@ class DemoChallengeSettingsTest {
         assertTrue(parser.parseSettings(meme.second, AO3ChallengeKind.PromptMeme).anonymous)
         assertEquals(meme.second, DemoNetwork.webFixture(memeUrl.toHttpUrl(), source)!!.decodeToString())
         val summerProfile = ChallengeSettingsDestinations.profile("summer_meme")
-        assertEquals(1, parser.parseTagSets(read(summerProfile).second).size)
+        assertEquals(listOf(AO3ChallengeTagSet(44, "Summer Prompt Tags")), parser.parseTagSets(read(summerProfile).second))
         assertEquals(read(summerProfile).second, DemoNetwork.webFixture(summerProfile.toHttpUrl(), source)!!.decodeToString())
         // The existing collection parser sees the same page and an owner-visible Manage link.
         assertNotNull(AO3CollectionParser().parseCollectionShow(read(summerProfile).second, "summer_meme").dashboard.challengeSettingsUrl)

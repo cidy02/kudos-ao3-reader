@@ -180,7 +180,22 @@ internal object DemoNetworkRoutes {
     ).map { (pattern, name) -> Regex(pattern) to name }
 
     fun fixtureName(path: String): String? =
-        routes.firstOrNull { (pattern, _) -> pattern.containsMatchIn(path) }?.second
+        if (Regex("^/tag_sets/(42|43|44)(?:/|$)").containsMatchIn(path)) tagSetFixture(path)
+        else routes.firstOrNull { (pattern, _) -> pattern.containsMatchIn(path) }?.second
+
+    /** One local answer per tag-set address, shared by the native screen and browser. */
+    private fun tagSetFixture(path: String): String? = when (path.trimEnd('/')) {
+        "/tag_sets/42" -> "ao3_demo_tag_set_42"
+        "/tag_sets/42/edit" -> "ao3_demo_tag_set_42_edit"
+        "/tag_sets/42/nominations" -> "ao3_demo_tag_set_42_nominations"
+        "/tag_sets/42/associations" -> "ao3_demo_tag_set_42_nominations"
+        "/tag_sets/43", "/tag_sets/43/edit" -> "ao3_demo_tag_set_43"
+        "/tag_sets/43/nominations", "/tag_sets/43/associations" -> "ao3_demo_tag_set_43_nominations"
+        "/tag_sets/44" -> "ao3_demo_tag_set_44"
+        "/tag_sets/44/edit" -> "ao3_demo_tag_set_44_edit_refused"
+        "/tag_sets/44/nominations", "/tag_sets/44/associations" -> "ao3_demo_tag_set_44_nominations"
+        else -> null // Unknown subpages remain terminal local failures.
+    }
 
     /** Subscriptions share a path, so their type query selects the fixture. */
     fun fixtureName(url: HttpUrl): String? {
@@ -251,6 +266,11 @@ internal class DemoNetworkInterceptor(
         val url = chain.request().url
         if (!DemoNetworkRoutes.isAo3Host(url.host)) return chain.proceed(chain.request())
         val path = DemoNetworkRoutes.decodedPath(url)
+        if (chain.request().method != "GET" && Regex("^/tag_sets/(42|43|44)(?:/|$)").containsMatchIn(path)) {
+            return Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1)
+                .code(405).message("Read-only tag-set demo").header("Content-Type", HTML)
+                .body("<p class='note'>This local tag-set answer is read only.</p>".toResponseBody(HTML_TYPE)).build()
+        }
         collectionParticipants.answer(chain.request(), fixtures())?.let { answer ->
             return Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1)
                 .code(answer.first).message("Local participants answer").header("Content-Type", HTML)
@@ -313,7 +333,7 @@ internal class DemoNetworkInterceptor(
             }
             bytes = document.outerHtml().encodeToByteArray()
         }
-        val code = if (bytes == null) 404 else 200
+        val code = if (bytes == null) 404 else if (path.trimEnd('/') == "/tag_sets/44/edit") 403 else 200
         return Response.Builder()
             .request(chain.request())
             .protocol(Protocol.HTTP_1_1)
@@ -430,6 +450,7 @@ private fun demoChallengeCollectionPage(bytes: ByteArray, path: String): ByteArr
         .replace("winter_exchange", "summer_meme").replace("Winter Exchange 2026", "Summer Prompt Meme")
         .replace("Gift Exchange", "Prompt Meme").replace("gift_exchange", "prompt_meme")
         .replace("Winter Exchange Tags", "Summer Prompt Tags")
+        .replace("/tag_sets/42", "/tag_sets/44")
         .replace("      <li><a href=\"/tag_sets/43\">Snowbound Characters</a></li>\n", "")
         .replace("Sign-ups are open until February.", "Leave a summer prompt about an imaginary seaside town.")
         .encodeToByteArray()

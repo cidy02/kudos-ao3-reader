@@ -63,7 +63,7 @@ class AO3ChallengeSettingsTest {
     @Test fun profileLinksAreNumericDeduplicatedAndNamedInServedOrder() {
         assertEquals(listOf(AO3ChallengeTagSet(42, "Winter Exchange Tags"), AO3ChallengeTagSet(43, "Snowbound Characters")),
             parser.parseTagSets(challengeFixture("ao3_collection_show")))
-        assertEquals(listOf(AO3ChallengeTagSet(42, "Summer Prompt Tags")), parser.parseTagSets("<dl><dt>Tag set:</dt><dd><a href='/tag_sets/42'>Summer Prompt Tags</a></dd></dl>"))
+        assertEquals(listOf(AO3ChallengeTagSet(44, "Summer Prompt Tags")), parser.parseTagSets("<dl><dt>Tag set:</dt><dd><a href='/tag_sets/44'>Summer Prompt Tags</a></dd></dl>"))
         assertEquals(listOf(AO3ChallengeTagSet(8, "Tag set 8")), parser.parseTagSets("""
             <dl><dt>Tag sets:</dt><dd><a href='/tag_sets/new'>new</a><a href='/tag_sets/8'></a>
             <a href='/tag_sets/8'>duplicate</a><a href='/tag_sets/9bad'>bad</a></dd>
