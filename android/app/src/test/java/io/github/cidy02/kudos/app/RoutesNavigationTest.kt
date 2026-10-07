@@ -47,6 +47,11 @@ class RoutesNavigationTest {
                 Routes.navArgOf("collectionSlug"), Routes.navArgOf("collectionTitle"),
                 navArgument("owner") { type = NavType.BoolType; defaultValue = false }
             )) { }
+            composable(Routes.AO3TagSet, arguments = listOf(
+                navArgument("tagSetId") { type = NavType.IntType },
+                navArgument("tagSetTitle") { type = NavType.StringType; defaultValue = "" },
+                navArgument("moderator") { type = NavType.BoolType; defaultValue = false }
+            )) { }
             composable(Routes.AO3CollectionModeration, arguments = listOf(
                 Routes.navArgOf("collectionSlug"), Routes.navArgOf("collectionTitle"),
                 navArgument("owner") { type = NavType.BoolType; defaultValue = false }
@@ -112,6 +117,21 @@ class RoutesNavigationTest {
         assertEquals("Challenge", Routes.titleFor(entry.destination.route))
         assertEquals(true, Routes.hasSubjectHeader(entry.destination.route))
         assertEquals(true, Routes.hidesTabBar(entry.destination.route))
+    }
+
+    @Test fun tagSetUsesItsOwnNumberTitleAndModeratorFlagWithSubjectChrome() {
+        navController.navigate(Routes.ao3TagSet(44, "Summer + Postcards / 2026", true))
+        val entry = navController.currentBackStackEntry!!
+        assertEquals(Routes.AO3TagSet, entry.destination.route)
+        assertEquals(44, entry.arguments?.getInt("tagSetId"))
+        assertEquals("Summer + Postcards / 2026", Routes.routeArg(entry, "tagSetTitle"))
+        assertEquals(true, entry.arguments?.getBoolean("moderator"))
+        assertEquals("Tag set", Routes.titleFor(entry.destination.route))
+        assertEquals(true, Routes.hasSubjectHeader(entry.destination.route))
+        assertEquals(true, Routes.hidesTabBar(entry.destination.route))
+        navController.navigate(Routes.ao3TagSet(43))
+        assertEquals(false, navController.currentBackStackEntry!!.arguments?.getBoolean("moderator"))
+        assertEquals("", Routes.routeArg(navController.currentBackStackEntry!!, "tagSetTitle"))
     }
 
     @Test fun messageCreatorOpensNativeCommentsWithComposerRequested() {

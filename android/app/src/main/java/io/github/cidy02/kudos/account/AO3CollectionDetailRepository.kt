@@ -1,6 +1,7 @@
 package io.github.cidy02.kudos.account
 
 import io.github.cidy02.kudos.auth.AO3AuthRepository
+import io.github.cidy02.kudos.auth.isSignedIn
 import io.github.cidy02.kudos.network.ao3.AO3Client
 import io.github.cidy02.kudos.network.ao3.AO3Constants
 import io.github.cidy02.kudos.network.ao3.AO3Error
@@ -28,6 +29,9 @@ import io.github.cidy02.kudos.network.ao3.account.AO3ChallengeKind
 import io.github.cidy02.kudos.network.ao3.account.AO3ChallengeSettingsPage
 import io.github.cidy02.kudos.network.ao3.account.AO3ChallengeSettingsParser
 import io.github.cidy02.kudos.network.ao3.account.ChallengeSettingsDestinations
+import io.github.cidy02.kudos.network.ao3.account.AO3TagSetSnapshot
+import io.github.cidy02.kudos.network.ao3.account.AO3TagSetParser
+import io.github.cidy02.kudos.network.ao3.account.AO3TagSetUrls
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.CancellationException
@@ -48,6 +52,31 @@ class AO3CollectionDetailRepository(
      */
     private val parseDispatcher: CoroutineDispatcher = Dispatchers.Default
 ) {
+    /** iOS: public/base page, then optional edit and nominations for every signed-in viewer. */
+    suspend fun getTagSet(id: Int): AO3Result<AO3TagSetSnapshot> {
+        val generation = authRepository.generation.value
+        val signedIn = authRepository.state.value.isSignedIn
+        val parser = AO3TagSetParser()
+        fun checkSession() {
+            // Session changes must not turn a private load into an anonymous fallback.
+            if (generation != authRepository.generation.value) throw CancellationException()
+        }
+        var loaded = when (val base = fetch(AO3TagSetUrls.page(id), authenticated = signedIn) { parser.parse(it, id) }) {
+            is AO3Result.Failure -> return base
+            is AO3Result.Success -> base.value
+        }
+        checkSession()
+        if (signedIn) {
+            val edit = fetch(AO3TagSetUrls.edit(id)) { parser.parse(it, id) }
+            checkSession()
+            if (edit is AO3Result.Success) loaded = edit.value
+            val queue = fetch(AO3TagSetUrls.nominations(id), parse = parser::parseNominations)
+            checkSession()
+            if (queue is AO3Result.Success) loaded = loaded.copy(reviewQueue = queue.value)
+        }
+        return AO3Result.Success(loaded)
+    }
+
     /** Corrected 3ba: at most four sequential page reads; never read any assignment page. */
     suspend fun getChallengeSettings(slug: String): AO3Result<AO3ChallengeSettingsPage> {
         val generation = authRepository.generation.value
@@ -72,7 +101,7 @@ class AO3CollectionDetailRepository(
             }
         }
         checkSession()
-        val tags = when (val result = fetch(ChallengeSettingsDestinations.profile(slug), parser::parseTagSets)) {
+        val tags = when (val result = fetch(ChallengeSettingsDestinations.profile(slug), parse = parser::parseTagSets)) {
             is AO3Result.Success -> result.value
             is AO3Result.Failure -> emptyList()
         }
@@ -180,11 +209,11 @@ class AO3CollectionDetailRepository(
         return fetch(url) { AO3CollectionItemsParser().parseUser(it, username, tab, page) }
     }
 
-    /** Signed-in GET, as [AccountListRepository] does it; a parser throw becomes a parse error. */
-    private suspend fun <T> fetch(url: String, parse: (String) -> T): AO3Result<T> {
+    /** Existing AO3 client read; signed-in by default, public only when explicitly requested. */
+    private suspend fun <T> fetch(url: String, authenticated: Boolean = true, parse: (String) -> T): AO3Result<T> {
         currentCoroutineContext().ensureActive()
         val generation = authRepository.generation.value
-        val headers = when (val result = authRepository.authenticatedHeaders(url)) {
+        val headers = if (!authenticated) emptyMap() else when (val result = authRepository.authenticatedHeaders(url)) {
             is AO3Result.Failure -> return result
             is AO3Result.Success -> result.value
         }
@@ -192,7 +221,7 @@ class AO3CollectionDetailRepository(
         if (generation != authRepository.generation.value) throw CancellationException()
         return when (result) {
             is AO3Result.Failure -> {
-                if (result.error == AO3Error.AuthenticationRequired) authRepository.sessionDidExpire(generation)
+                if (authenticated && result.error == AO3Error.AuthenticationRequired) authRepository.sessionDidExpire(generation)
                 result
             }
             is AO3Result.Success -> try {
