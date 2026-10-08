@@ -984,3 +984,12 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   with no locator: Android only). **A signed deletion from a trusted device removes the copy
   already here** for annotations, queue memberships and saved links.
   Reverse: revert the 3bs commit; no schema, manifest key or migration changed.
+
+## 2026-10-08: the reader finishes a work at its end, and scrubs within the chapter (brief 3br)
+
+- A complete work is marked finished only when the bottom of its last part is on screen (or
+  its last page, paged), never at a percentage; the copy's hold starts on leaving the reader.
+  The position card shows the page within the chapter and its thumb seeks within it. A saved
+  position that names a part the book does not have opens the book at the beginning (it used
+  to stop all position tracking for that work).
+  Reverse: revert the 3br commit; nothing stored changed.

@@ -1,10 +1,11 @@
 package io.github.cidy02.kudos.reader
 
+import kotlin.math.roundToInt
+
 /**
  * Formats live reading progress for the immersive bottom chrome.
  *
- * Prefer whole-book [ReaderProgress.totalProgression] when present; otherwise
- * estimate from spine index + intra-spine scroll fraction.
+ * Whole-work percent is the navigator's rounded total progression, as on iOS.
  *
  * Chapter labels use normalized [ReaderSection]s so Preface/Summary/Afterword
  * are never shown as fake numbered chapters, and the denominator is the real
@@ -12,48 +13,52 @@ package io.github.cidy02.kudos.reader
  */
 object ReaderProgressDisplay {
 
-    fun percent(progress: ReaderProgress?, spineCount: Int): Int? {
+    fun percent(progress: ReaderProgress?): Int? {
         if (progress == null) return null
-        progress.totalProgression?.let { total ->
-            return (total.coerceIn(0.0, 1.0) * 100.0).toInt().coerceIn(0, 100)
-        }
-        if (spineCount <= 0) return null
-        val spine = progress.spineIndex.coerceAtLeast(0).toDouble()
-        val fraction = progress.scrollFraction.coerceIn(0.0, 1.0)
-        val overall = ((spine + fraction) / spineCount.toDouble()).coerceIn(0.0, 1.0)
-        return (overall * 100.0).toInt().coerceIn(0, 100)
+        return ((progress.totalProgression ?: 0.0).coerceIn(0.0, 1.0) * 100.0).roundToInt()
     }
 
-    fun label(progress: ReaderProgress?, sections: List<ReaderSection>): String {
-        val spineCount = sections.size
-        val pct = percent(progress, spineCount)
-        val sectionPart = progress?.let { sectionLabel(it, sections) }
+    fun label(progress: ReaderProgress?, sections: List<ReaderSection>, chapters: String = ""): String {
+        val pct = percent(progress)
+        val sectionPart = progress?.let { sectionLabel(it, sections, chapters) }
         return when {
-            pct != null && sectionPart != null -> "$sectionPart · $pct%"
-            pct != null -> "$pct%"
+            pct != null && sectionPart != null -> "$sectionPart · $pct% of work"
+            pct != null -> "$pct% of work"
             sectionPart != null -> sectionPart
             else -> ""
         }
     }
 
-    /**
-     * Rough remaining-time estimate from remaining word count / 200 wpm
-     * (iOS `ReaderTimeEstimate` spirit — not exact page-of-page).
-     */
-    fun minutesRemaining(progress: ReaderProgress?, wordCount: Int): Int? {
-        if (wordCount <= 0) return null
-        val fraction = progress?.totalProgression
-            ?: return null
-        val remaining = ((1.0 - fraction.coerceIn(0.0, 1.0)) * wordCount).toInt()
-        if (remaining <= 0) return 0
-        return (remaining / 200.0).toInt().coerceAtLeast(1)
+    fun minutesForPositions(count: Int): Int = (count.coerceAtLeast(0) * 55.0 / 60).roundToInt()
+
+    fun durationLabel(minutes: Int): String {
+        val value = minutes.coerceAtLeast(0)
+        if (value < 60) return "$value min"
+        val hours = value / 60
+        val remainder = value % 60
+        return if (remainder == 0) "$hours hr" else "$hours hr $remainder min"
     }
 
-    private fun sectionLabel(progress: ReaderProgress, sections: List<ReaderSection>): String? {
+    fun sliderValue(page: Int, pageCount: Int): Float =
+        if (pageCount > 1) (page.coerceIn(1, pageCount) - 1).toFloat() / (pageCount - 1) else 1f
+
+    fun scrubPage(value: Float, pageCount: Int): Int =
+        if (pageCount > 1) (value.coerceIn(0f, 1f) * (pageCount - 1)).roundToInt() + 1 else 1
+
+    fun chapterRemainingPositions(page: Int, pageCount: Int, positionCount: Int): Int =
+        if (pageCount <= 0 || positionCount <= 0) 0 else
+            ((pageCount - page.coerceIn(1, pageCount)).toDouble() / pageCount * positionCount).roundToInt()
+
+    fun pageLabel(page: Int, pageCount: Int): String =
+        if (page < 1 || pageCount < 1) "Measuring pages" else "Page $page of $pageCount"
+
+    private fun sectionLabel(progress: ReaderProgress, sections: List<ReaderSection>, chapters: String): String? {
         if (sections.isEmpty()) return null
         val idx = progress.spineIndex.coerceIn(0, sections.lastIndex)
         val section = sections[idx]
-        val storyTotal = sections.storyChapterCount
+        val parts = chapters.split('/')
+        val storyTotal = if (parts.size == 2) parts[1].trim().toIntOrNull() ?: sections.storyChapterCount
+            else sections.storyChapterCount
         return when (section.kind) {
             ReaderSectionKind.PREFACE -> "Preface"
             ReaderSectionKind.SUMMARY -> "Summary"
@@ -61,7 +66,7 @@ object ReaderProgressDisplay {
             ReaderSectionKind.CHAPTER -> {
                 val i = section.storyChapterIndex ?: return null
                 val total = maxOf(storyTotal, i)
-                "Ch. $i/$total"
+                "Chapter $i of $total"
             }
             ReaderSectionKind.OTHER -> null
         }

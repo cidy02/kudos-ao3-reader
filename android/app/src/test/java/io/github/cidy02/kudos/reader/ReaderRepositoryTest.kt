@@ -226,6 +226,39 @@ class ReaderRepositoryTest {
     }
 
     @Test
+    fun reachingTheEndFinishesWithoutAHoldAndOnlyLeavingStartsIt() = runTest {
+        val work = savedWork(hasEpub = true).copy(
+            isSaved = false, isComplete = true, ao3WorkID = 123,
+            sourceUrl = "https://archiveofourown.org/works/123", lastSpineIndex = 3, lastScrollFraction = 0.9
+        )
+        workRepository.upsert(work)
+        fileStore.writeWorkEpub(WORK_UUID, EPUB_BYTES)
+        val finished = readerRepository.finishAtPublicationEnd(WORK_UUID)!!
+        assertTrue(finished.isFinished)
+        assertNull(finished.freedAt)
+        assertEquals(3, finished.lastSpineIndex)
+        assertEquals(0.9, finished.lastScrollFraction, 0.0)
+        assertTrue(fileStore.workEpubExists(WORK_UUID))
+        now = now.plusSeconds(120)
+        val closed = readerRepository.close(WORK_UUID)!!
+        assertEquals(now, closed.freedAt)
+        assertTrue(fileStore.workEpubExists(WORK_UUID))
+        now = now.plusSeconds(60)
+        assertEquals(closed.freedAt, readerRepository.close(WORK_UUID)!!.freedAt)
+    }
+
+    @Test
+    fun unfinishedWorkStaysManualAndExplicitFinishStillHoldsImmediately() = runTest {
+        workRepository.upsert(savedWork(hasEpub = true).copy(
+            isSaved = false, ao3WorkID = 123, sourceUrl = "https://archiveofourown.org/works/123"
+        ))
+        assertFalse(readerRepository.finishAtPublicationEnd(WORK_UUID)!!.isFinished)
+        assertNull(readerRepository.close(WORK_UUID)!!.freedAt)
+        assertTrue(readerRepository.setFinished(WORK_UUID, true)!!.isFinished)
+        assertTrue(workRepository.getWork(WORK_UUID)!!.freedAt != null)
+    }
+
+    @Test
     fun markEpubMissingClearsFlagButKeepsRecord() = runTest {
         workRepository.upsert(savedWork(hasEpub = true))
         val updated = readerRepository.markEpubMissing(WORK_UUID)!!

@@ -71,3 +71,33 @@ Static verification: `sh android/Scripts/check-invariants.sh` and `git diff --ch
 - A5's triage already leaves reader-dispose versus ViewModel cancellation ordering open. This brief preserves that lifecycle ownership; verify close/background and leave-mid-drag on a device, including the hold timestamp and final resume point. The tests cover completion/close with a live ViewModel, not OS reclamation during disposal.
 
 Manual handoff: offline imported/local EPUB, both reading modes, long last chapter before the actual end, true end and one-page last resource; open the card in first/middle/last chapters, scrub and release/reopen; check chapter time versus work time, TalkBack, origin cancel, a rapid drag and leave-mid-drag. Confirm no hold while still reading/backgrounded and a hold only after leaving; also check an explicit finish and a WIP. No sign-in or AO3 contact is needed.
+
+## Landing note (Claude, 2026-10-08)
+
+Applied cleanly; gate green at the first run (2,096 tests, 2,097 with the test added here).
+
+**Found while testing, and older than this brief: a saved position from another file killed
+the reader's position tracking.** The stored locator was handed to Readium without checking
+that the book has the resource it names. When it does not (the work was rebuilt, replaced or
+re-downloaded with different parts), Readium opens at the start and never reports a location
+again: the position card stayed on "Page …", and **nothing was saved for that work from then
+on**, so it reopened at chapter 1 every time. `ReadiumProgressAdapter.initialLocator` now
+drops such a locator and the book opens at the beginning. Test
+`aPositionFromAnotherFileOpensTheBookAtTheBeginning`. iOS not checked for the same fault.
+
+Seen on `emulator-5556` in airplane mode, scrolled reading, with a six-chapter test book
+(about two hours long) put in place of two demo works' files:
+
+- The card: "Page 1 of 16", "18 min left in chapter", "Chapter 2 of 6 · 15% of work · 1 hr
+  45 min left". Dragging the thumb went to page 11 and then 16 of 16, the work's percent to
+  25 and 29, and the chapter stayed chapter 2 (before this brief a drag jumped to the start
+  of some chapter).
+- A one-page work opens on its only page, which is its end: finished on leaving, as iOS.
+- The finish rule, on a complete work in its last chapter: left at 96% of the work (page 21
+  of 24) and again at 98% (page 22): **not finished**, and reopened where it was left. At the
+  last page scrolled to its bottom: finished after leaving. The old rule finished at 98.5%.
+
+Not seen: paginated reading (the brief uses the navigator's own page count there); the
+60-day hold's stamp on leaving; right-to-left and vertical text; a drag abandoned half-way.
+Still open from audit A5: whether leaving the reader can lose the session's end when the
+view model is cleared first.

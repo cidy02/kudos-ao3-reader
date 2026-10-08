@@ -14,6 +14,15 @@ import org.readium.r2.shared.publication.Publication
  */
 object ReadiumProgressAdapter {
 
+    /** Unknown hrefs must not masquerade as resource zero for completion. */
+    fun spineIndex(publication: Publication, locator: Locator): Int =
+        publication.readingOrder.indexOfFirst { it.url().isEquivalent(locator.href.removeFragment()) }
+
+    /** Frozen resource identity; only progression changes, never the chapter. */
+    fun chapterSeekTarget(origin: Locator, progression: Double): Locator = origin.copy(
+        locations = origin.locations.copy(progression = progression.coerceIn(0.0, 1.0), position = null)
+    )
+
     /** Capture a save point. Always populates the cross-platform fallback fields. */
     fun toReaderProgress(publication: Publication, locator: Locator): ReaderProgress {
         val spineIndex = runCatching {
@@ -47,6 +56,12 @@ object ReadiumProgressAdapter {
         return when (target) {
             is ReaderRestoreTarget.Locator ->
                 runCatching { Locator.fromJSON(JSONObject(target.locatorJson)) }.getOrNull()
+                    // A position saved against another file (the work was rebuilt, replaced or
+                    // re-downloaded with different parts) names a resource this book does not
+                    // have. Given that, Readium opens at the start and never reports a location
+                    // again: the position card froze and nothing was saved for that work from
+                    // then on. Such a position opens the book at the beginning.
+                    ?.takeIf { spineIndex(publication, it) >= 0 }
 
             is ReaderRestoreTarget.Fallback -> runCatching {
                 val link = publication.readingOrder.getOrNull(target.spineIndex)
