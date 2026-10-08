@@ -290,7 +290,7 @@ private fun FandomChipCluster(
         }
         if (remainder > 0) {
             SubjectChip(
-                text = "+${remainder.compactCount()} more",
+                text = "${remainder.compactCount()} more fandoms",
                 style = SubjectChipStyle.Dashed
             )
         }

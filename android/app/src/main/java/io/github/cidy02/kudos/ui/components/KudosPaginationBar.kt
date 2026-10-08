@@ -172,7 +172,7 @@ private fun PageScrubberSheet(
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 TextButton(onClick = { draft = 1f }, enabled = draftPage > 1) {
-                    Text("First", lineHeight = 20.sp)
+                    Text("First page", lineHeight = 20.sp)
                 }
                 TextButton(
                     onClick = { draft = maxOf(totalPages, 1).toFloat() },

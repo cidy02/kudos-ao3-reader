@@ -915,7 +915,7 @@ fun FilterButton(
     val tokens = LocalKudosTokens.current
     val tint = if (filtersActive) LocalSubjectPalette.current.accentOnFill else tokens.primaryInk
     var menuOpen by remember { mutableStateOf(false) }
-    val label = if (badgeCount > 0) "Filter, $badgeCount active" else "Filter"
+    val label = "Works Filters"
     Box(modifier) {
         Box(
             Modifier

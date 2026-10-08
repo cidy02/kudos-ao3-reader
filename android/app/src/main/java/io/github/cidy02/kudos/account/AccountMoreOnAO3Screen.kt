@@ -77,7 +77,7 @@ fun AccountMoreOnAO3Screen(
                     SubjectRowSeparator()
                     AccountExternalNavCard("Edit works in bulk", "works/show_multiple", onOpenWeb)
                     SubjectRowSeparator()
-                    AccountExternalNavCard("New series", "series/new", onOpenWeb)
+                    AccountExternalNavCard("New series on AO3", "series/new", onOpenWeb)
                     SubjectRowSeparator()
                     AccountExternalNavCard("Manage collections", "collections", onOpenWeb)
                 }

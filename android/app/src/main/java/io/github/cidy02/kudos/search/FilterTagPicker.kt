@@ -199,7 +199,7 @@ private fun FilterTagCapsule(tag: String, state: FilterSelectionState, onClick: 
             .clickable(role = Role.Button, onClick = onClick)
             .semantics(mergeDescendants = true) {
                 contentDescription = "${if (state == FilterSelectionState.EXCLUDED) "Excluded" else "Included"}: $tag"
-                stateDescription = "Tap to ${state.next.status.lowercase()} this tag"
+                stateDescription = "Cycle tag"
             }.padding(horizontal = 9.dp, vertical = 5.dp),
         horizontalArrangement = Arrangement.spacedBy(4.dp),
         verticalAlignment = Alignment.CenterVertically

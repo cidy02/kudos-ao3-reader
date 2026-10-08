@@ -159,7 +159,7 @@ fun AO3PreferencesScreen(
         error != null && snapshot == null -> Column {
             Spacer(Modifier.height(topInset))
             ErrorStateCard(
-                title = "Preferences failed",
+                title = "Couldn't load preferences",
                 message = error!!,
                 primaryActionLabel = "Try Again",
                 onPrimaryAction = { load() }
