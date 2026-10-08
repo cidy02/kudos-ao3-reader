@@ -359,6 +359,21 @@ final class CommentDraftStore {
         drafts()[key(for: context, identity: identity)] ?? ""
     }
 
+    /// Hands every draft filed under one identity to another, never over a draft the other
+    /// already has.
+    func move(from old: String, to new: String) {
+        var all = drafts()
+        let prefix = old + "|"
+        var changed = false
+        for (key, text) in all where key.hasPrefix(prefix) {
+            let moved = new + "|" + key.dropFirst(prefix.count)
+            if all[moved] == nil { all[moved] = text }
+            all.removeValue(forKey: key)
+            changed = true
+        }
+        if changed { defaults.set(all, forKey: storageKey) }
+    }
+
     func save(_ text: String, for context: AO3CommentContext, identity: String = "") {
         var all = drafts()
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)

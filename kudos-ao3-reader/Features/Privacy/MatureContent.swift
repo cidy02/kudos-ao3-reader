@@ -64,6 +64,12 @@ final class PrivacyGate {
         enabled && work.isAdult && mode == .hide && !isRevealed(work)
     }
 
+    /// Whether this work is drawn blurred right now (Blur mode only): until it is revealed,
+    /// nothing may open it or name it.
+    func isBlurred(_ work: SavedWork, enabled: Bool, mode: MaturePrivacyMode) -> Bool {
+        enabled && work.isAdult && mode == .obscure && !isRevealed(work)
+    }
+
     private func authenticate(_ onSuccess: @escaping () -> Void) {
         guard UserDefaults.standard.bool(forKey: "requireBiometricToReveal") else {
             onSuccess(); return
@@ -184,7 +190,8 @@ struct SensitiveWorkRow: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityElement(children: .ignore)
-                .accessibilityLabel(work.title)
+                // Still blurred, so still unnamed (audit A19-8).
+                .accessibilityLabel("Hidden mature work")
                 .accessibilityValue(isSelected ? "Selected" : "Not selected")
                 .accessibilityHint("Double-tap to \(isSelected ? "deselect" : "select") this work.")
             } else {
@@ -306,7 +313,8 @@ struct SensitiveWorkCoverCard: View {
                     }
                     .onTapGesture { onToggleSelection?() }
                     .accessibilityElement(children: .ignore)
-                    .accessibilityLabel(work.title)
+                    // Still blurred, so still unnamed (audit A19-8).
+                    .accessibilityLabel("Hidden mature work")
                     .accessibilityValue(isSelected ? "Selected" : "Not selected")
                     .accessibilityHint("Double-tap to \(isSelected ? "deselect" : "select") this work.")
             } else {

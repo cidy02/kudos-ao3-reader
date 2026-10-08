@@ -16,6 +16,8 @@ final class CommentsModel {
         let cacheScope: String
         let generation: Int
 
+        static let unknownSessionPrefix = "unknown-session:"
+
         static func current(_ auth: AO3AuthService) -> AuthContext {
             let username = auth.username?
                 .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -27,7 +29,7 @@ final class CommentsModel {
             // which account owns it. Keep those drafts session-local instead
             // of collapsing every unknown account into the empty identity.
             let identity = knownUsername
-                ?? (auth.isLoggedIn ? "unknown-session:\(auth.sessionGeneration)" : "")
+                ?? (auth.isLoggedIn ? "\(unknownSessionPrefix)\(auth.sessionGeneration)" : "")
             return AuthContext(
                 identity: identity,
                 cacheScope: AO3AuthorProfileFetcher.authenticationScope(for: auth),
@@ -236,6 +238,16 @@ final class CommentsModel {
         let hadContext = authContext.generation >= 0
         if hadContext, let composerContext, composerEditTarget == nil {
             drafts.save(composerText, for: composerContext, identity: authContext.identity)
+        }
+        // A session restored offline has no name yet, and its drafts were filed under the
+        // session. Verify Session then names the account (one step of the generation, and
+        // a real name): hand the drafts to it, or nothing would ever read them again
+        // (audit A19-7). Any other change of account moves nothing.
+        if authContext.identity.hasPrefix(AuthContext.unknownSessionPrefix),
+           !current.identity.isEmpty,
+           !current.identity.hasPrefix(AuthContext.unknownSessionPrefix),
+           current.generation == authContext.generation + 1 {
+            drafts.move(from: authContext.identity, to: current.identity)
         }
         authContext = current
         guard hadContext else { return true }
