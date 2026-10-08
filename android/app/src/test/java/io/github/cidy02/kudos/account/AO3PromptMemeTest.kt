@@ -4,6 +4,8 @@ import io.github.cidy02.kudos.auth.AO3AuthRepository
 import io.github.cidy02.kudos.auth.MemoryCookieStore
 import io.github.cidy02.kudos.auth.MemorySessionStore
 import io.github.cidy02.kudos.auth.testSession
+import io.github.cidy02.kudos.network.ao3.writes.AO3WriteRepository
+import io.github.cidy02.kudos.network.ao3.writes.DefaultAO3AuthenticatedClient
 import io.github.cidy02.kudos.network.ao3.*
 import io.github.cidy02.kudos.network.ao3.account.*
 import kotlinx.coroutines.CompletableDeferred
@@ -88,7 +90,7 @@ class AO3PromptMemeTest {
         assertFalse(readsPromptMemeSchedule(viewerIsOwner = false, attempted = false, hasDate = false))
         // A participant or a moderator: the listing and nothing else, on opening, on a page and on a refresh.
         val (_, client, repository) = promptMemeSetup()
-        val model = AO3PromptMemeState("summer_meme", repository, viewerIsOwner = false)
+        val model = AO3PromptMemeState("summer_meme", repository, viewerIsOwner = false, writes = promptMemeWrites(client, repository.authRepository))
         model.load(readSchedule = true)
         model.load(2)
         model.load(readSchedule = true)
@@ -99,7 +101,7 @@ class AO3PromptMemeTest {
 
     @Test fun anOwnersOpeningIsThreeReadsAFurtherPageOneAndARefreshOneOnceTheDateIsKnown() = runTest {
         val (_, client, repository) = promptMemeSetup()
-        val model = AO3PromptMemeState("summer_meme", repository, viewerIsOwner = true)
+        val model = AO3PromptMemeState("summer_meme", repository, viewerIsOwner = true, writes = promptMemeWrites(client, repository.authRepository))
         model.load(readSchedule = true)
         assertEquals(listOf(promptGiftUrl, promptSettingsUrl, promptFirstUrl), client.gets)
         assertTrue(model.state.value.closeDateText.startsWith("open until "))
@@ -120,7 +122,7 @@ class AO3PromptMemeTest {
             client.replies[promptSettingsUrl] = if (missing) challengeResponse(promptSettingsUrl,
                 "<main id='main'><form action='/collections/summer_meme/prompt_meme'><input name='authenticity_token' value='local'></form></main>")
             else AO3Result.Failure(AO3Error.Forbidden)
-            val model = AO3PromptMemeState("summer_meme", repository, viewerIsOwner = true)
+            val model = AO3PromptMemeState("summer_meme", repository, viewerIsOwner = true, writes = promptMemeWrites(client, repository.authRepository))
             model.load(readSchedule = true)
             assertEquals("", model.state.value.closeDateText)
             assertNull(model.state.value.failure)
@@ -139,7 +141,7 @@ class AO3PromptMemeTest {
         val (_, client, repository) = promptMemeSetup()
         client.replies[promptSettingsUrl] = challengeResponse(promptSettingsUrl,
             challengeFixture("ao3_demo_meme_settings").replace("2026-06-30 00:00:00", "After the last lantern"))
-        val model = AO3PromptMemeState("summer_meme", repository, viewerIsOwner = true)
+        val model = AO3PromptMemeState("summer_meme", repository, viewerIsOwner = true, writes = promptMemeWrites(client, repository.authRepository))
         model.load(readSchedule = true)
         assertEquals("open until After the last lantern", model.state.value.closeDateText)
     }
@@ -147,7 +149,7 @@ class AO3PromptMemeTest {
     @Test fun scheduleNonFallbackErrorStopsOnlyScheduleListingStillLoads() = runTest {
         val (_, client, repository) = promptMemeSetup()
         client.replies[promptGiftUrl] = AO3Result.Failure(AO3Error.Forbidden)
-        val model = AO3PromptMemeState("summer_meme", repository, viewerIsOwner = true)
+        val model = AO3PromptMemeState("summer_meme", repository, viewerIsOwner = true, writes = promptMemeWrites(client, repository.authRepository))
         model.load(readSchedule = true)
         assertEquals(listOf(promptGiftUrl, promptFirstUrl), client.gets)
         assertEquals("", model.state.value.closeDateText)
@@ -157,7 +159,7 @@ class AO3PromptMemeTest {
 
     @Test fun failedPageRetainsRowsCountsAndCurrentPageAndAnExplicitRetryHasOneRead() = runTest {
         val (_, client, repository) = promptMemeSetup()
-        val model = AO3PromptMemeState("summer_meme", repository, viewerIsOwner = true)
+        val model = AO3PromptMemeState("summer_meme", repository, viewerIsOwner = true, writes = promptMemeWrites(client, repository.authRepository))
         model.load(readSchedule = true)
         val old = model.state.value.data
         client.replies[promptSecondUrl] = AO3Result.Failure(AO3Error.Forbidden)
@@ -176,7 +178,7 @@ class AO3PromptMemeTest {
     @Test fun initialListingFailureAndRetryPreserveDateAndSendNoScheduleRetry() = runTest {
         val (_, client, repository) = promptMemeSetup()
         client.replies[promptFirstUrl] = AO3Result.Failure(AO3Error.NotFound)
-        val model = AO3PromptMemeState("summer_meme", repository, viewerIsOwner = true)
+        val model = AO3PromptMemeState("summer_meme", repository, viewerIsOwner = true, writes = promptMemeWrites(client, repository.authRepository))
         model.load(readSchedule = true)
         assertNull(model.state.value.data)
         assertNotNull(model.state.value.failure)
@@ -189,7 +191,7 @@ class AO3PromptMemeTest {
 
     @Test fun signedOutReadsPublicListingAndOnlyPublicListingOnFurtherPage() = runTest {
         val (_, client, repository) = promptMemeSetup(signedIn = false)
-        val model = AO3PromptMemeState("summer_meme", repository, viewerIsOwner = true)
+        val model = AO3PromptMemeState("summer_meme", repository, viewerIsOwner = true, writes = promptMemeWrites(client, repository.authRepository))
         model.load(readSchedule = true)
         assertEquals(listOf(promptFirstUrl), client.gets)
         assertEquals("", model.state.value.closeDateText)
@@ -204,7 +206,7 @@ class AO3PromptMemeTest {
         for (read in listOf(promptGiftUrl, promptSettingsUrl, promptFirstUrl)) {
             val (auth, client, repository) = promptMemeSetup()
             client.afterGet = { if (it == read) auth.logout() }
-            val model = AO3PromptMemeState("summer_meme", repository, viewerIsOwner = true)
+            val model = AO3PromptMemeState("summer_meme", repository, viewerIsOwner = true, writes = promptMemeWrites(client, repository.authRepository))
             val load = async { model.load(readSchedule = true) }
             runCatching { load.await() }
             assertTrue(load.isCancelled)
@@ -216,7 +218,7 @@ class AO3PromptMemeTest {
     @Test fun duplicateLoadAndDepartureCannotStartAnotherRead() = runTest {
         val (_, client, repository) = promptMemeSetup()
         client.hold = true
-        val model = AO3PromptMemeState("summer_meme", repository, viewerIsOwner = true)
+        val model = AO3PromptMemeState("summer_meme", repository, viewerIsOwner = true, writes = promptMemeWrites(client, repository.authRepository))
         val load = async { model.load(readSchedule = true) }
         client.entered.await()
         model.load(2)
@@ -246,11 +248,22 @@ internal suspend fun promptMemeSetup(signedIn: Boolean = true): Triple<AO3AuthRe
     return Triple(auth, client, AO3CollectionDetailRepository(client, auth, parseDispatcher = Dispatchers.Unconfined))
 }
 
+internal fun promptMemeWrites(client: PromptMemeReadClient, auth: AO3AuthRepository) =
+    AO3WriteRepository(DefaultAO3AuthenticatedClient(client, client, auth))
+
+internal data class PromptMemePost(val url: String, val fields: List<Pair<String, String>>, val headers: Map<String, String>)
+
 internal class PromptMemeReadClient : AO3Client, AO3FormPostClient {
     val gets = mutableListOf<String>()
     val headers = mutableListOf<Map<String, String>>()
     val replies = mutableMapOf<String, AO3Result<AO3HttpResponse>>()
     var posts = 0
+    val sent = mutableListOf<PromptMemePost>()
+    var postReply: AO3Result<AO3HttpResponse>? = null
+    var holdPost = false
+    val postEntered = CompletableDeferred<Unit>()
+    val postRelease = CompletableDeferred<Unit>()
+    var afterPost: suspend () -> Unit = {}
     var afterGet: suspend (String) -> Unit = {}
     var hold = false
     val entered = CompletableDeferred<Unit>()
@@ -264,6 +277,7 @@ internal class PromptMemeReadClient : AO3Client, AO3FormPostClient {
         return replies[url] ?: when (url) {
             promptGiftUrl -> AO3Result.Failure(AO3Error.NotFound)
             promptSettingsUrl -> challengeResponse(url, challengeFixture("ao3_demo_meme_settings"))
+            AO3PromptMemeUrls.claims("summer_meme", forUser = true) -> challengeResponse(url, "<meta name='csrf-token' content='fresh-release'>")
             promptFirstUrl -> challengeResponse(url, challengeFixture("ao3_demo_meme_requests_1"))
             promptSecondUrl -> challengeResponse(url, challengeFixture("ao3_demo_meme_requests_2"))
             else -> error("Unexpected prompts read: $url")
@@ -271,6 +285,10 @@ internal class PromptMemeReadClient : AO3Client, AO3FormPostClient {
     }
     override suspend fun postForm(url: String, formFields: List<Pair<String, String>>, headers: Map<String, String>): AO3Result<AO3HttpResponse> {
         posts++
-        error("Prompt Meme reading must never POST")
+        sent += PromptMemePost(url, formFields.toList(), headers.toMap())
+        postEntered.complete(Unit)
+        if (holdPost) postRelease.await()
+        afterPost()
+        return postReply ?: error("Prompt Meme reading must never POST")
     }
 }
