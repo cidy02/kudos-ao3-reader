@@ -394,7 +394,11 @@ class CommentsViewModel(
                     load()
                 }
                 is AO3Result.Failure -> {
-                    if (result.error is AO3Error.Network && !result.error.isOffline()) {
+                    val unconfirmed = (result.error as? AO3Error.Validation)?.message ==
+                        io.github.cidy02.kudos.network.ao3.account.AO3CollectionFields.UNCONFIRMED
+                    if (unconfirmed || (result.error is AO3Error.Network && !result.error.isOffline())) {
+                        // The text stays in the composer. The thread is read again so the reader
+                        // can see whether it arrived; the same text is not sent twice by a tap.
                         lastSubmittedContentHash = contentHash
                         _message.value = "Couldn't confirm this posted — reloading to check."
                         load()

@@ -89,11 +89,39 @@ class AO3CommentRepositoryTest {
         assertEquals(AO3Error.Validation("Write a comment first."), (result as AO3Result.Failure).error)
     }
 
+    /**
+     * iOS `commentWriteVerdict` (audit A17-1): a page that came back fine and confirms nothing
+     * is not "posted". The composer keeps the text on any failure, so this is what stops a
+     * maintenance page from throwing a comment away.
+     */
+    @Test
+    fun aPageThatConfirmsNothingIsNotPostedUpdatedOrDeleted() = runTest {
+        val maintenance = "<html><body><p>The Archive is down for maintenance.</p></body></html>"
+        fun repository(answer: String, status: Int = 200) = AO3CommentRepository(
+            publicClient = FakePublicClient(success("")),
+            authenticatedClient = TrackingAuthenticatedClient(
+                getResults = listOf(success(writeResource("ao3/comments/comments_basic.html"))),
+                postResults = listOf(success(answer, status = status))
+            )
+        )
+        val unconfirmed = AO3Error.Validation(io.github.cidy02.kudos.network.ao3.account.AO3CollectionFields.UNCONFIRMED)
+        assertEquals(unconfirmed, (repository(maintenance).submitComment(AO3CommentTarget.Work(123), "Thanks!") as AO3Result.Failure).error)
+        assertEquals(unconfirmed, (repository(maintenance).editComment("/comments/9/edit", "Edited") as AO3Result.Failure).error)
+        assertEquals(unconfirmed, (repository(maintenance).deleteComment("/comments/9") as AO3Result.Failure).error)
+        // otwarchive reports a failed delete as a comment_error flash on a redirected 200.
+        val refused = """<div class="flash comment_error">We couldn't delete that comment.</div>"""
+        assertEquals(AO3Error.Validation("We couldn't delete that comment."),
+            (repository(refused).deleteComment("/comments/9") as AO3Result.Failure).error)
+        // AO3's own notice is what "done" means.
+        val done = """<div class="flash comment_notice">Comment deleted.</div>"""
+        assertTrue(repository(done).deleteComment("/comments/9") is AO3Result.Success)
+    }
+
     @Test
     fun submitCommentFetchesFormThenPostsOneBody() = runTest {
         val auth = TrackingAuthenticatedClient(
             getResults = listOf(success(writeResource("ao3/comments/comments_basic.html"))),
-            postResults = listOf(success("ok"))
+            postResults = listOf(success("""<div class="flash comment_notice">Comment created!</div>"""))
         )
         val repository = AO3CommentRepository(
             publicClient = FakePublicClient(success("")),
@@ -126,7 +154,7 @@ class AO3CommentRepositoryTest {
                     url = AO3CommentUrls.commentThreadUrl(parentId, isReply = true)
                 )
             ),
-            postResults = listOf(success("ok"))
+            postResults = listOf(success("""<div class="flash comment_notice">Comment created!</div>"""))
         )
         val repository = AO3CommentRepository(
             publicClient = FakePublicClient(success("")),
