@@ -548,9 +548,45 @@ nonisolated enum WritingBufferPreview {
 
     static func state(for html: String) -> State {
         guard let body = try? SwiftSoup.parseBodyFragment(html).body(),
+              (try? wrapLooseText(in: body)) != nil,
               let document = try? AO3Client.parseRichText(body)
         else { return .failed }
         return .rendered(document)
+    }
+
+    private static let blocks = "p, div, blockquote, h1, h2, h3, h4, h5, h6, li"
+
+    /// AO3 puts loose text into paragraphs when it posts. `parseRichText` keeps
+    /// only block elements once there is one, so words typed outside a tag
+    /// vanished from the preview beside a single `<p>`. Each stretch of loose
+    /// nodes becomes a paragraph of its own, in place. Android does the same
+    /// (`WritingBufferPreview.kt`).
+    private static func wrapLooseText(in parent: Element) throws {
+        var loose: Element?
+        for node in parent.getChildNodes() {
+            if let element = node as? Element, try element.select(blocks).first() != nil {
+                loose = nil
+                if try !element.iS(blocks) { try wrapLooseText(in: element) }
+            } else if loose != nil || !((node as? TextNode)?.isBlank() ?? false) {
+                if let loose {
+                    try loose.appendChild(node)
+                } else {
+                    try node.wrap("<p></p>")
+                    loose = node.parent() as? Element
+                }
+            }
+        }
+        for paragraph in parent.children().array() where paragraph.tagName() == "p" {
+            let nodes = paragraph.getChildNodes()
+            if let first = nodes.first as? TextNode {
+                first.text(String(first.getWholeText().drop(while: \.isWhitespace)))
+            }
+            if let last = nodes.last as? TextNode {
+                var text = last.getWholeText()
+                while text.last?.isWhitespace == true { text.removeLast() }
+                last.text(text)
+            }
+        }
     }
 
     /// A parse publishes only if it belongs to the preview still on screen:
