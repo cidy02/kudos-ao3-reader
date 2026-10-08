@@ -27,6 +27,11 @@ struct QueueTagManagerView: View {
     /// "Remove from N works" asks first, like every other removal (T-288).
     @State private var pendingRemoval: Tag?
 
+    @ScaledMetric(relativeTo: .subheadline) private var countSize: CGFloat = 15
+    @ScaledMetric(relativeTo: .subheadline) private var inputSize: CGFloat = 15
+    @ScaledMetric(relativeTo: .headline) private var buttonLabelSize: CGFloat = 15
+    @ScaledMetric(relativeTo: .caption) private var footnoteSize: CGFloat = 11.5
+
     /// The queue's own colour, as Queue Details draws it — this screen is
     /// pushed from there, and 1bh's wash is the queue's.
     private var palette: SubjectPalette {
@@ -153,7 +158,7 @@ struct QueueTagManagerView: View {
                     SubjectFormRow(label: tag.name) {
                         HStack(spacing: 10) {
                             Text(count.compactCount)
-                                .font(.system(size: 15))
+                                .font(.system(size: countSize))
                                 .monospacedDigit()
                                 .foregroundStyle(.secondary)
                             Image(systemName: "ellipsis")
@@ -225,13 +230,13 @@ struct QueueTagManagerView: View {
                 .frame(width: 20)
                 .accessibilityHidden(true)
             TextField("New tag", text: $newTagName)
-                .font(.system(size: 15))
+                .font(.system(size: inputSize))
                 .onSubmit(addTypedTag)
             // Always present, dimmed while empty, as the old screen had it —
             // appearing only once typing starts put a submit control into a
             // panel VoiceOver had already read past.
             Button("Add", action: addTypedTag)
-                .font(.system(size: 15, weight: .semibold))
+                .font(.system(size: buttonLabelSize, weight: .semibold))
                 .foregroundStyle(palette.accent)
                 .buttonStyle(.plain)
                 .disabled(trimmedNewTag.isEmpty)
@@ -244,7 +249,7 @@ struct QueueTagManagerView: View {
 
     private func footnote(_ text: String) -> some View {
         Text(text)
-            .font(.system(size: 11.5))
+            .font(.system(size: footnoteSize))
             .foregroundStyle(.secondary.opacity(0.7))
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -317,6 +322,8 @@ struct QueueTagEditSheet: View {
         self.siblings = siblings
         self._name = State(initialValue: tag.name)
     }
+
+    @ScaledMetric(relativeTo: .caption) private var footnoteSize: CGFloat = 11.5
 
     private var palette: SubjectPalette {
         themeManager.appTheme.subjectPalette(hue: queue.displayHue, pickedHex: queue.colorHex)
@@ -447,7 +454,7 @@ struct QueueTagEditSheet: View {
 
     private func footnote(_ text: String) -> some View {
         Text(text)
-            .font(.system(size: 11.5))
+            .font(.system(size: footnoteSize))
             .foregroundStyle(.secondary.opacity(0.7))
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)
