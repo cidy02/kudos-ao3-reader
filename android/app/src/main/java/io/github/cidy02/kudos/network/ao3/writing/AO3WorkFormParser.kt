@@ -126,6 +126,8 @@ class AO3WorkFormParser {
             languageID = selected(AO3WorkFormField.languageID), languageOptions = select(AO3WorkFormField.languageID),
             summary = textarea(AO3WorkFormField.summary), notes = textarea(AO3WorkFormField.notes), endnotes = textarea(AO3WorkFormField.endnotes),
             collectionNames = splitWorkList(input(AO3WorkFormField.collectionNames).orEmpty()),
+            collections = splitWorkList(input(AO3WorkFormField.collectionNames).orEmpty())
+                .map { AO3CollectionOffer(it, it, isSelected = true) },
             gifts = splitWorkList(input(AO3WorkFormField.recipients).orEmpty()),
             series = seriesOptions.mapNotNull { option -> option.value.toLongOrNull()?.takeIf { it > 0 }?.let {
                 AO3SeriesMembership(it, option.title, option.isSelected)

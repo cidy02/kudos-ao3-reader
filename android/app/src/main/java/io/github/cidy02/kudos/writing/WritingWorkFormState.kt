@@ -6,6 +6,7 @@ import io.github.cidy02.kudos.network.ao3.AO3Error
 import io.github.cidy02.kudos.network.ao3.AO3Result
 import io.github.cidy02.kudos.network.ao3.writing.*
 import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -42,6 +43,7 @@ internal class WritingWorkFormState(
     private val generation = auth.generation.value
     private var active = true
     private var attempted = false
+    private var collectionsAttempted = false
     private val mutable = MutableStateFlow(WritingWorkFormUiState())
     val state = mutable.asStateFlow()
     private fun ownsSession() = active && generation == auth.generation.value
@@ -69,6 +71,64 @@ internal class WritingWorkFormState(
         val form = old.form ?: return
         mutable.value = old.copy(form = edit(form))
     }
+
+    /** First opening only: a failed/cancelled best-effort read is still an attempt. */
+    suspend fun openCollections() {
+        if (!ownsSession() || !auth.state.value.isSignedIn || state.value.form == null || collectionsAttempted) return
+        collectionsAttempted = true
+        val result = try { repository.loadCollectionOffers() } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            currentCoroutineContext().ensureActive()
+            return // Same silent best-effort behavior as iOS, with the attempt retained.
+        }
+        currentCoroutineContext().ensureActive()
+        if (result is AO3Result.Success && result.value.isNotEmpty()) change { form ->
+            // Edits made while the page was loading remain authoritative; the served fallback stays exact.
+            val selected = form.postedCollectionNames
+            val offered = result.value.map { row -> row.copy(isSelected = selected.any { it.equals(row.name, true) }) }
+            val held = form.collections.filter { row -> result.value.none { it.name.equals(row.name, true) } }
+            form.copy(collections = offered + held)
+        }
+    }
+
+    fun selectSeries(id: Long) = change { form ->
+        val row = form.series.firstOrNull { it.seriesID == id } ?: return@change form
+        if (form.currentSeries.any { it.seriesID == id }) return@change form
+        val picked = !row.isSelected
+        form.copy(series = form.series.map { it.copy(isSelected = picked && it.seriesID == id) },
+            newSeriesTitle = if (picked) "" else form.newSeriesTitle)
+    }
+    fun newSeries(value: String) = change { form -> form.copy(newSeriesTitle = value,
+        series = if (trimWritingTag(value).isNotEmpty()) form.series.map { it.copy(isSelected = false) } else form.series) }
+    fun toggleCollection(name: String) = change { form -> form.copy(collections = form.collections.map {
+        if (it.name == name) it.copy(isSelected = !it.isSelected) else it
+    }) }
+    fun addCollection(offer: AO3CollectionOffer) = change { form ->
+        if (form.collections.any { it.name.equals(offer.name, true) }) form
+        else form.copy(collections = form.collections + offer.copy(isSelected = false))
+    }
+    fun addGift(value: String): Boolean {
+        val name = trimWritingTag(value)
+        var added = false
+        change { form ->
+            if (name.isEmpty() || form.gifts.any { it.equals(name, true) }) form else {
+                added = true
+                form.copy(gifts = form.gifts + name)
+            }
+        }
+        return added
+    }
+    fun removeGift(name: String) = change { it.copy(gifts = it.gifts.filterNot { gift -> gift == name }) }
+    fun togglePseud(id: String) = change { form ->
+        val creators = form.creators
+        if (creators.availablePseuds.none { it.value == id }) return@change form
+        val chosen = creators.selectedPseudIDs
+        val next = if (id !in chosen) chosen + id else if (chosen.size > 1) chosen.filterNot { it == id } else chosen
+        form.copy(creators = creators.copy(selectedPseudIDs = next))
+    }
+    fun coauthor(value: String) = change { it.copy(creators = it.creators.copy(coauthorByline = value)) }
+    fun parentWork(edit: (AO3ParentWorkDraft) -> AO3ParentWorkDraft) = change { it.copy(parentWork = edit(it.parentWork)) }
 
     fun title(value: String) = change { it.copy(title = value) }
     fun choice(kind: WorkFormChoice, value: String) = change { form ->
@@ -170,7 +230,7 @@ internal fun AO3WorkForm.subtitle() = buildList {
 internal fun AO3WorkForm.recoveryTarget() = workID?.let { "work:$it" } ?: "work:new"
 internal fun AO3WorkForm.seriesValue(): String {
     val current = currentSeries.joinToString(", ") { it.title }
-    val adding = series.firstOrNull { it.isSelected }?.title ?: newSeriesTitle.trim().takeIf { it.isNotEmpty() }
+    val adding = series.firstOrNull { it.isSelected }?.title ?: trimWritingTag(newSeriesTitle).takeIf { it.isNotEmpty() }
     return when {
         current.isEmpty() && adding == null -> "None"
         current.isEmpty() -> "Adding $adding"
