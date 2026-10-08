@@ -135,6 +135,26 @@ struct AO3WriteActionsTests {
         #expect(id == "654321")
     }
 
+    /// `error_messages_for` (otwarchive `validation_helper.rb`): the list a
+    /// re-rendered form carries. Nothing matched it, so a refused bookmark said
+    /// "Bookmarked." and closed its sheet (audit A4-3).
+    @MainActor
+    @Test func readsAO3sValidationList() {
+        let html = """
+        <html><body><div id="main">
+        <div id="error" class="error"><h4>Sorry! We couldn't save this bookmark because:</h4>
+        <ul><li>Notes must be less than 5000 characters long.</li></ul></div>
+        <form><textarea>They finished successfully.</textarea></form>
+        </div></body></html>
+        """
+        #expect(AO3Client.writeErrorMessage(in: html) == "Notes must be less than 5000 characters long.")
+        #expect(throws: AO3WriteError.self) {
+            try AO3AuthService.readingsWriteResult(
+                status: 200, body: html, success: "Marked for later.", rejectedFallback: "Couldn't mark for later."
+            )
+        }
+    }
+
     @Test func readsRenderedErrorList() {
         let html = """
         <html><body>

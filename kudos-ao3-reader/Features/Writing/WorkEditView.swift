@@ -407,7 +407,9 @@ struct WorkEditView: View {
     /// only after), so the segment positions are counted, not fixed.
     @ViewBuilder
     private var textRows: some View {
-        let showsWorkText = form.kind == .new || form.isDraft
+        // Not for a draft with several chapters: AO3 serves no text box there, and
+        // this row would be an empty one that replaces chapter 1 (audit A4-1).
+        let showsWorkText = (form.kind == .new || form.isDraft) && form.chapter?.contentServed != false
         let postedWorkID: Int? = form.isPosted ? form.workID : nil
         let count = 4 + (showsWorkText ? 1 : 0) + (postedWorkID == nil ? 0 : 3)
         let afterNotes = showsWorkText ? 4 : 3

@@ -437,7 +437,7 @@ extension AO3AuthService {
         let (status, body) = try await submitWrite(request, using: client)
         if let error = AO3Client.writeErrorMessage(in: body) {
             var invalid = (try? AO3Client.parseCollectionForm(body, slug: form.collectionSlug)) ?? form
-            invalid.generalErrors = [error] + invalid.generalErrors
+            invalid.generalErrors = [error] + invalid.generalErrors.filter { $0 != error }
             return .invalid(invalid)
         }
         if let notice = AO3Client.writeSuccessMessage(in: body)

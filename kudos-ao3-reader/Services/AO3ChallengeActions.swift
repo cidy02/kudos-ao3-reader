@@ -284,7 +284,7 @@ extension AO3AuthService {
             var invalid = (try? AO3Client.parseChallengeSettingsForm(
                 body, slug: form.collectionSlug, kind: form.kind
             )) ?? posted
-            invalid.generalErrors = [error] + invalid.generalErrors
+            invalid.generalErrors = [error] + invalid.generalErrors.filter { $0 != error }
             // Keep the caller's dates/limits if AO3 re-rendered blanks.
             invalid.settings.signupsOpenAt = posted.settings.signupsOpenAt
             invalid.settings.signupsCloseAt = posted.settings.signupsCloseAt
