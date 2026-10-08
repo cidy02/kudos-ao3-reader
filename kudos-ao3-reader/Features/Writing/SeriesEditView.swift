@@ -32,6 +32,8 @@ struct SeriesEditView: View {
     @Environment(AO3AuthService.self) private var auth
     @Environment(\.openURL) private var openURL
 
+    @ScaledMetric(relativeTo: .caption) private var footnoteSize: CGFloat = 11.5
+
     @State private var form: AO3SeriesForm
     @State private var isSaving = false
     @State private var errorMessage: String?
@@ -224,7 +226,7 @@ struct SeriesEditView: View {
 
     private func footnote(_ text: String) -> some View {
         Text(text)
-            .font(.system(size: 11.5))
+            .font(.system(size: footnoteSize))
             .foregroundStyle(.secondary.opacity(0.7))
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -267,6 +269,10 @@ struct SeriesReorderView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(ThemeManager.self) private var theme
     @Environment(AO3AuthService.self) private var auth
+
+    @ScaledMetric(relativeTo: .subheadline) private var workTitleSize: CGFloat = 14.5
+    @ScaledMetric(relativeTo: .footnote) private var positionNumberSize: CGFloat = 13
+    @ScaledMetric(relativeTo: .caption) private var footnoteSize: CGFloat = 11.5
 
     @State private var rows: [AO3SeriesWorkRow]
     @State private var openedGeneration: Int?
@@ -333,7 +339,7 @@ struct SeriesReorderView: View {
             Section {
                 Text("Each work has a numbered position. After you arrange the list, save once to update "
                     + "the whole order on AO3 and check that it was saved.")
-                    .font(.system(size: 11.5))
+                    .font(.system(size: footnoteSize))
                     .foregroundStyle(.secondary.opacity(0.7))
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -368,15 +374,15 @@ struct SeriesReorderView: View {
     private func orderRow(_ row: AO3SeriesWorkRow, position index: Int) -> some View {
         HStack(spacing: 12) {
             Text("\(index)")
-                .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                .font(.system(size: positionNumberSize, weight: .semibold, design: .monospaced))
                 .foregroundStyle(accountPalette.accent)
                 .frame(minWidth: 26, alignment: .trailing)
             VStack(alignment: .leading, spacing: 3) {
                 Text(row.title.isEmpty ? "Untitled work" : row.title)
-                    .font(.system(size: 14.5, weight: .medium))
+                    .font(.system(size: workTitleSize, weight: .medium))
                     .lineLimit(2)
                 if let metadata = row.metadataText {
-                    Text(metadata).font(.system(size: 11.5)).foregroundStyle(.secondary)
+                    Text(metadata).font(.system(size: footnoteSize)).foregroundStyle(.secondary)
                 }
             }
             Spacer(minLength: 0)
@@ -427,6 +433,9 @@ struct SeriesRemoveWorksView: View {
     @Environment(ThemeManager.self) private var theme
     @Environment(AO3AuthService.self) private var auth
 
+    @ScaledMetric(relativeTo: .subheadline) private var workTitleSize: CGFloat = 14.5
+    @ScaledMetric(relativeTo: .caption) private var footnoteSize: CGFloat = 11.5
+
     @State private var rows: [AO3SeriesWorkRow]
     @State private var openedGeneration: Int?
     @State private var removing: AO3SeriesWorkRow?
@@ -471,7 +480,7 @@ struct SeriesRemoveWorksView: View {
                     ? "A removed work stays posted and only leaves this series."
                     : "AO3 deletes a series when its last work leaves. Remove the last work by deleting "
                         + "the series on AO3.")
-                    .font(.system(size: 11.5))
+                    .font(.system(size: footnoteSize))
                     .foregroundStyle(.secondary.opacity(0.7))
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -508,9 +517,9 @@ struct SeriesRemoveWorksView: View {
     private func row(_ row: AO3SeriesWorkRow) -> some View {
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 3) {
-                Text(Self.title(row)).font(.system(size: 14.5, weight: .medium)).lineLimit(2)
+                Text(Self.title(row)).font(.system(size: workTitleSize, weight: .medium)).lineLimit(2)
                 if let metadata = row.metadataText {
-                    Text(metadata).font(.system(size: 11.5)).foregroundStyle(.secondary)
+                    Text(metadata).font(.system(size: footnoteSize)).foregroundStyle(.secondary)
                 }
             }
             Spacer(minLength: 0)

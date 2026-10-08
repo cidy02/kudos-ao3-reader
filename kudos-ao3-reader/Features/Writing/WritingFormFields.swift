@@ -57,6 +57,9 @@ struct WritingTagsRow: View {
     var showsInlineChips = false
     var onAdd: (() -> Void)?
 
+    @ScaledMetric(relativeTo: .subheadline) private var rowTitleSize: CGFloat = 15
+    @ScaledMetric(relativeTo: .footnote) private var countSize: CGFloat = 13
+
     @Environment(ThemeManager.self) private var theme
 
     var body: some View {
@@ -82,11 +85,11 @@ struct WritingTagsRow: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
                 titleLabel
-                    .font(.system(size: 15))
+                    .font(.system(size: rowTitleSize))
                     .accessibilityLabel(isRequired ? "\(title), required" : title)
                 Spacer(minLength: 8)
                 Text(values.isEmpty ? "None" : "\(values.count)")
-                    .font(.system(size: 13))
+                    .font(.system(size: countSize))
                     .foregroundStyle(.secondary)
                     .monospacedDigit()
             }

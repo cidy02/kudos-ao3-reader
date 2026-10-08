@@ -534,7 +534,7 @@ struct TagSetView: View {
 
     private func stateBadge(_ text: String, color: Color) -> some View {
         Text(text)
-            .font(.system(size: 11, weight: .semibold))
+            .font(.system(size: fieldLabelSize, weight: .semibold))
             .lineLimit(1)
             .fixedSize()
             .foregroundStyle(color)

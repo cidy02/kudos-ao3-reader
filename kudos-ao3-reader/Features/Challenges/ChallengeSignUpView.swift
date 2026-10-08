@@ -15,6 +15,17 @@ struct ChallengeSignUpView: View {
     @Environment(ThemeManager.self) var theme
     @Environment(\.dismiss) var dismiss
 
+    @ScaledMetric(relativeTo: .headline) private var stateTitleSize: CGFloat = 15
+    @ScaledMetric(relativeTo: .subheadline) private var rowTitleSize: CGFloat = 15
+    @ScaledMetric(relativeTo: .footnote) private var buttonLabelSize: CGFloat = 14
+    @ScaledMetric(relativeTo: .footnote) private var promptEditorSize: CGFloat = 14
+    @ScaledMetric(relativeTo: .footnote) private var loadingSize: CGFloat = 14
+    @ScaledMetric(relativeTo: .footnote) private var noticeTextSize: CGFloat = 13
+    @ScaledMetric(relativeTo: .footnote) private var failureBodySize: CGFloat = 13
+    @ScaledMetric(relativeTo: .footnote) private var errorTextSize: CGFloat = 12.5
+    @ScaledMetric(relativeTo: .caption) private var captionSize: CGFloat = 11.5
+    @ScaledMetric(relativeTo: .caption) private var promptFootnoteSize: CGFloat = 10.5
+
     @State var form: AO3ChallengeSignUpForm?
     @State var phase: Phase = .idle
     @State var isSubmitting: Bool = false
@@ -278,10 +289,10 @@ extension ChallengeSignUpView {
             Toggle(isOn: promptBinding(id: prompt.id, kind: .request).anyRelationship) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Any of these is fine")
-                        .font(.system(size: 15))
+                        .font(.system(size: rowTitleSize))
                         .foregroundStyle(.primary)
                     Text("Any relationship matches, not only the ones chosen")
-                        .font(.system(size: 11.5))
+                        .font(.system(size: captionSize))
                         .foregroundStyle(.secondary)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -305,14 +316,14 @@ extension ChallengeSignUpView {
             ZStack(alignment: .topLeading) {
                 if binding.wrappedValue.isEmpty {
                     Text("Describe what you would love to receive…")
-                        .font(.system(size: 14, design: .serif))
+                        .font(.system(size: promptEditorSize, design: .serif))
                         .foregroundStyle(.secondary.opacity(0.6))
                         .padding(.horizontal, 4)
                         .padding(.vertical, 8)
                 }
 
                 TextEditor(text: binding)
-                    .font(.system(size: 14, design: .serif))
+                    .font(.system(size: promptEditorSize, design: .serif))
                     .frame(minHeight: 80)
                     .scrollContentBackground(.hidden)
                     .background(Color.clear)
@@ -320,13 +331,13 @@ extension ChallengeSignUpView {
 
             HStack {
                 Text("Visible to your recipient only")
-                    .font(.system(size: 10.5))
+                    .font(.system(size: promptFootnoteSize))
                     .foregroundStyle(.secondary.opacity(0.8))
 
                 Spacer()
 
                 Text("\(binding.wrappedValue.count) / 1000")
-                    .font(.system(size: 10.5, weight: .semibold, design: .monospaced))
+                    .font(.system(size: promptFootnoteSize, weight: .semibold, design: .monospaced))
                     .foregroundStyle(.secondary.opacity(0.8))
             }
         }
@@ -356,7 +367,7 @@ extension ChallengeSignUpView {
         }
         sentences.append("Kudos checks these limits before you submit your sign-up.")
         return Text(sentences.joined(separator: " "))
-            .font(.system(size: 11.5))
+            .font(.system(size: captionSize))
             .foregroundStyle(Color.secondary.opacity(0.7))
             .fixedSize(horizontal: false, vertical: true)
             .padding(.horizontal, 4)
@@ -392,7 +403,7 @@ extension ChallengeSignUpView {
                             .foregroundStyle(palette.accent)
 
                         Text("Add an offer")
-                            .font(.system(size: 15))
+                            .font(.system(size: rowTitleSize))
                             .foregroundStyle(.primary)
 
                         Spacer()
@@ -422,7 +433,7 @@ extension ChallengeSignUpView {
 
     var offersFootnote: some View {
         Text("You can edit your sign-up until sign-ups close. After they close, you can only withdraw it.")
-            .font(.system(size: 11.5))
+            .font(.system(size: captionSize))
             .foregroundStyle(Color.secondary.opacity(0.7))
             .fixedSize(horizontal: false, vertical: true)
             .padding(.horizontal, 4)
@@ -440,7 +451,7 @@ extension ChallengeSignUpView {
                         .frame(width: 20)
 
                     Text("Withdraw sign-up")
-                        .font(.system(size: 15))
+                        .font(.system(size: rowTitleSize))
                         .foregroundStyle(Color.red)
                         .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -465,10 +476,10 @@ extension ChallengeSignUpView {
                 addNewRequest()
             } label: {
                 Text("Add request")
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(.system(size: buttonLabelSize, weight: .semibold))
                     .foregroundStyle(.primary)
                     .frame(maxWidth: .infinity)
-                    .frame(height: 44)
+                    .frame(minHeight: 44)
                     .background(
                         RoundedRectangle(cornerRadius: 12, style: .continuous)
                             .fill(theme.appTheme.glassFill(0.10))
@@ -491,11 +502,11 @@ extension ChallengeSignUpView {
                             .tint(palette.labelOnAccent)
                     }
                     Text("Submit sign-up")
-                        .font(.system(size: 14, weight: .semibold))
+                        .font(.system(size: buttonLabelSize, weight: .semibold))
                         .foregroundStyle(palette.labelOnAccent)
                 }
                 .frame(maxWidth: .infinity)
-                .frame(height: 44)
+                .frame(minHeight: 44)
                 .background(
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
                         .fill(palette.accent)
@@ -534,7 +545,7 @@ extension ChallengeSignUpView {
             Image(systemName: "checkmark.circle")
                 .foregroundStyle(palette.accent)
             Text(text)
-                .font(.system(size: 13, weight: .medium))
+                .font(.system(size: noticeTextSize, weight: .medium))
                 .foregroundStyle(palette.accent)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -547,7 +558,7 @@ extension ChallengeSignUpView {
             Image(systemName: "exclamationmark.triangle")
                 .foregroundStyle(Color.red)
             Text(text)
-                .font(.system(size: 12.5))
+                .font(.system(size: errorTextSize))
                 .foregroundStyle(Color.red)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -560,7 +571,7 @@ extension ChallengeSignUpView {
             ProgressView()
                 .controlSize(.small)
             Text("Loading sign-up…")
-                .font(.system(size: 14))
+                .font(.system(size: loadingSize))
                 .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, alignment: .center)
@@ -570,9 +581,9 @@ extension ChallengeSignUpView {
     func failureCard(_ message: String) -> some View {
         VStack(spacing: 8) {
             Text("Couldn't load sign-up")
-                .font(.system(size: 15, weight: .semibold))
+                .font(.system(size: stateTitleSize, weight: .semibold))
             Text(message)
-                .font(.system(size: 13))
+                .font(.system(size: failureBodySize))
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
             Button("Try Again") {

@@ -41,6 +41,9 @@ struct AddChapterView: View {
         theme.scopePalette
     }
 
+    @ScaledMetric(relativeTo: .subheadline) private var actionTitleSize: CGFloat = 15
+    @ScaledMetric(relativeTo: .caption) private var footnoteSize: CGFloat = 11.5
+
     private var gutter: CGFloat { SubjectMetrics.accountGutter }
     private var selfGuttered: CGFloat { 0 }
 
@@ -90,7 +93,7 @@ struct AddChapterView: View {
                 Text("When you turn on Last chapter, Kudos sets the work's total to this chapter's "
                     + "position. AO3 marks the work complete when its posted and total chapters match.")
 
-                    .font(.system(size: 11.5))
+                    .font(.system(size: footnoteSize))
                     .foregroundStyle(.secondary.opacity(0.7))
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -105,7 +108,7 @@ struct AddChapterView: View {
                 Text("Posting a chapter notifies your subscribers. Save it as a draft if you want to "
                     + "work on it over several sittings without sending a notification.")
 
-                    .font(.system(size: 11.5))
+                    .font(.system(size: footnoteSize))
                     .foregroundStyle(.secondary.opacity(0.7))
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -309,7 +312,7 @@ struct AddChapterView: View {
                     Image(systemName: "arrow.up.circle.fill")
                         .frame(width: 20)
                     Text(form.chapterID != nil && !form.isDraft ? "Save chapter changes" : "Post chapter now")
-                        .font(.system(size: 15))
+                        .font(.system(size: actionTitleSize))
                     Spacer()
                 }
                 .foregroundStyle(theme.appTheme.statusSuccessColor)
@@ -330,7 +333,7 @@ struct AddChapterView: View {
                     Image(systemName: "doc.text.fill")
                         .frame(width: 20)
                     Text("Save as draft")
-                        .font(.system(size: 15))
+                        .font(.system(size: actionTitleSize))
                     Spacer()
                 }
                 .foregroundStyle(.primary)
