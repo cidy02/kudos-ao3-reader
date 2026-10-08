@@ -20,6 +20,11 @@ import io.github.cidy02.kudos.network.ao3.account.AO3CollectionSaveOutcome
 import io.github.cidy02.kudos.network.ao3.account.AO3CollectionModerationUrls
 import io.github.cidy02.kudos.network.ao3.account.AO3CollectionParticipantsUrls
 import io.github.cidy02.kudos.network.ao3.account.collectionNameFormatIsValid
+import io.github.cidy02.kudos.network.ao3.account.AO3TagSetSnapshot
+import io.github.cidy02.kudos.network.ao3.account.AO3TagSetField
+import io.github.cidy02.kudos.network.ao3.account.AO3TagSetUrls
+import io.github.cidy02.kudos.network.ao3.account.AO3TagNomination
+import io.github.cidy02.kudos.network.ao3.account.rejectParameter
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
@@ -31,6 +36,52 @@ class AO3WriteRepository(
     private val client: AO3AuthenticatedClient,
     private val parser: AO3WriteFormParser = AO3WriteFormParser()
 ) {
+    /** iOS: fresh edit-page meta token, captured action/method, all four strings, one POST. */
+    suspend fun saveTagSetFields(tagSet: AO3TagSetSnapshot, fields: Map<AO3TagSetField, String>,
+        expectedGeneration: Int): AO3Result<Unit> {
+        requireCollectionSession(expectedGeneration)
+        if (client.username() == null) return AO3Result.Failure(AO3Error.Validation("Log in to AO3 first."))
+        val referer = AO3TagSetUrls.edit(tagSet.id)
+        val html = when (val result = client.getAuthenticated(referer)) {
+            is AO3Result.Failure -> return result
+            is AO3Result.Success -> result.value.body
+        }
+        requireCollectionSession(expectedGeneration)
+        val token = parser.parseAuthenticityToken(html, metaOnly = true)
+            ?: return AO3Result.Failure(AO3Error.Validation("Couldn't prepare the request. Try again, or open the work on AO3."))
+        val action = tagSet.actionUrl
+            ?: return AO3Result.Failure(AO3Error.Validation("Couldn't find AO3's tag-set form."))
+        currentCoroutineContext().ensureActive()
+        val response = withContext(NonCancellable) {
+            client.postAuthenticatedInSession(action, tagSet.saveParameters(fields, token),
+                writeHeaders(token, referer), expectedGeneration)
+        }
+        requireCollectionSession(expectedGeneration)
+        return collectionWriteVerdict(response, "AO3 couldn't save that tag set.")
+    }
+
+    /** iOS: bracket replacement precedes the shared form encoder; no success verification GET. */
+    suspend fun reportRejectedTag(tagSetId: Int, nomination: AO3TagNomination, expectedGeneration: Int): AO3Result<Unit> {
+        requireCollectionSession(expectedGeneration)
+        if (client.username() == null) return AO3Result.Failure(AO3Error.Validation("Log in to AO3 first."))
+        val referer = AO3TagSetUrls.nominations(tagSetId)
+        val html = when (val result = client.getAuthenticated(referer)) {
+            is AO3Result.Failure -> return result
+            is AO3Result.Success -> result.value.body
+        }
+        requireCollectionSession(expectedGeneration)
+        val token = parser.parseAuthenticityToken(html, metaOnly = true)
+            ?: return AO3Result.Failure(AO3Error.Validation("Couldn't prepare the request. Try again, or open the work on AO3."))
+        currentCoroutineContext().ensureActive()
+        val response = withContext(NonCancellable) {
+            client.postAuthenticatedInSession(referer,
+                listOf("_method" to "put", "authenticity_token" to token, nomination.rejectParameter()),
+                writeHeaders(token, referer), expectedGeneration)
+        }
+        requireCollectionSession(expectedGeneration)
+        return collectionWriteVerdict(response, "AO3 couldn't reject that tag.")
+    }
+
     /** One participants CSRF read and one tap-triggered, generation-fenced POST. */
     suspend fun decideCollectionMember(slug: String, id: Int, accept: Boolean, expectedGeneration: Int): AO3Result<Unit> {
         requireCollectionSession(expectedGeneration)

@@ -260,12 +260,18 @@ internal class DemoNetworkInterceptor(
     private val userCollectionItems = DemoCollectionItems(account = true)
     private val collectionForms = DemoCollectionForms()
     private val collectionParticipants = DemoCollectionParticipants()
+    private val tagSets = DemoTagSetWrites()
 
     override fun intercept(chain: Interceptor.Chain): Response {
         if (!isActive()) return chain.proceed(chain.request())
         val url = chain.request().url
         if (!DemoNetworkRoutes.isAo3Host(url.host)) return chain.proceed(chain.request())
         val path = DemoNetworkRoutes.decodedPath(url)
+        tagSets.answer(chain.request(), fixtures())?.let { answer ->
+            return Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1)
+                .code(answer.first).message("Local tag-set answer").header("Content-Type", HTML)
+                .body(answer.second.toResponseBody(HTML_TYPE)).build()
+        }
         if (chain.request().method != "GET" && Regex("^/tag_sets/(42|43|44)(?:/|$)").containsMatchIn(path)) {
             return Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1)
                 .code(405).message("Read-only tag-set demo").header("Content-Type", HTML)
@@ -613,5 +619,80 @@ private class DemoCollectionItems(private val account: Boolean = false) {
             "<li><a href='?page=$it'>$it</a></li>"
         } + "</ol>")
         return 200 to doc.outerHtml()
+    }
+}
+
+/** Only the two tag-set 42 write addresses; process-local server state resets on relaunch. */
+private class DemoTagSetWrites {
+    private val additions = mutableMapOf<String, List<String>>()
+    private val rejected = mutableSetOf<String>()
+
+    @Synchronized
+    fun answer(request: okhttp3.Request, source: FixtureSource): Pair<Int, String>? {
+        val path = DemoNetworkRoutes.decodedPath(request.url).trimEnd('/')
+        if (path !in setOf("/tag_sets/42", "/tag_sets/42/edit", "/tag_sets/42/nominations")) return null
+        if (request.method !in setOf("GET", "POST") || (request.method != "GET" && path.endsWith("edit"))) return null
+        val name = DemoNetworkRoutes.fixtureName(request.url) ?: return 404 to ""
+        val raw = source.read(name)?.decodeToString() ?: return 404 to ""
+        if (request.method == "GET") {
+            if (additions.isEmpty() && rejected.isEmpty()) return 200 to raw
+            val doc = Jsoup.parse(raw)
+            if (path.endsWith("nominations")) {
+                doc.select("li.nomination, tr.nomination, div.nomination").forEach { row ->
+                    if (row.selectFirst(".tag")?.text() in rejected) row.textNodes().forEach {
+                        it.text(it.text().replace("unreviewed", "rejected"))
+                    }
+                }
+                doc.select("input[name]").forEach { input ->
+                    val key = input.attr("name")
+                    val tag = key.substringAfter("_change_", "").replace("#LBRACKET", "[").replace("#RBRACKET", "]")
+                    if (tag in rejected) input.attr("name", key.replace("_change_", "_reject_"))
+                }
+            } else {
+                val categories = listOf("fandom" to "Fandoms", "character" to "Characters",
+                    "relationship" to "Relationships", "freeform" to "Additional tags")
+                categories.forEach { (field, label) ->
+                    val heading = doc.select("h3.heading").firstOrNull { it.text().startsWith(label) }
+                    val count = heading?.text()?.filter(Char::isDigit)?.toIntOrNull() ?: 0
+                    heading?.text("$label (${count + additions[field].orEmpty().size})")
+                }
+            }
+            return 200 to doc.outerHtml()
+        }
+        if (request.method != "POST") return null
+        val buffer = Buffer()
+        request.body?.writeTo(buffer)
+        val fields = buffer.readUtf8().split('&').associate { encoded ->
+            val parts = encoded.split('=', limit = 2)
+            URLDecoder.decode(parts[0], "UTF-8") to URLDecoder.decode(parts.getOrElse(1) { "" }, "UTF-8")
+        }
+        fun refused(message: String) = 422 to "<div class='flash error'>$message</div>"
+        val token = if (path.endsWith("nominations")) "demo-tag-set-42-nominations" else "demo-tag-set-42"
+        if (fields["authenticity_token"] != token || fields["_method"] != "put") return refused("The tag-set form could not be verified.")
+        if (path.endsWith("nominations")) {
+            val key = fields.keys.singleOrNull { "_reject_" in it } ?: return refused("No nomination was selected.")
+            if (fields.size != 3 || fields[key] != "1") return refused("The nomination fields were not accepted.")
+            when (key) {
+                "fandom_reject_Paper Harbor" -> return refused("Paper Harbor is locked for this review.")
+                "freeform_reject_Letters #LBRACKETWinter#RBRACKET" -> rejected += "Letters [Winter]"
+                else -> return refused("That nomination was not accepted.")
+            }
+        } else {
+            val labels = linkedMapOf("fandom" to "Fandom tags to add", "character" to "Character tags to add",
+                "relationship" to "Relationship tags to add", "freeform" to "Additional tags to add")
+            val keys = labels.keys.map { "owned_tag_set[tag_set_attributes][${it}_tagnames_to_add]" }
+            if (fields.keys != (keys + listOf("authenticity_token", "_method")).toSet()) return refused("The tag lists were not accepted.")
+            labels.forEach { (field, label) ->
+                val value = fields.getValue("owned_tag_set[tag_set_attributes][${field}_tagnames_to_add]")
+                if (value.split(',').any { it.trim().equals("Uncharted Lantern", ignoreCase = true) })
+                    return refused("$label: Uncharted Lantern could not be added.")
+            }
+            labels.keys.forEach { field ->
+                val tags = fields.getValue("owned_tag_set[tag_set_attributes][${field}_tagnames_to_add]")
+                    .split(',').map(String::trim).filter(String::isNotEmpty)
+                additions[field] = (additions[field].orEmpty() + tags).distinct()
+            }
+        }
+        return 200 to "<div class='flash notice'>Tag set updated.</div>"
     }
 }
