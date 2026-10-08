@@ -5,6 +5,20 @@ import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
 
 class AO3WriteFormParser {
+    /** Work flashes are layout evidence, never the writer's chapter/preview HTML. */
+    fun workWriteError(html: String): String? {
+        val document = Jsoup.parse(html)
+        if (document.selectFirst("#main > #previewpane") != null) return null
+        return document.select("#main .flash.error, #main #error li")
+            .firstOrNull { element ->
+                element.parents().none { it.id() == "workskin" || it.id() == "previewpane" || it.hasClass("userstuff") } &&
+                    element.normalizedText().isNotEmpty()
+            }?.normalizedText()
+    }
+
+    fun workWriteNotice(html: String): String? = Jsoup.parse(html)
+        .selectFirst("#main > .flash.notice")?.normalizedText()?.takeIf { it.isNotEmpty() }
+
     fun parseAuthenticityToken(html: String, formSelector: String? = null, metaOnly: Boolean = false): String? {
         val document = Jsoup.parse(html)
         // iOS fetchCSRFPage uses the page's csrf-token meta, not another row's input.

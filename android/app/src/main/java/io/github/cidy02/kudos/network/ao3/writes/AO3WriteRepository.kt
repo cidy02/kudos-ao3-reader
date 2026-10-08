@@ -30,6 +30,9 @@ import io.github.cidy02.kudos.network.ao3.account.AO3TagSetField
 import io.github.cidy02.kudos.network.ao3.account.AO3TagSetUrls
 import io.github.cidy02.kudos.network.ao3.account.AO3TagNomination
 import io.github.cidy02.kudos.network.ao3.account.rejectParameter
+import io.github.cidy02.kudos.network.ao3.writing.AO3WorkForm
+import io.github.cidy02.kudos.network.ao3.writing.AO3WorkFormField
+import io.github.cidy02.kudos.network.ao3.writing.AO3WorkSubmitAction
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
@@ -41,6 +44,34 @@ class AO3WriteRepository(
     private val client: AO3AuthenticatedClient,
     private val parser: AO3WriteFormParser = AO3WriteFormParser()
 ) {
+    /** iOS saveWork: the loaded token/body/action, zero preparation reads, one single-shot POST. */
+    suspend fun saveWork(form: AO3WorkForm, expectedGeneration: Int): AO3Result<Unit> {
+        requireCollectionSession(expectedGeneration)
+        if (client.username() == null) return AO3Result.Failure(AO3Error.Validation("Log in to AO3 first."))
+        if (!AO3RedirectCookieRelay.isTrustedUrl(form.actionUrl)) return AO3Result.Failure(
+            AO3Error.Parse("Couldn't read AO3's work form."))
+        val fields = form.parameters(if (form.isPosted) AO3WorkSubmitAction.Update else AO3WorkSubmitAction.SaveDraft)
+        val token = fields.firstOrNull { it.first == AO3WorkFormField.authenticityToken }?.second.orEmpty()
+        currentCoroutineContext().ensureActive()
+        val response = withContext(NonCancellable) {
+            client.postAuthenticatedInSession(form.actionUrl, fields, writeHeaders(token, form.actionUrl), expectedGeneration)
+        }
+        requireCollectionSession(expectedGeneration)
+        return when (response) {
+            is AO3Result.Failure -> response
+            is AO3Result.Success -> {
+                val error = parser.workWriteError(response.value.body)
+                when {
+                    error != null -> AO3Result.Failure(AO3Error.Validation(error))
+                    parser.workWriteNotice(response.value.body) != null || response.value.statusCode in 300..399 ->
+                        AO3Result.Success(Unit)
+                    response.value.statusCode in 200..299 -> AO3Result.Failure(AO3Error.Validation(AO3CollectionFields.UNCONFIRMED))
+                    else -> AO3Result.Failure(AO3Error.Validation("AO3 didn't accept the change."))
+                }
+            }
+        }
+    }
+
     /** iOS saveChallengeSignUp: validate, one fresh meta token, one POST, no follow-up GET. */
     suspend fun saveChallengeSignUp(form: AO3ChallengeSignUpForm,
         expectedGeneration: Int): AO3Result<AO3SignUpSaveOutcome> {

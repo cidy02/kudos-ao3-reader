@@ -42,6 +42,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -85,23 +86,25 @@ import java.util.Locale
 @Composable
 fun WritingDraftsScreen(
     repository: WritingDraftsRepository,
-    onOpenWeb: (String) -> Unit,
-    clock: Clock? = null
+    onOpenWork: (String) -> Unit,
+    clock: Clock? = null,
+    savedRevision: Int = 0
 ) {
     val tokens = LocalKudosTokens.current
     val palette = tokens.scopePalette
     val generation by repository.authRepository.generation.collectAsState()
     val auth by repository.authRepository.state.collectAsState()
-    var page by remember(repository) { mutableStateOf(1) }
-    val loader = remember(repository, generation, auth, page) { WritingDraftsState(repository, page) }
+    var page by rememberSaveable(repository) { mutableStateOf(1) }
+    val loader = remember(repository, generation, auth, page, savedRevision) { WritingDraftsState(repository, page) }
     val state by loader.state.collectAsState()
     val scope = rememberCoroutineScope()
     val today = rememberDraftDay(clock)
     val accessibility = isAccessibilityFontScale()
 
+    // iOS's drafts task reads this page on return from a saved form. One read, no enrichment.
     LaunchedEffect(loader) { if (auth != AO3AuthState.Restoring) loader.load() }
     ProvidePushedShellChrome(hasSubjectHeader = true, trailingContent = {
-        ToolbarAddButton(onClick = { onOpenWeb(WritingWorkDestination.url()) },
+        ToolbarAddButton(onClick = { onOpenWork(WritingWorkDestination.route()) },
             accessibilityName = "New Work", palette = palette)
     })
 
@@ -177,7 +180,7 @@ fun WritingDraftsScreen(
                             item { SectionRuleHeader("On AO3", modifier = Modifier.padding(top = 6.dp)) }
                             items(drafts.page.works, key = { it.id }) { work ->
                                 DraftCard(work, drafts.deletionDates[work.id], today) {
-                                    onOpenWeb(WritingWorkDestination.url(work.id))
+                                    onOpenWork(WritingWorkDestination.route(work.id))
                                 }
                             }
                         }
