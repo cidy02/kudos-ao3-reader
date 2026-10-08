@@ -332,7 +332,11 @@ struct KudosBackupTests {
         // Prove this reached the intended late failure, rather than passing because
         // archive construction or an earlier restore phase threw for another reason.
         #expect(restoreError?.domain == NSCocoaErrorDomain)
-        #expect(restoreError?.code == 512) // Cocoa fileWriteFailure (NSFileWriteFailureError)
+        // An atomic write onto a directory: Cocoa calls it fileWriteUnknown (512) on some
+        // systems and fileNoSuchFile (4) on others (the iOS 27 simulator). Either is the
+        // write this test means to fail; pinned to 512 alone, the test failed on the OS, not
+        // on the code.
+        #expect([512, 4].contains(restoreError?.code ?? -1))
 
         try context.save()
         let observer = ModelContext(container)
@@ -945,6 +949,11 @@ struct KudosBackupTests {
         // has its own coverage in ArchiveTrustBoundaryTests; this fixture keeps the validator
         // on the hook.
         localWork.epubPreservationStatus = .notPreserved
+        // Queueing the work stamps it "modified now", which made the local record the newer
+        // one: `mayReplaceEPUB` then refused the bytes before the validator saw them, and the
+        // count below stayed 0. Put the older clock back so the archive is the fresher copy,
+        // as the comment at the top of this test requires.
+        localWork.markModified(olderLocalDate)
         try context.save()
         defer { try? FileManager.default.removeItem(at: localWork.fileURL) }
 
