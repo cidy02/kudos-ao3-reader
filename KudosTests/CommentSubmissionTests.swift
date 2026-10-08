@@ -547,6 +547,30 @@ struct CommentSubmissionTests {
         #expect(store.draft(for: reply).isEmpty)
     }
 
+    /// Audit A19-7: a draft typed before the session had a name follows the account that
+    /// verification names, and never replaces a draft that account already has.
+    @Test func anUnnamedSessionsDraftsMoveToTheAccountThatIsThenNamed() {
+        let suiteName = "CommentSubmissionTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let store = CommentDraftStore(defaults: defaults)
+        let chapter = AO3CommentContext(workID: 42, chapterID: 7)
+        let reply = AO3CommentContext(workID: 42, chapterID: 7, parentCommentID: 5)
+
+        store.save("typed offline", for: chapter, identity: "unknown-session:3")
+        store.save("a reply typed offline", for: reply, identity: "unknown-session:3")
+        store.save("alice's own reply", for: reply, identity: "alice")
+        store.save("someone else", for: chapter, identity: "bob")
+
+        store.move(from: "unknown-session:3", to: "alice")
+
+        #expect(store.draft(for: chapter, identity: "alice") == "typed offline")
+        #expect(store.draft(for: reply, identity: "alice") == "alice's own reply")
+        #expect(store.draft(for: chapter, identity: "unknown-session:3").isEmpty)
+        #expect(store.draft(for: reply, identity: "unknown-session:3").isEmpty)
+        #expect(store.draft(for: chapter, identity: "bob") == "someone else")
+    }
+
     @Test func draftsAreAccountScopedAndVerifiedSuccessClearsChapterVariants() {
         let suiteName = "CommentSubmissionTests-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!

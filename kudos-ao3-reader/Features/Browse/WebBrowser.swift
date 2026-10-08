@@ -38,6 +38,66 @@ enum BrowserThemeStyle {
         return host == "archiveofourown.org" || host.hasSuffix(".archiveofourown.org")
     }
 
+    /// What a web view that holds the AO3 session does with a navigation.
+    enum NavigationVerdict: Equatable { case allow, openOutside, cancel }
+
+    /// `AppRouter.open`'s rule, applied inside the web view as well. The router decided only
+    /// the first address: a typed address, or a link on an AO3 page, then loaded any site
+    /// and any scheme in the view that keeps the AO3 login (audit A19-1).
+    static func navigationVerdict(
+        for url: URL?, isMainFrame: Bool, isDemo: Bool = demoIsActive
+    ) -> NavigationVerdict {
+        guard let url, let scheme = url.scheme?.lowercased() else { return .cancel }
+        // A frame's empty starting document, and the demo's own page.
+        if scheme == "about" { return .allow }
+        guard scheme == "http" || scheme == "https" else { return .cancel }
+        // The demo never contacts AO3, and a web view's requests do not pass through the
+        // URLProtocol that enforces that everywhere else (audit A19-2).
+        if isDemo { return .cancel }
+        // AO3 permits embeds (video, audio) from other hosts: frames, not the page.
+        if !isMainFrame { return .allow }
+        return isAO3URL(url) ? .allow : .openOutside
+    }
+
+    /// The delegate's answer, sending an outside address to the system browser.
+    @MainActor
+    static func decide(_ action: WKNavigationAction) -> WKNavigationActionPolicy {
+        let url = action.request.url
+        // No target frame is a link that asks for a new window: the page, for this purpose.
+        switch navigationVerdict(for: url, isMainFrame: action.targetFrame?.isMainFrame ?? true) {
+        case .allow:
+            return .allow
+        case .openOutside:
+            if let url { openOutside(url) }
+            return .cancel
+        case .cancel:
+            return .cancel
+        }
+    }
+
+    @MainActor
+    static func openOutside(_ url: URL) {
+        #if os(macOS)
+        NSWorkspace.shared.open(url)
+        #else
+        UIApplication.shared.open(url)
+        #endif
+    }
+
+    static var demoIsActive: Bool {
+        #if DEBUG
+        DemoNetworkBlock.isActive
+        #else
+        false
+        #endif
+    }
+
+    /// Only a download the reader asked AO3 for: the page itself, from AO3. An EPUB answer
+    /// from a frame or from another site used to go into the library with no tap.
+    static func mayImportDownload(from url: URL?, isForMainFrame: Bool) -> Bool {
+        isForMainFrame && isAO3URL(url)
+    }
+
     static func css(for theme: ReaderTheme) -> String? {
         guard let palette = palette(for: theme) else { return nil }
         return """
@@ -270,7 +330,19 @@ final class BrowserModel: NSObject {
     #endif
 
     func load(_ url: URL) {
-        webView.load(URLRequest(url: url))
+        if BrowserThemeStyle.demoIsActive {
+            webView.loadHTMLString(
+                "<meta name=viewport content='width=device-width'><p style='font:-apple-system-body;padding:24px'>"
+                    + "The demo does not open AO3's website.</p>",
+                baseURL: nil
+            )
+            return
+        }
+        switch BrowserThemeStyle.navigationVerdict(for: url, isMainFrame: true) {
+        case .allow: webView.load(URLRequest(url: url))
+        case .openOutside: BrowserThemeStyle.openOutside(url)
+        case .cancel: break
+        }
     }
 
     func loadFromAddressBar() {
@@ -343,7 +415,19 @@ extension BrowserModel: WKNavigationDelegate, WKDownloadDelegate {
         let response = navigationResponse.response
         let isEPUB = response.mimeType == "application/epub+zip"
             || response.url?.pathExtension.lowercased() == "epub"
-        decisionHandler(isEPUB ? .download : .allow)
+        guard isEPUB else { return decisionHandler(.allow) }
+        let wanted = BrowserThemeStyle.mayImportDownload(
+            from: response.url, isForMainFrame: navigationResponse.isForMainFrame
+        )
+        decisionHandler(wanted ? .download : .cancel)
+    }
+
+    func webView(
+        _: WKWebView,
+        decidePolicyFor navigationAction: WKNavigationAction,
+        decisionHandler: @escaping (WKNavigationActionPolicy) -> Void
+    ) {
+        decisionHandler(BrowserThemeStyle.decide(navigationAction))
     }
 
     func webView(

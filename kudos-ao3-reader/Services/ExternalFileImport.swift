@@ -57,7 +57,8 @@ final class ExternalFileImport {
         } catch {
             let fileName = url.lastPathComponent
             let reason = error.localizedDescription
-            Log.library.error("Opening \(fileName, privacy: .public) failed: \(reason, privacy: .public)")
+            // A file's name is the reader's business, and the system's reason usually repeats it.
+            Log.library.error("Opening \(fileName, privacy: .private) failed: \(reason, privacy: .private)")
             notice = Notice(
                 title: "Couldn't Import This File",
                 message: error.localizedDescription,
@@ -88,7 +89,8 @@ final class ExternalFileImport {
         } catch {
             let fileName = selection.url.lastPathComponent
             let reason = error.localizedDescription
-            Log.library.error("Opening \(fileName, privacy: .public) failed: \(reason, privacy: .public)")
+            // A file's name is the reader's business, and the system's reason usually repeats it.
+            Log.library.error("Opening \(fileName, privacy: .private) failed: \(reason, privacy: .private)")
             notice = Notice(
                 title: "Couldn't Import This File",
                 message: error.localizedDescription,

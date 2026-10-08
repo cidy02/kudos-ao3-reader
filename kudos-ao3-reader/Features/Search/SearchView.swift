@@ -7,6 +7,8 @@ import SwiftUI
 /// for fandom, rating, sort, and completion.
 struct SearchView: View { // swiftlint:disable:this type_body_length
     @AppStorage("hideMatureContent") private var hideMature = true
+    @AppStorage("matureContentMode") private var matureMode: MaturePrivacyMode = .obscure
+    @Environment(PrivacyGate.self) private var gate
     @Environment(\.modelContext) private var context
     @Environment(AppRouter.self) private var router
     @Environment(AO3AuthService.self) private var auth
@@ -84,6 +86,8 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
         let tagCount: Int
         let collectionCount: Int
         let catalogRevision: Int
+        /// Hide mode and what has been revealed: both change which works may be listed.
+        let privacy: String
     }
 
     private var localMatchKey: LocalMatchKey {
@@ -92,7 +96,8 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
             workCount: savedWorks.count,
             tagCount: allTags.count,
             collectionCount: collections.count,
-            catalogRevision: FandomCatalog.shared.revision
+            catalogRevision: FandomCatalog.shared.revision,
+            privacy: "\(hideMature)|\(matureMode.rawValue)|\(gate.revealAll)|\(gate.revealedIDs.count)"
         )
     }
 
@@ -481,12 +486,16 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
         let terms = WorkSearchIndex.terms(from: query)
         let normalizedQuery = WorkSearchIndex.normalize(query)
 
+        // Hide mode leaves a mature work out of every list until it is revealed, and this is
+        // one of them: its title, its summary, and a fandom that only it carries (audit
+        // A19-3; the same predicate as Home's `passesPrivacy`).
+        let shownWorks = savedWorks.filter { !gate.isHidden($0, enabled: hideMature, mode: matureMode) }
         matches.works = Array(
-            savedWorks.lazy.filter { WorkSearchIndex.matches($0, terms: terms) }.prefix(20)
+            shownWorks.lazy.filter { WorkSearchIndex.matches($0, terms: terms) }.prefix(20)
         )
 
         var seenFandoms = Set<String>()
-        outer: for work in savedWorks {
+        outer: for work in shownWorks {
             for fandom in work.workFandoms {
                 let key = WorkSearchIndex.normalize(fandom)
                 guard key.contains(normalizedQuery), seenFandoms.insert(key).inserted else { continue }
