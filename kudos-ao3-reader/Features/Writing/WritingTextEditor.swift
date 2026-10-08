@@ -483,6 +483,9 @@ struct WritingChapterEditorActions {
 
 struct WritingTextEditorRow: View {
     @Environment(AO3AuthService.self) private var auth
+
+    @ScaledMetric(relativeTo: .footnote) private var detailSize: CGFloat = 12.5
+
     let title: String
     @Binding var text: String
     let target: String
@@ -505,7 +508,7 @@ struct WritingTextEditorRow: View {
                 VStack(alignment: .leading, spacing: 0) {
                     SubjectFormRow(label: title, showsDisclosure: true) { EmptyView() }
                     Text(detail)
-                        .font(.system(size: 12.5))
+                        .font(.system(size: detailSize))
                         .foregroundStyle(.secondary)
                         .lineLimit(2)
                         .frame(maxWidth: .infinity, alignment: .leading)

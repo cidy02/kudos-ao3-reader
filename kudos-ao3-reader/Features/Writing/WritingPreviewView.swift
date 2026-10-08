@@ -21,6 +21,9 @@ struct WritingPreviewView: View {
     @State private var isConfirming = false
     @State private var errorMessage: String?
 
+    @ScaledMetric(relativeTo: .subheadline) private var actionTitleSize: CGFloat = 15
+    @ScaledMetric(relativeTo: .caption) private var footnoteSize: CGFloat = 11.5
+
     private var gutter: CGFloat { SubjectMetrics.accountGutter }
 
     var body: some View {
@@ -98,7 +101,7 @@ struct WritingPreviewView: View {
         Button(action: action) {
             HStack(spacing: 10) {
                 Image(systemName: icon).frame(width: 20).accessibilityHidden(true)
-                Text(title).font(.system(size: 15))
+                Text(title).font(.system(size: actionTitleSize))
                 Spacer()
                 if busy { ProgressView() }
             }
@@ -112,7 +115,7 @@ struct WritingPreviewView: View {
 
     private func footnote(_ text: String) -> some View {
         Text(text)
-            .font(.system(size: 11.5))
+            .font(.system(size: footnoteSize))
             .foregroundStyle(.secondary.opacity(0.7))
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)

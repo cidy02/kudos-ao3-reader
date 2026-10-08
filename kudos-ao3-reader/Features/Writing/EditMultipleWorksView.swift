@@ -6,6 +6,9 @@ struct EditMultipleWorksView: View {
     @Environment(ThemeManager.self) private var theme
     @Environment(AO3AuthService.self) private var auth
 
+    @ScaledMetric(relativeTo: .footnote) private var noteSize: CGFloat = 12.5
+    @ScaledMetric(relativeTo: .caption) private var footnoteSize: CGFloat = 11.5
+
     @State private var form: AO3BulkEditForm
     @State private var changes: AO3BulkEditChanges
     @State private var isSaving = false
@@ -62,7 +65,7 @@ struct EditMultipleWorksView: View {
                 Text("Your changes apply to every selected work. Use the separate Add and Remove groups "
                     + "for tags. Anything you leave alone stays unchanged.")
 
-                    .font(.system(size: 12.5))
+                    .font(.system(size: noteSize))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -88,7 +91,7 @@ struct EditMultipleWorksView: View {
                 Text("Changing the rating or language replaces that value on every selected work. "
                     + "Warnings and categories are added or removed instead.")
 
-                    .font(.system(size: 11.5))
+                    .font(.system(size: footnoteSize))
                     .foregroundStyle(.secondary.opacity(0.7))
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -107,7 +110,7 @@ struct EditMultipleWorksView: View {
                 creatorsRows
                 Text("AO3 sends each co-creator an invitation. Their work doesn't change until they accept it.")
 
-                    .font(.system(size: 11.5))
+                    .font(.system(size: footnoteSize))
                     .foregroundStyle(.secondary.opacity(0.7))
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)

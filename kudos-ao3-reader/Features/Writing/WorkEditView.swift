@@ -6,6 +6,9 @@ struct WorkEditView: View {
     @Environment(ThemeManager.self) private var theme
     @Environment(AO3AuthService.self) private var auth
 
+    @ScaledMetric(relativeTo: .subheadline) private var actionRowTitleSize: CGFloat = 15
+    @ScaledMetric(relativeTo: .caption) private var footnoteSize: CGFloat = 11.5
+
     @State private var form: AO3WorkForm
     @State private var editingGeneration: Int?
     @State private var isSaving = false
@@ -82,7 +85,7 @@ struct WorkEditView: View {
             Section {
                 tagsRows
                 Text("Tags can also be edited separately from the work text.")
-                    .font(.system(size: 11.5))
+                    .font(.system(size: footnoteSize))
                     .foregroundStyle(.secondary.opacity(0.7))
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -726,7 +729,7 @@ extension WorkEditView {
                     .frame(width: 20)
                     .accessibilityHidden(true)
                 Text(title)
-                    .font(.system(size: 15))
+                    .font(.system(size: actionRowTitleSize))
                 Spacer()
             }
             .foregroundStyle(color)
@@ -740,7 +743,7 @@ extension WorkEditView {
 
     private func footnote(_ text: String) -> some View {
         Text(text)
-            .font(.system(size: 11.5))
+            .font(.system(size: footnoteSize))
             .foregroundStyle(.secondary.opacity(0.7))
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)

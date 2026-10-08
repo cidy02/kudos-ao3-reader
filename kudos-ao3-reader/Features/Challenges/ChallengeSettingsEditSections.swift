@@ -120,7 +120,7 @@ extension ChallengeSettingsEditView {
         } label: {
             HStack(spacing: 4) {
                 Text(optionTitle(value))
-                    .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                    .font(.system(size: optionValueSize, weight: .semibold, design: .monospaced))
                 Image(systemName: "chevron.up.chevron.down")
                     .font(.system(size: 11, weight: .semibold))
             }
