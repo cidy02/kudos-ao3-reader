@@ -475,6 +475,29 @@ class BackupRepository(
             }
         }
 
+        if (merge.mode != BackupImportMode.REPLACE_LIBRARY) {
+            // The same captured-row guard as saved searches. Never sweep rows
+            // merely because a stale snapshot does not list them.
+            merge.removedBookmarks.forEach { captured ->
+                val held = database.bookmarkDao().getById(captured.id)?.toDomain()
+                if (held == captured) database.bookmarkDao().deleteById(captured.id)
+            }
+            merge.removedAnnotations.forEach { captured ->
+                val held = database.annotationDao().getById(captured.id)?.toDomain()
+                if (held == captured) database.annotationDao().deleteById(captured.id)
+            }
+            val retainedMembershipIds = snapshot.readingQueueMemberships.mapTo(mutableSetOf()) { it.id }
+            val removedMemberships = merge.capturedSnapshot.readingQueueMemberships.filter { it.id !in retainedMembershipIds }
+            if (removedMemberships.isNotEmpty()) {
+                val heldById = database.readingQueueDao().getAllMemberships().associateBy { it.id }
+                for (captured in removedMemberships) {
+                    if (heldById[captured.id]?.toDomain() == captured) {
+                        database.readingQueueDao().deleteMembershipById(captured.id)
+                    }
+                }
+            }
+        }
+
         snapshot.bookmarks.forEach { database.bookmarkDao().upsert(it.toEntity()) }
 
         snapshot.fonts.forEach { database.customFontDao().upsert(it.toEntity()) }
@@ -527,6 +550,23 @@ class BackupRepository(
             io.github.cidy02.kudos.core.model.SyncTombstoneRecordType.READING_FAVORITE,
             io.github.cidy02.kudos.core.model.SyncTombstoneRecordType.FANDOM_READ_WATERMARK
         )
+        if (merge.mode == BackupImportMode.MERGE) {
+            // File Merge restored a deleted work and retracted its markers in the
+            // snapshot. Persist precisely those retractions; retain a deletion
+            // made after capture, whose clock/signature no longer equals it.
+            val retainedIds = snapshot.tombstones.mapTo(mutableSetOf()) { it.id }
+            val retracted = merge.capturedSnapshot.tombstones.filter {
+                it.recordTypeRaw == io.github.cidy02.kudos.core.model.SyncTombstoneRecordType.SAVED_WORK && it.id !in retainedIds
+            }
+            if (retracted.isNotEmpty()) {
+                val heldById = database.syncTombstoneDao().getAll().associateBy { it.id }
+                for (captured in retracted) {
+                    if (heldById[captured.id]?.toDomain() == captured) {
+                        database.syncTombstoneDao().deleteById(captured.id)
+                    }
+                }
+            }
+        }
         snapshot.tombstones.forEach { tombstone ->
             if (tombstone.recordTypeRaw in knownTombstoneTypes) {
                 database.syncTombstoneDao().upsert(tombstone.toEntity())
