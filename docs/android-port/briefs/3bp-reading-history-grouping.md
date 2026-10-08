@@ -93,3 +93,16 @@ Light, Dark, Sepia and OLED; every new text with a line height; nothing clipped 
   left out; the button sets the override, bumps the modified time, and the row leaves
   Abandoned without a reload; the override survives an export and import (`BackupMappers`);
   the stored grouping is not in the backup; the other section kinds show no strip.
+
+## Added 2026-10-08 (from the landings since this was written)
+
+- A section header is drawn in capitals (`SectionRuleHeader`): a test that waits for a
+  header's text must ask for "IN PROGRESS", not "In progress".
+- Text actions and action rows use the palette's accent (`tokens.scopePalette.accent`;
+  `SettingsActionRow` already does): the raw `tokens.accent` cannot be read in Dark.
+- A `SubjectFormRow` given a `trailing` slot draws no `value`, even when the slot is empty:
+  pass one or the other.
+- A selection holds only rows on screen: when a strip, a chip or a filter hides a row, it
+  leaves the selection (`LibrarySelection.visible`, already wired into the section lists;
+  keep it working when rows are grouped).
+- Do not write helper scripts or scratch files into the worktree.
