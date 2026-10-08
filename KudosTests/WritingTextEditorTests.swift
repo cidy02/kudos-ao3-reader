@@ -206,6 +206,21 @@ struct WritingTextRecoveryBoundsTests {
         #expect(empty.isEmpty)
     }
 
+    /// Words typed outside a block tag used to vanish from the preview as soon
+    /// as the buffer held one block tag. Same vectors as Android's test.
+    @Test func thePreviewShowsTextTypedOutsideABlockTag() {
+        func texts(_ html: String) -> [String] {
+            guard case let .rendered(document) = WritingBufferPreview.state(for: html) else { return ["failed"] }
+            return document.blocks.map { $0.runs.map(\.text).joined() }
+        }
+        #expect(texts("<p>The gate.</p>\n\nA small <strong>&lt;boat&gt;</strong> waited.\n")
+            == ["The gate.", "A small <boat> waited."])
+        #expect(texts("before<p>one</p>between<ul>\n<li>item</li>\n</ul><details>after</details>")
+            == ["before", "one", "between", "item", "after"])
+        #expect(texts("first\n\nsecond") == ["first\n\nsecond"])
+        #expect(texts("<p>only</p>\n\n<!-- note --><script>hidden</script>") == ["only"])
+    }
+
     /// Only the parse for the preview on screen publishes: leaving preview,
     /// or entering it again, makes an older parse stale.
     @Test func onlyTheCurrentPreviewParsePublishes() {
