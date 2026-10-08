@@ -12,6 +12,7 @@ struct ReaderNoteEditor: View {
 
     @Environment(\.dismiss) private var dismiss
     @State private var draft: String = ""
+    @State private var colorOnOpen: ReadingAnnotationColor?
     @FocusState private var isEditorFocused: Bool
 
     var body: some View {
@@ -64,7 +65,15 @@ struct ReaderNoteEditor: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
+                    Button("Cancel") {
+                        // A swatch writes straight to the highlight so the page shows
+                        // it at once; Cancel has to take that back too (audit A12-6).
+                        if let colorOnOpen, annotation.color != colorOnOpen {
+                            annotation.color = colorOnOpen
+                            onCommit()
+                        }
+                        dismiss()
+                    }
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button {
@@ -81,6 +90,7 @@ struct ReaderNoteEditor: View {
         }
         .onAppear {
             draft = annotation.note
+            colorOnOpen = annotation.color
             isEditorFocused = true
         }
     }
