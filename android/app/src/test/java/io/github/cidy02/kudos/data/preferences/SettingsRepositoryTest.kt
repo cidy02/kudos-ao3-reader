@@ -1,6 +1,8 @@
 package io.github.cidy02.kudos.data.preferences
 
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
+import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.stringPreferencesKey
 import io.github.cidy02.kudos.core.model.AppThemeSetting
 import io.github.cidy02.kudos.core.model.KudosSettings
 import io.github.cidy02.kudos.core.model.MatureContentMode
@@ -23,17 +25,47 @@ import org.junit.Test
 class SettingsRepositoryTest {
     private val tempDir = Files.createTempDirectory("kudos-settings-test").toFile()
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
-    private val repository = SettingsRepository(
-        PreferenceDataStoreFactory.create(
-            scope = scope,
-            produceFile = { File(tempDir, "settings.preferences_pb") }
-        )
-    )
+    private val dataStore = PreferenceDataStoreFactory.create(
+        scope = scope, produceFile = { File(tempDir, "settings.preferences_pb") })
+    private val repository = SettingsRepository(dataStore)
 
     @After
     fun tearDown() {
         scope.cancel()
         tempDir.deleteRecursively()
+    }
+
+    @Test fun writingRecentTagsRoundTripCapDedupeAndStayOutOfBackupSettings() = runBlocking {
+        for (kind in listOf("fandom", "relationship", "character", "freeform")) {
+            repeat(21) { repository.recordWritingTag(kind, "tag-$it") }
+            val names = repository.recentWritingTags.first().getValue(kind)
+            assertEquals(20, names.size)
+            assertEquals("tag-20", names.first()); assertEquals("tag-1", names.last())
+        }
+        val secondEditor = SettingsRepository(dataStore)
+        secondEditor.recordWritingTag("freeform", "\u0085 Fluff \u00a0")
+        repository.recordWritingTag("freeform", "Angst")
+        secondEditor.recordWritingTag("freeform", "fluff")
+        assertEquals(listOf("fluff", "Angst"), repository.recentWritingTags.first().getValue("freeform").take(2))
+        val beforeIgnored = repository.recentWritingTags.first()
+        repository.recordWritingTag("tag", "Ignored")
+        repository.recordWritingTag("fandom", "\u0085 ")
+        assertEquals(beforeIgnored, repository.recentWritingTags.first())
+        // No key in KudosSettings/backup DTO; restore writes only its existing field allowlist.
+        assertEquals(KudosSettings.Defaults, repository.snapshot())
+        repository.replaceAll(KudosSettings.Defaults)
+        assertEquals(beforeIgnored, secondEditor.recentWritingTags.first())
+        assertEquals(KudosSettings.Defaults, repository.snapshot())
+        val raw = dataStore.data.first()[stringPreferencesKey("writing.recentTags.v1")]!!
+        assertTrue(raw.startsWith("{\"byKind\":"))
+        assertTrue(raw.contains("fluff"))
+    }
+
+    @Test fun malformedRecentWritingJsonIsEmptyAndCanBeRepairedByAnAdd() = runBlocking {
+        dataStore.edit { it[stringPreferencesKey("writing.recentTags.v1")] = "bad JSON" }
+        assertTrue(repository.recentWritingTags.first().isEmpty())
+        repository.recordWritingTag("character", "星")
+        assertEquals(mapOf("character" to listOf("星")), repository.recentWritingTags.first())
     }
 
     @Test

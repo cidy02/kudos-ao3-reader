@@ -49,6 +49,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlin.math.max
@@ -78,13 +79,15 @@ object SubjectHueSwatches {
 @Composable
 fun SubjectFieldLabel(
     text: String,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    lineHeight: TextUnit = TextUnit.Unspecified
 ) {
     Text(
         text = text.uppercase(),
         modifier = modifier,
         color = LocalKudosTokens.current.secondaryInk,
         fontSize = 11.sp,
+        lineHeight = lineHeight,
         fontWeight = FontWeight.Bold,
         letterSpacing = 0.8.sp
     )

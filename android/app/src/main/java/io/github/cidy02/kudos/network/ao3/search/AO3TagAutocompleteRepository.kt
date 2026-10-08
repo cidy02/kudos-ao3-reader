@@ -4,8 +4,8 @@ import io.github.cidy02.kudos.network.ao3.AO3Client
 import io.github.cidy02.kudos.network.ao3.AO3Constants
 import io.github.cidy02.kudos.network.ao3.AO3Result
 import io.github.cidy02.kudos.network.ao3.OkHttpAO3Client
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
+import io.github.cidy02.kudos.network.ao3.writing.trimWritingTag
+import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -20,9 +20,11 @@ class AO3TagAutocompleteRepository(
 ) {
     private val json = Json { ignoreUnknownKeys = true }
 
-    suspend fun autocomplete(kind: String, term: String): AO3Result<List<String>> {
-        val trimmed = term.trim()
-        if (trimmed.length < 2) return AO3Result.Success(emptyList())
+    suspend fun autocomplete(kind: String, term: String, minimumTermLength: Int = 2): AO3Result<List<String>> {
+        val trimmed = trimWritingTag(term)
+        // Search filters retain their two-character gate; the writing picker, like iOS,
+        // asks for any nonblank term. Both use this same address and parser.
+        if (trimmed.isEmpty() || trimmed.length < minimumTermLength) return AO3Result.Success(emptyList())
 
         val url = AO3Constants.baseHttpUrl.newBuilder()
             .addPathSegment("autocomplete")
@@ -41,6 +43,7 @@ class AO3TagAutocompleteRepository(
                     }
                     AO3Result.Success(tags)
                 }.getOrElse { 
+                    if (it is CancellationException) throw it
                     AO3Result.Failure(io.github.cidy02.kudos.network.ao3.AO3Error.Parse("Could not parse autocomplete response."))
                 }
             }

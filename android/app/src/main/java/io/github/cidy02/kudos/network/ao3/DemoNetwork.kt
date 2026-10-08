@@ -20,6 +20,10 @@ import java.time.Clock
 import java.time.LocalDate
 import java.time.format.TextStyle
 import java.util.Locale
+import kotlinx.serialization.json.buildJsonArray
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
+import kotlinx.serialization.json.add
 
 /**
  * Local stand-in for iOS `DemoNetworkBlock`. While the debug demo extra is on,
@@ -272,6 +276,21 @@ internal class DemoNetworkInterceptor(
         val url = chain.request().url
         if (!DemoNetworkRoutes.isAo3Host(url.host)) return chain.proceed(chain.request())
         val path = DemoNetworkRoutes.decodedPath(url)
+        if (chain.request().method == "GET" && path.trimEnd('/') in setOf(
+                "/autocomplete/fandom", "/autocomplete/relationship", "/autocomplete/character", "/autocomplete/freeform")) {
+            val term = url.queryParameter("term").orEmpty().trim().lowercase(Locale.ROOT)
+            val names = if (term == "demo") when (path.trimEnd('/').substringAfterLast('/')) {
+                "fandom" -> listOf("Demo Fandom", "Demo Fandom & 星", "Demo Fandom - Alternate Universe")
+                "relationship" -> listOf("Demo A/Demo B", "Demo A & Demo B", "Demo B/Demo C")
+                "character" -> listOf("Demo A", "Demo B", "Demo C")
+                else -> listOf("Demo Fluff", "Demo Angst", "Demo Found Family")
+            } else emptyList()
+            val json = buildJsonArray { names.forEach { name -> add(buildJsonObject { put("id", name); put("name", name) }) } }
+            val type = "application/json; charset=utf-8"
+            return Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1)
+                .code(if (term == "fail") 403 else 200).message("Local autocomplete answer")
+                .header("Content-Type", type).body(json.toString().toResponseBody(type.toMediaType())).build()
+        }
         tagSets.answer(chain.request(), fixtures())?.let { answer ->
             return Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1)
                 .code(answer.first).message("Local tag-set answer").header("Content-Type", HTML)

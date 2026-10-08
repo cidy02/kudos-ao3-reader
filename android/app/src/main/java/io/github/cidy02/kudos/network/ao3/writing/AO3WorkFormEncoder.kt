@@ -17,10 +17,10 @@ object AO3WorkFormEncoder {
             if (rating.isNotEmpty()) add(AO3WorkFormField.rating to rating)
             (warnings.ifEmpty { listOf("") }).forEach { add(AO3WorkFormField.warnings to it) }
             (categories.ifEmpty { listOf("") }).forEach { add(AO3WorkFormField.categories to it) }
-            add(AO3WorkFormField.fandoms to joinWorkList(fandoms))
-            add(AO3WorkFormField.relationships to joinWorkList(relationships))
-            add(AO3WorkFormField.characters to joinWorkList(characters))
-            add(AO3WorkFormField.additionalTags to joinWorkList(additionalTags))
+            add(AO3WorkFormField.fandoms to joinWritingTags(fandoms))
+            add(AO3WorkFormField.relationships to joinWritingTags(relationships))
+            add(AO3WorkFormField.characters to joinWritingTags(characters))
+            add(AO3WorkFormField.additionalTags to joinWritingTags(additionalTags))
             add(AO3WorkFormField.languageID to languageID)
             add(AO3WorkFormField.summary to summary)
             add(AO3WorkFormField.notes to notes)
