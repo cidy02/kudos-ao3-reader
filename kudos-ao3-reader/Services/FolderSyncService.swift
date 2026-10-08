@@ -531,7 +531,7 @@ enum FolderSyncService {
             }
         } catch {
             Log.library.notice(
-                "Legacy sync package fold failed: \(error.localizedDescription, privacy: .public)"
+                "Legacy sync package fold failed: \(error.localizedDescription, privacy: .private)"
             )
         }
         return result
@@ -624,7 +624,7 @@ enum FolderSyncService {
     private static func recordError(_ error: Error, defaults: UserDefaults) {
         let message = error.localizedDescription
         defaults.set(message, forKey: lastErrorKey)
-        Log.library.error("Library folder sync failed: \(message, privacy: .public)")
+        Log.library.error("Library folder sync failed: \(message, privacy: .private)")
     }
 
     private static func bookmarkData(for url: URL) throws -> Data {

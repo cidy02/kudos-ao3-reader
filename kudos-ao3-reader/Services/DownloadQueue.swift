@@ -180,7 +180,7 @@ final class DownloadQueue {
             } catch {
                 items[index].status = .failed
                 Log.library.error(
-                    "Queue download failed for work \(item.id): \(error.localizedDescription, privacy: .public)"
+                    "Queue download failed for work \(item.id, privacy: .private(mask: .hash)): \(error.localizedDescription, privacy: .private)"
                 )
             }
         }

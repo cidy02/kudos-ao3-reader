@@ -130,17 +130,17 @@ extension KudosBackupService {
             let name = font.fileName
             let entryName = "Fonts/\(name)"
             guard let data = try? Data(contentsOf: font.fileURL, options: .mappedIfSafe) else {
-                Log.library.error("Backup skips unreadable font \(name, privacy: .public).")
+                Log.library.error("Backup skips unreadable font \(name, privacy: .private).")
                 continue
             }
             if let reason = KudosBackupContents.fontRejectionReason(fileName: name, data: data) {
-                Log.library.error("Backup skips font \(name, privacy: .public): \(reason, privacy: .public)")
+                Log.library.error("Backup skips font \(name, privacy: .private): \(reason, privacy: .private)")
                 continue
             }
             // The total cap sinks a backup just as firmly as the per-font one,
             // so eight individually-valid fonts can still cost a library.
             guard aggregateFontBytes <= KudosBackupContents.maxTotalFontBytes - data.count else {
-                Log.library.error("Backup skips font \(name, privacy: .public): total reached.")
+                Log.library.error("Backup skips font \(name, privacy: .private): total reached.")
                 continue
             }
             guard seenNames.insert(entryName).inserted else { continue }

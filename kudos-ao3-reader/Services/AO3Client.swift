@@ -290,7 +290,9 @@ actor AO3Client { // swiftlint:disable:this type_body_length
     }
 
     private func performFetch(from url: URL) async throws -> Data {
-        Log.network.debug("GET \(url.absoluteString, privacy: .public)")
+        // An address says what is being read or searched for, and whose account it is: never
+        // public text in the log (audit A21).
+        Log.network.debug("GET \(url.absoluteString, privacy: .private)")
         return try await withRetry {
             try await pace()
             let (data, response) = try await session.data(from: url)
@@ -784,7 +786,7 @@ actor AO3Client { // swiftlint:disable:this type_body_length
         // The session cookies are attached explicitly by the auth service; don't let
         // URLSession's shared cookie storage add a second, possibly stale, set.
         request.httpShouldHandleCookies = false
-        Log.network.debug("GET (auth) \(request.url?.absoluteString ?? "?", privacy: .public)")
+        Log.network.debug("GET (auth) \(request.url?.absoluteString ?? "?", privacy: .private)")
 
         let key = Self.authCoalescingKey(
             url: request.url,
@@ -901,7 +903,7 @@ actor AO3Client { // swiftlint:disable:this type_body_length
         try await requireCurrentWriteSession(prepared, using: isCurrentWriteSession)
         try await pace()
         try await requireCurrentWriteSession(prepared, using: isCurrentWriteSession)
-        Log.network.debug("POST (auth) \(request.url?.absoluteString ?? "?", privacy: .public)")
+        Log.network.debug("POST (auth) \(request.url?.absoluteString ?? "?", privacy: .private)")
         let (data, response) = try await session.data(for: request, delegate: redirectCookieRelay)
         guard let http = response as? HTTPURLResponse else {
             throw AO3Error.network("No response from AO3.")

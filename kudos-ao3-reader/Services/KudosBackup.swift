@@ -138,7 +138,7 @@ nonisolated struct KudosBackupContents {
             guard MiniZip.crc32(payload) == declared else {
                 Log.library.error(
                     """
-                    Backup entry \(name, privacy: .public) failed its CRC-32 check; \
+                    Backup entry \(name, privacy: .private) failed its CRC-32 check; \
                     treating it as missing rather than restoring damaged bytes.
                     """
                 )
