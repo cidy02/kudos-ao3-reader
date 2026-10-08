@@ -24,6 +24,12 @@ class AO3WorkFormRepository(
     private val parser: AO3WorkFormParser = AO3WorkFormParser(),
     private val parseDispatcher: CoroutineDispatcher = Dispatchers.Default
 ) {
+    suspend fun loadEditTagsForm(workID: Long): AO3Result<AO3WorkForm> = when (val result = load(AO3WorkFormUrls.editTags(workID))) {
+        is AO3Result.Failure -> result
+        is AO3Result.Success -> if (result.value.kind == AO3WorkFormKind.EditTags && result.value.workID == workID) result
+            else AO3Result.Failure(AO3Error.Parse("Couldn't read AO3's work form."))
+    }
+
     suspend fun loadNewWorkForm(): AO3Result<AO3WorkForm> = load(AO3WorkFormUrls.newWork())
     suspend fun loadWorkForm(workID: Long): AO3Result<AO3WorkForm> = load(AO3WorkFormUrls.editWork(workID))
 

@@ -1048,3 +1048,11 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   order and "Unread works" are kept per device under iOS's keys and are not in the backup.
 - The demo's finished works have a read date.
   Reverse: the commit "Favorites by author, fandom and tag".
+
+## 2026-10-08: a posted work's tags can be edited (brief 3bt)
+
+- Edit tags reads AO3's tag form once on opening. Save reads it again for a fresh token and
+  action, sends the chosen tags in one POST, never retried, and counts as done only on AO3's
+  notice or redirect (iOS `editTags`). The work form underneath re-reads its own form after
+  a confirmed Save and keeps unsaved text edits.
+  Reverse: the commit "A posted work's tags can be edited".

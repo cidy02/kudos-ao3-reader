@@ -35,7 +35,11 @@ class AO3WorkFormParser {
             !element.attr("method").equals("post", ignoreCase = true)
         ) invalid("AO3 returned an unexpected work form address or method.")
         // The broad iOS fallback must not accept search or deletion forms as an editor.
-        if (element.selectFirst("input[name='work[title]']") == null) invalid("AO3 didn't return a work editor.")
+        val tagsPage = pageUrl.toHttpUrlOrNull()?.encodedPath?.endsWith("/edit_tags") == true ||
+            action.encodedPath.endsWith("/edit_tags") || action.encodedPath.endsWith("/update_tags")
+        if (element.selectFirst("input[name='work[title]']") == null &&
+            !(tagsPage && element.selectFirst("input[name='work[fandom_string]']") != null)
+        ) invalid("AO3 didn't return a work editor.")
 
         val controls = servedControls(doc, element)
         fun inputs(name: String) = controls.filter { it.tag == "input" && it.name == name }
@@ -72,7 +76,7 @@ class AO3WorkFormParser {
         val posted = hasSubmit(AO3WorkSubmitAction.Update.fieldName) && !hasSubmit(AO3WorkSubmitAction.SaveDraft.fieldName)
         val heading = doc.selectFirst("h2.heading, h2")?.text().orEmpty().lowercase()
         val kind = when {
-            action.encodedPath.contains("edit_tags") || action.encodedPath.contains("update_tags") -> AO3WorkFormKind.EditTags
+            tagsPage -> AO3WorkFormKind.EditTags
             heading.contains("post new") || workID == null -> AO3WorkFormKind.New
             !posted -> AO3WorkFormKind.Draft
             else -> AO3WorkFormKind.Edit

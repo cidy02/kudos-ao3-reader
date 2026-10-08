@@ -130,6 +130,7 @@ internal object DemoNetworkRoutes {
         "^/works/new" to "ao3_work_new_draft",
         "^/works/995001/edit/?$" to "ao3_demo_work_draft_edit",
         "^/works/995006/edit/?$" to "ao3_demo_work_posted_edit",
+        "^/works/995006/edit_tags/?$" to "ao3_demo_work_edit_tags",
         "^/works/\\d+/edit" to "ao3_work_edit",
         "^/works/995006/navigate/?$" to "ao3_demo_work_posted_navigate",
         "^/works/\\d+/navigate" to "ao3_chapter_navigate",
@@ -463,9 +464,54 @@ internal class DemoNetworkInterceptor(
 private class DemoWorkSaves {
     private val edited = ConcurrentHashMap<Long, String>()
     private val values = ConcurrentHashMap<Long, Map<String, List<String>>>()
+    private var editedTags: String? = null
 
+    @Synchronized
     fun answer(request: okhttp3.Request, source: FixtureSource, clock: Clock?): Pair<Int, String>? {
         val path = DemoNetworkRoutes.decodedPath(request.url).trimEnd('/')
+        if (path == "/works/995006/edit_tags" && request.method == "GET")
+            return editedTags?.let { 200 to it }
+        if (path == "/works/995006/update_tags" && request.method == "POST") {
+            val html = editedTags ?: source.read("ao3_demo_work_edit_tags")?.decodeToString() ?: return 404 to ""
+            val doc = Jsoup.parse(html)
+            val buffer = okio.Buffer()
+            request.body?.writeTo(buffer)
+            val fields = buffer.readUtf8().split('&').filter(String::isNotEmpty).map {
+                val pair = it.split('=', limit = 2)
+                URLDecoder.decode(pair[0], "UTF-8") to URLDecoder.decode(pair.getOrElse(1) { "" }, "UTF-8")
+            }.groupBy({ it.first }, { it.second })
+            val token = doc.selectFirst("meta[name=csrf-token]")?.attr("content")
+            val reason = when {
+                fields["authenticity_token"] != listOf(token) || request.header("X-CSRF-Token") != token ||
+                    fields["update_button"] != listOf("1") || fields["_method"] != listOf("patch") -> "AO3 didn't accept the change."
+                fields["work[freeform_string]"]?.firstOrNull()?.split(',')?.any { it.trim() == "Refuse this tag" } == true ->
+                    "Additional tags: Refuse this tag could not be saved."
+                fields["work[archive_warning_strings][]"].orEmpty().all { it.isEmpty() } -> "Please select at least one warning"
+                fields["work[fandom_string]"].orEmpty().all { it.isBlank() } -> "Fandom can't be blank"
+                else -> null
+            }
+            if (reason != null) return 422 to "<main id='main'><div id='error'><ul><li>$reason</li></ul></div></main>"
+            fun applyTags(target: org.jsoup.nodes.Document) {
+                for (control in target.select("form#work-form [name]")) {
+                    val sent = fields[control.attr("name")] ?: continue
+                    when (control.tagName()) {
+                        "select" -> control.select("option").forEach { option ->
+                            if (option.attr("value") in sent) option.attr("selected", "selected") else option.removeAttr("selected")
+                        }
+                        "input" -> if (control.attr("type") in setOf("checkbox", "radio")) {
+                            if (control.attr("value") in sent) control.attr("checked", "checked") else control.removeAttr("checked")
+                        } else control.attr("value", sent.firstOrNull().orEmpty())
+                    }
+                }
+            }
+            applyTags(doc)
+            editedTags = doc.outerHtml()
+            val work = edited[995006L] ?: source.read("ao3_demo_work_posted_edit")?.decodeToString() ?: return 404 to ""
+            val workDoc = Jsoup.parse(work)
+            applyTags(workDoc)
+            edited[995006L] = workDoc.outerHtml()
+            return 200 to "<main id='main'><div class='flash notice'>Tags were successfully updated.</div></main>"
+        }
         val id = Regex("^/works/(995001|995006|995007)(?:/edit)?$").matchEntire(path)?.groupValues?.get(1)?.toLong()
         if (request.method == "GET") {
             if (id != null && path.endsWith("/edit")) edited[id]?.let { return 200 to it }
