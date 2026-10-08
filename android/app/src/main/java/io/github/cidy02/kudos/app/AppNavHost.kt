@@ -856,6 +856,7 @@ fun AppNavHost(
                 savedSearchRepository = container.savedSearchRepository,
                 workRepository = container.workRepository,
                 settingsRepository = container.settingsRepository,
+                privacyGate = container.privacyGate,
                 onOpenUrl = { url -> navController.navigate(Routes.webFallback(url)) },
                 fandomCatalogCache = container.fandomCatalogCache,
                 workImporter = container.workImporter,
@@ -969,13 +970,13 @@ fun AppNavHost(
             Routes.Comments,
             arguments = listOf(
                 Routes.navArgOf("commentWorkId"),
-                navArgument("focused") { type = NavType.StringType; nullable = true },
+                navArgument(Routes.ARG_COMMENT_FOCUSED_ID) { type = NavType.StringType; nullable = true },
                 navArgument("chapterPosition") { type = NavType.StringType; nullable = true },
                 navArgument("compose") { type = NavType.BoolType; defaultValue = false }
             )
         ) { backStackEntry ->
             val workId = Routes.routeArg(backStackEntry, "commentWorkId")?.toLongOrNull()
-            val focusedId = Routes.routeArg(backStackEntry, "focused")?.toLongOrNull()
+            val focusedId = Routes.routeArg(backStackEntry, Routes.ARG_COMMENT_FOCUSED_ID)?.toLongOrNull()
             // 1-based story chapter from the reader's Comments button.
             val chapterPosition = Routes.routeArg(backStackEntry, "chapterPosition")?.toIntOrNull()
             // The current value on the first frame, not a placeholder: a "Restoring" first frame

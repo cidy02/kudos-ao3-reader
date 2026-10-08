@@ -93,7 +93,12 @@ class KudosApplication : Application(), Configuration.Provider {
         // Throttled GitHub update check (default: at most once/24h). Silent on
         // failure — a broken GitHub check must never affect app startup.
         applicationScope.launch {
-            runCatching { container.appUpdateRepository.checkIfDue() }
+            runCatching {
+                // The demo asks nothing of the network, GitHub included (audit A18-6).
+                DemoNetwork.awaitLaunchDecision()
+                if (DemoNetwork.isActive) return@runCatching
+                container.appUpdateRepository.checkIfDue()
+            }
         }
 
         // iOS also syncs on launch / foreground / background; the 6h WorkManager

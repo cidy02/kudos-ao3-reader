@@ -1,5 +1,10 @@
 package io.github.cidy02.kudos.search
 
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.flowOf
+import io.github.cidy02.kudos.library.LibraryPrivacyVisibility
+import io.github.cidy02.kudos.library.LibraryPrivacy
+import io.github.cidy02.kudos.core.model.PrivacySettings
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -112,6 +117,7 @@ fun SearchScreen(
     savedSearchRepository: SavedSearchRepository? = null,
     workRepository: WorkRepository? = null,
     settingsRepository: SettingsRepository? = null,
+    privacyGate: io.github.cidy02.kudos.app.PrivacyGate = io.github.cidy02.kudos.app.PrivacyGate(),
     onOpenUrl: ((String) -> Unit)? = null,
     fandomCatalogCache: FandomCatalogCache? = null,
     workImporter: WorkImporter? = null,
@@ -124,6 +130,13 @@ fun SearchScreen(
     val viewModel: SearchViewModel = viewModel(
         factory = SearchViewModel.factory(repository, savedSearchRepository, workRepository)
     )
+    // The Library's blur, for the matches that come from the reader's own library. Until the
+    // setting has been read the default applies, which blurs.
+    val privacy by remember(settingsRepository) {
+        settingsRepository?.settings?.map { it.privacy } ?: flowOf(PrivacySettings())
+    }.collectAsState(initial = PrivacySettings())
+    val reveal by privacyGate.state.collectAsState()
+    val activity = LocalContext.current as? androidx.fragment.app.FragmentActivity
     val filters by viewModel.filters.collectAsState()
     val state by viewModel.state.collectAsState()
     val savedSearches by viewModel.savedSearches.collectAsState()
@@ -315,6 +328,10 @@ fun SearchScreen(
                 showsLocal -> LocalMatchesList(
                     query = query,
                     matches = localMatches,
+                    isObscured = { work ->
+                        LibraryPrivacy.visibility(work, privacy, reveal) == LibraryPrivacyVisibility.Obscured
+                    },
+                    onReveal = { id -> privacyGate.reveal(id, activity) },
                     selecting = localSelecting,
                     selection = localSelection,
                     onToggle = { id ->
@@ -513,10 +530,6 @@ fun SearchScreen(
             }
         )
     }
-
-    // settingsRepository stays in the signature so the shell can pass it.
-    // Search does not read a setting of its own; mature reveal lives on Library.
-    if (settingsRepository == null) Unit
 }
 
 private fun selectionTitle(count: Int): String =
@@ -821,6 +834,8 @@ private fun SavedSearchesList(
 private fun LocalMatchesList(
     query: String,
     matches: SearchLocalMatches,
+    isObscured: (SavedWork) -> Boolean,
+    onReveal: (String) -> Unit,
     selecting: Boolean,
     selection: Set<String>,
     onToggle: (String) -> Unit,
@@ -854,6 +869,10 @@ private fun LocalMatchesList(
                     onOpenWork = { onOpenWork(work) },
                     selected = selecting && selected,
                     selecting = selecting,
+                    // A library match is the reader's own library: the Library's blur applies
+                    // (audit A18-4; iOS draws these with the row that blurs itself).
+                    obscured = isObscured(work),
+                    onReveal = { onReveal(work.id) },
                     onSelect = { onToggle(work.id) },
                     onLongClick = { onSelect(work.id) },
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)

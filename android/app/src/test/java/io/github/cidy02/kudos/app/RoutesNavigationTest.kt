@@ -62,7 +62,7 @@ class RoutesNavigationTest {
             )) { }
             composable(Routes.Comments, arguments = listOf(
                 Routes.navArgOf("commentWorkId"),
-                navArgument("focusedCommentId") { type = NavType.StringType; nullable = true; defaultValue = null },
+                navArgument(Routes.ARG_COMMENT_FOCUSED_ID) { type = NavType.StringType; nullable = true; defaultValue = null },
                 navArgument("chapterPosition") { type = NavType.StringType; nullable = true; defaultValue = null },
                 navArgument("compose") { type = NavType.BoolType; defaultValue = false }
             )) { }
