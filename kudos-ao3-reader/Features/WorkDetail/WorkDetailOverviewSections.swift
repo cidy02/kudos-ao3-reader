@@ -49,7 +49,7 @@ extension WorkDetailView {
             Section {
                 VStack(alignment: .leading, spacing: 10) {
                     Text(summary)
-                        .font(.system(size: 16, design: .serif))
+                        .font(.system(size: summarySize, design: .serif))
                         // CSS line-height 1.6 on 16px is 25.6pt of line box; a
                         // 16pt line is about 20 of that on its own, so the rest
                         // is added here.

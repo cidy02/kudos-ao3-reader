@@ -56,6 +56,14 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
     @Query(sort: \Tag.name) var allTags: [Tag]
     @Query(filter: #Predicate<SavedWork> { !$0.isPendingDeletion }) private var allWorks: [SavedWork]
 
+    @ScaledMetric(relativeTo: .subheadline) var summarySize: CGFloat = 16
+    @ScaledMetric(relativeTo: .subheadline) var myCopyRowTitleSize: CGFloat = 14.5
+    @ScaledMetric(relativeTo: .footnote) var myCopyValueSize: CGFloat = 13
+    @ScaledMetric(relativeTo: .footnote) var myCopyActionSize: CGFloat = 14
+    @ScaledMetric(relativeTo: .footnote) var tagChipSize: CGFloat = 13.5
+    @ScaledMetric(relativeTo: .body) private var myCopyTitleSize: CGFloat = 19
+    @ScaledMetric(relativeTo: .caption) private var myCopySubtitleSize: CGFloat = 12
+
     /// The resolved local record: the saved work itself, an existing library match for
     /// a remote summary, or the record created when a remote work is imported on tap.
     @State var localWork: SavedWork?
@@ -396,10 +404,10 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 3) {
                 Text("My copy")
-                    .font(.system(size: 19, weight: .semibold))
+                    .font(.system(size: myCopyTitleSize, weight: .semibold))
                     .accessibilityAddTraits(.isHeader)
                 Text("Private to this device")
-                    .font(.system(size: 12))
+                    .font(.system(size: myCopySubtitleSize))
                     .foregroundStyle(.secondary)
             }
             .frame(maxWidth: .infinity, alignment: .leading)

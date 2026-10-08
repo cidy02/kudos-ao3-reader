@@ -117,9 +117,24 @@ struct PromptMemeView: View {
     }
 
     private var promptList: some View {
+        // A refused Claim or Release says so under the header. Tapped from a card
+        // further down, that sentence was out of sight and the reader saw nothing
+        // happen (T-360): the list returns to it. Android does the same.
+        ScrollViewReader { proxy in
+            promptRows
+                .onChange(of: actionErrorMessage) { _, message in
+                    guard message != nil else { return }
+                    withAnimation { proxy.scrollTo(Self.headerRowID, anchor: .top) }
+                }
+        }
+    }
+
+    private static let headerRowID = "prompt-meme-header"
+
+    private var promptRows: some View {
         List {
             Section {
-                header.pageBodyRow(top: 20, gutter: selfGuttered)
+                header.pageBodyRow(top: 20, gutter: selfGuttered).id(Self.headerRowID)
                 filterSegment.pageBodyRow(top: 14, gutter: gutter)
             }
 

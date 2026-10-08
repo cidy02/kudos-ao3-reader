@@ -169,7 +169,7 @@ struct ReadingInsightsView: View {
                         .lineLimit(1)
                         .minimumScaleFactor(0.6)
                     Text("hours in \(periodName)")
-                        .font(.system(size: 12.5))
+                        .font(.system(size: periodLabelSize))
                         .foregroundStyle(.secondary)
                 }
                 Spacer(minLength: 8)
@@ -198,10 +198,10 @@ struct ReadingInsightsView: View {
                     .font(.system(size: 11, weight: .bold))
                     .foregroundStyle(delta < 0 ? Color.secondary : Color.green)
                 Text(ReadingInsights.signedHoursLabel(delta))
-                    .font(.system(size: 13, weight: .medium))
+                    .font(.system(size: deltaSize, weight: .medium))
                     .monospacedDigit()
                 Text("vs \(previousPeriodName)")
-                    .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                    .font(.system(size: deltaPeriodSize, weight: .semibold, design: .monospaced))
                     .foregroundStyle(.secondary)
             }
             .padding(.horizontal, 12)
@@ -230,7 +230,7 @@ struct ReadingInsightsView: View {
                 let isLatest = index == insights.weeklySeconds.count - 1
                 VStack(spacing: 6) {
                     Text(ReadingInsights.hoursLabel(bucket.seconds))
-                        .font(.system(size: 9.5, weight: .semibold, design: .monospaced))
+                        .font(.system(size: barValueSize, weight: .semibold, design: .monospaced))
                         .foregroundStyle(isLatest ? palette.accent : Color.secondary)
                         .lineLimit(1)
                         .minimumScaleFactor(0.7)
@@ -251,7 +251,7 @@ struct ReadingInsightsView: View {
                     }
                     .frame(height: chartHeight)
                     Text(weekLabel(bucket.weekStart))
-                        .font(.system(size: 8.5))
+                        .font(.system(size: barLabelSize))
                         .foregroundStyle(.tertiary)
                         .lineLimit(1)
                         .minimumScaleFactor(0.7)
@@ -292,12 +292,12 @@ struct ReadingInsightsView: View {
         return VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text(entry.name)
-                    .font(.system(size: 14, weight: .medium))
+                    .font(.system(size: fandomNameSize, weight: .medium))
                     .lineLimit(1)
                     .truncationMode(.tail)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 Text(value)
-                    .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                    .font(.system(size: fandomValueSize, weight: .semibold, design: .monospaced))
                     .foregroundStyle(tint)
             }
             Capsule()
@@ -331,7 +331,7 @@ struct ReadingInsightsView: View {
             paceGrid
             Divider().overlay(Color.primary.opacity(0.12))
             Text(paceFootnote)
-                .font(.system(size: 12))
+                .font(.system(size: footnoteSize))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -370,7 +370,7 @@ struct ReadingInsightsView: View {
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
             Text(caption)
-                .font(.system(size: 11.5))
+                .font(.system(size: paceCaptionSize))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -408,10 +408,10 @@ struct ReadingInsightsView: View {
     private var noSessionsNote: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text("No reading logged this \(period == .month ? "month" : "year")")
-                .font(.system(size: 15, weight: .semibold))
+                .font(.system(size: noteTitleSize, weight: .semibold))
             Text("Kudos counts reading time only on this device, while a work is open in the reader. "
                 + "Your Library totals still appear below.")
-                .font(.system(size: 12.5))
+                .font(.system(size: noteBodySize))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -438,7 +438,7 @@ struct ReadingInsightsView: View {
             Divider().overlay(Color.primary.opacity(0.12))
             Text("Words read includes finished works when AO3 provides a word count. Recent activity counts each "
                 + "work you opened once. Finished includes works you completed before Kudos began recording time.")
-                .font(.system(size: 12))
+                .font(.system(size: footnoteSize))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -546,6 +546,17 @@ struct ReadingInsightsView: View {
     @ScaledMetric(relativeTo: .largeTitle) private var heroSize: CGFloat = 44
     @ScaledMetric(relativeTo: .title2) private var figureSize: CGFloat = 22
     @ScaledMetric(relativeTo: .caption) private var chartHeight: CGFloat = 72
+    @ScaledMetric(relativeTo: .footnote) private var periodLabelSize: CGFloat = 12.5
+    @ScaledMetric(relativeTo: .footnote) private var deltaSize: CGFloat = 13
+    @ScaledMetric(relativeTo: .caption) private var deltaPeriodSize: CGFloat = 11
+    @ScaledMetric(relativeTo: .caption) private var barValueSize: CGFloat = 9.5
+    @ScaledMetric(relativeTo: .caption) private var barLabelSize: CGFloat = 8.5
+    @ScaledMetric(relativeTo: .footnote) private var fandomNameSize: CGFloat = 14
+    @ScaledMetric(relativeTo: .caption) private var fandomValueSize: CGFloat = 11
+    @ScaledMetric(relativeTo: .caption) private var footnoteSize: CGFloat = 12
+    @ScaledMetric(relativeTo: .caption) private var paceCaptionSize: CGFloat = 11.5
+    @ScaledMetric(relativeTo: .headline) private var noteTitleSize: CGFloat = 15
+    @ScaledMetric(relativeTo: .footnote) private var noteBodySize: CGFloat = 12.5
 
     private var calendar: Calendar { .current }
 

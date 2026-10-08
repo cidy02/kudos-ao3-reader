@@ -7,12 +7,14 @@ struct MoveBackToInProgressButton: View {
     let work: SavedWork
     @Environment(\.modelContext) private var context
 
+    @ScaledMetric(relativeTo: .footnote) private var buttonLabelSize: CGFloat = 12.5
+
     var body: some View {
         Button {
             WorkLifecycle.keepInProgress(work, in: context)
         } label: {
             Label("Move back to In progress", systemImage: "arrow.uturn.backward")
-                .font(.system(size: 12.5, weight: .medium))
+                .font(.system(size: buttonLabelSize, weight: .medium))
                 .padding(.horizontal, 12)
                 .padding(.vertical, 7)
                 .background(
@@ -58,6 +60,8 @@ struct ReadingHistoryFactsStrip: View {
     let palette: SubjectPalette
     var style: Style = .history
 
+    @ScaledMetric(relativeTo: .caption) private var factSize: CGFloat = 11.5
+
     /// 1ah: "What this page adds sits on a hairline underneath" — tinted
     /// words on the rule, not boxed chips.
     var body: some View {
@@ -98,7 +102,7 @@ struct ReadingHistoryFactsStrip: View {
 
     private func fact(_ text: String, tint: Color? = nil) -> some View {
         Text(text)
-            .font(.system(size: 11.5, weight: .semibold))
+            .font(.system(size: factSize, weight: .semibold))
             .monospacedDigit()
             .foregroundStyle(tint ?? Color.secondary)
     }
