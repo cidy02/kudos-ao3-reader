@@ -696,6 +696,7 @@ fun AppNavHost(
                 title = Routes.routeArg(entry, "tagSetTitle").orEmpty(),
                 isModerator = entry.arguments?.getBoolean("moderator") == true,
                 repository = container.collectionDetailRepository,
+                writes = container.writeRepository,
                 onOpenWeb = { navController.navigate(Routes.webFallback(it)) }
             )
         }
