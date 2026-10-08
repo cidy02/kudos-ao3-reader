@@ -32,6 +32,16 @@ struct ChallengeSettingsEditView: View {
     @Environment(ThemeManager.self) private var theme
     @Environment(AppRouter.self) private var router
 
+    @ScaledMetric(relativeTo: .headline) private var stateTitleSize: CGFloat = 15
+    @ScaledMetric(relativeTo: .subheadline) private var toggleTitleSize: CGFloat = 15
+    @ScaledMetric(relativeTo: .footnote) private var saveButtonSize: CGFloat = 14
+    @ScaledMetric(relativeTo: .footnote) private var instructionsFontSize: CGFloat = 14
+    @ScaledMetric(relativeTo: .footnote) private var loadingSize: CGFloat = 14
+    @ScaledMetric(relativeTo: .footnote) var optionValueSize: CGFloat = 13
+    @ScaledMetric(relativeTo: .footnote) private var bodySize: CGFloat = 13
+    @ScaledMetric(relativeTo: .footnote) private var errorBodySize: CGFloat = 12.5
+    @ScaledMetric(relativeTo: .caption) private var captionSize: CGFloat = 11.5
+
     @State var form: AO3ChallengeSettingsForm?
     /// The collection's own edit form (Basics, moderation switches), and the
     /// copy it loaded as, so Save posts it only when a switch changed.
@@ -250,14 +260,14 @@ struct ChallengeSettingsEditView: View {
             ZStack(alignment: .topLeading) {
                 if instructionsBinding.wrappedValue.isEmpty {
                     Text("Describe the challenge for people signing up…")
-                        .font(.system(size: 14, design: .serif))
+                        .font(.system(size: instructionsFontSize, design: .serif))
                         .foregroundStyle(.secondary.opacity(0.6))
                         .padding(.horizontal, 4)
                         .padding(.vertical, 8)
                 }
 
                 TextEditor(text: instructionsBinding)
-                    .font(.system(size: 14, design: .serif))
+                    .font(.system(size: instructionsFontSize, design: .serif))
                     .frame(minHeight: 100)
                     .scrollContentBackground(.hidden)
                     .background(Color.clear)
@@ -283,7 +293,7 @@ struct ChallengeSettingsEditView: View {
         return SubjectFormRow(label: label, arrangement: .control) {
             if !settings.scheduleIsEditable {
                 Text(instant.wireString.isEmpty ? "Not set" : instant.wireString)
-                    .font(.system(size: 13))
+                    .font(.system(size: bodySize))
                     .foregroundStyle(.secondary)
             } else if let wallClock = instant.wallClock {
                 DatePicker("", selection: Binding(
@@ -296,11 +306,11 @@ struct ChallengeSettingsEditView: View {
             } else {
                 // Unreadable text is shown as AO3 sent it and posted back unchanged.
                 Text(instant.wireString.isEmpty ? "Not set" : instant.wireString)
-                    .font(.system(size: 13))
+                    .font(.system(size: bodySize))
                     .foregroundStyle(.secondary)
                 if instant.wireString.isEmpty {
                     Button("Set") { form?.settings[keyPath: keyPath].wallClock = Date() }
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(.system(size: bodySize, weight: .semibold))
                         .foregroundStyle(palette.accent)
                         .buttonStyle(.plain)
                 }
@@ -348,7 +358,7 @@ struct ChallengeSettingsEditView: View {
             ? "Dates use the challenge’s time zone shown on AO3. After a reveal happens, you can't "
                 + "move it to an earlier time in Kudos."
             : "Kudos couldn't read the challenge's time zone. Dates are view-only and won't be saved.")
-            .font(.system(size: 11.5))
+            .font(.system(size: captionSize))
             .foregroundStyle(Color.secondary.opacity(0.7))
             .fixedSize(horizontal: false, vertical: true)
             .padding(.horizontal, 4)
@@ -372,7 +382,7 @@ struct ChallengeSettingsEditView: View {
         SubjectFormRow(label: label, arrangement: .value, isDisabled: isDisabled) {
             HStack(spacing: 10) {
                 Text("\(value)")
-                    .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                    .font(.system(size: optionValueSize, weight: .semibold, design: .monospaced))
                     .foregroundStyle(.secondary)
                 Stepper("", value: Binding(get: { value }, set: onChange), in: range)
                     .labelsHidden()
@@ -402,7 +412,7 @@ struct ChallengeSettingsEditView: View {
         SubjectFormRow(label: label, arrangement: .control) {
             countMenu("\(label) required", required)
             Text("to")
-                .font(.system(size: 13))
+                .font(.system(size: bodySize))
                 .foregroundStyle(.secondary)
             countMenu("\(label) allowed", allowed)
         }
@@ -462,7 +472,7 @@ struct ChallengeSettingsEditView: View {
 
     private var restrictionLockNote: some View {
         Text("Prompts have been added so these settings can no longer be changed.")
-            .font(.system(size: 11.5))
+            .font(.system(size: captionSize))
             .foregroundStyle(Color.secondary.opacity(0.7))
             .fixedSize(horizontal: false, vertical: true)
             .padding(.horizontal, 4)
@@ -529,10 +539,10 @@ struct ChallengeSettingsEditView: View {
             Toggle(isOn: requestRestrictionToggleBinding(\.allowAnyFandom)) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Allow any fandom")
-                        .font(.system(size: 15))
+                        .font(.system(size: toggleTitleSize))
                         .foregroundStyle(.primary)
                     Text("Choosing “any” can match you with anything in the tag set.")
-                        .font(.system(size: 11.5))
+                        .font(.system(size: captionSize))
                         .foregroundStyle(.secondary)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -550,7 +560,7 @@ struct ChallengeSettingsEditView: View {
         Text("AO3 does the matching. Save these settings here, then use Open on AO3 to run or rerun "
             + "the match. If potential matches already exist, your changes take effect after you "
             + "regenerate them on AO3.")
-            .font(.system(size: 11.5))
+            .font(.system(size: captionSize))
             .foregroundStyle(Color.secondary.opacity(0.7))
             .fixedSize(horizontal: false, vertical: true)
             .padding(.horizontal, 4)
@@ -593,11 +603,11 @@ struct ChallengeSettingsEditView: View {
                         .tint(palette.labelOnAccent)
                 }
                 Text("Save changes")
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(.system(size: saveButtonSize, weight: .semibold))
                     .foregroundStyle(palette.labelOnAccent)
             }
             .frame(maxWidth: .infinity)
-            .frame(height: 44)
+            .frame(minHeight: 44)
             .background(
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
                     .fill(palette.accent)
@@ -631,7 +641,7 @@ struct ChallengeSettingsEditView: View {
             ProgressView()
                 .controlSize(.small)
             Text("Loading challenge settings…")
-                .font(.system(size: 14))
+                .font(.system(size: loadingSize))
                 .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, alignment: .center)
@@ -641,9 +651,9 @@ struct ChallengeSettingsEditView: View {
     private func failureCard(_ message: String) -> some View {
         VStack(spacing: 8) {
             Text("Couldn't load challenge settings")
-                .font(.system(size: 15, weight: .semibold))
+                .font(.system(size: stateTitleSize, weight: .semibold))
             Text(message)
-                .font(.system(size: 13))
+                .font(.system(size: bodySize))
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
             Button("Try Again") {
@@ -663,7 +673,7 @@ struct ChallengeSettingsEditView: View {
             Image(systemName: "checkmark.circle")
                 .foregroundStyle(palette.accent)
             Text(text)
-                .font(.system(size: 13, weight: .medium))
+                .font(.system(size: bodySize, weight: .medium))
                 .foregroundStyle(palette.accent)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -676,7 +686,7 @@ struct ChallengeSettingsEditView: View {
             Image(systemName: "exclamationmark.triangle")
                 .foregroundStyle(Color.red)
             Text(text)
-                .font(.system(size: 12.5))
+                .font(.system(size: errorBodySize))
                 .foregroundStyle(Color.red)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }

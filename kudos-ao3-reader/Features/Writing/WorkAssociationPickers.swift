@@ -24,6 +24,10 @@ struct WorkCollectionsGiftsView: View {
     var parentWorkCount: Int
 
     @Environment(ThemeManager.self) private var theme
+
+    @ScaledMetric(relativeTo: .subheadline) private var rowTitleSize: CGFloat = 14.5
+    @ScaledMetric(relativeTo: .caption) private var captionSize: CGFloat = 11.5
+
     @State private var query = ""
     @State private var searchResults: [AO3CollectionOffer] = []
     @State private var newRecipient = ""
@@ -164,10 +168,10 @@ struct WorkCollectionsGiftsView: View {
                 Image(systemName: "plus.circle").foregroundStyle(palette.accent)
                 VStack(alignment: .leading, spacing: 3) {
                     Text(offer.title.isEmpty ? offer.name : offer.title)
-                        .font(.system(size: 14.5, weight: .medium))
+                        .font(.system(size: rowTitleSize, weight: .medium))
                         .foregroundStyle(.primary)
                     Text(Self.stateText(offer.access))
-                        .font(.system(size: 11.5))
+                        .font(.system(size: captionSize))
                         .foregroundStyle(.secondary)
                 }
                 Spacer(minLength: 0)
@@ -194,10 +198,10 @@ struct WorkCollectionsGiftsView: View {
                     .foregroundStyle(offer.isSelected ? palette.accent : Color.secondary)
                 VStack(alignment: .leading, spacing: 3) {
                     Text(offer.title.isEmpty ? offer.name : offer.title)
-                        .font(.system(size: 14.5, weight: .medium))
+                        .font(.system(size: rowTitleSize, weight: .medium))
                         .foregroundStyle(.primary)
                     Text(Self.stateText(offer.access))
-                        .font(.system(size: 11.5))
+                        .font(.system(size: captionSize))
                         .foregroundStyle(.secondary)
                 }
                 Spacer(minLength: 0)
@@ -276,7 +280,7 @@ struct WorkCollectionsGiftsView: View {
 
     private func footnote(_ text: String) -> some View {
         Text(text)
-            .font(.system(size: 11.5))
+            .font(.system(size: captionSize))
             .foregroundStyle(.secondary.opacity(0.7))
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -309,6 +313,9 @@ struct WorkSeriesPickerView: View {
     var currentSeries: [AO3CurrentSeries] = []
 
     @Environment(ThemeManager.self) private var theme
+
+    @ScaledMetric(relativeTo: .subheadline) private var rowTitleSize: CGFloat = 14.5
+    @ScaledMetric(relativeTo: .caption) private var captionSize: CGFloat = 11.5
 
     private var palette: SubjectPalette { theme.scopePalette }
     private var gutter: CGFloat { SubjectMetrics.accountGutter }
@@ -445,11 +452,11 @@ struct WorkSeriesPickerView: View {
                     .frame(minWidth: 17)
                 VStack(alignment: .leading, spacing: 3) {
                     Text(membership.title)
-                        .font(.system(size: 14.5, weight: .medium))
+                        .font(.system(size: rowTitleSize, weight: .medium))
                         .foregroundStyle(.primary)
                     if let detail = isCurrent ? "This work is in it" : Self.detailText(membership) {
                         Text(detail)
-                            .font(.system(size: 11.5))
+                            .font(.system(size: captionSize))
                             .foregroundStyle(.secondary)
                     }
                 }
@@ -468,7 +475,7 @@ struct WorkSeriesPickerView: View {
 
     private func footnote(_ text: String) -> some View {
         Text(text)
-            .font(.system(size: 11.5))
+            .font(.system(size: captionSize))
             .foregroundStyle(.secondary.opacity(0.7))
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -512,6 +519,8 @@ struct WorkCreatorsPickerView: View {
 
     @Environment(ThemeManager.self) private var theme
 
+    @ScaledMetric(relativeTo: .caption) private var footnoteSize: CGFloat = 11.5
+
     private var palette: SubjectPalette { theme.scopePalette }
     private var gutter: CGFloat { SubjectMetrics.accountGutter }
 
@@ -540,7 +549,7 @@ struct WorkCreatorsPickerView: View {
                 bylinePanel.pageBodyRow(top: 8, gutter: gutter)
                 Text("AO3 invites a co-creator, and the work stays unchanged until they accept. "
                     + "Enter their byline exactly as it appears on AO3, as username or username (pseud).")
-                    .font(.system(size: 11.5))
+                    .font(.system(size: footnoteSize))
                     .foregroundStyle(.secondary.opacity(0.7))
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -620,6 +629,8 @@ struct WorkParentWorkPickerView: View {
 
     @Environment(ThemeManager.self) private var theme
 
+    @ScaledMetric(relativeTo: .caption) private var footnoteSize: CGFloat = 11.5
+
     private var palette: SubjectPalette { theme.scopePalette }
     private var gutter: CGFloat { SubjectMetrics.accountGutter }
 
@@ -644,7 +655,7 @@ struct WorkParentWorkPickerView: View {
                 sourcePanel.pageBodyRow(top: 8, gutter: gutter)
                 Text("For a work on AO3, enter its web address. For a work from elsewhere, enter its "
                     + "title and author, which will appear instead of a link.")
-                    .font(.system(size: 11.5))
+                    .font(.system(size: footnoteSize))
                     .foregroundStyle(.secondary.opacity(0.7))
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
