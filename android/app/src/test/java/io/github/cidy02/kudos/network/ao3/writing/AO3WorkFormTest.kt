@@ -44,6 +44,12 @@ class AO3WorkFormTest {
 
     // Exactly the three normalization rules Claude authorized. No generic blank,
     // whitespace, sorting, deduplication, date, select or HTML normalization.
+    @Test fun aServedTagPaddedWithAZeroWidthSpaceIsTheSameTagAsTheOneTypedInTheEditor() {
+        // Foundation's whitespace set, which iOS trims with, holds U+200B and U+0085; Kotlin's does not.
+        assertEquals(listOf("Demo Fandom", "Second"), splitWorkList("\u200BDemo Fandom\u200B,\u0085Second "))
+        assertEquals(trimWritingTag(" Demo Fandom\u200B"), splitWorkList("\u200BDemo Fandom").single())
+    }
+
     private fun meaning(name: String, values: List<String>, form: AO3WorkForm): List<String> = when {
         name in commaLists -> values.map { it.split(',').joinToString(",") { part -> part.trim() } }
         name in AO3WorkSubmitAction.entries.map { it.fieldName } -> if (values.isEmpty()) emptyList() else listOf(name)
