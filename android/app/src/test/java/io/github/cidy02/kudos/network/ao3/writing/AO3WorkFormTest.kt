@@ -248,7 +248,7 @@ second line  </textarea>
         val form = parser.parse(workFixture("ao3_demo_work_draft_edit")).copy(rating = "", commentPermissions = "",
             creators = AO3CreatorDraft(), languageID = "", summary = "", notes = "", endnotes = "",
             fandoms = emptyList(), relationships = emptyList(), characters = emptyList(), additionalTags = emptyList(),
-            gifts = emptyList(), collectionNames = emptyList(), chapterTotal = "", anonymous = null, collectionInbox = null,
+            gifts = emptyList(), collectionNames = emptyList(), collections = emptyList(), chapterTotal = "", anonymous = null, collectionInbox = null,
             chapter = AO3WorkChapterDraft(), workSkinID = "")
         val modeled = AO3WorkFormEncoder.iosParameters(form, AO3WorkSubmitAction.SaveDraft)
         for (name in listOf(AO3WorkFormField.rating, AO3WorkFormField.commentPermissions, AO3WorkFormField.authorIDs,
@@ -424,8 +424,9 @@ second line  </textarea>
     @Test fun theCollectionsPickerDecidesWhatIsPosted() {
         val form = parser.parse(workFixture("ao3_work_edit"))
         assertEquals(listOf("nanami_week"), values(form.parameters(AO3WorkSubmitAction.Update), AO3WorkFormField.collectionNames))
-        assertEquals(listOf(""), values(form.copy(collectionNames = emptyList()).parameters(AO3WorkSubmitAction.Update), AO3WorkFormField.collectionNames))
-        assertEquals(listOf("slowburn_2026"), values(form.copy(collectionNames = listOf("slowburn_2026")).parameters(AO3WorkSubmitAction.Update), AO3WorkFormField.collectionNames))
+        assertEquals(listOf(""), values(form.copy(collections = form.collections.map { it.copy(isSelected = false) }).parameters(AO3WorkSubmitAction.Update), AO3WorkFormField.collectionNames))
+        assertEquals(listOf("slowburn_2026"), values(form.copy(collections = form.collections.map { it.copy(isSelected = false) } +
+            AO3CollectionOffer("slowburn_2026", "Slow Burn Exchange 2026", isSelected = true)).parameters(AO3WorkSubmitAction.Update), AO3WorkFormField.collectionNames))
     }
 
     @Test fun clearingEveryCategoryPostsAnEmptyValue() {

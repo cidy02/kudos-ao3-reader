@@ -170,7 +170,8 @@ class WritingTagsEditorScreenTest {
         compose.waitForIdle()
         assertEquals(old.fandoms, form.state.value.form!!.fandoms)
         back()
-        for (label in listOf("Series", "Add to collections", "Gift recipients", "Co-creators", "Inspired by", "Chapters", "Add chapter", "Edit tags")) {
+        // The association rows open their pickers since brief 3bj; these three still wait for their screens.
+        for (label in listOf("Chapters", "Add chapter", "Edit tags")) {
             reach(label); compose.onNodeWithText(label).assertHasNoClickAction()
         }
         assertEquals(0, setup.client.posts); assertEquals(0, tags.posts)

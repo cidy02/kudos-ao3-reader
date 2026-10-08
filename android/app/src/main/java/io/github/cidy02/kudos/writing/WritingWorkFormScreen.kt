@@ -71,6 +71,7 @@ internal fun WritingWorkFormContent(model: WritingWorkFormState, account: String
     val list = rememberLazyListState()
     val scope = rememberCoroutineScope()
     var editing by remember(model) { mutableStateOf<WorkFormText?>(null) }
+    var association by remember(model) { mutableStateOf<WorkAssociation?>(null) }
     var writingTags by remember(model) { mutableStateOf<WritingTagKind?>(null) }
     var choosingTags by remember(model) { mutableStateOf<WorkFormTags?>(null) }
     var choosing by remember(model) { mutableStateOf<WorkFormChoice?>(null) }
@@ -88,6 +89,11 @@ internal fun WritingWorkFormContent(model: WritingWorkFormState, account: String
             onValues = { model.writingTags(writingKind, it) },
             readValues = { model.state.value.form?.let(writingKind::values).orEmpty() },
             recordScope = scope, onBack = { writingTags = null })
+        return
+    }
+    val associationKind = association
+    if (associationKind != null && form != null) {
+        WritingAssociationPicker(associationKind, form, model, autocompleteRepository) { association = null }
         return
     }
     val tags = choosingTags
@@ -159,15 +165,20 @@ internal fun WritingWorkFormContent(model: WritingWorkFormState, account: String
             item {
                 WorkFormSection("Association")
                 SettingsPanel(Modifier.padding(top = 8.dp)) {
-                    SubjectFormRow("Series", value = form.seriesValue(), valueMaxLines = Int.MAX_VALUE)
+                    SubjectFormRow("Series", value = form.seriesValue(), valueMaxLines = Int.MAX_VALUE,
+                        showsDisclosure = true, onClick = { association = WorkAssociation.Series })
                     SubjectRowSeparator()
-                    SubjectFormRow("Add to collections", value = workFormCount(form.collectionNames), valueMaxLines = Int.MAX_VALUE)
+                    SubjectFormRow("Add to collections", value = workFormCount(form.postedCollectionNames), valueMaxLines = Int.MAX_VALUE,
+                        showsDisclosure = true, onClick = { association = WorkAssociation.CollectionsGifts })
                     SubjectRowSeparator()
-                    SubjectFormRow("Gift recipients", value = workFormCount(form.gifts), valueMaxLines = Int.MAX_VALUE)
+                    SubjectFormRow("Gift recipients", value = workFormCount(form.gifts), valueMaxLines = Int.MAX_VALUE,
+                        showsDisclosure = true, onClick = { association = WorkAssociation.CollectionsGifts })
                     SubjectRowSeparator()
-                    SubjectFormRow("Co-creators", value = form.creatorsValue(), valueMaxLines = Int.MAX_VALUE)
+                    SubjectFormRow("Co-creators", value = form.creatorsValue(), valueMaxLines = Int.MAX_VALUE,
+                        showsDisclosure = true, onClick = { association = WorkAssociation.Creators })
                     SubjectRowSeparator()
-                    SubjectFormRow("Inspired by", value = if (form.parentWork.url.isEmpty()) "None" else "1", valueMaxLines = Int.MAX_VALUE)
+                    SubjectFormRow("Inspired by", value = if (form.parentWork.url.isEmpty()) "None" else "1", valueMaxLines = Int.MAX_VALUE,
+                        showsDisclosure = true, onClick = { association = WorkAssociation.Parent })
                 }
             }
             item {
@@ -253,10 +264,10 @@ internal fun WritingWorkFormContent(model: WritingWorkFormState, account: String
 }
 
 @Composable
-private fun WorkFormSection(title: String) = SectionRuleHeader(title, modifier = Modifier.padding(top = 18.dp))
+internal fun WorkFormSection(title: String) = SectionRuleHeader(title, modifier = Modifier.padding(top = 18.dp))
 
 @Composable
-private fun WorkFormFootnote(text: String) {
+internal fun WorkFormFootnote(text: String) {
     Text(text, color = LocalKudosTokens.current.secondaryInk.copy(alpha = 0.7f), fontSize = 11.5.sp, lineHeight = 17.sp,
         modifier = Modifier.padding(horizontal = SubjectMetrics.accountGutter + 14.dp).padding(top = 8.dp))
 }
@@ -290,7 +301,7 @@ private fun WorkFormTextRow(form: AO3WorkForm, field: WorkFormText, onEdit: (Wor
 }
 
 @Composable
-private fun WorkFormControlRow(label: String, control: @Composable () -> Unit) {
+internal fun WorkFormControlRow(label: String, control: @Composable () -> Unit) {
     if (isAccessibilityFontScale()) Column(Modifier.fillMaxWidth().padding(horizontal = 13.dp, vertical = 11.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(label, color = LocalKudosTokens.current.primaryInk, fontSize = 14.5.sp, lineHeight = 20.sp)
@@ -299,7 +310,7 @@ private fun WorkFormControlRow(label: String, control: @Composable () -> Unit) {
 }
 
 @Composable
-private fun WorkFormToggle(label: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+internal fun WorkFormToggle(label: String, checked: Boolean, onChange: (Boolean) -> Unit) {
     WorkFormControlRow(label) {
         SubjectToggle(checked, onChange, accent = LocalKudosTokens.current.scopePalette.accent, contentDescription = label)
     }
@@ -337,7 +348,7 @@ private fun WorkFormOptionRow(label: String, selected: Boolean, onClick: () -> U
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun WorkFormChoiceSheet(title: String, options: List<AO3FormOption>, selected: String, onDismiss: () -> Unit, onPick: (String) -> Unit) {
+internal fun WorkFormChoiceSheet(title: String, options: List<AO3FormOption>, selected: String, onDismiss: () -> Unit, onPick: (String) -> Unit) {
     val tokens = LocalKudosTokens.current
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
         containerColor = tokens.cardFill, contentColor = tokens.primaryInk, scrimColor = tokens.primaryInk.copy(alpha = 0.32f), dragHandle = null) {

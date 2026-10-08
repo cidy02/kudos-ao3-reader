@@ -25,10 +25,10 @@ object AO3WorkFormEncoder {
             add(AO3WorkFormField.summary to summary)
             add(AO3WorkFormField.notes to notes)
             add(AO3WorkFormField.endnotes to endnotes)
-            add(AO3WorkFormField.collectionNames to joinWorkList(collectionNames))
+            add(AO3WorkFormField.collectionNames to joinWorkList(postedCollectionNames))
             add(AO3WorkFormField.recipients to joinWorkList(gifts))
             val selectedSeries = series.firstOrNull { it.isSelected }
-            val newTitle = newSeriesTitle.trim()
+            val newTitle = trimWritingTag(newSeriesTitle)
             when {
                 selectedSeries != null -> add(AO3WorkFormField.seriesID to selectedSeries.seriesID.toString())
                 newTitle.isNotEmpty() -> add(AO3WorkFormField.seriesTitle to newTitle)

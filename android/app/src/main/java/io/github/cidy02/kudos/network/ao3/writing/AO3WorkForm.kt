@@ -104,6 +104,16 @@ data class AO3CreatorDraft(
 data class AO3SeriesMembership(val seriesID: Long, val title: String, val isSelected: Boolean = false)
 data class AO3CurrentSeries(val seriesID: Long, val title: String, val serialWorkID: Long?)
 
+/** In-memory work-picker offers; autocomplete describes only whether a collection is closed. */
+data class AO3CollectionAccess(
+    val isOpen: Boolean = true, val isModerated: Boolean = false,
+    val isUnrevealed: Boolean = false, val isAnonymous: Boolean = false, val isDescribed: Boolean = true
+)
+data class AO3CollectionOffer(
+    val name: String, val title: String, val access: AO3CollectionAccess = AO3CollectionAccess(),
+    val isSelected: Boolean = false
+)
+
 object AO3WorkFormUrls {
     fun newWork() = "${AO3Constants.BASE_URL}/works/new"
     fun editWork(workID: Long): String {
@@ -112,7 +122,7 @@ object AO3WorkFormUrls {
     }
 }
 
-/** Pure form data. No persistent schema, UI state, account collection enrichment or write API. */
+/** Pure in-memory form data. No persistent schema or write API. */
 data class AO3WorkForm(
     val kind: AO3WorkFormKind,
     val workID: Long?,
@@ -139,6 +149,7 @@ data class AO3WorkForm(
     val notes: String = "",
     val endnotes: String = "",
     val collectionNames: List<String> = emptyList(),
+    val collections: List<AO3CollectionOffer> = emptyList(),
     val gifts: List<String> = emptyList(),
     val series: List<AO3SeriesMembership> = emptyList(),
     val seriesOptions: List<AO3FormOption> = emptyList(),
@@ -163,6 +174,15 @@ data class AO3WorkForm(
     val workSkinOptions: List<AO3FormOption> = emptyList()
 ) {
     val isDraft: Boolean get() = !isPosted
+    val postedCollectionNames: List<String> get() = if (collections.isEmpty()) collectionNames
+        else collections.filter { it.isSelected }.map { it.name }
+
+    fun applyingCollectionStates(offers: List<AO3CollectionOffer>): AO3WorkForm {
+        val merged = offers.map { offer -> offer.copy(isSelected = collectionNames.any { it.equals(offer.name, true) }) }
+        val missing = collectionNames.filter { name -> offers.none { it.name.equals(name, true) } }
+            .map { AO3CollectionOffer(it, it, isSelected = true) }
+        return copy(collections = merged + missing)
+    }
 
     fun missingRequiredFields(): List<String> = buildList {
         if (title.isBlank()) add("Title")
@@ -177,7 +197,7 @@ data class AO3WorkForm(
 }
 
 internal fun splitWorkList(raw: String): List<String> = raw.split(',').map(String::trim).filter(String::isNotEmpty)
-internal fun joinWorkList(names: List<String>): String = names.map(String::trim).filter(String::isNotEmpty).joinToString(", ")
+internal fun joinWorkList(names: List<String>): String = names.map(::trimWritingTag).filter(String::isNotEmpty).joinToString(", ")
 
 /** Foundation whitespacesAndNewlines, rather than Kotlin's extra C0 separators. */
 internal fun trimWritingTag(name: String): String = name.trim { char ->
