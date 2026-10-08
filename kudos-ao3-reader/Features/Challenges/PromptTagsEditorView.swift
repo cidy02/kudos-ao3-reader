@@ -10,6 +10,9 @@ struct PromptTagsEditorView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(ThemeManager.self) private var theme
 
+    @ScaledMetric(relativeTo: .headline) private var doneButtonSize: CGFloat = 15
+    @ScaledMetric(relativeTo: .subheadline) private var inputFontSize: CGFloat = 15
+
     @State private var fandomsText: String = ""
     @State private var relationshipsText: String = ""
     @State private var charactersText: String = ""
@@ -69,7 +72,7 @@ struct PromptTagsEditorView: View {
                         saveTags()
                         dismiss()
                     }
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(.system(size: doneButtonSize, weight: .semibold))
                     .foregroundStyle(palette.accent)
                 }
             }
@@ -86,7 +89,7 @@ struct PromptTagsEditorView: View {
     private func tagInputField(_ placeholder: String, text: Binding<String>) -> some View {
         VStack(spacing: 0) {
             TextField(placeholder, text: text)
-                .font(.system(size: 15))
+                .font(.system(size: inputFontSize))
                 .padding(.horizontal, 14)
                 .padding(.vertical, 12)
         }

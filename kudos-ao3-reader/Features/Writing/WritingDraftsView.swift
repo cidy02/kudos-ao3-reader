@@ -18,6 +18,10 @@ struct WritingDraftsView: View {
     /// day changes, since nothing else re-renders this screen on time.
     @State private var now = Date()
 
+    @ScaledMetric(relativeTo: .headline) private var retryButtonSize: CGFloat = 15
+    @ScaledMetric(relativeTo: .footnote) private var noticeBodySize: CGFloat = 12.5
+    @ScaledMetric(relativeTo: .caption) private var footnoteSize: CGFloat = 11.5
+
     private var gutter: CGFloat { SubjectMetrics.accountGutter }
 
     /// Artboard **1x**: header block, an orange notice that drafts expire, then
@@ -57,7 +61,7 @@ struct WritingDraftsView: View {
                 Section {
                     footnote(errorMessage)
                     Button("Try Again") { reload += 1 }
-                        .font(.system(size: 15, weight: .semibold))
+                        .font(.system(size: retryButtonSize, weight: .semibold))
                         .foregroundStyle(theme.scopePalette.accent)
                         .buttonStyle(.plain)
                         .padding(.horizontal, 14)
@@ -141,7 +145,7 @@ struct WritingDraftsView: View {
         let shape = RoundedRectangle(cornerRadius: 16, style: .continuous)
         return Text("AO3 deletes an unposted draft 30 days after you create it. Recovery copies "
             + "stay on this device and aren't deleted with it.")
-            .font(.system(size: 12.5))
+            .font(.system(size: noticeBodySize))
             .foregroundStyle(.primary.opacity(0.78))
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -153,7 +157,7 @@ struct WritingDraftsView: View {
 
     private func footnote(_ text: String) -> some View {
         Text(text)
-            .font(.system(size: 11.5))
+            .font(.system(size: footnoteSize))
             .foregroundStyle(.secondary.opacity(0.7))
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -209,6 +213,10 @@ private struct DraftCard: View {
     /// The deletion date AO3 printed on this draft, when it parsed.
     var deletion: DateComponents?
     let now: Date
+
+    @ScaledMetric(relativeTo: .body) private var titleSize: CGFloat = 19
+    @ScaledMetric(relativeTo: .footnote) private var summarySize: CGFloat = 13.5
+    @ScaledMetric(relativeTo: .caption) private var metaSize: CGFloat = 11.5
 
     @Environment(ThemeManager.self) private var themeManager
 
@@ -271,7 +279,7 @@ private struct DraftCard: View {
                         }
                     }
                     Text(work.title.isEmpty ? "Untitled" : work.title)
-                        .font(.system(size: 19, weight: .semibold))
+                        .font(.system(size: titleSize, weight: .semibold))
                         .foregroundStyle(.primary)
                         .lineLimit(2)
                         .fixedSize(horizontal: false, vertical: true)
@@ -289,7 +297,7 @@ private struct DraftCard: View {
             }
             if !work.summary.isEmpty {
                 Text(work.summary)
-                    .font(.system(size: 13.5))
+                    .font(.system(size: summarySize))
                     .foregroundStyle(.secondary)
                     .lineLimit(3)
             }
@@ -303,7 +311,7 @@ private struct DraftCard: View {
                         Text("Created \(created.formatted(.dateTime.day().month(.abbreviated).year()))")
                     }
                 }
-                .font(.system(size: 11.5))
+                .font(.system(size: metaSize))
                 .foregroundStyle(.secondary)
                 .monospacedDigit()
             }
