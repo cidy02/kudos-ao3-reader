@@ -95,3 +95,22 @@
 4. **What it reads and writes**: No network requests. Handles a local file import. Selects the Library tab.
 5. **Where it would go on Android**: `android/app/src/main/java/io/github/cidy02/kudos/app/KudosApp.kt:87`, `:213-223`. Android's dialog currently only has "OK".
 6. **Size**: small (a button on an existing dialog).
+
+## Triage (Claude, 2026-10-08, first pass)
+
+A reading, not an audit: eleven features, each checked against the code as it was used.
+
+- **Manage collection items: done, and it uncovered a fault.** No row on Android's More on
+  AO3 screen opened anything: each handed the browser a bare path ("collections"), which the
+  browser refuses, and the screen closed again. The rows were also a different set from
+  iOS's. The screen now has iOS's four sections and 23 rows with full addresses
+  (`MoreOnAO3`, tests in `MoreOnAO3Test`). Seen on the emulator: the row opens the browser
+  and it stays.
+- **Share an author profile: done** ("Share Profile" in the author menu; the pseud's page
+  when one is chosen, as iOS's `dashboardURL`). Not seen on the emulator.
+- **Bookmark the in-app browser page: not ported.** Audit A20 found that nothing on iOS
+  ever reads those bookmarks back: a button that saves to nowhere.
+- Small, still to do by hand: "Open Chapter Comments" in the inbox menu, the "Showing cached
+  AO3 data" banner, "Nearby" pages in the page jump, "Show in Library" after an import.
+- Medium, to brief for Codex: the Account shortcut editor, Read Aloud downloads on Privacy,
+  popular tags in the tag picker, works sort and completion on an author.

@@ -126,6 +126,7 @@ fun AuthorProfileScreen(
         }
     }
     
+    val shareContext = androidx.compose.ui.platform.LocalContext.current
     var showMenu by remember { mutableStateOf(false) }
 
     val workHue = remember(route.displayName) { HomeFacts.workHue(emptyList(), route.displayName) }
@@ -183,6 +184,19 @@ fun AuthorProfileScreen(
                         text = { Text("Open on AO3") },
                         onClick = { showMenu = false; onOpenWeb(AO3AuthorUrls.userProfileUrl(route.username) ?: "") }
                     )
+                    // iOS `ShareLink(item: route.dashboardURL)`: the pseud's page when one is chosen.
+                    AO3AuthorUrls.userDashboardUrl(route.username, route.pseud)?.let { profileUrl ->
+                        DropdownMenuItem(
+                            text = { Text("Share Profile") },
+                            onClick = {
+                                showMenu = false
+                                val send = android.content.Intent(android.content.Intent.ACTION_SEND)
+                                    .setType("text/plain")
+                                    .putExtra(android.content.Intent.EXTRA_TEXT, profileUrl)
+                                shareContext.startActivity(android.content.Intent.createChooser(send, null))
+                            }
+                        )
+                    }
                 }
             }
         }

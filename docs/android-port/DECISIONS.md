@@ -1066,3 +1066,13 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   screen again, not page 1, and keep the focused comment.
 - A read-aloud failure logs its kind, not the exception (audit A21).
   Reverse: the commit "Filter edits closed without Apply are dropped".
+
+## 2026-10-08: More on AO3 has iOS's rows, and they open
+
+- The screen's sections, rows and addresses are iOS's (artboard 1aa): a page of the reader's
+  own under `/users/<name>/`, or a site-wide page. A page of the reader's own does nothing
+  when signed out, as on iOS. Android's earlier rows that iOS does not have (change username,
+  password and email, blocked and muted users, the challenge lists) are gone from this
+  screen; blocked and muted users have their own screens elsewhere.
+- The author menu has "Share Profile".
+  Reverse: the commit "More on AO3: iOS's rows, and they open".

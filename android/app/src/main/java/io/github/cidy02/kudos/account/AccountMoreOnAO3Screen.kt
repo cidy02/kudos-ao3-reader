@@ -34,6 +34,7 @@ import io.github.cidy02.kudos.ui.subject.subjectScreenWash
 
 @Composable
 fun AccountMoreOnAO3Screen(
+    username: String?,
     onOpenWeb: (String) -> Unit
 ) {
     val chrome = LocalPushedShellChrome.current
@@ -62,121 +63,119 @@ fun AccountMoreOnAO3Screen(
             )
         }
 
-        item {
-            Column(modifier = Modifier.padding(top = 18.dp)) {
-                SectionRuleHeader("Post and manage")
-                Column(
-                    modifier = Modifier
-                        .padding(top = 8.dp)
-                        .padding(horizontal = SubjectMetrics.accountGutter)
-                        .subjectPanel()
-                ) {
-                    AccountExternalNavCard("Post new work", "works/new", onOpenWeb)
-                    SubjectRowSeparator()
-                    AccountExternalNavCard("Import work", "works/new?import=true", onOpenWeb)
-                    SubjectRowSeparator()
-                    AccountExternalNavCard("Edit works in bulk", "works/show_multiple", onOpenWeb)
-                    SubjectRowSeparator()
-                    AccountExternalNavCard("New series on AO3", "series/new", onOpenWeb)
-                    SubjectRowSeparator()
-                    AccountExternalNavCard("Manage collections", "collections", onOpenWeb)
-                }
-                Text(
-                    text = "These open your AO3 pages in Browse. You can find works, series, bookmarks, history and inbox in the Reading, Writing and Activity sections of Account.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = LocalKudosTokens.current.secondaryInk,
-                    modifier = Modifier
-                        .padding(horizontal = SubjectMetrics.accountGutter)
-                        .padding(top = 8.dp)
-                )
-            }
-        }
-
-        item {
-            Column(modifier = Modifier.padding(top = 18.dp)) {
-                SectionRuleHeader("Challenges")
-                Column(
-                    modifier = Modifier
-                        .padding(top = 8.dp)
-                        .padding(horizontal = SubjectMetrics.accountGutter)
-                        .subjectPanel()
-                ) {
-                    AccountExternalNavCard("Gift exchange", "collections/list_challenges?challenge_type=gift_exchange", onOpenWeb)
-                    SubjectRowSeparator()
-                    AccountExternalNavCard("Prompt meme", "collections/list_challenges?challenge_type=prompt_meme", onOpenWeb)
-                    SubjectRowSeparator()
-                    AccountExternalNavCard("My sign-ups", "signups", onOpenWeb)
-                    SubjectRowSeparator()
-                    AccountExternalNavCard("My assignments", "assignments", onOpenWeb)
-                    SubjectRowSeparator()
-                    AccountExternalNavCard("My claims", "claims", onOpenWeb)
-                }
-            }
-        }
-
-        item {
-            Column(modifier = Modifier.padding(top = 18.dp)) {
-                SectionRuleHeader("Your account")
-                Column(
-                    modifier = Modifier
-                        .padding(top = 8.dp)
-                        .padding(horizontal = SubjectMetrics.accountGutter)
-                        .subjectPanel()
-                ) {
-                    AccountExternalNavCard("Edit profile", "profile/edit", onOpenWeb)
-                    SubjectRowSeparator()
-                    AccountExternalNavCard("Manage pseuds", "pseuds", onOpenWeb)
-                    SubjectRowSeparator()
-                    AccountExternalNavCard("Change username", "change_username", onOpenWeb)
-                    SubjectRowSeparator()
-                    AccountExternalNavCard("Change password", "change_password", onOpenWeb)
-                    SubjectRowSeparator()
-                    AccountExternalNavCard("Change email", "change_email", onOpenWeb)
-                    SubjectRowSeparator()
-                    AccountExternalNavCard("Blocked users", "blocked/users", onOpenWeb)
-                    SubjectRowSeparator()
-                    AccountExternalNavCard("Muted users", "muted/users", onOpenWeb)
-                }
-            }
-        }
-
-        item {
-            Column(modifier = Modifier.padding(top = 18.dp)) {
-                SectionRuleHeader("The archive")
-                Column(
-                    modifier = Modifier
-                        .padding(top = 8.dp)
-                        .padding(horizontal = SubjectMetrics.accountGutter)
-                        .subjectPanel()
-                ) {
-                    AccountExternalNavCard("Support and feedback", "support", onOpenWeb)
-                    SubjectRowSeparator()
-                    AccountExternalNavCard("Report abuse", "abuse_reports/new", onOpenWeb)
-                    SubjectRowSeparator()
-                    AccountExternalNavCard("Terms of Service", "tos", onOpenWeb)
-                    SubjectRowSeparator()
-                    AccountExternalNavCard("Content policy", "content", onOpenWeb)
-                    SubjectRowSeparator()
-                    AccountExternalNavCard("Privacy policy", "privacy", onOpenWeb)
-                    SubjectRowSeparator()
-                    AccountExternalNavCard("FAQs", "faq", onOpenWeb)
-                    SubjectRowSeparator()
-                    AccountExternalNavCard("Donate to the OTW", "donate", onOpenWeb)
+        MoreOnAO3.sections.forEach { section ->
+            item(key = section.title) {
+                Column(modifier = Modifier.padding(top = 18.dp)) {
+                    SectionRuleHeader(section.title)
+                    Column(
+                        modifier = Modifier
+                            .padding(top = 8.dp)
+                            .padding(horizontal = SubjectMetrics.accountGutter)
+                            .subjectPanel()
+                    ) {
+                        section.rows.forEachIndexed { index, row ->
+                            if (index > 0) SubjectRowSeparator()
+                            SubjectFormRow(
+                                label = row.title,
+                                showsDisclosure = true,
+                                // A page of the reader's own has no address when signed out:
+                                // the row does nothing, as on iOS.
+                                onClick = { MoreOnAO3.url(row.target, username)?.let(onOpenWeb) }
+                            )
+                        }
+                    }
+                    section.footnote?.let { note ->
+                        Text(
+                            text = note,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = LocalKudosTokens.current.secondaryInk,
+                            modifier = Modifier
+                                .padding(horizontal = SubjectMetrics.accountGutter)
+                                .padding(top = 8.dp)
+                        )
+                    }
                 }
             }
         }
     }
 }
 
-@Composable
-private fun AccountExternalNavCard(
-    title: String,
-    path: String,
-    onOpenWeb: (String) -> Unit
-) {
-    SubjectFormRow(
-        label = title,
-        showsDisclosure = true,
-        onClick = { onOpenWeb(path) }
+/**
+ * iOS `AccountMoreOnAO3View` (artboard 1aa): the sections, rows and addresses, in its order.
+ *
+ * Each row used to hand the browser a bare path ("collections", "works/new"). The browser
+ * keeps to AO3's own https addresses, refused it, and closed: **no row on this screen opened
+ * anything.** The rows were also a different set from iOS's. Now every row has iOS's title
+ * and a full address: a page of the reader's own (`/users/<name>/<suffix>`) or a site-wide
+ * one, as `AccountExternalNavCard.Target` has it.
+ */
+internal object MoreOnAO3 {
+    sealed interface Target {
+        data class User(val suffix: String) : Target
+        data class Site(val path: String) : Target
+    }
+
+    data class Row(val title: String, val target: Target)
+    data class Section(val title: String, val rows: List<Row>, val footnote: String? = null)
+
+    private fun user(title: String, suffix: String) = Row(title, Target.User(suffix))
+    private fun site(title: String, path: String) = Row(title, Target.Site(path))
+
+    val sections = listOf(
+        Section(
+            "Post and manage",
+            listOf(
+                site("Post new work", "/works/new"),
+                site("Import work", "/works/new?import=true"),
+                user("Edit works in bulk", "works/show_multiple"),
+                user("Manage collection items", "collection_items"),
+                user("Related works", "related_works"),
+                user("Drafts", "works/drafts")
+            ),
+            "These open your AO3 pages in Browse. You can find works, series, bookmarks, history and inbox " +
+                "in the Reading, Writing and Activity sections of Account."
+        ),
+        Section(
+            "Challenges",
+            listOf(
+                user("Sign-ups", "signups"),
+                user("Assignments", "assignments"),
+                user("Claims", "claims"),
+                user("Gifts given and received", "gifts")
+            )
+        ),
+        Section(
+            "Your account",
+            listOf(
+                user("Profile", "profile"),
+                user("Invitations", "invitations"),
+                user("Skins and site styles", "skins"),
+                user("Pseuds", "pseuds"),
+                user("Co-Creator Requests", "creatorships"),
+                user("Statistics", "stats")
+            )
+        ),
+        Section(
+            "The archive",
+            listOf(
+                site("Support and feedback", "/support"),
+                site("Report abuse", "/abuse_reports/new"),
+                site("Terms of Service", "/tos"),
+                site("Content policy", "/content"),
+                site("Privacy policy", "/privacy"),
+                site("FAQs", "/faq"),
+                site("Donate to the OTW", "/donate")
+            ),
+            "These public AO3 pages open in Browse. You don't need to sign in to view them."
+        )
     )
+
+    /** The full address, or null for a page of the reader's own when nobody is signed in. */
+    fun url(target: Target, username: String?): String? = when (target) {
+        is Target.Site -> "https://archiveofourown.org${target.path}"
+        is Target.User -> username?.trim()?.takeIf { it.isNotEmpty() }?.let { name ->
+            val encoded = java.net.URLEncoder.encode(name, "UTF-8").replace("+", "%20")
+            "https://archiveofourown.org/users/$encoded/${target.suffix}"
+        }
+    }
 }
