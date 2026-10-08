@@ -972,3 +972,15 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   History" sends iOS's request to AO3 and removes the row only when AO3 confirms; before, it
   hid the row and sent nothing. Fixtures only for the write.
   Reverse: `softDeleteHistoryOnly`, `clearReadingPositions`, `deleteReading`.
+
+## 2026-10-08: seven backup merge rules brought to iOS's (brief 3bs, audits A3 and A12)
+
+- Date Added and a queue's Date Created are always the earlier of two copies. Replace
+  Library takes the archive's queues and memberships. File Merge returns a collection or a
+  queue from Recently Deleted and retracts a returned work's deletion marker. A note a newer
+  copy displaces is kept on a hidden row. A delete and its marker are one transaction,
+  marker first. "Gone from AO3" is never cleared by a merge; a file's name is only filled
+  when empty; two live annotations at the same place collapse to the newer (never those
+  with no locator: Android only). **A signed deletion from a trusted device removes the copy
+  already here** for annotations, queue memberships and saved links.
+  Reverse: revert the 3bs commit; no schema, manifest key or migration changed.

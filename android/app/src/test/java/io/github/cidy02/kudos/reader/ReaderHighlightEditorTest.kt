@@ -305,6 +305,14 @@ class ReaderHighlightEditorTest {
             deletes += id
             dao.deleteById(id)
         }
+        // Since brief 3bs a delete and its tombstone are one transaction on the DAO.
+        override suspend fun deleteWithTombstone(
+            id: String, tombstone: io.github.cidy02.kudos.data.local.entity.SyncTombstoneEntity,
+            tombstoneDao: io.github.cidy02.kudos.data.local.dao.SyncTombstoneDao
+        ) {
+            deletes += id
+            dao.deleteWithTombstone(id, tombstone, tombstoneDao)
+        }
 
         fun clear() { reads.clear(); writes.clear(); deletes.clear() }
     }

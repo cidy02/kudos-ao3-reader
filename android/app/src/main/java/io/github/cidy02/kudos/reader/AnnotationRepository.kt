@@ -42,11 +42,10 @@ class AnnotationRepository(
 
     suspend fun deleteAnnotation(id: String) {
         val existing = dao.getById(id)
-        dao.deleteById(id)
         if (existing == null) return
         val now = clock()
-        tombstoneDao.upsert(
-            TombstoneSigning.sign(
+        dao.deleteWithTombstone(
+            id, TombstoneSigning.sign(
                 SyncTombstone(
                     id = uuidFactory(),
                     recordID = id.lowercase(),
@@ -55,7 +54,7 @@ class AnnotationRepository(
                     lastModifiedAt = now,
                     deletionReason = "annotationDeleted"
                 )
-            ).toEntity()
+            ).toEntity(), tombstoneDao
         )
     }
 

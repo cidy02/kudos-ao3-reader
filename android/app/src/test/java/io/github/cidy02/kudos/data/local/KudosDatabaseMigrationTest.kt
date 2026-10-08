@@ -247,7 +247,7 @@ class KudosDatabaseMigrationTest {
                 .name("kudos-migration-9-10")
                 .callback(object : SupportSQLiteOpenHelper.Callback(9) {
                     override fun onCreate(db: SupportSQLiteDatabase) {
-                        db.execSQL("CREATE TABLE IF NOT EXISTS `works` (`id` TEXT NOT NULL, PRIMARY KEY(`id`))")
+                        createLegacyWorkFixture(db, 9)
                     }
 
                     override fun onUpgrade(db: SupportSQLiteDatabase, oldVersion: Int, newVersion: Int) = Unit
@@ -256,7 +256,7 @@ class KudosDatabaseMigrationTest {
         )
         val db = helper.writableDatabase
         try {
-            db.execSQL("INSERT INTO works (id) VALUES ('work-pre')")
+            val columnsBefore = columnNames(db, "works")
             assertFalse(columnNames(db, "works").contains("hasGivenKudos"))
 
             KudosDatabaseMigrations.MIGRATION_9_10.migrate(db)
@@ -266,6 +266,8 @@ class KudosDatabaseMigrationTest {
                 assertTrue(cursor.moveToFirst())
                 assertEquals(0, cursor.getInt(0))
             }
+            assertEquals(columnsBefore + "hasGivenKudos", columnNames(db, "works"))
+            assertLegacyWorkSurvived(db)
             assertEquals(10, db.version)
         } finally {
             db.close()
@@ -297,7 +299,7 @@ class KudosDatabaseMigrationTest {
                 .name("kudos-migration-12-13")
                 .callback(object : SupportSQLiteOpenHelper.Callback(12) {
                     override fun onCreate(db: SupportSQLiteDatabase) {
-                        db.execSQL("CREATE TABLE works (id TEXT NOT NULL, PRIMARY KEY(id))")
+                        createLegacyWorkFixture(db, 12)
                     }
 
                     override fun onUpgrade(db: SupportSQLiteDatabase, oldVersion: Int, newVersion: Int) = Unit
@@ -306,7 +308,7 @@ class KudosDatabaseMigrationTest {
         )
         val db = helper.writableDatabase
         try {
-            db.execSQL("INSERT INTO works (id) VALUES ('work-pre')")
+            val columnsBefore = columnNames(db, "works")
             KudosDatabaseMigrations.MIGRATION_12_13.migrate(db)
             db.version = 13
 
@@ -315,6 +317,8 @@ class KudosDatabaseMigrationTest {
                 assertTrue(cursor.moveToFirst())
                 assertTrue(cursor.isNull(0))
             }
+            assertEquals(columnsBefore + "downloadedAt", columnNames(db, "works"))
+            assertLegacyWorkSurvived(db)
             assertEquals(13, db.version)
         } finally {
             db.close()
@@ -360,6 +364,46 @@ class KudosDatabaseMigrationTest {
         } finally {
             db.close()
             helper.close()
+        }
+    }
+
+    /** Use the committed real table, with a title/progress sentinel, not an id-only substitute. */
+    private fun createLegacyWorkFixture(db: SupportSQLiteDatabase, version: Int) {
+        val schema = Json.parseToJsonElement(
+            File("schemas/io.github.cidy02.kudos.data.local.KudosDatabase/$version.json").readText()
+        ).jsonObject.getValue("database").jsonObject
+        val work = schema.getValue("entities").jsonArray.single {
+            it.jsonObject.getValue("tableName").jsonPrimitive.content == "works"
+        }.jsonObject
+        db.execSQL(work.getValue("createSql").jsonPrimitive.content.replace("\${TABLE_NAME}", "works"))
+        val fields = work.getValue("fields").jsonArray.map { it.jsonObject }
+        val names = fields.map { it.getValue("columnName").jsonPrimitive.content }
+        val values = fields.map { field ->
+            when (field.getValue("columnName").jsonPrimitive.content) {
+                "id" -> "work-pre"
+                "title" -> "Kept title"
+                "lastSpineIndex" -> 7
+                "lastScrollFraction" -> 0.4
+                "readiumLocator" -> "kept-locator"
+                else -> when {
+                    field["notNull"]?.jsonPrimitive?.content != "true" -> null
+                    field.getValue("affinity").jsonPrimitive.content == "TEXT" -> ""
+                    else -> 0
+                }
+            }
+        }
+        val columns = names.joinToString(",") { "`$it`" }
+        val placeholders = names.joinToString(",") { "?" }
+        db.execSQL("INSERT INTO works ($columns) VALUES ($placeholders)", values.toTypedArray<Any?>())
+    }
+
+    private fun assertLegacyWorkSurvived(db: SupportSQLiteDatabase) {
+        db.query("SELECT title,lastSpineIndex,lastScrollFraction,readiumLocator FROM works WHERE id = 'work-pre'").use { cursor ->
+            assertTrue(cursor.moveToFirst())
+            assertEquals("Kept title", cursor.getString(0))
+            assertEquals(7, cursor.getInt(1))
+            assertEquals(0.4, cursor.getDouble(2), 0.0)
+            assertEquals("kept-locator", cursor.getString(3))
         }
     }
 

@@ -1460,3 +1460,32 @@ All “fixed” below mean implementation and tests written, awaiting Claude's b
 | 6c · same-passage annotations | Yes | Yes | Parity `sameWorkKindAndExactLocatorCollapseToNewestAndSalvageBothNotes`, `samePassageWithEmptyWinnerFillsTheNoteAndStampsTheContentEdit`, `samePassageDedupIsExactAndUsesUuidToBreakEqualClockTies`, `pendingDeletionRowsAndAnnotationsWithoutAResolvedWorkDoNotCompeteInDedup` |
 | 7 · A12 existing-row deletion | Yes on both current checkouts | Android fixed, iOS T-364 pending | Parity `trustedRemoteTombstonesRemoveExistingAnnotationsMembershipsAndSavedLinksUsingRowClocks`, `tombstoneSecondPassUsesCreatedAndQueuedFallbacksAndNeverSnapshotExportTime`, `suppressedIncomingLinkRemovesSameAddressLocalIdButKeepsANewerLocalAdd`, `unknownAndUnsignedIncomingTombstonesDoNotRemoveExistingRows`, `repeatedReplaceBypassesAllThreeTombstoneSecondPasses`; Apply `remoteDeleteRemovesExistingAnnotationMembershipAndLinkFromRoomAndNextExport`, `remoteDeletionDoesNotDeleteAnnotationOrMembershipEditedSinceCapture` |
 | Optional A3-9 fixtures | Yes | Two fixtures only; no production change | `KudosDatabaseMigrationTest.migrate9To10_addsHasGivenKudosDefaultingToFalse`, `migrate12To13AddsNullableDownloadedAtWithoutBackfill` |
+
+## Landing note (Claude, 2026-10-08)
+
+Applied cleanly. Gate: 2,084 tests, green. The production diff was read against the Swift
+each item cites (`KudosBackup.swift`: `apply`, `parkDisplacedNote`,
+`dedupeSamePassageAnnotations`, `applyTombstonesToExisting`, the queue and membership
+loops); it follows them.
+
+Changed on landing:
+
+- **Annotations with no locator are never "the same passage".** iOS groups duplicates by
+  work, kind and exact locator and has no row without a locator. Android's oldest builds
+  stored some: grouped by an empty string they would have collapsed to one, the rest hidden.
+  They are left out of the grouping. Test `annotationsWithNoLocatorAreNeverCollapsed`.
+- A test fixture did not compile (a reified type inferred as an intersection).
+- Two older tests met the new rules and were brought in line, not the code:
+  `BackupTrustPhase2Test.assertKeptRowEdits` counted every annotation row and now counts
+  live ones (a displaced note is kept on a hidden row); `ReaderHighlightEditorTest`'s
+  recording DAO did not see the new one-transaction delete.
+
+What a reader can now meet that they could not before: **a deletion made on another paired
+device removes the copy here** (a highlight, note or bookmark in a book; a queue membership;
+a saved link), unless the copy here was changed after the deletion. Only signed deletions
+from a trusted device do this, and never in Replace Library. **iOS does not do this yet**
+(T-366): until it does, an iPhone keeps and re-exports what Android deleted, and Android
+keeps refusing to add it back.
+
+Not verified here: two real devices; a process killed between a database commit and the
+removal of an EPUB file.

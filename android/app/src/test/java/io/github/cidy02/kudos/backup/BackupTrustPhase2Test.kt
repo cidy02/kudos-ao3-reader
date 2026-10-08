@@ -1260,7 +1260,9 @@ class BackupTrustPhase2Test {
         assertEquals(if (addOnly) 1 else 3, database.readingQueueDao().getMembershipById(TOMBSTONE_ID)!!.sortOrderInQueue)
         assertEquals(2, database.workDao().getAllIncludingDeleted().size)
         assertEquals(2, database.collectionDao().getAllIncludingDeleted().size)
-        assertEquals(2, database.annotationDao().getAll().size)
+        // Live rows. A note a newer copy displaced is kept on a hidden sibling (brief 3bs,
+        // iOS `parkDisplacedNote`), so the table itself may hold more.
+        assertEquals(2, database.annotationDao().getAll().count { !it.isPendingDeletion })
         assertEquals(2, database.savedSearchDao().getAll().size)
         assertEquals(2, database.readingQueueDao().getAllMemberships().size)
         assertEquals(1, database.readingQueueDao().getAllQueues().size)
