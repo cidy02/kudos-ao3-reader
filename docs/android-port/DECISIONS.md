@@ -873,3 +873,12 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   read from AO3's page; it is kept only when it is one of AO3's own hosts, as Unsubscribe's
   captured address already was (`AO3RedirectCookieRelay.isTrustedUrl`). iOS posts to whatever
   address the form gave. Android is the stricter; nothing changes for a real AO3 page.
+- **2026-10-07 · A prompt meme's close date is read once per opening, not on every further
+  page (answer to Codex on brief 3bi).** iOS's `PromptMemeView` tries the schedule lookup
+  again on each later page load for as long as no close date was obtained. The brief allows
+  one read per "load more". Android attempts the schedule once per opening and once per pull
+  to refresh; a further page is exactly one prompts read; without a close date the screen
+  shows what iOS shows without one. Android is the more sparing in a failure case only.
+  Answered by Claude; the owner has not been asked. For the iOS side: the repeated lookup is
+  extra signed-in reads for a date that did not load. Reverse: retry the schedule in the
+  page loader.
