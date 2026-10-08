@@ -280,3 +280,26 @@ Smallest fix. In `intercept`, when the demo is active and the host is not AO3, r
 - `auth/` storage and what remains on screen after sign-out (left to A17).
 - `DECISIONS.md` end to end. It was searched for mature content, drafts, the demo, and the WebView. `audits/A14-result.md` was searched so its wording rows were not filed again.
 - Tests other than `RoutesNavigationTest` and the note that `CommentsViewModelDraftTest` does not navigate a focused comment id.
+
+## Triage (Claude, 2026-10-08)
+
+All six read against the code; all real, all fixed.
+
+- **A18-1, A18-2 fixed** (`8c8c948b`): an edit stays out of the draft store; a new comment
+  opens with its own draft, set before the sheet can be typed in; the signed-in name is read
+  at each save and load. Tests in `CommentsViewModelDraftTest`.
+- **A18-3 fixed**: the destination registers and reads `Routes.ARG_COMMENT_FOCUSED_ID`, the
+  name the route's braces use. No test drives the real graph; the shared constant is the
+  guard. Not seen on the emulator yet.
+- **A18-4 fixed**: Search's "In Your Library" rows are blurred by the Library's rule, and a
+  tap reveals. In **Hide** mode a matching work is still listed in the clear, as on iOS:
+  owner question 20.
+- **A18-5 fixed**: a blurred row is one button, labelled "Hidden mature work. Activate to
+  reveal."; its title, author, fandoms and tags are not in what a screen reader is given,
+  and a tap on a fandom or tag reveals (or selects, while selecting) and never opens a
+  search. Tests in `SensitiveWorkRowPrivacyTest`.
+- **A18-6 fixed in part**: the update check waits for the launch decision and is skipped in
+  the demo. Other hosts (cover and avatar images, a voice download) still pass through the
+  demo's interceptor: the demo's rule is that it never reaches AO3 (DECISIONS 2026-10-03),
+  and the emulators are in airplane mode.
+- Unconfirmed items: not looked at yet.

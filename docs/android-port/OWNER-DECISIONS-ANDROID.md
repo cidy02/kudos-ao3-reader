@@ -352,3 +352,14 @@ Until answered: iOS unchanged. On Android the action rows (Settings, and the new
 buttons) now use the palette's accent, which is readable on every theme and keeps the
 chosen hue; about forty other places still use the raw accent for text or an icon.
 
+## 20. Hide mode and a search of your own library (both apps)
+
+With "Hide mature content" on and the mode set to **Hide**, a mature work is left out of the
+Library's lists. Typing its title in Search still lists it under "In Your Library", in the
+clear, on iOS and on Android. (In **Blur** mode both apps now blur that row.)
+
+- **Leave it** (what both do today): a reader who types the title is looking for it.
+- **Leave it out of Search too**, until the session's reveal: Hide then means the same
+  thing everywhere.
+
+Until you say, both stay as they are.

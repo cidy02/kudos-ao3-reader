@@ -33,6 +33,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
@@ -135,8 +136,19 @@ fun SensitiveWorkRow(
     val tokens = LocalKudosTokens.current
     val palette = SubjectPalette.fromHue(HomeFacts.workHue(fandoms, title), tokens.theme)
     val defaultTagSearch = LocalTagSearch.current
-    val tagSearch: (SearchSubjectField, String) -> Unit = onTagSearch ?: { field, tag ->
-        if (onTagClick != null) onTagClick(tag) else defaultTagSearch(field, tag)
+    val cardTap: () -> Unit = {
+        when {
+            selecting -> onSelect?.invoke()
+            obscured -> onReveal?.invoke()
+            else -> onClick()
+        }
+    }
+    // A fandom or tag inside a blurred or selectable row is part of the row: the tap reveals
+    // or selects. It used to open a search for a fandom the blur was hiding.
+    val tagSearch: (SearchSubjectField, String) -> Unit = when {
+        obscured || selecting -> { _, _ -> cardTap() }
+        onTagSearch != null -> onTagSearch
+        else -> { field, tag -> if (onTagClick != null) onTagClick(tag) else defaultTagSearch(field, tag) }
     }
 
     Box(modifier = modifier.workCardZoomSource(id.toLongOrNull() ?: 0L)) {
@@ -148,16 +160,19 @@ fun SensitiveWorkRow(
                     .background(tokens.cardFill, MaterialTheme.shapes.medium)
                     .background(palette.cardWash, MaterialTheme.shapes.medium)
             )
-            .semantics { contentDescription = "$title, by ${author.ifBlank { "Anonymous" }}" }
-            .combinedClickable(
-                onClick = {
-                    when {
-                        selecting -> onSelect?.invoke()
-                        obscured -> onReveal?.invoke()
-                        else -> onClick()
+            .combinedClickable(onClick = cardTap, onLongClick = onLongClick)
+            // After the click, so its action stays: a blurred row is one button that says
+            // nothing of the work. It used to read out the title and author it had just
+            // blurred (audit A18-5; iOS `SensitiveWorkRow`, the same words as `WorkLedgerRow`).
+            .then(
+                if (obscured) {
+                    Modifier.clearAndSetSemantics {
+                        contentDescription =
+                            if (selecting) "Hidden mature work" else "Hidden mature work. Activate to reveal."
                     }
-                },
-                onLongClick = onLongClick
+                } else {
+                    Modifier.semantics { contentDescription = "$title, by ${author.ifBlank { "Anonymous" }}" }
+                }
             )
 
         Card(

@@ -1001,3 +1001,13 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   comment cache stays (iOS has none), as one read-only copy per viewer, used only when AO3
   cannot be reached.
   Reverse: the commits "Comment and Inbox writes need AO3's own notice" and the one after.
+
+## 2026-10-08: comment drafts, the mature blur and the demo after audit A18
+
+- A comment draft belongs to the account signed in when it is saved; an edit never uses the
+  draft store (as iOS).
+- A blurred row says "Hidden mature work. Activate to reveal." and nothing else, and any tap
+  on it reveals. Search's library matches are blurred by the Library's rule. Hide mode is
+  left as iOS has it (owner question 20).
+- The demo skips the GitHub update check. It does not block other hosts.
+  Reverse: the two commits that name audit A18.

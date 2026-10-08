@@ -92,7 +92,12 @@ object Routes {
     fun reader(workId: String) = "reader/${encode(workId)}"
 
     private const val ARG_COMMENT_WORK_ID = "commentWorkId"
-    private const val ARG_COMMENT_FOCUSED_ID = "focusedCommentId"
+    /**
+     * The name inside the braces, which is the name Navigation stores the value under; the
+     * address says `focused=`. The destination registered and read "focused", so an Inbox
+     * row's comment id never arrived and the first page was shown (audit A18-3).
+     */
+    const val ARG_COMMENT_FOCUSED_ID = "focusedCommentId"
     private const val ARG_COMMENT_CHAPTER_POSITION = "chapterPosition"
     const val Comments =
         "comments/{$ARG_COMMENT_WORK_ID}?focused={$ARG_COMMENT_FOCUSED_ID}" +
