@@ -308,3 +308,23 @@ handle (DECISIONS, 2026-10-05). Android cannot save a work yet.
   after.
 
 Until answered: iOS unchanged. Android, once it can save, sends everything back.
+
+## 18. A backup holding a deletion marker of a kind this app does not know: fail, or skip it? (2026-10-08)
+
+Found by audit A3. When Android merges a backup or a sync folder and meets a deletion marker
+whose kind it does not recognise, it stops and applies nothing from that file. A security
+test pins this (`BackupRestoreSecurityTest`, "M2b"). iOS skips that one marker and restores
+the rest.
+
+It cannot happen today: both apps write the same kinds. It would happen the day one app
+ships a new kind before the other knows it: from then on every Android sync would fail until
+Android was updated.
+
+- **A (recommended).** Follow iOS: skip a marker of an unknown kind, restore the rest, and
+  still refuse a blank kind. A skipped marker means one deletion from the other device is
+  not applied here, which is the safe side.
+- **B.** Keep Android as it is, and treat a new kind of marker as a change that needs both
+  apps released together.
+
+Until answered: Android unchanged (B).
+
