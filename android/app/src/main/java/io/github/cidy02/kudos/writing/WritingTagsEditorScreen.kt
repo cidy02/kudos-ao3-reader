@@ -252,11 +252,11 @@ private fun WritingChosenChip(name: String, width: Dp, model: WritingTagsEditorS
     }
 }
 
-private data class WritingChipSize(val name: String, val width: Dp)
+internal data class WritingChipSize(val name: String, val width: Dp)
 
 /** Measure flow rows once, then virtualize each row rather than composing a whole long list. */
 @Composable
-private fun writingChipRows(names: List<String>, width: Dp, chosen: Boolean): List<List<WritingChipSize>> {
+internal fun writingChipRows(names: List<String>, width: Dp, chosen: Boolean): List<List<WritingChipSize>> {
     val measurer = rememberTextMeasurer()
     val density = LocalDensity.current
     return remember(names, width, chosen, measurer, density) {

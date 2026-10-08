@@ -20,6 +20,8 @@ internal data class WritingWorkFormUiState(
     val failure: String? = null,
     val saving: Boolean = false,
     val saved: Boolean = false,
+    val tagsNeedRefresh: Boolean = false,
+    val refreshingTags: Boolean = false,
     val saveError: String? = null
 )
 
@@ -44,13 +46,15 @@ internal class WritingWorkFormState(
     private val repository: AO3WorkFormRepository,
     private val auth: AO3AuthRepository,
     private val writes: AO3WriteRepository,
-    private val today: () -> LocalDate = { LocalDate.now() }
+    private val today: () -> LocalDate = { LocalDate.now() },
+    private val editTagsOnly: Boolean = false
 ) {
     private val generation = auth.generation.value
     val account = auth.username().orEmpty()
     private var active = true
     private var attempted = false
     private var collectionsAttempted = false
+    private var tagRefreshAttempted = false
     private val mutable = MutableStateFlow(WritingWorkFormUiState())
     val state = mutable.asStateFlow()
     private fun ownsSession() = active && generation == auth.generation.value
@@ -58,33 +62,35 @@ internal class WritingWorkFormState(
     suspend fun save() {
         val old = state.value
         val form = old.form ?: return
-        if (!active || old.saving || old.saved) return
+        // EditTagsView keeps fields editable during Save; a refusal keeps even edits made in flight.
+        fun retained() = if (editTagsOnly) old.copy(form = state.value.form) else old
+        if (!active || old.saving || old.saved || old.tagsNeedRefresh) return
         if (generation != auth.generation.value) {
-            mutable.value = old.copy(saveError = WORK_FORM_SESSION_CHANGED)
+            mutable.value = retained().copy(saveError = WORK_FORM_SESSION_CHANGED)
             return
         }
-        mutable.value = old.copy(saving = true, saveError = null)
+        mutable.value = retained().copy(saving = true, saveError = null)
         try {
-            val result = writes.saveWork(form, generation)
+            val result = if (editTagsOnly) writes.editWorkTags(form, generation) else writes.saveWork(form, generation)
             currentCoroutineContext().ensureActive()
             if (!active) return
             mutable.value = when {
-                generation != auth.generation.value -> old.copy(saveError = WORK_FORM_SESSION_CHANGED)
-                result is AO3Result.Success -> old.copy(saved = true, saveError = null)
-                result is AO3Result.Failure -> old.copy(saveError = workFormFailure(result.error))
-                else -> old
+                generation != auth.generation.value -> retained().copy(saveError = WORK_FORM_SESSION_CHANGED)
+                result is AO3Result.Success -> retained().copy(saved = true, saveError = null)
+                result is AO3Result.Failure -> retained().copy(saveError = workFormFailure(result.error))
+                else -> retained()
             }
         } catch (cancelled: CancellationException) {
             if (active && generation != auth.generation.value) {
-                mutable.value = old.copy(saveError = WORK_FORM_SESSION_CHANGED)
+                mutable.value = retained().copy(saveError = WORK_FORM_SESSION_CHANGED)
             } else {
-                if (active) mutable.value = old
+                if (active) mutable.value = retained()
                 throw cancelled
             }
         } catch (error: Exception) {
             val failure = if (error is java.io.IOException) AO3Error.networkFromTransport(error)
                 else AO3Error.Network(error.message.orEmpty(), error)
-            if (active) mutable.value = old.copy(saveError = if (generation != auth.generation.value)
+            if (active) mutable.value = retained().copy(saveError = if (generation != auth.generation.value)
                 WORK_FORM_SESSION_CHANGED else workFormFailure(failure))
         }
     }
@@ -99,7 +105,8 @@ internal class WritingWorkFormState(
             return
         }
         mutable.value = WritingWorkFormUiState(loading = true)
-        val result = if (workID == null) repository.loadNewWorkForm() else repository.loadWorkForm(workID)
+        val result = if (editTagsOnly && workID != null) repository.loadEditTagsForm(workID)
+            else if (workID == null) repository.loadNewWorkForm() else repository.loadWorkForm(workID)
         currentCoroutineContext().ensureActive()
         if (!ownsSession()) return
         mutable.value = when (result) {
@@ -108,10 +115,53 @@ internal class WritingWorkFormState(
         }
     }
 
+    fun editTagsModel(): WritingWorkFormState? {
+        val old = state.value
+        val form = old.form ?: return null
+        if (!ownsSession() || !auth.state.value.isSignedIn || old.saving || old.saved ||
+            !form.isPosted || form.workID == null) return null
+        return WritingWorkFormState(form.workID, repository, auth, writes, today, editTagsOnly = true)
+    }
+
+    fun tagsSaved() {
+        if (!ownsSession()) return
+        tagRefreshAttempted = false
+        mutable.value = state.value.copy(tagsNeedRefresh = true)
+    }
+
+    /** One required read after confirmation; a failed attempt blocks Save until explicit Reload tags. */
+    suspend fun refreshTags(retry: Boolean = false) {
+        val old = state.value
+        val id = old.form?.workID ?: return
+        if (!ownsSession() || !old.tagsNeedRefresh || old.refreshingTags || (tagRefreshAttempted && !retry)) return
+        tagRefreshAttempted = true
+        mutable.value = old.copy(refreshingTags = true)
+        try {
+            val result = repository.loadWorkForm(id)
+            currentCoroutineContext().ensureActive()
+            if (!ownsSession()) return
+            val latest = state.value
+            mutable.value = when (result) {
+                is AO3Result.Success -> latest.copy(form = latest.form?.withTagsFrom(result.value),
+                    tagsNeedRefresh = false, refreshingTags = false, saveError = null)
+                is AO3Result.Failure -> latest.copy(refreshingTags = false,
+                    saveError = "Reload tags before saving this work. " + workFormFailure(result.error))
+            }
+        } catch (cancelled: CancellationException) {
+            if (active) mutable.value = state.value.copy(refreshingTags = false)
+            throw cancelled
+        } catch (error: Exception) {
+            if (ownsSession()) mutable.value = state.value.copy(refreshingTags = false,
+                saveError = "Reload tags before saving this work. " + workFormFailure(
+                    if (error is java.io.IOException) AO3Error.networkFromTransport(error)
+                    else AO3Error.Network(error.message.orEmpty(), error)))
+        }
+    }
+
     private fun change(edit: (AO3WorkForm) -> AO3WorkForm) {
         if (!ownsSession() || !auth.state.value.isSignedIn) return
         val old = state.value
-        if (old.saving || old.saved) return
+        if ((old.saving && !editTagsOnly) || old.saved) return
         val form = old.form ?: return
         mutable.value = old.copy(form = edit(form))
     }

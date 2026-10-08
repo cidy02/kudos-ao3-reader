@@ -87,6 +87,27 @@ internal fun WritingWorkFormContent(model: WritingWorkFormState, account: String
     var choosing by remember(model) { mutableStateOf<WorkFormChoice?>(null) }
     var dating by remember(model) { mutableStateOf(false) }
     var viewingChapters by remember(model) { mutableStateOf(false) }
+    var editingPostedTags by remember(model) { mutableStateOf<WritingWorkFormState?>(null) }
+    LaunchedEffect(state.tagsNeedRefresh) { if (state.tagsNeedRefresh) model.refreshTags() }
+    editingPostedTags?.let { tagsModel ->
+        WritingEditTagsScreen(tagsModel, form?.title.orEmpty(), autocompleteRepository, settingsRepository,
+            onBack = { editingPostedTags = null }, onSave = {
+                // The work form owns this save, so Back during a dispatched POST cannot leave
+                // its old tags ready to overwrite a confirmed change (iOS's Task also survives Back).
+                scope.launch {
+                    try {
+                        tagsModel.save()
+                        if (tagsModel.state.value.saved) {
+                            model.tagsSaved()
+                            if (editingPostedTags === tagsModel) editingPostedTags = null
+                        }
+                    } finally {
+                        if (editingPostedTags !== tagsModel) tagsModel.close()
+                    }
+                }
+            })
+        return
+    }
     val field = editing
     if (field != null && form != null) {
         WritingTextEditorScreen(field.text(form), field.title, account, form.recoveryTarget(), field.field,
@@ -121,7 +142,7 @@ internal fun WritingWorkFormContent(model: WritingWorkFormState, account: String
     // for the form inside its own content stayed empty when the form arrived after the screen.
     val saveButton: (@Composable RowScope.() -> Unit)? = if (form == null) null else {
         {
-            TextButton(enabled = !state.saving && !state.saved,
+            TextButton(enabled = !state.saving && !state.saved && !state.tagsNeedRefresh,
                 onClick = { onSaving(); scope.launch { model.save() } },
                 colors = ButtonDefaults.textButtonColors(contentColor = palette.accent, disabledContentColor = tokens.tertiaryInk)) {
                 Text("Save", fontSize = 15.sp, lineHeight = 21.sp)
@@ -181,6 +202,11 @@ internal fun WritingWorkFormContent(model: WritingWorkFormState, account: String
             }
             item {
                 WorkFormSection("Tags")
+                if (state.tagsNeedRefresh) TextButton(enabled = !state.refreshingTags,
+                    onClick = { scope.launch { model.refreshTags(retry = true) } },
+                    colors = ButtonDefaults.textButtonColors(contentColor = palette.accent)) {
+                    Text("Reload tags", color = palette.accent, fontSize = 14.sp, lineHeight = 20.sp)
+                }
                 SettingsPanel(Modifier.padding(top = 8.dp)) {
                     SubjectFormRow("Categories", value = workFormCount(form.categories), showsDisclosure = true,
                         onClick = if (state.saving) null else ({ choosingTags = WorkFormTags.Categories }), valueMaxLines = Int.MAX_VALUE)
@@ -236,7 +262,8 @@ internal fun WritingWorkFormContent(model: WritingWorkFormState, account: String
                         SubjectRowSeparator()
                         SubjectFormRow("Add chapter", value = "")
                         SubjectRowSeparator()
-                        SubjectFormRow("Edit tags", value = "")
+                        SubjectFormRow("Edit tags", value = "", showsDisclosure = true,
+                            onClick = if (state.saving) null else ({ model.editTagsModel()?.let { onSaving(); editingPostedTags = it } }))
                     }
                     SubjectRowSeparator()
                     WorkFormChoiceRow("Work skin", form, WorkFormChoice.Skin, enabled = !state.saving) { if (!state.saving) choosing = it }

@@ -126,6 +126,10 @@ data class AO3CollectionOffer(
 
 object AO3WorkFormUrls {
     fun newWork() = "${AO3Constants.BASE_URL}/works/new"
+    fun editTags(workID: Long): String {
+        require(workID > 0)
+        return "${AO3Constants.BASE_URL}/works/$workID/edit_tags"
+    }
     fun chapterIndex(workID: Long): String {
         require(workID > 0)
         return "${AO3Constants.BASE_URL}/works/$workID/navigate"
@@ -223,3 +227,10 @@ internal fun trimWritingTag(name: String): String = name.trim { char ->
         char == '\u202f' || char == '\u205f' || char == '\u3000'
 }
 internal fun joinWritingTags(names: List<String>): String = joinWorkList(names)
+
+/** The seven fields iOS refreshes after a separate confirmed tag save. */
+internal fun AO3WorkForm.withTagsFrom(tags: AO3WorkForm) = copy(
+    rating = tags.rating, warnings = tags.warnings, categories = tags.categories,
+    fandoms = tags.fandoms, relationships = tags.relationships, characters = tags.characters,
+    additionalTags = tags.additionalTags
+)

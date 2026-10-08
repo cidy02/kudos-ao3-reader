@@ -484,6 +484,8 @@ fun SubjectChip(
             }
             Text(
                 text = text,
+                // A wrapping chip must reserve the remove glyph's width beside its text.
+                modifier = if (trailingIcon != null && maxLines > 1) Modifier.weight(1f, fill = false) else Modifier,
                 color = foreground,
                 fontSize = 13.sp,
                 lineHeight = 18.sp,

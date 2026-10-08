@@ -3,13 +3,19 @@ package io.github.cidy02.kudos.network.ao3.writing
 /** Parameter construction only; this object cannot dispatch a request. */
 object AO3WorkFormEncoder {
     fun encode(form: AO3WorkForm, submit: AO3WorkSubmitAction): List<Pair<String, String>> {
-        val modeled = iosParameters(form, submit)
+        val modeled = iosParameters(form, submit).let { pairs ->
+            if (form.kind != AO3WorkFormKind.EditTags) pairs else {
+                val served = form.servedControls.filterNot { it.disabled }.map { it.name }.toSet()
+                pairs.filter { it.first in served }
+            }
+        }
         val overridden = modeled.map { it.first }.toSet()
         return modeled + carriedParameters(form, submit, overridden)
     }
 
     /** Exact order, representations and conditional branches of iOS's modeled fields. */
-    fun iosParameters(form: AO3WorkForm, submit: AO3WorkSubmitAction): List<Pair<String, String>> = buildList {
+    fun iosParameters(form: AO3WorkForm, submit: AO3WorkSubmitAction): List<Pair<String, String>> =
+        if (form.kind == AO3WorkFormKind.EditTags) editTagsParameters(form, submit) else buildList {
         with(form) {
             add(AO3WorkFormField.authenticityToken to csrfToken)
             methodOverride?.takeIf(String::isNotEmpty)?.let { add(AO3WorkFormField.methodOverride to it) }
@@ -84,6 +90,21 @@ object AO3WorkFormEncoder {
     ): List<Pair<String, String>> = form.servedControls.flatMap { control ->
         if (control.name in overriddenNames) emptyList()
         else control.successfulValues(submit).map { control.name to it }
+    }
+
+    /** AO3EditTagsForm.parameters: tags only, with fresh served language left unchanged. */
+    private fun editTagsParameters(form: AO3WorkForm, submit: AO3WorkSubmitAction) = buildList {
+        add(AO3WorkFormField.authenticityToken to form.csrfToken)
+        form.methodOverride?.takeIf(String::isNotEmpty)?.let { add(AO3WorkFormField.methodOverride to it) }
+        if (form.rating.isNotEmpty()) add(AO3WorkFormField.rating to form.rating)
+        form.warnings.ifEmpty { listOf("") }.forEach { add(AO3WorkFormField.warnings to it) }
+        form.categories.ifEmpty { listOf("") }.forEach { add(AO3WorkFormField.categories to it) }
+        add(AO3WorkFormField.fandoms to joinWritingTags(form.fandoms))
+        add(AO3WorkFormField.relationships to joinWritingTags(form.relationships))
+        add(AO3WorkFormField.characters to joinWritingTags(form.characters))
+        add(AO3WorkFormField.additionalTags to joinWritingTags(form.additionalTags))
+        if (form.languageID.isNotEmpty()) add(AO3WorkFormField.languageID to form.languageID)
+        add(submit.fieldName to "1")
     }
 
     private fun flag(value: Boolean) = if (value) "1" else "0"
