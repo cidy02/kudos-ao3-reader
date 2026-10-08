@@ -103,3 +103,20 @@ stay above the keyboard.
   words; the reads for one opening, counted; exactly one token read and one POST per Save;
   each verdict with iOS's words; the screen unchanged until confirmation; nothing sent on
   opening; both entry points opening the screen; no withdrawal control present.
+
+## Added 2026-10-08 (from audits A4 and A1, and from landing 3bm)
+
+- **Check this against iOS before anything else.** Audit A4 suspects iOS's sign-up save does
+  not post the form's hidden fields (`Services/AO3Client+Challenges.swift`, about lines
+  451-462): an existing prompt carries a hidden `tag_set_attributes[id]`, and without it AO3
+  may create a second tag set or refuse the nested update. Read iOS's encoder and AO3's form
+  (the fixture) and say what is true. Android replays every served control the model does not
+  set, as the work form does (3bb), so a hidden id goes back as served. If that differs from
+  iOS, list it under "Decided without asking" with the field names.
+- AO3's validation list is `div#error` holding a `ul`: `AO3WriteFormParser.writeErrorMessage`
+  reads it now (`#error li`). Use that function for the refusal; do not write another.
+- A write that AO3 answers with a page and no notice is "didn't confirm"
+  (`AO3CollectionFields.UNCONFIRMED`), never success.
+- A list of rows is lazy and drawn with the screen's own parts; no stock Material `Button`,
+  progress ring colours or unstyled `Text`. A row with a long label shows a short value as
+  its `trailing` content, not as `value`.
