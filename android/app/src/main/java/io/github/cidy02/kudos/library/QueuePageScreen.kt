@@ -198,6 +198,13 @@ fun QueuePageScreen(
     }
     val dragLive = ReadingQueueFacts.isDragLive(reordering && !hidesMature, selecting, narrowed)
     val shown = if (reordering && !hidesMature) works else filtered
+    // A selection acts on what is on screen (iOS `selectedWorks`, L3 B2 #1): a work the quick
+    // filter hides leaves it, so Remove never takes a work unseen (audit A5-6).
+    val shownIds = shown.mapTo(linkedSetOf()) { it.id }
+    LaunchedEffect(shownIds, selected) {
+        val seen = LibrarySelection.visible(selected, shownIds)
+        if (seen.size != selected.size) selected = seen
+    }
     val (upNext, inLine) = if (dragLive) null to shown else ReadingQueueFacts.upNext(filtered)
     val preservedBytes = preservedIds.sumOf { bytes[it] ?: 0L }
     val reorderLabel = when {

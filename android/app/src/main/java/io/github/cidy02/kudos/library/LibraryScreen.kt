@@ -1248,6 +1248,13 @@ private fun LibrarySectionContent(
     }
     val ids = sectionItems.mapTo(linkedSetOf()) { it.item.work.id }
     val allSelected = ids.isNotEmpty() && state.selectedWorkIds.containsAll(ids)
+    // A selection acts on what is on screen (iOS `selectedWorks`). A row a quick filter hides
+    // leaves the selection: Delete used to count and take works the reader could no longer
+    // see (audit A5-5).
+    LaunchedEffect(ids, state.selectedWorkIds, state.selectionMode) {
+        val seen = LibrarySelection.visible(state.selectedWorkIds, ids)
+        if (state.selectionMode && seen.size != state.selectedWorkIds.size) onSetSelection(seen)
+    }
 
     BackHandler(enabled = state.selectionMode) { onExitSelection() }
 

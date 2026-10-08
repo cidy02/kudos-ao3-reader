@@ -331,3 +331,32 @@ These are not findings. Each one needs the check named here.
 - `DECISIONS.md` outside the 2026-10-05 reader notes (about lines 480-599) and a slider grep. Brief results other than `3ak-result.md` (pitch) and the `3ai-result.md` bookmark gap cited from that decision.
 - iOS `Services/ReaderProgressBridge.swift`, `Services/ReadingInsights.swift` past a grep, and `Services/ReadingProgress*.swift` (the progress type that is present is `ReadiumProgressPersistence.swift`).
 - Tests other than `ReaderProgressSaverTest`, `ReadingLogServiceTest`, `EndOfWorkActionsTest`, `ReadiumProgressAdapterTest`, the start of `ReaderFanMenuTest`, and greps of `LibrarySelectionTest`, `LibrarySectionQuickFilterTest`, `ReaderProgressMappingTest`, `ReaderProgressDisplayTest`, and `AnnotationTombstoneTest`.
+
+## Triage (Claude, 2026-10-08)
+
+Each finding read against the Kotlin and the Swift it cites. All six are real.
+
+- **A5-1 real, fixed; P2 as it stands** (the window is the few milliseconds of a save, 1.5 s
+  after a page turn, and what is lost is one page turn). `ReaderProgressSaver` now finishes a
+  save it has begun and a flush waits for it (`NonCancellable` under a mutex); Mark as
+  Finished writes the position first. Tests `aFlushDuringASaveWaitsForItAndLosesNothing`,
+  `aFlushWritesWhatArrivedDuringASave`. **Still open** (its first unconfirmed suspicion):
+  `close()` and `pauseReadingSession()` launch on the view model's scope and return; if the
+  view model is cleared before they finish, the session's end and the shelf date are lost.
+  Needs a look at the order of dispose and `onCleared` on a device.
+- **A5-2 real, not fixed: brief `3br`.** The position card's thumb is the whole book's
+  progress, its label and its minutes say "chapter", and a drag goes to a chapter's start.
+- **A5-3 real, not fixed: brief `3br`.** Finished at 98.5% of the book: on a long work that
+  is a chapter early, and the copy's 60-day hold starts then. iOS finishes at the last
+  resource's trailing edge and starts the hold on leaving.
+- **A5-4 real, fixed.** The same passage is the same stored locator, as iOS. Test
+  `theSameWordsFurtherDownAreASecondHighlightNotTheFirstMoved`. New highlights now go
+  through the annotation mutex.
+- **A5-5 and A5-6 real, fixed.** A row a quick filter hides leaves the selection, in the
+  Library's section lists and on a queue page (`LibrarySelection.visible`). iOS keeps a
+  hidden id selected and skips it; here it is dropped, so switching the filter back does
+  not reselect it. Test `aRowAFilterHidesLeavesTheSelection`; the two screens' effects are
+  not covered by a screen test.
+- Unconfirmed suspicions: the spine index coerced to 0 on an href mismatch
+  (`ReadiumProgressAdapter.kt:19-23`) and the Library dashboard's filter during selection
+  (`LibraryScreen.kt:249`) are worth a look; the rest wait.
