@@ -67,9 +67,9 @@ data class WorkEntity(
 
     val lastTagRefreshAttemptAt: Instant? = null,
     /**
-     * Cross-platform backup pass-through only (see [io.github.cidy02.kudos.core.model.SavedWork]).
+     * Queue preservation state and cross-platform backup (see [io.github.cidy02.kudos.core.model.SavedWork]).
      * Nullable with no backfill — existing rows simply have no preservation history.
-     * Android must not act on these values.
+     * Statuses never authorize removing files or memberships.
      */
     val epubPreservationStatusRaw: String? = null,
     val metadataSyncStatusRaw: String? = null,
