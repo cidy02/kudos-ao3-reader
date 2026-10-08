@@ -210,7 +210,7 @@ fun PrivacyDataScreen(
     DestructiveConfirmation(
         show = showClearBrowseCacheConfirm,
         title = "Clear Browse Cache?",
-        text = "Cached AO3 fandom and category data used to show Browse instantly. Safe to clear — it rebuilds the next time you open Browse.",
+        text = "Removes saved fandom and category lists. Your reading, saved works, and downloads stay untouched; Browse rebuilds the lists next time you open it.",
         confirmText = "Clear",
         confirmBeforeDelete = settings.app.confirmBeforeDelete,
         onConfirm = {

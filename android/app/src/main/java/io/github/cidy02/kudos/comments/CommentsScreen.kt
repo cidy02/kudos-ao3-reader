@@ -728,7 +728,7 @@ fun ChapterPickerSheet(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Text(
-                text = "Browse comments by chapter",
+                text = "Browse Comments by Chapter",
                 fontSize = 17.sp,
                 fontWeight = FontWeight.Bold,
                 color = tokens.primaryInk,

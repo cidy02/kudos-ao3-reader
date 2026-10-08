@@ -466,7 +466,7 @@ private fun InboxMoreMenu(
     Box {
         ToolbarCircleButton(
             onClick = { if (enabled) expanded = true },
-            accessibilityName = "Select inbox items",
+            accessibilityName = "Select Inbox Items",
             palette = palette
         ) {
             Icon(Icons.Outlined.MoreVert, contentDescription = null)

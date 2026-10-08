@@ -197,7 +197,7 @@ fun AuthorProfileScreen(
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         if (headerLoading && header == null) {
-            item { LoadingStateCard("Loading…") }
+            item { LoadingStateCard("Loading author profile") }
         } else if (headerError != null && header == null) {
             item {
                 ErrorStateCard(
