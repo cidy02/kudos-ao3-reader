@@ -59,6 +59,7 @@ import androidx.compose.material.icons.outlined.Queue
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.Star
 import androidx.compose.material.icons.outlined.StarBorder
+import androidx.compose.material.icons.automirrored.outlined.Undo
 import androidx.compose.material.icons.outlined.CloudDownload
 import androidx.compose.material.icons.outlined.RemoveCircleOutline
 import androidx.compose.material3.AlertDialog
@@ -92,6 +93,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -120,6 +123,10 @@ import io.github.cidy02.kudos.works.DownloadQueue
 import io.github.cidy02.kudos.ui.components.KudosRefreshBox
 import io.github.cidy02.kudos.ui.subject.FilterButton
 import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
+import io.github.cidy02.kudos.settings.SettingsPanel
+import io.github.cidy02.kudos.ui.subject.SubjectRowSeparator
+import io.github.cidy02.kudos.ui.subject.SubjectSegmentedControl
+import io.github.cidy02.kudos.ui.subject.isAccessibilityFontScale
 import io.github.cidy02.kudos.ui.subject.SectionRuleHeader
 import io.github.cidy02.kudos.ui.subject.SubjectChip
 import io.github.cidy02.kudos.ui.subject.SubjectChipStyle
@@ -133,6 +140,7 @@ import io.github.cidy02.kudos.ui.subject.WorkSectionLayout
 import io.github.cidy02.kudos.ui.subject.defaultWorkSignals
 import io.github.cidy02.kudos.ui.subject.subjectPanel
 import io.github.cidy02.kudos.ui.subject.subjectScreenWash
+import java.time.Instant
 import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
 
@@ -553,6 +561,8 @@ fun LibraryScreen(
             }
         },
         onTogglePrivacy = { viewModel.toggleRevealAll(activity) },
+        onHistoryGroupingChange = viewModel::updateHistoryGrouping,
+        onKeepInProgress = viewModel::keepInProgress,
         onRefresh = { viewModel.refresh() }
     )
 
@@ -628,6 +638,8 @@ private fun LibraryContent(
     canRebuildFromOriginal: suspend (SavedWork) -> Boolean,
     onRebuildFromOriginal: (SavedWork) -> Unit,
     onTogglePrivacy: () -> Unit,
+    onHistoryGroupingChange: (LibraryHistoryGrouping) -> Unit,
+    onKeepInProgress: (String) -> Unit,
     onRefresh: suspend () -> Unit
 ) {
     val tokens = LocalKudosTokens.current
@@ -683,6 +695,8 @@ private fun LibraryContent(
             onBulkRemoveFromSaveForLater = onBulkRemoveFromSaveForLater,
             onRemoveFromHistory = onRemoveFromHistory,
             onRemoveFromAllQueues = onRemoveFromAllQueues,
+            onHistoryGroupingChange = onHistoryGroupingChange,
+            onKeepInProgress = onKeepInProgress,
             onRefresh = onRefresh
         )
         return
@@ -974,28 +988,36 @@ internal fun LibrarySubjectLedgerRow(
     selected: Boolean = false,
     selecting: Boolean = false,
     showsZeroStats: Boolean = true,
-    expandAll: Boolean = false
+    expandAll: Boolean = false,
+    abandoned: Boolean = false,
+    onKeepInProgress: (String) -> Unit = {}
 ) {
     val work = display.item.work
     val obscured = display.privacyVisibility == LibraryPrivacyVisibility.Obscured
     var menuOpen by remember(work.id) { mutableStateOf(false) }
     val progress = work.readingProgressFraction() ?: 0.0
     val row: @Composable () -> Unit = {
-        SensitiveWorkRow(
-            work = work,
-            showsZeroStats = showsZeroStats,
-            onOpenWork = {
-                if (work.hasEpub) actions.onOpenReader(work.id) else actions.onOpenWork(work.id)
-            },
-            selecting = selecting,
-            selected = selected,
-            obscured = obscured,
-            expandAll = expandAll,
-            onSelect = { actions.onSelect(work.id) },
-            onReveal = { actions.onReveal(work.id) },
-            onLongClick = { if (!obscured && !selecting) menuOpen = true },
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
-        )
+        Column {
+            SensitiveWorkRow(
+                work = work,
+                showsZeroStats = showsZeroStats,
+                mutedHistory = abandoned,
+                onOpenWork = {
+                    if (work.hasEpub) actions.onOpenReader(work.id) else actions.onOpenWork(work.id)
+                },
+                selecting = selecting,
+                selected = selected,
+                obscured = obscured,
+                expandAll = expandAll,
+                onSelect = { actions.onSelect(work.id) },
+                onReveal = { actions.onReveal(work.id) },
+                onLongClick = { if (!obscured && !selecting) menuOpen = true },
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+            )
+            if (abandoned && !selecting) {
+                MoveBackToInProgressButton { onKeepInProgress(work.id) }
+            }
+        }
     }
     if (selecting || obscured) {
         row()
@@ -1194,7 +1216,9 @@ private fun LibrarySectionContent(
     onBulkRemoveFromSaveForLater: () -> Unit,
     onRemoveFromHistory: (String) -> Unit,
     onRemoveFromAllQueues: (String) -> Unit,
-    onRefresh: suspend () -> Unit
+    onRefresh: suspend () -> Unit,
+    onHistoryGroupingChange: (LibraryHistoryGrouping) -> Unit = {},
+    onKeepInProgress: (String) -> Unit = {}
 ) {
     val tokens = LocalKudosTokens.current
     val baseItems = kind.items(state)
@@ -1252,6 +1276,16 @@ private fun LibrarySectionContent(
     val sectionItems = quickFilteredItems.let {
         if (state.sort == LibrarySort.Natural) it else LibraryQuery.sortDisplayItems(it, state.sort)
     }
+    val now = Instant.now()
+    val groupedItems = if (kind == LibrarySectionKind.History) {
+        LibraryHistoryGrouping.groups(
+            state.historyGrouping, sectionItems.map { it.item.work }, now = now,
+            isAbandoned = { ReadingAbandonment.isAbandoned(it, now) }
+        )
+    } else if (sectionItems.isEmpty()) emptyList() else listOf(
+        LibraryHistoryGrouping.Bucket(kind.groupTitle, sectionItems.map { it.item.work.id })
+    )
+    val itemsById = sectionItems.associateBy { it.item.work.id }
     val ids = sectionItems.mapTo(linkedSetOf()) { it.item.work.id }
     val allSelected = ids.isNotEmpty() && state.selectedWorkIds.containsAll(ids)
     // A selection acts on what is on screen (iOS `selectedWorks`). A row a quick filter hides
@@ -1275,10 +1309,10 @@ private fun LibrarySectionContent(
         trailingContent = {
             if (state.selectionMode) {
                 TextButton(onClick = { onSetSelection(if (allSelected) emptySet() else ids) }) {
-                    Text(if (allSelected) "Deselect All" else "Select All", color = tokens.accent)
+                    Text(if (allSelected) "Deselect All" else "Select All", color = tokens.scopePalette.accent)
                 }
                 TextButton(onClick = onExitSelection) {
-                    Text("Done", color = tokens.accent)
+                    Text("Done", color = tokens.scopePalette.accent)
                 }
             } else {
                 FilterButton(
@@ -1328,6 +1362,8 @@ private fun LibrarySectionContent(
                         title = kind.title,
                         subtitle = if (state.hasActiveQueryOrFilters && sectionItems.isEmpty() && unfilteredItems.isNotEmpty()) {
                             "${unfilteredItems.size} ${if (unfilteredItems.size == 1) "work" else "works"} · none match the current filters"
+                        } else if (kind == LibrarySectionKind.History) {
+                            LibraryHistoryGrouping.tallyLine(sectionItems.size, state.historyGrouping, groupedItems)
                         } else {
                             val sortLabel = if (state.hasActiveQueryOrFilters) null else {
                                 if (state.sort != LibrarySort.Natural) state.sort.label else when (kind) {
@@ -1377,12 +1413,15 @@ private fun LibrarySectionContent(
                         }
                     }
                 }
-                item {
-                    SectionRuleHeader(
-                        kind.groupTitle.uppercase(),
-                        modifier = Modifier.padding(top = 8.dp),
-                        count = sectionItems.size
-                    )
+                if (kind == LibrarySectionKind.History) {
+                    item(key = "history-grouping") {
+                        HistoryGroupingStrip(state.historyGrouping, onHistoryGroupingChange)
+                    }
+                }
+                if (kind != LibrarySectionKind.History) {
+                    item {
+                        SectionRuleHeader(kind.groupTitle, count = sectionItems.size, modifier = Modifier.padding(top = 8.dp))
+                    }
                 }
                 when {
                     state.loading -> item { LoadingStateCard("Loading ${kind.title}", Modifier.padding(horizontal = 16.dp)) }
@@ -1414,17 +1453,28 @@ private fun LibrarySectionContent(
                             icon = kind.emptyStateIcon
                         )
                     }
-                    else -> items(sectionItems, key = { "${kind.id}-${it.item.work.id}" }) { display ->
-                        LibrarySubjectLedgerRow(
-                            display = display,
-                            kind = kind,
-                            actions = cardActions,
-                            onRemoveFromHistory = onRemoveFromHistory,
-                            onRemoveFromAllQueues = onRemoveFromAllQueues,
-                            selected = display.item.work.id in state.selectedWorkIds,
-                            selecting = state.selectionMode,
-                            showsZeroStats = state.showsZeroStats
-                        )
+                    else -> groupedItems.forEach { group ->
+                        if (kind == LibrarySectionKind.History) {
+                            item(key = "group-${group.id}") {
+                                SectionRuleHeader(group.title, count = group.workIds.size, modifier = Modifier.padding(top = 8.dp))
+                            }
+                        }
+                        items(group.workIds, key = { "${kind.id}-$it" }) { id ->
+                            val display = itemsById.getValue(id)
+                            LibrarySubjectLedgerRow(
+                                display = display,
+                                kind = kind,
+                                actions = cardActions,
+                                onRemoveFromHistory = onRemoveFromHistory,
+                                onRemoveFromAllQueues = onRemoveFromAllQueues,
+                                selected = id in state.selectedWorkIds,
+                                selecting = state.selectionMode,
+                                showsZeroStats = state.showsZeroStats,
+                                abandoned = kind == LibrarySectionKind.History && state.historyGrouping == LibraryHistoryGrouping.State &&
+                                    ReadingAbandonment.isAbandoned(display.item.work, now),
+                                onKeepInProgress = onKeepInProgress
+                            )
+                        }
                     }
                 }
             }
@@ -1447,6 +1497,47 @@ private fun LibrarySectionContent(
                 modifier = Modifier.align(Alignment.BottomCenter)
             )
         }
+    }
+}
+
+@Composable
+private fun MoveBackToInProgressButton(onClick: () -> Unit) {
+    val tokens = LocalKudosTokens.current
+    Row(
+        Modifier.padding(horizontal = 16.dp).padding(bottom = 4.dp)
+            .heightIn(min = 48.dp).subjectPanel(cornerRadius = 9.dp)
+            .clickable(role = Role.Button, onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 7.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Icon(Icons.AutoMirrored.Outlined.Undo, contentDescription = null,
+            tint = tokens.scopePalette.accent, modifier = Modifier.size(16.dp))
+        Text("Move back to In progress", color = tokens.scopePalette.accent,
+            modifier = Modifier.weight(1f, fill = false), fontSize = 12.5.sp, lineHeight = 18.sp, fontWeight = FontWeight.Medium)
+    }
+}
+
+@Composable
+private fun HistoryGroupingStrip(
+    grouping: LibraryHistoryGrouping,
+    onSelect: (LibraryHistoryGrouping) -> Unit
+) {
+    val tokens = LocalKudosTokens.current
+    if (isAccessibilityFontScale()) {
+        SettingsPanel {
+            LibraryHistoryGrouping.entries.forEachIndexed { index, option ->
+                if (index > 0) SubjectRowSeparator()
+                Text(option.title, color = if (grouping == option) tokens.scopePalette.accent else tokens.primaryInk,
+                    fontSize = 13.sp, lineHeight = 19.sp, fontWeight = FontWeight.Medium,
+                    modifier = Modifier.fillMaxWidth().semantics { selected = grouping == option }
+                        .clickable(role = Role.RadioButton) { onSelect(option) }.padding(14.dp))
+            }
+        }
+    } else {
+        SubjectSegmentedControl(options = LibraryHistoryGrouping.entries, selected = grouping,
+            onSelect = onSelect, title = { it.title }, contentDescription = "History grouping",
+            modifier = Modifier.padding(horizontal = 16.dp))
     }
 }
 

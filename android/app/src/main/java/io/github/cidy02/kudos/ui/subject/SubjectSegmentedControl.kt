@@ -69,6 +69,7 @@ fun <T> SubjectSegmentedControl(
                     text = title(option),
                     color = if (isSelected) tokens.primaryInk else tokens.secondaryInk,
                     fontSize = 13.sp,
+                    lineHeight = 17.sp,
                     fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,

@@ -23,6 +23,13 @@ import java.nio.file.Files
 import java.time.Instant
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
+import io.github.cidy02.kudos.library.LibraryHistoryGrouping
+import io.github.cidy02.kudos.library.ReadingAbandonment
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.async
+import kotlinx.coroutines.withTimeout
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.decodeFromString
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.After
@@ -226,6 +233,43 @@ class WorkLifecycleRepositoryTest {
     @After
     fun tearDown() {
         database.close()
+    }
+
+    /** Swift ReadingLogTests.moveBackToInProgressStoresTheOverrideAndRebuckets. */
+    @Test
+    fun moveBackToInProgressStoresTheOverrideAndRebuckets() = runTest {
+        val dusty = repository.upsert(sampleSavedWork().copy(
+            lastReadDate = clockNow.minusSeconds(30 * 86_400L),
+            readiumLocator = """{"locations":{"totalProgression":0.4}}""",
+            lastModifiedAt = clockNow.minusSeconds(10),
+            progressModifiedAt = clockNow.minusSeconds(20)
+        ))
+        assertTrue(ReadingAbandonment.isAbandoned(dusty, clockNow))
+        // Stay subscribed across the transaction: a Room invalidation, not a screen reload.
+        val changed = async(start = CoroutineStart.UNDISPATCHED) {
+            withTimeout(10_000) { repository.observeLibraryWorks().first { works ->
+                works.any { it.id == dusty.id && it.keepInProgressOverride }
+            }.single { it.id == dusty.id } }
+        }
+        val kept = repository.keepInProgress(dusty.id)!!
+        assertEquals(kept, changed.await())
+        assertTrue(kept.keepInProgressOverride)
+        assertEquals(clockNow, kept.lastModifiedAt)
+        assertTrue(kept.effectiveLastModifiedAt > dusty.effectiveLastModifiedAt)
+        assertEquals(dusty.progressModifiedAt, kept.progressModifiedAt)
+        assertEquals(dusty.lastReadDate, kept.lastReadDate)
+        assertEquals(dusty.readiumLocator, kept.readiumLocator)
+        assertFalse(ReadingAbandonment.isAbandoned(kept, clockNow))
+        assertFalse(ReadingAbandonment.isAbandoned(kept, clockNow.plusSeconds(365 * 86_400L)))
+        val groups = LibraryHistoryGrouping.groups(LibraryHistoryGrouping.State, listOf(kept), now = clockNow,
+            isAbandoned = { ReadingAbandonment.isAbandoned(it, clockNow) })
+        assertEquals(listOf("In progress"), groups.map { it.title })
+        // Exercise the real existing BackupMappers through JSON export/import.
+        val encoded = BackupJson.encodeToString(kept.toBackupWork())
+        val restored = BackupJson.decodeFromString<BackupWork>(encoded).toSavedWork(hasEpub = true)
+        assertTrue(restored.keepInProgressOverride)
+        assertEquals(kept.lastModifiedAt, restored.lastModifiedAt)
+        assertFalse(ReadingAbandonment.isAbandoned(restored, clockNow))
     }
 
     @Test

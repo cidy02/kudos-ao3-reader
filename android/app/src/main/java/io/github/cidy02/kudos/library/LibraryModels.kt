@@ -54,6 +54,7 @@ data class LibraryUiState(
     val collectionMembers: List<LibraryDisplayItem> = emptyList(),
     val continueReading: List<LibraryDisplayItem> = emptyList(),
     val readingHistory: List<LibraryDisplayItem> = emptyList(),
+    val historyGrouping: LibraryHistoryGrouping = LibraryHistoryGrouping.Default,
     val recentlyAdded: List<LibraryDisplayItem> = emptyList(),
     val favorites: List<LibraryDisplayItem> = emptyList(),
     /** Finishing-session count per work, for Favorites → Rereads. */

@@ -60,7 +60,8 @@ object DemoLibrary {
         val favorite: Boolean = false,
         val kept: Boolean = false,
         val onDevice: Boolean = true,
-        val seenChapters: Int? = null
+        val seenChapters: Int? = null,
+        val lastReadDaysAgo: Long? = null
     )
 
     private val SAMPLES = listOf(
@@ -115,7 +116,8 @@ object DemoLibrary {
             chapters = "9/?",
             progress = 0.63,
             kept = true,
-            seenChapters = 7
+            seenChapters = 7,
+            lastReadDaysAgo = 1
         ),
         Sample(
             title = "The Long Way Down",
@@ -153,7 +155,8 @@ object DemoLibrary {
             chapters = "4/6",
             progress = 0.71,
             favorite = true,
-            seenChapters = 3
+            seenChapters = 3,
+            lastReadDaysAgo = 30
         ),
         Sample(
             title = "What the River Keeps",
@@ -172,7 +175,8 @@ object DemoLibrary {
             rating = "Mature",
             words = 27_600,
             chapters = "3/?",
-            onDevice = false
+            onDevice = false,
+            lastReadDaysAgo = 60
         ),
         Sample(
             title = "Every Door in Hades",
@@ -268,6 +272,22 @@ object DemoLibrary {
             allWorks.firstOrNull { it.title == "The Long Way Down" && it.hasEpub }?.let {
                 writePlaceholderEpub(it.id, it.title, fileStore)
             }
+            // Change only untouched old fixture dates; never replace a user's reading or undo.
+            for ((index, sample) in SAMPLES.withIndex()) {
+                val age = sample.lastReadDaysAgo ?: continue
+                val row = allWorks.firstOrNull { it.title == sample.title } ?: continue
+                val work = workRepository.getWork(row.id) ?: continue
+                val originalDate = if (sample.progress == null) null else
+                    work.dateAdded.plusSeconds(index.toLong() * (3 * 86_400L - 7 * 3_600L))
+                if (work.lastReadDate == originalDate && work.lastScrollFraction == (sample.progress ?: 0.0) &&
+                    work.readiumLocator == null && !work.keepInProgressOverride && work.isFinished == sample.finished) {
+                    // Reconstruct its seed clock, so reseeding cannot keep moving the date.
+                    val seededAt = work.dateAdded.plusSeconds(index.toLong() * 3 * 86_400L)
+                    val changedAt = clock()
+                    workRepository.upsert(work.copy(lastReadDate = seededAt.minusSeconds(age * 86_400L),
+                        lastModifiedAt = changedAt, progressModifiedAt = changedAt))
+                }
+            }
             seedRecentlyDeleted(database, workRepository, fileStore, clock)
             return
         }
@@ -280,10 +300,10 @@ object DemoLibrary {
             val isComplete = chapterParts.lastOrNull() != "?" &&
                 chapterParts.firstOrNull() == chapterParts.lastOrNull()
 
-            val lastReadDate = if (sample.progress != null) {
-                now.minusSeconds(index.toLong() * 3_600L * 7L)
-            } else {
-                null
+            val lastReadDate = when {
+                sample.lastReadDaysAgo != null -> now.minusSeconds(sample.lastReadDaysAgo * 86_400L)
+                sample.progress != null -> now.minusSeconds(index.toLong() * 3_600L * 7L)
+                else -> null
             }
             val lastSpineIndex = if (sample.progress != null) 1 else 0
             val lastScrollFraction = sample.progress ?: 0.0

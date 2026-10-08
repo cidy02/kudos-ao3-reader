@@ -19,6 +19,8 @@ import io.github.cidy02.kudos.data.preferences.SettingsRepository
 import io.github.cidy02.kudos.files.WorkFileStore
 import io.github.cidy02.kudos.library.ReadingQueueRepository
 import io.github.cidy02.kudos.works.WorkRepository
+import io.github.cidy02.kudos.library.LibraryHistoryGrouping
+import io.github.cidy02.kudos.library.ReadingAbandonment
 import io.github.cidy02.kudos.library.LibraryFilterState
 import io.github.cidy02.kudos.library.LibraryQuery
 import io.github.cidy02.kudos.library.LibraryRepository
@@ -414,6 +416,50 @@ class DemoLibraryTest {
 
         assertEquals(2, workRepository.allCollections().size)
         assertEquals(1, workRepository.listRecentlyDeletedCollections().size)
+    }
+
+    @Test
+    fun installedDemoHistoryDatesUpgradeOnlyUntouchedFixturesAndRespectUndo() = runTest {
+        DemoLibrary.seed(database, workRepository, queueRepository, fileStore, clock = { fixedNow })
+        val rows = database.workDao().getAll()
+        val winter = workRepository.getWork(rows.single { it.title == "Winter Garden" }.id)!!
+        val static = workRepository.getWork(rows.single { it.title == "Static on Channel Nine" }.id)!!
+        // Reconstruct the previous seed, then verify the narrow installed-demo upgrade.
+        workRepository.upsert(winter.copy(lastReadDate = winter.dateAdded.plusSeconds(8 * (3 * 86_400L - 7 * 3_600L))))
+        workRepository.upsert(static.copy(lastReadDate = null))
+        DemoLibrary.seed(database, workRepository, queueRepository, fileStore, clock = { fixedNow })
+        val upgraded = workRepository.getWork(winter.id)!!
+        assertEquals(fixedNow.minusSeconds(30 * 86_400L), upgraded.lastReadDate)
+        assertEquals(fixedNow, upgraded.lastModifiedAt)
+        assertEquals(fixedNow, upgraded.progressModifiedAt)
+        assertTrue(ReadingAbandonment.isAbandoned(upgraded, fixedNow))
+        assertEquals(fixedNow.minusSeconds(60 * 86_400L), workRepository.getWork(static.id)!!.lastReadDate)
+        workRepository.keepInProgress(winter.id)
+        val kept = workRepository.getWork(winter.id)!!
+        val revisited = workRepository.upsert(static.copy(lastReadDate = fixedNow.minusSeconds(3_600)))
+        DemoLibrary.seed(database, workRepository, queueRepository, fileStore, clock = { fixedNow.plusSeconds(86_400) })
+        assertEquals(kept, workRepository.getWork(winter.id))
+        assertEquals(revisited, workRepository.getWork(static.id))
+        assertEquals(16, database.workDao().getAllIncludingDeleted().size)
+    }
+
+    @Test
+    fun demoHistoryHasThreeTimeBucketsAbandonedAndReadNotFinishedWithoutAddingRows() = runTest {
+        DemoLibrary.seed(database, workRepository, queueRepository, fileStore, clock = { fixedNow })
+        suspend fun history() = LibraryQuery.buildState(LibraryRepository(workRepository).observeSnapshot().first(),
+            "", LibraryFilterState(), LibrarySort.Natural).readingHistory.map { it.item.work }
+        val before = history()
+        val time = LibraryHistoryGrouping.groups(LibraryHistoryGrouping.Time, before, now = fixedNow,
+            zone = java.time.ZoneId.of("UTC"), weekFields = java.time.temporal.WeekFields.ISO, isAbandoned = { false })
+        assertTrue(time.size >= 3)
+        assertTrue(time.map { it.title }.containsAll(listOf("Today", "Yesterday", "Earlier")))
+        val state = LibraryHistoryGrouping.groups(LibraryHistoryGrouping.State, before, now = fixedNow,
+            isAbandoned = { ReadingAbandonment.isAbandoned(it, fixedNow) })
+        assertTrue(state.any { it.title == "Abandoned" })
+        assertTrue(state.any { it.title == "Read, not finished" })
+        assertEquals(16, database.workDao().getAllIncludingDeleted().size)
+        DemoLibrary.seed(database, workRepository, queueRepository, fileStore, clock = { fixedNow })
+        assertEquals(before, history())
     }
 
     @Test

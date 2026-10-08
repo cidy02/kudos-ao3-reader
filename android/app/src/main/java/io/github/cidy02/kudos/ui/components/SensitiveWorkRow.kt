@@ -117,6 +117,7 @@ fun SensitiveWorkRow(
     selecting: Boolean = false,
     expandAll: Boolean = false,
     showsZeroStats: Boolean = LocalShowsZeroStats.current,
+    mutedHistory: Boolean = false,
     onClick: () -> Unit,
     onReveal: (() -> Unit)? = null,
     onSelect: (() -> Unit)? = null,
@@ -146,7 +147,7 @@ fun SensitiveWorkRow(
                 if (selected) Modifier.background(MaterialTheme.colorScheme.primaryContainer, MaterialTheme.shapes.medium)
                 else Modifier
                     .background(tokens.cardFill, MaterialTheme.shapes.medium)
-                    .background(palette.cardWash, MaterialTheme.shapes.medium)
+                    .then(if (mutedHistory) Modifier else Modifier.background(palette.cardWash, MaterialTheme.shapes.medium))
             )
             .semantics { contentDescription = "$title, by ${author.ifBlank { "Anonymous" }}" }
             .combinedClickable(
@@ -237,6 +238,7 @@ fun SensitiveWorkRow(
                                     },
                                     icon = Icons.AutoMirrored.Outlined.MenuBook,
                                     accessibilityLabel = "Fandom: $fandom",
+                                    color = if (mutedHistory) tokens.secondaryInk else MaterialTheme.colorScheme.onSurfaceVariant,
                                     modifier = Modifier.clickable {
                                         tagSearch(SearchSubjectField.FANDOM, fandom)
                                     }
@@ -419,7 +421,8 @@ fun SensitiveWorkRow(
     onTagClick: ((String) -> Unit)? = null,
     onTagSearch: ((SearchSubjectField, String) -> Unit)? = null,
     onLongClick: (() -> Unit)? = null,
-    showsZeroStats: Boolean = LocalShowsZeroStats.current
+    showsZeroStats: Boolean = LocalShowsZeroStats.current,
+    mutedHistory: Boolean = false
 ) {
     SensitiveWorkRow(
         id = work.id,
@@ -454,6 +457,7 @@ fun SensitiveWorkRow(
         onTagSearch = onTagSearch,
         onLongClick = onLongClick,
         showsZeroStats = showsZeroStats,
+        mutedHistory = mutedHistory,
         modifier = modifier
     )
 }
