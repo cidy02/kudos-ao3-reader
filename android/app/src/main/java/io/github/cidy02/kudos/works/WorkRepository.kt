@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.works
 
+import androidx.room.withTransaction
 import io.github.cidy02.kudos.backup.TombstoneSigning
 import io.github.cidy02.kudos.core.model.ReadingQueueKind
 import io.github.cidy02.kudos.core.model.SavedWork
@@ -412,13 +413,15 @@ class WorkRepository(
      * Used by "Delete forever" and [sweepExpiredSoftDeletes].
      */
     suspend fun hardDelete(workId: String) {
-        val work = getWork(workId)
-        deleteDependents(workId)
-        fileStore.deleteWorkEpub(workId)
-        workDao.deleteById(workId)
-        if (work != null) {
-            recordWorkTombstone(work, clock(), deletionReason = "workDeleted")
+        database.withTransaction {
+            val work = getWork(workId)
+            if (work != null) recordWorkTombstone(work, clock(), deletionReason = "workDeleted")
+            deleteDependents(workId)
+            workDao.deleteById(workId)
         }
+        // Files cannot roll back with Room. Remove only after the rows and every
+        // deletion marker commit; a failed DAO write must leave the reader's EPUB.
+        fileStore.deleteWorkEpub(workId)
     }
 
     /**
@@ -431,7 +434,6 @@ class WorkRepository(
     private suspend fun deleteDependents(workId: String) {
         val now = clock()
         for (membership in queueDao.getMembershipsForWork(workId)) {
-            queueDao.deleteMembershipById(membership.id)
             upsertSignedTombstone(
                 SyncTombstone(
                     id = uuidFactory(),
@@ -443,9 +445,9 @@ class WorkRepository(
                     deletionReason = "queueMembershipRemoved"
                 )
             )
+            queueDao.deleteMembershipById(membership.id)
         }
         for (annotation in annotationDao.getAllForWork(workId)) {
-            annotationDao.deleteById(annotation.id)
             upsertSignedTombstone(
                 SyncTombstone(
                     id = uuidFactory(),
@@ -456,6 +458,7 @@ class WorkRepository(
                     deletionReason = "annotationDeleted"
                 )
             )
+            annotationDao.deleteById(annotation.id)
         }
     }
 
@@ -544,14 +547,13 @@ class WorkRepository(
         ao3WorkId: Int? = null,
         sourceUrl: String = ""
     ) {
-        val canonical = WorkTags.canonicalAO3WorkURL(sourceUrl).orEmpty()
-        tombstoneDao.deleteSavedWorkByIdentity(
-            recordId = recordId,
-            ao3WorkId = ao3WorkId,
-            canonicalSourceUrl = canonical,
-            sourceUrl = sourceUrl,
-            recordType = SyncTombstoneRecordType.SAVED_WORK
-        )
+        // Same identity-aware retraction as a snapshot File Merge. Canonicalize
+        // both addresses, as iOS does, including old tombstones with chapter URLs.
+        val held = tombstoneDao.getAll().map { it.toDomain() }
+        val retainedIds = retractWorkTombstone(held, recordId, ao3WorkId, sourceUrl).mapTo(mutableSetOf()) { it.id }
+        for (tombstone in held) {
+            if (tombstone.id !in retainedIds) tombstoneDao.deleteById(tombstone.id)
+        }
     }
 
     private suspend fun retractWorkTombstone(work: SavedWork) {
@@ -826,22 +828,24 @@ class WorkRepository(
     }
 
     suspend fun removeFromCollection(workId: String, collectionId: String): List<WorkCollection> {
-        collectionDao.removeWork(collectionId, workId)
-        touchCollection(collectionId)
-        val now = clock()
-        // Without a tombstone, restoring a backup that still lists this membership
-        // silently resurrects it — same reasoning as reading-queue removeWork.
-        upsertSignedTombstone(
-            SyncTombstone(
-                id = uuidFactory(),
-                recordID = membershipRecordId(collectionId, workId),
-                recordTypeRaw = SyncTombstoneRecordType.WORK_COLLECTION_MEMBERSHIP,
-                createdAt = now,
-                lastModifiedAt = now,
-                deletedOnDeviceID = "",
-                deletionReason = "collectionMembershipRemoved"
+        database.withTransaction {
+            val now = clock()
+            // Without a tombstone, restoring a backup that still lists this membership
+            // silently resurrects it — same reasoning as reading-queue removeWork.
+            upsertSignedTombstone(
+                SyncTombstone(
+                    id = uuidFactory(),
+                    recordID = membershipRecordId(collectionId, workId),
+                    recordTypeRaw = SyncTombstoneRecordType.WORK_COLLECTION_MEMBERSHIP,
+                    createdAt = now,
+                    lastModifiedAt = now,
+                    deletedOnDeviceID = "",
+                    deletionReason = "collectionMembershipRemoved"
+                )
             )
-        )
+            collectionDao.removeWork(collectionId, workId)
+            touchCollection(collectionId)
+        }
         return collectionsForWork(workId)
     }
 
@@ -933,6 +937,23 @@ class WorkRepository(
     }
 
     companion object {
+        /** PreservedWorkService.retractTombstone, shared by live restore and backup snapshots. */
+        fun retractWorkTombstone(
+            tombstones: List<SyncTombstone>,
+            recordId: String,
+            ao3WorkId: Int? = null,
+            sourceUrl: String = ""
+        ): List<SyncTombstone> {
+            val canonical = WorkTags.canonicalAO3WorkURL(sourceUrl)
+            return tombstones.filterNot { tombstone ->
+                tombstone.recordTypeRaw == SyncTombstoneRecordType.SAVED_WORK && (
+                    tombstone.recordID.equals(recordId, ignoreCase = true) ||
+                        (ao3WorkId != null && tombstone.ao3WorkID == ao3WorkId) ||
+                        (canonical != null && WorkTags.canonicalAO3WorkURL(tombstone.sourceURL) == canonical)
+                    )
+            }
+        }
+
         /** Apple `PreservedWorkService.recoveryWindow` — 90 days. */
         val RECOVERY_WINDOW: Duration = Duration.ofDays(90)
         /** Apple `WorkLifecycle.freedCopyWindow` — 60 days. */

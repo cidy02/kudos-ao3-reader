@@ -1695,7 +1695,9 @@ class BackupAnnotationApplyTest {
         )
 
         assertEquals(1, result.summary.annotationsUpdated)
-        val ann = result.snapshot.annotations.single()
+        val ann = result.snapshot.annotations.single { it.id == ANN_ID }
+        assertEquals("old", result.snapshot.annotations.single { it.id != ANN_ID }.note)
+        assertTrue(result.snapshot.annotations.single { it.id != ANN_ID }.isPendingDeletion)
         assertEquals("new note", ann.note)
         assertEquals("highlight", ann.kindRaw)
         assertEquals("""{"href":"ch1"}""", ann.locatorString)

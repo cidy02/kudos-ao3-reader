@@ -15,6 +15,7 @@ import io.github.cidy02.kudos.backup.KudosBackupManifest
 import io.github.cidy02.kudos.backup.KudosBackupPackage
 import io.github.cidy02.kudos.backup.PersistenceGate
 import io.github.cidy02.kudos.backup.TombstoneSigning
+import io.github.cidy02.kudos.backup.toBackupTombstone
 import io.github.cidy02.kudos.core.model.ReadingAnnotation
 import io.github.cidy02.kudos.core.model.SavedWork
 import io.github.cidy02.kudos.core.model.SyncTombstoneRecordType
@@ -98,6 +99,99 @@ class AnnotationTombstoneTest {
         database.close()
         settingsScope.cancel()
         TombstoneSigning.resetForTests()
+    }
+
+    @Test
+    fun remoteDeleteRemovesExistingAnnotationMembershipAndLinkFromRoomAndNextExport() = runTest {
+        val work = SavedWork(id = WORK_ID, title = "Work", author = "Writer", dateAdded = ANNOTATION_CREATED)
+        val mark = ReadingAnnotation(id = ANN_ID, workID = WORK_ID, createdAt = ANNOTATION_CREATED)
+        val queue = io.github.cidy02.kudos.core.model.ReadingQueue(id = QUEUE_ID, name = "Queue", dateCreated = ANNOTATION_CREATED)
+        val membership = io.github.cidy02.kudos.core.model.ReadingQueueMembership(id = MEMBER_ID, queueID = QUEUE_ID, workID = WORK_ID, queuedAt = ANNOTATION_CREATED)
+        val link = io.github.cidy02.kudos.core.model.Bookmark(id = LINK_ID, title = "Link", urlString = "https://example.invalid/saved", dateAdded = ANNOTATION_CREATED)
+        database.workDao().upsert(work.toEntity())
+        database.annotationDao().upsert(mark.toEntity())
+        database.readingQueueDao().upsertQueue(queue.toEntity())
+        database.readingQueueDao().upsertMembership(membership.toEntity())
+        database.bookmarkDao().upsert(link.toEntity())
+        val tombstones = listOf(ANN_ID to SyncTombstoneRecordType.READING_ANNOTATION,
+            MEMBER_ID to SyncTombstoneRecordType.READING_QUEUE_MEMBERSHIP,
+            LINK_ID to SyncTombstoneRecordType.BOOKMARK).map { (id, kind) ->
+            TombstoneSigning.sign(io.github.cidy02.kudos.core.model.SyncTombstone(recordID = id, recordTypeRaw = kind, createdAt = CLOCK))
+        }
+        val remote = KudosBackupPackage(KudosBackupManifest(version = BackupVersion.CURRENT, exportedAt = CLOCK.toString(),
+            tombstones = tombstones.map { it.toBackupTombstone() }))
+        backupRepository.importPackage(remote)
+        assertNull(database.annotationDao().getById(ANN_ID))
+        assertNull(database.readingQueueDao().getMembershipForWork(QUEUE_ID, WORK_ID))
+        assertNull(database.bookmarkDao().getById(LINK_ID))
+        val exported = backupRepository.captureLibrarySnapshot()
+        assertTrue(exported.annotations.isEmpty())
+        assertTrue(exported.readingQueueMemberships.isEmpty())
+        assertTrue(exported.bookmarks.isEmpty())
+    }
+
+    @Test
+    fun fileMergeRetractsWorkDeletionFromRoomAsRecentlyDeletedRestoreDoes() = runTest {
+        val work = SavedWork(id = WORK_ID, title = "Work", author = "Writer", dateAdded = ANNOTATION_CREATED,
+            sourceUrl = "https://archiveofourown.org/works/4242", isDeleted = true, deletedAt = CLOCK,
+            permanentDeletionScheduledAt = CLOCK.plusSeconds(500), lastModifiedAt = CLOCK)
+        database.workDao().upsert(work.toEntity())
+        val tombstone = TombstoneSigning.sign(io.github.cidy02.kudos.core.model.SyncTombstone(
+            recordID = WORK_ID, recordTypeRaw = SyncTombstoneRecordType.SAVED_WORK, createdAt = CLOCK))
+        database.syncTombstoneDao().upsert(tombstone.toEntity())
+        backupRepository.importPackage(packageWithWorkAndAnnotation(), BackupImportMode.MERGE)
+        assertTrue(database.syncTombstoneDao().getAll().none { it.recordTypeRaw == SyncTombstoneRecordType.SAVED_WORK })
+        assertEquals(false, database.workDao().getById(WORK_ID)!!.isDeleted)
+    }
+
+    @Test
+    fun remoteDeletionDoesNotDeleteAnnotationOrMembershipEditedSinceCapture() = runTest {
+        val work = SavedWork(id = WORK_ID, title = "Work", author = "Writer", dateAdded = ANNOTATION_CREATED)
+        val mark = ReadingAnnotation(id = ANN_ID, workID = WORK_ID, createdAt = ANNOTATION_CREATED)
+        val queue = io.github.cidy02.kudos.core.model.ReadingQueue(id = QUEUE_ID, name = "Queue", dateCreated = ANNOTATION_CREATED)
+        val member = io.github.cidy02.kudos.core.model.ReadingQueueMembership(id = MEMBER_ID, queueID = QUEUE_ID, workID = WORK_ID, queuedAt = ANNOTATION_CREATED)
+        database.workDao().upsert(work.toEntity())
+        database.annotationDao().upsert(mark.toEntity())
+        database.readingQueueDao().upsertQueue(queue.toEntity())
+        database.readingQueueDao().upsertMembership(member.toEntity())
+        val captured = backupRepository.captureLibrarySnapshot()
+        val remote = KudosBackupPackage(KudosBackupManifest(version = BackupVersion.CURRENT, exportedAt = CLOCK.toString(),
+            tombstones = listOf(ANN_ID to SyncTombstoneRecordType.READING_ANNOTATION, MEMBER_ID to SyncTombstoneRecordType.READING_QUEUE_MEMBERSHIP).map { (id, kind) ->
+                TombstoneSigning.sign(io.github.cidy02.kudos.core.model.SyncTombstone(recordID = id, recordTypeRaw = kind, createdAt = CLOCK)).toBackupTombstone()
+            }))
+        val planned = io.github.cidy02.kudos.backup.BackupMergeService.merge(captured, remote, now = CLOCK)
+        database.annotationDao().upsert(mark.copy(note = "edited", lastModifiedAt = CLOCK.plusSeconds(1)).toEntity())
+        database.readingQueueDao().upsertMembership(member.copy(note = "edited", lastModifiedAt = CLOCK.plusSeconds(1)).toEntity())
+        backupRepository.applyMergeResult(planned)
+        assertEquals("edited", database.annotationDao().getById(ANN_ID)!!.note)
+        assertEquals("edited", database.readingQueueDao().getMembershipForWork(QUEUE_ID, WORK_ID)!!.note)
+    }
+
+    @Test
+    fun displacedNoteStaysHiddenAndExportableBeyondTheWorkRecoveryWindow() = runTest {
+        val pack = packageWithWorkAndAnnotation()
+        val archived = pack.manifest.annotations.single()
+        database.workDao().upsert(SavedWork(id = WORK_ID, title = "Work", author = "Writer", dateAdded = ANNOTATION_CREATED).toEntity())
+        database.annotationDao().upsert(ReadingAnnotation(id = ANN_ID, workID = WORK_ID, kindRaw = "highlight",
+            note = "displaced", locatorString = "original anchor", createdAt = ANNOTATION_CREATED,
+            lastModifiedAt = ANNOTATION_CREATED).toEntity())
+        backupRepository.importPackage(pack.copy(manifest = pack.manifest.copy(annotations = listOf(
+            archived.copy(note = "new", lastModifiedAt = CLOCK.toString())
+        ))))
+        assertEquals("new", annotationRepository.observeForWork(WORK_ID).first().single().note)
+        val parked = database.annotationDao().getAll().single { it.id != ANN_ID }
+        assertEquals("displaced", parked.note)
+        assertTrue(parked.isPendingDeletion)
+        val root = Files.createTempDirectory("kudos-ann-sweep")
+        try {
+            val workRepository = io.github.cidy02.kudos.works.WorkRepository(database, WorkFileStore(root),
+                clock = { CLOCK.plus(java.time.Duration.ofDays(91)) })
+            workRepository.sweepExpiredSoftDeletes()
+            assertEquals(parked, database.annotationDao().getById(parked.id))
+            assertEquals("displaced", backupRepository.captureLibrarySnapshot().annotations.single { it.id == parked.id }.note)
+        } finally {
+            root.toFile().deleteRecursively()
+        }
     }
 
     @Test
@@ -281,6 +375,9 @@ class AnnotationTombstoneTest {
     }
 
     companion object {
+        const val QUEUE_ID = "22222222-2222-4222-8222-222222222222"
+        const val MEMBER_ID = "33333333-3333-4333-8333-333333333333"
+        const val LINK_ID = "44444444-4444-4444-8444-444444444444"
         private val CLOCK: Instant = Instant.parse("2026-06-26T12:00:00Z")
         private val ANNOTATION_CREATED: Instant = Instant.parse("2026-01-01T00:00:00Z")
         private const val WORK_ID = "cccccccc-cccc-4ccc-8ccc-cccccccccccc"

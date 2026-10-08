@@ -141,65 +141,61 @@ class ReadingQueueRepository(
     }
 
     suspend fun removeWork(queueId: String, workId: String) {
-        val existing = queueDao.getMembershipForWork(queueId, workId) ?: return
-        val now = clock()
+        database.withTransaction {
+            val existing = queueDao.getMembershipForWork(queueId, workId) ?: return@withTransaction
+            val now = clock()
 
-        queueDao.deleteMembershipById(existing.id)
-        // Without a tombstone, restoring a backup that still lists this membership
-        // silently resurrects it (mergeQueues/TombstoneIndex.membershipResolution
-        // expect one to exist for every removed membership).
-        upsertSignedTombstone(
-            SyncTombstone(
-                id = uuidFactory(),
-                recordID = existing.id,
-                recordTypeRaw = SyncTombstoneRecordType.READING_QUEUE_MEMBERSHIP,
-                createdAt = now,
-                lastModifiedAt = now,
-                deletedOnDeviceID = "",
-                deletionReason = "queueMembershipRemoved"
+            // Without a tombstone, restoring a backup that still lists this membership
+            // silently resurrects it (mergeQueues/TombstoneIndex.membershipResolution
+            // expect one to exist for every removed membership).
+            upsertSignedTombstone(
+                SyncTombstone(
+                    id = uuidFactory(),
+                    recordID = existing.id,
+                    recordTypeRaw = SyncTombstoneRecordType.READING_QUEUE_MEMBERSHIP,
+                    createdAt = now,
+                    lastModifiedAt = now,
+                    deletedOnDeviceID = "",
+                    deletionReason = "queueMembershipRemoved"
+                )
             )
-        )
-        touchQueueMembershipChanged(queueId, now)
+            queueDao.deleteMembershipById(existing.id)
+            touchQueueMembershipChanged(queueId, now)
 
-        // iOS parity: removeFromQueueAndDeleteIfQueueOnly. Once a work loses its last
-        // queue membership, clear the flag; if it was queue-only (never explicitly
-        // saved or favorited), the user is abandoning it entirely - soft-delete it
-        // the same way any other removal goes to Recently Deleted, rather than
-        // leaving an orphaned, invisible row behind forever.
-        //
-        // Re-read the row here rather than reusing an entity fetched before the
-        // membership delete above: this suspends across several DB writes
-        // (tombstone insert, queue touch), a real window for something else -
-        // a completed download setting hasEpub, a favorite toggle - to have
-        // changed the row in the meantime. Deciding and writing from a stale
-        // snapshot could soft-delete a work that just became protected, or
-        // clobber a concurrent field change.
-        val freshEntity = workDao.getById(workId)
-        if (freshEntity != null) {
-            val remainingCount = queueDao.getActiveMembershipCountForWork(workId)
-            // Must read isQueueOnlyWork from the still-queued entity, before the
-            // flag gets cleared below - isQueueOnlyWork is defined in terms of
-            // isQueuedForLater, so checking it on the already-cleared copy would
-            // always read false regardless of prior state.
-            val wasQueueOnly = freshEntity.toDomain().isQueueOnlyWork
-            if (remainingCount == 0 && freshEntity.isQueuedForLater) {
-                val cleared = freshEntity.copy(isQueuedForLater = false, lastModifiedAt = now)
-                if (wasQueueOnly) {
-                    workDao.upsert(
-                        cleared.copy(
-                            isDeleted = true,
-                            deletedAt = now,
-                            permanentDeletionScheduledAt = now.plus(WorkRepository.RECOVERY_WINDOW)
+            // iOS parity: removeFromQueueAndDeleteIfQueueOnly. Once a work loses its last
+            // queue membership, clear the flag; if it was queue-only (never explicitly
+            // saved or favorited), the user is abandoning it entirely - soft-delete it
+            // the same way any other removal goes to Recently Deleted, rather than
+            // leaving an orphaned, invisible row behind forever.
+            //
+            // Read the work inside the same transaction as the membership
+            // removal, before deciding whether its last queue kept it alive.
+            val freshEntity = workDao.getById(workId)
+            if (freshEntity != null) {
+                val remainingCount = queueDao.getActiveMembershipCountForWork(workId)
+                // Must read isQueueOnlyWork from the still-queued entity, before the
+                // flag gets cleared below - isQueueOnlyWork is defined in terms of
+                // isQueuedForLater, so checking it on the already-cleared copy would
+                // always read false regardless of prior state.
+                val wasQueueOnly = freshEntity.toDomain().isQueueOnlyWork
+                if (remainingCount == 0 && freshEntity.isQueuedForLater) {
+                    val cleared = freshEntity.copy(isQueuedForLater = false, lastModifiedAt = now)
+                    if (wasQueueOnly) {
+                        workDao.upsert(
+                            cleared.copy(
+                                isDeleted = true,
+                                deletedAt = now,
+                                permanentDeletionScheduledAt = now.plus(WorkRepository.RECOVERY_WINDOW)
+                            )
                         )
-                    )
-                } else {
-                    workDao.upsert(cleared)
+                    } else {
+                        workDao.upsert(cleared)
+                    }
                 }
             }
         }
     }
 
-    
     suspend fun removeFromAllQueuesAndDeleteIfQueueOnly(workId: String) {
         val memberships = queueDao.getMembershipsForWork(workId)
         for (membership in memberships) {
