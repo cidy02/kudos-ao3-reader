@@ -54,6 +54,11 @@ struct WritingTagsEditor: View {
     /// character would otherwise re-run the request that just answered.
     @State private var cache: [String: [AO3EditorTag]] = [:]
 
+    @ScaledMetric(relativeTo: .subheadline) private var tagNameSize: CGFloat = 15
+    @ScaledMetric(relativeTo: .caption) private var workCountSize: CGFloat = 12
+    @ScaledMetric(relativeTo: .caption) private var footnoteSize: CGFloat = 11.5
+    @ScaledMetric(relativeTo: .caption) private var badgeTextSize: CGFloat = 10.5
+
     private var palette: SubjectPalette { theme.scopePalette }
     private var gutter: CGFloat { SubjectMetrics.accountGutter }
 
@@ -286,7 +291,7 @@ struct WritingTagsEditor: View {
             }
             if let errorMessage {
                 Text(errorMessage)
-                    .font(.system(size: 11.5))
+                    .font(.system(size: footnoteSize))
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 14)
@@ -327,7 +332,7 @@ struct WritingTagsEditor: View {
             HStack(spacing: 10) {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(name)
-                        .font(.system(size: 15))
+                        .font(.system(size: tagNameSize))
                         .foregroundStyle(.primary)
                         .lineLimit(2)
                     badgeLine(badge)
@@ -338,7 +343,7 @@ struct WritingTagsEditor: View {
                 // does. See the type comment: no dash, no zero, no column.
                 if let workCount {
                     Text(workCount.formatted())
-                        .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                        .font(.system(size: workCountSize, weight: .semibold, design: .monospaced))
                         .foregroundStyle(.secondary)
                 }
 
@@ -366,13 +371,13 @@ struct WritingTagsEditor: View {
                 Image(systemName: "checkmark.circle.fill")
                     .font(.system(size: 10))
                 Text("Canonical")
-                    .font(.system(size: 10.5, weight: .medium))
+                    .font(.system(size: badgeTextSize, weight: .medium))
                     .tracking(10.5 * 0.03)
             }
             .foregroundStyle(.green)
         case .postsAsTyped:
             Text("Posts as typed")
-                .font(.system(size: 10.5))
+                .font(.system(size: badgeTextSize))
                 .foregroundStyle(.orange)
         }
     }
@@ -380,7 +385,7 @@ struct WritingTagsEditor: View {
     private var footnote: some View {
         Text("AO3 suggests only its canonical tags and doesn't provide work counts here. "
             + "You can still post a tag exactly as you type it, which is how new tags are created.")
-            .font(.system(size: 11.5))
+            .font(.system(size: footnoteSize))
             .foregroundStyle(.secondary.opacity(0.7))
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)

@@ -6,6 +6,8 @@ struct EditTagsView: View {
     @Environment(ThemeManager.self) private var theme
     @Environment(AO3AuthService.self) private var auth
 
+    @ScaledMetric(relativeTo: .caption) private var footnoteSize: CGFloat = 11.5
+
     @State private var form: AO3EditTagsForm
     @State private var originalTags: AO3WorkTagSet
     @State private var isSaving = false
@@ -71,7 +73,7 @@ struct EditTagsView: View {
                 Text("Choose at least one warning. Choose the first option if you don't want to "
                     + "name a specific warning.")
 
-                    .font(.system(size: 11.5))
+                    .font(.system(size: footnoteSize))
                     .foregroundStyle(.secondary.opacity(0.7))
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -98,7 +100,7 @@ struct EditTagsView: View {
                 Text("As you type, AO3 suggests its canonical tags first. You can still post a tag "
                     + "that isn't canonical, and removing one here doesn't delete it from AO3.")
 
-                    .font(.system(size: 11.5))
+                    .font(.system(size: footnoteSize))
                     .foregroundStyle(.secondary.opacity(0.7))
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
