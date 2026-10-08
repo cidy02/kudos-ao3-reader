@@ -329,14 +329,14 @@ fun AccountScreen(
                             val destinations = listOf(
                                 Triple("Drafts", Icons.Outlined.Drafts, "works/drafts"),
                                 Triple("Pseuds", Icons.Outlined.People, "pseuds"),
-                                Triple("Skins", Icons.Outlined.Palette, "skins"),
+                                Triple("Skins and site styles", Icons.Outlined.Palette, "skins"),
                                 Triple("Statistics", Icons.Outlined.BarChart, "stats"),
                                 Triple("Co-Creator Requests", Icons.Outlined.PersonAdd, "creatorships"),
                                 Triple("Sign-ups", Icons.Outlined.EditNote, "signups"),
                                 Triple("Assignments", Icons.AutoMirrored.Outlined.Assignment, "assignments"),
                                 Triple("Claims", Icons.Outlined.Flag, "claims"),
-                                Triple("Related Works", Icons.AutoMirrored.Outlined.CallSplit, "related_works"),
-                                Triple("Gifts", Icons.Outlined.CardGiftcard, "gifts")
+                                Triple("Related works", Icons.AutoMirrored.Outlined.CallSplit, "related_works"),
+                                Triple("Gifts given and received", Icons.Outlined.CardGiftcard, "gifts")
                             )
                             destinations.forEach { (title, icon, pathSuffix) ->
                                 DropdownMenuItem(
@@ -536,7 +536,7 @@ private fun AccountSignedInHeader(
                     ) {
                         Icon(
                             imageVector = Icons.Outlined.MoreHoriz,
-                            contentDescription = "Account menu",
+                            contentDescription = "Account actions",
                             tint = tokens.primaryInk,
                             modifier = Modifier.size(18.dp)
                         )
@@ -730,7 +730,7 @@ private fun AccountAvatar(
                     .data(avatarUrl)
                     .crossfade(true)
                     .build(),
-                contentDescription = "Avatar",
+                contentDescription = "View Profile",
                 modifier = Modifier.fillMaxSize(),
                 contentScale = ContentScale.Crop,
                 error = painterResource(id = R.drawable.ic_kudos_mark),

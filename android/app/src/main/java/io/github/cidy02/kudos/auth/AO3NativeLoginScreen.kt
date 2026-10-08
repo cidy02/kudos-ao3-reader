@@ -409,6 +409,6 @@ private fun LoginField(label: String, value: String, onValueChange: (String) -> 
     }
 }
 
-private const val FallbackPrompt = "Let's finish logging in on AO3's page below."
+private const val FallbackPrompt = "Complete login on AO3 below."
 private const val SignUpUrl = "https://archiveofourown.org/users/new"
 private const val PasswordResetUrl = "https://archiveofourown.org/users/password/new"
