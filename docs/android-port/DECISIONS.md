@@ -1040,3 +1040,11 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   conceals it; a tap reveals it.
 - Home's subscriptions are applied only for the session that asked for them.
   Reverse: the commit "A blurred mature work is unnamed and unopened everywhere".
+
+## 2026-10-08: Favorites has its four scopes (brief 3bq)
+
+- Works, Authors, Fandoms, Tags, as iOS, ranked by what was read (not by what is starred);
+  mature works that are blurred or hidden are left out of the aggregates. The scope, the
+  order and "Unread works" are kept per device under iOS's keys and are not in the backup.
+- The demo's finished works have a read date.
+  Reverse: the commit "Favorites by author, fandom and tag".

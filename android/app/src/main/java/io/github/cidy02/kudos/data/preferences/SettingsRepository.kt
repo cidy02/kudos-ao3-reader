@@ -1,6 +1,9 @@
 package io.github.cidy02.kudos.data.preferences
 
 import androidx.datastore.core.DataStore
+import io.github.cidy02.kudos.library.FavoritePreferences
+import io.github.cidy02.kudos.library.FavoriteScope
+import io.github.cidy02.kudos.library.ReadingAffinities
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.doublePreferencesKey
@@ -79,6 +82,24 @@ class SettingsRepository(
 
     suspend fun updateHistoryGrouping(grouping: LibraryHistoryGrouping) {
         dataStore.edit { it[Keys.HistoryGrouping] = grouping.id }
+    }
+
+    /** Favorites layout only: deliberately outside KudosSettings and its backup allowlist. */
+    val favoritePreferences: Flow<FavoritePreferences> = dataStore.data.map { prefs ->
+        FavoritePreferences(FavoriteScope.fromId(prefs[Keys.FavoriteScope]),
+            ReadingAffinities.Order.fromId(prefs[Keys.FavoriteOrder]), prefs[Keys.TagsUnreadOnly] ?: false)
+    }
+
+    suspend fun updateFavoriteScope(scope: FavoriteScope) {
+        dataStore.edit { it[Keys.FavoriteScope] = scope.id }
+    }
+
+    suspend fun updateFavoriteOrder(order: ReadingAffinities.Order) {
+        dataStore.edit { it[Keys.FavoriteOrder] = order.id }
+    }
+
+    suspend fun updateTagsUnreadOnly(unread: Boolean) {
+        dataStore.edit { it[Keys.TagsUnreadOnly] = unread }
     }
 
     /** iOS writing.recentTags.v1: device-local JSON, outside KudosSettings/backup/sync. */
@@ -578,6 +599,9 @@ class SettingsRepository(
     }
 
     private object Keys {
+        val FavoriteScope = stringPreferencesKey("library.favorites.scope")
+        val FavoriteOrder = stringPreferencesKey("library.favorites.order")
+        val TagsUnreadOnly = booleanPreferencesKey("library.favorites.tagsUnreadOnly")
         val HistoryGrouping = stringPreferencesKey("library.history.grouping")
         val RecentWritingTags = stringPreferencesKey("writing.recentTags.v1")
         val SpeechRate = floatPreferencesKey("readerSpeechRate")

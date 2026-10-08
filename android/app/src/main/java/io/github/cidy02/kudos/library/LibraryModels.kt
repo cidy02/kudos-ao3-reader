@@ -59,6 +59,8 @@ data class LibraryUiState(
     val favorites: List<LibraryDisplayItem> = emptyList(),
     /** Finishing-session count per work, for Favorites → Rereads. */
     val finishCounts: Map<String, Int> = emptyMap(),
+    val readingSummaries: Map<String, WorkReadingSummary> = emptyMap(),
+    val favoritePreferences: FavoritePreferences = FavoritePreferences(),
     /** iOS Library dashboard shelves (Reading Now / Saved for Later / Finished / Downloaded). */
     val savedForLater: List<LibraryDisplayItem> = emptyList(),
     val finished: List<LibraryDisplayItem> = emptyList(),

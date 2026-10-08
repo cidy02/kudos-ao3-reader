@@ -174,7 +174,10 @@ fun LibraryScreen(
     onOpenComments: (Long) -> Unit = {},
     section: LibrarySectionKind? = null,
     onOpenSection: (LibrarySectionKind) -> Unit = {},
-    libraryChrome: LibraryShellChrome? = null
+    libraryChrome: LibraryShellChrome? = null,
+    onOpenAuthor: (String) -> Unit = {},
+    onFilterLibraryFandom: (String) -> Unit = {},
+    onFilterLibraryTag: (String) -> Unit = {}
 ) {
     val viewModel: LibraryViewModel = viewModel(
         factory = LibraryViewModel.factory(
@@ -189,9 +192,11 @@ fun LibraryScreen(
     )
     val state by viewModel.state.collectAsState()
     val filterRequestTick by LibraryFilterRequest.tick.collectAsState()
-    LaunchedEffect(filterRequestTick, state.loading, state.userTags) {
+    LaunchedEffect(filterRequestTick, state.loading, state.userTags, section) {
         if (filterRequestTick == 0 || state.loading) return@LaunchedEffect
-        LibraryFilterRequest.takeFandom()?.let(viewModel::setFandomFilter)
+        if (section != null) return@LaunchedEffect
+        LibraryFilterRequest.takeFandom()?.let { viewModel.applyAffinityFilter(FavoriteScope.Fandoms, it) }
+        LibraryFilterRequest.takeFreeform()?.let { viewModel.applyAffinityFilter(FavoriteScope.Tags, it) }
         val tagName = LibraryFilterRequest.takeUserTag() ?: return@LaunchedEffect
         val tag = state.userTags.firstOrNull { it.name.equals(tagName, ignoreCase = true) }
             ?: return@LaunchedEffect
@@ -561,6 +566,17 @@ fun LibraryScreen(
             }
         },
         onTogglePrivacy = { viewModel.toggleRevealAll(activity) },
+        onFavoriteScopeChange = viewModel::updateFavoriteScope,
+        onFavoriteOrderChange = viewModel::updateFavoriteOrder,
+        onTagsUnreadChange = viewModel::updateTagsUnreadOnly,
+        onOpenAffinity = { scope, row ->
+            when (scope) {
+                FavoriteScope.Authors -> row.username?.let(onOpenAuthor)
+                FavoriteScope.Fandoms -> onFilterLibraryFandom(row.name)
+                FavoriteScope.Tags -> onFilterLibraryTag(row.name)
+                FavoriteScope.Works -> Unit
+            }
+        },
         onHistoryGroupingChange = viewModel::updateHistoryGrouping,
         onKeepInProgress = viewModel::keepInProgress,
         onRefresh = { viewModel.refresh() }
@@ -638,6 +654,10 @@ private fun LibraryContent(
     canRebuildFromOriginal: suspend (SavedWork) -> Boolean,
     onRebuildFromOriginal: (SavedWork) -> Unit,
     onTogglePrivacy: () -> Unit,
+    onFavoriteScopeChange: (FavoriteScope) -> Unit,
+    onFavoriteOrderChange: (ReadingAffinities.Order) -> Unit,
+    onTagsUnreadChange: (Boolean) -> Unit,
+    onOpenAffinity: (FavoriteScope, ReadingAffinities.Row) -> Unit,
     onHistoryGroupingChange: (LibraryHistoryGrouping) -> Unit,
     onKeepInProgress: (String) -> Unit,
     onRefresh: suspend () -> Unit
@@ -695,6 +715,10 @@ private fun LibraryContent(
             onBulkRemoveFromSaveForLater = onBulkRemoveFromSaveForLater,
             onRemoveFromHistory = onRemoveFromHistory,
             onRemoveFromAllQueues = onRemoveFromAllQueues,
+            onFavoriteScopeChange = onFavoriteScopeChange,
+            onFavoriteOrderChange = onFavoriteOrderChange,
+            onTagsUnreadChange = onTagsUnreadChange,
+            onOpenAffinity = onOpenAffinity,
             onHistoryGroupingChange = onHistoryGroupingChange,
             onKeepInProgress = onKeepInProgress,
             onRefresh = onRefresh
@@ -1217,12 +1241,20 @@ private fun LibrarySectionContent(
     onRemoveFromHistory: (String) -> Unit,
     onRemoveFromAllQueues: (String) -> Unit,
     onRefresh: suspend () -> Unit,
+    onFavoriteScopeChange: (FavoriteScope) -> Unit,
+    onFavoriteOrderChange: (ReadingAffinities.Order) -> Unit,
+    onTagsUnreadChange: (Boolean) -> Unit,
+    onOpenAffinity: (FavoriteScope, ReadingAffinities.Row) -> Unit,
     onHistoryGroupingChange: (LibraryHistoryGrouping) -> Unit = {},
     onKeepInProgress: (String) -> Unit = {}
 ) {
     val tokens = LocalKudosTokens.current
+    val showsFavoriteScopes = kind == LibrarySectionKind.Favorites
+    val showsAffinityList = showsFavoriteScopes && state.favoritePreferences.scope != FavoriteScope.Works
     val baseItems = kind.items(state)
     val unfilteredItems = kind.unfilteredItems(state)
+    val hasWorkContent = unfilteredItems.isNotEmpty()
+    val hasPrivacyMenu = if (showsFavoriteScopes) state.hideMatureContent else state.showPrivacyToggle
     // Search is an Android-only control. Hold it fixed when offering predicate drops.
     val collisionItems = LibraryQuery.filterOnly(unfilteredItems, state.searchQuery)
     val quickFilters = kind.quickFilters()
@@ -1286,7 +1318,7 @@ private fun LibrarySectionContent(
         LibraryHistoryGrouping.Bucket(kind.groupTitle, sectionItems.map { it.item.work.id })
     )
     val itemsById = sectionItems.associateBy { it.item.work.id }
-    val ids = sectionItems.mapTo(linkedSetOf()) { it.item.work.id }
+    val ids = if (showsAffinityList) emptySet() else sectionItems.mapTo(linkedSetOf()) { it.item.work.id }
     val allSelected = ids.isNotEmpty() && state.selectedWorkIds.containsAll(ids)
     // A selection acts on what is on screen (iOS `selectedWorks`). A row a quick filter hides
     // leaves the selection: Delete used to count and take works the reader could no longer
@@ -1315,12 +1347,12 @@ private fun LibrarySectionContent(
                     Text("Done", color = tokens.scopePalette.accent)
                 }
             } else {
-                FilterButton(
+                if (!showsFavoriteScopes || hasWorkContent) FilterButton(
                     filtersActive = state.hasActiveQueryOrFilters,
                     badgeCount = state.filters.activeCount + if (state.searchQuery.isBlank()) 0 else 1,
                     onClick = onShowFilters
                 )
-                Box {
+                if (!showsFavoriteScopes || hasWorkContent || hasPrivacyMenu) Box {
                     ToolbarCircleButton(
                         onClick = { showMenu = true },
                         accessibilityName = "More options"
@@ -1328,16 +1360,16 @@ private fun LibrarySectionContent(
                         Icon(Icons.Filled.MoreVert, contentDescription = null)
                     }
                     DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
-                        if (state.showPrivacyToggle) {
+                        if (hasPrivacyMenu) {
                             DropdownMenuItem(
                                 text = { Text(if (state.revealAllActive) "Hide mature works" else "Show mature works") },
                                 onClick = { showMenu = false; onTogglePrivacy() }
                             )
                         }
-                        DropdownMenuItem(
+                        if (!showsFavoriteScopes || hasWorkContent) DropdownMenuItem(
                             text = { Text("Select") },
                             onClick = { showMenu = false; onEnterSelection() },
-                            enabled = baseItems.isNotEmpty()
+                            enabled = if (showsFavoriteScopes) hasWorkContent else baseItems.isNotEmpty()
                         )
                     }
                 }
@@ -1350,7 +1382,9 @@ private fun LibrarySectionContent(
             .fillMaxSize()
             .subjectScreenWash(tokens.scopePalette)
     ) {
-        KudosRefreshBox(onRefresh = onRefresh, modifier = Modifier.fillMaxSize()) {
+        if (showsAffinityList) {
+            FavoriteAffinityList(state, onFavoriteScopeChange, onFavoriteOrderChange, onTagsUnreadChange, onOpenAffinity)
+        } else KudosRefreshBox(onRefresh = onRefresh, modifier = Modifier.fillMaxSize()) {
             val topInset = WindowInsets.systemBars.asPaddingValues().calculateTopPadding()
             LazyColumn(
                 contentPadding = PaddingValues(top = topInset + 56.dp, bottom = if (state.selectionMode) 94.dp else 18.dp),
@@ -1379,7 +1413,12 @@ private fun LibrarySectionContent(
                         palette = tokens.scopePalette
                     )
                 }
-                if (quickFilters.isNotEmpty()) {
+                if (showsFavoriteScopes && hasWorkContent) {
+                    item(key = "favorites-scope") {
+                        FavoriteScopesStrip(state.favoritePreferences, onFavoriteScopeChange, onFavoriteOrderChange, onTagsUnreadChange)
+                    }
+                }
+                if (quickFilters.isNotEmpty() && (!showsFavoriteScopes || hasWorkContent)) {
                     item {
                         LazyRow(
                             contentPadding = PaddingValues(horizontal = 16.dp),
@@ -1418,7 +1457,7 @@ private fun LibrarySectionContent(
                         HistoryGroupingStrip(state.historyGrouping, onHistoryGroupingChange)
                     }
                 }
-                if (kind != LibrarySectionKind.History) {
+                if (kind != LibrarySectionKind.History && (!showsFavoriteScopes || hasWorkContent)) {
                     item {
                         SectionRuleHeader(kind.groupTitle, count = sectionItems.size, modifier = Modifier.padding(top = 8.dp))
                     }

@@ -400,7 +400,16 @@ fun AppNavHost(
                     onOpenCollections = { navController.navigate(Routes.Collections) },
                     onOpenQueue = { queueId -> navController.navigate(Routes.readingQueues(queueId)) },
                     onOpenCollection = { collectionId -> navController.navigate(Routes.collectionDetail(collectionId)) },
-                    onOpenComments = { workId -> navController.navigate(Routes.comments(workId)) }
+                    onOpenComments = { workId -> navController.navigate(Routes.comments(workId)) },
+                    onOpenAuthor = { username -> navController.navigate(Routes.authorProfile(username)) },
+                    onFilterLibraryFandom = { name ->
+                        LibraryFilterRequest.requestFandom(name)
+                        navController.navigateShellRoot(Routes.Library)
+                    },
+                    onFilterLibraryTag = { name ->
+                        LibraryFilterRequest.requestFreeform(name)
+                        navController.navigateShellRoot(Routes.Library)
+                    }
                 )
             }
         }

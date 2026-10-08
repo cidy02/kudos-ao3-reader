@@ -30,8 +30,9 @@ else a reader uses**:
 - **Settle A19's five unconfirmed suspicions** by reading (its section "Unconfirmed"):
   each becomes a finding with a failing case, or is closed with the reason.
 
-A19's ten findings have since been fixed in that working copy (uncommitted changes in
-`/Users/cidy02/kudos-ios-polish`; `git -C /Users/cidy02/kudos-ios-polish diff` shows them).
+A19's ten findings have since been fixed there, in commit `86389972` on
+`claude/polish-loop` (`git -C /Users/cidy02/kudos-ios-polish show 86389972` shows them; the
+uncommitted changes in that working copy are a separate batch of text sizes: ignore them).
 Do not re-file them. **Do review those fixes**: under a heading "A19's fixes", say for each
 of the ten whether the change closes the failing case A19 gave, and file anything a fix
 breaks or leaves open (the browser's navigation rule and the comment-draft hand-over
