@@ -3,6 +3,9 @@ package io.github.cidy02.kudos.data.preferences
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
+import io.github.cidy02.kudos.library.FavoriteScope
+import io.github.cidy02.kudos.library.FavoritePreferences
+import io.github.cidy02.kudos.library.ReadingAffinities
 import io.github.cidy02.kudos.library.LibraryHistoryGrouping
 import io.github.cidy02.kudos.core.model.BackupSettings
 import io.github.cidy02.kudos.backup.BackupJson
@@ -38,6 +41,28 @@ class SettingsRepositoryTest {
     fun tearDown() {
         scope.cancel()
         tempDir.deleteRecursively()
+    }
+
+    @Test fun favoriteScopeOrderAndTagsFilterStayOnDeviceAndSurviveBackupRestore() = runBlocking {
+        assertEquals(FavoritePreferences(), repository.favoritePreferences.first())
+        val before = BackupJson.encodeToString(BackupSettings.fromSettings(repository.snapshot()).toBackupSettingsPayload())
+        for (scope in FavoriteScope.entries) {
+            repository.updateFavoriteScope(scope)
+            assertEquals(scope, SettingsRepository(dataStore).favoritePreferences.first().scope)
+            assertEquals(scope.id, dataStore.data.first()[stringPreferencesKey("library.favorites.scope")])
+        }
+        repository.updateFavoriteOrder(ReadingAffinities.Order.MostTime)
+        repository.updateTagsUnreadOnly(true)
+        assertEquals(before, BackupJson.encodeToString(BackupSettings.fromSettings(repository.snapshot()).toBackupSettingsPayload()))
+        assertFalse(before.contains("library.favorites"))
+        repository.replaceAll(KudosSettings.Defaults)
+        assertEquals(FavoritePreferences(FavoriteScope.Tags, ReadingAffinities.Order.MostTime, true),
+            repository.favoritePreferences.first())
+        dataStore.edit {
+            it[stringPreferencesKey("library.favorites.scope")] = "unknown"
+            it[stringPreferencesKey("library.favorites.order")] = "unknown"
+        }
+        assertEquals(FavoritePreferences(tagsUnreadOnly = true), repository.favoritePreferences.first())
     }
 
     @Test fun historyGroupingIsDeviceLocalDefaultsToTimeAndSurvivesRestore() = runBlocking {

@@ -288,6 +288,12 @@ object DemoLibrary {
                         lastModifiedAt = changedAt, progressModifiedAt = changedAt))
                 }
             }
+            // Add only missing tags; keep demo row counts and every reading/user flag intact.
+            for (row in allWorks) {
+                val work = workRepository.getWork(row.id) ?: continue
+                val tagged = withDemoAffinityTags(work)
+                if (tagged != work) workRepository.upsert(tagged)
+            }
             seedRecentlyDeleted(database, workRepository, fileStore, clock)
             return
         }
@@ -339,7 +345,7 @@ object DemoLibrary {
                 writePlaceholderEpub(work.id, work.title, fileStore)
             }
 
-            val savedWork = workRepository.upsert(withDemoListLinks(work))
+            val savedWork = workRepository.upsert(withDemoAffinityTags(withDemoListLinks(work)))
             seededWorks.add(savedWork)
         }
 
@@ -417,6 +423,17 @@ object DemoLibrary {
         }
 
         seedRecentlyDeleted(database, workRepository, fileStore, clock)
+    }
+
+    private fun withDemoAffinityTags(work: SavedWork): SavedWork {
+        if (work.workFreeforms.isNotEmpty() || work.workTags.isNotEmpty()) return work
+        val tag = when (work.title) {
+            "Sodium Lights", "Paper Cranes" -> "Slow Burn"
+            "Unanswered Is Not Unread", "Burn my heart, heed my eyes" -> "Fix-It"
+            "Winter Garden" -> "Found Family"
+            else -> return work
+        }
+        return work.copy(workFreeforms = listOf(tag))
     }
 
     private fun withDemoListLinks(work: SavedWork): SavedWork = when {

@@ -18,13 +18,27 @@ object LibraryFilterRequest {
     var userTagName: String? = null
         private set
 
+    var freeformName: String? = null
+        private set
+
+    fun requestFreeform(name: String) {
+        freeformName = name
+        fandom = null
+        userTagName = null
+        tickFlow.value = tickFlow.value + 1
+    }
+
+    fun takeFreeform(): String? = freeformName.also { freeformName = null }
+
     fun requestFandom(name: String) {
+        freeformName = null
         fandom = name
         userTagName = null
         tickFlow.value = tickFlow.value + 1
     }
 
     fun requestUserTag(name: String) {
+        freeformName = null
         userTagName = name
         fandom = null
         tickFlow.value = tickFlow.value + 1

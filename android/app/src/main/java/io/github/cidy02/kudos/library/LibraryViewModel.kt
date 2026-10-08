@@ -42,12 +42,12 @@ class LibraryViewModel(
     private val readingQueues = MutableStateFlow<List<LibraryQueuePreview>>(emptyList())
     private val deletedQueueCount = MutableStateFlow(0)
     private val queueRefreshTick = MutableStateFlow(0)
-    private val finishCounts = readingLogDao?.observeSessions()?.map { sessions ->
-        sessions.asSequence()
-            .filter { it.didFinish }
-            .groupingBy { it.workID }
-            .eachCount()
-    } ?: flowOf(emptyMap<String, Int>())
+    private val readingSummaries = readingLogDao?.observeSessions()?.map(ReadingAffinities::summaries)
+        ?: flowOf(emptyMap<String, WorkReadingSummary>())
+    private val layouts = combine(
+        settingsRepository?.historyGrouping ?: flowOf(LibraryHistoryGrouping.Default),
+        settingsRepository?.favoritePreferences ?: flowOf(FavoritePreferences())
+    ) { history, favorites -> history to favorites }
 
     // Same rule as Home: only a snapshot that already has works is a finished
     // load. The empty pre-seed emission must not become the first frame.
@@ -90,10 +90,10 @@ class LibraryViewModel(
         readingQueues,
         repository.observeRecentlyDeletedCount(),
         deletedQueueCount,
-        finishCounts,
-        settingsRepository?.historyGrouping ?: flowOf(LibraryHistoryGrouping.Default)
-    ) { queues, deletedCount, queueCount, counts, grouping ->
-        LibraryDashboardExtras(queues, deletedCount + queueCount, counts, grouping)
+        readingSummaries,
+        layouts
+    ) { queues, deletedCount, queueCount, summaries, layout ->
+        LibraryDashboardExtras(queues, deletedCount + queueCount, summaries, layout.first, layout.second)
     }
 
     val state: StateFlow<LibraryUiState> = combine(
@@ -110,7 +110,9 @@ class LibraryViewModel(
             revealAllActive = revealed.revealAll,
             readingQueues = extras.queues,
             recentlyDeletedCount = extras.recentlyDeletedCount,
-            finishCounts = extras.finishCounts,
+            finishCounts = extras.readingSummaries.mapValues { it.value.finishCount },
+            readingSummaries = extras.readingSummaries,
+            favoritePreferences = extras.favoritePreferences,
             historyGrouping = extras.historyGrouping
             // Reveal is already folded into every shelf by LibraryQuery.buildState.
         )
@@ -130,6 +132,18 @@ class LibraryViewModel(
 
     fun updateHistoryGrouping(grouping: LibraryHistoryGrouping) {
         viewModelScope.launch { settingsRepository?.updateHistoryGrouping(grouping) }
+    }
+
+    fun updateFavoriteScope(scope: FavoriteScope) {
+        viewModelScope.launch { settingsRepository?.updateFavoriteScope(scope) }
+    }
+
+    fun updateFavoriteOrder(order: ReadingAffinities.Order) {
+        viewModelScope.launch { settingsRepository?.updateFavoriteOrder(order) }
+    }
+
+    fun updateTagsUnreadOnly(unread: Boolean) {
+        viewModelScope.launch { settingsRepository?.updateTagsUnreadOnly(unread) }
     }
 
     fun keepInProgress(workId: String) {
@@ -156,6 +170,18 @@ class LibraryViewModel(
                 fandoms = if (next.isEmpty()) emptySet() else setOf(next)
             )
         }
+    }
+
+    /** A name destination replaces the dashboard filters, as iOS pendingLibraryTag does. */
+    fun applyAffinityFilter(scope: FavoriteScope, name: String) {
+        val applied = when (scope) {
+            FavoriteScope.Fandoms -> LibraryFilterState(fandoms = setOf(name))
+            FavoriteScope.Tags -> LibraryFilterState(freeforms = setOf(name))
+            else -> return
+        }
+        searchQuery.value = ""
+        sort.value = LibrarySort.Natural
+        filters.value = applied
     }
 
     fun toggleFavoriteOnly() {
@@ -526,8 +552,9 @@ class LibraryViewModel(
 private data class LibraryDashboardExtras(
     val queues: List<LibraryQueuePreview>,
     val recentlyDeletedCount: Int,
-    val finishCounts: Map<String, Int>,
-    val historyGrouping: LibraryHistoryGrouping
+    val readingSummaries: Map<String, WorkReadingSummary>,
+    val historyGrouping: LibraryHistoryGrouping,
+    val favoritePreferences: FavoritePreferences
 )
 
 private fun Set<String>.toggle(value: String): Set<String> {
