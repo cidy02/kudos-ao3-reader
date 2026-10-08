@@ -83,13 +83,13 @@ class AO3InboxRepository(
         ) {
             is AO3Result.Failure -> response
             is AO3Result.Success -> {
-                val error = formParser.writeErrorMessage(response.value.body)
-                if (response.value.statusCode in 200..399 && error == null) {
+                val error = formParser.commentWriteFailure(
+                    response.value.statusCode, response.value.body, "AO3 couldn't update your Inbox."
+                )
+                if (error == null) {
                     AO3Result.Success(action.successMessage)
                 } else {
-                    AO3Result.Failure(
-                        AO3Error.Validation(error ?: "AO3 couldn't update your Inbox.")
-                    )
+                    AO3Result.Failure(AO3Error.Validation(error))
                 }
             }
         }

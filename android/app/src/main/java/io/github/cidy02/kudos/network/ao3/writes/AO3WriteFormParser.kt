@@ -117,6 +117,18 @@ class AO3WriteFormParser {
         }
     }
 
+    /**
+     * iOS `AO3Client.commentWriteVerdict`: a refusal AO3 names; "done" only with AO3's own
+     * notice; any other page that came back fine (a maintenance page, an interstitial) is
+     * neither. Null is done; otherwise the reason to show. Comment and Inbox writes counted
+     * every such page as done, and the composer then threw the typed text away (audit A17-1).
+     */
+    fun commentWriteFailure(statusCode: Int, body: String, fallback: String): String? {
+        writeErrorMessage(body)?.let { return it }
+        if (statusCode !in 200..399) return fallback
+        return if (writeSuccessMessage(body) != null) null else io.github.cidy02.kudos.network.ao3.account.AO3CollectionFields.UNCONFIRMED
+    }
+
     fun writeSuccessMessage(html: String): String? = Jsoup.parse(html)
         .selectFirst(".flash.comment_notice, .flash.notice")?.normalizedText()?.takeIf { it.isNotBlank() }
 

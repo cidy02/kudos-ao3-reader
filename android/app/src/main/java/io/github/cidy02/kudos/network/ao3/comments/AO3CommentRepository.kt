@@ -136,8 +136,11 @@ class AO3CommentRepository(
         )) {
             is AO3Result.Failure -> response
             is AO3Result.Success -> {
-                val error = formParser.writeErrorMessage(response.value.body)
-                if (response.value.statusCode in 200..399 && error == null) {
+                val error = formParser.commentWriteFailure(
+                    response.value.statusCode, response.value.body,
+                    if (replyParentId != null) "Couldn't post reply." else "Couldn't post comment."
+                )
+                if (error == null) {
                     // Persist choice on success.
                     if (preferredPseudId != null && form != null) {
                         val chosenName = form.availablePseuds.find { it.id == preferredPseudId }?.name
@@ -153,15 +156,7 @@ class AO3CommentRepository(
                         )
                     )
                 } else {
-                    AO3Result.Failure(
-                        AO3Error.Validation(
-                            error ?: if (replyParentId != null) {
-                                "AO3 couldn't post the reply."
-                            } else {
-                                "AO3 couldn't post the comment."
-                            }
-                        )
-                    )
+                    AO3Result.Failure(AO3Error.Validation(error))
                 }
             }
         }
@@ -186,11 +181,13 @@ class AO3CommentRepository(
         return when (val response = authenticatedClient.postAuthenticated(url, fields, mapOf("X-CSRF-Token" to token, "Referer" to url))) {
             is AO3Result.Failure -> response
             is AO3Result.Success -> {
-                val error = formParser.writeErrorMessage(response.value.body)
-                if (response.value.statusCode in 200..399 && error == null) {
+                val error = formParser.commentWriteFailure(
+                    response.value.statusCode, response.value.body, "Couldn't update comment."
+                )
+                if (error == null) {
                     AO3Result.Success(AO3WriteOutcome(AO3WriteActionKind.Comment, "Comment updated."))
                 } else {
-                    AO3Result.Failure(AO3Error.Validation(error ?: "Couldn't update comment."))
+                    AO3Result.Failure(AO3Error.Validation(error))
                 }
             }
         }
@@ -208,8 +205,12 @@ class AO3CommentRepository(
         return when (val response = authenticatedClient.postAuthenticated(url, fields, mapOf("X-CSRF-Token" to token, "Referer" to url))) {
             is AO3Result.Failure -> response
             is AO3Result.Success -> {
-                if (response.value.statusCode in 200..399) AO3Result.Success(Unit)
-                else AO3Result.Failure(AO3Error.Http(response.value.statusCode))
+                // otwarchive reports a failed delete as `flash[:comment_error]` on a redirected
+                // 200: the body was never read, so that said "Comment deleted." (audit A17-1).
+                val error = formParser.commentWriteFailure(
+                    response.value.statusCode, response.value.body, "Couldn't delete comment."
+                )
+                if (error == null) AO3Result.Success(Unit) else AO3Result.Failure(AO3Error.Validation(error))
             }
         }
     }
