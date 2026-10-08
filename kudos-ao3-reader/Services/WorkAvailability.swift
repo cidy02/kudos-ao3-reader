@@ -65,7 +65,7 @@ enum WorkAvailability {
             // so nothing is recorded — including the timestamp, so a later pass still
             // treats this work as unchecked rather than as verified-present.
             let reason = error.localizedDescription
-            Log.library.notice("Availability check for work \(id) was inconclusive: \(reason, privacy: .public)")
+            Log.library.notice("Availability check for work \(id, privacy: .private(mask: .hash)) was inconclusive: \(reason, privacy: .public)")
         }
     }
 

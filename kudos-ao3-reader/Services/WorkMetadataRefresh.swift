@@ -61,7 +61,7 @@ enum WorkMetadataRefresh {
                 summary.failed += 1
                 let id = work.ao3WorkID ?? WorkTags.ao3WorkID(from: work.sourceURL) ?? -1
                 Log.network.notice(
-                    "Metadata refresh failed for work \(id, privacy: .public): \(message(for: error), privacy: .public)"
+                    "Metadata refresh failed for work \(id, privacy: .private(mask: .hash)): \(message(for: error), privacy: .public)"
                 )
             }
         }
