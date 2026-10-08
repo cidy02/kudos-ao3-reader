@@ -5,6 +5,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Close
@@ -79,7 +80,11 @@ fun AO3PromptMemeScreen(
         outline = tokens.separator, outlineVariant = tokens.separator, surfaceTint = palette.accent
     )) {
         KudosRefreshBox(onRefresh = { model.load(readSchedule = true) }, modifier = Modifier.fillMaxSize().subjectScreenWash(palette)) {
-            LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
+            // A refusal is drawn under the header. Tapped from a card further down it was out of sight,
+            // and the reader saw nothing happen (iOS the same until T-360): bring it into view.
+            val list = rememberLazyListState()
+            LaunchedEffect(state.actionError) { if (state.actionError != null) list.animateScrollToItem(0) }
+            LazyColumn(Modifier.fillMaxSize(), state = list, contentPadding = PaddingValues(bottom = 24.dp)) {
                 item {
                     Spacer(Modifier.windowInsetsTopHeight(WindowInsets.statusBars))
                     Spacer(Modifier.height(76.dp))
