@@ -50,6 +50,9 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
     @Environment(\.accessibilityReduceMotion) var reduceMotion
     @Environment(\.dynamicTypeSize) var dynamicTypeSize
     @Environment(AppRouter.self) var router
+    @Environment(PrivacyGate.self) var gate
+    @AppStorage("hideMatureContent") var hideMature = true
+    @AppStorage("matureContentMode") var matureMode: MaturePrivacyMode = .obscure
     @Environment(ThemeManager.self) private var themeManager
     @Environment(AO3AuthService.self) var auth
     @Environment(DownloadQueue.self) private var downloadQueue
@@ -632,8 +635,10 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
     /// Other downloaded works in the same series, ordered by series position.
     var seriesWorks: [SavedWork] {
         guard let work = localWork, !work.seriesTitle.isEmpty else { return [] }
+        // Hide mode leaves a mature work out of this list as out of every other (audit A20-4).
         return allWorks
             .filter { $0.seriesTitle == work.seriesTitle && $0.id != work.id }
+            .filter { !gate.isHidden($0, enabled: hideMature, mode: matureMode) }
             .sorted { $0.seriesPosition < $1.seriesPosition }
     }
 

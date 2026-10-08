@@ -256,6 +256,14 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                 // Only at the root — pushed detail pages use the normal swipe-to-pop.
                 .edgeSwipeToGoBack(isActive: path.isEmpty) { goBack() }
             #endif
+                .onChange(of: router.panel == .searchFilters) { _, showing in
+                    // Closed without Apply while results are on screen: the panel's edits are
+                    // dropped (the typed search text is not the panel's, and stays). The next
+                    // page tap used to run them as a new search (audit A20-3).
+                    guard !showing, phase == .loaded, var restored = loadedFilters else { return }
+                    restored.query = filters.query
+                    if filters != restored { filters = restored }
+                }
                 .filterPanelPresentation(
                     isPresented: router.isShowing(.searchFilters),
                     detents: [.medium, .large]

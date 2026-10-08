@@ -118,6 +118,10 @@ struct FandomWorksView: View {
     /// refined via the same filter panel the Search tab uses.
     @State private var filters: AO3SearchFilters
     @State private var showingFilters = false
+    /// The filters the results on screen were asked for. The panel edits `filters` itself, so
+    /// closing it without Apply left edits that the next page or a refresh then sent to AO3:
+    /// page 7 of a filter nobody applied (audit A20-3).
+    @State private var loadedFilters: AO3SearchFilters?
     @State private var bulkSelection = RemoteWorkSelectionController()
 
     private enum Phase: Equatable { case loading, loaded, failed(String) }
@@ -230,6 +234,10 @@ struct FandomWorksView: View {
             // Zooms out of the fandom row that pushed it.
             .workCardZoomDestination(BrowseZoomKey.fandom(zoomKey), in: zoomNamespace)
             .toolbar { toolbarContent }
+            .onChange(of: showingFilters) { _, showing in
+                // Closed without Apply: the edits are dropped.
+                if !showing, let loaded = loadedFilters, filters != loaded { filters = loaded }
+            }
             .filterPanelPresentation(isPresented: $showingFilters, detents: [.medium, .large]) {
                 AO3FilterPanel(
                     filters: $filters,
@@ -348,6 +356,7 @@ struct FandomWorksView: View {
         // being empty), so nothing flashes — the pager just stops pretending
         // the tap did nothing.
         phase = .loading
+        if loadedFilters == nil { loadedFilters = filters }
         loadToken += 1
         let token = loadToken
         do {
@@ -416,6 +425,7 @@ struct FandomWorksView: View {
     /// search with whatever filters are now set — the same single request, just newly
     /// parameterised.
     private func reload() {
+        loadedFilters = filters
         phase = .loading
         results = []
         currentPage = 1
@@ -498,6 +508,10 @@ struct TagWorksView: View {
     @State private var expandAll = false
     @State private var filters = Self.baseline
     @State private var showingFilters = false
+    /// The filters the results on screen were asked for. The panel edits `filters` itself, so
+    /// closing it without Apply left edits that the next page or a refresh then sent to AO3:
+    /// page 7 of a filter nobody applied (audit A20-3).
+    @State private var loadedFilters: AO3SearchFilters?
     @State private var bulkSelection = RemoteWorkSelectionController()
 
     private enum Phase: Equatable { case loading, loaded, failed(String) }
@@ -575,6 +589,10 @@ struct TagWorksView: View {
         .subjectScreenWash(palette: resultsPalette, washHeight: 600)
         .screenTint(resultsPalette)
             .toolbar { toolbarContent }
+            .onChange(of: showingFilters) { _, showing in
+                // Closed without Apply: the edits are dropped.
+                if !showing, let loaded = loadedFilters, filters != loaded { filters = loaded }
+            }
             .filterPanelPresentation(isPresented: $showingFilters, detents: [.medium, .large]) {
                 AO3FilterPanel(
                     filters: $filters,
@@ -709,6 +727,7 @@ struct TagWorksView: View {
     }
 
     private func reload() {
+        loadedFilters = filters
         phase = .loading
         results = []
         currentPage = 1
@@ -725,6 +744,7 @@ struct TagWorksView: View {
         // being empty), so nothing flashes — the pager just stops pretending
         // the tap did nothing.
         phase = .loading
+        if loadedFilters == nil { loadedFilters = filters }
         loadToken += 1
         let token = loadToken
         do {
