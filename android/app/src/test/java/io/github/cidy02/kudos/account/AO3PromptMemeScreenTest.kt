@@ -21,6 +21,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
+import org.jsoup.Jsoup
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34], application = Application::class, qualifiers = "w411dp-h1800dp")
@@ -43,7 +44,7 @@ class AO3PromptMemeScreenTest {
             KudosTheme(themeMode = theme) {
                 val density = LocalDensity.current
                 CompositionLocalProvider(LocalDensity provides Density(density.density, scale)) {
-                    if (opened) AO3PromptMemeScreen("summer_meme", "Summer Prompt Meme", true, repository, onOpenWeb = { browser += it })
+                    if (opened) AO3PromptMemeScreen("summer_meme", "Summer Prompt Meme", true, repository, promptMemeWrites(client, repository.authRepository), onOpenWeb = { browser += it })
                     else if (fromManage) CollectionManageRow("Prompts", promptFirstUrl,
                         onOpenModeration = { error("Wrong destination") }, onOpenSettings = { error("Wrong destination") },
                         onOpenMaintainers = { error("Wrong destination") }, onOpenWebFallback = { error("Manage opened browser") },
@@ -67,8 +68,9 @@ class AO3PromptMemeScreenTest {
         reach(label)
         compose.onNodeWithText(label).performClick()
     }
+    private fun action(title: String, id: Int) = compose.onNode(hasText(title) and hasAnyAncestor(hasTestTag("prompt-$id")))
     private fun noWrites() {
-        listOf("Claim", "Release", "New prompt", "Submit sign-up").forEach { compose.onNodeWithText(it).assertDoesNotExist() }
+        listOf("New prompt", "Submit sign-up").forEach { compose.onNodeWithText(it).assertDoesNotExist() }
         assertEquals(0, client.posts)
     }
 
@@ -181,6 +183,85 @@ class AO3PromptMemeScreenTest {
         noWrites()
     }
 
+    @Test fun claimWaitKeepsCardAndDisablesClaimReleaseAndFillUntilAuthoritativeReload() {
+        show { it.holdPost = true; it.postReply = challengeResponse(promptFirstUrl, "<div class='flash notice'>Claimed.</div>") }
+        awaitText("Lanterns after closing")
+        reach("Claim")
+        action("Claim", 701).performClick()
+        compose.waitUntil(15_000) { client.posts == 1 }
+        action("Claim", 701).assertIsNotEnabled()
+        compose.onNodeWithTag("prompt-action-progress").assertExists()
+        compose.onNodeWithText("Lanterns after closing").assertExists()
+        reach("Release")
+        action("Release", 702).assertIsNotEnabled()
+        reach("Fill it")
+        action("Fill it", 703).assertIsNotEnabled()
+        reach("Page 1 of 2")
+        compose.onNodeWithContentDescription("Next Page").assertIsNotEnabled()
+        assertEquals(4, client.gets.size)
+        val doc = Jsoup.parse(challengeFixture("ao3_demo_meme_requests_1"))
+        doc.selectFirst("li.blurb")!!.append("<a href='/collections/summer_meme/claims/1701' data-method='delete'>Drop Claim</a>")
+        compose.runOnIdle {
+            client.replies[promptFirstUrl] = challengeResponse(promptFirstUrl, doc.outerHtml())
+            client.postRelease.complete(Unit)
+        }
+        compose.waitUntil(15_000) { client.gets.size == 5 }
+        reach("Lanterns after closing")
+        compose.waitUntil(15_000) { compose.onAllNodes(hasText("Release") and hasAnyAncestor(hasTestTag("prompt-701")))
+            .fetchSemanticsNodes().isNotEmpty() }
+        action("Release", 701).assertIsEnabled()
+        compose.onNodeWithTag("prompt-action-progress").assertDoesNotExist()
+        assertEquals(1, client.posts)
+        assertEquals(listOf(promptFirstUrl, promptFirstUrl), client.gets.drop(3))
+    }
+
+    @Test fun releaseWaitDisablesOtherActionsAndSuccessReloadReplacesOwnClaim() {
+        show { it.holdPost = true; it.postReply = challengeResponse(promptFirstUrl, "<div class='flash notice'>Released.</div>") }
+        awaitText("Lanterns after closing")
+        reach("Release")
+        action("Release", 702).performClick()
+        compose.waitUntil(15_000) { client.posts == 1 }
+        action("Release", 702).assertIsNotEnabled()
+        compose.onNodeWithTag("prompt-action-progress").assertExists()
+        compose.onNodeWithText("Claimed by you").assertExists()
+        reach("Claim")
+        action("Claim", 701).assertIsNotEnabled()
+        val doc = Jsoup.parse(challengeFixture("ao3_demo_meme_requests_1"))
+        val row = doc.select("li.blurb")[1]
+        row.select("a[data-method=delete], div.claims").remove()
+        row.append("<form action='/collections/summer_meme/claims?prompt_id=702' method='post'><input type='submit' value='Claim'></form>")
+        compose.runOnIdle {
+            client.replies[promptFirstUrl] = challengeResponse(promptFirstUrl, doc.outerHtml())
+            client.postRelease.complete(Unit)
+        }
+        compose.waitUntil(15_000) { client.gets.size == 5 }
+        reach("A borrowed constellation")
+        compose.waitUntil(15_000) { compose.onAllNodes(hasText("Claim") and hasAnyAncestor(hasTestTag("prompt-702")))
+            .fetchSemanticsNodes().isNotEmpty() }
+        action("Claim", 702).assertIsEnabled()
+        assertEquals(listOf(AO3PromptMemeUrls.claims("summer_meme", forUser = true), promptFirstUrl), client.gets.drop(3))
+        assertEquals(1, client.posts)
+    }
+
+    @Test fun refusedReleaseKeepsOwnCardShowsIosReasonAndDismissSendsNothing() {
+        show { it.postReply = challengeResponse(promptFirstUrl, "<div class='flash error'>This claim cannot be released.</div>") }
+        awaitText("Lanterns after closing")
+        reach("Release")
+        action("Release", 702).performClick()
+        compose.waitUntil(15_000) { client.posts == 1 }
+        val message = "Couldn't release that prompt: This claim cannot be released."
+        reach(message)
+        awaitText(message)
+        reach("Release")
+        action("Release", 702).assertIsEnabled()
+        compose.onNodeWithText("Claimed by you").assertExists()
+        reach(message)
+        compose.onNodeWithContentDescription("Dismiss error").performClick()
+        compose.onNodeWithText(message).assertDoesNotExist()
+        assertEquals(listOf(AO3PromptMemeUrls.claims("summer_meme", forUser = true)), client.gets.drop(3))
+        assertEquals(1, client.posts)
+    }
+
     private fun accessibleTheme(theme: KudosThemeMode) {
         show(theme = theme, scale = 2f)
         awaitText("Lanterns after closing")
@@ -196,8 +277,33 @@ class AO3PromptMemeScreenTest {
         compose.onNodeWithText("Unclaimed").performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(filterLayouts) }
         assertTrue(filterLayouts.isNotEmpty())
         assertTrue(filterLayouts.all { !it.didOverflowHeight && !it.isLineEllipsized(it.lineCount - 1) })
-        assertEquals(3, client.gets.size)
-        noWrites()
+        reach("Claim")
+        val claimLayouts = mutableListOf<TextLayoutResult>()
+        action("Claim", 701).performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(claimLayouts) }
+        assertTrue(claimLayouts.isNotEmpty())
+        assertTrue(claimLayouts.all { !it.didOverflowHeight && !it.isLineEllipsized(it.lineCount - 1) })
+        val message = "Couldn't claim that prompt: This prompt is closed to new claims."
+        compose.runOnIdle { client.postReply = challengeResponse(promptFirstUrl,
+            "<div class='flash error'>This prompt is closed to new claims.</div>") }
+        action("Claim", 701).performClick()
+        compose.waitUntil(15_000) { client.posts == 1 }
+        reach(message)
+        awaitText(message)
+        val errorLayouts = mutableListOf<TextLayoutResult>()
+        compose.onNodeWithText(message).performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(errorLayouts) }
+        assertTrue(errorLayouts.isNotEmpty())
+        assertTrue(errorLayouts.all { !it.didOverflowHeight && !it.isLineEllipsized(it.lineCount - 1) })
+        compose.onNodeWithContentDescription("Dismiss error").performClick()
+        select("Yours")
+        awaitText("A borrowed constellation")
+        reach("Release")
+        val releaseLayouts = mutableListOf<TextLayoutResult>()
+        action("Release", 702).performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(releaseLayouts) }
+        assertTrue(releaseLayouts.isNotEmpty())
+        assertTrue(releaseLayouts.all { !it.didOverflowHeight && !it.isLineEllipsized(it.lineCount - 1) })
+        assertEquals(listOf(promptFirstUrl), client.gets.drop(3))
+        assertEquals(1, client.posts)
+        compose.onNodeWithText("New prompt").assertDoesNotExist()
     }
     @Test fun lightAtAccessibilityScale() = accessibleTheme(KudosThemeMode.Light)
     @Test fun darkAtAccessibilityScale() = accessibleTheme(KudosThemeMode.Dark)

@@ -6,6 +6,7 @@ import io.github.cidy02.kudos.network.ao3.AO3HttpResponse
 import io.github.cidy02.kudos.network.ao3.AO3OverloadDetector
 import io.github.cidy02.kudos.network.ao3.AO3RedirectCookieRelay
 import io.github.cidy02.kudos.network.ao3.AO3Result
+import io.github.cidy02.kudos.network.ao3.account.AO3PromptMemeUrls
 import io.github.cidy02.kudos.network.ao3.account.AO3AccountUrls
 import io.github.cidy02.kudos.network.ao3.account.AO3CollectionItemDraft
 import io.github.cidy02.kudos.network.ao3.account.AO3CollectionItemTab
@@ -36,6 +37,38 @@ class AO3WriteRepository(
     private val client: AO3AuthenticatedClient,
     private val parser: AO3WriteFormParser = AO3WriteFormParser()
 ) {
+    /** iOS claimPrompt: one fresh requests-page token and one single-shot POST. */
+    suspend fun claimPrompt(slug: String, promptID: Int, expectedGeneration: Int): AO3Result<Unit> =
+        changePromptClaim(AO3PromptMemeUrls.requests(slug), AO3PromptMemeUrls.claims(slug),
+            promptID, expectedGeneration)
+
+    /** iOS releasePrompt: one fresh for-user claims token and one single-shot delete override. */
+    suspend fun releasePrompt(slug: String, claimID: Int, expectedGeneration: Int): AO3Result<Unit> =
+        changePromptClaim(AO3PromptMemeUrls.claims(slug, forUser = true), AO3PromptMemeUrls.claim(slug, claimID),
+            null, expectedGeneration)
+
+    private suspend fun changePromptClaim(referer: String, action: String, promptID: Int?,
+        expectedGeneration: Int): AO3Result<Unit> {
+        requireCollectionSession(expectedGeneration)
+        if (client.username() == null) return AO3Result.Failure(AO3Error.Validation("Log in to AO3 first."))
+        val html = when (val result = client.getAuthenticated(referer)) {
+            is AO3Result.Failure -> return result
+            is AO3Result.Success -> result.value.body
+        }
+        requireCollectionSession(expectedGeneration)
+        val token = parser.parseAuthenticityToken(html, metaOnly = true)
+            ?: return AO3Result.Failure(AO3Error.Validation("Couldn't prepare the request. Try again, or open the work on AO3."))
+        val fields = if (promptID != null) listOf("authenticity_token" to token, "prompt_id" to promptID.toString())
+            else listOf("_method" to "delete", "authenticity_token" to token)
+        currentCoroutineContext().ensureActive()
+        val response = withContext(NonCancellable) {
+            client.postAuthenticatedInSession(action, fields, writeHeaders(token, referer), expectedGeneration)
+        }
+        requireCollectionSession(expectedGeneration)
+        return collectionWriteVerdict(response, if (promptID != null) "AO3 couldn't claim that prompt."
+            else "AO3 couldn't release that prompt.")
+    }
+
     /** iOS: fresh edit-page meta token, captured action/method, all four strings, one POST. */
     suspend fun saveTagSetFields(tagSet: AO3TagSetSnapshot, fields: Map<AO3TagSetField, String>,
         expectedGeneration: Int): AO3Result<Unit> {

@@ -4,6 +4,7 @@ import io.github.cidy02.kudos.auth.isSignedIn
 import io.github.cidy02.kudos.network.ao3.AO3Result
 import io.github.cidy02.kudos.network.ao3.account.AO3PromptMemePage
 import io.github.cidy02.kudos.network.ao3.account.challengeDateText
+import io.github.cidy02.kudos.network.ao3.writes.AO3WriteRepository
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.currentCoroutineContext
@@ -15,7 +16,9 @@ internal data class PromptMemeUiState(
     val data: AO3PromptMemePage? = null,
     val closeDateText: String = "",
     val loading: Boolean = false,
-    val failure: String? = null
+    val failure: String? = null,
+    val promptInFlight: Int? = null,
+    val actionError: String? = null
 )
 
 /**
@@ -30,21 +33,54 @@ internal fun readsPromptMemeSchedule(viewerIsOwner: Boolean, attempted: Boolean,
 internal class AO3PromptMemeState(
     private val slug: String,
     private val repository: AO3CollectionDetailRepository,
-    private val viewerIsOwner: Boolean
+    private val viewerIsOwner: Boolean,
+    private val writes: AO3WriteRepository
 ) {
     private var scheduleAttempted = false
     private val auth = repository.authRepository
     private val generation = auth.generation.value
     private var active = true
     private var loadJob: Job? = null
+    private var actionJob: Job? = null
     private val mutable = MutableStateFlow(PromptMemeUiState())
     val state = mutable.asStateFlow()
 
     private fun ownsSession() = active && generation == auth.generation.value
-    fun close() { active = false; loadJob?.cancel() }
+    fun close() { active = false; loadJob?.cancel(); actionJob?.cancel() }
+    fun dismissActionError() { if (ownsSession()) mutable.value = state.value.copy(actionError = null) }
+
+    suspend fun claim(promptID: Int) = changeClaim(promptID, release = false)
+    suspend fun release(promptID: Int) = changeClaim(promptID, release = true)
+
+    private suspend fun changeClaim(promptID: Int, release: Boolean) {
+        if (!ownsSession() || state.value.loading || state.value.promptInFlight != null) return
+        val prompt = state.value.data?.prompts?.firstOrNull { it.id == promptID } ?: return
+        if (release && prompt.claimID == null || !release && (!prompt.canClaim || prompt.claimedByCurrentUser)) return
+        actionJob = currentCoroutineContext()[Job]
+        mutable.value = state.value.copy(promptInFlight = promptID, actionError = null)
+        try {
+            val result = if (release) writes.releasePrompt(slug, prompt.claimID!!, generation)
+                else writes.claimPrompt(slug, prompt.id, generation)
+            currentCoroutineContext().ensureActive()
+            if (!ownsSession()) return
+            when (result) {
+                is AO3Result.Success -> loadPage(state.value.data?.currentPage ?: 1, readSchedule = false)
+                is AO3Result.Failure -> mutable.value = state.value.copy(actionError =
+                    "Couldn't ${if (release) "release" else "claim"} that prompt: ${result.error.moderationMessage()}")
+            }
+        } finally {
+            if (ownsSession()) mutable.value = state.value.copy(promptInFlight = null)
+            actionJob = null
+        }
+    }
 
     /** [readSchedule] marks an opening or a refresh, the two moments the close date may be asked for. */
     suspend fun load(page: Int = 1, readSchedule: Boolean = false) {
+        if (state.value.promptInFlight != null) return
+        loadPage(page, readSchedule)
+    }
+
+    private suspend fun loadPage(page: Int, readSchedule: Boolean) {
         if (!ownsSession() || state.value.loading || page < 1) return
         loadJob = currentCoroutineContext()[Job]
         mutable.value = state.value.copy(loading = true, failure = null)

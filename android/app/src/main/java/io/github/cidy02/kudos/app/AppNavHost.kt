@@ -716,7 +716,7 @@ fun AppNavHost(
             else io.github.cidy02.kudos.account.AO3PromptMemeScreen(
                 slug = slug, title = Routes.routeArg(entry, "collectionTitle").orEmpty(),
                 viewerIsOwner = entry.arguments?.getBoolean("owner") == true,
-                repository = container.collectionDetailRepository,
+                repository = container.collectionDetailRepository, writes = container.writeRepository,
                 onOpenWeb = { navController.navigate(Routes.webFallback(it)) }
             )
         }
