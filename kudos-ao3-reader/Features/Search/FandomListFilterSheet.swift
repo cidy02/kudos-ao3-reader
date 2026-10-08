@@ -15,6 +15,10 @@ struct FandomListFilterSheet: View {
     var onReset: () -> Void
 
     @Environment(ThemeManager.self) private var themeManager
+    @ScaledMetric(relativeTo: .caption) private var captionSize: CGFloat = 11.5
+    @ScaledMetric(relativeTo: .subheadline) private var toggleTitleSize: CGFloat = 15
+    @ScaledMetric(relativeTo: .caption) private var toggleDetailSize: CGFloat = 12
+    @ScaledMetric(relativeTo: .headline) private var applyButtonSize: CGFloat = 16
 
     private var tallies: FandomFamilyFilterTallies {
         FandomFamilyFilters.tallies(families, library: library)
@@ -117,7 +121,7 @@ struct FandomListFilterSheet: View {
             )
             if options.minimumWorks != .any {
                 Text(minimumWorksCaption)
-                    .font(.system(size: 11.5))
+                    .font(.system(size: captionSize))
                     .foregroundStyle(.secondary)
                     .padding(.horizontal, 2)
             }
@@ -146,10 +150,10 @@ struct FandomListFilterSheet: View {
         Toggle(isOn: isOn) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .font(.system(size: 15))
+                    .font(.system(size: toggleTitleSize))
                     .foregroundStyle(.primary)
                 Text(detail)
-                    .font(.system(size: 12))
+                    .font(.system(size: toggleDetailSize))
                     .foregroundStyle(.secondary)
                     .monospacedDigit()
             }
@@ -167,7 +171,7 @@ struct FandomListFilterSheet: View {
     private var applyButton: some View {
         Button(action: onApply) {
             Text("Show \(remainingTagCount.formatted()) tags")
-                .font(.system(size: 16, weight: .semibold))
+                .font(.system(size: applyButtonSize, weight: .semibold))
                 .monospacedDigit()
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 15)

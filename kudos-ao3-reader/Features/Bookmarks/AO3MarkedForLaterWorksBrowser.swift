@@ -232,6 +232,7 @@ struct AO3MarkedForLaterWorksBrowser: View {
     var onUnmark: (CanonicalWork) -> Void = { _ in }
 
     @Environment(ThemeManager.self) private var theme
+    @ScaledMetric(relativeTo: .caption) private var footerSize: CGFloat = 11.5
 
     private var sections: [AO3MarkedForLaterSection<CanonicalWork>] {
         AO3MarkedForLaterGrouping.sections(
@@ -305,7 +306,7 @@ struct AO3MarkedForLaterWorksBrowser: View {
 
     private var footer: some View {
         Text(AO3MarkedForLaterCopy.footer(currentPage: currentPage, totalPages: totalPages))
-            .font(.system(size: 11.5))
+            .font(.system(size: footerSize))
             .foregroundStyle(.secondary)
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -476,9 +477,11 @@ struct AO3MarkedForLaterFilterRail: View {
 struct AO3MarkedForLaterDownloadFootnote: View {
     let text: String
 
+    @ScaledMetric(relativeTo: .caption) private var footnoteSize: CGFloat = 11.5
+
     var body: some View {
         Text(text)
-            .font(.system(size: 11.5, weight: .medium, design: .monospaced))
+            .font(.system(size: footnoteSize, weight: .medium, design: .monospaced))
             .foregroundStyle(.secondary)
             .frame(maxWidth: .infinity, alignment: .leading)
             .accessibilityLabel(text)

@@ -40,6 +40,10 @@ struct MediaBrowserView: View {
     @State private var jumpBackInPicks: [JumpBackInPick] = []
     /// About a third of a phone's width, so a fourth card peeks at the edge.
     @ScaledMetric(relativeTo: .subheadline) private var jumpBackInCardWidth: CGFloat = 112
+    @ScaledMetric(relativeTo: .footnote) private var openWebsiteSize: CGFloat = 13.5
+    @ScaledMetric(relativeTo: .subheadline) private var categoryNameSize: CGFloat = 15
+    @ScaledMetric(relativeTo: .footnote) private var jumpBackInTitleSize: CGFloat = 14
+    @ScaledMetric(relativeTo: .caption) private var jumpBackInCountSize: CGFloat = 10.5
     /// Set once `cardsReady` has waited as long as it is willing to for counts
     /// (a warm cache beats it; a cold one does not) — see `load`.
     @State private var countsSettled = false
@@ -179,7 +183,7 @@ struct MediaBrowserView: View {
         } label: {
             HStack {
                 Text("Open AO3 Website")
-                    .font(.system(size: 13.5, weight: .medium))
+                    .font(.system(size: openWebsiteSize, weight: .medium))
                 Spacer()
                 Image(systemName: "chevron.right")
                     .font(.system(size: 11, weight: .semibold))
@@ -210,7 +214,7 @@ struct MediaBrowserView: View {
         return SubjectPanel(palette: palette, leadingSymbol: category.symbol) {
             VStack(alignment: .leading, spacing: 3) {
                 Text(wrapSafeName(category.name))
-                    .font(.system(size: 15))
+                    .font(.system(size: categoryNameSize))
                     .foregroundStyle(.primary)
                     .fixedSize(horizontal: false, vertical: true)
                 statsLine(stats, palette: palette)
@@ -304,14 +308,14 @@ struct MediaBrowserView: View {
             )
 
             Text(FandomDisplayName.bareTitle(entry.fandom, among: jumpBackInPicks.map(\.fandom)))
-                .font(.system(size: 14, weight: .semibold))
+                .font(.system(size: jumpBackInTitleSize, weight: .semibold))
                 .foregroundStyle(.primary)
                 .lineLimit(2)
                 .fixedSize(horizontal: false, vertical: true)
 
             if let workCount = entry.workCount {
                 Text("\(compact(workCount)) works")
-                    .font(.system(size: 10.5))
+                    .font(.system(size: jumpBackInCountSize))
                     .monospacedDigit()
                     .foregroundStyle(.secondary)
             }

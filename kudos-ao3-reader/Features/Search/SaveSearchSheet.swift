@@ -18,6 +18,9 @@ struct SaveSearchSheet: View {
 
     @Environment(\.dismiss) private var dismiss
     @Environment(ThemeManager.self) private var theme
+    @ScaledMetric(relativeTo: .body) private var nameFieldSize: CGFloat = 17
+    @ScaledMetric(relativeTo: .caption) private var footnoteSize: CGFloat = 11.5
+    @ScaledMetric(relativeTo: .footnote) private var emptySummarySize: CGFloat = 12.5
 
     private var palette: SubjectPalette {
         theme.appTheme.subjectPalette(hue: CoverArt.workHue(fandoms: [], title: name))
@@ -33,14 +36,14 @@ struct SaveSearchSheet: View {
                 Section {
                     TextField("Name", text: $name)
                         .textFieldStyle(.plain)
-                        .font(.system(size: 17))
+                        .font(.system(size: nameFieldSize))
                         .padding(.horizontal, 14)
                         .padding(.vertical, 12)
                         .subjectPanel()
                         .pageBodyRow(top: 14, gutter: SubjectMetrics.accountGutter)
 
                     Text("The name comes from your search. You can change it to anything.")
-                        .font(.system(size: 11.5))
+                        .font(.system(size: footnoteSize))
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                         .pageBodyRow(top: 6, gutter: SubjectMetrics.accountGutter)
@@ -50,7 +53,7 @@ struct SaveSearchSheet: View {
                     VStack(alignment: .leading, spacing: 8) {
                         if summary.isEmpty {
                             Text("You haven't chosen any filters, so only the name will be saved.")
-                                .font(.system(size: 12.5))
+                                .font(.system(size: emptySummarySize))
                                 .foregroundStyle(.secondary)
                                 .fixedSize(horizontal: false, vertical: true)
                                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -69,7 +72,7 @@ struct SaveSearchSheet: View {
                         }
 
                         Text("Only the choices you changed are saved.")
-                            .font(.system(size: 11.5))
+                            .font(.system(size: footnoteSize))
                             .foregroundStyle(.secondary)
                     }
                     .pageBodyRow(top: 8, gutter: SubjectMetrics.accountGutter)
@@ -145,10 +148,11 @@ private struct SaveSearchSummaryChip: View {
     let kind: SaveSearchSummaryKind
 
     @Environment(ThemeManager.self) private var theme
+    @ScaledMetric(relativeTo: .caption) private var chipTextSize: CGFloat = 12
 
     var body: some View {
         Text(text)
-            .font(.system(size: 12))
+            .font(.system(size: chipTextSize))
             .lineLimit(1)
             .padding(.horizontal, 9)
             .padding(.vertical, 4)

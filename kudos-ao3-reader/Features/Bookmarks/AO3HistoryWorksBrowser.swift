@@ -243,6 +243,9 @@ struct AO3HistoryReadingFootnote: View {
     let reading: AO3ReadingEntry
     var localProgress: String?
 
+    @ScaledMetric(relativeTo: .caption) private var footnoteSize: CGFloat = 11.5
+    @ScaledMetric(relativeTo: .caption) private var statusSize: CGFloat = 11
+
     var body: some View {
         let facts = [
             reading.visitCountDisplay,
@@ -253,7 +256,7 @@ struct AO3HistoryReadingFootnote: View {
         VStack(alignment: .leading, spacing: 4) {
             if !facts.isEmpty {
                 Text(facts.joined(separator: " · "))
-                    .font(.system(size: 11.5))
+                    .font(.system(size: footnoteSize))
                     .foregroundStyle(.secondary)
                     .monospacedDigit()
             }
@@ -266,7 +269,7 @@ struct AO3HistoryReadingFootnote: View {
                         Label("Flagged to skip", systemImage: "eye.slash")
                     }
                 }
-                .font(.system(size: 11))
+                .font(.system(size: statusSize))
                 .foregroundStyle(.secondary.opacity(0.8))
             }
         }

@@ -58,6 +58,8 @@ struct AO3NamedSubscriptionsList: View {
     let kicker: String
 
     @Environment(AO3AuthService.self) private var auth
+    @ScaledMetric(relativeTo: .headline) private var rowTitleSize: CGFloat = 15
+    @ScaledMetric(relativeTo: .footnote) private var rowSubtitleSize: CGFloat = 12.5
     @State private var page = 1
     /// Tagged with the key it was fetched for. A page or error whose key is
     /// not the current one is not drawn, so a scope or account switch never
@@ -215,11 +217,11 @@ struct AO3NamedSubscriptionsList: View {
     private func rowLabel(_ row: AO3NamedSubscription) -> some View {
         VStack(alignment: .leading, spacing: 3) {
             Text(row.name)
-                .font(.system(size: 15, weight: .semibold))
+                .font(.system(size: rowTitleSize, weight: .semibold))
                 .foregroundStyle(.primary)
             if !row.creators.isEmpty {
                 Text("by " + row.creators.map(\.displayName).joined(separator: ", "))
-                    .font(.system(size: 12.5))
+                    .font(.system(size: rowSubtitleSize))
                     .foregroundStyle(.secondary)
             }
         }

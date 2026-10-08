@@ -12,6 +12,8 @@ struct FilterRangeSlider: View {
     var defaultMaximum: Int
 
     @Environment(ThemeManager.self) private var theme
+    @ScaledMetric(relativeTo: .caption) private var fieldTitleSize: CGFloat = 12
+    @ScaledMetric(relativeTo: .footnote) private var fieldValueSize: CGFloat = 14
 
     @GestureState private var isDragging = false
     @State private var dragMaximum: Int?
@@ -71,12 +73,12 @@ struct FilterRangeSlider: View {
     private func boundField(_ title: String, text: Binding<String>) -> some View {
         HStack(spacing: 8) {
             Text(title)
-                .font(.system(size: 12))
+                .font(.system(size: fieldTitleSize))
                 .foregroundStyle(.secondary)
                 .fixedSize()
             TextField("Any", text: Self.digitsOnly(text))
                 .accessibilityLabel(title)
-                .font(.system(size: 14, design: .monospaced))
+                .font(.system(size: fieldValueSize, design: .monospaced))
                 .monospacedDigit()
             #if !os(macOS)
                 .keyboardType(.numberPad)

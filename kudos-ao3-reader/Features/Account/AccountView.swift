@@ -29,6 +29,9 @@ struct AccountView: View {
     @State private var selectedTab: AccountTab = .overview
     @ScaledMetric(relativeTo: .body) private var scopeRowTitleSize: CGFloat = 15
     @ScaledMetric(relativeTo: .caption) private var scopeRowSubtitleSize: CGFloat = 11.5
+    @ScaledMetric(relativeTo: .body) private var skeletonUsernameSize: CGFloat = 19
+    @ScaledMetric(relativeTo: .footnote) private var previewNoticeSize: CGFloat = 12.5
+    @ScaledMetric(relativeTo: .footnote) private var scopeRowCountSize: CGFloat = 13
     @State private var readingTab: AccountReadingTab = .later
     @State private var editingWorkID: Int?
     @State private var writingTab: AccountWritingTab = .works
@@ -907,7 +910,7 @@ private extension AccountView {
         HStack(spacing: 13) {
             AO3AuthorAvatar(url: nil, name: "AO3 account", size: 44, isCircular: true)
             Text("Your username")
-                .font(.system(size: 19, weight: .bold))
+                .font(.system(size: skeletonUsernameSize, weight: .bold))
                 .foregroundStyle(.primary)
             Spacer(minLength: 0)
         }
@@ -919,7 +922,7 @@ private extension AccountView {
         Section {
             VStack(alignment: .leading, spacing: 0) {
                 Text("When you sign in, this tab shows your AO3 account and activity.")
-                    .font(.system(size: 12.5))
+                    .font(.system(size: previewNoticeSize))
                     .foregroundStyle(.secondary)
                     .padding(.bottom, 14)
 
@@ -1228,7 +1231,7 @@ private extension AccountView {
                     // the list rather than printing a total, which is why the
                     // artboard shows exactly that against Collections.
                     Text(count)
-                        .font(.system(size: 13, weight: .medium, design: .monospaced))
+                        .font(.system(size: scopeRowCountSize, weight: .medium, design: .monospaced))
                         .foregroundStyle(.secondary)
                 }
 

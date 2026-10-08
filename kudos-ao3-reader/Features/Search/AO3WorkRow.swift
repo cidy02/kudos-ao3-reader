@@ -32,6 +32,7 @@ struct AO3WorkRow: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @AppStorage("showsZeroStats") private var showsZeroStats = true
     @ScaledMetric(relativeTo: .title3) private var bookmarkTitleSize: CGFloat = 19
+    @ScaledMetric(relativeTo: .caption) private var bookmarkMetadataSize: CGFloat = 11.5
     @State private var expanded = false
 
     /// Worth an expand toggle only when there's more to show than the clamped view:
@@ -418,7 +419,7 @@ struct AO3WorkRow: View {
                             .fixedSize(horizontal: true, vertical: false)
                     }
                 }
-                .font(.system(size: 11.5))
+                .font(.system(size: bookmarkMetadataSize))
                 .foregroundStyle(.secondary)
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel(
