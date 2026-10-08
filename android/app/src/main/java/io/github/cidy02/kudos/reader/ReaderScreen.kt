@@ -28,6 +28,8 @@ import io.github.cidy02.kudos.ui.subject.SubjectSegmentedControl
 import io.github.cidy02.kudos.ui.subject.SubjectToggle
 import io.github.cidy02.kudos.ui.subject.ToolbarCircleButton
 import kotlin.math.roundToInt
+import org.readium.r2.shared.publication.services.positionsByReadingOrder
+import org.readium.r2.shared.publication.Locator
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -346,28 +348,63 @@ private fun ReaderReading(
             }
             val tocEntries = remember(publication) { ReadiumTocAdapter.entries(publication) }
             val sections = remember(publication) { ReadiumTocAdapter.sections(publication) }
-            val progressLabel = ReaderProgressDisplay.label(state.liveProgress, sections)
-            val minutesRemaining = ReaderProgressDisplay.minutesRemaining(
-                state.liveProgress,
-                wordCount = state.work.wordCount
-            )
-            val bottomLabel = if (minutesRemaining != null) {
-                "$progressLabel · ~$minutesRemaining min left"
-            } else {
-                progressLabel
+            val progressLabel = ReaderProgressDisplay.label(state.liveProgress, sections, state.work.chapters)
+            var positions by remember(publication) { mutableStateOf<List<List<Locator>>>(emptyList()) }
+            var scrubOriginLocator by remember(publication) { mutableStateOf<Locator?>(null) }
+            var scrubViewport by remember(publication) { mutableStateOf<ReaderViewport?>(null) }
+            var scrubValue by remember(publication) { mutableStateOf<Float?>(null) }
+            var lastScrubPage by remember(publication) { mutableStateOf<Int?>(null) }
+            val viewport = scrubViewport ?: state.viewport
+            val pageCount = viewport?.pageCount ?: 0
+            val page = scrubValue?.let { ReaderProgressDisplay.scrubPage(it, pageCount) } ?: viewport?.page ?: 0
+            val currentProgress = scrubValue ?: if (pageCount > 0) ReaderProgressDisplay.sliderValue(page, pageCount) else 0f
+            val chapterPositions = positions.getOrNull(viewport?.spineIndex ?: -1)
+            val chapterRemainingMinutes = chapterPositions?.takeIf { it.isNotEmpty() && pageCount > 0 }?.let {
+                ReaderProgressDisplay.minutesForPositions(
+                    ReaderProgressDisplay.chapterRemainingPositions(page, pageCount, it.size)
+                )
+            }
+            val liveLocator = state.liveProgress?.locatorJson?.let(ReadiumNavigatorController::locatorFromJson)
+            val workRemainingMinutes = liveLocator?.locations?.position?.takeIf { positions.isNotEmpty() }?.let {
+                ReaderProgressDisplay.minutesForPositions((positions.sumOf { chapter -> chapter.size } - it).coerceAtLeast(0))
+            }
+            val bottomLabel = if (workRemainingMinutes != null) {
+                "$progressLabel · ${ReaderProgressDisplay.durationLabel(workRemainingMinutes)} left"
+            } else progressLabel
+
+            // Keep the released preview until the navigator settles, as iOS
+            // does; clearing it on release snapped the thumb to an older page.
+            LaunchedEffect(state.viewport) {
+                if (scrubOriginLocator == null) {
+                    scrubValue = null
+                    lastScrubPage = null
+                }
             }
 
-            val currentProgress = state.liveProgress?.totalProgression?.toFloat()
-                ?: ReaderProgressDisplay.percent(
-                    state.liveProgress,
-                    publication.readingOrder.size
-                )?.div(100f) ?: 0f
-
-            val page = state.liveProgress?.spineIndex?.plus(1) ?: 1
-            val pageCount = publication.readingOrder.size.coerceAtLeast(1)
+            fun seekInChapter(value: Float, commit: Boolean = false) {
+                if (pageCount <= 1) return
+                val origin = scrubOriginLocator ?: liveLocator ?: return
+                if (scrubOriginLocator == null) {
+                    scrubOriginLocator = origin
+                    scrubViewport = state.viewport
+                    lastScrubPage = viewport?.page
+                    viewModel.setScrubbing(true)
+                }
+                scrubValue = value
+                val targetPage = ReaderProgressDisplay.scrubPage(value, pageCount)
+                if (commit || targetPage != lastScrubPage) {
+                    lastScrubPage = targetPage
+                    haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    val target = ReadiumProgressAdapter.chapterSeekTarget(
+                        origin, ReaderProgressDisplay.sliderValue(targetPage, pageCount).toDouble()
+                    )
+                    scope.launch { navigatorController.scrubTo(target) }
+                }
+            }
 
             LaunchedEffect(publication) {
                 viewModel.setSpineCount(publication.readingOrder.size)
+                positions = publication.positionsByReadingOrder()
             }
 
             fun annotateSelection(asNote: Boolean, onComplete: () -> Unit = {}) {
@@ -412,6 +449,7 @@ private fun ReaderReading(
                         onHighlightSelection = { complete -> annotateSelection(false, complete) },
                         onAddNoteSelection = { complete -> annotateSelection(true, complete) },
                         onHighlightTap = viewModel::openHighlight,
+                        onViewportChanged = viewModel::onViewport,
                         onContentTap = {
                             if (fanMenuOpen) {
                                 fanMenuOpen = false
@@ -630,26 +668,16 @@ private fun ReaderReading(
                         ReaderPositionCard(
                             page = page,
                             pageCount = pageCount,
-                            chapterRemainingMinutes = minutesRemaining,
+                            chapterRemainingMinutes = chapterRemainingMinutes,
                             workLine = bottomLabel,
                             sliderValue = currentProgress,
-                            sliderEnabled = publication.readingOrder.isNotEmpty(),
-                            onSeek = { progression ->
-                                haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                val spineCount = publication.readingOrder.size
-                                if (spineCount > 0) {
-                                    val targetIndex = (progression * spineCount).toInt()
-                                        .coerceIn(0, spineCount - 1)
-                                    val fraction = (progression * spineCount) - targetIndex
-                                    val target = ReaderRestoreTarget.Fallback(
-                                        targetIndex,
-                                        fraction.toDouble()
-                                    )
-                                    val loc = ReadiumProgressAdapter.initialLocator(target, publication)
-                                    if (loc != null) {
-                                        navigatorController.go(loc, animated = false)
-                                    }
-                                }
+                            sliderEnabled = pageCount > 1 && liveLocator != null,
+                            onSeek = { seekInChapter(it) },
+                            onSeekEnd = {
+                                scrubValue?.let { seekInChapter(it, commit = true) }
+                                scrubOriginLocator = null
+                                scrubViewport = null
+                                viewModel.setScrubbing(false)
                             },
                             showsMiniPlayer = showsMiniPlayer,
                             speechStatus = speechStatus,

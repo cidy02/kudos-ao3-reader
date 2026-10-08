@@ -148,6 +148,19 @@ class ReaderRepository(
         return workRepository.setFinished(workId, finished)
     }
 
+    /** iOS onReachedPublicationEnd: finish now, hold the copy only on close. */
+    suspend fun finishAtPublicationEnd(workId: String): SavedWork? {
+        val work = workRepository.getWork(workId) ?: return null
+        if (!work.isComplete || work.isFinished) return work
+        val now = clock()
+        return workRepository.upsert(work.copy(
+            isFinished = true,
+            lastReadDate = now,
+            progressModifiedAt = now,
+            lastModifiedAt = now
+        ))
+    }
+
     suspend fun close(workId: String): SavedWork? = workRepository.holdFinishedCopy(workId, clock())
 
     /**

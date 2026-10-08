@@ -10,13 +10,21 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.fragment.app.FragmentActivity
 import androidx.fragment.app.FragmentContainerView
 import io.github.cidy02.kudos.reader.settings.CustomFontDeclaration
+import io.github.cidy02.kudos.reader.ReaderViewport
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import org.json.JSONObject
+import org.readium.r2.navigator.preferences.ReadingProgression
 import org.readium.r2.navigator.epub.EpubNavigatorFactory
 import org.readium.r2.navigator.epub.EpubNavigatorFragment
 import org.readium.r2.navigator.epub.EpubPreferences
@@ -54,6 +62,7 @@ fun ReadiumNavigatorHost(
     onHighlightSelection: (() -> Unit) -> Unit,
     onAddNoteSelection: (() -> Unit) -> Unit,
     onHighlightTap: (String) -> Unit,
+    onViewportChanged: (ReaderViewport?) -> Unit,
     modifier: Modifier = Modifier,
     controller: ReadiumNavigatorController? = null,
     onContentTap: (() -> Unit)? = null,
@@ -71,11 +80,43 @@ fun ReadiumNavigatorHost(
     val currentOnAddNoteSelection by rememberUpdatedState(onAddNoteSelection)
     val currentController by rememberUpdatedState(controller)
     val currentOnNavigatorReady by rememberUpdatedState(onNavigatorReady)
+    val currentOnViewportChanged by rememberUpdatedState(onViewportChanged)
+    val scope = rememberCoroutineScope()
+    var viewportJob by remember(publication) { mutableStateOf<Job?>(null) }
 
     val listener = remember(publication) {
         object : EpubNavigatorFragment.Listener {
             override fun onExternalLinkActivated(url: AbsoluteUrl) {
                 currentOnExternalLink(url.toString())
+            }
+        }
+    }
+
+    val paginationListener = remember(publication) {
+        object : EpubNavigatorFragment.PaginationListener {
+            override fun onPageChanged(pageIndex: Int, totalPages: Int, locator: Locator) {
+                viewportJob?.cancel()
+                val nav = activity.supportFragmentManager.findFragmentByTag(FRAGMENT_TAG)
+                    as? EpubNavigatorFragment ?: return
+                val settings = nav.settings.value
+                val index = ReadiumProgressAdapter.spineIndex(publication, locator)
+                currentOnLocatorChanged(locator)
+                if (!settings.scroll) {
+                    val page = if (settings.readingProgression == ReadingProgression.RTL)
+                        totalPages - pageIndex else pageIndex + 1
+                    currentOnViewportChanged(ReaderViewport(index, page, totalPages))
+                    return
+                }
+                // PaginationListener's horizontal count is not a scrolled page count.
+                // Read the loaded current resource's scroll extent, never a book percent.
+                viewportJob = scope.launch {
+                    val raw = nav.evaluateJavascript(SCROLL_EXTENT_SCRIPT) ?: return@launch
+                    if (nav.currentLocator.value != locator || nav.settings.value != settings) return@launch
+                    val metrics = runCatching { JSONObject(raw) }.getOrNull() ?: return@launch
+                    currentOnViewportChanged(ReaderViewport.scrolled(
+                        index, metrics.optDouble("offset"), metrics.optDouble("extent"), metrics.optDouble("range")
+                    ))
+                }
             }
         }
     }
@@ -88,6 +129,7 @@ fun ReadiumNavigatorHost(
             initialLocator = initialLocator,
             initialPreferences = preferences,
             listener = listener,
+            paginationListener = paginationListener,
             configuration = configuration
         )
     }
@@ -121,6 +163,7 @@ fun ReadiumNavigatorHost(
                 .commitAllowingStateLoss()
         }
         onDispose {
+            viewportJob?.cancel()
             currentController?.attach(null)
             val fragment = fm.findFragmentByTag(FRAGMENT_TAG)
             if (fragment != null && !fm.isStateSaved) {
@@ -169,10 +212,23 @@ fun ReadiumNavigatorHost(
 
     // Apply preference changes after the fragment exists.
     LaunchedEffect(preferences) {
+        currentOnViewportChanged(null)
         (activity.supportFragmentManager.findFragmentByTag(FRAGMENT_TAG) as? EpubNavigatorFragment)
             ?.submitPreferences(preferences)
     }
 }
+
+/** Same scrolling element/axes used by Readium's bundled scrollToPosition. No network. */
+private val SCROLL_EXTENT_SCRIPT = """
+    (function() {
+        var e = document.scrollingElement;
+        if (!e || document.readyState !== 'complete') return null;
+        var vertical = getComputedStyle(document.documentElement).writingMode.startsWith('vertical');
+        return vertical
+            ? {offset: Math.abs(e.scrollLeft), extent: e.clientWidth, range: e.scrollWidth}
+            : {offset: e.scrollTop, extent: e.clientHeight, range: e.scrollHeight};
+    })();
+""".trimIndent()
 
 private const val FRAGMENT_LOOKUP_MAX_TRIES = 40
 private const val FRAGMENT_LOOKUP_DELAY_MS = 50L

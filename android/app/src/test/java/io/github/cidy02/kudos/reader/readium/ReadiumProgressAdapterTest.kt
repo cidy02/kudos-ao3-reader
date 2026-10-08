@@ -4,6 +4,7 @@ import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.readium.r2.shared.publication.Locator
@@ -16,6 +17,23 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
 class ReadiumProgressAdapterTest {
+    @Test
+    fun everyDragTargetStaysInItsFirstMiddleOrLastChapter() {
+        for (chapter in listOf(1, 5, 10)) {
+            val origin = Locator.fromJSON(JSONObject("""
+                {"href":"chapter$chapter.xhtml","type":"application/xhtml+xml",
+                 "locations":{"progression":0.25,"totalProgression":0.8,"position":123}}
+            """))!!
+            for (value in listOf(0.0, 0.5, 1.0)) {
+                val target = ReadiumProgressAdapter.chapterSeekTarget(origin, value)
+                assertEquals(origin.href, target.href)
+                assertEquals(value, target.locations.progression!!, 0.0)
+                assertNull(target.locations.position)
+            }
+            assertEquals(123, origin.locations.position)
+        }
+    }
+
     @Test
     fun fallbackScrollFractionPrefersSpineProgressionOverTotalProgression() {
         val locator = Locator.fromJSON(
@@ -83,4 +101,3 @@ class ReadiumProgressAdapterTest {
         assertFalse(progress.locatorJson.isNullOrBlank())
     }
 }
-

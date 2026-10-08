@@ -41,6 +41,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -48,6 +49,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -92,26 +94,39 @@ fun ReaderPositionCard(
     val interactionSource = remember { MutableInteractionSource() }
     var scrubOrigin by remember { mutableStateOf<Float?>(null) }
     var isDragging by remember { mutableStateOf(false) }
+    var previewValue by remember { mutableStateOf(sliderValue) }
+    val currentSliderValue by rememberUpdatedState(sliderValue)
+    val currentOnSeekEnd by rememberUpdatedState(onSeekEnd)
+
+    // Drag preview owns the thumb until release; navigator callbacks never fight it.
+    LaunchedEffect(sliderValue, isDragging) {
+        if (!isDragging) previewValue = sliderValue
+    }
 
     LaunchedEffect(interactionSource) {
         interactionSource.interactions.collect { interaction ->
             when (interaction) {
                 is DragInteraction.Start -> {
-                    scrubOrigin = sliderValue
+                    scrubOrigin = currentSliderValue
                     isDragging = true
                 }
-                is DragInteraction.Stop, is DragInteraction.Cancel -> {
+                is DragInteraction.Stop -> {
                     scrubOrigin = null
                     isDragging = false
-                    onSeekEnd()
+                }
+                is DragInteraction.Cancel -> {
+                    scrubOrigin = null
+                    isDragging = false
+                    currentOnSeekEnd()
                 }
             }
         }
     }
 
-    val scrubValuesEmphasized = isDragging && scrubOrigin != null && kotlin.math.abs(sliderValue - (scrubOrigin ?: 0f)) > 0.01f
-
-    val pageA11y = if (page < 1 || pageCount < 1) "Measuring pages" else "Page $page of $pageCount"
+    val scrubValuesEmphasized = isDragging && scrubOrigin != null &&
+        ReaderProgressDisplay.scrubPage(previewValue, pageCount) !=
+        ReaderProgressDisplay.scrubPage(scrubOrigin ?: previewValue, pageCount)
+    val pageA11y = ReaderProgressDisplay.pageLabel(page, pageCount)
 
     Box(
         modifier = modifier
@@ -207,7 +222,7 @@ fun ReaderPositionCard(
                     if (chapterRemainingMinutes != null) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
-                                text = "$chapterRemainingMinutes min",
+                                text = ReaderProgressDisplay.durationLabel(chapterRemainingMinutes),
                                 fontSize = 13.sp,
                                 style = TextStyle(fontFeatureSettings = "tnum"), // iOS .monospacedDigit()
                                 color = if (scrubValuesEmphasized) tokens.accent else tokens.secondaryInk
@@ -225,17 +240,23 @@ fun ReaderPositionCard(
                 // Scrub Slider with Origin Tick
                 BoxWithConstraints(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .semantics {
-                            contentDescription = "Seek within chapter: $pageA11y"
-                        },
+                        .fillMaxWidth(),
                     contentAlignment = Alignment.CenterStart
                 ) {
                     val fullWidth = maxWidth
 
                     Slider(
-                        value = sliderValue.coerceIn(0f, 1f),
-                        onValueChange = onSeek,
+                        value = (if (isDragging) previewValue else sliderValue).coerceIn(0f, 1f),
+                        onValueChange = { value ->
+                            val origin = scrubOrigin
+                            val snapped = if (origin != null &&
+                                ReaderProgressDisplay.scrubPage(value, pageCount) ==
+                                ReaderProgressDisplay.scrubPage(origin, pageCount)
+                            ) origin else value
+                            previewValue = snapped
+                            onSeek(snapped)
+                        },
+                        onValueChangeFinished = onSeekEnd,
                         enabled = sliderEnabled,
                         interactionSource = interactionSource,
                         colors = SliderDefaults.colors(
@@ -243,7 +264,10 @@ fun ReaderPositionCard(
                             activeTrackColor = tokens.accent,
                             inactiveTrackColor = tokens.glassStroke(0.3)
                         ),
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth().semantics {
+                            contentDescription = "Seek within chapter"
+                            stateDescription = pageA11y
+                        }
                     )
 
                     // Origin tick `|` marking where scrubbing began

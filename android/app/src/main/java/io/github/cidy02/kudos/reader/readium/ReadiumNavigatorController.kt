@@ -19,9 +19,31 @@ import org.readium.r2.shared.publication.Locator
 class ReadiumNavigatorController {
     @Volatile
     private var navigator: EpubNavigatorFragment? = null
+    private var pendingScrub: Locator? = null
+    private var scrubInFlight = false
 
     internal fun attach(fragment: EpubNavigatorFragment?) {
         navigator = fragment
+        pendingScrub = null
+    }
+
+    /** Readium's own resource-local scroll function; at most one evaluation in flight. */
+    suspend fun scrubTo(target: Locator) {
+        pendingScrub = target
+        if (scrubInFlight) return
+        scrubInFlight = true
+        try {
+            while (true) {
+                val next = pendingScrub ?: break
+                pendingScrub = null
+                val nav = navigator ?: break
+                if (!nav.currentLocator.value.href.isEquivalent(next.href)) continue
+                val progression = next.locations.progression ?: continue
+                nav.evaluateJavascript("readium.scrollToPosition($progression);")
+            }
+        } finally {
+            scrubInFlight = false
+        }
     }
 
     fun go(locator: Locator, animated: Boolean = true): Boolean =

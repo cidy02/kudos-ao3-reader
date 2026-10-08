@@ -14,6 +14,15 @@ import org.readium.r2.shared.publication.Publication
  */
 object ReadiumProgressAdapter {
 
+    /** Unknown hrefs must not masquerade as resource zero for completion. */
+    fun spineIndex(publication: Publication, locator: Locator): Int =
+        publication.readingOrder.indexOfFirst { it.url().isEquivalent(locator.href.removeFragment()) }
+
+    /** Frozen resource identity; only progression changes, never the chapter. */
+    fun chapterSeekTarget(origin: Locator, progression: Double): Locator = origin.copy(
+        locations = origin.locations.copy(progression = progression.coerceIn(0.0, 1.0), position = null)
+    )
+
     /** Capture a save point. Always populates the cross-platform fallback fields. */
     fun toReaderProgress(publication: Publication, locator: Locator): ReaderProgress {
         val spineIndex = runCatching {

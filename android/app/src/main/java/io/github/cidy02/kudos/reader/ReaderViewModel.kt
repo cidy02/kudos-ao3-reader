@@ -65,6 +65,7 @@ class ReaderViewModel(
 
     private var autoFinishedThisSession = false
     private var spineCountForEof = 0
+    private var isScrubbing = false
     private var sessionLifecycleJob: Job? = null
 
     /** iOS KeepScreenAwakeModifier: the screen stays lit while a book is open, if asked. */
@@ -136,19 +137,36 @@ class ReaderViewModel(
      * baseline so the first identical callback stays quiet).
      */
     fun onProgress(progress: ReaderProgress) {
-        updateReading { it.copy(liveProgress = progress) }
+        updateReading { it.copy(
+            liveProgress = progress,
+            viewport = it.viewport?.takeIf { viewport -> viewport.spineIndex == progress.spineIndex }
+        ) }
+        if (isScrubbing) return
         if (!repository.observeLocation(workId, progress)) return
         saver.onProgress(progress)
-        maybeAutoFinish(progress)
     }
 
-    private fun maybeAutoFinish(progress: ReaderProgress) {
+    fun setScrubbing(scrubbing: Boolean) {
+        isScrubbing = scrubbing
+        if (!scrubbing) (_state.value as? ReaderUiState.Reading)?.liveProgress?.let(::onProgress)
+    }
+
+    fun onViewport(viewport: ReaderViewport?) {
+        updateReading { it.copy(viewport = viewport) }
         if (autoFinishedThisSession) return
         val reading = _state.value as? ReaderUiState.Reading ?: return
         if (reading.finished || !reading.endOfWork.canMarkFinished) return
-        if (!EndOfWorkActions.isAtEndOfPublication(progress, spineCountForEof)) return
+        if (!EndOfWorkActions.isAtEndOfPublication(viewport, spineCountForEof)) return
         autoFinishedThisSession = true
-        markFinished()
+        enqueueSessionLifecycle {
+            saver.flush()
+            (_state.value as? ReaderUiState.Reading)?.liveProgress?.let { repository.persistLocation(workId, it) }
+            repository.finishAtPublicationEnd(workId)
+            updateReading { it.copy(
+                finished = true,
+                endOfWork = it.endOfWork.copy(canMarkFinished = false)
+            ) }
+        }
     }
 
     fun startReadingSession() {
@@ -160,6 +178,7 @@ class ReaderViewModel(
     fun pauseReadingSession() {
         enqueueSessionLifecycle {
             saver.flush()
+            flushScrubPosition()
             repository.finishReading(workId)?.let { readingLogService.pauseSession(it) }
         }
     }
@@ -171,8 +190,18 @@ class ReaderViewModel(
     fun close() {
         enqueueSessionLifecycle {
             saver.flush()
+            flushScrubPosition()
+            isScrubbing = false
             repository.finishReading(workId)?.let { readingLogService.endSession(it) }
             repository.close(workId)
+        }
+    }
+
+    private suspend fun flushScrubPosition() {
+        if (isScrubbing) {
+            (_state.value as? ReaderUiState.Reading)?.liveProgress?.let {
+                repository.persistLocation(workId, it)
+            }
         }
     }
 
