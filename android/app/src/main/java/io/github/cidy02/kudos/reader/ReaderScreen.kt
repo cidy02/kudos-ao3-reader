@@ -1,5 +1,9 @@
 package io.github.cidy02.kudos.reader
 
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.Role
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.verticalScroll
@@ -1128,13 +1132,17 @@ private fun AnnotateDialog(
                                         Modifier.border(2.dp, MaterialTheme.colorScheme.primary, CircleShape)
                                     } else Modifier
                                 )
-                                .clickable { selectedColor = swatch },
+                                // Named and stateful whether chosen or not: only the chosen
+                                // swatch had a name, on its tick (audits A7 and A13).
+                                .selectable(selected = isSelected, role = Role.RadioButton,
+                                    onClick = { selectedColor = swatch })
+                                .semantics { contentDescription = swatch.displayName },
                             contentAlignment = Alignment.Center
                         ) {
                             if (isSelected) {
                                 Icon(
                                     imageVector = Icons.Filled.Check,
-                                    contentDescription = swatch.displayName,
+                                    contentDescription = null,
                                     tint = androidx.compose.ui.graphics.Color.Black,
                                     modifier = Modifier.size(16.dp)
                                 )

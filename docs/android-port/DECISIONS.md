@@ -927,3 +927,11 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   it selected and skips it. Not yet changed: the position card's scrub and auto-finish at
   98.5% (brief 3br).
   Reverse: the edits marked "audit A5-1", "A5-4", "A5-5" and "A5-6".
+
+## 2026-10-08: a section header's title may use the whole row
+
+- `SectionRuleHeader` held its title to half the row (a weighted title beside a weighted
+  spacer), so at large text sizes a short title wrapped. The title and its count now share
+  the row up to See All. Five custom controls got a role and a state for screen readers
+  (audit A13 and the reader's colour swatches).
+  Reverse: the inner `Row` in `SectionRuleHeader`.
