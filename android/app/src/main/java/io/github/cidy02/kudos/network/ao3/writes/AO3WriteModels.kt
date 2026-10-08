@@ -9,7 +9,8 @@ enum class AO3WriteActionKind {
     Unsubscribe,
     MarkForLater,
     Bookmark,
-    Comment
+    Comment,
+    History
 }
 
 data class AO3WriteOutcome(

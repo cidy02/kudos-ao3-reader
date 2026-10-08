@@ -573,6 +573,42 @@ class AO3WriteRepository(
             ?.takeIf { AO3RedirectCookieRelay.isTrustedUrl(it) }
             ?: return AO3Result.Failure(AO3Error.Validation("Couldn't build the subscription address."))
         val referer = AO3AccountUrls().url(AccountListType.Subscriptions, username, page.coerceAtLeast(1))
+        return indexWrite(generation, referer, endpoint, AO3WriteActionKind.Unsubscribe, "Unsubscribed.",
+            "Couldn't unsubscribe.") { token -> listOf("_method" to "delete", "authenticity_token" to token) }
+    }
+
+    /**
+     * iOS `deleteReading`: one row of AO3's reading history. The token comes from the history
+     * page the row is on (the page that renders its form); the POST carries Rails' method
+     * override and the reading's own id. Never run against AO3.
+     */
+    suspend fun deleteReading(readingId: Long, page: Int): AO3Result<AO3WriteOutcome> {
+        val generation = client.sessionGeneration()
+        val username = client.username() ?: return AO3Result.Failure(AO3Error.AuthenticationRequired)
+        if (readingId <= 0) return AO3Result.Failure(AO3Error.Validation("Couldn't build the history address."))
+        val shown = page.coerceAtLeast(1)
+        val referer = AO3AccountUrls().url(AccountListType.History, username, shown)
+        // The form passes the page through; page 1 has no query (iOS `deleteReadingURL`).
+        val endpoint = AO3AccountUrls().url(AccountListType.History, username, 1).substringBefore('?') +
+            "/$readingId" + if (shown > 1) "?page=$shown" else ""
+        if (!AO3RedirectCookieRelay.isTrustedUrl(endpoint)) {
+            return AO3Result.Failure(AO3Error.Validation("Couldn't build the history address."))
+        }
+        return indexWrite(generation, referer, endpoint, AO3WriteActionKind.History, "Removed from history.",
+            "Couldn't remove that from history.") { token ->
+            listOf("_method" to "delete", "authenticity_token" to token, "reading" to readingId.toString())
+        }
+    }
+
+    /**
+     * A write whose form lives on one of the account's index pages: a fresh general token
+     * from that page, one POST never retried, and AO3's own evidence before "done"
+     * (iOS `readingsWriteResult`).
+     */
+    private suspend fun indexWrite(
+        generation: Int?, referer: String, endpoint: String, kind: AO3WriteActionKind, done: String,
+        fallback: String, fields: (String) -> List<Pair<String, String>>
+    ): AO3Result<AO3WriteOutcome> {
         val html = when (val result = client.getAuthenticated(referer)) {
             is AO3Result.Failure -> return result
             is AO3Result.Success -> result.value.body
@@ -584,10 +620,7 @@ class AO3WriteRepository(
             )
         // A view may disappear after sending. Finish that single write; never retry it.
         val response = withContext(NonCancellable) {
-            client.postAuthenticatedInSession(
-                endpoint, listOf("_method" to "delete", "authenticity_token" to token),
-                writeHeaders(token, referer), generation
-            )
+            client.postAuthenticatedInSession(endpoint, fields(token), writeHeaders(token, referer), generation)
         }
         if (client.sessionGeneration() != generation) throw CancellationException()
         return when (response) {
@@ -600,11 +633,11 @@ class AO3WriteRepository(
                     AO3OverloadDetector.isOverloadPage(body) ->
                         AO3Result.Failure(AO3Error.Overloaded(response.value.statusCode, null))
                     parser.writeSuccessMessage(body) != null || response.value.statusCode in 300..399 ->
-                        success(AO3WriteActionKind.Unsubscribe, "Unsubscribed.")
+                        success(kind, done)
                     response.value.statusCode in 200..399 -> AO3Result.Failure(AO3Error.Validation(
                         "AO3 replied but didn't confirm the change went through. Check on AO3 before trying again."
                     ))
-                    else -> rejected(body, "Couldn't unsubscribe.")
+                    else -> rejected(body, fallback)
                 }
             }
         }

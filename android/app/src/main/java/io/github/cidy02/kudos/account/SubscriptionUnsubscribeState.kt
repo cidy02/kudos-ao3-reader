@@ -24,11 +24,19 @@ internal class SubscriptionUnsubscribeState(
     fun dismissError() { mutableError.value = null }
 
     /** Called only by the destructive confirmation's confirm button. */
-    suspend fun confirm(path: String, page: Int, onSuccess: () -> Unit) {
+    suspend fun confirm(path: String, page: Int, onSuccess: () -> Unit) =
+        confirmWrite(path, { repository.unsubscribe(path, page) }, onSuccess)
+
+    /** One row of AO3's reading history, by the id its own delete form carries. */
+    suspend fun confirmDeleteReading(readingId: Long, page: Int, onSuccess: () -> Unit) =
+        confirmWrite("reading:$readingId", { repository.deleteReading(readingId, page) }, onSuccess)
+
+    /** One write at a time for this screen and this session; the row changes only on AO3's confirmation. */
+    private suspend fun confirmWrite(key: String, write: suspend () -> AO3Result<*>, onSuccess: () -> Unit) {
         if (mutableBusyPath.value != null || generation != auth.generation.value) return
-        mutableBusyPath.value = path
+        mutableBusyPath.value = key
         try {
-            val result = repository.unsubscribe(path, page)
+            val result = write()
             currentCoroutineContext().ensureActive()
             if (generation != auth.generation.value) return
             when (result) {

@@ -963,3 +963,12 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   accent follows the reader's chosen hue and is tuned per theme, as iOS's palette does for
   its text roles. Other text in the raw accent, and iOS's tinted rows, are owner question 19.
   Reverse: `else -> tokens.accent` in `settings/SettingsChrome.kt`.
+
+## 2026-10-08: what the Privacy page and the History list say, they do (audit A14)
+
+- Clear reading history takes only works left in the history alone (no copy here, not saved,
+  favourited, kept offline, imported or gone from AO3; and, more sparing than iOS, not in a
+  queue). Clear reading positions clears positions and keeps the works. "Delete from
+  History" sends iOS's request to AO3 and removes the row only when AO3 confirms; before, it
+  hid the row and sent nothing. Fixtures only for the write.
+  Reverse: `softDeleteHistoryOnly`, `clearReadingPositions`, `deleteReading`.

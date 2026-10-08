@@ -398,6 +398,23 @@ internal class DemoNetworkInterceptor(
                     "<div class='flash error'>Couldn't unsubscribe.</div>").toResponseBody(HTML_TYPE))
                 .build()
         }
+        // One row of the demo's AO3 history, removed for this run only (the screen hides it).
+        if (chain.request().method == "POST" && Regex("^/users/[^/]+/readings/\\d+/?$").matches(path)) {
+            val buffer = Buffer()
+            chain.request().body?.writeTo(buffer)
+            val fields = buffer.readUtf8().split('&').associate { field ->
+                val parts = field.split('=', limit = 2)
+                URLDecoder.decode(parts[0], "UTF-8") to URLDecoder.decode(parts.getOrElse(1) { "" }, "UTF-8")
+            }
+            val accepted = fields["_method"] == "delete" && fields["authenticity_token"] == "demo-history-token" &&
+                fields["reading"] == url.pathSegments.lastOrNull { it.isNotEmpty() }
+            return Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1)
+                .code(if (accepted) 200 else 422).message(if (accepted) "OK" else "Unprocessable Entity")
+                .header("Content-Type", HTML)
+                .body((if (accepted) "<div class='flash notice'>Work successfully deleted from your history.</div>" else
+                    "<div class='flash error'>Couldn't remove that from history.</div>").toResponseBody(HTML_TYPE))
+                .build()
+        }
         val matchTarget = if (url.queryParameter("show_comments") == "true") "$path/comments" else path
         val name = if (matchTarget == path) DemoNetworkRoutes.fixtureName(url) else DemoNetworkRoutes.fixtureName(matchTarget)
         var bytes = name?.let { fixtures().read(it) }
