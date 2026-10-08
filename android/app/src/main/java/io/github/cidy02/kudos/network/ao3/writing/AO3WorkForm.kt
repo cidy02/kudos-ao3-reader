@@ -90,7 +90,15 @@ data class AO3ServedControl(
 
 data class AO3WorkChapterDraft(
     val title: String = "", val summary: String = "", val content: String = "",
-    val publishedYear: String = "", val publishedMonth: String = "", val publishedDay: String = ""
+    val publishedYear: String = "", val publishedMonth: String = "", val publishedDay: String = "",
+    /**
+     * False when AO3's edit page left the text box out, as it does for a work with more than
+     * one chapter (`_standard_form.html.erb`: `unless @chapters`) while still serving chapter
+     * 1's title and date. The text is then neither shown nor sent: `works#update` assigns
+     * what it is given to chapter 1, so an empty text was refused and took the whole save
+     * with it, and a typed one would have replaced chapter 1 (audit A4-1, iOS the same).
+     */
+    val contentServed: Boolean = true
 )
 data class AO3ParentWorkDraft(
     val url: String = "", val title: String = "", val author: String = "",
@@ -194,7 +202,7 @@ data class AO3WorkForm(
         if (warnings.isEmpty()) add("Archive Warning")
         if (fandoms.isEmpty()) add("Fandoms")
         if (languageID.isBlank()) add("Language")
-        if ((kind == AO3WorkFormKind.New || isDraft) && chapter?.content?.isBlank() == true) add("Work Text")
+        if ((kind == AO3WorkFormKind.New || isDraft) && chapter?.let { it.contentServed && it.content.isBlank() } == true) add("Work Text")
     }
 
     fun parameters(submit: AO3WorkSubmitAction): List<Pair<String, String>> = AO3WorkFormEncoder.encode(this, submit)

@@ -55,7 +55,7 @@ object AO3WorkFormEncoder {
             chapter?.let {
                 add(AO3WorkFormField.chapterTitle to it.title)
                 add(AO3WorkFormField.chapterSummary to it.summary)
-                add(AO3WorkFormField.chapterContent to it.content)
+                if (it.contentServed) add(AO3WorkFormField.chapterContent to it.content)
                 if (it.publishedYear.isNotEmpty()) {
                     add(AO3WorkFormField.chapterPublishedYear to it.publishedYear)
                     add(AO3WorkFormField.chapterPublishedMonth to it.publishedMonth)

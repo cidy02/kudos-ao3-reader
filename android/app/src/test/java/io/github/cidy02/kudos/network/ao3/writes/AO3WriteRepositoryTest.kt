@@ -3,6 +3,7 @@ package io.github.cidy02.kudos.network.ao3.writes
 import io.github.cidy02.kudos.network.ao3.AO3Error
 import io.github.cidy02.kudos.network.ao3.AO3HttpResponse
 import io.github.cidy02.kudos.network.ao3.AO3Result
+import io.github.cidy02.kudos.network.ao3.account.AO3CollectionFields
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -84,7 +85,7 @@ class AO3SubscribeRepositoryTest {
     fun subscribedStatePostsDeleteToUnsubscribePath() = runTest {
         val client = FakeAuthenticatedClient(
             getResults = listOf(success(writeResource("ao3/writes/work_subscribed.html"))),
-            postResults = listOf(success("ok"))
+            postResults = listOf(success("""<div class="flash notice">You have successfully unsubscribed from Tide.</div>"""))
         )
         val repository = AO3WriteRepository(client)
 
@@ -119,7 +120,7 @@ class AO3MarkForLaterRepositoryTest {
     fun markForLaterPostsOnlyTheFreshToken() = runTest {
         val client = FakeAuthenticatedClient(
             getResults = listOf(success(writeResource("ao3/writes/work_with_forms.html"))),
-            postResults = listOf(success("ok"))
+            postResults = listOf(success("""<div class="flash notice">This work was added to your Marked for Later list.</div>"""))
         )
         val repository = AO3WriteRepository(client)
 
@@ -208,6 +209,33 @@ class AO3BookmarkRepositoryTest {
             ),
             client.posts.single().fields
         )
+    }
+}
+
+/** Audit A4-6 and A4-3: what counts as AO3 saying yes, and what as AO3 saying no. */
+class AO3WriteVerdictTest {
+    private fun later(answer: String) = FakeAuthenticatedClient(
+        getResults = listOf(success(writeResource("ao3/writes/work_with_forms.html"))),
+        postResults = listOf(success(answer))
+    )
+
+    @Test
+    fun aPageWithNoNoticeIsNotAO3ConfirmingMarkForLater() = runTest {
+        val client = later("<html><body><p>The Archive is down for maintenance.</p></body></html>")
+        val result = AO3WriteRepository(client).markForLater(123)
+        assertEquals(AO3CollectionFields.UNCONFIRMED, ((result as AO3Result.Failure).error as AO3Error.Validation).message)
+        assertEquals(1, client.posts.size) // never sent again
+    }
+
+    @Test
+    fun ao3sValidationListIsARefusalWithItsReason() = runTest {
+        val refused = """<div id="main"><div id="error" class="error"><h4>Sorry! We couldn't save this bookmark because:</h4>
+            <ul><li>Notes must be less than 5000 characters long.</li></ul></div>
+            <form><textarea>They finished successfully.</textarea></form></div>"""
+        assertEquals("Notes must be less than 5000 characters long.", AO3WriteFormParser().writeErrorMessage(refused))
+        val result = AO3WriteRepository(later(refused)).markForLater(123)
+        assertEquals("Notes must be less than 5000 characters long.",
+            ((result as AO3Result.Failure).error as AO3Error.Validation).message)
     }
 }
 
