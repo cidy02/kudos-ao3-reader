@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.home
 
+import io.github.cidy02.kudos.ui.components.hiddenMatureWorkSemantics
 import io.github.cidy02.kudos.ui.subject.SelectionChrome
 import io.github.cidy02.kudos.ui.subject.RevealCapsule
 import io.github.cidy02.kudos.ui.subject.CoverSurface
@@ -71,7 +72,11 @@ fun HomeResumeHero(
             .padding(bottom = 4.dp)
             .downloadDimmed(dim)
     ) {
-        Box(Modifier.then(if (obscured) Modifier.blur(6.dp) else Modifier)) {
+        Box(
+            Modifier
+                .then(if (obscured) Modifier.blur(6.dp) else Modifier)
+                .hiddenMatureWorkSemantics(obscured, isSelecting)
+        ) {
             CoverSurface(palette = palette, shape = shape, hero = true, modifier = Modifier.fillMaxWidth()) {
                 HeroBody(work = work, palette = palette, downloading = downloading, now = now)
             }

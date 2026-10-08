@@ -93,6 +93,18 @@ class SensitiveWorkRowPrivacyTest {
         assertEquals(0, searched)
     }
 
+    /** The same for a cover (Home, the Library's grids): audit A19-8's rule on Android. */
+    @Test fun aBlurredCoverNamesNothing() {
+        compose.setContent {
+            KudosTheme(KudosThemeMode.Light) {
+                io.github.cidy02.kudos.ui.subject.SubjectWorkCoverCard(work = work, obscured = true, downloading = false)
+            }
+        }
+        // The tree a screen reader is given (the unmerged one keeps cleared nodes, for tools).
+        compose.onAllNodesWithText("A Private Title", substring = true).assertCountEquals(0)
+        compose.onNodeWithContentDescription("Hidden mature work. Activate to reveal.").assertExists()
+    }
+
     @Test fun aRowInTheClearStillOpensAFandomSearch() {
         var searched = 0
         compose.setContent {

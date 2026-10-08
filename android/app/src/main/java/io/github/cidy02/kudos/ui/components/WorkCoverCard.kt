@@ -95,7 +95,10 @@ fun WorkCoverCard(
                 },
                 onLongClick = onLongClick
             )
-            .semantics { this.contentDescription = a11y },
+            .then(
+                if (obscured) Modifier.hiddenMatureWorkSemantics(true, isSelecting)
+                else Modifier.semantics { this.contentDescription = a11y }
+            ),
         shape = MaterialTheme.shapes.large,
         colors = CardDefaults.elevatedCardColors(
             containerColor = coverContainerColor(title)

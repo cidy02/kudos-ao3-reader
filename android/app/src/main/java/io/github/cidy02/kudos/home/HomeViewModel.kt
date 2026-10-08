@@ -193,8 +193,13 @@ class HomeViewModel(
             return
         }
         subscriptionsLoading.value = true
+        // Whose list this is. An answer for a session that has ended (signed out, or another
+        // account by now) stayed on Home until the next load finished (audit A19-5).
+        val generation = authRepository.generation.value
         try {
-            when (val result = accountListRepository.load(AccountListType.Subscriptions, page = 1)) {
+            val result = accountListRepository.load(AccountListType.Subscriptions, page = 1)
+            if (authRepository.generation.value != generation) return
+            when (result) {
                 is AO3Result.Success -> {
                     subscriptions.value = result.value.works
                     subscriptionsLoadFailed.value = false

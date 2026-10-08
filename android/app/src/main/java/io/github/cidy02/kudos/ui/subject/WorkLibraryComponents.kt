@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.ui.subject
 
+import io.github.cidy02.kudos.ui.components.hiddenMatureWorkSemantics
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
@@ -155,9 +156,10 @@ fun WorkLedgerRow(
                 .border(if (selected) 2.dp else 0.5.dp, if (selected) tokens.accent else palette.rowBorder, shape)
                 .combinedClickable(onClick = onClick, onLongClick = onLongClick)
                 .padding(horizontal = 14.dp, vertical = 13.dp)
-                .semantics {
-                    contentDescription = if (obscured) "Hidden mature work. Activate to reveal." else "$title, by $author"
-                },
+                .then(
+                    if (obscured) Modifier.hiddenMatureWorkSemantics(true)
+                    else Modifier.semantics { contentDescription = "$title, by $author" }
+                ),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             SubjectKicker(
@@ -190,9 +192,10 @@ fun WorkLedgerRow(
             .border(if (selected) 2.dp else 0.5.dp, if (selected) tokens.accent else palette.rowBorder, shape)
             .combinedClickable(onClick = onClick, onLongClick = onLongClick)
             .padding(horizontal = 14.dp, vertical = 13.dp)
-            .semantics {
-                contentDescription = if (obscured) "Hidden mature work. Activate to reveal." else "$title, by $author"
-            },
+            .then(
+                if (obscured) Modifier.hiddenMatureWorkSemantics(true)
+                else Modifier.semantics { contentDescription = "$title, by $author" }
+            ),
         horizontalArrangement = Arrangement.spacedBy(13.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
