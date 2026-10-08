@@ -278,15 +278,20 @@ internal class DemoNetworkInterceptor(
         if (!DemoNetworkRoutes.isAo3Host(url.host)) return chain.proceed(chain.request())
         val path = DemoNetworkRoutes.decodedPath(url)
         if (chain.request().method == "GET" && path.trimEnd('/') in setOf(
-                "/autocomplete/fandom", "/autocomplete/relationship", "/autocomplete/character", "/autocomplete/freeform")) {
+                "/autocomplete/fandom", "/autocomplete/relationship", "/autocomplete/character", "/autocomplete/freeform",
+                "/autocomplete/open_collection_names")) {
             val term = url.queryParameter("term").orEmpty().trim().lowercase(Locale.ROOT)
             val names = if (term == "demo") when (path.trimEnd('/').substringAfterLast('/')) {
                 "fandom" -> listOf("Demo Fandom", "Demo Fandom & 星", "Demo Fandom - Alternate Universe")
                 "relationship" -> listOf("Demo A/Demo B", "Demo A & Demo B", "Demo B/Demo C")
                 "character" -> listOf("Demo A", "Demo B", "Demo C")
+                "open_collection_names" -> listOf("Demo Lanterns (demo_lanterns)", "Demo Atlas & 星 (demo_atlas)", "Demo Exchange (demo_exchange)")
                 else -> listOf("Demo Fluff", "Demo Angst", "Demo Found Family")
             } else emptyList()
-            val json = buildJsonArray { names.forEach { name -> add(buildJsonObject { put("id", name); put("name", name) }) } }
+            val json = buildJsonArray { names.forEach { name -> add(buildJsonObject {
+                put("id", if (path.trimEnd('/').endsWith("/open_collection_names")) name.substringAfterLast('(').removeSuffix(")") else name)
+                put("name", name)
+            }) } }
             val type = "application/json; charset=utf-8"
             return Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1)
                 .code(if (term == "fail") 403 else 200).message("Local autocomplete answer")

@@ -282,7 +282,7 @@ private fun writingChipRows(names: List<String>, width: Dp, chosen: Boolean): Li
 
 /** Lazy rows share one rounded panel, with side strokes and only the outer end caps. */
 @Composable
-private fun Modifier.writingSuggestionPanel(first: Boolean, last: Boolean): Modifier {
+internal fun Modifier.writingSuggestionPanel(first: Boolean, last: Boolean): Modifier {
     val tokens = LocalKudosTokens.current
     val radius = SubjectMetrics.panelRadius
     val border = tokens.glassStroke(0.13)

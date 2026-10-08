@@ -9,6 +9,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -119,6 +120,7 @@ fun SubjectTextFieldRow(
     /** The writing tag field uses this row without a second visible label. */
     fieldOnly: Boolean = false,
     onSubmit: (() -> Unit)? = null,
+    keyboardType: KeyboardType = KeyboardType.Text,
     leading: @Composable () -> Unit = {},
     trailing: @Composable () -> Unit = {}
 ) {
@@ -147,6 +149,7 @@ fun SubjectTextFieldRow(
                 singleLine = !multiline, minLines = if (multiline) 2 else 1, maxLines = if (multiline) 6 else 1,
                 textStyle = style, cursorBrush = SolidColor(tokens.accent),
                 keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.None, autoCorrectEnabled = autocorrect,
+                    keyboardType = keyboardType,
                     imeAction = if (onSubmit != null) ImeAction.Search else ImeAction.Default),
                 keyboardActions = if (onSubmit == null) KeyboardActions() else KeyboardActions(onAny = { onSubmit() }),
                 modifier = (if (stacked) Modifier.fillMaxWidth() else Modifier.width(hug))
