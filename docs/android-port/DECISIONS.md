@@ -882,3 +882,15 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   Answered by Claude; the owner has not been asked. For the iOS side: the repeated lookup is
   extra signed-in reads for a date that did not load. Reverse: retry the schedule in the
   page loader.
+- **2026-10-07 · Owner: the prompt meme's close date is asked for once, and only when AO3
+  will answer ("do it, fix iOS and skip lookup for non-maintainers").** This replaces the
+  entry above it as the rule for both apps. The date is on the challenge's settings form.
+  AO3 serves that form to the collection's **owners** only and refuses it to everyone else,
+  moderators included (iOS `AO3CollectionDetailView.swift`, the comment on the Challenge
+  Settings row), and the Prompts screen is open to any participant, so the gate is "the
+  viewer is an owner": a moderator would be refused too. The rule, one pure function on each
+  app: ask only for an owner, only until a date is known, once per opening and once more per
+  pull to refresh. iOS: T-359, `PromptMemeView.readsSchedule`. Android: brief 3bi, applied on
+  landing, where the collection page's Prompts row must also open the screen for any
+  participant, as on iOS. Still open: a participant never sees "open until" on either app.
+  Reverse: pass `viewerIsOwner: true` from both callers.
