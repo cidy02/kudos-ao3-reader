@@ -529,7 +529,7 @@ enum ReadingQueueService {
         } catch {
             let message = error.localizedDescription
             Log.library.error(
-                "Queue preserve failed for \(work.id.uuidString, privacy: .public): \(message, privacy: .public)"
+                "Queue preserve failed for \(work.id.uuidString, privacy: .public): \(message, privacy: .private)"
             )
             work.epubPreservationStatus = .failed
             try context.save()

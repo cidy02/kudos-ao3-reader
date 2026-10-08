@@ -107,7 +107,7 @@ nonisolated enum ImportedDocumentConverter {
     /// `importEPUB` already detaches its metadata read.
     static func convert(fileAt url: URL) throws -> Outcome {
         let format = ImportedFileFormat.detect(at: url)
-        Log.library.info("Import sniffed \(format.rawValue, privacy: .public) for \(url.lastPathComponent, privacy: .public)")
+        Log.library.info("Import sniffed \(format.rawValue, privacy: .public) for \(url.lastPathComponent, privacy: .private)")
 
         switch format {
         case .epub:

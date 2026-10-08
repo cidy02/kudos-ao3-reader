@@ -55,7 +55,7 @@ actor AO3SparseWorkEnricher {
                 return metadata.asWorkSummary
             } catch {
                 Log.network.notice(
-                    "Sparse work \(work.id, privacy: .public) could not be enriched: \(error.localizedDescription, privacy: .public)"
+                    "Sparse work \(work.id, privacy: .private(mask: .hash)) could not be enriched: \(error.localizedDescription, privacy: .public)"
                 )
                 return nil
             }
