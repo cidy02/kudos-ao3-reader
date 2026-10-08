@@ -197,14 +197,14 @@ object BackupMergeService {
                 restored.copy(assetIdentifier = BackupPaths.iosEpubAssetIdentifier(restored.id))
             } else if (mode == BackupImportMode.MERGE && existing.isDeleted) {
                 // Recently Deleted is not in the active library. File Merge
-                // adds it back without planting a tombstone, matching iOS.
+                // adds it back without planting a tombstone, matching iOS. The clocks then
+                // decide the fields, as iOS's `apply` does: copying the archive row put last
+                // month's reading position over today's (audit A3-2).
                 summary = summary.copy(worksUpdated = summary.worksUpdated + 1)
-                restored.copy(
-                    id = existing.id,
-                    isDeleted = false,
-                    deletedAt = null,
-                    permanentDeletionScheduledAt = null
-                )
+                mergeWork(
+                    existing.copy(isDeleted = false, deletedAt = null, permanentDeletionScheduledAt = null),
+                    restored, archived, incomingModifiedAt, exportedAt
+                ).copy(isDeleted = false, deletedAt = null, permanentDeletionScheduledAt = null)
             } else if (mode == BackupImportMode.MERGE) {
                 existing.copy(downloadedAt = existing.downloadedAt ?: restored.downloadedAt)
             } else if (mode == BackupImportMode.REPLACE_LIBRARY) {
@@ -848,10 +848,14 @@ object BackupMergeService {
             } else {
                 existing.downloadedAt
             },
-            epubPreservationStatusRaw = if (incomingWins) {
-                restored.epubPreservationStatusRaw ?: existing.epubPreservationStatusRaw
-            } else {
-                existing.epubPreservationStatusRaw ?: restored.epubPreservationStatusRaw
+            // iOS `apply`: preservation is monotonic under merge. An archive may promote a work
+            // to "preserved", never demote one: the demoted status let the next restore
+            // replace the bytes `mayReplaceEpub` protects (audit A3-1).
+            epubPreservationStatusRaw = when {
+                existing.epubPreservationStatusRaw == "preserved" -> "preserved"
+                incomingWins || existing.epubPreservationStatusRaw == "notPreserved" ->
+                    restored.epubPreservationStatusRaw ?: existing.epubPreservationStatusRaw
+                else -> existing.epubPreservationStatusRaw ?: restored.epubPreservationStatusRaw
             },
             metadataSyncStatusRaw = if (incomingWins) {
                 restored.metadataSyncStatusRaw ?: existing.metadataSyncStatusRaw
