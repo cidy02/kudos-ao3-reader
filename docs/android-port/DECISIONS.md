@@ -918,3 +918,12 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   clock. File Merge of a work in Recently Deleted returns it and lets the clocks decide its
   fields; the archive row is no longer copied over it. Both are iOS's `apply`.
   Reverse: the two edits in `BackupMergeService.kt` marked "audit A3-1" and "audit A3-2".
+
+## 2026-10-08: four reader and library faults from audit A5
+
+- A reading position save, once begun, finishes, and leaving the reader waits for it. The
+  same passage means the same stored locator (iOS), not the same words nearby. A selection
+  holds only rows on screen: a row a quick filter hides is dropped from it, where iOS keeps
+  it selected and skips it. Not yet changed: the position card's scrub and auto-finish at
+  98.5% (brief 3br).
+  Reverse: the edits marked "audit A5-1", "A5-4", "A5-5" and "A5-6".

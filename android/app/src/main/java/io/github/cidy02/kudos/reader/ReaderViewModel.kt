@@ -186,6 +186,9 @@ class ReaderViewModel(
 
     fun markFinished() {
         enqueueSessionLifecycle {
+            // The position first: both writes replace the whole row, and a debounced save
+            // landing after this one put "not finished" back (audit A5-1).
+            saver.flush()
             repository.setFinished(workId, true)
             updateReading { reading ->
                 reading.copy(
@@ -239,17 +242,19 @@ class ReaderViewModel(
         // envelope. Stored bare, the highlight could not be drawn or gone to.
         val stored = ReaderLocatorCodec.forStorage(locatorString) ?: return
         viewModelScope.launch {
-            annotationRepository.addOrRecolorHighlight(
-                workId = workId,
-                locatorString = stored,
-                selectedText = selectedText,
-                color = color,
-                note = note,
-                progression = progression,
-                spineIndex = spineIndex,
-                chapterTitle = chapterTitle,
-                kind = if (asNote) "note" else "highlight"
-            )
+            annotationEditMutex.withLock {
+                annotationRepository.addOrRecolorHighlight(
+                    workId = workId,
+                    locatorString = stored,
+                    selectedText = selectedText,
+                    color = color,
+                    note = note,
+                    progression = progression,
+                    spineIndex = spineIndex,
+                    chapterTitle = chapterTitle,
+                    kind = if (asNote) "note" else "highlight"
+                )
+            }
         }
     }
 

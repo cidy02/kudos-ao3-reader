@@ -14,4 +14,11 @@ object LibrarySelection {
     fun clear(): Set<String> = emptySet()
 
     fun isSelected(selectedIds: Set<String>, workId: String): Boolean = workId in selectedIds
+
+    /**
+     * The selection a bulk action may act on: only rows still on screen (iOS `selectedWorks`).
+     * Returns [selectedIds] itself when nothing is hidden.
+     */
+    fun visible(selectedIds: Set<String>, shownIds: Set<String>): Set<String> =
+        if (shownIds.containsAll(selectedIds)) selectedIds else selectedIds.intersect(shownIds)
 }

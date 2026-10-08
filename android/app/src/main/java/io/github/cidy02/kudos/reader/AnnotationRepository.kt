@@ -133,7 +133,7 @@ class AnnotationRepository(
         chapterTitle: String = "",
         kind: String = "highlight"
     ): ReadingAnnotation {
-        val existing = findSamePassage(workId, selectedText, progression, spineIndex)
+        val existing = findSamePassage(workId, locatorString)
         val annotation = if (existing != null) {
             existing.copy(
                 colorRaw = color,
@@ -162,22 +162,16 @@ class AnnotationRepository(
         return annotation
     }
 
-    private suspend fun findSamePassage(
-        workId: String,
-        selectedText: String,
-        progression: Double,
-        spineIndex: Int
-    ): ReadingAnnotation? {
-        val needle = selectedText.trim().lowercase()
-        if (needle.isEmpty()) return null
-        return observeForWork(workId).first()
-            .filter {
-                it.kindRaw.equals("highlight", ignoreCase = true) ||
-                    it.kindRaw.equals("note", ignoreCase = true)
-            }
-            .filter { it.spineIndex == spineIndex }
-            .filter { it.selectedText.trim().equals(needle, ignoreCase = true) }
-            .minByOrNull { kotlin.math.abs(it.progression - progression) }
-            ?.takeIf { kotlin.math.abs(it.progression - progression) < 0.05 }
+    /**
+     * iOS `ReadingAnnotationMatching.isSamePassage`: the same stored locator, nothing looser.
+     * Matching by text and nearness took a second "Harry" a few lines down for the first,
+     * moved the first mark onto it and left the first passage unmarked (audit A5-4).
+     */
+    private suspend fun findSamePassage(workId: String, locatorString: String): ReadingAnnotation? {
+        if (locatorString.isBlank()) return null
+        return observeForWork(workId).first().firstOrNull {
+            (it.kindRaw.equals("highlight", ignoreCase = true) || it.kindRaw.equals("note", ignoreCase = true)) &&
+                it.locatorString == locatorString
+        }
     }
 }

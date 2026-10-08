@@ -143,6 +143,38 @@ class AnnotationTombstoneTest {
         assertNotEquals(bookmark.id, fresh.id)
     }
 
+    /**
+     * iOS `ReadingAnnotationMatching.isSamePassage`: only the same stored locator is the same
+     * passage. The same words a few lines down are a second highlight (audit A5-4).
+     */
+    @Test
+    fun theSameWordsFurtherDownAreASecondHighlightNotTheFirstMoved() = runTest {
+        database.workDao().upsert(SavedWork(id = WORK_ID, title = "Work", author = "Author", dateAdded = Instant.parse("2026-01-01T00:00:00Z")).toEntity())
+        val first = annotationRepository.addOrRecolorHighlight(
+            workId = WORK_ID, locatorString = "locator-a", selectedText = "Harry", color = "yellow",
+            note = "the first", progression = 0.10, spineIndex = 2
+        )
+        val second = annotationRepository.addOrRecolorHighlight(
+            workId = WORK_ID, locatorString = "locator-b", selectedText = "Harry", color = "pink",
+            progression = 0.12, spineIndex = 2
+        )
+        assertNotEquals(first.id, second.id)
+        val stored = annotationRepository.observeForWork(WORK_ID).first().associateBy { it.id }
+        assertEquals(2, stored.size)
+        assertEquals("locator-a", stored.getValue(first.id).locatorString)
+        assertEquals("yellow", stored.getValue(first.id).colorRaw)
+        assertEquals("the first", stored.getValue(first.id).note)
+        assertEquals("", stored.getValue(second.id).note)
+        // The very same selection again recolours the mark it already has.
+        val again = annotationRepository.addOrRecolorHighlight(
+            workId = WORK_ID, locatorString = "locator-a", selectedText = "Harry", color = "green",
+            progression = 0.10, spineIndex = 2
+        )
+        assertEquals(first.id, again.id)
+        assertEquals("the first", again.note)
+        assertEquals(2, annotationRepository.observeForWork(WORK_ID).first().size)
+    }
+
     @Test
     fun deleteAnnotationMintsTombstoneAndFolderSyncDoesNotResurrect() = runTest {
         database.workDao().upsert(

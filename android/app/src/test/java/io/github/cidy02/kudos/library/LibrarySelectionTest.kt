@@ -25,6 +25,16 @@ class LibrarySelectionTest {
         assertEquals(setOf("w9"), LibrarySelection.selectOnly("w9"))
     }
 
+    /** iOS `selectedWorks`: a bulk action reaches only rows still on screen (audits A5-5, A5-6). */
+    @Test
+    fun aRowAFilterHidesLeavesTheSelection() {
+        val selected = setOf("complete", "wip")
+        assertEquals(setOf("wip"), LibrarySelection.visible(selected, setOf("wip", "other")))
+        assertTrue(LibrarySelection.visible(selected, emptySet()).isEmpty())
+        // Nothing hidden: the same set, so nothing is rewritten.
+        assertTrue(LibrarySelection.visible(selected, setOf("complete", "wip", "other")) === selected)
+    }
+
     @Test
     fun clearEmptiesSelection() {
         assertTrue(LibrarySelection.clear().isEmpty())

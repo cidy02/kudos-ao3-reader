@@ -2,8 +2,12 @@ package io.github.cidy02.kudos.reader
 
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 
 /**
  * Debounces reader progress so rapid location callbacks do not hammer the
@@ -17,6 +21,7 @@ class ReaderProgressSaver(
 ) {
     private var pending: ReaderProgress? = null
     private var job: Job? = null
+    private val writing = Mutex()
 
     fun onProgress(progress: ReaderProgress) {
         pending = progress
@@ -32,10 +37,19 @@ class ReaderProgressSaver(
         flushPending()
     }
 
-    private suspend fun flushPending() {
-        val toSave = pending ?: return
-        pending = null
-        save(toSave)
+    /**
+     * A save, once begun, finishes, and a flush waits for it. The debounced job used to take
+     * the value out of [pending] and then suspend in the database: a flush in that moment
+     * cancelled it, found nothing pending and wrote nothing, so leaving the reader lost the
+     * last page turn (audit A5-1). iOS keeps the latest locator across the cancel and writes
+     * it before its flush returns.
+     */
+    private suspend fun flushPending() = withContext(NonCancellable) {
+        writing.withLock {
+            val toSave = pending ?: return@withLock
+            pending = null
+            save(toSave)
+        }
     }
 
     companion object {
