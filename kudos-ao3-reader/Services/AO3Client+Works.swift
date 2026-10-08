@@ -826,7 +826,8 @@ extension AO3Client {
             content: content,
             publishedYear: controlValue(form, name: AO3WorkFormField.chapterPublishedYear) ?? "",
             publishedMonth: controlValue(form, name: AO3WorkFormField.chapterPublishedMonth) ?? "",
-            publishedDay: controlValue(form, name: AO3WorkFormField.chapterPublishedDay) ?? ""
+            publishedDay: controlValue(form, name: AO3WorkFormField.chapterPublishedDay) ?? "",
+            contentServed: hasChapterField
         )
     }
 
