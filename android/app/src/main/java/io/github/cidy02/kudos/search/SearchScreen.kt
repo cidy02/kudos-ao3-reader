@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.search
 
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.flowOf
 import io.github.cidy02.kudos.library.LibraryPrivacyVisibility
@@ -128,7 +129,17 @@ fun SearchScreen(
     onFilterLibraryTag: (String) -> Unit = {}
 ) {
     val viewModel: SearchViewModel = viewModel(
-        factory = SearchViewModel.factory(repository, savedSearchRepository, workRepository)
+        factory = SearchViewModel.factory(
+            repository, savedSearchRepository, workRepository,
+            hiddenWorks = combine(
+                settingsRepository?.settings?.map { it.privacy } ?: flowOf(PrivacySettings()),
+                privacyGate.state
+            ) { privacy, reveal ->
+                { work: SavedWork ->
+                    LibraryPrivacy.visibility(work, privacy, reveal) == LibraryPrivacyVisibility.Hidden
+                }
+            }
+        )
     )
     // The Library's blur, for the matches that come from the reader's own library. Until the
     // setting has been read the default applies, which blurs.

@@ -36,7 +36,13 @@ import kotlinx.coroutines.launch
 class SearchViewModel(
     private val repository: AO3SearchRepository,
     private val savedSearchRepository: SavedSearchRepository? = null,
-    private val workRepository: WorkRepository? = null
+    private val workRepository: WorkRepository? = null,
+    /**
+     * Which saved works Hide mode is leaving out of lists right now. Search listed them
+     * anyway, with their title and summary, and listed a fandom that only one of them
+     * carries (audit A19-3; iOS `PrivacyGate.isHidden`, as Home applies it).
+     */
+    hiddenWorks: Flow<(SavedWork) -> Boolean> = flowOf({ false })
 ) : ViewModel() {
 
     private val _filters = MutableStateFlow(AO3SearchFilters())
@@ -82,7 +88,7 @@ class SearchViewModel(
                 emit(query)
             }
         },
-        savedWorks,
+        combine(savedWorks, hiddenWorks) { works, isHidden -> works.filterNot(isHidden) },
         userTags,
         collections,
         catalog
@@ -364,10 +370,11 @@ class SearchViewModel(
         fun factory(
             repository: AO3SearchRepository,
             savedSearchRepository: SavedSearchRepository? = null,
-            workRepository: WorkRepository? = null
+            workRepository: WorkRepository? = null,
+            hiddenWorks: Flow<(SavedWork) -> Boolean> = flowOf({ false })
         ): ViewModelProvider.Factory = viewModelFactory {
             initializer {
-                SearchViewModel(repository, savedSearchRepository, workRepository)
+                SearchViewModel(repository, savedSearchRepository, workRepository, hiddenWorks)
             }
         }
     }
