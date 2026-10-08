@@ -37,6 +37,9 @@ struct ReadingQueueSettingsView: View {
     @Query private var allTags: [Tag]
     @State private var showingTags = false
 
+    @ScaledMetric(relativeTo: .caption) private var legendSize: CGFloat = 11.5
+    @ScaledMetric(relativeTo: .caption) private var footnoteSize: CGFloat = 11.5
+
     private var palette: SubjectPalette {
         themeManager.appTheme.subjectPalette(hue: queue.displayHue, pickedHex: queue.colorHex)
     }
@@ -127,7 +130,7 @@ struct ReadingQueueSettingsView: View {
                     VStack(alignment: .leading, spacing: 7) {
                         QueueProgressStrip(progress: progress, palette: palette)
                         Text(ReadingQueueFacts.legend(progress, offlineCount: preservedWorks.count))
-                            .font(.system(size: 11.5))
+                            .font(.system(size: legendSize))
                             .foregroundStyle(.secondary)
                     }
                     .pageBodyRow(top: 8, gutter: SubjectMetrics.headerGutter)
@@ -157,7 +160,7 @@ struct ReadingQueueSettingsView: View {
                     "When this is off, the queue keeps only your list. It doesn't download or keep copies, "
                         + "so it uses no extra storage."
                 )
-                    .font(.system(size: 11.5))
+                    .font(.system(size: footnoteSize))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                     .pageBodyRow(top: 2, gutter: SubjectMetrics.gutter + 6)

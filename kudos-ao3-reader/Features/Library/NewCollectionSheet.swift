@@ -28,6 +28,8 @@ struct NewCollectionSheet: View {
     @State private var keepsWorksOffline = false
     @State private var showsOnHome = false
 
+    @ScaledMetric(relativeTo: .caption) private var footnoteSize: CGFloat = 11.5
+
     private var trimmedName: String {
         name.trimmingCharacters(in: .whitespacesAndNewlines)
     }
@@ -130,7 +132,7 @@ struct NewCollectionSheet: View {
 
     private func footnote(_ text: String) -> some View {
         Text(text)
-            .font(.system(size: 11.5))
+            .font(.system(size: footnoteSize))
             .foregroundStyle(.secondary.opacity(0.7))
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -183,6 +185,11 @@ struct CollectionReorderSheet: View {
         self.works = works
         self._ordered = State(initialValue: works)
     }
+
+    @ScaledMetric(relativeTo: .caption) private var footnoteSize: CGFloat = 11.5
+    @ScaledMetric(relativeTo: .footnote) private var positionSize: CGFloat = 13
+    @ScaledMetric(relativeTo: .subheadline) private var titleSize: CGFloat = 15
+    @ScaledMetric(relativeTo: .caption) private var authorSize: CGFloat = 11.5
 
     private var palette: SubjectPalette {
         themeManager.appTheme.subjectPalette(hue: collection.displayHue, pickedHex: collection.colorHex)
@@ -250,7 +257,7 @@ struct CollectionReorderSheet: View {
                     // filter re-sorts (`LibraryFilters.apply`).
                     Text("This order is used when no filter is on. Works you add later, or restore from "
                         + "Recently Deleted after tapping Done, appear at the end.")
-                        .font(.system(size: 11.5))
+                        .font(.system(size: footnoteSize))
                         .foregroundStyle(.secondary.opacity(0.7))
                         .fixedSize(horizontal: false, vertical: true)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -291,20 +298,20 @@ struct CollectionReorderSheet: View {
     private func orderRow(_ work: SavedWork, position: Int) -> some View {
         HStack(spacing: 12) {
             Text("\(position)")
-                .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                .font(.system(size: positionSize, weight: .semibold, design: .monospaced))
                 .foregroundStyle(palette.accent)
                 // Wide enough for three digits, so titles do not jog right at
                 // row 100 in a collection that can hold hundreds of works.
                 .frame(minWidth: 26, alignment: .trailing)
             VStack(alignment: .leading, spacing: 3) {
                 Text(work.title)
-                    .font(.system(size: 15, weight: .medium))
+                    .font(.system(size: titleSize, weight: .medium))
                     .lineLimit(2)
                 // Unclipped, as before the redesign: a multi-creator byline is
                 // how two works with the same title are told apart.
                 if !work.author.isEmpty {
                     Text(work.author)
-                        .font(.system(size: 11.5))
+                        .font(.system(size: authorSize))
                         .foregroundStyle(.secondary)
                 }
             }

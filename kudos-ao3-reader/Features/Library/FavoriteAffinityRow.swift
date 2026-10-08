@@ -23,6 +23,12 @@ struct FavoriteAffinityRow: View {
 
     @Environment(AppRouter.self) private var router
 
+    @ScaledMetric(relativeTo: .headline) private var rowTitleSize: CGFloat = 16
+    @ScaledMetric(relativeTo: .footnote) private var unreadCountSize: CGFloat = 14
+    @ScaledMetric(relativeTo: .footnote) private var workTitleSize: CGFloat = 14
+    @ScaledMetric(relativeTo: .caption) private var captionSize: CGFloat = 11.5
+    @ScaledMetric(relativeTo: .caption) private var libraryLineSize: CGFloat = 11
+
     /// `#` for tags, the name's first letter for authors and fandoms — the spec's
     /// own distinction, and it is doing work: a tag's first letter is not a thing
     /// anyone sorts or scans by.
@@ -97,7 +103,7 @@ struct FavoriteAffinityRow: View {
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 6) {
                     Text(row.name)
-                        .font(.system(size: 16, weight: .semibold))
+                        .font(.system(size: rowTitleSize, weight: .semibold))
                         .lineLimit(2)
                     // Filled on every row of all three scopes, as the spec draws it:
                     // being on this page *is* the favourite. The explicit
@@ -110,7 +116,7 @@ struct FavoriteAffinityRow: View {
                         .accessibilityHidden(true)
                 }
                 Text(logLine)
-                    .font(.system(size: 11.5))
+                    .font(.system(size: captionSize))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                 // 1ak's own label says these counts belong on the author's page
@@ -154,11 +160,11 @@ struct FavoriteAffinityRow: View {
                 .foregroundStyle(.secondary)
             let unread = row.unreadInLibrary
             Text(unread > 0 ? "\(unread) unread work\(unread == 1 ? "" : "s")" : "No unread works")
-                .font(.system(size: 14, weight: .semibold))
+                .font(.system(size: unreadCountSize, weight: .semibold))
                 .foregroundStyle(unread > 0 ? palette.accent : Color.primary)
             if let libraryDetail {
                 Text(libraryDetail)
-                    .font(.system(size: 11.5))
+                    .font(.system(size: captionSize))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -187,10 +193,10 @@ struct FavoriteAffinityRow: View {
             HStack(alignment: .top, spacing: 9) {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(work.title)
-                        .font(.system(size: 14, weight: .semibold))
+                        .font(.system(size: workTitleSize, weight: .semibold))
                         .lineLimit(2)
                     Text(newestWorkMetadata(work))
-                        .font(.system(size: 11.5))
+                        .font(.system(size: captionSize))
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -293,7 +299,7 @@ struct FavoriteAffinityRow: View {
     @ViewBuilder
     private var libraryLine: some View {
         Text(libraryText)
-            .font(.system(size: 11))
+            .font(.system(size: libraryLineSize))
             .foregroundStyle(row.unreadInLibrary > 0 ? palette.accent : Color.secondary)
             .fixedSize(horizontal: false, vertical: true)
     }
@@ -328,12 +334,15 @@ struct FavoriteAffinityEmptyCard: View {
     let scope: LibrarySectionListView.FavoriteScope
     let hiddenByFilter: Bool
 
+    @ScaledMetric(relativeTo: .headline) private var titleSize: CGFloat = 15
+    @ScaledMetric(relativeTo: .footnote) private var detailSize: CGFloat = 12.5
+
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(title)
-                .font(.system(size: 15, weight: .semibold))
+                .font(.system(size: titleSize, weight: .semibold))
             Text(detail)
-                .font(.system(size: 12.5))
+                .font(.system(size: detailSize))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
