@@ -9,6 +9,9 @@ struct AO3PreferencesView: View {
     @Environment(AO3AuthService.self) private var auth
     @Environment(AppRouter.self) private var router
     @Environment(ThemeManager.self) private var themeManager
+    @ScaledMetric(relativeTo: .footnote) private var retryButtonSize: CGFloat = 14
+    @ScaledMetric(relativeTo: .footnote) private var bannerTextSize: CGFloat = 14
+    @ScaledMetric(relativeTo: .caption) private var footnoteSize: CGFloat = 11.5
 
     @State private var snapshot: AO3PreferencesSnapshot?
     @State private var phase: Phase = .loading
@@ -511,7 +514,7 @@ extension AO3PreferencesView {
                 bannerView(banner)
                 if !bannerIsSuccess(banner) {
                     Button("Try Again") { Task { await save() } }
-                        .font(.system(size: 14, weight: .semibold))
+                        .font(.system(size: retryButtonSize, weight: .semibold))
                         .disabled(isSaving)
                 }
             }
@@ -546,11 +549,11 @@ extension AO3PreferencesView {
             Image(systemName: bannerIsSuccess(banner) ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
                 .foregroundStyle(bannerIsSuccess(banner) ? Color.green : Color.red)
             Text(bannerText(banner))
-                .font(.system(size: 14, weight: .medium))
+                .font(.system(size: bannerTextSize, weight: .medium))
                 .foregroundStyle(.primary)
         }
         .padding(.horizontal, 18)
-        .frame(height: 44)
+        .frame(minHeight: 44)
         .background(
             Capsule()
                 .fill(themeManager.appTheme.glassFill(0.86))
@@ -574,7 +577,7 @@ extension AO3PreferencesView {
     private var footnote: some View {
         Text("These preferences are saved to your AO3 account and follow you on AO3. "
             + "Settings that affect only Kudos are under Settings.")
-            .font(.system(size: 11.5))
+            .font(.system(size: footnoteSize))
             .foregroundStyle(.secondary)
             .lineSpacing(1.5)
     }

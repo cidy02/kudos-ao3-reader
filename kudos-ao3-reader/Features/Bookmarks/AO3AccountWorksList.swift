@@ -137,6 +137,9 @@ struct AO3AccountWorksList: View {
     @AppStorage("hideMatureContent") private var hideMature = true
     @AppStorage("matureContentMode") private var matureMode: MaturePrivacyMode = .obscure
 
+    @ScaledMetric(relativeTo: .caption) private var footnoteSize: CGFloat = 11.5
+    @ScaledMetric(relativeTo: .caption) private var smallCaptionSize: CGFloat = 11
+
     @Query(filter: #Predicate<SavedWork> { !$0.isPendingDeletion }) private var localWorks: [SavedWork]
 
     @State private var works: [AO3WorkSummary] = []
@@ -528,7 +531,7 @@ struct AO3AccountWorksList: View {
         return VStack(alignment: .leading, spacing: 4) {
             if !facts.isEmpty {
                 Text(facts.joined(separator: " · "))
-                    .font(.system(size: 11.5))
+                    .font(.system(size: footnoteSize))
                     .foregroundStyle(.secondary)
                     .monospacedDigit()
             }
@@ -541,7 +544,7 @@ struct AO3AccountWorksList: View {
                         Label("Flagged to skip", systemImage: "eye.slash")
                     }
                 }
-                .font(.system(size: 11))
+                .font(.system(size: smallCaptionSize))
                 .foregroundStyle(.secondary.opacity(0.8))
             }
         }
@@ -746,7 +749,7 @@ struct AO3AccountWorksList: View {
     private func newChapterBadge(_ count: Int) -> some View {
         if count > 0 {
             Text(count == 1 ? "1 NEW" : "\(count) NEW")
-                .font(.system(size: 11, weight: .semibold))
+                .font(.system(size: smallCaptionSize, weight: .semibold))
                 .foregroundStyle(accountPalette.accentOnFill)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 5)

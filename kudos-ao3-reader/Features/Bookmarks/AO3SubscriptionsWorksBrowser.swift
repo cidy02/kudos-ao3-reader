@@ -209,6 +209,7 @@ struct AO3SubscriptionsWorksBrowser: View {
     let onPage: (Int) -> Void
     let onUnsubscribe: (CanonicalWork) -> Void
     let onEnriched: (AO3WorkSummary) -> Void
+    @ScaledMetric(relativeTo: .caption) private var footerSize: CGFloat = 11.5
     private var sections: [AO3SubscriptionsSection<CanonicalWork>] {
         AO3SubscriptionsGrouping.sections(entries, filter: filter, isUpdated: isUpdated(_:))
     }
@@ -292,7 +293,7 @@ struct AO3SubscriptionsWorksBrowser: View {
 
     private var footer: some View {
         Text(AO3SubscriptionsCopy.footer(currentPage: currentPage, totalPages: totalPages))
-            .font(.system(size: 11.5))
+            .font(.system(size: footerSize))
             .foregroundStyle(.secondary)
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -479,9 +480,11 @@ struct AO3SubscriptionsFilterRail: View {
 struct AO3SubscriptionsChapterFootnote: View {
     let text: String
 
+    @ScaledMetric(relativeTo: .caption) private var footnoteSize: CGFloat = 11.5
+
     var body: some View {
         Text(text)
-            .font(.system(size: 11.5))
+            .font(.system(size: footnoteSize))
             .foregroundStyle(.secondary)
             .monospacedDigit()
             .frame(maxWidth: .infinity, alignment: .leading)

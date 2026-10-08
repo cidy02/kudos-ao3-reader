@@ -381,6 +381,8 @@ struct CommentFormattingTray: View {
     @Environment(ThemeManager.self) private var theme
     @Environment(\.dismiss) private var dismiss
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @ScaledMetric(relativeTo: .footnote) private var titleSize: CGFloat = 14
+    @ScaledMetric(relativeTo: .footnote) private var doneActionSize: CGFloat = 13
 
     var body: some View {
         VStack(spacing: 0) {
@@ -406,7 +408,7 @@ struct CommentFormattingTray: View {
     private var titleRow: some View {
         HStack(spacing: 10) {
             Text("Formatting")
-                .font(.system(size: 14, weight: .semibold))
+                .font(.system(size: titleSize, weight: .semibold))
 
             Spacer(minLength: 0)
 
@@ -414,7 +416,7 @@ struct CommentFormattingTray: View {
                 if let onDone { onDone() } else { dismiss() }
             } label: {
                 Text("Done")
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.system(size: doneActionSize, weight: .semibold))
                     .padding(.horizontal, 13)
                     .padding(.vertical, 7)
                     .background(Capsule().fill(theme.appTheme.glassFill(0.16)))

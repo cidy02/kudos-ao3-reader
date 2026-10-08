@@ -35,6 +35,11 @@ struct AO3CollectionFormView: View {
     @Environment(ThemeManager.self) private var theme
     @Environment(AppRouter.self) private var router
     @Environment(\.dismiss) private var dismiss
+    @ScaledMetric(relativeTo: .caption) private var groupNoteSize: CGFloat = 12
+    @ScaledMetric(relativeTo: .caption) private var fieldErrorSize: CGFloat = 11.5
+    @ScaledMetric(relativeTo: .footnote) private var noticeCardSize: CGFloat = 12.5
+    @ScaledMetric(relativeTo: .headline) private var actionTitleSize: CGFloat = 15
+    @ScaledMetric(relativeTo: .footnote) private var actionButtonSize: CGFloat = 13
 
     @State private var form: AO3CollectionForm?
     /// The session `form` was loaded under, and its account. Save posts only
@@ -251,7 +256,7 @@ struct AO3CollectionFormView: View {
                 .pageBodyRow(top: 8, gutter: SubjectMetrics.accountGutter)
             if let note {
                 Text(note)
-                    .font(.system(size: 12))
+                    .font(.system(size: groupNoteSize))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -352,7 +357,7 @@ struct AO3CollectionFormView: View {
 
     private func fieldError(_ message: String) -> some View {
         Text(message)
-            .font(.system(size: 11.5))
+            .font(.system(size: fieldErrorSize))
             .foregroundStyle(.red)
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -362,7 +367,7 @@ struct AO3CollectionFormView: View {
 
     private func noticeCard(_ message: String, isError: Bool) -> some View {
         Text(message)
-            .font(.system(size: 12.5))
+            .font(.system(size: noticeCardSize))
             .foregroundStyle(isError ? Color.red : .secondary)
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -412,9 +417,9 @@ struct AO3CollectionFormView: View {
     private var openOnAO3Card: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Collection actions")
-                .font(.system(size: 15, weight: .semibold))
+                .font(.system(size: actionTitleSize, weight: .semibold))
             Text("Open AO3 to close this collection. Deleting the collection leaves its works on AO3.")
-                .font(.system(size: 12.5))
+                .font(.system(size: noticeCardSize))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             if let slug {
@@ -422,7 +427,7 @@ struct AO3CollectionFormView: View {
                     router.open(AO3CollectionURL.edit(slug: slug))
                 }
                     .buttonStyle(.borderless)
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.system(size: actionButtonSize, weight: .semibold))
                 if AO3CollectionDeleteDecision.canStart(
                     allowsDelete: form?.allowsDelete == true,
                     isDeleting: false,
@@ -432,7 +437,7 @@ struct AO3CollectionFormView: View {
                         showingDeleteConfirmation = true
                     }
                         .buttonStyle(.borderless)
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(.system(size: actionButtonSize, weight: .semibold))
                         .disabled(phase == .saving || isDeleting)
                 }
             }

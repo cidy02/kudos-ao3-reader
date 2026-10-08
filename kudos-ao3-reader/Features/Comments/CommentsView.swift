@@ -49,6 +49,8 @@ struct CommentsView: View {
     @Environment(ThemeManager.self) private var theme
     @Environment(\.dismiss) private var dismiss
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @ScaledMetric(relativeTo: .caption) private var noteSize: CGFloat = 11.5
+    @ScaledMetric(relativeTo: .footnote) private var writeCommentButtonSize: CGFloat = 14
 
     @State private var model: CommentsModel
     @State private var showingChapterPicker = false
@@ -139,7 +141,7 @@ struct CommentsView: View {
                             .pageBodyRow(top: 14, gutter: gutter)
                         if let note = signalScopeNote {
                             Text(note)
-                                .font(.system(size: 11.5))
+                                .font(.system(size: noteSize))
                                 .foregroundStyle(Color.secondary.opacity(0.7))
                                 .fixedSize(horizontal: false, vertical: true)
                                 .pageBodyRow(top: 8, gutter: gutter + 4)
@@ -831,13 +833,13 @@ struct CommentsView: View {
                         ? "pencil" : "person.crop.circle.badge.questionmark")
                         .font(.system(size: 14, weight: .semibold))
                     Text(title)
-                        .font(.system(size: 14, weight: .semibold))
+                        .font(.system(size: writeCommentButtonSize, weight: .semibold))
                         .lineLimit(1)
                         .minimumScaleFactor(0.8)
                 }
                 .foregroundStyle(palette.solidButtonLabel)
                 .padding(.horizontal, 20)
-                .frame(height: 44)
+                .frame(minHeight: 44)
                 .background(Capsule().fill(palette.accent))
             }
             .buttonStyle(.plain)
@@ -1168,6 +1170,10 @@ struct CommentComposerSheet: View {
     @Environment(AppRouter.self) private var router
     @Environment(ThemeManager.self) private var theme
     @Environment(\.dismiss) private var dismiss
+    @ScaledMetric(relativeTo: .subheadline) private var editorTextSize: CGFloat = 15
+    @ScaledMetric(relativeTo: .caption) private var identitySize: CGFloat = 11.5
+    @ScaledMetric(relativeTo: .footnote) private var quoteBodySize: CGFloat = 12.5
+    @ScaledMetric(relativeTo: .caption) private var quoteAuthorSize: CGFloat = 11
     @State private var draftSaveTask: Task<Void, Never>?
     @FocusState private var editorFocused: Bool
     /// The field's live selection, handed to `CommentMarkup` so a format button
@@ -1354,7 +1360,7 @@ struct CommentComposerSheet: View {
     /// inside it was a second frame around the same thing.
     private var editor: some View {
         TextEditor(text: $model.composerText, selection: $selection)
-            .font(.system(size: 15))
+            .font(.system(size: editorTextSize))
             .lineSpacing(3)
             .scrollContentBackground(.hidden)
             .padding(.horizontal, 12)
@@ -1365,7 +1371,7 @@ struct CommentComposerSheet: View {
                     // Offset past `TextEditor`'s own internal text inset, so the
                     // placeholder sits exactly where the first character will.
                     Text(isReply ? "Write your reply…" : "Share your thoughts…")
-                        .font(.system(size: 15))
+                        .font(.system(size: editorTextSize))
                         .foregroundStyle(.secondary)
                         .padding(.horizontal, 17)
                         .padding(.top, 18)
@@ -1389,7 +1395,7 @@ struct CommentComposerSheet: View {
             Text("\(remainingCharacters.formatted()) left")
                 .foregroundStyle(remainingCharacters < 0 ? Color.red : Color.secondary)
         }
-        .font(.system(size: 11.5))
+        .font(.system(size: identitySize))
         .monospacedDigit()
         .foregroundStyle(Color.secondary)
         .accessibilityElement(children: .combine)
@@ -1414,7 +1420,7 @@ struct CommentComposerSheet: View {
         VStack(alignment: .leading, spacing: 4) {
             replyContextLabel(for: parent)
             Text(parent.bodyText)
-                .font(.system(size: 12.5))
+                .font(.system(size: quoteBodySize))
                 .lineSpacing(2)
                 .foregroundStyle(.secondary)
                 .lineLimit(3)
@@ -1452,20 +1458,20 @@ struct CommentComposerSheet: View {
                     openParentAuthor(route)
                 } label: {
                     Text(parent.author)
-                        .font(.system(size: 11, weight: .semibold))
+                        .font(.system(size: quoteAuthorSize, weight: .semibold))
                         .foregroundStyle(palette.accent)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("View \(parent.author)'s profile")
                 if !chapterSuffix.isEmpty {
                     Text(chapterSuffix)
-                        .font(.system(size: 11, weight: .semibold))
+                        .font(.system(size: quoteAuthorSize, weight: .semibold))
                         .foregroundStyle(palette.accent)
                 }
             }
         } else {
             Text(parent.author + chapterSuffix)
-                .font(.system(size: 11, weight: .semibold))
+                .font(.system(size: quoteAuthorSize, weight: .semibold))
                 .foregroundStyle(palette.accent)
         }
     }
