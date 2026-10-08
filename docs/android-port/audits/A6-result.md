@@ -24,6 +24,8 @@ set, AO3 Collections, Reading History.
 | 6 | P3 | Library › Collections | the header is inset further than the cards under it | open |
 | 7 | P3 | the editor's recovery sheet | the second copy's date is cut at the edge at 2.0 (check that the row scrolls) | open |
 
+| 8 | **P2** | every Settings action row and other text in the raw accent, Dark and OLED | `#990000` on a near-black panel, about 1.8 to 1: "Export Backup…", "Import Backup…", "Rename" can barely be read. iOS tints the same rows with the same colour. | **owner question 19** |
+
 Also confirmed in this sitting: a quick filter drops hidden rows from a selection (Favorites:
 "Delete 1 work?"; a queue: "Remove 3 works from this queue?", audits A5-5 and A5-6); the
 keyboard closes when the editor's Done is tapped (brief 3bf's open item).

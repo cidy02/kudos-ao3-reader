@@ -42,10 +42,13 @@ class WorkImporter(
     suspend fun saveMetadataOnly(
         summary: AO3WorkSummary,
         markSaved: Boolean = true,
-        isQueuedForLater: Boolean = false
+        isQueuedForLater: Boolean = false,
+        enrichMetadata: Boolean = true
     ): WorkImportResult {
         val existing = findExisting(summary)
-        val metadata = fetchCanonical(summary.id)
+        // ReadingQueueService.swift:690–731 saves listing metadata before the EPUB.
+        // A series batch must not read each work page ahead of preservation.
+        val metadata = if (enrichMetadata) fetchCanonical(summary.id) else null
         var work = merger.merge(
             summary = summary,
             canonical = metadata,
@@ -119,6 +122,44 @@ class WorkImporter(
     private suspend fun reviveIfNeeded(existing: SavedWork?, saved: SavedWork): SavedWork {
         if (existing?.isDeleted != true) return saved
         return workRepository.restoreFromRecentlyDeleted(saved.id) ?: saved
+    }
+
+    /** ReadingQueueService.swift:476–528: await one EPUB; failed attempts are remembered too. */
+    suspend fun preserveQueuedWork(work: SavedWork, allowDownload: Boolean = true): WorkImportResult {
+        if (work.ao3Unavailable) return WorkImportResult.Failure(work, AO3Error.NotFound)
+        val attempt = workRepository.upsert(work.copy(lastPreservationAttemptAt = workRepository.currentInstant()))
+        if (attempt.hasEpub && fileStore.workEpubExists(attempt.id)) {
+            return WorkImportResult.Success(workRepository.upsert(attempt.copy(
+                epubPreservationStatusRaw = "preserved", preservedAt = attempt.preservedAt ?: workRepository.currentInstant()
+            )))
+        }
+        // A restricted listing may use an existing local EPUB, but never request a missing one.
+        if (!allowDownload) return WorkImportResult.Failure(
+            workRepository.upsert(attempt.copy(epubPreservationStatusRaw = "failed")), AO3Error.AuthenticationRequired)
+        val preserving = workRepository.upsert(attempt.copy(epubPreservationStatusRaw = "preserving"))
+        return try {
+            when (val result = downloadExisting(preserving)) {
+                is WorkImportResult.Success -> WorkImportResult.Success(workRepository.upsert(result.work.copy(
+                    epubPreservationStatusRaw = "preserved", preservedAt = workRepository.currentInstant()
+                )))
+                is WorkImportResult.Failure -> {
+                    val fresh = workRepository.getWork(work.id) ?: preserving
+                    WorkImportResult.Failure(workRepository.upsert(fresh.copy(epubPreservationStatusRaw = "failed")), result.error)
+                }
+            }
+        } catch (error: kotlinx.coroutines.CancellationException) {
+            // Persist the interruption without trying to finish another read or deleting the membership.
+            kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
+                val fresh = workRepository.getWork(work.id) ?: preserving
+                workRepository.upsert(fresh.copy(epubPreservationStatusRaw =
+                    if (fresh.hasEpub && fileStore.workEpubExists(fresh.id)) "preserved" else "queued"))
+            }
+            throw error
+        } catch (error: Exception) {
+            val fresh = workRepository.getWork(work.id) ?: preserving
+            WorkImportResult.Failure(workRepository.upsert(fresh.copy(epubPreservationStatusRaw = "failed")),
+                AO3Error.Validation(error.message ?: "The EPUB couldn't be preserved right now."))
+        }
     }
 
     suspend fun downloadExisting(work: SavedWork): WorkImportResult {

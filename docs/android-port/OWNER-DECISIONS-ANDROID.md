@@ -328,3 +328,26 @@ Android was updated.
 
 Until answered: Android unchanged (B).
 
+## 19. In Dark and OLED, text in the accent colour is too dark to read (both apps) (2026-10-08)
+
+Found by audit A6. The default accent is AO3 red (`#990000`). Both apps use it unchanged for
+text and icons: on Android every Settings action row ("Export Backup…", "Import Backup…",
+"Rename"), on iOS every tinted button and link. On a dark panel that is a contrast of about
+1.8 to 1; text needs 4.5 to 1 to be read comfortably. Screens built on a subject palette are
+fine: the palette already lightens its accent for dark themes, for exactly this reason
+(`SubjectSurface.swift`: "a very dark accent as label text on a dark wash is unreadable").
+
+iOS has the place for the fix and leaves it empty: `SubjectPalette.controlColor(_:on:)`
+returns the colour as given. Android copies it.
+
+- **A (recommended).** In Dark and OLED, text and icons in the accent colour are lightened
+  until they reach 4.5 to 1 against the page, keeping the hue; fills (a filled button, a
+  switch) keep the colour exactly as chosen. One function on each app.
+- **B.** Leave it: the accent is the reader's choice, and a lighter accent can be picked in
+  Settings.
+- **C.** Change only the default accent in Dark and OLED to a lighter red, and leave a
+  chosen colour alone.
+
+Until answered: unchanged (B), except that new sheets use the palette's accent for their
+text actions, as the newer screens already do.
+

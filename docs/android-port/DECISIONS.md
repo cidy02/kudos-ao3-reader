@@ -935,3 +935,14 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   the row up to See All. Five custom controls got a role and a state for screen readers
   (audit A13 and the reader's colour swatches).
   Reverse: the inner `Row` in `SectionRuleHeader`.
+
+## 2026-10-08: Work Detail saves a series the way iOS does, and its sheets are the app's own (brief 3bn)
+
+- Save for Later on a work in a series offers iOS's "Preserve Series?" (or preserves a small
+  series by itself when the setting is on and the first page shows the whole series, at or
+  under the saved threshold, which the setting now really controls). Works are downloaded one
+  at a time, awaited, with the two-second pause, and can be cancelled; a restricted work is
+  skipped, never requested (owner, 2026-10-07). The bookmark and Add to Queue sheets replace
+  the old Material dialogs. Android now stamps the preservation status and time it used to
+  carry only for iOS.
+  Reverse: revert the 3bn commit; no schema or backup key changed.

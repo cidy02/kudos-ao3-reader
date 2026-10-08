@@ -76,7 +76,7 @@ data class AppSettings(
     val downloadOnSubscribe: Boolean = false,
     val appTheme: AppThemeSetting = AppThemeSetting.Light,
     val accentColorHex: String = "#990000",
-    /** iOS backup passthrough; Android has no UI for these queue defaults yet. */
+    /** Shared Reading queues setting; Work Detail uses it after Save for Later. */
     val autoPreserveSmallSeriesOnSaveForLater: Boolean = false,
     val autoPreserveSeriesWorkThreshold: Int = 5
 )

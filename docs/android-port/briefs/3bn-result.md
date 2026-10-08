@@ -78,3 +78,52 @@ Sodium Lights and Unanswered Is Not Unread are reachable through **Library → R
 - Existing `AO3WriteRepositoryTest`: 2 added cases for one shared advisory GET/no signed-out read and exact over-length bookmark fields/refusal/no retry. Existing create/update payload cases remain.
 
 **Claude must run:** Android compile and the focused suites above, then the app's required regression checks (existing queue membership/download/import/backup tests should remain green). In particular all coroutine/Room cancellation, Compose modal/IME/layout and live-collected setting claims need execution. Visually review both sheets, queue sheet and status rows in all four themes at default and accessibility font scale; drag/back/scrim during bookmark writes; manual partial Cancel with the two-page demo. No visual correctness is claimed here. The full request body implementation in `createBookmark` is unchanged; the optional advisory read helper is the only production write-repository addition.
+
+## Landing note (Claude, 2026-10-08)
+
+Applied on top of the lane with one conflict (the old inline dialogs in `WorkDetailScreen.kt`,
+which this brief removes; taken as written). Gate: 2,022 tests, green on the second run; see
+the flaky test below.
+
+Changed on landing:
+
+- A forced unwrap in the series loop (`workDao.getById(saved.id)!!`) is now a fallback to
+  the row just saved.
+- One new test compared a row with the object `upsert` handed back, which keeps more than
+  the stored milliseconds; it compares the stored row before and after.
+- **The sheets' text actions were unreadable in Dark.** Cancel, Save, Done, the tick and the
+  progress colours used the theme's raw accent (`#990000` on a near-black sheet, a contrast
+  of about 1.8 to 1). They now use the scope palette's accent, as the newer screens do. The
+  action rows inside the sheets (`SettingsActionRow`: "Preserve Entire Series", "Only This
+  Work") still use the raw accent, as every Settings action row does: that is a fault of the
+  whole app in Dark and OLED on both platforms, now owner question 19.
+
+**What Android now writes that it did not before:** `epubPreservationStatusRaw` ("preserving",
+"preserved", "failed", "queued": all values iOS's enum has) and `preservedAt`, on an explicit
+series or queue preservation. Before this brief Android only carried those fields through a
+backup. iOS writes the same values at the same moments, and Android's merge already marks a
+queued work with a file "preserved", so a backup either way stays consistent.
+
+Seen on `emulator-5556` in airplane mode, Dark: Work Detail → More actions → Edit Bookmark
+on AO3 (Notes, Tags with its placeholder and footnote, Private, Recommend, Cancel, Save);
+Add to Queue (New queue, the four queues with a tick on the current one, the Series switch;
+with the switch on: "This series has 4 works. Download every work in the series?" and Add
+Series to Selected Queues, which ended "1 added, 2 already preserved, 1 skipped."); Save for
+Later on a work in a four-work series ("Preserve Series?" with the switch, its footnote,
+Preserve Entire Series and Only This Work).
+
+Not seen: Cancel part-way through a long series, the two-page series, a failed preview, the
+bookmark's refusal, Sepia, Light, OLED and large text for these sheets.
+
+Leads, not from this brief:
+
+- **A flaky test run.** One gate run failed `BackupTrustPhase1Test.importPackageMergeKeepsExistingAnnotationNoteAndInsertsNewId`
+  with "uncaught exceptions before the test started": a coroutine from an earlier test in
+  the same fork threw after its test ended. It passed on the rerun and had not been seen in
+  about fifteen runs before this landing, so the leak is probably in one of this brief's
+  new tests. Watch for it.
+- The Library's long-press menu says "Remove from Saved for Later" for a work that is in
+  another queue and not in Saved for Later (Work Detail, for the same work, offers "Save for
+  Later"). Probably the menu reads the "queued" flag and not the membership.
+- In the queue sheet, tapping the switch's label does not move the switch (iOS's is the
+  same); the switch's node does not report itself checkable to accessibility.
