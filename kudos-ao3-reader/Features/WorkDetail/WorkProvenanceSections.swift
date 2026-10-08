@@ -19,6 +19,8 @@ struct WorkProvenanceSections: View {
 
     @Environment(\.modelContext) private var context
 
+    @ScaledMetric(relativeTo: .subheadline) private var rowContentSize: CGFloat = 14.5
+
     @State private var rebuilding = false
     @State private var rebuildError: String?
     @State private var rebuilt = false
@@ -71,7 +73,7 @@ struct WorkProvenanceSections: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
-            .font(.system(size: 14.5))
+            .font(.system(size: rowContentSize))
             .myCopyRow()
         }
     }
@@ -130,7 +132,7 @@ struct WorkProvenanceSections: View {
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-                .font(.system(size: 14.5))
+                .font(.system(size: rowContentSize))
                 .myCopyRow()
                 .confirmationDialog(
                     "Rebuild this work?",

@@ -14,6 +14,12 @@ struct LibraryFilterCollisionCard: View {
 
     @Environment(ThemeManager.self) private var themeManager
 
+    @ScaledMetric(relativeTo: .body) private var titleSize: CGFloat = 18
+    @ScaledMetric(relativeTo: .footnote) private var detailSize: CGFloat = 13.5
+    @ScaledMetric(relativeTo: .footnote) private var dropLabelSize: CGFloat = 13.5
+    @ScaledMetric(relativeTo: .caption) private var countSize: CGFloat = 12
+    @ScaledMetric(relativeTo: .footnote) private var buttonLabelSize: CGFloat = 14
+
     private var drops: [LibraryFilters.FilterDrop] {
         filters.droppingEachActiveFilter(from: works)
     }
@@ -30,11 +36,11 @@ struct LibraryFilterCollisionCard: View {
         VStack(alignment: .leading, spacing: 11) {
             VStack(alignment: .leading, spacing: 7) {
                 Text(collisionTitle)
-                    .font(.system(size: 18, weight: .semibold))
+                    .font(.system(size: titleSize, weight: .semibold))
                     .foregroundStyle(.primary)
                     .fixedSize(horizontal: false, vertical: true)
                 Text(collisionDetail)
-                    .font(.system(size: 13.5))
+                    .font(.system(size: detailSize))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -58,12 +64,12 @@ struct LibraryFilterCollisionCard: View {
                             } label: {
                                 HStack(spacing: 9) {
                                     Text("Without \(drop.filterLabel)")
-                                        .font(.system(size: 13.5, weight: .medium))
+                                        .font(.system(size: dropLabelSize, weight: .medium))
                                         .foregroundStyle(.primary)
                                         .lineLimit(2)
                                         .frame(maxWidth: .infinity, alignment: .leading)
                                     Text(workCountText(drop.remainingCount))
-                                        .font(.system(size: 12, weight: .semibold))
+                                        .font(.system(size: countSize, weight: .semibold))
                                         .monospacedDigit()
                                         .foregroundStyle(palette.accent)
                                         .fixedSize()
@@ -89,7 +95,7 @@ struct LibraryFilterCollisionCard: View {
                     filters = LibraryFilters()
                 } label: {
                     Text("Clear all filters")
-                        .font(.system(size: 14, weight: .semibold))
+                        .font(.system(size: buttonLabelSize, weight: .semibold))
                         .frame(maxWidth: .infinity)
                         .frame(height: 42)
                         .foregroundStyle(clearLabelColor)
@@ -102,7 +108,7 @@ struct LibraryFilterCollisionCard: View {
 
                 Button(action: onEdit) {
                     Text("Edit")
-                        .font(.system(size: 14, weight: .medium))
+                        .font(.system(size: buttonLabelSize, weight: .medium))
                         .padding(.horizontal, 18)
                         .frame(height: 42)
                         .foregroundStyle(.primary)

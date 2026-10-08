@@ -43,6 +43,9 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
     @State private var filters = LibraryFilters()
     @State private var showingNewCollection = false
 
+    @ScaledMetric(relativeTo: .footnote) private var recentlyDeletedTitleSize: CGFloat = 14
+    @ScaledMetric(relativeTo: .footnote) private var recentlyDeletedCountSize: CGFloat = 13
+
     // MARK: Section cache
     //
     // Filtering the whole library for every carousel on every body pass was
@@ -475,10 +478,10 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
                     .font(.system(size: 14))
                     .foregroundStyle(.secondary)
                 Text("Recently Deleted")
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(.system(size: recentlyDeletedTitleSize, weight: .semibold))
                 Spacer()
                 Text(recentlyDeletedCount.compactCount)
-                    .font(.system(size: 13))
+                    .font(.system(size: recentlyDeletedCountSize))
                     .monospacedDigit()
                     .foregroundStyle(.secondary)
                 Image(systemName: "chevron.right")
