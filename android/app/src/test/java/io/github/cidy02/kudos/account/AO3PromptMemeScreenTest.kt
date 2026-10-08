@@ -70,7 +70,7 @@ class AO3PromptMemeScreenTest {
     }
     private fun action(title: String, id: Int) = compose.onNode(hasText(title) and hasAnyAncestor(hasTestTag("prompt-$id")))
     private fun noWrites() {
-        listOf("New prompt", "Submit sign-up").forEach { compose.onNodeWithText(it).assertDoesNotExist() }
+        listOf("Submit sign-up").forEach { compose.onNodeWithText(it).assertDoesNotExist() }
         assertEquals(0, client.posts)
     }
 

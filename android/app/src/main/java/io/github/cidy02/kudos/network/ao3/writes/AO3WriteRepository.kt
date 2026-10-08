@@ -6,6 +6,10 @@ import io.github.cidy02.kudos.network.ao3.AO3HttpResponse
 import io.github.cidy02.kudos.network.ao3.AO3OverloadDetector
 import io.github.cidy02.kudos.network.ao3.AO3RedirectCookieRelay
 import io.github.cidy02.kudos.network.ao3.AO3Result
+import io.github.cidy02.kudos.network.ao3.account.AO3ChallengeSignUpForm
+import io.github.cidy02.kudos.network.ao3.account.AO3ChallengeSignUpUrls
+import io.github.cidy02.kudos.network.ao3.account.AO3ChallengeSignUpParser
+import io.github.cidy02.kudos.network.ao3.account.AO3SignUpSaveOutcome
 import io.github.cidy02.kudos.network.ao3.account.AO3PromptMemeUrls
 import io.github.cidy02.kudos.network.ao3.account.AO3AccountUrls
 import io.github.cidy02.kudos.network.ao3.account.AO3CollectionItemDraft
@@ -37,6 +41,53 @@ class AO3WriteRepository(
     private val client: AO3AuthenticatedClient,
     private val parser: AO3WriteFormParser = AO3WriteFormParser()
 ) {
+    /** iOS saveChallengeSignUp: validate, one fresh meta token, one POST, no follow-up GET. */
+    suspend fun saveChallengeSignUp(form: AO3ChallengeSignUpForm,
+        expectedGeneration: Int): AO3Result<AO3SignUpSaveOutcome> {
+        requireCollectionSession(expectedGeneration)
+        if (client.username() == null) return AO3Result.Failure(AO3Error.Validation("Log in to AO3 first."))
+        val checked = form.validated()
+        if (!checked.isValid) return AO3Result.Success(AO3SignUpSaveOutcome.Invalid(checked))
+        val referer = AO3ChallengeSignUpUrls.form(form.slug, form.signUpID)
+        val html = when (val result = client.getAuthenticated(referer)) {
+            is AO3Result.Failure -> return result
+            is AO3Result.Success -> result.value.body
+        }
+        requireCollectionSession(expectedGeneration)
+        val token = parser.parseAuthenticityToken(html, metaOnly = true)
+            ?: return AO3Result.Failure(AO3Error.Validation("Couldn't prepare the request. Try again, or open the work on AO3."))
+        val action = checked.actionUrl.ifEmpty {
+            "${AO3CollectionFormUrls.show(form.slug)}/signups" + (form.signUpID?.let { "/$it" } ?: "")
+        }
+        val posted = checked.copy(token = token, actionUrl = action)
+        if (!AO3RedirectCookieRelay.isTrustedUrl(posted.actionUrl)) return AO3Result.Failure(
+            AO3Error.Parse("Couldn't read AO3's sign-up form."))
+        currentCoroutineContext().ensureActive()
+        val response = withContext(NonCancellable) {
+            client.postAuthenticatedInSession(posted.actionUrl, posted.parameters(), writeHeaders(token, referer), expectedGeneration)
+        }
+        requireCollectionSession(expectedGeneration)
+        return when (response) {
+            is AO3Result.Failure -> response
+            is AO3Result.Success -> {
+                val body = response.value.body
+                val parsed = try { AO3ChallengeSignUpParser().parse(body, form.slug) }
+                    catch (_: Exception) { null }
+                val error = parser.writeErrorMessage(body)
+                when {
+                    parsed != null && !parsed.isValid -> AO3Result.Success(
+                        AO3SignUpSaveOutcome.Invalid(checked.copy(
+                            fieldErrors = parsed.fieldErrors, generalErrors = parsed.generalErrors)))
+                    error != null -> AO3Result.Success(AO3SignUpSaveOutcome.Invalid(
+                        checked.copy(generalErrors = listOf(error))))
+                    parser.writeSuccessMessage(body) != null || response.value.statusCode in 300..399 ->
+                        AO3Result.Success(AO3SignUpSaveOutcome.Saved(parsed ?: posted))
+                    else -> AO3Result.Failure(AO3Error.Validation(AO3CollectionFields.UNCONFIRMED))
+                }
+            }
+        }
+    }
+
     /** iOS claimPrompt: one fresh requests-page token and one single-shot POST. */
     suspend fun claimPrompt(slug: String, promptID: Int, expectedGeneration: Int): AO3Result<Unit> =
         changePromptClaim(AO3PromptMemeUrls.requests(slug), AO3PromptMemeUrls.claims(slug),
