@@ -1161,7 +1161,9 @@ fun AppNavHost(
         }
 
         sharedComposable(Routes.AccountMoreOnAO3) {
+            val moreOnAo3Auth by container.authRepository.state.collectAsState()
             io.github.cidy02.kudos.account.AccountMoreOnAO3Screen(
+                username = moreOnAo3Auth.usernameOrNull,
                 onOpenWeb = { url -> navController.navigate(Routes.webFallback(url)) }
             )
         }
