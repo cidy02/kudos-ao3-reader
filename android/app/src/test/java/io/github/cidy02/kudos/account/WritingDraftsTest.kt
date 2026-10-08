@@ -117,14 +117,14 @@ class WritingDraftsTest {
         assertEquals("page 2 of 2 · 2 expiring this week on this page", DraftExpiry.tally(parser.parse(draftsFixture(2), 2), clock))
     }
 
-    @Test fun urlsMatchIosAndBothEditorFallbacksStayTogether() {
+    @Test fun urlsMatchIosAndBothNativeEditorEntrancesStayTogether() {
         assertEquals("/users/AO3_Reader/works/drafts", AO3DraftsUrls.page(" AO3_Reader ", 1)!!.toHttpUrl().encodedPath)
         assertNull(AO3DraftsUrls.page("AO3_Reader", 1)!!.toHttpUrl().query)
         assertEquals("2", AO3DraftsUrls.page("AO3_Reader", 2)!!.toHttpUrl().queryParameter("page"))
         assertEquals("/users/a%2Fb/works/drafts", AO3DraftsUrls.page("a/b", 1)!!.toHttpUrl().encodedPath)
         assertNull(AO3DraftsUrls.page(" ", 1))
-        assertEquals("https://archiveofourown.org/works/995001/edit", WritingWorkDestination.url(995001L))
-        assertEquals("https://archiveofourown.org/works/new", WritingWorkDestination.url())
+        assertEquals("writing-work?workId=995001", WritingWorkDestination.route(995001L))
+        assertEquals("writing-work", WritingWorkDestination.route())
         assertEquals("Drafts", Routes.titleFor(Routes.WritingDrafts))
         assertTrue(Routes.hasSubjectHeader(Routes.WritingDrafts)); assertTrue(Routes.hidesTabBar(Routes.WritingDrafts))
         assertFalse(Routes.isShellRoot(Routes.WritingDrafts))

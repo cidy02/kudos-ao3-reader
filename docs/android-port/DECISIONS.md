@@ -1021,3 +1021,12 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   owner question 20 is withdrawn: iOS's own code says Hide filters before the row).
   Reverse: the commits "Reading History grouped by time, state or fandom" and "Hide mode
   leaves a mature work out of Search's library matches too".
+
+## 2026-10-08: the work form saves (brief 3bo)
+
+- Save on the native work form: one POST of the loaded form to its own action with the token
+  it was served, never retried, never preceded by a read; done only on AO3's notice or its
+  redirect; AO3's reason shown otherwise and everything typed kept. Drafts and New Work open
+  the native form. After a confirmed Save the drafts list reads its current page once; an
+  unsaved Back reads nothing (the more sparing choice).
+  Reverse: the commit "The work form saves".

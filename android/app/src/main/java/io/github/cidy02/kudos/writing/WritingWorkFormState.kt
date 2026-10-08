@@ -6,6 +6,7 @@ import io.github.cidy02.kudos.network.ao3.AO3Error
 import io.github.cidy02.kudos.network.ao3.chapters.AO3ChapterRef
 import io.github.cidy02.kudos.network.ao3.AO3Result
 import io.github.cidy02.kudos.network.ao3.writing.*
+import io.github.cidy02.kudos.network.ao3.writes.AO3WriteRepository
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ensureActive
@@ -16,7 +17,10 @@ import java.time.LocalDate
 internal data class WritingWorkFormUiState(
     val form: AO3WorkForm? = null,
     val loading: Boolean = false,
-    val failure: String? = null
+    val failure: String? = null,
+    val saving: Boolean = false,
+    val saved: Boolean = false,
+    val saveError: String? = null
 )
 
 internal enum class WorkFormChoice { Rating, Language, Comments, Skin }
@@ -34,20 +38,58 @@ internal enum class WorkFormText(val title: String, val field: String) {
     }
 }
 
-/** Owns one opening, one form read and only in-memory edits. No write API or persistence. */
+/** Owns one opening, one form read, in-memory edits and a single guarded Save. */
 internal class WritingWorkFormState(
     private val workID: Long?,
     private val repository: AO3WorkFormRepository,
     private val auth: AO3AuthRepository,
+    private val writes: AO3WriteRepository,
     private val today: () -> LocalDate = { LocalDate.now() }
 ) {
     private val generation = auth.generation.value
+    val account = auth.username().orEmpty()
     private var active = true
     private var attempted = false
     private var collectionsAttempted = false
     private val mutable = MutableStateFlow(WritingWorkFormUiState())
     val state = mutable.asStateFlow()
     private fun ownsSession() = active && generation == auth.generation.value
+
+    suspend fun save() {
+        val old = state.value
+        val form = old.form ?: return
+        if (!active || old.saving || old.saved) return
+        if (generation != auth.generation.value) {
+            mutable.value = old.copy(saveError = WORK_FORM_SESSION_CHANGED)
+            return
+        }
+        mutable.value = old.copy(saving = true, saveError = null)
+        try {
+            val result = writes.saveWork(form, generation)
+            currentCoroutineContext().ensureActive()
+            if (!active) return
+            mutable.value = when {
+                generation != auth.generation.value -> old.copy(saveError = WORK_FORM_SESSION_CHANGED)
+                result is AO3Result.Success -> old.copy(saved = true, saveError = null)
+                result is AO3Result.Failure -> old.copy(saveError = workFormFailure(result.error))
+                else -> old
+            }
+        } catch (cancelled: CancellationException) {
+            if (active && generation != auth.generation.value) {
+                mutable.value = old.copy(saveError = WORK_FORM_SESSION_CHANGED)
+            } else {
+                if (active) mutable.value = old
+                throw cancelled
+            }
+        } catch (error: Exception) {
+            val failure = if (error is java.io.IOException) AO3Error.networkFromTransport(error)
+                else AO3Error.Network(error.message.orEmpty(), error)
+            if (active) mutable.value = old.copy(saveError = if (generation != auth.generation.value)
+                WORK_FORM_SESSION_CHANGED else workFormFailure(failure))
+        }
+    }
+
+    fun dismissSaveError() { mutable.value = state.value.copy(saveError = null) }
 
     suspend fun load(retry: Boolean = false) {
         if (!ownsSession() || state.value.loading || state.value.form != null || (attempted && !retry)) return
@@ -69,6 +111,7 @@ internal class WritingWorkFormState(
     private fun change(edit: (AO3WorkForm) -> AO3WorkForm) {
         if (!ownsSession() || !auth.state.value.isSignedIn) return
         val old = state.value
+        if (old.saving || old.saved) return
         val form = old.form ?: return
         mutable.value = old.copy(form = edit(form))
     }
@@ -189,6 +232,8 @@ internal class WritingWorkFormState(
     fun close() { active = false }
 }
 
+internal const val WORK_FORM_SESSION_CHANGED = "Your AO3 session changed. Reopen this form before saving."
+
 private fun AO3WorkForm.withPublicationDate(date: LocalDate) = copy(chapter = chapter?.copy(
     publishedYear = date.year.toString(), publishedMonth = date.monthValue.toString(), publishedDay = date.dayOfMonth.toString()))
 
@@ -268,8 +313,12 @@ internal fun workFormFailure(error: AO3Error): String = when (error) {
         else -> "AO3's page format wasn't what the app expected."
     }
     is AO3Error.RateLimited -> "AO3 is rate-limiting requests. Wait a moment and try again."
-    is AO3Error.Network -> if (error.offline) "You're offline. Connect to the internet and try again."
-        else "Couldn't reach AO3. Check your connection and try again."
+    is AO3Error.Network -> when {
+        error.offline -> "You're offline. Connect to the internet and try again."
+        error.cause is java.net.SocketTimeoutException -> "AO3 took too long to answer. Try again."
+        error.cause is javax.net.ssl.SSLException -> "Couldn't make a secure connection to AO3."
+        else -> "Couldn't reach AO3. Check your connection and try again."
+    }
     is AO3Error.Http -> "AO3 returned an unexpected response (HTTP ${error.statusCode})."
     is AO3Error.Validation -> error.message
     AO3Error.BadRequest -> "AO3 returned an unexpected response (HTTP 400)."

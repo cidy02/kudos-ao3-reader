@@ -2,6 +2,12 @@ package io.github.cidy02.kudos.network.ao3
 
 import io.github.cidy02.kudos.network.ao3.writing.AO3DraftsParser
 import io.github.cidy02.kudos.network.ao3.writing.DraftExpiry
+import io.github.cidy02.kudos.network.ao3.writing.AO3WorkForm
+import io.github.cidy02.kudos.network.ao3.writing.AO3WorkFormParser
+import io.github.cidy02.kudos.network.ao3.writing.AO3WorkSubmitAction
+import io.github.cidy02.kudos.network.ao3.writes.AO3WriteFormParser
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -61,6 +67,62 @@ class DemoDraftsTest {
     private fun client(source: FixtureSource, clock: Clock): OkHttpClient = OkHttpClient.Builder()
         .addInterceptor(DemoNetworkInterceptor(isActive = { true }, fixtures = { source }, clock = clock))
         .addInterceptor { error("The drafts demo must never reach the network") }.build()
+
+    @Test fun demoSavesNewAndExistingDraftAndUpdatesPostedWorkThenResetsOnRelaunch() {
+        val client = client(source, Clock.systemUTC())
+        val parser = AO3WorkFormParser()
+        for ((path, title) in listOf("/works/new" to "A locally saved new draft", "/works/995001/edit" to "Changed lanterns",
+            "/works/995006/edit" to "Changed posted tide")) {
+            val url = "https://archiveofourown.org$path"
+            val form = parser.parse(html(client, url), url).copy(title = title)
+            val answer = save(client, form)
+            assertEquals(200, answer.first)
+            assertNotNull(AO3WriteFormParser().workWriteNotice(answer.second))
+            val workId = form.workID ?: 995007L
+            val editedUrl = "https://archiveofourown.org/works/$workId/edit"
+            val edited = parser.parse(html(client, editedUrl), editedUrl)
+            assertEquals(title, edited.title)
+            assertEquals(workId, edited.workID)
+            assertEquals(form.isPosted, edited.isPosted)
+        }
+        val drafts = AO3DraftsParser().parse(html(client, base), 1)
+        assertEquals("A locally saved new draft", drafts.page.works.first { it.id == 995007L }.title)
+        assertEquals("Changed lanterns", drafts.page.works.first { it.id == 995001L }.title)
+        assertTrue(drafts.page.works.none { it.id == 995006L })
+        val reset = client(source, Clock.systemUTC())
+        val fresh = AO3DraftsParser().parse(html(reset, base), 1)
+        assertTrue(fresh.page.works.none { it.id == 995007L })
+        assertEquals("Lanterns Above the Mill", fresh.page.works.first { it.id == 995001L }.title)
+    }
+
+    @Test fun refusedTitleAndInvalidTokenStayLocalAndNeverChangeTheDraft() {
+        val client = client(source, Clock.systemUTC())
+        val url = "https://archiveofourown.org/works/995001/edit"
+        val form = AO3WorkFormParser().parse(html(client, url), url)
+        val refused = save(client, form.copy(title = "Refuse this draft"))
+        assertEquals(422, refused.first)
+        assertEquals("Title is too long (maximum is 255 characters)", AO3WriteFormParser().workWriteError(refused.second))
+        assertEquals(form.title, AO3WorkFormParser().parse(html(client, url), url).title)
+        assertEquals(422, save(client, form.copy(csrfToken = "wrong")).first)
+        assertEquals(form.title, AO3WorkFormParser().parse(html(client, url), url).title)
+    }
+
+    @Test fun workSaveWithoutBundledAssetsIsATerminalLocalFailure() {
+        val client = client(FixtureSource { null }, Clock.systemUTC())
+        val form = AO3WorkFormParser().parse(source.read("ao3_demo_work_draft_edit")!!.decodeToString(),
+            "https://archiveofourown.org/works/995001/edit")
+        assertEquals(404, save(client, form).first)
+    }
+
+    private fun save(client: OkHttpClient, form: AO3WorkForm): Pair<Int, String> {
+        val submit = if (form.isPosted) AO3WorkSubmitAction.Update else AO3WorkSubmitAction.SaveDraft
+        val body = AO3FormEncoding.encode(form.parameters(submit))
+            .toRequestBody("application/x-www-form-urlencoded; charset=UTF-8".toMediaType())
+        return client.newCall(Request.Builder().url(form.actionUrl).post(body)
+            .header("X-CSRF-Token", form.csrfToken).header("Referer", form.actionUrl).build()).execute().use {
+            it.code to it.body.string()
+        }
+    }
 
     private fun html(client: OkHttpClient, url: String): String =
         client.newCall(Request.Builder().url(url).build()).execute().use {

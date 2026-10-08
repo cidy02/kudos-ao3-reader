@@ -14,6 +14,7 @@ import io.github.cidy02.kudos.app.LocalPushedShellChrome
 import io.github.cidy02.kudos.app.PushedShellChrome
 import io.github.cidy02.kudos.network.ao3.AO3Error
 import io.github.cidy02.kudos.network.ao3.writing.AO3WorkFormField
+import io.github.cidy02.kudos.network.ao3.writing.AO3WorkSubmitAction
 import io.github.cidy02.kudos.ui.theme.KudosTheme
 import io.github.cidy02.kudos.ui.theme.KudosThemeMode
 import kotlinx.coroutines.CompletableDeferred
@@ -65,7 +66,7 @@ class WritingWorkFormScreenTest {
     private fun noWrites() {
         assertEquals(1, setup.client.gets.size)
         assertEquals(0, setup.client.posts)
-        assertNull(chrome.trailingContent)
+        assertNotNull(chrome.trailingContent)
     }
 
     private fun inventory(id: Long?) {
@@ -120,7 +121,7 @@ class WritingWorkFormScreenTest {
         row("Who can comment", if (posted) "Only registered users" else "Registered users and guests")
         // Posted fixture is metadata-only, despite served backdate inputs.
         compose.onNodeWithText("Publication date").assertDoesNotExist()
-        for (omitted in listOf("Save", "Post work", "Preview on AO3", "Delete draft", "Delete work on AO3", "Chapter title", "Anonymous", "Collection inbox")) {
+        for (omitted in listOf("Post work", "Preview on AO3", "Delete draft", "Delete work on AO3", "Chapter title", "Anonymous", "Collection inbox")) {
             compose.onNodeWithText(omitted).assertDoesNotExist()
         }
         noWrites()
@@ -230,6 +231,10 @@ class WritingWorkFormScreenTest {
 
     private fun largeTheme(mode: KudosThemeMode) {
         show(995006L, mode, 2f)
+        val saveLayouts = mutableListOf<TextLayoutResult>()
+        compose.onNodeWithText("Save").performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(saveLayouts) }
+        assertTrue(saveLayouts.isNotEmpty())
+        assertTrue(saveLayouts.all { !it.didOverflowHeight && !it.isLineEllipsized(it.lineCount - 1) })
         for (label in listOf("Fandoms ∗", "Series", "Chapters posted", "Set a different publication date", "Only show to registered users", "Enable comment moderation")) {
             reach(label)
             val layouts = mutableListOf<TextLayoutResult>()
@@ -241,11 +246,122 @@ class WritingWorkFormScreenTest {
         reach("Who can comment")
         compose.onNodeWithText("Who can comment").assertExists()
         noWrites()
+        val reason = "Title is too long (maximum is 255 characters)"
+        compose.runOnIdle { setup.client.postBody = "<main id=main><div id=error><ul><li>$reason</li></ul></div></main>" }
+        compose.onNodeWithText("Save").performClick()
+        awaitText("AO3 could not save the change")
+        for (text in listOf("AO3 could not save the change", reason, "OK")) {
+            val layouts = mutableListOf<TextLayoutResult>()
+            compose.onNodeWithText(text).performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
+            assertTrue(layouts.isNotEmpty())
+            assertTrue("$mode / alert / $text", layouts.all { !it.didOverflowHeight && !it.isLineEllipsized(it.lineCount - 1) })
+        }
+        assertEquals(1, setup.client.posts); assertEquals(0, leaves)
     }
     @Test fun lightAccessibilityTextWraps() = largeTheme(KudosThemeMode.Light)
     @Test fun darkAccessibilityTextWraps() = largeTheme(KudosThemeMode.Dark)
     @Test fun sepiaAccessibilityTextWraps() = largeTheme(KudosThemeMode.Sepia)
     @Test fun oledAccessibilityTextWraps() = largeTheme(KudosThemeMode.Oled)
+
+    private fun saveEditedForm(id: Long?) {
+        show(id)
+        compose.onNodeWithContentDescription("Title ∗").performTextReplacement("  Screen title & 星  ")
+        val before = model.state.value.form!!
+        compose.onNodeWithText("Save").assertIsEnabled().performClick()
+        compose.waitUntil(15_000) { leaves == 1 }
+        val submit = if (id == 995006L) AO3WorkSubmitAction.Update else AO3WorkSubmitAction.SaveDraft
+        assertEquals(before.parameters(submit), setup.client.recordedPosts.single().fields)
+        assertEquals(iosFixtureSaveFields(id, title = "  Screen title & 星  "), setup.client.recordedPosts.single().fields)
+        assertEquals(listOf("  Screen title & 星  "), setup.client.recordedPosts.single().fields
+            .filter { it.first == AO3WorkFormField.title }.map { it.second })
+        assertEquals(1, setup.client.posts); assertEquals(1, setup.client.gets.size)
+    }
+    @Test fun newWorkSavePostsTheActualEditedScreenFormAndCloses() = saveEditedForm(null)
+    @Test fun draftSavePostsTheActualEditedScreenFormAndCloses() = saveEditedForm(995001L)
+    @Test fun postedSavePostsTheActualEditedScreenFormAndCloses() = saveEditedForm(995006L)
+
+    @Test fun saveDisablesInFlightAndSecondTapSendsNothingThenClosesOnlyOnConfirmation() {
+        show(995001L)
+        val release = CompletableDeferred<Unit>()
+        compose.runOnIdle { setup.client.beforePostResponse = { release.await() } }
+        compose.onNodeWithText("Save").performClick()
+        compose.waitUntil(15_000) { setup.client.posts == 1 }
+        compose.onNodeWithText("Save").assertIsNotEnabled().performClick()
+        compose.runOnIdle { assertEquals(0, leaves); assertEquals(1, setup.client.posts) }
+        compose.runOnIdle { release.complete(Unit) }
+        compose.waitUntil(15_000) { leaves == 1 }
+        assertEquals(1, setup.client.posts)
+    }
+
+    @Test fun refusedSaveKeepsTheTypedFormWithIosAlertAndAo3Reason() {
+        show(995001L)
+        compose.runOnIdle {
+            setup.client.postBody = "<main id=main><div id=error><ul><li>Title is too long (maximum is 255 characters)</li></ul></div></main>"
+            setup.client.postStatus = 422
+        }
+        compose.onNodeWithContentDescription("Title ∗").performTextReplacement("Keep this title")
+        compose.onNodeWithText("Save").performClick()
+        awaitText("AO3 could not save the change")
+        compose.onNodeWithText("Title is too long (maximum is 255 characters)").assertExists()
+        compose.onNodeWithText("OK").performClick()
+        compose.onNodeWithContentDescription("Title ∗").assertTextContains("Keep this title")
+        assertEquals(0, leaves); assertEquals(1, setup.client.posts); assertEquals(1, setup.client.gets.size)
+    }
+
+    @Test fun unconfirmedSaveKeepsTheFormAndShowsIosWords() {
+        show()
+        compose.runOnIdle { setup.client.postBody = "<main id=main></main>" }
+        compose.onNodeWithText("Save").performClick()
+        awaitText("AO3 could not save the change")
+        compose.onNodeWithText("AO3 replied but didn't confirm the change went through. Check on AO3 before trying again.").assertExists()
+        assertEquals(0, leaves); assertEquals(1, setup.client.posts)
+    }
+
+    @Test fun multiChapterDraftHasNoWorkTextRowAndSaveSendsNoContent() {
+        setup = runBlocking { workFormSetup() }
+        val doc = org.jsoup.Jsoup.parse(io.github.cidy02.kudos.network.ao3.writing.workFixture("ao3_demo_work_draft_edit"))
+        doc.select("textarea[name='work[chapter_attributes][content]']").remove()
+        setup.client.body = doc.outerHtml()
+        model = setup.model(995001L)
+        runBlocking { model.load() }
+        compose.setContent { KudosTheme(KudosThemeMode.Light) {
+            CompositionLocalProvider(LocalPushedShellChrome provides chrome) {
+                Column {
+                    Row { chrome.trailingContent?.invoke(this) }
+                    WritingWorkFormContent(model, model.account, "Edit work", { leaves++ })
+                }
+            }
+        } }
+        reach("Work skin")
+        compose.onNodeWithText("Work text").assertDoesNotExist()
+        compose.onNodeWithText("Save").performClick()
+        compose.waitUntil(15_000) { leaves == 1 }
+        assertTrue(setup.client.recordedPosts.single().fields.none { it.first == AO3WorkFormField.chapterContent })
+    }
+
+    @Test fun realWrapperKeepsTypedFieldsWhenTheSessionChangesDuringSave() {
+        setup = runBlocking { workFormSetup() }
+        val release = CompletableDeferred<Unit>()
+        setup.client.beforePostResponse = { release.await() }
+        compose.setContent { KudosTheme(KudosThemeMode.Light) {
+            CompositionLocalProvider(LocalPushedShellChrome provides chrome) {
+                Column {
+                    Row { chrome.trailingContent?.invoke(this) }
+                    WritingWorkFormScreen(995001L, setup.repository, setup.auth, { leaves++ }, writeRepository = setup.writes)
+                }
+            }
+        } }
+        awaitText("Lanterns Above the Mill · never posted")
+        compose.onNodeWithContentDescription("Title ∗").performTextReplacement("Retained on session failure")
+        compose.onNodeWithText("Save").performClick()
+        compose.waitUntil(15_000) { setup.client.posts == 1 }
+        compose.runOnIdle { runBlocking { setup.auth.logout() }; release.complete(Unit) }
+        awaitText("AO3 could not save the change")
+        compose.onNodeWithText(WORK_FORM_SESSION_CHANGED).assertExists()
+        compose.onNodeWithText("OK").performClick()
+        compose.onNodeWithContentDescription("Title ∗").assertTextContains("Retained on session failure")
+        assertEquals(0, leaves); assertEquals(1, setup.client.posts); assertEquals(1, setup.client.gets.size)
+    }
 
     private fun showLoader(signedIn: Boolean = true, hold: CompletableDeferred<Unit>? = null, error: AO3Error? = null) {
         setup = runBlocking { workFormSetup(signedIn) }
@@ -254,7 +370,7 @@ class WritingWorkFormScreenTest {
         compose.setContent {
             KudosTheme(KudosThemeMode.Light) {
                 CompositionLocalProvider(LocalPushedShellChrome provides chrome) {
-                    WritingWorkFormScreen(null, setup.repository, setup.auth, { leaves++ })
+                    WritingWorkFormScreen(null, setup.repository, setup.auth, { leaves++ }, writeRepository = setup.writes)
                 }
             }
         }

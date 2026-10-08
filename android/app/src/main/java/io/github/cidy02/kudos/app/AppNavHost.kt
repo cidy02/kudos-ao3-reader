@@ -597,7 +597,7 @@ fun AppNavHost(
                         }
                         io.github.cidy02.kudos.writing.WritingWorkFormScreen(workID, repository, container.authRepository,
                             onClose = { navController.popBackStack() }, autocompleteRepository = container.tagAutocompleteRepository,
-                            settingsRepository = container.settingsRepository)
+                            settingsRepository = container.settingsRepository, writeRepository = container.writeRepository)
                     } else LaunchedEffect(Unit) { navController.popBackStack() }
                 }
             }
@@ -610,10 +610,30 @@ fun AppNavHost(
                     onClose = { navController.popBackStack() })
             }
         }
-        sharedComposable(Routes.WritingDrafts) {
+        sharedComposable(Routes.WritingWork, arguments = listOf(
+            navArgument("workId") { type = NavType.LongType; defaultValue = -1L }
+        )) { entry ->
+            val workID = entry.arguments?.getLong("workId")?.takeIf { it > 0 }
+            val repository = remember(container) {
+                io.github.cidy02.kudos.network.ao3.writing.AO3WorkFormRepository(
+                    container.authenticatedClient, container.authRepository)
+            }
+            io.github.cidy02.kudos.writing.WritingWorkFormScreen(workID, repository, container.authRepository,
+                onClose = { navController.popBackStack() }, autocompleteRepository = container.tagAutocompleteRepository,
+                settingsRepository = container.settingsRepository, writeRepository = container.writeRepository,
+                onSaved = {
+                    navController.previousBackStackEntry?.takeIf { it.destination.route == Routes.WritingDrafts }?.let {
+                        val revision = it.savedStateHandle.get<Int>("writingWorkSaved") ?: 0
+                        it.savedStateHandle["writingWorkSaved"] = revision + 1
+                    }
+                    navController.popBackStack()
+                })
+        }
+        sharedComposable(Routes.WritingDrafts) { entry ->
+            val savedRevision by entry.savedStateHandle.getStateFlow("writingWorkSaved", 0).collectAsState()
             io.github.cidy02.kudos.account.WritingDraftsScreen(
                 repository = container.writingDraftsRepository,
-                onOpenWeb = { navController.navigate(Routes.webFallback(it)) }
+                onOpenWork = { navController.navigate(it) }, savedRevision = savedRevision
             )
         }
         sharedComposable(Routes.AO3Collections) {

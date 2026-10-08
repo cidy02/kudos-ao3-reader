@@ -1,6 +1,6 @@
 package io.github.cidy02.kudos.account
 
-import io.github.cidy02.kudos.network.ao3.AO3Constants
+import io.github.cidy02.kudos.app.Routes
 import io.github.cidy02.kudos.network.ao3.AO3Error
 import io.github.cidy02.kudos.network.ao3.AO3Result
 import io.github.cidy02.kudos.network.ao3.writing.AO3DraftsPage
@@ -9,10 +9,9 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
-/** Replace these two destinations together when Android's native work editor lands. */
+/** Both Drafts entrances open the same native form destination. */
 object WritingWorkDestination {
-    fun url(workId: Long? = null): String = if (workId == null) "${AO3Constants.BASE_URL}/works/new"
-        else "${AO3Constants.BASE_URL}/works/$workId/edit"
+    fun route(workId: Long? = null): String = Routes.writingWork(workId)
 }
 
 internal data class WritingDraftsUiState(

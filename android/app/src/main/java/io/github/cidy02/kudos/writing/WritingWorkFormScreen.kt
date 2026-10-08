@@ -29,6 +29,7 @@ import io.github.cidy02.kudos.core.strippingHtml
 import io.github.cidy02.kudos.data.preferences.SettingsRepository
 import io.github.cidy02.kudos.network.ao3.search.AO3TagAutocompleteRepository
 import io.github.cidy02.kudos.network.ao3.writing.*
+import io.github.cidy02.kudos.network.ao3.writes.AO3WriteRepository
 import io.github.cidy02.kudos.settings.SettingsPanel
 import io.github.cidy02.kudos.settings.SubjectTextFieldRow
 import io.github.cidy02.kudos.ui.subject.*
@@ -41,7 +42,7 @@ import java.time.format.FormatStyle
 import java.time.format.TextStyle
 import java.util.Locale
 
-/** No production navigation points here until the Save brief. */
+/** A user-opened AO3 work form; edits stay here until AO3 confirms Save. */
 @Composable
 fun WritingWorkFormScreen(
     workID: Long?,
@@ -49,27 +50,36 @@ fun WritingWorkFormScreen(
     auth: AO3AuthRepository,
     onClose: () -> Unit,
     autocompleteRepository: AO3TagAutocompleteRepository? = null,
-    settingsRepository: SettingsRepository? = null
+    settingsRepository: SettingsRepository? = null,
+    writeRepository: AO3WriteRepository,
+    onSaved: () -> Unit = onClose
 ) {
     val generation by auth.generation.collectAsState()
     val accountState by auth.state.collectAsState()
-    val model = remember(workID, repository, auth, generation, accountState.isSignedIn) {
-        WritingWorkFormState(workID, repository, auth)
+    var savingModel by remember(workID, repository, auth) { mutableStateOf<WritingWorkFormState?>(null) }
+    val currentModel = remember(workID, repository, auth, generation, accountState.isSignedIn) {
+        WritingWorkFormState(workID, repository, auth, writes = writeRepository)
     }
+    // Once Save is tapped its exact draft survives even a session failure. It can never be
+    // sent by the replacement session; the opening generation remains the write fence.
+    val model = savingModel ?: currentModel
     LaunchedEffect(model) { model.load() }
     DisposableEffect(model) { onDispose { model.close() } }
-    WritingWorkFormContent(model, auth.username().orEmpty(), if (workID == null) "New work" else "Edit work", onClose, autocompleteRepository, settingsRepository)
+    WritingWorkFormContent(model, model.account, if (workID == null) "New work" else "Edit work", onClose,
+        autocompleteRepository, settingsRepository, onSaved = onSaved, onSaving = { savingModel = model })
 }
 
 @Composable
 internal fun WritingWorkFormContent(model: WritingWorkFormState, account: String, loadingTitle: String, onClose: () -> Unit,
-    autocompleteRepository: AO3TagAutocompleteRepository? = null, settingsRepository: SettingsRepository? = null) {
+    autocompleteRepository: AO3TagAutocompleteRepository? = null, settingsRepository: SettingsRepository? = null,
+    onSaved: () -> Unit = onClose, onSaving: () -> Unit = {}) {
     val state by model.state.collectAsState()
     val form = state.form
     val tokens = LocalKudosTokens.current
     val palette = tokens.scopePalette
     val list = rememberLazyListState()
     val scope = rememberCoroutineScope()
+    LaunchedEffect(state.saved) { if (state.saved) onSaved() }
     var editing by remember(model) { mutableStateOf<WorkFormText?>(null) }
     var association by remember(model) { mutableStateOf<WorkAssociation?>(null) }
     var writingTags by remember(model) { mutableStateOf<WritingTagKind?>(null) }
@@ -107,7 +117,26 @@ internal fun WritingWorkFormContent(model: WritingWorkFormState, account: String
         return
     }
     BackHandler(onBack = onClose)
-    ProvidePushedShellChrome(hasSubjectHeader = true, hideTabBar = true, onBack = onClose)
+    // No button until there is a form, as a value the shell sees change: a button that tested
+    // for the form inside its own content stayed empty when the form arrived after the screen.
+    val saveButton: (@Composable RowScope.() -> Unit)? = if (form == null) null else {
+        {
+            TextButton(enabled = !state.saving && !state.saved,
+                onClick = { onSaving(); scope.launch { model.save() } },
+                colors = ButtonDefaults.textButtonColors(contentColor = palette.accent, disabledContentColor = tokens.tertiaryInk)) {
+                Text("Save", fontSize = 15.sp, lineHeight = 21.sp)
+            }
+        }
+    }
+    ProvidePushedShellChrome(hasSubjectHeader = true, hideTabBar = true, onBack = onClose, trailingContent = saveButton)
+    state.saveError?.let { message ->
+        AlertDialog(onDismissRequest = model::dismissSaveError, containerColor = tokens.cardFill,
+            titleContentColor = tokens.primaryInk, textContentColor = tokens.secondaryInk,
+            title = { Text("AO3 could not save the change", lineHeight = 28.sp) },
+            text = { Text(message, lineHeight = 22.sp) }, confirmButton = {
+                TextButton(onClick = model::dismissSaveError) { Text("OK", color = palette.accent, lineHeight = 20.sp) }
+            })
+    }
     LazyColumn(Modifier.fillMaxSize().subjectScreenWash(palette).testTag("Writing work form"), state = list,
         contentPadding = PaddingValues(bottom = 24.dp)) {
         item {
@@ -137,33 +166,33 @@ internal fun WritingWorkFormContent(model: WritingWorkFormState, account: String
             item {
                 WorkFormSection(if (form.isDraft) "Required before posting" else "Required")
                 SettingsPanel(Modifier.padding(top = 8.dp)) {
-                    SubjectTextFieldRow("Title ∗", form.title, "Title", model::title)
+                    SubjectTextFieldRow("Title ∗", form.title, "Title", model::title, enabled = !state.saving)
                     SubjectRowSeparator()
-                    WorkFormChoiceRow("Rating", form, WorkFormChoice.Rating) { choosing = it }
+                    WorkFormChoiceRow("Rating", form, WorkFormChoice.Rating, enabled = !state.saving) { if (!state.saving) choosing = it }
                     SubjectRowSeparator()
                     SubjectFormRow("Archive warnings ∗", value = workFormCount(form.warnings), showsDisclosure = true,
-                        onClick = { choosingTags = WorkFormTags.Warnings }, valueMaxLines = Int.MAX_VALUE)
+                        onClick = if (state.saving) null else ({ choosingTags = WorkFormTags.Warnings }), valueMaxLines = Int.MAX_VALUE)
                     SubjectRowSeparator()
                     SubjectFormRow("Fandoms ∗", value = workFormCount(form.fandoms), valueMaxLines = Int.MAX_VALUE,
-                        showsDisclosure = true, onClick = { writingTags = WritingTagKind.Fandom })
+                        showsDisclosure = true, onClick = if (state.saving) null else ({ writingTags = WritingTagKind.Fandom }))
                     SubjectRowSeparator()
-                    WorkFormChoiceRow("Language", form, WorkFormChoice.Language) { choosing = it }
+                    WorkFormChoiceRow("Language", form, WorkFormChoice.Language, enabled = !state.saving) { if (!state.saving) choosing = it }
                 }
             }
             item {
                 WorkFormSection("Tags")
                 SettingsPanel(Modifier.padding(top = 8.dp)) {
                     SubjectFormRow("Categories", value = workFormCount(form.categories), showsDisclosure = true,
-                        onClick = { choosingTags = WorkFormTags.Categories }, valueMaxLines = Int.MAX_VALUE)
+                        onClick = if (state.saving) null else ({ choosingTags = WorkFormTags.Categories }), valueMaxLines = Int.MAX_VALUE)
                     SubjectRowSeparator()
                     SubjectFormRow("Relationships", value = workFormCount(form.relationships), valueMaxLines = Int.MAX_VALUE,
-                        showsDisclosure = true, onClick = { writingTags = WritingTagKind.Relationship })
+                        showsDisclosure = true, onClick = if (state.saving) null else ({ writingTags = WritingTagKind.Relationship }))
                     SubjectRowSeparator()
                     SubjectFormRow("Characters", value = workFormCount(form.characters), valueMaxLines = Int.MAX_VALUE,
-                        showsDisclosure = true, onClick = { writingTags = WritingTagKind.Character })
+                        showsDisclosure = true, onClick = if (state.saving) null else ({ writingTags = WritingTagKind.Character }))
                     SubjectRowSeparator()
                     SubjectFormRow("Additional tags", value = workFormCount(form.additionalTags), valueMaxLines = Int.MAX_VALUE,
-                        showsDisclosure = true, onClick = { writingTags = WritingTagKind.Freeform })
+                        showsDisclosure = true, onClick = if (state.saving) null else ({ writingTags = WritingTagKind.Freeform }))
                 }
                 WorkFormFootnote("Tags can also be edited separately from the work text.")
             }
@@ -171,46 +200,46 @@ internal fun WritingWorkFormContent(model: WritingWorkFormState, account: String
                 WorkFormSection("Association")
                 SettingsPanel(Modifier.padding(top = 8.dp)) {
                     SubjectFormRow("Series", value = form.seriesValue(), valueMaxLines = Int.MAX_VALUE,
-                        showsDisclosure = true, onClick = { association = WorkAssociation.Series })
+                        showsDisclosure = true, onClick = if (state.saving) null else ({ association = WorkAssociation.Series }))
                     SubjectRowSeparator()
                     SubjectFormRow("Add to collections", value = workFormCount(form.postedCollectionNames), valueMaxLines = Int.MAX_VALUE,
-                        showsDisclosure = true, onClick = { association = WorkAssociation.CollectionsGifts })
+                        showsDisclosure = true, onClick = if (state.saving) null else ({ association = WorkAssociation.CollectionsGifts }))
                     SubjectRowSeparator()
                     SubjectFormRow("Gift recipients", value = workFormCount(form.gifts), valueMaxLines = Int.MAX_VALUE,
-                        showsDisclosure = true, onClick = { association = WorkAssociation.CollectionsGifts })
+                        showsDisclosure = true, onClick = if (state.saving) null else ({ association = WorkAssociation.CollectionsGifts }))
                     SubjectRowSeparator()
                     SubjectFormRow("Co-creators", value = form.creatorsValue(), valueMaxLines = Int.MAX_VALUE,
-                        showsDisclosure = true, onClick = { association = WorkAssociation.Creators })
+                        showsDisclosure = true, onClick = if (state.saving) null else ({ association = WorkAssociation.Creators }))
                     SubjectRowSeparator()
                     SubjectFormRow("Inspired by", value = if (form.parentWork.url.isEmpty()) "None" else "1", valueMaxLines = Int.MAX_VALUE,
-                        showsDisclosure = true, onClick = { association = WorkAssociation.Parent })
+                        showsDisclosure = true, onClick = if (state.saving) null else ({ association = WorkAssociation.Parent }))
                 }
             }
             item {
                 WorkFormSection("Text")
                 SettingsPanel(Modifier.padding(top = 8.dp)) {
-                    WorkFormTextRow(form, WorkFormText.Summary) { editing = it }
+                    WorkFormTextRow(form, WorkFormText.Summary, enabled = !state.saving) { if (!state.saving) editing = it }
                     SubjectRowSeparator()
-                    WorkFormTextRow(form, WorkFormText.Notes) { editing = it }
+                    WorkFormTextRow(form, WorkFormText.Notes, enabled = !state.saving) { if (!state.saving) editing = it }
                     SubjectRowSeparator()
-                    WorkFormTextRow(form, WorkFormText.Endnotes) { editing = it }
+                    WorkFormTextRow(form, WorkFormText.Endnotes, enabled = !state.saving) { if (!state.saving) editing = it }
                     // Not for a draft with several chapters: AO3 serves no text box there, and this
                     // row would be an empty one that replaces chapter 1 (audit A4-1).
                     if ((form.kind == AO3WorkFormKind.New || form.isDraft) && form.chapter?.contentServed != false) {
                         SubjectRowSeparator()
-                        WorkFormTextRow(form, WorkFormText.Content) { editing = it }
+                        WorkFormTextRow(form, WorkFormText.Content, enabled = !state.saving) { if (!state.saving) editing = it }
                     }
                     if (form.isPosted && form.workID != null) {
                         SubjectRowSeparator()
                         SubjectFormRow("Chapters", value = form.chaptersPosted?.toString().orEmpty(), valueMaxLines = Int.MAX_VALUE,
-                            showsDisclosure = true, onClick = { viewingChapters = true })
+                            showsDisclosure = true, onClick = if (state.saving) null else ({ viewingChapters = true }))
                         SubjectRowSeparator()
                         SubjectFormRow("Add chapter", value = "")
                         SubjectRowSeparator()
                         SubjectFormRow("Edit tags", value = "")
                     }
                     SubjectRowSeparator()
-                    WorkFormChoiceRow("Work skin", form, WorkFormChoice.Skin) { choosing = it }
+                    WorkFormChoiceRow("Work skin", form, WorkFormChoice.Skin, enabled = !state.saving) { if (!state.saving) choosing = it }
                 }
             }
             item {
@@ -221,6 +250,7 @@ internal fun WritingWorkFormContent(model: WritingWorkFormState, account: String
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text("${form.chaptersPosted ?: 1} of", color = tokens.secondaryInk, fontSize = 14.5.sp, lineHeight = 20.sp)
                                 BasicTextField(form.chapterTotal, onValueChange = model::chapterTotal,
+                                    enabled = !state.saving,
                                     singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                                     textStyle = ComposeTextStyle(color = tokens.primaryInk, fontSize = 14.5.sp, lineHeight = 20.sp,
                                         textAlign = TextAlign.End), cursorBrush = SolidColor(palette.accent),
@@ -232,23 +262,23 @@ internal fun WritingWorkFormContent(model: WritingWorkFormState, account: String
                             }
                         }
                         SubjectRowSeparator()
-                        WorkFormToggle("Work is complete", form.chapterTotal == "${form.chaptersPosted ?: 1}") {
+                        WorkFormToggle("Work is complete", form.chapterTotal == "${form.chaptersPosted ?: 1}", enabled = !state.saving) {
                             model.toggle(WorkFormSwitch.Complete, it)
                         }
                         SubjectRowSeparator()
                     }
-                    WorkFormToggle("Set a different publication date", form.backdate) { model.toggle(WorkFormSwitch.Backdate, it) }
+                    WorkFormToggle("Set a different publication date", form.backdate, enabled = !state.saving) { model.toggle(WorkFormSwitch.Backdate, it) }
                     if (form.backdate && form.chapter != null) {
                         SubjectRowSeparator()
                         SubjectFormRow("Publication date", value = form.publicationDate().format(DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM)),
-                            onClick = { dating = true }, valueMaxLines = Int.MAX_VALUE)
+                            onClick = if (state.saving) null else ({ dating = true }), valueMaxLines = Int.MAX_VALUE)
                     }
                     SubjectRowSeparator()
-                    WorkFormToggle("Only show to registered users", form.restricted) { model.toggle(WorkFormSwitch.Restricted, it) }
+                    WorkFormToggle("Only show to registered users", form.restricted, enabled = !state.saving) { model.toggle(WorkFormSwitch.Restricted, it) }
                     SubjectRowSeparator()
-                    WorkFormToggle("Enable comment moderation", form.moderatedCommenting) { model.toggle(WorkFormSwitch.Moderation, it) }
+                    WorkFormToggle("Enable comment moderation", form.moderatedCommenting, enabled = !state.saving) { model.toggle(WorkFormSwitch.Moderation, it) }
                     SubjectRowSeparator()
-                    WorkFormChoiceRow("Who can comment", form, WorkFormChoice.Comments) { choosing = it }
+                    WorkFormChoiceRow("Who can comment", form, WorkFormChoice.Comments, enabled = !state.saving) { if (!state.saving) choosing = it }
                 }
                 if (form.isPosted) WorkFormFootnote("AO3 marks a work in progress when its total chapters are higher than the number " +
                     "posted. Complete sets both numbers to the same value.")
@@ -281,14 +311,14 @@ internal fun WorkFormFootnote(text: String) {
 }
 
 @Composable
-private fun WorkFormChoiceRow(label: String, form: AO3WorkForm, kind: WorkFormChoice, onPick: (WorkFormChoice) -> Unit) {
+private fun WorkFormChoiceRow(label: String, form: AO3WorkForm, kind: WorkFormChoice, enabled: Boolean = true, onPick: (WorkFormChoice) -> Unit) {
     val value = form.choiceValue(kind)
     SubjectFormRow(label, value = form.choiceOptions(kind).firstOrNull { it.value == value }?.title ?: value.ifEmpty { "Select…" },
-        valueMaxLines = Int.MAX_VALUE, onClick = { onPick(kind) })
+        valueMaxLines = Int.MAX_VALUE, onClick = if (enabled) ({ onPick(kind) }) else null)
 }
 
 @Composable
-private fun WorkFormTextRow(form: AO3WorkForm, field: WorkFormText, onEdit: (WorkFormText) -> Unit) {
+private fun WorkFormTextRow(form: AO3WorkForm, field: WorkFormText, enabled: Boolean = true, onEdit: (WorkFormText) -> Unit) {
     val text = field.text(form)
     var detail by remember { mutableStateOf<String?>(null) }
     // Summary only; never lay out or count chapter content in this row.
@@ -299,7 +329,7 @@ private fun WorkFormTextRow(form: AO3WorkForm, field: WorkFormText, onEdit: (Wor
     }
     Column {
         SubjectFormRow(field.title, value = if (detail == null) if (text.isEmpty()) "Empty" else "Set" else null,
-            showsDisclosure = true, onClick = { onEdit(field) })
+            showsDisclosure = true, onClick = if (enabled) ({ onEdit(field) }) else null)
         detail?.let { preview ->
             Text(preview, color = LocalKudosTokens.current.secondaryInk, fontSize = 12.5.sp, lineHeight = 18.sp,
                 maxLines = if (isAccessibilityFontScale()) Int.MAX_VALUE else 2,
@@ -318,9 +348,9 @@ internal fun WorkFormControlRow(label: String, control: @Composable () -> Unit) 
 }
 
 @Composable
-internal fun WorkFormToggle(label: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+internal fun WorkFormToggle(label: String, checked: Boolean, enabled: Boolean = true, onChange: (Boolean) -> Unit) {
     WorkFormControlRow(label) {
-        SubjectToggle(checked, onChange, accent = LocalKudosTokens.current.scopePalette.accent, contentDescription = label)
+        SubjectToggle(checked, onChange, enabled = enabled, accent = LocalKudosTokens.current.scopePalette.accent, contentDescription = label)
     }
 }
 

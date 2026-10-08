@@ -32,6 +32,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
 import java.time.Clock
 import java.time.Instant
 import java.time.ZoneId
@@ -39,6 +40,7 @@ import java.time.ZoneOffset
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34], application = Application::class, qualifiers = "w411dp-h1600dp")
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
 class WritingDraftsScreenTest {
     @get:Rule val compose = createComposeRule()
     private lateinit var client: DraftsMemoryClient
@@ -46,6 +48,7 @@ class WritingDraftsScreenTest {
     private val opened = mutableListOf<String>()
     private val clock = DraftsTestClock()
     private lateinit var lifecycle: LifecycleRegistry
+    private var savedRevision by mutableStateOf(0)
 
     private fun show(theme: KudosThemeMode = KudosThemeMode.Light, accountRow: Boolean = false,
         signedIn: Boolean = true, largeText: Boolean = false, body: String? = null, error: AO3Error? = null,
@@ -69,7 +72,8 @@ class WritingDraftsScreenTest {
                     var drafts by remember { mutableStateOf(!accountRow) }
                     Column {
                         Row { chrome.trailingContent?.invoke(this) }
-                        if (drafts) WritingDraftsScreen(repository, onOpenWeb = { opened += it }, clock = clock)
+                        if (drafts) WritingDraftsScreen(repository, onOpenWork = { opened += it }, clock = clock,
+                            savedRevision = savedRevision)
                         else AccountDraftsRow { drafts = true }
                     }
                 }
@@ -89,7 +93,7 @@ class WritingDraftsScreenTest {
         awaitText("Lanterns Above the Mill")
         assertEquals(1, client.gets.size)
         compose.onNodeWithText("Lanterns Above the Mill").performClick()
-        assertEquals(listOf("https://archiveofourown.org/works/995001/edit"), opened)
+        assertEquals(listOf("writing-work?workId=995001"), opened)
         assertEquals(1, client.gets.size) // A tap just hands off an address; no editor-form read here.
     }
 
@@ -97,12 +101,41 @@ class WritingDraftsScreenTest {
         show()
         awaitText("Lanterns Above the Mill")
         compose.onNodeWithContentDescription("New Work").performClick()
-        assertEquals(listOf("https://archiveofourown.org/works/new"), opened)
+        assertEquals(listOf("writing-work"), opened)
         assertEquals(1, client.gets.size)
         compose.onNodeWithText("Post").assertDoesNotExist()
         compose.onNodeWithText("Delete").assertDoesNotExist()
         compose.onNodeWithText("AO3 deletes an unposted draft 30 days after you create it.").assertExists()
         compose.onNodeWithText("Recovery copies", substring = true).assertDoesNotExist()
+    }
+
+    @Test fun confirmedSaveReturnReadsTheCurrentDraftsPageOnceAndShowsTheServedChange() {
+        show()
+        awaitText("Lanterns Above the Mill")
+        compose.runOnIdle {
+            client.body = draftsFixture(1).replace("Lanterns Above the Mill", "Lanterns after Save")
+            savedRevision += 1
+        }
+        awaitText("Lanterns after Save")
+        assertEquals(2, client.gets.size)
+        compose.onNodeWithText("Lanterns Above the Mill").assertDoesNotExist()
+        compose.waitForIdle()
+        assertEquals(2, client.gets.size)
+    }
+
+    @Test fun confirmedSaveReturnKeepsTheSelectedDraftsPage() {
+        show()
+        awaitText("page 1 of 2 · 1 expiring this week on this page")
+        compose.onNode(hasScrollAction()).performScrollToNode(hasContentDescription("Next Page"))
+        compose.onNodeWithContentDescription("Next Page").performClick()
+        awaitText("page 2 of 2 · 2 expiring this week on this page")
+        compose.runOnIdle { savedRevision += 1 }
+        // A wait on something that is not on screen does not let the screen recompose here.
+        compose.waitForIdle()
+        compose.waitUntil(15_000) { client.gets.size == 3 }
+        awaitText("page 2 of 2 · 2 expiring this week on this page")
+        assertEquals(client.gets[1], client.gets[2])
+        assertTrue(client.gets[2].endsWith("page=2"))
     }
 
     @Test fun pageTurnReadsOnlyThatPageAndDayChangeUpdatesChipsWithoutReading() {
