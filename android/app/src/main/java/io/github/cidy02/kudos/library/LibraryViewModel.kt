@@ -90,9 +90,10 @@ class LibraryViewModel(
         readingQueues,
         repository.observeRecentlyDeletedCount(),
         deletedQueueCount,
-        finishCounts
-    ) { queues, deletedCount, queueCount, counts ->
-        LibraryDashboardExtras(queues, deletedCount + queueCount, counts)
+        finishCounts,
+        settingsRepository?.historyGrouping ?: flowOf(LibraryHistoryGrouping.Default)
+    ) { queues, deletedCount, queueCount, counts, grouping ->
+        LibraryDashboardExtras(queues, deletedCount + queueCount, counts, grouping)
     }
 
     val state: StateFlow<LibraryUiState> = combine(
@@ -109,7 +110,8 @@ class LibraryViewModel(
             revealAllActive = revealed.revealAll,
             readingQueues = extras.queues,
             recentlyDeletedCount = extras.recentlyDeletedCount,
-            finishCounts = extras.finishCounts
+            finishCounts = extras.finishCounts,
+            historyGrouping = extras.historyGrouping
             // Reveal is already folded into every shelf by LibraryQuery.buildState.
         )
     }.stateIn(
@@ -124,6 +126,14 @@ class LibraryViewModel(
         viewModelScope.launch {
             queueRefreshTick.collect { refreshQueues() }
         }
+    }
+
+    fun updateHistoryGrouping(grouping: LibraryHistoryGrouping) {
+        viewModelScope.launch { settingsRepository?.updateHistoryGrouping(grouping) }
+    }
+
+    fun keepInProgress(workId: String) {
+        viewModelScope.launch { workRepository.keepInProgress(workId) }
     }
 
     fun updateSearchQuery(query: String) {
@@ -516,7 +526,8 @@ class LibraryViewModel(
 private data class LibraryDashboardExtras(
     val queues: List<LibraryQueuePreview>,
     val recentlyDeletedCount: Int,
-    val finishCounts: Map<String, Int>
+    val finishCounts: Map<String, Int>,
+    val historyGrouping: LibraryHistoryGrouping
 )
 
 private fun Set<String>.toggle(value: String): Set<String> {

@@ -3,6 +3,11 @@ package io.github.cidy02.kudos.data.preferences
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
+import io.github.cidy02.kudos.library.LibraryHistoryGrouping
+import io.github.cidy02.kudos.core.model.BackupSettings
+import io.github.cidy02.kudos.backup.BackupJson
+import io.github.cidy02.kudos.backup.toBackupSettingsPayload
+import kotlinx.serialization.encodeToString
 import io.github.cidy02.kudos.core.model.AppThemeSetting
 import io.github.cidy02.kudos.core.model.KudosSettings
 import io.github.cidy02.kudos.core.model.MatureContentMode
@@ -33,6 +38,22 @@ class SettingsRepositoryTest {
     fun tearDown() {
         scope.cancel()
         tempDir.deleteRecursively()
+    }
+
+    @Test fun historyGroupingIsDeviceLocalDefaultsToTimeAndSurvivesRestore() = runBlocking {
+        assertEquals(LibraryHistoryGrouping.Time, repository.historyGrouping.first())
+        val originalBackup = BackupJson.encodeToString(BackupSettings.fromSettings(repository.snapshot()).toBackupSettingsPayload())
+        for (grouping in LibraryHistoryGrouping.entries) {
+            repository.updateHistoryGrouping(grouping)
+            assertEquals(grouping, SettingsRepository(dataStore).historyGrouping.first())
+            assertEquals(grouping.id, dataStore.data.first()[stringPreferencesKey("library.history.grouping")])
+            assertEquals(originalBackup, BackupJson.encodeToString(BackupSettings.fromSettings(repository.snapshot()).toBackupSettingsPayload()))
+        }
+        assertFalse(originalBackup.contains("grouping", ignoreCase = true))
+        repository.replaceAll(KudosSettings.Defaults)
+        assertEquals(LibraryHistoryGrouping.Flat, repository.historyGrouping.first())
+        dataStore.edit { it[stringPreferencesKey("library.history.grouping")] = "unknown" }
+        assertEquals(LibraryHistoryGrouping.Time, repository.historyGrouping.first())
     }
 
     @Test fun writingRecentTagsRoundTripCapDedupeAndStayOutOfBackupSettings() = runBlocking {
