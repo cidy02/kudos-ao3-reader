@@ -116,9 +116,11 @@ fun CommentsScreen(
     onRequestExpand: (() -> Unit)? = null,
     onBack: (() -> Unit)? = null
 ) {
+    // The view model outlives this frame; it asks for the name each time it needs it.
+    val latestUsername by androidx.compose.runtime.rememberUpdatedState(currentUsername)
     val viewModel: CommentsViewModel = viewModel(
         key = target?.workId?.toString(),
-        factory = CommentsViewModel.factory(repository, target, draftStore, currentUsername)
+        factory = CommentsViewModel.factory(repository, target, draftStore) { latestUsername }
     )
 
     LaunchedEffect(viewModel, initialComposes) {

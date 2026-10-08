@@ -978,9 +978,9 @@ fun AppNavHost(
             val focusedId = Routes.routeArg(backStackEntry, "focused")?.toLongOrNull()
             // 1-based story chapter from the reader's Comments button.
             val chapterPosition = Routes.routeArg(backStackEntry, "chapterPosition")?.toIntOrNull()
-            val commentsAuthState by container.authRepository.state.collectAsState(
-                initial = AO3AuthState.Restoring
-            )
+            // The current value on the first frame, not a placeholder: a "Restoring" first frame
+            // made every signed-in reader's comment drafts the guest's (audit A18-2).
+            val commentsAuthState by container.authRepository.state.collectAsState()
             CommentsScreen(
                 target = workId?.let { AO3CommentTarget.Work(it) },
                 repository = container.commentRepository,

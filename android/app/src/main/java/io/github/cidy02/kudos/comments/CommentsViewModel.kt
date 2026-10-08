@@ -55,7 +55,12 @@ class CommentsViewModel(
     private val repository: AO3CommentRepository,
     val initialTarget: AO3CommentTarget?,
     private val draftStore: CommentDraftStore? = null,
-    private val currentUsername: String? = null
+    /**
+     * Read at each save and load, never kept: the screen's first frame did not yet know who
+     * was signed in, the name was captured then, and every signed-in reader's drafts were
+     * stored as the guest's, where the next account found them (audit A18-2).
+     */
+    private val currentUsername: () -> String? = { null }
 ) : ViewModel() {
     private val _state = MutableStateFlow<CommentsUiState>(CommentsUiState.Loading)
     val state: StateFlow<CommentsUiState> = _state.asStateFlow()
@@ -143,9 +148,12 @@ class CommentsViewModel(
                         workId = target.workId,
                         chapterId = (target as? AO3CommentTarget.Chapter)?.chapterId,
                         parentId = null,
-                        username = currentUsername
+                        username = currentUsername()
                     )
-                    if (draftContent != null) _draft.value = draftContent
+                    // Never over text already in the field, nor into an edit.
+                    if (draftContent != null && _draft.value.isEmpty() && _editTarget.value == null) {
+                        _draft.value = draftContent
+                    }
                     _isDraftRestored.value = true
                 }
                 is AO3Result.Failure -> {
@@ -245,18 +253,18 @@ class CommentsViewModel(
                 _replyTarget.value = null
                 _editTarget.value = null
                 _composerParent.value = null
-                _composerPresented.value = true
                 val target = _currentTarget.value
-                if (target != null) {
-                    viewModelScope.launch {
-                        val draftContent = draftStore?.getDraft(
-                            workId = target.workId,
-                            chapterId = (target as? AO3CommentTarget.Chapter)?.chapterId,
-                            parentId = null,
-                            username = currentUsername
-                        )
-                        if (draftContent != null) _draft.value = draftContent
-                    }
+                // The stored draft, or nothing, before the sheet can be typed in: the field
+                // used to keep whatever an edit had left in it, and a draft that arrived
+                // late replaced what had been typed meanwhile (audit A18-1).
+                viewModelScope.launch {
+                    _draft.value = if (target == null) "" else draftStore?.getDraft(
+                        workId = target.workId,
+                        chapterId = (target as? AO3CommentTarget.Chapter)?.chapterId,
+                        parentId = null,
+                        username = currentUsername()
+                    ).orEmpty()
+                    _composerPresented.value = true
                 }
             }
         }
@@ -271,6 +279,9 @@ class CommentsViewModel(
     }
 
     fun saveDraft() {
+        // iOS `saveDraft`: an edit never uses the draft store. It has no slot of its own, so
+        // its text went into the new-comment slot and replaced the comment waiting there.
+        if (_editTarget.value != null) return
         val target = _currentTarget.value ?: return
         val reply = _replyTarget.value
         val content = _draft.value
@@ -280,7 +291,7 @@ class CommentsViewModel(
                 workId = target.workId,
                 chapterId = (target as? AO3CommentTarget.Chapter)?.chapterId,
                 parentId = reply?.commentId,
-                username = currentUsername
+                username = currentUsername()
             )
         }
     }
@@ -305,7 +316,7 @@ class CommentsViewModel(
                     workId = target.workId,
                     chapterId = (target as? AO3CommentTarget.Chapter)?.chapterId,
                     parentId = id,
-                    username = currentUsername
+                    username = currentUsername()
                 )
                 if (draftContent != null && _draft.value.isEmpty() && _replyTarget.value?.commentId == id) {
                     _draft.value = draftContent
@@ -389,7 +400,7 @@ class CommentsViewModel(
                         workId = target.workId,
                         chapterId = (target as? AO3CommentTarget.Chapter)?.chapterId,
                         parentId = reply?.commentId,
-                        username = currentUsername
+                        username = currentUsername()
                     )
                     load()
                 }
@@ -442,7 +453,7 @@ class CommentsViewModel(
             repository: AO3CommentRepository,
             initialTarget: AO3CommentTarget?,
             draftStore: CommentDraftStore? = null,
-            currentUsername: String? = null
+            currentUsername: () -> String? = { null }
         ): ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 CommentsViewModel(repository, initialTarget, draftStore, currentUsername)
