@@ -131,11 +131,19 @@ class WritingWorkFormScreenTest {
 
     @Test fun waitingRowsHaveNoActionOrDestination() {
         show(995006L)
-        for (label in listOf("Chapters", "Add chapter", "Edit tags")) {
+        for (label in listOf("Add chapter", "Edit tags")) {
             reach(label)
             compose.onNodeWithText(label).assertHasNoClickAction()
         }
         noWrites()
+    }
+
+    @Test fun chaptersRowOpensChaptersScreen() {
+        show(995006L)
+        reach("Chapters")
+        compose.onNodeWithText("Chapters").performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText("The Cartographer’s \"Second\" Tide & 星 · 2 chapters", substring = true).assertExists()
     }
 
     @Test fun titleAndServedSingleChoiceAndSwitchEditTheActualScreenStateWithoutAnotherRead() {

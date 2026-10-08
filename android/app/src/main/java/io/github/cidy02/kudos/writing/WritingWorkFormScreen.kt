@@ -41,12 +41,15 @@ import java.time.format.FormatStyle
 import java.time.format.TextStyle
 import java.util.Locale
 
+import io.github.cidy02.kudos.network.ao3.writes.AO3AuthenticatedClient
+
 /** No production navigation points here until the Save brief. */
 @Composable
 fun WritingWorkFormScreen(
     workID: Long?,
     repository: AO3WorkFormRepository,
     auth: AO3AuthRepository,
+    client: AO3AuthenticatedClient,
     onClose: () -> Unit,
     autocompleteRepository: AO3TagAutocompleteRepository? = null,
     settingsRepository: SettingsRepository? = null
@@ -58,11 +61,11 @@ fun WritingWorkFormScreen(
     }
     LaunchedEffect(model) { model.load() }
     DisposableEffect(model) { onDispose { model.close() } }
-    WritingWorkFormContent(model, auth.username().orEmpty(), if (workID == null) "New work" else "Edit work", onClose, autocompleteRepository, settingsRepository)
+    WritingWorkFormContent(model, auth, client, auth.username().orEmpty(), if (workID == null) "New work" else "Edit work", onClose, autocompleteRepository, settingsRepository)
 }
 
 @Composable
-internal fun WritingWorkFormContent(model: WritingWorkFormState, account: String, loadingTitle: String, onClose: () -> Unit,
+internal fun WritingWorkFormContent(model: WritingWorkFormState, auth: AO3AuthRepository, client: AO3AuthenticatedClient, account: String, loadingTitle: String, onClose: () -> Unit,
     autocompleteRepository: AO3TagAutocompleteRepository? = null, settingsRepository: SettingsRepository? = null) {
     val state by model.state.collectAsState()
     val form = state.form
@@ -73,6 +76,7 @@ internal fun WritingWorkFormContent(model: WritingWorkFormState, account: String
     var editing by remember(model) { mutableStateOf<WorkFormText?>(null) }
     var association by remember(model) { mutableStateOf<WorkAssociation?>(null) }
     var writingTags by remember(model) { mutableStateOf<WritingTagKind?>(null) }
+    var viewingChapters by remember(model) { mutableStateOf(false) }
     var choosingTags by remember(model) { mutableStateOf<WorkFormTags?>(null) }
     var choosing by remember(model) { mutableStateOf<WorkFormChoice?>(null) }
     var dating by remember(model) { mutableStateOf(false) }
@@ -94,6 +98,10 @@ internal fun WritingWorkFormContent(model: WritingWorkFormState, account: String
     val associationKind = association
     if (associationKind != null && form != null) {
         WritingAssociationPicker(associationKind, form, model, autocompleteRepository) { association = null }
+        return
+    }
+    if (viewingChapters && form?.isPosted == true && form.workID != null) {
+        WritingChaptersScreen(form.workID, form.title, client, auth, onBack = { viewingChapters = false })
         return
     }
     val tags = choosingTags
@@ -195,7 +203,8 @@ internal fun WritingWorkFormContent(model: WritingWorkFormState, account: String
                     }
                     if (form.isPosted && form.workID != null) {
                         SubjectRowSeparator()
-                        SubjectFormRow("Chapters", value = form.chaptersPosted?.toString().orEmpty(), valueMaxLines = Int.MAX_VALUE)
+                        SubjectFormRow("Chapters", value = form.chaptersPosted?.toString().orEmpty(), valueMaxLines = Int.MAX_VALUE,
+                            showsDisclosure = true, onClick = { viewingChapters = true })
                         SubjectRowSeparator()
                         SubjectFormRow("Add chapter", value = "")
                         SubjectRowSeparator()

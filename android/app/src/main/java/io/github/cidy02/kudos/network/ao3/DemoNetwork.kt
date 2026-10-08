@@ -130,6 +130,7 @@ internal object DemoNetworkRoutes {
         "^/works/new" to "ao3_work_new_draft",
         "^/works/995001/edit/?$" to "ao3_demo_work_draft_edit",
         "^/works/995006/edit/?$" to "ao3_demo_work_posted_edit",
+        "^/works/995006/navigate/?$" to "ao3_demo_work_posted_navigate",
         "^/works/\\d+/edit" to "ao3_work_edit",
         "^/works/\\d+/navigate" to "ao3_chapter_navigate",
         "comments" to "ao3_comments_page",
