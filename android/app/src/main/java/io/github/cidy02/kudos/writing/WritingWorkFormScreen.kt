@@ -26,6 +26,8 @@ import io.github.cidy02.kudos.app.ProvidePushedShellChrome
 import io.github.cidy02.kudos.auth.AO3AuthRepository
 import io.github.cidy02.kudos.auth.isSignedIn
 import io.github.cidy02.kudos.core.strippingHtml
+import io.github.cidy02.kudos.data.preferences.SettingsRepository
+import io.github.cidy02.kudos.network.ao3.search.AO3TagAutocompleteRepository
 import io.github.cidy02.kudos.network.ao3.writing.*
 import io.github.cidy02.kudos.settings.SettingsPanel
 import io.github.cidy02.kudos.settings.SubjectTextFieldRow
@@ -45,7 +47,9 @@ fun WritingWorkFormScreen(
     workID: Long?,
     repository: AO3WorkFormRepository,
     auth: AO3AuthRepository,
-    onClose: () -> Unit
+    onClose: () -> Unit,
+    autocompleteRepository: AO3TagAutocompleteRepository? = null,
+    settingsRepository: SettingsRepository? = null
 ) {
     val generation by auth.generation.collectAsState()
     val accountState by auth.state.collectAsState()
@@ -54,11 +58,12 @@ fun WritingWorkFormScreen(
     }
     LaunchedEffect(model) { model.load() }
     DisposableEffect(model) { onDispose { model.close() } }
-    WritingWorkFormContent(model, auth.username().orEmpty(), if (workID == null) "New work" else "Edit work", onClose)
+    WritingWorkFormContent(model, auth.username().orEmpty(), if (workID == null) "New work" else "Edit work", onClose, autocompleteRepository, settingsRepository)
 }
 
 @Composable
-internal fun WritingWorkFormContent(model: WritingWorkFormState, account: String, loadingTitle: String, onClose: () -> Unit) {
+internal fun WritingWorkFormContent(model: WritingWorkFormState, account: String, loadingTitle: String, onClose: () -> Unit,
+    autocompleteRepository: AO3TagAutocompleteRepository? = null, settingsRepository: SettingsRepository? = null) {
     val state by model.state.collectAsState()
     val form = state.form
     val tokens = LocalKudosTokens.current
@@ -66,6 +71,7 @@ internal fun WritingWorkFormContent(model: WritingWorkFormState, account: String
     val list = rememberLazyListState()
     val scope = rememberCoroutineScope()
     var editing by remember(model) { mutableStateOf<WorkFormText?>(null) }
+    var writingTags by remember(model) { mutableStateOf<WritingTagKind?>(null) }
     var choosingTags by remember(model) { mutableStateOf<WorkFormTags?>(null) }
     var choosing by remember(model) { mutableStateOf<WorkFormChoice?>(null) }
     var dating by remember(model) { mutableStateOf(false) }
@@ -74,6 +80,14 @@ internal fun WritingWorkFormContent(model: WritingWorkFormState, account: String
         WritingTextEditorScreen(field.text(form), field.title, account, form.recoveryTarget(), field.field,
             onCheckpoint = { model.checkpoint(field, it) },
             onDone = { model.checkpoint(field, it); editing = null }, onBack = { editing = null })
+        return
+    }
+    val writingKind = writingTags
+    if (writingKind != null && form != null) {
+        WritingTagsEditorScreen(writingKind, writingKind.values(form), autocompleteRepository, settingsRepository,
+            onValues = { model.writingTags(writingKind, it) },
+            readValues = { model.state.value.form?.let(writingKind::values).orEmpty() },
+            recordScope = scope, onBack = { writingTags = null })
         return
     }
     val tags = choosingTags
@@ -119,7 +133,8 @@ internal fun WritingWorkFormContent(model: WritingWorkFormState, account: String
                     SubjectFormRow("Archive warnings ∗", value = workFormCount(form.warnings), showsDisclosure = true,
                         onClick = { choosingTags = WorkFormTags.Warnings }, valueMaxLines = Int.MAX_VALUE)
                     SubjectRowSeparator()
-                    SubjectFormRow("Fandoms ∗", value = workFormCount(form.fandoms), valueMaxLines = Int.MAX_VALUE)
+                    SubjectFormRow("Fandoms ∗", value = workFormCount(form.fandoms), valueMaxLines = Int.MAX_VALUE,
+                        showsDisclosure = true, onClick = { writingTags = WritingTagKind.Fandom })
                     SubjectRowSeparator()
                     WorkFormChoiceRow("Language", form, WorkFormChoice.Language) { choosing = it }
                 }
@@ -130,11 +145,14 @@ internal fun WritingWorkFormContent(model: WritingWorkFormState, account: String
                     SubjectFormRow("Categories", value = workFormCount(form.categories), showsDisclosure = true,
                         onClick = { choosingTags = WorkFormTags.Categories }, valueMaxLines = Int.MAX_VALUE)
                     SubjectRowSeparator()
-                    SubjectFormRow("Relationships", value = workFormCount(form.relationships), valueMaxLines = Int.MAX_VALUE)
+                    SubjectFormRow("Relationships", value = workFormCount(form.relationships), valueMaxLines = Int.MAX_VALUE,
+                        showsDisclosure = true, onClick = { writingTags = WritingTagKind.Relationship })
                     SubjectRowSeparator()
-                    SubjectFormRow("Characters", value = workFormCount(form.characters), valueMaxLines = Int.MAX_VALUE)
+                    SubjectFormRow("Characters", value = workFormCount(form.characters), valueMaxLines = Int.MAX_VALUE,
+                        showsDisclosure = true, onClick = { writingTags = WritingTagKind.Character })
                     SubjectRowSeparator()
-                    SubjectFormRow("Additional tags", value = workFormCount(form.additionalTags), valueMaxLines = Int.MAX_VALUE)
+                    SubjectFormRow("Additional tags", value = workFormCount(form.additionalTags), valueMaxLines = Int.MAX_VALUE,
+                        showsDisclosure = true, onClick = { writingTags = WritingTagKind.Freeform })
                 }
                 WorkFormFootnote("Tags can also be edited separately from the work text.")
             }

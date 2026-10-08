@@ -26,6 +26,9 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.builtins.MapSerializer
+import kotlinx.serialization.builtins.serializer
+import io.github.cidy02.kudos.network.ao3.writing.trimWritingTag
 import kotlinx.serialization.json.Json
 import java.time.Instant
 
@@ -54,10 +57,38 @@ private fun encodeTrustedDeviceRecords(records: List<TrustedDeviceRecord>): Stri
     return Json.encodeToString(ListSerializer(TrustedDeviceRecord.serializer()), records)
 }
 
+private fun decodeRecentWritingTags(raw: String?): Map<String, List<String>> {
+    if (raw == null) return emptyMap()
+    return runCatching {
+        val serializer = MapSerializer(String.serializer(), ListSerializer(String.serializer()))
+        val root = Json.parseToJsonElement(raw) as kotlinx.serialization.json.JsonObject
+        Json.decodeFromJsonElement(serializer, root.getValue("byKind"))
+    }.getOrDefault(emptyMap())
+}
+
 class SettingsRepository(
     private val dataStore: DataStore<Preferences>
 ) {
     val settings: Flow<KudosSettings> = dataStore.data.map(::settingsFromPreferences)
+
+    /** iOS writing.recentTags.v1: device-local JSON, outside KudosSettings/backup/sync. */
+    val recentWritingTags: Flow<Map<String, List<String>>> = dataStore.data.map { prefs ->
+        decodeRecentWritingTags(prefs[Keys.RecentWritingTags])
+    }
+
+    suspend fun recordWritingTag(kind: String, name: String) {
+        val trimmed = trimWritingTag(name)
+        if (kind !in setOf("fandom", "relationship", "character", "freeform") || trimmed.isEmpty()) return
+        dataStore.edit { prefs ->
+            // Read inside the atomic edit: another editor's additions survive.
+            val byKind = decodeRecentWritingTags(prefs[Keys.RecentWritingTags]).toMutableMap()
+            byKind[kind] = (listOf(trimmed) + byKind[kind].orEmpty().filterNot {
+                it.equals(trimmed, ignoreCase = true)
+            }).take(20)
+            val serializer = MapSerializer(String.serializer(), ListSerializer(String.serializer()))
+            prefs[Keys.RecentWritingTags] = "{\"byKind\":" + Json.encodeToString(serializer, byKind) + "}"
+        }
+    }
 
     /** Speech is device-local, outside KudosSettings and the backup settings contract. */
     val speechPreferences: Flow<ReaderSpeechPreferences> = dataStore.data.map { prefs ->
@@ -537,6 +568,7 @@ class SettingsRepository(
     }
 
     private object Keys {
+        val RecentWritingTags = stringPreferencesKey("writing.recentTags.v1")
         val SpeechRate = floatPreferencesKey("readerSpeechRate")
         val SpeechVoiceIdentifier = stringPreferencesKey("readerSpeechVoiceID")
         val ReaderFontId = stringPreferencesKey("readerFontID")

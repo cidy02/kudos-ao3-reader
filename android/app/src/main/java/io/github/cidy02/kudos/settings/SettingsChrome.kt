@@ -7,6 +7,8 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -113,10 +115,15 @@ fun SubjectTextFieldRow(
     error: String? = null,
     autocorrect: Boolean = true,
     /** The label above the field rather than beside it; for a narrow place such as a dialog. */
-    stackedLabel: Boolean = false
+    stackedLabel: Boolean = false,
+    /** The writing tag field uses this row without a second visible label. */
+    fieldOnly: Boolean = false,
+    onSubmit: (() -> Unit)? = null,
+    leading: @Composable () -> Unit = {},
+    trailing: @Composable () -> Unit = {}
 ) {
     val tokens = LocalKudosTokens.current
-    val stacked = multiline || stackedLabel || isAccessibilityFontScale()
+    val stacked = multiline || stackedLabel || fieldOnly || isAccessibilityFontScale()
     val style = TextStyle(color = if (enabled) tokens.primaryInk else tokens.secondaryInk,
         fontSize = 14.5.sp, lineHeight = 20.sp, textAlign = if (stacked) TextAlign.Start else TextAlign.End)
     val focus = remember { FocusRequester() }
@@ -139,7 +146,9 @@ fun SubjectTextFieldRow(
             BasicTextField(value = value, onValueChange = onValueChange, enabled = enabled,
                 singleLine = !multiline, minLines = if (multiline) 2 else 1, maxLines = if (multiline) 6 else 1,
                 textStyle = style, cursorBrush = SolidColor(tokens.accent),
-                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.None, autoCorrectEnabled = autocorrect),
+                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.None, autoCorrectEnabled = autocorrect,
+                    imeAction = if (onSubmit != null) ImeAction.Search else ImeAction.Default),
+                keyboardActions = if (onSubmit == null) KeyboardActions() else KeyboardActions(onAny = { onSubmit() }),
                 modifier = (if (stacked) Modifier.fillMaxWidth() else Modifier.width(hug))
                     .focusRequester(focus).semantics { contentDescription = label },
                 decorationBox = { inner ->
@@ -151,7 +160,12 @@ fun SubjectTextFieldRow(
         }
     }
     Column {
-        if (stacked) Column(Modifier.fillMaxWidth().padding(horizontal = 13.dp, vertical = 11.dp),
+        if (fieldOnly) Row(Modifier.fillMaxWidth().padding(horizontal = 13.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+            leading()
+            Box(Modifier.weight(1f)) { input() }
+            trailing()
+        } else if (stacked) Column(Modifier.fillMaxWidth().padding(horizontal = 13.dp, vertical = 11.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(label, color = tokens.primaryInk, fontSize = 14.5.sp, lineHeight = 20.sp)
             input()
