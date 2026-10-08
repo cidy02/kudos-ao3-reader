@@ -1043,11 +1043,14 @@ actor AO3Client { // swiftlint:disable:this type_body_length
     /// `comments_controller.rb`), and `flash[:caution]` (`.flash.caution` — the
     /// Inbox mass-edit failure branch, `inbox_controller.rb`). The CSS classes
     /// don't overlap (`flash_div` emits `class="flash <key>"`), so `.flash.error`
-    /// alone never matched the latter two.
+    /// alone never matched the latter two. `#error li` is the validation list
+    /// itself: `error_messages_for` renders `<div id="error" class="error">`
+    /// holding an `h4` and a `ul`, which none of the others match, so a form
+    /// AO3 re-rendered with its reasons read as "no error" (audit A4-3).
     static func writeErrorMessage(in html: String) -> String? {
         guard let doc = try? SwiftSoup.parse(html) else { return nil }
         let text = try? doc.select(
-            ".errorlist li, .error p, .flash.error, .flash.comment_error, .flash.caution"
+            "#error li, .errorlist li, .error p, .flash.error, .flash.comment_error, .flash.caution"
         ).first()?.text()
         let trimmed = text?.trimmingCharacters(in: .whitespacesAndNewlines)
         return (trimmed?.isEmpty == false) ? trimmed : nil

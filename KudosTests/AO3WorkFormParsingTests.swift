@@ -65,6 +65,32 @@ struct AO3WorkFormParsingTests {
         #expect(skin.map(\.1) == [""])
     }
 
+    /// A work with more than one chapter: AO3's edit page serves chapter 1's
+    /// title and no text box (`unless @chapters`), and `works#update` assigns
+    /// whatever it is sent to chapter 1. An empty text was refused and took the
+    /// whole save with it (audit A4-1).
+    @Test func aWorkWithSeveralChaptersSendsNoChapterText() throws {
+        let titled = try fixture("ao3_work_edit").replacingOccurrences(
+            of: "</form>",
+            with: #"<input type="text" name="work[chapter_attributes][title]" value="Prologue"></form>"#
+        )
+        let form = try AO3Client.parseWorkForm(from: titled)
+        #expect(form.chapter?.title == "Prologue")
+        #expect(form.chapter?.contentServed == false)
+        let sent = form.parameters(submit: .update)
+        #expect(value(AO3WorkFormField.chapterTitle, in: sent) == "Prologue")
+        #expect(value(AO3WorkFormField.chapterContent, in: sent) == nil)
+        // A draft in that state is not missing its text: there is no box to fill.
+        var draft = form
+        draft.isDraft = true
+        #expect(!draft.missingRequiredFields().contains("Work Text"))
+
+        // One chapter: the box is served, so its text goes back, empty or not.
+        let single = try AO3Client.parseWorkForm(from: try fixture("ao3_work_new_draft"))
+        #expect(single.chapter?.contentServed == true)
+        #expect(value(AO3WorkFormField.chapterContent, in: single.parameters(submit: .saveDraft)) == "")
+    }
+
     /// AO3's work form has `post_button` and no `post_without_preview_button`
     /// (that is the chapter form's); `works#create`/`#update` post only on
     /// `post_button`. Sending the other saved a draft and reported success.

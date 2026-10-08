@@ -107,9 +107,9 @@ extension AO3AuthService {
             let body = Self.formEncoded([("_method", "delete"), ("authenticity_token", token)])
             let request = try writeRequest(to: url, body: body, csrf: token, referer: workURL, ajax: false)
             let (status, responseBody) = try await submitWrite(request)
-            if (200 ... 399).contains(status) { return "Unsubscribed." }
-            throw AO3WriteError.rejected(
-                AO3Client.writeErrorMessage(in: responseBody) ?? "Couldn't unsubscribe."
+            return try Self.readingsWriteResult(
+                status: status, body: responseBody,
+                success: "Unsubscribed.", rejectedFallback: "Couldn't unsubscribe."
             )
         }
 
@@ -187,9 +187,11 @@ extension AO3AuthService {
             body: body, csrf: token, referer: workURL, ajax: false
         )
         let (status, responseBody) = try await submitWrite(request)
-        if (200 ... 399).contains(status) { return "Marked for later." }
-        throw AO3WriteError.rejected(
-            AO3Client.writeErrorMessage(in: responseBody) ?? "Couldn't mark for later."
+        // AO3's evidence, as `unmarkForLater`: any 2xx used to count, so a
+        // maintenance page said "Marked for later." (audit A4-6).
+        return try Self.readingsWriteResult(
+            status: status, body: responseBody,
+            success: "Marked for later.", rejectedFallback: "Couldn't mark for later."
         )
     }
 

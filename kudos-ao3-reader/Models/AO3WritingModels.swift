@@ -72,6 +72,7 @@ enum AO3WorkFormField {
     static let seriesNotes = "series[series_notes]"
     static let seriesComplete = "series[complete]"
     static let seriesAuthorIDs = "series[author_attributes][ids][]"
+    static let seriesAuthorByline = "series[author_attributes][byline]"
     static let serialOrder = "serial[]"
     static let serialWorks = "serial_works[]"
 
@@ -346,6 +347,14 @@ nonisolated struct AO3WorkChapterDraft: Equatable, Sendable {
     var publishedYear: String = ""
     var publishedMonth: String = ""
     var publishedDay: String = ""
+    /// False when AO3's edit page left the text box out. It does for a work
+    /// with more than one chapter (`_standard_form.html.erb`: `unless
+    /// @chapters`), while still serving chapter 1's title and date. The text
+    /// is then neither shown nor sent: `works#update` assigns whatever
+    /// `chapter_attributes` it is given to chapter 1, so an empty text was
+    /// refused ("at least 10 characters") and took the whole save with it,
+    /// and a typed one would have replaced chapter 1 (audit A4-1).
+    var contentServed: Bool = true
 }
 
 /// `published_at(1i/2i/3i)` ↔ `Date`, for the work and chapter forms' backdate.
@@ -500,7 +509,7 @@ nonisolated struct AO3WorkForm: Equatable, Sendable {
         if languageID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             missing.append("Language")
         }
-        if kind == .new || isDraft, let chapter, chapter.content
+        if kind == .new || isDraft, let chapter, chapter.contentServed, chapter.content
             .trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             missing.append("Work Text")
         }
@@ -601,7 +610,9 @@ nonisolated struct AO3WorkForm: Equatable, Sendable {
         if let chapter {
             pairs.append((AO3WorkFormField.chapterTitle, chapter.title))
             pairs.append((AO3WorkFormField.chapterSummary, chapter.summary))
-            pairs.append((AO3WorkFormField.chapterContent, chapter.content))
+            if chapter.contentServed {
+                pairs.append((AO3WorkFormField.chapterContent, chapter.content))
+            }
             if !chapter.publishedYear.isEmpty {
                 pairs.append((AO3WorkFormField.chapterPublishedYear, chapter.publishedYear))
                 pairs.append((AO3WorkFormField.chapterPublishedMonth, chapter.publishedMonth))
@@ -737,6 +748,11 @@ nonisolated struct AO3SeriesForm: Equatable, Sendable {
         }
         for id in creators.selectedPseudIDs {
             pairs.append((AO3WorkFormField.seriesAuthorIDs, id))
+        }
+        // The screen has the field and AO3 permits it (`series_params`); it was
+        // never sent, and AO3 said "successfully updated" (audit A4-2).
+        if !creators.coauthorByline.isEmpty {
+            pairs.append((AO3WorkFormField.seriesAuthorByline, creators.coauthorByline))
         }
         return pairs
     }
