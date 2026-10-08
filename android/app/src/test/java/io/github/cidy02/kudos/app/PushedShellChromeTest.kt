@@ -70,8 +70,13 @@ class PushedShellChromeTest {
                 if (showNew) ProvidePushedShellChrome(customTitle = "New", trailingContent = {})
             }
         }
+        compose.waitForIdle()
+        val oldHolder = compose.runOnIdle { chrome.holder }
         showNew = true
         compose.waitForIdle()
+        // The shell watches this to bring back a row the older screen had scrolled away.
+        val newHolder = compose.runOnIdle { chrome.holder }
+        assertTrue(oldHolder != null && newHolder != null && newHolder !== oldHolder)
 
         // The older screen updates itself while the newer one is up: it must not take the row.
         oldTitle = "Old, loaded"
@@ -87,6 +92,7 @@ class PushedShellChromeTest {
             assertEquals("Old, loaded", chrome.customTitle)
             assertNull(chrome.trailingContent)
             assertTrue(chrome.mounted)
+            assertTrue(chrome.holder === oldHolder)
         }
 
         showOld = false

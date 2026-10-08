@@ -39,6 +39,20 @@ class ScrollAwayTopChromeTest {
         assertFalse(chrome.isHidden(Routes.Home))
     }
 
+    /** An editor opened from a scrolled form takes the row over: its buttons must be there. */
+    @Test
+    fun revealShowsARowAnotherScreenScrolledAwayAndLeavesTheContentWhereItIs() {
+        val chrome = ShellChromeState()
+        chrome.onContentDelta(Routes.AccountList, deltaDp = 400f, atTop = false)
+        assertTrue(chrome.isHidden(Routes.AccountList))
+        chrome.reveal(Routes.AccountList)
+        assertFalse(chrome.isHidden(Routes.AccountList))
+        assertTrue(chrome.isScrolled(Routes.AccountList))
+        // Scrolling on hides it again as before.
+        chrome.onContentDelta(Routes.AccountList, deltaDp = 200f, atTop = false)
+        assertTrue(chrome.isHidden(Routes.AccountList))
+    }
+
     @Test
     fun aListThatHasLeftTheTopCountsAsScrolledUntilItReturns() {
         val chrome = ShellChromeState()

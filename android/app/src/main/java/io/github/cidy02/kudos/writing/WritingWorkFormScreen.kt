@@ -1,0 +1,374 @@
+package io.github.cidy02.kudos.writing
+
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.TextStyle as ComposeTextStyle
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import io.github.cidy02.kudos.app.ProvidePushedShellChrome
+import io.github.cidy02.kudos.auth.AO3AuthRepository
+import io.github.cidy02.kudos.auth.isSignedIn
+import io.github.cidy02.kudos.core.strippingHtml
+import io.github.cidy02.kudos.network.ao3.writing.*
+import io.github.cidy02.kudos.settings.SettingsPanel
+import io.github.cidy02.kudos.settings.SubjectTextFieldRow
+import io.github.cidy02.kudos.ui.subject.*
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+import java.time.format.FormatStyle
+import java.time.format.TextStyle
+import java.util.Locale
+
+/** No production navigation points here until the Save brief. */
+@Composable
+fun WritingWorkFormScreen(
+    workID: Long?,
+    repository: AO3WorkFormRepository,
+    auth: AO3AuthRepository,
+    onClose: () -> Unit
+) {
+    val generation by auth.generation.collectAsState()
+    val accountState by auth.state.collectAsState()
+    val model = remember(workID, repository, auth, generation, accountState.isSignedIn) {
+        WritingWorkFormState(workID, repository, auth)
+    }
+    LaunchedEffect(model) { model.load() }
+    DisposableEffect(model) { onDispose { model.close() } }
+    WritingWorkFormContent(model, auth.username().orEmpty(), if (workID == null) "New work" else "Edit work", onClose)
+}
+
+@Composable
+internal fun WritingWorkFormContent(model: WritingWorkFormState, account: String, loadingTitle: String, onClose: () -> Unit) {
+    val state by model.state.collectAsState()
+    val form = state.form
+    val tokens = LocalKudosTokens.current
+    val palette = tokens.scopePalette
+    val list = rememberLazyListState()
+    val scope = rememberCoroutineScope()
+    var editing by remember(model) { mutableStateOf<WorkFormText?>(null) }
+    var choosingTags by remember(model) { mutableStateOf<WorkFormTags?>(null) }
+    var choosing by remember(model) { mutableStateOf<WorkFormChoice?>(null) }
+    var dating by remember(model) { mutableStateOf(false) }
+    val field = editing
+    if (field != null && form != null) {
+        WritingTextEditorScreen(field.text(form), field.title, account, form.recoveryTarget(), field.field,
+            onCheckpoint = { model.checkpoint(field, it) },
+            onDone = { model.checkpoint(field, it); editing = null }, onBack = { editing = null })
+        return
+    }
+    val tags = choosingTags
+    if (tags != null && form != null) {
+        WorkFormTagChoices(form, tags, model::toggleTag) { choosingTags = null }
+        return
+    }
+    BackHandler(onBack = onClose)
+    ProvidePushedShellChrome(hasSubjectHeader = true, hideTabBar = true, onBack = onClose)
+    LazyColumn(Modifier.fillMaxSize().subjectScreenWash(palette).testTag("Writing work form"), state = list,
+        contentPadding = PaddingValues(bottom = 24.dp)) {
+        item {
+            Spacer(Modifier.windowInsetsTopHeight(WindowInsets.statusBars))
+            Spacer(Modifier.height(76.dp))
+            SubjectHeaderBlock(kicker = "AO3 Account", title = form?.screenTitle() ?: loadingTitle,
+                subtitle = form?.subtitle(), palette = palette, gutter = SubjectMetrics.accountGutter)
+            if (form?.isDraft == true) WorkFormFootnote("This draft isn't public yet. Options that apply only after posting " +
+                "will appear once you post it.")
+        }
+        if (form == null) item {
+            Box(Modifier.fillMaxWidth().padding(top = 60.dp).padding(horizontal = SubjectMetrics.accountGutter),
+                contentAlignment = Alignment.Center) {
+                val failure = state.failure
+                if (failure == null) CircularProgressIndicator(color = palette.accent, trackColor = tokens.separator)
+                else Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Couldn't load from AO3", color = tokens.primaryInk, fontSize = 20.sp, lineHeight = 27.sp,
+                        textAlign = TextAlign.Center)
+                    Text(failure, color = tokens.secondaryInk, fontSize = 14.sp, lineHeight = 20.sp, textAlign = TextAlign.Center)
+                    TextButton(onClick = { scope.launch { model.load(retry = true) } },
+                        colors = ButtonDefaults.textButtonColors(contentColor = palette.accent)) {
+                        Text("Try Again", color = palette.accent, fontSize = 14.sp, lineHeight = 20.sp)
+                    }
+                }
+            }
+        } else {
+            item {
+                WorkFormSection(if (form.isDraft) "Required before posting" else "Required")
+                SettingsPanel(Modifier.padding(top = 8.dp)) {
+                    SubjectTextFieldRow("Title ∗", form.title, "Title", model::title)
+                    SubjectRowSeparator()
+                    WorkFormChoiceRow("Rating", form, WorkFormChoice.Rating) { choosing = it }
+                    SubjectRowSeparator()
+                    SubjectFormRow("Archive warnings ∗", value = workFormCount(form.warnings), showsDisclosure = true,
+                        onClick = { choosingTags = WorkFormTags.Warnings }, valueMaxLines = Int.MAX_VALUE)
+                    SubjectRowSeparator()
+                    SubjectFormRow("Fandoms ∗", value = workFormCount(form.fandoms), valueMaxLines = Int.MAX_VALUE)
+                    SubjectRowSeparator()
+                    WorkFormChoiceRow("Language", form, WorkFormChoice.Language) { choosing = it }
+                }
+            }
+            item {
+                WorkFormSection("Tags")
+                SettingsPanel(Modifier.padding(top = 8.dp)) {
+                    SubjectFormRow("Categories", value = workFormCount(form.categories), showsDisclosure = true,
+                        onClick = { choosingTags = WorkFormTags.Categories }, valueMaxLines = Int.MAX_VALUE)
+                    SubjectRowSeparator()
+                    SubjectFormRow("Relationships", value = workFormCount(form.relationships), valueMaxLines = Int.MAX_VALUE)
+                    SubjectRowSeparator()
+                    SubjectFormRow("Characters", value = workFormCount(form.characters), valueMaxLines = Int.MAX_VALUE)
+                    SubjectRowSeparator()
+                    SubjectFormRow("Additional tags", value = workFormCount(form.additionalTags), valueMaxLines = Int.MAX_VALUE)
+                }
+                WorkFormFootnote("Tags can also be edited separately from the work text.")
+            }
+            item {
+                WorkFormSection("Association")
+                SettingsPanel(Modifier.padding(top = 8.dp)) {
+                    SubjectFormRow("Series", value = form.seriesValue(), valueMaxLines = Int.MAX_VALUE)
+                    SubjectRowSeparator()
+                    SubjectFormRow("Add to collections", value = workFormCount(form.collectionNames), valueMaxLines = Int.MAX_VALUE)
+                    SubjectRowSeparator()
+                    SubjectFormRow("Gift recipients", value = workFormCount(form.gifts), valueMaxLines = Int.MAX_VALUE)
+                    SubjectRowSeparator()
+                    SubjectFormRow("Co-creators", value = form.creatorsValue(), valueMaxLines = Int.MAX_VALUE)
+                    SubjectRowSeparator()
+                    SubjectFormRow("Inspired by", value = if (form.parentWork.url.isEmpty()) "None" else "1", valueMaxLines = Int.MAX_VALUE)
+                }
+            }
+            item {
+                WorkFormSection("Text")
+                SettingsPanel(Modifier.padding(top = 8.dp)) {
+                    WorkFormTextRow(form, WorkFormText.Summary) { editing = it }
+                    SubjectRowSeparator()
+                    WorkFormTextRow(form, WorkFormText.Notes) { editing = it }
+                    SubjectRowSeparator()
+                    WorkFormTextRow(form, WorkFormText.Endnotes) { editing = it }
+                    if (form.kind == AO3WorkFormKind.New || form.isDraft) {
+                        SubjectRowSeparator()
+                        WorkFormTextRow(form, WorkFormText.Content) { editing = it }
+                    }
+                    if (form.isPosted && form.workID != null) {
+                        SubjectRowSeparator()
+                        SubjectFormRow("Chapters", value = form.chaptersPosted?.toString().orEmpty(), valueMaxLines = Int.MAX_VALUE)
+                        SubjectRowSeparator()
+                        SubjectFormRow("Add chapter", value = "")
+                        SubjectRowSeparator()
+                        SubjectFormRow("Edit tags", value = "")
+                    }
+                    SubjectRowSeparator()
+                    WorkFormChoiceRow("Work skin", form, WorkFormChoice.Skin) { choosing = it }
+                }
+            }
+            item {
+                WorkFormSection(if (form.isDraft) "When posted" else "Publication")
+                SettingsPanel(Modifier.padding(top = 8.dp)) {
+                    if (form.isPosted) {
+                        WorkFormControlRow("Chapters posted") {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text("${form.chaptersPosted ?: 1} of", color = tokens.secondaryInk, fontSize = 14.5.sp, lineHeight = 20.sp)
+                                BasicTextField(form.chapterTotal, onValueChange = model::chapterTotal,
+                                    singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                    textStyle = ComposeTextStyle(color = tokens.primaryInk, fontSize = 14.5.sp, lineHeight = 20.sp,
+                                        textAlign = TextAlign.End), cursorBrush = SolidColor(palette.accent),
+                                    modifier = Modifier.width(64.dp).semantics { contentDescription = "Chapter total" },
+                                    decorationBox = { input -> Box(contentAlignment = Alignment.CenterEnd) {
+                                        if (form.chapterTotal.isEmpty()) Text("?", color = tokens.tertiaryInk, fontSize = 14.5.sp, lineHeight = 20.sp)
+                                        input()
+                                    } })
+                            }
+                        }
+                        SubjectRowSeparator()
+                        WorkFormToggle("Work is complete", form.chapterTotal == "${form.chaptersPosted ?: 1}") {
+                            model.toggle(WorkFormSwitch.Complete, it)
+                        }
+                        SubjectRowSeparator()
+                    }
+                    WorkFormToggle("Set a different publication date", form.backdate) { model.toggle(WorkFormSwitch.Backdate, it) }
+                    if (form.backdate && form.chapter != null) {
+                        SubjectRowSeparator()
+                        SubjectFormRow("Publication date", value = form.publicationDate().format(DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM)),
+                            onClick = { dating = true }, valueMaxLines = Int.MAX_VALUE)
+                    }
+                    SubjectRowSeparator()
+                    WorkFormToggle("Only show to registered users", form.restricted) { model.toggle(WorkFormSwitch.Restricted, it) }
+                    SubjectRowSeparator()
+                    WorkFormToggle("Enable comment moderation", form.moderatedCommenting) { model.toggle(WorkFormSwitch.Moderation, it) }
+                    SubjectRowSeparator()
+                    WorkFormChoiceRow("Who can comment", form, WorkFormChoice.Comments) { choosing = it }
+                }
+                if (form.isPosted) WorkFormFootnote("AO3 marks a work in progress when its total chapters are higher than the number " +
+                    "posted. Complete sets both numbers to the same value.")
+            }
+        }
+    }
+    if (form != null) {
+        choosing?.let { choice ->
+            val options = form.choiceOptions(choice)
+            val current = form.choiceValue(choice)
+            WorkFormChoiceSheet(when (choice) {
+                WorkFormChoice.Rating -> "Rating"
+                WorkFormChoice.Language -> "Language"
+                WorkFormChoice.Comments -> "Who can comment"
+                WorkFormChoice.Skin -> "Work skin"
+            }, if (options.none { it.value == current }) listOf(AO3FormOption(current, current.ifEmpty { "Select…" })) + options else options,
+                current, onDismiss = { choosing = null }, onPick = { model.choice(choice, it); choosing = null })
+        }
+        if (dating) WorkFormDateSheet(form.publicationDate(), model::publicationDate) { dating = false }
+    }
+}
+
+@Composable
+private fun WorkFormSection(title: String) = SectionRuleHeader(title, modifier = Modifier.padding(top = 18.dp))
+
+@Composable
+private fun WorkFormFootnote(text: String) {
+    Text(text, color = LocalKudosTokens.current.secondaryInk.copy(alpha = 0.7f), fontSize = 11.5.sp, lineHeight = 17.sp,
+        modifier = Modifier.padding(horizontal = SubjectMetrics.accountGutter + 14.dp).padding(top = 8.dp))
+}
+
+@Composable
+private fun WorkFormChoiceRow(label: String, form: AO3WorkForm, kind: WorkFormChoice, onPick: (WorkFormChoice) -> Unit) {
+    val value = form.choiceValue(kind)
+    SubjectFormRow(label, value = form.choiceOptions(kind).firstOrNull { it.value == value }?.title ?: value.ifEmpty { "Select…" },
+        valueMaxLines = Int.MAX_VALUE, onClick = { onPick(kind) })
+}
+
+@Composable
+private fun WorkFormTextRow(form: AO3WorkForm, field: WorkFormText, onEdit: (WorkFormText) -> Unit) {
+    val text = field.text(form)
+    var detail by remember { mutableStateOf<String?>(null) }
+    // Summary only; never lay out or count chapter content in this row.
+    LaunchedEffect(text, field) {
+        detail = if (field == WorkFormText.Summary && text.isNotEmpty()) withContext(Dispatchers.Default) {
+            text.strippingHtml().trim().takeIf { it.isNotEmpty() }
+        } else null
+    }
+    Column {
+        SubjectFormRow(field.title, value = if (detail == null) if (text.isEmpty()) "Empty" else "Set" else null,
+            showsDisclosure = true, onClick = { onEdit(field) })
+        detail?.let { preview ->
+            Text(preview, color = LocalKudosTokens.current.secondaryInk, fontSize = 12.5.sp, lineHeight = 18.sp,
+                maxLines = if (isAccessibilityFontScale()) Int.MAX_VALUE else 2,
+                modifier = Modifier.padding(horizontal = 14.dp).padding(bottom = 11.dp))
+        }
+    }
+}
+
+@Composable
+private fun WorkFormControlRow(label: String, control: @Composable () -> Unit) {
+    if (isAccessibilityFontScale()) Column(Modifier.fillMaxWidth().padding(horizontal = 13.dp, vertical = 11.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(label, color = LocalKudosTokens.current.primaryInk, fontSize = 14.5.sp, lineHeight = 20.sp)
+        control()
+    } else SubjectFormRow(label, trailing = control)
+}
+
+@Composable
+private fun WorkFormToggle(label: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+    WorkFormControlRow(label) {
+        SubjectToggle(checked, onChange, accent = LocalKudosTokens.current.scopePalette.accent, contentDescription = label)
+    }
+}
+
+/** Warnings/categories are the iOS closed-list pushed chooser, with no toolbar actions. */
+@Composable
+private fun WorkFormTagChoices(form: AO3WorkForm, kind: WorkFormTags, onToggle: (WorkFormTags, String) -> Unit, onBack: () -> Unit) {
+    val palette = LocalKudosTokens.current.scopePalette
+    val title = if (kind == WorkFormTags.Warnings) "Archive warnings" else "Categories"
+    val values = form.tagValues(kind)
+    BackHandler(onBack = onBack)
+    ProvidePushedShellChrome(hasSubjectHeader = true, hideTabBar = true, onBack = onBack)
+    Column(Modifier.fillMaxSize().subjectScreenWash(palette)) {
+        Spacer(Modifier.windowInsetsTopHeight(WindowInsets.statusBars))
+        Spacer(Modifier.height(76.dp))
+        SubjectHeaderBlock(kicker = "Choose", title = title,
+            subtitle = if (values.isEmpty()) "None chosen" else "${values.size} chosen", palette = palette, gutter = SubjectMetrics.accountGutter)
+        LazyColumn(Modifier.padding(horizontal = SubjectMetrics.accountGutter).padding(top = 18.dp).subjectPanel()) {
+            itemsIndexed(form.tagOptions(kind)) { index, option ->
+                if (index > 0) SubjectRowSeparator()
+                WorkFormOptionRow(option.title, option.value in values) { onToggle(kind, option.value) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun WorkFormOptionRow(label: String, selected: Boolean, onClick: () -> Unit) {
+    val tokens = LocalKudosTokens.current
+    SubjectFormRow(label, onClick = onClick, trailing = {
+        if (selected) Icon(Icons.Filled.Check, contentDescription = "Selected", tint = tokens.scopePalette.accent, modifier = Modifier.size(18.dp))
+    })
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun WorkFormChoiceSheet(title: String, options: List<AO3FormOption>, selected: String, onDismiss: () -> Unit, onPick: (String) -> Unit) {
+    val tokens = LocalKudosTokens.current
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        containerColor = tokens.cardFill, contentColor = tokens.primaryInk, scrimColor = tokens.primaryInk.copy(alpha = 0.32f), dragHandle = null) {
+        Text(title, fontSize = 18.sp, lineHeight = 25.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+        LazyColumn(Modifier.fillMaxWidth().heightIn(max = 480.dp).navigationBarsPadding()) {
+            itemsIndexed(options) { index, option ->
+                if (index > 0) SubjectRowSeparator()
+                WorkFormOptionRow(option.title, option.value == selected) { onPick(option.value) }
+            }
+        }
+    }
+}
+
+/** Gregorian date components avoid a fixed-height calendar clipping at accessibility sizes.
+ * Bounds are iOS AO3PublicationDate.allowedRange, not an invented served-choice catalog. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun WorkFormDateSheet(date: LocalDate, onChange: (LocalDate) -> Unit, onDismiss: () -> Unit) {
+    val tokens = LocalKudosTokens.current
+    val today = LocalDate.now()
+    var component by remember { mutableStateOf<String?>(null) }
+    val part = component
+    val choices = when (part) {
+        "Year" -> (1950..today.year).reversed().map { AO3FormOption("$it", "$it") }
+        "Month" -> (1..if (date.year == today.year) today.monthValue else 12).map {
+            AO3FormOption("$it", java.time.Month.of(it).getDisplayName(TextStyle.FULL, Locale.getDefault()))
+        }
+        "Day" -> (1..if (date.year == today.year && date.monthValue == today.monthValue) today.dayOfMonth else date.lengthOfMonth())
+            .map { AO3FormOption("$it", "$it") }
+        else -> emptyList()
+    }
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        containerColor = tokens.cardFill, contentColor = tokens.primaryInk, scrimColor = tokens.primaryInk.copy(alpha = 0.32f), dragHandle = null) {
+        Text(part ?: "Publication date", fontSize = 18.sp, lineHeight = 25.sp, modifier = Modifier.padding(16.dp))
+        LazyColumn(Modifier.fillMaxWidth().heightIn(max = 480.dp).navigationBarsPadding()) {
+            if (part == null) itemsIndexed(listOf("Year" to date.year.toString(), "Month" to date.month.getDisplayName(TextStyle.FULL, Locale.getDefault()),
+                "Day" to date.dayOfMonth.toString())) { index, (label, value) ->
+                if (index > 0) SubjectRowSeparator()
+                SubjectFormRow(label, value = value, onClick = { component = label }, valueMaxLines = Int.MAX_VALUE)
+            } else itemsIndexed(choices) { index, option ->
+                if (index > 0) SubjectRowSeparator()
+                val selected = when (part) { "Year" -> date.year; "Month" -> date.monthValue; else -> date.dayOfMonth }
+                WorkFormOptionRow(option.title, option.value == "$selected") {
+                    val number = option.value.toInt()
+                    val changed = when (part) { "Year" -> date.withYear(number); "Month" -> date.withMonth(number); else -> date.withDayOfMonth(number) }
+                    onChange(if (changed > today) today else changed)
+                    component = null
+                }
+            }
+        }
+    }
+}

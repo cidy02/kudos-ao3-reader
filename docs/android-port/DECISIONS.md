@@ -856,3 +856,20 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   for their own briefs; nothing opens it but demo routes until Save exists. The tag set's
   writes follow the pattern of Unsubscribe and the collection writes: one fresh token, one
   POST never retried, the screen changed only on AO3's confirmation, fixtures only.
+- **2026-10-07 · The shell shows its top row again whenever a different screen takes it over.**
+  The top row hides when a page is scrolled down, and the state is kept per route. A screen
+  that replaces another inside one route (the text editor opened from the work form, the tag
+  set's Add tags screen, a chooser) inherited a hidden row and had no Back, Done or Undo. The
+  shell now shows the row whenever the screen holding it changes, which also means a page you
+  come back to shows its row even if you had scrolled it away. iOS has no scroll-away chrome
+  yet (T-349), so there is nothing there to match; when it gets one, do the same. Reverse:
+  the `LaunchedEffect(pushedHolder)` line in `app/MainScaffold.kt`.
+- **2026-10-07 · Choosing the blank rating does not clear a rating, on either app.** iOS's
+  encoder sends no rating when none is chosen, and AO3 keeps what it had. Android's encoder
+  (brief 3bb) sends the rating control back as AO3 served it, with the same result. Left as it
+  is; the Save brief must not present the blank line as a way to remove a rating. iOS
+  evidence: `AO3WorkTagSet.parameters()` (`if !rating.isEmpty`).
+- **2026-10-07 · The tag set's writes post only to AO3.** The address Save tags posts to is
+  read from AO3's page; it is kept only when it is one of AO3's own hosts, as Unsubscribe's
+  captured address already was (`AO3RedirectCookieRelay.isTrustedUrl`). iOS posts to whatever
+  address the form gave. Android is the stricter; nothing changes for a real AO3 page.

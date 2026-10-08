@@ -149,6 +149,7 @@ class WritingEditorSession(
     fun done(): String {
         editor.commitComposition()
         scheduler.fireNow()
+        editor.endEditing() // The keyboard leaves with the editor; it stayed up over the form.
         return checkpointText
     }
 
