@@ -822,3 +822,37 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   public, so Android makes that one read through its client for public AO3 pages and none of
   the signed-in reads (the edit form, the nominations). Answered by Claude; the owner has not
   been asked. Reverse: refuse the screen when signed out.
+- **2026-10-07 · The tag set's four Tags rows open nothing until its writes are built.** Codex
+  made each count row open AO3's four "tags to add" boxes read-only. AO3 serves those boxes
+  empty, so a real tag set would have shown four headings over nothing. On iOS the rows open
+  the Add tags editor, which is a write. Until brief 3bg lands the rows show their counts and
+  are not tappable. iOS evidence: `TagSetView.swift` (the Add tags destination),
+  `AO3Client+Challenges.swift:551` (the fields read are `…_tagnames_to_add`). Reverse: brief
+  3bg restores the destination as an editor. Commit `4ec4d8eb`.
+- **2026-10-07 · The editor's preview shows text typed outside a block tag, on both apps.**
+  Found on the emulator: with `<p>one</p>` and then a loose line, Preview showed only "one".
+  iOS does the same, because its preview reuses the parser for AO3's own pages
+  (`AO3Client.parseRichText`), which keeps only block elements once there is one. A preview
+  that hides a writer's words is a fault whoever has it, so this is fixed on both rather than
+  copied: each stretch of loose text becomes a paragraph of its own before parsing, as AO3
+  does when it posts. Android `wrapLoose` in `writing/WritingBufferPreview.kt` (`95e67b97`);
+  iOS `wrapLooseText` in `WritingBufferPreview` (T-358), same test cases. Only the editor's
+  preview changes; the parser AO3's pages use is untouched. Reverse: remove the one call.
+- **2026-10-07 · On Android the preview and the recovery sheet draw long text lazily.** A
+  full-length chapter drawn at once froze the preview and the sheet for seconds on the
+  emulator. Both are lazy lists now (the sheet shows the copy line by line). iOS draws both
+  whole and has not been measured with a full-length chapter: an item for the iOS tail.
+  Reverse: `EditorPreview` and the sheet in `writing/WritingTextEditorScreen.kt`.
+- **2026-10-07 · The native text field stays for now; the decision is not made.** The design
+  document leaves Android's HTML-mode widget to a measurement on a Pixel 6a class phone (B1,
+  B6). On the emulator the 510,000-character chapter opens, types and checkpoints, and a
+  keystroke costs the same per frame as in two lines of text; the emulator's own frame times
+  are far above 16 ms on any screen, so it cannot pass or fail the budget. The platform
+  `EditText` is kept, the measurement is owed on a phone, and the widget is one file
+  (`writing/WritingNativeTextField.kt`) if it fails.
+- **2026-10-07 · Next in Writing: the work form's screen without Save (3bf); next in
+  Challenges: the tag set's two writes (3bg).** The form's screen shows a loaded work and
+  changes it in memory, with the text rows opening the editor; tags and association rows wait
+  for their own briefs; nothing opens it but demo routes until Save exists. The tag set's
+  writes follow the pattern of Unsubscribe and the collection writes: one fresh token, one
+  POST never retried, the screen changed only on AO3's confirmation, fixtures only.
