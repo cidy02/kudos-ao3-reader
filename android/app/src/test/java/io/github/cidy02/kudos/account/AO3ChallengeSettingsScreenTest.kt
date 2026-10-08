@@ -57,7 +57,8 @@ class AO3ChallengeSettingsScreenTest {
                         })
                     else AO3ChallengeSettingsScreen("winter_exchange", "Winter Exchange 2026", owner, repository,
                         onOpenWeb = { browser += it }, onOpenExternal = { external += it },
-                        onOpenTagSet = { id, title -> native += Routes.ao3TagSet(id, title, isModerator = true) })
+                        onOpenTagSet = { id, title -> native += Routes.ao3TagSet(id, title, isModerator = true) },
+                        onOpenPrompts = { slug, title -> native += Routes.ao3PromptMeme(slug, title) })
                 }
             }
         }
@@ -93,11 +94,12 @@ class AO3ChallengeSettingsScreenTest {
         assertEquals(listOf(giftUrl, signupUrl,
             ChallengeSettingsDestinations.challengeAssignmentsView("winter_exchange"), ChallengeSettingsDestinations.challengeAssignmentsView("winter_exchange")), browser)
         assertEquals(listOf(ChallengeSettingsDestinations.runMatching("winter_exchange")), external)
+        compose.onNodeWithText("Prompts").assertDoesNotExist()
         assertEquals(4, client.gets.size) // row taps navigate; no native follow-up/read/write here
         assertEquals(0, client.posts)
     }
 
-    @Test fun memeReplacesLowerHalfAndEditAndPromptsOpenMemePages() {
+    @Test fun memeReplacesLowerHalfAndPromptsOpenNativeScreen() {
         show(meme = true)
         awaitText("Edit settings")
         compose.onNodeWithText("Winter Exchange 2026 · Prompt Meme").assertExists()
@@ -117,7 +119,9 @@ class AO3ChallengeSettingsScreenTest {
         compose.onNodeWithText("Assignments").assertDoesNotExist()
         compose.onNodeWithText("ASSIGNMENTS").assertDoesNotExist()
         compose.onNodeWithText("AT AO3").assertDoesNotExist()
-        assertEquals(listOf(memeUrl, ChallengeSettingsDestinations.promptMemeView("winter_exchange")), browser)
+        assertEquals(listOf(memeUrl), browser)
+        assertEquals(listOf(Routes.ao3TagSet(44, "Summer Prompt Tags", true),
+            Routes.ao3PromptMeme("winter_exchange", "Winter Exchange 2026")), native)
         assertTrue(external.isEmpty())
         assertEquals(listOf(giftUrl, memeUrl, profileUrl), client.gets)
     }

@@ -25,6 +25,10 @@ import io.github.cidy02.kudos.network.ao3.account.collectionNameFormatIsValid
 import io.github.cidy02.kudos.network.ao3.account.reservedCollectionNames
 import io.github.cidy02.kudos.network.ao3.search.AO3SearchPage
 import io.github.cidy02.kudos.network.ao3.search.AO3SearchParser
+import io.github.cidy02.kudos.network.ao3.account.AO3PromptMemePage
+import io.github.cidy02.kudos.network.ao3.account.AO3PromptMemeParser
+import io.github.cidy02.kudos.network.ao3.account.AO3PromptMemeUrls
+import io.github.cidy02.kudos.network.ao3.account.AO3ChallengeSettings
 import io.github.cidy02.kudos.network.ao3.account.AO3ChallengeKind
 import io.github.cidy02.kudos.network.ao3.account.AO3ChallengeSettingsPage
 import io.github.cidy02.kudos.network.ao3.account.AO3ChallengeSettingsParser
@@ -77,8 +81,8 @@ class AO3CollectionDetailRepository(
         return AO3Result.Success(loaded)
     }
 
-    /** Corrected 3ba: at most four sequential page reads; never read any assignment page. */
-    suspend fun getChallengeSettings(slug: String): AO3Result<AO3ChallengeSettingsPage> {
+    /** Shared 3ba settings-form read only: gift probe, then meme fallback. No profile/tallies. */
+    suspend fun getChallengeSettingsForm(slug: String): AO3Result<AO3ChallengeSettings> {
         val generation = authRepository.generation.value
         val parser = AO3ChallengeSettingsParser()
         fun checkSession() {
@@ -88,17 +92,36 @@ class AO3CollectionDetailRepository(
             parser.parseSettings(it, AO3ChallengeKind.GiftExchange)
         }
         checkSession()
-        val settings = when (gift) {
-            is AO3Result.Success -> gift.value
+        return when (gift) {
+            is AO3Result.Success -> gift
             is AO3Result.Failure -> {
                 if (gift.error != AO3Error.NotFound && gift.error !is AO3Error.Parse) return gift
                 when (val meme = fetch(ChallengeSettingsDestinations.challengeSettingsEditView(slug, AO3ChallengeKind.PromptMeme)) {
                     parser.parseSettings(it, AO3ChallengeKind.PromptMeme)
                 }) {
                     is AO3Result.Failure -> return meme
-                    is AO3Result.Success -> meme.value
+                    is AO3Result.Success -> meme
                 }
             }
+        }
+    }
+
+    /** Exactly one selected prompts page; anonymous only for an already signed-out viewer. */
+    suspend fun getPromptMemePrompts(slug: String, page: Int): AO3Result<AO3PromptMemePage> =
+        fetch(AO3PromptMemeUrls.requests(slug, page), authenticated = authRepository.state.value.isSignedIn) {
+            AO3PromptMemeParser().parse(it, page)
+        }
+
+    /** Corrected 3ba: at most four sequential page reads; never read any assignment page. */
+    suspend fun getChallengeSettings(slug: String): AO3Result<AO3ChallengeSettingsPage> {
+        val generation = authRepository.generation.value
+        val parser = AO3ChallengeSettingsParser()
+        fun checkSession() {
+            if (generation != authRepository.generation.value) throw CancellationException()
+        }
+        val settings = when (val form = getChallengeSettingsForm(slug)) {
+            is AO3Result.Failure -> return form
+            is AO3Result.Success -> form.value
         }
         checkSession()
         val tags = when (val result = fetch(ChallengeSettingsDestinations.profile(slug), parse = parser::parseTagSets)) {

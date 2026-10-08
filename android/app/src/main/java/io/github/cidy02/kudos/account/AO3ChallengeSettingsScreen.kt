@@ -35,7 +35,8 @@ fun AO3ChallengeSettingsScreen(
     repository: AO3CollectionDetailRepository,
     onOpenWeb: (String) -> Unit,
     onOpenExternal: (String) -> Unit,
-    onOpenTagSet: (Int, String) -> Unit
+    onOpenTagSet: (Int, String) -> Unit,
+    onOpenPrompts: (String, String) -> Unit
 ) {
     val auth = repository.authRepository
     val generation by auth.generation.collectAsState()
@@ -169,7 +170,7 @@ fun AO3ChallengeSettingsScreen(
                                     ChallengeSection("Prompts")
                                     SettingsPanel(Modifier.padding(top = 8.dp)) {
                                         SubjectFormRow("Prompts", value = "Claim and fill", showsDisclosure = true, valueMaxLines = Int.MAX_VALUE,
-                                            onClick = { onOpenWeb(ChallengeSettingsDestinations.promptMemeView(slug)) })
+                                            onClick = { onOpenPrompts(slug, effectiveTitle) })
                                         SubjectRowSeparator()
                                         SubjectFormRow("Prompts posted anonymously", value = if (settings.anonymous) "Yes" else "No", valueMaxLines = Int.MAX_VALUE)
                                     }

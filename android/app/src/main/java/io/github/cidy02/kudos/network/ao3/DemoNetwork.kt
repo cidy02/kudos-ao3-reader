@@ -201,6 +201,11 @@ internal object DemoNetworkRoutes {
     fun fixtureName(url: HttpUrl): String? {
         val path = decodedPath(url)
         // One answer per address for both OkHttp and the demo's read-only WebView.
+        if (path.trimEnd('/') == "/collections/summer_meme/requests") return when (url.queryParameter("page")) {
+            null, "1" -> "ao3_demo_meme_requests_1"
+            "2" -> "ao3_demo_meme_requests_2"
+            else -> null
+        }
         if (path.trimEnd('/') == "/collections/summer_meme/gift_exchange/edit") return null // local 404 probes the meme
         if (path.trimEnd('/') in setOf("/collections/summer_meme/prompt_meme", "/collections/summer_meme/prompt_meme/edit"))
             return "ao3_demo_meme_settings"

@@ -57,7 +57,8 @@ class AO3CollectionModerationScreenTest {
                     "detail" -> AO3CollectionDetailScreen("winter_exchange", "Winter Exchange 2026", repository,
                         SettingsRepository(prefs), PrivacyGate(), onOpenWork = {}, onOpenWebFallback = {},
                         onOpenModeration = { isOwner = it; screen = "moderation" }, onOpenSettings = {},
-                        onOpenChallengeSettings = { error("Wrong challenge destination") }, onOpenMaintainers = { screen = "maintainers" })
+                        onOpenChallengeSettings = { error("Wrong challenge destination") },
+                        onOpenPrompts = { error("Wrong prompts destination") }, onOpenMaintainers = { screen = "maintainers" })
                     "moderation" -> AO3CollectionModerationScreen("winter_exchange", "Winter Exchange 2026", isOwner,
                         repository, writes, onRecentlyDecided = { screen = "items" }, onMaintainers = {
                             maintainerRoutes += Routes.ao3CollectionMaintainers("winter_exchange", "Winter Exchange 2026")
