@@ -1011,3 +1011,13 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   left as iOS has it (owner question 20).
 - The demo skips the GitHub update check. It does not block other hosts.
   Reverse: the two commits that name audit A18.
+
+## 2026-10-08: Reading History is grouped (brief 3bp)
+
+- Time, State, Fandom, Flat, as iOS; the choice is kept per device under iOS's key
+  (`library.history.grouping`) and is not in the backup. "Move back to In progress" writes
+  the existing `keepInProgressOverride` and the work's modification time, nothing else.
+- Hide mode leaves a mature work out of Search's library matches on both apps (audit A19-3;
+  owner question 20 is withdrawn: iOS's own code says Hide filters before the row).
+  Reverse: the commits "Reading History grouped by time, state or fandom" and "Hide mode
+  leaves a mature work out of Search's library matches too".

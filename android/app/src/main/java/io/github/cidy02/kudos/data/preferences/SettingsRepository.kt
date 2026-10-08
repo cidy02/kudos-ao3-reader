@@ -8,6 +8,7 @@ import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
+import io.github.cidy02.kudos.library.LibraryHistoryGrouping
 import io.github.cidy02.kudos.onboarding.FirstRunState
 import io.github.cidy02.kudos.support.ChangelogEntry
 import io.github.cidy02.kudos.support.Changelog
@@ -70,6 +71,15 @@ class SettingsRepository(
     private val dataStore: DataStore<Preferences>
 ) {
     val settings: Flow<KudosSettings> = dataStore.data.map(::settingsFromPreferences)
+
+    /** iOS library.history.grouping: per-device layout, outside KudosSettings/backup/sync. */
+    val historyGrouping: Flow<LibraryHistoryGrouping> = dataStore.data.map { prefs ->
+        LibraryHistoryGrouping.fromId(prefs[Keys.HistoryGrouping]) ?: LibraryHistoryGrouping.Default
+    }
+
+    suspend fun updateHistoryGrouping(grouping: LibraryHistoryGrouping) {
+        dataStore.edit { it[Keys.HistoryGrouping] = grouping.id }
+    }
 
     /** iOS writing.recentTags.v1: device-local JSON, outside KudosSettings/backup/sync. */
     val recentWritingTags: Flow<Map<String, List<String>>> = dataStore.data.map { prefs ->
@@ -568,6 +578,7 @@ class SettingsRepository(
     }
 
     private object Keys {
+        val HistoryGrouping = stringPreferencesKey("library.history.grouping")
         val RecentWritingTags = stringPreferencesKey("writing.recentTags.v1")
         val SpeechRate = floatPreferencesKey("readerSpeechRate")
         val SpeechVoiceIdentifier = stringPreferencesKey("readerSpeechVoiceID")

@@ -318,6 +318,12 @@ class WorkRepository(
         }
     }
 
+    /** History's local undo: stored override and the flag/metadata merge clock together. */
+    suspend fun keepInProgress(workId: String): SavedWork? = database.withTransaction {
+        val work = getWork(workId) ?: return@withTransaction null
+        upsert(work.copy(keepInProgressOverride = true, lastModifiedAt = clock()))
+    }
+
     /** Recently Deleted's Restore for a held copy: keep it as a Download. */
     suspend fun restoreHeldCopy(workId: String): SavedWork? {
         val work = getWork(workId) ?: return null

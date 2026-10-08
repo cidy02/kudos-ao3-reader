@@ -290,7 +290,8 @@ fun CardMetaLine(
     text: String,
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     accessibilityLabel: String,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    color: Color = MaterialTheme.colorScheme.onSurfaceVariant
 ) {
     Row(
         modifier = modifier.semantics { contentDescription = accessibilityLabel },
@@ -300,13 +301,13 @@ fun CardMetaLine(
         Icon(
             imageVector = icon,
             contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            tint = color,
             modifier = Modifier.size(14.dp)
         )
         Text(
             text = text,
             style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = color,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
