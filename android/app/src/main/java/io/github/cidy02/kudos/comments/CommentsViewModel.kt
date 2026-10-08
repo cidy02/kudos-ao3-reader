@@ -346,6 +346,15 @@ class CommentsViewModel(
         _composerPresented.value = false
     }
 
+    /**
+     * The page on screen, to read again after a write that belongs to it. A reply, an edit or
+     * a delete used to reload page 1, wherever the comment was (audit A20-5, the same on iOS).
+     */
+    private fun reloadPageOnScreen() {
+        val page = (_state.value as? CommentsUiState.Loaded)?.thread?.currentPage ?: 1
+        load(page, _focusedCommentId.value)
+    }
+
     fun deleteComment(comment: AO3Comment) {
         val path = comment.deletePath ?: return
         viewModelScope.launch {
@@ -353,7 +362,7 @@ class CommentsViewModel(
             when (val result = repository.deleteComment(path)) {
                 is AO3Result.Success -> {
                     _message.value = "Comment deleted."
-                    load()
+                    reloadPageOnScreen()
                 }
                 is AO3Result.Failure -> {
                     _message.value = result.error.displayMessage()
@@ -402,7 +411,7 @@ class CommentsViewModel(
                         parentId = reply?.commentId,
                         username = currentUsername()
                     )
-                    load()
+                    if (reply != null || edit != null) reloadPageOnScreen() else load()
                 }
                 is AO3Result.Failure -> {
                     val unconfirmed = (result.error as? AO3Error.Validation)?.message ==
@@ -412,7 +421,7 @@ class CommentsViewModel(
                         // can see whether it arrived; the same text is not sent twice by a tap.
                         lastSubmittedContentHash = contentHash
                         _message.value = "Couldn't confirm this posted — reloading to check."
-                        load()
+                        if (reply != null || edit != null) reloadPageOnScreen() else load()
                     } else {
                         _message.value = result.error.displayMessage()
                     }

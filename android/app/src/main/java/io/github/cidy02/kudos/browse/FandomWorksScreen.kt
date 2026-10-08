@@ -81,6 +81,10 @@ fun FandomWorksScreen(
     // relevance ordering, so RELEVANCE would send no sort_column, AO3 would sort by
     // revised_at, and the sheet would sit there claiming "Best Match".
     var filters by remember { mutableStateOf(AO3BrowseRepository.browseBaseline()) }
+    // The filters the page on screen was asked for. The sheet edits `filters` itself, so closing
+    // it without Apply left edits that the next page then sent: page 7 of a filter nobody
+    // applied (audit A20-3, the same on iOS).
+    var loadedFilters by remember { mutableStateOf(filters) }
     var showFilterSheet by remember { mutableStateOf(false) }
     var showMenu by remember { mutableStateOf(false) }
     var expandAllCards by remember { mutableStateOf(false) }
@@ -112,6 +116,7 @@ fun FandomWorksScreen(
     }
 
     fun load(page: Int = 1) {
+        loadedFilters = filters
         state = FandomWorksState.Loading
         val generation = ++loadGeneration
         scope.launch {
@@ -327,7 +332,7 @@ fun FandomWorksScreen(
             onFiltersChange = { filters = it },
             onApply = { showFilterSheet = false; load() },
             onClear = { filters = AO3BrowseRepository.browseBaseline(); load() },
-            onDismiss = { showFilterSheet = false },
+            onDismiss = { showFilterSheet = false; filters = loadedFilters },
             localTagSuggestions = localTagSuggestions,
             autocompleteRepository = autocompleteRepository
         )

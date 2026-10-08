@@ -1056,3 +1056,13 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   notice or redirect (iOS `editTags`). The work form underneath re-reads its own form after
   a confirmed Save and keeps unsaved text edits.
   Reverse: the commit "A posted work's tags can be edited".
+
+## 2026-10-08: filters closed without Apply, and the page after a reply (audit A20)
+
+- Closing the filter sheet without Apply drops its edits: on a fandom or tag page always, on
+  Search while results are on screen (the typed search text stays). Before, the next page
+  tap sent them. The same on iOS (T-370).
+- After a reply, an edit, a delete, or a post AO3 did not confirm, comments read the page on
+  screen again, not page 1, and keep the focused comment.
+- A read-aloud failure logs its kind, not the exception (audit A21).
+  Reverse: the commit "Filter edits closed without Apply are dropped".

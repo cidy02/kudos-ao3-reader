@@ -165,7 +165,9 @@ class KokoroTTSController(private val context: Context) : TTSService {
                         
                         track.write(samples, 0, samples.size, AudioTrack.WRITE_BLOCKING)
                     } catch (e: Exception) {
-                        Log.e("KokoroTTS", "Error synthesizing chunk", e)
+                        // The kind of failure only: the exception may quote the text being read aloud,
+                        // and logcat has no private values (audit A21).
+                        Log.e("KokoroTTS", "Error synthesizing chunk: ${e.javaClass.simpleName}")
                     }
                 }
             } finally {
