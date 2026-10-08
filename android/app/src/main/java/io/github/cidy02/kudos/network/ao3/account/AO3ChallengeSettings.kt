@@ -32,7 +32,7 @@ data class AO3ChallengeSettingsPage(
     val signUpTotal: Int?
 )
 
-/** Named after the eventual native screens; all five currently use the in-app browser. */
+/** AO3 addresses shared by native challenge readers and browser destinations. */
 object ChallengeSettingsDestinations {
     fun challengeSettingsEditView(slug: String, kind: AO3ChallengeKind) =
         "${AO3CollectionFormUrls.show(slug)}/${kind.fieldPrefix}/edit"
