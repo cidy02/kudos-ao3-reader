@@ -44,6 +44,8 @@ struct SearchPaginationBar: View {
     @State private var showingPageSheet = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(ThemeManager.self) private var themeManager
+    @ScaledMetric(relativeTo: .footnote) private var currentPageSize: CGFloat = 14
+    @ScaledMetric(relativeTo: .caption) private var totalPagesSize: CGFloat = 12
 
     private var resolvedPalette: SubjectPalette {
         palette ?? themeManager.scopePalette
@@ -131,14 +133,14 @@ struct SearchPaginationBar: View {
     private var positionLabel: some View {
         HStack(spacing: 7) {
             Text("Page \(currentPage)")
-                .font(.system(size: 14, weight: .semibold))
+                .font(.system(size: currentPageSize, weight: .semibold))
                 .foregroundStyle(Color.primary)
                 .monospacedDigit()
                 .contentTransition(.numericText())
                 .animation(reduceMotion ? nil : .snappy, value: currentPage)
 
             Text("/ \(totalPages.formatted())")
-                .font(.system(size: 12, weight: .medium, design: .monospaced))
+                .font(.system(size: totalPagesSize, weight: .medium, design: .monospaced))
                 .foregroundStyle(
                     themeManager.appTheme.isDarkFamily
                         ? Color.white.opacity(0.60)
@@ -278,6 +280,11 @@ private struct PageJumpSheet: View {
 
     @Environment(\.dismiss) private var dismiss
     @Environment(ThemeManager.self) private var themeManager
+    @ScaledMetric(relativeTo: .headline) private var headerTitleSize: CGFloat = 16
+    @ScaledMetric(relativeTo: .subheadline) private var fieldInputSize: CGFloat = 16
+    @ScaledMetric(relativeTo: .footnote) private var totalPagesSize: CGFloat = 12.5
+    @ScaledMetric(relativeTo: .headline) private var tileNumberSize: CGFloat = 15
+    @ScaledMetric(relativeTo: .footnote) private var endButtonSize: CGFloat = 14
     @State private var draftText: String
     @FocusState private var fieldFocused: Bool
 
@@ -334,7 +341,7 @@ private struct PageJumpSheet: View {
             }
 
             Text("Go to page")
-                .font(.system(size: 16, weight: .semibold))
+                .font(.system(size: headerTitleSize, weight: .semibold))
                 .frame(maxWidth: .infinity, alignment: .leading)
 
             GlassCircleButton(
@@ -367,7 +374,7 @@ private struct PageJumpSheet: View {
             sectionLabel("Page number")
             HStack(spacing: 8) {
                 TextField("Page", text: $draftText)
-                    .font(.system(size: 16))
+                    .font(.system(size: fieldInputSize))
                     .monospacedDigit()
                     .focused($fieldFocused)
                     .textFieldStyle(.plain)
@@ -383,7 +390,7 @@ private struct PageJumpSheet: View {
                     }
 
                 Text("of \(totalPages.formatted())")
-                    .font(.system(size: 12.5, weight: .medium, design: .monospaced))
+                    .font(.system(size: totalPagesSize, weight: .medium, design: .monospaced))
                     .foregroundStyle(.secondary)
             }
             .padding(.horizontal, 13)
@@ -406,7 +413,7 @@ private struct PageJumpSheet: View {
                 ForEach(nearbyPages, id: \.self) { page in
                     Button { draftText = String(page) } label: {
                         Text(page.formatted())
-                            .font(.system(size: 15, weight: .semibold))
+                            .font(.system(size: tileNumberSize, weight: .semibold))
                             .monospacedDigit()
                             .lineLimit(1)
                             .minimumScaleFactor(0.6)
@@ -449,7 +456,7 @@ private struct PageJumpSheet: View {
     private func endButton(_ title: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Text(title)
-                .font(.system(size: 14, weight: .medium))
+                .font(.system(size: endButtonSize, weight: .medium))
                 .monospacedDigit()
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)

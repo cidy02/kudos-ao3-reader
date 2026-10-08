@@ -68,6 +68,7 @@ enum AO3MoreOnAO3Route {
 /// destinations, and adding the site-wide "The archive" section for general AO3 pages.
 struct AccountMoreOnAO3View: View {
     @Environment(ThemeManager.self) private var theme
+    @ScaledMetric(relativeTo: .footnote) private var footnoteSize: CGFloat = 12.5
 
     private var gutter: CGFloat { SubjectMetrics.accountGutter }
     private var selfGuttered: CGFloat { 0 }
@@ -310,7 +311,7 @@ struct AccountMoreOnAO3View: View {
 
     private func footnote(_ text: String) -> some View {
         Text(text)
-            .font(.system(size: 12.5))
+            .font(.system(size: footnoteSize))
             .foregroundStyle(.secondary)
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)

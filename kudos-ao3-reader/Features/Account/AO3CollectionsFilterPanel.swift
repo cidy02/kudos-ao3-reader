@@ -17,6 +17,7 @@ struct AO3CollectionsFilterPanel: View {
     var onFinish: (AO3CollectionsFilter) -> Void
 
     @Environment(ThemeManager.self) private var theme
+    @ScaledMetric(relativeTo: .caption) private var noteSize: CGFloat = 12
     @State private var editor: AO3CollectionsFilterDraft
 
     init(
@@ -150,7 +151,7 @@ struct AO3CollectionsFilterPanel: View {
 
     private func note(_ text: String) -> some View {
         Text(text)
-            .font(.system(size: 12))
+            .font(.system(size: noteSize))
             .foregroundStyle(.secondary)
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)

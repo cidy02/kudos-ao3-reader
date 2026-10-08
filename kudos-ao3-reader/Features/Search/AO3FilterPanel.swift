@@ -40,6 +40,8 @@ struct AO3FilterPanel: View {
     enum Mode { case search, refine }
 
     @Environment(ThemeManager.self) private var theme
+    @ScaledMetric(relativeTo: .footnote) private var refineMatchSize: CGFloat = 12.5
+    @ScaledMetric(relativeTo: .caption) private var sortHintSize: CGFloat = 12
 
     @Binding var filters: AO3SearchFilters
     var mode: Mode = .search
@@ -149,7 +151,7 @@ struct AO3FilterPanel: View {
     private var refineMatchLine: some View {
         if mode == .refine, !refineSource.isEmpty {
             Text(refineMatchText)
-                .font(.system(size: 12.5))
+                .font(.system(size: refineMatchSize))
                 .foregroundStyle(.secondary)
                 .monospacedDigit()
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -640,7 +642,7 @@ extension AO3FilterPanel {
                         VStack(alignment: .trailing, spacing: 2) {
                             Text(sortPresentation.draft.column.title)
                             Text(AO3WorksSort.fieldsHint)
-                                .font(.system(size: 12))
+                                .font(.system(size: sortHintSize))
                                 .foregroundStyle(.secondary)
                         }
                     }

@@ -27,6 +27,7 @@ struct AccountExternalNavCard: View {
 
     @Environment(AO3AuthService.self) private var auth
     @Environment(AppRouter.self) private var router
+    @ScaledMetric(relativeTo: .caption) private var footnoteSize: CGFloat = 11.5
 
     init(
         title: String,
@@ -96,7 +97,7 @@ struct AccountExternalNavCard: View {
             VStack(alignment: .leading, spacing: 6) {
                 button
                 Text(footnote)
-                    .font(.system(size: 11.5))
+                    .font(.system(size: footnoteSize))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
