@@ -318,3 +318,28 @@ Smallest fix. Count works that have a locator or a non-zero spine index or scrol
 - Bug-report payload construction past the screen strings. No Cookie header was found in the log calls that were searched. Session-file encryption was not read past the comment in `AO3SessionStore`.
 - Tests. Live AO3. otwarchive source this pass (A4 already cited it). `viewModelScope`'s dispatcher implementation in the local lifecycle 2.10 jar, as noted under Unconfirmed.
 - `DECISIONS.md` was searched for history, reading positions, and comment cache, and the Clear History leave-out was read in full. The rest of that file was not re-read line by line.
+
+## Triage (Claude, 2026-10-08)
+
+All seven read against the code; all real. Three were already fixed when this arrived (the
+audit read the tree from before those commits).
+
+- **A17-1 real, fixed** (`faa67f35`): comment, reply, edit, delete and Inbox actions need
+  AO3's own notice; anything else that came back fine is "didn't confirm" and the typed text
+  stays. Delete now reads the page. In the demo an Inbox action now says "didn't confirm":
+  the demo has no local answer for it.
+- **A17-2 real, fixed**: the preferences save needs AO3's notice, its sentence or the
+  redirect, as iOS. No test (there is none for that repository).
+- **A17-3 real, fixed**: every plain authenticated POST goes through the fenced path, so a
+  write queued before a sign-out is not sent after it and a 401 expires only its own
+  session. The caller gets "log in" back, not silence. Test
+  `aPlainAuthenticatedPostQueuedBeforeSignOutIsNeverSent`. Still open: `CommentsViewModel`
+  applies a result with no check of whose session it was (the fenced POST makes this hard
+  to reach).
+- **A17-4 real, fixed**: the offline comment cache keeps one copy per viewer, with no form,
+  token, edit or delete address, and is used only when AO3 cannot be reached, never after a
+  refusal. iOS keeps comments in memory only; Android keeps this read-only copy for offline
+  reading (DECISIONS). Tests in `CommentCacheTest`.
+- **A17-5, A17-6, A17-7**: fixed earlier (`88c794c2`, `903ec596`).
+- Unconfirmed: a double tap on Post (the composer's state is set inside the coroutine) is
+  worth a look; the sparse-work enricher's memo is not keyed by session.

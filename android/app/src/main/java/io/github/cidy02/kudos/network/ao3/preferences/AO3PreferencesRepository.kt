@@ -65,10 +65,20 @@ class AO3PreferencesRepository(
         ) {
             is AO3Result.Failure -> response
             is AO3Result.Success -> {
-                if (response.value.statusCode in 200..399) {
-                    AO3Result.Success(Unit)
-                } else {
-                    AO3Result.Failure(AO3Error.Http(response.value.statusCode))
+                // iOS `savePreferences`: AO3's reason if it gave one; saved only on AO3's own
+                // word (its notice, its sentence, or the redirect away from the form). Any
+                // page that came back fine used to count as saved (audit A17-2).
+                val body = response.value.body
+                val status = response.value.statusCode
+                val parser = io.github.cidy02.kudos.network.ao3.writes.AO3WriteFormParser()
+                val error = parser.writeErrorMessage(body)
+                when {
+                    error != null -> AO3Result.Failure(AO3Error.Validation(error))
+                    status !in 200..399 -> AO3Result.Failure(AO3Error.Http(status))
+                    parser.writeSuccessMessage(body) != null || status in 300..399 ||
+                        body.contains("successfully updated", ignoreCase = true) -> AO3Result.Success(Unit)
+                    else -> AO3Result.Failure(AO3Error.Validation(
+                        io.github.cidy02.kudos.network.ao3.account.AO3CollectionFields.UNCONFIRMED))
                 }
             }
         }

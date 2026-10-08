@@ -993,3 +993,11 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   position that names a part the book does not have opens the book at the beginning (it used
   to stop all position tracking for that work).
   Reverse: revert the 3br commit; nothing stored changed.
+
+## 2026-10-08: Android's writes and its comment cache after audit A17
+
+- A plain authenticated POST is fenced by the session it was made under, like the newer
+  writes. Comment, Inbox and preferences writes need AO3's own confirmation. The offline
+  comment cache stays (iOS has none), as one read-only copy per viewer, used only when AO3
+  cannot be reached.
+  Reverse: the commits "Comment and Inbox writes need AO3's own notice" and the one after.
