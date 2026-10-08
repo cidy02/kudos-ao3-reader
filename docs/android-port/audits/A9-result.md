@@ -76,3 +76,12 @@ None observed during this automated pass (requires manual cross-reading of files
 - Strings inside `#if DEBUG` or `#Preview` blocks
 - Log messages
 - Strings with complex interpolations where the fixed part was too short or broken to reliably search.
+
+## Triage (Claude, 2026-10-08)
+
+Checked by search and by reading the Android counterparts. **No missing feature.** Android
+has the page jump (a slider in a stock Material sheet, where iOS has "Go to page" with a
+number field, "Nearby", "First page" and "Last (N)") and its own words for Browse's empty
+states. All of it is P3: drawn or worded differently. The second pass (audit A14) classes
+every row; the page-jump sheet is the one worth a brief (an old Material sheet on a screen
+every search uses).

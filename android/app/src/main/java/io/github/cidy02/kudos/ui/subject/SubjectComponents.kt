@@ -355,52 +355,60 @@ fun SectionRuleHeader(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        Text(
-            text = title.uppercase(),
-            color = tokens.secondaryInk,
-            fontSize = labelSize,
-            fontWeight = FontWeight.Bold,
-            letterSpacing = (11f * 0.127f).sp,
-            maxLines = if (accessibilityFontScale) Int.MAX_VALUE else 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f, fill = false)
-        )
-        val figure = countText ?: count?.compactCount()
-        if (figure != null) {
+        // The title and what follows it share the whole row up to See All. Beside a weighted
+        // spacer the title was held to half the row, and at large text sizes "READING NOW"
+        // broke onto two lines with room to spare (audit A6).
+        Row(
+            Modifier.weight(1f),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
             Text(
-                text = figure,
-                color = tokens.tertiaryInk,
+                text = title.uppercase(),
+                color = tokens.secondaryInk,
                 fontSize = labelSize,
-                fontWeight = FontWeight.Medium,
-                fontFamily = FontFamily.Monospace,
-                maxLines = 1
+                fontWeight = FontWeight.Bold,
+                letterSpacing = (11f * 0.127f).sp,
+                maxLines = if (accessibilityFontScale) Int.MAX_VALUE else 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f, fill = false)
             )
+            val figure = countText ?: count?.compactCount()
+            if (figure != null) {
+                Text(
+                    text = figure,
+                    color = tokens.tertiaryInk,
+                    fontSize = labelSize,
+                    fontWeight = FontWeight.Medium,
+                    fontFamily = FontFamily.Monospace,
+                    maxLines = 1
+                )
+            }
+            if (note != null) {
+                Text(
+                    text = "· $note",
+                    color = tokens.tertiaryInk,
+                    fontSize = labelSize,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            if (onToggleCollapse != null) {
+                Icon(
+                    imageVector = if (isCollapsed) {
+                        Icons.AutoMirrored.Filled.KeyboardArrowRight
+                    } else {
+                        Icons.Filled.KeyboardArrowDown
+                    },
+                    contentDescription = if (isCollapsed) "Expand $title" else "Collapse $title",
+                    tint = tokens.tertiaryInk,
+                    modifier = Modifier
+                        .size(10.sp.asDp())
+                        .clickable(onClick = onToggleCollapse)
+                )
+            }
         }
-        if (note != null) {
-            Text(
-                text = "· $note",
-                color = tokens.tertiaryInk,
-                fontSize = labelSize,
-                fontWeight = FontWeight.Medium,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
-        if (onToggleCollapse != null) {
-            Icon(
-                imageVector = if (isCollapsed) {
-                    Icons.AutoMirrored.Filled.KeyboardArrowRight
-                } else {
-                    Icons.Filled.KeyboardArrowDown
-                },
-                contentDescription = if (isCollapsed) "Expand $title" else "Collapse $title",
-                tint = tokens.tertiaryInk,
-                modifier = Modifier
-                    .size(10.sp.asDp())
-                    .clickable(onClick = onToggleCollapse)
-            )
-        }
-        Spacer(Modifier.weight(1f))
         if (onSeeAll != null) {
             Icon(
                 imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,

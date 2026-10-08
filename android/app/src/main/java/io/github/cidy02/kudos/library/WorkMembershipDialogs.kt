@@ -1,5 +1,7 @@
 package io.github.cidy02.kudos.library
 
+import androidx.compose.ui.semantics.Role
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -164,8 +166,8 @@ internal fun AddToCollectionDialog(
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clickable(enabled = membershipLoaded) {
-                                        val next = !isMember
+                                    // One control with a state TalkBack can say (audit A13).
+                                    .toggleable(value = isMember, enabled = membershipLoaded, role = Role.Checkbox) { next ->
                                         memberIds = if (next) {
                                             memberIds + collection.id
                                         } else {

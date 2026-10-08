@@ -1,5 +1,7 @@
 package io.github.cidy02.kudos.works
 
+import androidx.compose.ui.semantics.Role
+import androidx.compose.foundation.selection.toggleable
 import android.content.Context
 import android.content.Intent
 import androidx.compose.foundation.clickable
@@ -690,14 +692,11 @@ fun WorkDetailScreen(
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clickable { includeSeriesInQueue = !includeSeriesInQueue }
+                                .toggleable(value = includeSeriesInQueue, role = Role.Switch) { includeSeriesInQueue = it }
                                 .padding(vertical = 8.dp)
                         ) {
                             Text("Also add works from this AO3 series", modifier = Modifier.weight(1f))
-                            Switch(
-                                checked = includeSeriesInQueue,
-                                onCheckedChange = { includeSeriesInQueue = it }
-                            )
+                            Switch(checked = includeSeriesInQueue, onCheckedChange = null)
                         }
                         if (includeSeriesInQueue) {
                             if (checkingSeriesPreview) {

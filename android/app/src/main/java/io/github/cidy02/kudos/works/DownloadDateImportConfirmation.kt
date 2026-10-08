@@ -1,5 +1,7 @@
 package io.github.cidy02.kudos.works
 
+import androidx.compose.ui.semantics.Role
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -163,10 +165,11 @@ fun DownloadDateImportConfirmation(
 @Composable
 private fun BatchChoiceRow(label: String, selected: Boolean, onClick: () -> Unit) {
     Row(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(10.dp),
+        modifier = Modifier.fillMaxWidth()
+            .selectable(selected = selected, role = Role.RadioButton, onClick = onClick).padding(10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        RadioButton(selected = selected, onClick = onClick)
+        RadioButton(selected = selected, onClick = null)
         Text(label)
     }
 }

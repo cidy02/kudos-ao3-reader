@@ -1,5 +1,7 @@
 package io.github.cidy02.kudos.library
 
+import androidx.compose.ui.semantics.Role
+import androidx.compose.foundation.selection.toggleable
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -1059,9 +1061,9 @@ private fun AddWorksToCollectionDialog(
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clickable {
-                                    val current = selectedIds[work.id] ?: false
-                                    selectedIds[work.id] = !current
+                                // One control with a state TalkBack can say (audit A13).
+                                .toggleable(value = selectedIds[work.id] ?: false, role = Role.Checkbox) {
+                                    selectedIds[work.id] = it
                                 }
                                 .padding(vertical = 4.dp),
                             verticalAlignment = Alignment.CenterVertically,
@@ -1069,7 +1071,7 @@ private fun AddWorksToCollectionDialog(
                         ) {
                             Checkbox(
                                 checked = selectedIds[work.id] ?: false,
-                                onCheckedChange = { selectedIds[work.id] = it }
+                                onCheckedChange = null
                             )
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
