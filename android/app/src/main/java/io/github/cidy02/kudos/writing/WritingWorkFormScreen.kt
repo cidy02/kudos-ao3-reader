@@ -76,6 +76,7 @@ internal fun WritingWorkFormContent(model: WritingWorkFormState, account: String
     var choosingTags by remember(model) { mutableStateOf<WorkFormTags?>(null) }
     var choosing by remember(model) { mutableStateOf<WorkFormChoice?>(null) }
     var dating by remember(model) { mutableStateOf(false) }
+    var viewingChapters by remember(model) { mutableStateOf(false) }
     val field = editing
     if (field != null && form != null) {
         WritingTextEditorScreen(field.text(form), field.title, account, form.recoveryTarget(), field.field,
@@ -94,6 +95,10 @@ internal fun WritingWorkFormContent(model: WritingWorkFormState, account: String
     val associationKind = association
     if (associationKind != null && form != null) {
         WritingAssociationPicker(associationKind, form, model, autocompleteRepository) { association = null }
+        return
+    }
+    if (viewingChapters && form?.isPosted == true && form.workID != null) {
+        WritingChaptersScreen(form.title, model::loadChapters) { viewingChapters = false }
         return
     }
     val tags = choosingTags
@@ -195,7 +200,8 @@ internal fun WritingWorkFormContent(model: WritingWorkFormState, account: String
                     }
                     if (form.isPosted && form.workID != null) {
                         SubjectRowSeparator()
-                        SubjectFormRow("Chapters", value = form.chaptersPosted?.toString().orEmpty(), valueMaxLines = Int.MAX_VALUE)
+                        SubjectFormRow("Chapters", value = form.chaptersPosted?.toString().orEmpty(), valueMaxLines = Int.MAX_VALUE,
+                            showsDisclosure = true, onClick = { viewingChapters = true })
                         SubjectRowSeparator()
                         SubjectFormRow("Add chapter", value = "")
                         SubjectRowSeparator()

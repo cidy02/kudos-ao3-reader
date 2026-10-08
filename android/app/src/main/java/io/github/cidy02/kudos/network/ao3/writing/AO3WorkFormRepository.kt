@@ -4,6 +4,8 @@ import io.github.cidy02.kudos.auth.AO3AuthRepository
 import io.github.cidy02.kudos.auth.isSignedIn
 import io.github.cidy02.kudos.network.ao3.AO3Error
 import io.github.cidy02.kudos.network.ao3.AO3Result
+import io.github.cidy02.kudos.network.ao3.chapters.AO3ChapterIndexParser
+import io.github.cidy02.kudos.network.ao3.chapters.AO3ChapterRef
 import io.github.cidy02.kudos.network.ao3.writes.AO3AuthenticatedClient
 import io.github.cidy02.kudos.network.ao3.account.AO3AccountParser
 import io.github.cidy02.kudos.network.ao3.account.AO3AccountUrls
@@ -24,6 +26,25 @@ class AO3WorkFormRepository(
 ) {
     suspend fun loadNewWorkForm(): AO3Result<AO3WorkForm> = load(AO3WorkFormUrls.newWork())
     suspend fun loadWorkForm(workID: Long): AO3Result<AO3WorkForm> = load(AO3WorkFormUrls.editWork(workID))
+
+    /** iOS WritingChaptersView: the work's own chapter index (a draft chapter is listed for its owner), one signed-in GET. */
+    suspend fun loadChapters(workID: Long): AO3Result<List<AO3ChapterRef>> {
+        if (!authRepository.state.value.isSignedIn) return AO3Result.Failure(AO3Error.AuthenticationRequired)
+        val generation = authRepository.generation.value
+        val response = client.getAuthenticated(AO3WorkFormUrls.chapterIndex(workID))
+        currentCoroutineContext().ensureActive()
+        if (generation != authRepository.generation.value) throw CancellationException()
+        return when (response) {
+            is AO3Result.Failure -> response
+            is AO3Result.Success -> try {
+                AO3Result.Success(withContext(parseDispatcher) { AO3ChapterIndexParser.parse(response.value.body) })
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                AO3Result.Failure(AO3Error.Parse("Couldn't read AO3's chapter list."))
+            }
+        }
+    }
 
     suspend fun loadCollectionOffers(): AO3Result<List<AO3CollectionOffer>> {
         if (!authRepository.state.value.isSignedIn) return AO3Result.Failure(AO3Error.AuthenticationRequired)

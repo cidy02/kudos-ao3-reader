@@ -116,6 +116,10 @@ data class AO3CollectionOffer(
 
 object AO3WorkFormUrls {
     fun newWork() = "${AO3Constants.BASE_URL}/works/new"
+    fun chapterIndex(workID: Long): String {
+        require(workID > 0)
+        return "${AO3Constants.BASE_URL}/works/$workID/navigate"
+    }
     fun editWork(workID: Long): String {
         require(workID > 0)
         return "${AO3Constants.BASE_URL}/works/$workID/edit"

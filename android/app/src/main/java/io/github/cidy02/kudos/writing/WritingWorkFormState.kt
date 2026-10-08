@@ -3,6 +3,7 @@ package io.github.cidy02.kudos.writing
 import io.github.cidy02.kudos.auth.AO3AuthRepository
 import io.github.cidy02.kudos.auth.isSignedIn
 import io.github.cidy02.kudos.network.ao3.AO3Error
+import io.github.cidy02.kudos.network.ao3.chapters.AO3ChapterRef
 import io.github.cidy02.kudos.network.ao3.AO3Result
 import io.github.cidy02.kudos.network.ao3.writing.*
 import kotlinx.coroutines.currentCoroutineContext
@@ -73,6 +74,13 @@ internal class WritingWorkFormState(
     }
 
     /** First opening only: a failed/cancelled best-effort read is still an attempt. */
+    /** The Chapters row: the form's work, its own session, one read. */
+    suspend fun loadChapters(): AO3Result<List<AO3ChapterRef>> {
+        val id = state.value.form?.workID
+        if (!ownsSession() || id == null) return AO3Result.Failure(AO3Error.AuthenticationRequired)
+        return repository.loadChapters(id)
+    }
+
     suspend fun openCollections() {
         if (!ownsSession() || !auth.state.value.isSignedIn || state.value.form == null || collectionsAttempted) return
         collectionsAttempted = true
