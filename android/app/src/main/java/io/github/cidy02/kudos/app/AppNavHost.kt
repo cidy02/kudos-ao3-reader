@@ -584,6 +584,16 @@ fun AppNavHost(
                 }
             )
         }
+        if (io.github.cidy02.kudos.BuildConfig.DEBUG) {
+            sharedComposable(Routes.WritingEditorDemo) {
+                io.github.cidy02.kudos.writing.WritingEditorDemoScreen(fromFile = false,
+                    onClose = { navController.popBackStack() })
+            }
+            sharedComposable(Routes.WritingEditorFixture) {
+                io.github.cidy02.kudos.writing.WritingEditorDemoScreen(fromFile = true,
+                    onClose = { navController.popBackStack() })
+            }
+        }
         sharedComposable(Routes.WritingDrafts) {
             io.github.cidy02.kudos.account.WritingDraftsScreen(
                 repository = container.writingDraftsRepository,

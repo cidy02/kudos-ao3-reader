@@ -10,4 +10,6 @@ object DebugRoutes {
     const val EXTRA = "kudosDebugRoute"
     const val DESIGN_CATALOG = "designCatalog"
     const val NAV_PREFIX = "nav:"
+    const val WRITING_EDITOR = "nav:writing-editor-demo"
+    const val WRITING_EDITOR_FIXTURE = "nav:writing-editor-fixture"
 }
