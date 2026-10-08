@@ -1,0 +1,296 @@
+# Brief I2 Audit Result: Dynamic Type Scaling in Search, Comments, Account, Bookmarks, and Authors
+
+This document records the audit and replacement of fixed-size fonts (`.font(.system(size: ...))`) with `@ScaledMetric` dynamic type properties across all Swift views in:
+- `kudos-ao3-reader/Features/Search/`
+- `kudos-ao3-reader/Features/Comments/`
+- `kudos-ao3-reader/Features/Account/`
+- `kudos-ao3-reader/Features/Bookmarks/`
+- `kudos-ao3-reader/Features/Authors/`
+
+## Summary Statistics
+
+- **Total view files audited**: All files in `Features/Search/`, `Features/Comments/`, `Features/Account/`, `Features/Bookmarks/`, and `Features/Authors/`
+- **Total call sites audited**: 111 call sites (Search: 31, Comments: 29, Account: 29, Bookmarks: 12, Authors: 10)
+- **Call sites updated to `@ScaledMetric`**: 78 call sites (Search: 26, Comments: 11, Account: 21, Bookmarks: 12, Authors: 8)
+- **Call sites left alone**: 33 call sites (SF Symbols, fixed-size miniature controls/avatar tiles, design kickers)
+- **Call sites needing layout work**: 2 call sites (containers with fixed 44pt height)
+
+## Detailed Changes
+
+Each change is listed as `path:line`, old code, and new code:
+
+- **`kudos-ao3-reader/Features/Account/AO3CollectionFormView.swift:254`**
+  - **Old**: `.font(.system(size: 12))`
+  - **New**: `.font(.system(size: groupNoteSize))`
+- **`kudos-ao3-reader/Features/Account/AO3CollectionFormView.swift:355`**
+  - **Old**: `.font(.system(size: 11.5))`
+  - **New**: `.font(.system(size: fieldErrorSize))`
+- **`kudos-ao3-reader/Features/Account/AO3CollectionFormView.swift:365`**
+  - **Old**: `.font(.system(size: 12.5))`
+  - **New**: `.font(.system(size: noticeCardSize))`
+- **`kudos-ao3-reader/Features/Account/AO3CollectionFormView.swift:415`**
+  - **Old**: `.font(.system(size: 15, weight: .semibold))`
+  - **New**: `.font(.system(size: actionTitleSize, weight: .semibold))`
+- **`kudos-ao3-reader/Features/Account/AO3CollectionFormView.swift:417`**
+  - **Old**: `.font(.system(size: 12.5))`
+  - **New**: `.font(.system(size: noticeCardSize))`
+- **`kudos-ao3-reader/Features/Account/AO3CollectionFormView.swift:425`**
+  - **Old**: `.font(.system(size: 13, weight: .semibold))`
+  - **New**: `.font(.system(size: actionButtonSize, weight: .semibold))`
+- **`kudos-ao3-reader/Features/Account/AO3CollectionFormView.swift:435`**
+  - **Old**: `.font(.system(size: 13, weight: .semibold))`
+  - **New**: `.font(.system(size: actionButtonSize, weight: .semibold))`
+- **`kudos-ao3-reader/Features/Account/AO3CollectionsFilterPanel.swift:153`**
+  - **Old**: `.font(.system(size: 12))`
+  - **New**: `.font(.system(size: noteSize))`
+- **`kudos-ao3-reader/Features/Account/AO3PreferencesView.swift:514`**
+  - **Old**: `.font(.system(size: 14, weight: .semibold))`
+  - **New**: `.font(.system(size: retryButtonSize, weight: .semibold))`
+- **`kudos-ao3-reader/Features/Account/AO3PreferencesView.swift:549`**
+  - **Old**: `.font(.system(size: 14, weight: .medium))`
+  - **New**: `.font(.system(size: bannerTextSize, weight: .medium))`
+- **`kudos-ao3-reader/Features/Account/AO3PreferencesView.swift:577`**
+  - **Old**: `.font(.system(size: 11.5))`
+  - **New**: `.font(.system(size: footnoteSize))`
+- **`kudos-ao3-reader/Features/Account/AccountComponents.swift:134`**
+  - **Old**: `.font(.system(size: 13, weight: .medium))`
+  - **New**: `.font(.system(size: postingAsSize, weight: .medium))`
+- **`kudos-ao3-reader/Features/Account/AccountComponents.swift:316`**
+  - **Old**: `.font(.system(size: 13))`
+  - **New**: `.font(.system(size: signedOutBodySize))`
+- **`kudos-ao3-reader/Features/Account/AccountExternalNavCard.swift:99`**
+  - **Old**: `.font(.system(size: 11.5))`
+  - **New**: `.font(.system(size: footnoteSize))`
+- **`kudos-ao3-reader/Features/Account/AccountMoreOnAO3View.swift:313`**
+  - **Old**: `.font(.system(size: 12.5))`
+  - **New**: `.font(.system(size: footnoteSize))`
+- **`kudos-ao3-reader/Features/Account/AccountView.swift:910`**
+  - **Old**: `.font(.system(size: 19, weight: .bold))`
+  - **New**: `.font(.system(size: skeletonUsernameSize, weight: .bold))`
+- **`kudos-ao3-reader/Features/Account/AccountView.swift:922`**
+  - **Old**: `.font(.system(size: 12.5))`
+  - **New**: `.font(.system(size: previewNoticeSize))`
+- **`kudos-ao3-reader/Features/Account/AccountView.swift:1231`**
+  - **Old**: `.font(.system(size: 13, weight: .medium, design: .monospaced))`
+  - **New**: `.font(.system(size: scopeRowCountSize, weight: .medium, design: .monospaced))`
+- **`kudos-ao3-reader/Features/Account/PrivacyDataView.swift:424`**
+  - **Old**: `.font(.system(size: 15, weight: .semibold))`
+  - **New**: `.font(.system(size: voicePackTitleSize, weight: .semibold))`
+- **`kudos-ao3-reader/Features/Account/PrivacyDataView.swift:431`**
+  - **Old**: `.font(.system(size: 12.5))`
+  - **New**: `.font(.system(size: voicePackBodySize))`
+- **`kudos-ao3-reader/Features/Account/PrivacyDataView.swift:461`**
+  - **Old**: `.font(.system(size: 12.5))`
+  - **New**: `.font(.system(size: voicePackBodySize))`
+- **`kudos-ao3-reader/Features/Authors/AuthorProfileComponents.swift:219`**
+  - **Old**: `.font(.system(size: 19, weight: .semibold))`
+  - **New**: `.font(.system(size: titleSize, weight: .semibold))`
+- **`kudos-ao3-reader/Features/Authors/AuthorProfileComponents.swift:228`**
+  - **Old**: `.font(.system(size: 13.5))`
+  - **New**: `.font(.system(size: summarySize))`
+- **`kudos-ao3-reader/Features/Authors/AuthorProfileComponents.swift:255`**
+  - **Old**: `.font(.system(size: 11.5))`
+  - **New**: `.font(.system(size: metaSize))`
+- **`kudos-ao3-reader/Features/Authors/AuthorProfileComponents.swift:416`**
+  - **Old**: `.font(.system(size: 11.5))`
+  - **New**: `.font(.system(size: dateSize))`
+- **`kudos-ao3-reader/Features/Authors/AuthorProfileComponents.swift:452`**
+  - **Old**: `.font(.system(size: 13))`
+  - **New**: `.font(.system(size: tagTextSize))`
+- **`kudos-ao3-reader/Features/Authors/AuthorProfileContentSections.swift:483`**
+  - **Old**: `.font(.system(size: 18, weight: .semibold))`
+  - **New**: `.font(.system(size: emptyTitleSize, weight: .semibold))`
+- **`kudos-ao3-reader/Features/Authors/AuthorProfileContentSections.swift:486`**
+  - **Old**: `.font(.system(size: 13.5))`
+  - **New**: `.font(.system(size: emptyBodySize))`
+- **`kudos-ao3-reader/Features/Authors/AuthorProfileContentSections.swift:507`**
+  - **Old**: `.font(.system(size: 11.5))`
+  - **New**: `.font(.system(size: emptyFootnoteSize))`
+- **`kudos-ao3-reader/Features/Bookmarks/AO3AccountWorksList.swift:531`**
+  - **Old**: `.font(.system(size: 11.5))`
+  - **New**: `.font(.system(size: footnoteSize))`
+- **`kudos-ao3-reader/Features/Bookmarks/AO3AccountWorksList.swift:544`**
+  - **Old**: `.font(.system(size: 11))`
+  - **New**: `.font(.system(size: footnoteStatusSize))`
+- **`kudos-ao3-reader/Features/Bookmarks/AO3AccountWorksList.swift:749`**
+  - **Old**: `.font(.system(size: 11, weight: .semibold))`
+  - **New**: `.font(.system(size: badgeSize, weight: .semibold))`
+- **`kudos-ao3-reader/Features/Bookmarks/AO3BookmarksWorksBrowser.swift:229`**
+  - **Old**: `.font(.system(size: 11.5))`
+  - **New**: `.font(.system(size: footerSize))`
+- **`kudos-ao3-reader/Features/Bookmarks/AO3HistoryWorksBrowser.swift:256`**
+  - **Old**: `.font(.system(size: 11.5))`
+  - **New**: `.font(.system(size: footnoteSize))`
+- **`kudos-ao3-reader/Features/Bookmarks/AO3HistoryWorksBrowser.swift:269`**
+  - **Old**: `.font(.system(size: 11))`
+  - **New**: `.font(.system(size: statusSize))`
+- **`kudos-ao3-reader/Features/Bookmarks/AO3MarkedForLaterWorksBrowser.swift:308`**
+  - **Old**: `.font(.system(size: 11.5))`
+  - **New**: `.font(.system(size: footerSize))`
+- **`kudos-ao3-reader/Features/Bookmarks/AO3MarkedForLaterWorksBrowser.swift:481`**
+  - **Old**: `.font(.system(size: 11.5, weight: .medium, design: .monospaced))`
+  - **New**: `.font(.system(size: footnoteSize, weight: .medium, design: .monospaced))`
+- **`kudos-ao3-reader/Features/Bookmarks/AO3NamedSubscriptionsList.swift:218`**
+  - **Old**: `.font(.system(size: 15, weight: .semibold))`
+  - **New**: `.font(.system(size: rowTitleSize, weight: .semibold))`
+- **`kudos-ao3-reader/Features/Bookmarks/AO3NamedSubscriptionsList.swift:222`**
+  - **Old**: `.font(.system(size: 12.5))`
+  - **New**: `.font(.system(size: rowSubtitleSize))`
+- **`kudos-ao3-reader/Features/Bookmarks/AO3SubscriptionsWorksBrowser.swift:295`**
+  - **Old**: `.font(.system(size: 11.5))`
+  - **New**: `.font(.system(size: footerSize))`
+- **`kudos-ao3-reader/Features/Bookmarks/AO3SubscriptionsWorksBrowser.swift:484`**
+  - **Old**: `.font(.system(size: 11.5))`
+  - **New**: `.font(.system(size: footnoteSize))`
+- **`kudos-ao3-reader/Features/Comments/CommentMarkup.swift:409`**
+  - **Old**: `.font(.system(size: 14, weight: .semibold))`
+  - **New**: `.font(.system(size: titleSize, weight: .semibold))`
+- **`kudos-ao3-reader/Features/Comments/CommentMarkup.swift:417`**
+  - **Old**: `.font(.system(size: 13, weight: .semibold))`
+  - **New**: `.font(.system(size: doneActionSize, weight: .semibold))`
+- **`kudos-ao3-reader/Features/Comments/CommentsView.swift:142`**
+  - **Old**: `.font(.system(size: 11.5))`
+  - **New**: `.font(.system(size: noteSize))`
+- **`kudos-ao3-reader/Features/Comments/CommentsView.swift:834`**
+  - **Old**: `.font(.system(size: 14, weight: .semibold))`
+  - **New**: `.font(.system(size: writeCommentButtonSize, weight: .semibold))`
+- **`kudos-ao3-reader/Features/Comments/CommentsView.swift:1357`**
+  - **Old**: `.font(.system(size: 15))`
+  - **New**: `.font(.system(size: editorTextSize))`
+- **`kudos-ao3-reader/Features/Comments/CommentsView.swift:1368`**
+  - **Old**: `.font(.system(size: 15))`
+  - **New**: `.font(.system(size: editorTextSize))`
+- **`kudos-ao3-reader/Features/Comments/CommentsView.swift:1392`**
+  - **Old**: `.font(.system(size: 11.5))`
+  - **New**: `.font(.system(size: identitySize))`
+- **`kudos-ao3-reader/Features/Comments/CommentsView.swift:1417`**
+  - **Old**: `.font(.system(size: 12.5))`
+  - **New**: `.font(.system(size: quoteBodySize))`
+- **`kudos-ao3-reader/Features/Comments/CommentsView.swift:1455`**
+  - **Old**: `.font(.system(size: 11, weight: .semibold))`
+  - **New**: `.font(.system(size: quoteAuthorSize, weight: .semibold))`
+- **`kudos-ao3-reader/Features/Comments/CommentsView.swift:1462`**
+  - **Old**: `.font(.system(size: 11, weight: .semibold))`
+  - **New**: `.font(.system(size: quoteAuthorSize, weight: .semibold))`
+- **`kudos-ao3-reader/Features/Comments/CommentsView.swift:1468`**
+  - **Old**: `.font(.system(size: 11, weight: .semibold))`
+  - **New**: `.font(.system(size: quoteAuthorSize, weight: .semibold))`
+- **`kudos-ao3-reader/Features/Search/AO3FilterPanel.swift:152`**
+  - **Old**: `.font(.system(size: 12.5))`
+  - **New**: `.font(.system(size: refineMatchSize))`
+- **`kudos-ao3-reader/Features/Search/AO3FilterPanel.swift:643`**
+  - **Old**: `.font(.system(size: 12))`
+  - **New**: `.font(.system(size: sortHintSize))`
+- **`kudos-ao3-reader/Features/Search/AO3WorkRow.swift:421`**
+  - **Old**: `.font(.system(size: 11.5))`
+  - **New**: `.font(.system(size: bookmarkMetadataSize))`
+- **`kudos-ao3-reader/Features/Search/FandomFamilyRows.swift:71`**
+  - **Old**: `.font(.system(size: 11, weight: .medium, design: .monospaced))`
+  - **New**: `.font(.system(size: allTagsSize, weight: .medium, design: .monospaced))`
+- **`kudos-ao3-reader/Features/Search/FandomListFilterSheet.swift:120`**
+  - **Old**: `.font(.system(size: 11.5))`
+  - **New**: `.font(.system(size: captionSize))`
+- **`kudos-ao3-reader/Features/Search/FandomListFilterSheet.swift:149`**
+  - **Old**: `.font(.system(size: 15))`
+  - **New**: `.font(.system(size: toggleTitleSize))`
+- **`kudos-ao3-reader/Features/Search/FandomListFilterSheet.swift:152`**
+  - **Old**: `.font(.system(size: 12))`
+  - **New**: `.font(.system(size: toggleDetailSize))`
+- **`kudos-ao3-reader/Features/Search/FandomListFilterSheet.swift:170`**
+  - **Old**: `.font(.system(size: 16, weight: .semibold))`
+  - **New**: `.font(.system(size: applyButtonSize, weight: .semibold))`
+- **`kudos-ao3-reader/Features/Search/FilterRangeSlider.swift:74`**
+  - **Old**: `.font(.system(size: 12))`
+  - **New**: `.font(.system(size: fieldTitleSize))`
+- **`kudos-ao3-reader/Features/Search/FilterRangeSlider.swift:79`**
+  - **Old**: `.font(.system(size: 14, design: .monospaced))`
+  - **New**: `.font(.system(size: fieldValueSize, design: .monospaced))`
+- **`kudos-ao3-reader/Features/Search/MediaBrowserView.swift:182`**
+  - **Old**: `.font(.system(size: 13.5, weight: .medium))`
+  - **New**: `.font(.system(size: openWebsiteSize, weight: .medium))`
+- **`kudos-ao3-reader/Features/Search/MediaBrowserView.swift:213`**
+  - **Old**: `.font(.system(size: 15))`
+  - **New**: `.font(.system(size: categoryNameSize))`
+- **`kudos-ao3-reader/Features/Search/MediaBrowserView.swift:307`**
+  - **Old**: `.font(.system(size: 14, weight: .semibold))`
+  - **New**: `.font(.system(size: jumpBackInTitleSize, weight: .semibold))`
+- **`kudos-ao3-reader/Features/Search/MediaBrowserView.swift:314`**
+  - **Old**: `.font(.system(size: 10.5))`
+  - **New**: `.font(.system(size: jumpBackInCountSize))`
+- **`kudos-ao3-reader/Features/Search/SaveSearchSheet.swift:36`**
+  - **Old**: `.font(.system(size: 17))`
+  - **New**: `.font(.system(size: nameFieldSize))`
+- **`kudos-ao3-reader/Features/Search/SaveSearchSheet.swift:43`**
+  - **Old**: `.font(.system(size: 11.5))`
+  - **New**: `.font(.system(size: footnoteSize))`
+- **`kudos-ao3-reader/Features/Search/SaveSearchSheet.swift:53`**
+  - **Old**: `.font(.system(size: 12.5))`
+  - **New**: `.font(.system(size: emptySummarySize))`
+- **`kudos-ao3-reader/Features/Search/SaveSearchSheet.swift:72`**
+  - **Old**: `.font(.system(size: 11.5))`
+  - **New**: `.font(.system(size: footnoteSize))`
+- **`kudos-ao3-reader/Features/Search/SaveSearchSheet.swift:151`**
+  - **Old**: `.font(.system(size: 12))`
+  - **New**: `.font(.system(size: chipTextSize))`
+- **`kudos-ao3-reader/Features/Search/SearchPaginationBar.swift:134`**
+  - **Old**: `.font(.system(size: 14, weight: .semibold))`
+  - **New**: `.font(.system(size: currentPageSize, weight: .semibold))`
+- **`kudos-ao3-reader/Features/Search/SearchPaginationBar.swift:141`**
+  - **Old**: `.font(.system(size: 12, weight: .medium, design: .monospaced))`
+  - **New**: `.font(.system(size: totalPagesSize, weight: .medium, design: .monospaced))`
+- **`kudos-ao3-reader/Features/Search/SearchPaginationBar.swift:337`**
+  - **Old**: `.font(.system(size: 16, weight: .semibold))`
+  - **New**: `.font(.system(size: headerTitleSize, weight: .semibold))`
+- **`kudos-ao3-reader/Features/Search/SearchPaginationBar.swift:370`**
+  - **Old**: `.font(.system(size: 16))`
+  - **New**: `.font(.system(size: fieldInputSize))`
+- **`kudos-ao3-reader/Features/Search/SearchPaginationBar.swift:386`**
+  - **Old**: `.font(.system(size: 12.5, weight: .medium, design: .monospaced))`
+  - **New**: `.font(.system(size: totalPagesSize, weight: .medium, design: .monospaced))`
+- **`kudos-ao3-reader/Features/Search/SearchPaginationBar.swift:409`**
+  - **Old**: `.font(.system(size: 15, weight: .semibold))`
+  - **New**: `.font(.system(size: tileNumberSize, weight: .semibold))`
+- **`kudos-ao3-reader/Features/Search/SearchPaginationBar.swift:452`**
+  - **Old**: `.font(.system(size: 14, weight: .medium))`
+  - **New**: `.font(.system(size: endButtonSize, weight: .medium))`
+
+## Left alone
+
+- `kudos-ao3-reader/Features/Search/SearchPaginationBar.swift:153`: `.font(.system(size: 10, weight: .semibold))` — SF Symbol image (`Image(systemName: "chevron.up")`)
+- `kudos-ao3-reader/Features/Search/SearchPaginationBar.swift:186`: `.font(.system(size: 13, weight: .semibold))` — SF Symbol image (`Image(systemName: isBackward ? "chevron.backward" : "chevron.forward")`)
+- `kudos-ao3-reader/Features/Search/SearchPaginationBar.swift:360`: `.font(.system(size: 10.5, weight: .bold))` — Small-caps kicker / label in `sectionLabel` fixed by design
+- `kudos-ao3-reader/Features/Search/FandomListFilterSheet.swift:138`: `.font(.system(size: 11, weight: .semibold))` — Small-caps kicker / label in `sectionLabel` fixed by design
+- `kudos-ao3-reader/Features/Search/MediaBrowserView.swift:185`: `.font(.system(size: 11, weight: .semibold))` — SF Symbol image (`Image(systemName: "chevron.right")`)
+- `kudos-ao3-reader/Features/Comments/CommentMarkup.swift:324`: `.font(.system(size: 16, weight: .bold, design: .serif))` — Fixed icon glyph (`Text("B")`) inside fixed 34x34 pt button frame in `CommentFormatBarButtonFace`
+- `kudos-ao3-reader/Features/Comments/CommentMarkup.swift:326`: `.font(.system(size: 16, design: .serif))` — Fixed icon glyph (`Text("I")`) inside fixed 34x34 pt button frame in `CommentFormatBarButtonFace`
+- `kudos-ao3-reader/Features/Comments/CommentMarkup.swift:328`: `.font(.system(size: 16, design: .serif))` — Fixed icon glyph (`Text("U")`) inside fixed 34x34 pt button frame in `CommentFormatBarButtonFace`
+- `kudos-ao3-reader/Features/Comments/CommentMarkup.swift:330`: `.font(.system(size: 16, design: .serif))` — Fixed icon glyph (`Text("S")`) inside fixed 34x34 pt button frame in `CommentFormatBarButtonFace`
+- `kudos-ao3-reader/Features/Comments/CommentMarkup.swift:332`: `.font(.system(size: 18))` — SF Symbol image (`Image(systemName: tag.symbol)`)
+- `kudos-ao3-reader/Features/Comments/CommentMarkup.swift:334`: `.font(.system(size: 18))` — SF Symbol image (`Image(systemName: "ellipsis")`)
+- `kudos-ao3-reader/Features/Comments/CommentMarkup.swift:532`: `.font(.system(size: 16, weight: .bold, design: .serif))` — Fixed icon glyph (`Text("B")`) inside fixed 19 pt height container in `CommentFormatTileFace`
+- `kudos-ao3-reader/Features/Comments/CommentMarkup.swift:534`: `.font(.system(size: 16, design: .serif))` — Fixed icon glyph (`Text("I")`) inside fixed 19 pt height container in `CommentFormatTileFace`
+- `kudos-ao3-reader/Features/Comments/CommentMarkup.swift:536`: `.font(.system(size: 16, design: .serif))` — Fixed icon glyph (`Text("U")`) inside fixed 19 pt height container in `CommentFormatTileFace`
+- `kudos-ao3-reader/Features/Comments/CommentMarkup.swift:538`: `.font(.system(size: 16, design: .serif))` — Fixed icon glyph (`Text("S")`) inside fixed 19 pt height container in `CommentFormatTileFace`
+- `kudos-ao3-reader/Features/Comments/CommentMarkup.swift:544`: `.font(.system(size: 11, design: .serif))` — Fixed icon glyph (`Text("Aa")`) inside fixed 19 pt height container in `CommentFormatTileFace`
+- `kudos-ao3-reader/Features/Comments/CommentMarkup.swift:546`: `.font(.system(size: 12, design: .monospaced))` — Fixed icon glyph (`Text("</>")`) inside fixed 19 pt height container in `CommentFormatTileFace`
+- `kudos-ao3-reader/Features/Comments/CommentMarkup.swift:548`: `.font(.system(size: 15, weight: .bold))` — Fixed icon glyph (`Text("H")`) inside fixed 19 pt height container in `CommentFormatTileFace`
+- `kudos-ao3-reader/Features/Comments/CommentMarkup.swift:551`: `.font(.system(size: 15, weight: .medium))` — SF Symbol image (`Image(systemName: tag.symbol)`)
+- `kudos-ao3-reader/Features/Comments/CommentMarkup.swift:557`: `.font(.system(size: 15, design: .serif))` — Fixed icon glyph (`Text("A")`) inside fixed 19 pt height container in `scriptedTwo`
+- `kudos-ao3-reader/Features/Comments/CommentMarkup.swift:559`: `.font(.system(size: 9, design: .serif))` — Fixed icon glyph (`Text("2")`) inside fixed 19 pt height container in `scriptedTwo`
+- `kudos-ao3-reader/Features/Comments/CommentThreadRow.swift:1489`: `.font(.system(size: 15))` — SF Symbol image (`Image(systemName: "ellipsis")` in `CommentOverflowButtonLabel`)
+- `kudos-ao3-reader/Features/Comments/CommentsView.swift:832`: `.font(.system(size: 14, weight: .semibold))` — SF Symbol image (`Image(systemName: auth.isLoggedIn ? "pencil" : "person.crop.circle.badge.questionmark")`)
+- `kudos-ao3-reader/Features/Account/AO3CollectionItemsView.swift:716`: `.font(.system(size: 8, weight: .bold))` — SF Symbol image (`Image(systemName: "chevron.down")`)
+- `kudos-ao3-reader/Features/Account/AO3CollectionsList.swift:728`: `.font(.system(size: 12, weight: .semibold))` — SF Symbol image (`Image(systemName: "chevron.right")`)
+- `kudos-ao3-reader/Features/Account/AO3CollectionsList.swift:757`: `.font(.system(size: 16, weight: .semibold))` — SF Symbol image (`Image(systemName: "archivebox")`)
+- `kudos-ao3-reader/Features/Account/AO3PreferencesView.swift:212`: `.font(.system(size: 10, weight: .semibold))` — SF Symbol image (`Image(systemName: isCollapsed ? "chevron.right" : "chevron.down")`)
+- `kudos-ao3-reader/Features/Account/AO3CollectionDetailView.swift:265`: `.font(.system(size: 10, weight: .bold, design: .monospaced))` — Small-caps kicker / badge (`ANON`) fixed by design
+- `kudos-ao3-reader/Features/Account/AO3CollectionDetailView.swift:632`: `.font(.system(size: 15, weight: .bold))` — Text inside fixed-size avatar tile (monogram initial inside fixed 30x30 pt frame in `AO3CollectionPersonRow`)
+- `kudos-ao3-reader/Features/Account/AccountComponents.swift:274`: `.font(.system(size: 14, weight: .semibold))` — SF Symbol image (`Image(systemName: "ellipsis")` in `AccountProfileCard`)
+- `kudos-ao3-reader/Features/Account/AccountComponents.swift:412`: `.font(.system(size: 12, weight: .semibold))` — SF Symbol image (`Image(systemName: systemImage)` in `AccountIconSquare`)
+- `kudos-ao3-reader/Features/Authors/AuthorProfileComponents.swift:201`: `.font(.system(size: 10, weight: .bold))` — Small-caps kicker (`primaryFandom.uppercased()`) fixed by design
+- `kudos-ao3-reader/Features/Authors/AuthorProfileComponents.swift:479`: `.font(.system(size: 4))` — SF Symbol bullet image (`Image(systemName: "circle.fill")` in `BookmarkTagPill`)
+
+## Needs layout work
+
+- `kudos-ao3-reader/Features/Comments/CommentsView.swift:834`: Button label "Write a comment" / "Log in to comment" scaled with `writeCommentButtonSize` is inside a fixed-height container `.frame(height: 44)` (line 842); at large Dynamic Type sizes the label may clip vertically.
+- `kudos-ao3-reader/Features/Account/AO3PreferencesView.swift:549`: Toast banner text scaled with `bannerTextSize` is inside a fixed-height container `.frame(height: 44)` (line 556); at large Dynamic Type sizes the banner text may clip vertically.

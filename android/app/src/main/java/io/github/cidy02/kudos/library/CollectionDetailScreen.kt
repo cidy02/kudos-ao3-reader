@@ -214,6 +214,13 @@ fun CollectionDetailScreen(
         }
     }
 
+    // Remove acts on what the filter still shows (audit A12-5, the same fault on iOS).
+    val visibleIds = remember(visibleWorks) { visibleWorks.mapTo(linkedSetOf()) { it.id } }
+    LaunchedEffect(visibleIds, selectedIds) {
+        val seen = LibrarySelection.visible(selectedIds, visibleIds)
+        if (seen.size != selectedIds.size) selectedIds = seen
+    }
+
     val tallyLine = remember(works.size, collection?.keepsWorksOffline) {
         val count = works.size
         val base = "$count ${if (count == 1) "work" else "works"}"

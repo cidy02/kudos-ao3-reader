@@ -1,4 +1,4 @@
-# Brief 3bs: Android's backup merge follows iOS's in six more places (audit A3)
+# Brief 3bs: Android's backup merge follows iOS's in seven more places (audits A3 and A12)
 
 Rules (binding): work only in this worktree; don't commit, push, or switch branches; never sign in
 and never contact archiveofourown.org; no stub files; no helper scripts or `.orig` files left
@@ -28,7 +28,7 @@ A3-2 are already fixed: read how, in `backup/BackupMergeService.kt`, and their t
 `android/app/src/test/java/io/github/cidy02/kudos/backup/` (how a merge is tested:
 `BackupMergeService.merge(current, backup, mode)` on snapshots, no database needed for most).
 
-## The six items
+## The seven items
 
 For each: quote iOS's lines and Android's lines in the result, say whether the audit's claim
 is true (it was written by another agent: **verify it, do not assume it**), then fix it or
@@ -63,6 +63,20 @@ say why not.
    replaces it when the archive wins), and two live annotations with the same work, kind and
    locator (iOS `dedupeSamePassageAnnotations` collapses them). For each: is it true, what
    can a reader lose, and fix it only if iOS's rule is unambiguous in the code.
+
+7. **A deletion made on another device removes the copy already here**, for highlights,
+   notes and bookmarks in a book (`readingAnnotation`), queue memberships, and saved AO3
+   links (audit A12-2 and A12-3: the same hole on both apps). Today the merge only declines
+   to add such a row back; the copy this device already has stays, and its next export
+   publishes it again, so the deletion never settles. Saved searches, reading sessions,
+   favourites and fandom watermarks already have the second pass (find
+   "iOS `applyTombstonesToExisting`" in `BackupMergeService.kt`): do the same for these
+   three kinds, with the same resolution function each incoming loop uses, the row's own
+   modified time (a saved link: its date added) as the clock, and **never in Replace
+   Library** (quote iOS's comment on why). A saved link is matched by address and keeps its
+   own id: when a trusted tombstone suppresses an incoming link, also remove the local link
+   with that address, as the audit describes, and say what clock you compared. iOS gets the
+   same change separately (T-364); the two must agree, so quote the Swift you matched.
 
 **Not in this brief** (decided, or waiting for the owner): A3-6 (an unknown tombstone type
 fails the merge: a security test pins it, owner question 18), A3-9 (test quality: fix the two
