@@ -16,6 +16,17 @@ import SwiftUI
 struct PromptMemeView: View {
     let collectionSlug: String
     var collectionTitle: String = ""
+    /// Whether to ask AO3 for the close date at all. It is on the challenge's
+    /// settings form, which AO3 serves to the collection's owners and refuses
+    /// to everyone else, moderators included; the callers already know.
+    var viewerIsOwner: Bool = false
+
+    /// Whether this load asks AO3 for the close date: only for an owner (AO3
+    /// refuses the settings form to anyone else), only until a date is known,
+    /// and once per opening or refresh. Android follows the same rule.
+    nonisolated static func readsSchedule(viewerIsOwner: Bool, attempted: Bool, hasDate: Bool) -> Bool {
+        viewerIsOwner && !attempted && !hasDate
+    }
 
     @Environment(AO3AuthService.self) private var auth
     @Environment(ThemeManager.self) private var theme
@@ -35,6 +46,8 @@ struct PromptMemeView: View {
     @State private var totalPages: Int = 1
     @State private var filterSelection: PromptFilter = .all
     @State private var closeDateText: String = ""
+    /// Set once the close date has been asked for, whatever came back.
+    @State private var scheduleAttempted = false
     @State private var phase: Phase = .idle
     @State private var promptInFlight: Int?
     @State private var actionErrorMessage: String?
@@ -95,7 +108,11 @@ struct PromptMemeView: View {
             }
         }
         .task { await loadPromptsIfNeeded() }
-        .refreshable { await loadPrompts(page: 1) }
+        .refreshable {
+            // A refresh is the reader's way to try for a date that did not load.
+            scheduleAttempted = false
+            await loadPrompts(page: 1)
+        }
             .screenTint(palette)
     }
 
@@ -492,15 +509,24 @@ private extension PromptMemeView {
         // Best-effort schedule read, same fields Gift Exchange calls sign-ups —
         // AO3's prompt_meme form reuses `signups_open_at`/`signups_close_at` for
         // when prompts and claims are open, so this is genuinely the close date,
-        // not a mislabelled sign-up date. Fetched once; it doesn't change page to
-        // page or after a claim/release.
-        if closeDateText.isEmpty,
-           let settingsRequest = try? auth.authenticatedRequest(
-               for: AO3ChallengeURL.promptMemeEdit(slug: collectionSlug)
-           ),
-           let form = try? await AO3Client.shared.challengeSettings(slug: collectionSlug, request: settingsRequest),
-           let closeDate = form.settings.signupsCloseAt.dateText {
-            closeDateText = "open until \(closeDate)"
+        // not a mislabelled sign-up date. Asked for once: it doesn't change page
+        // to page or after a claim/release. This used to test only whether a
+        // date had arrived, so a lookup that could not succeed (anyone but an
+        // owner, or a challenge with no close date) was sent again with every
+        // page and every claim: two signed-in requests each time, for nothing.
+        if Self.readsSchedule(
+            viewerIsOwner: viewerIsOwner, attempted: scheduleAttempted, hasDate: !closeDateText.isEmpty
+        ) {
+            scheduleAttempted = true
+            if let settingsRequest = try? auth.authenticatedRequest(
+                for: AO3ChallengeURL.promptMemeEdit(slug: collectionSlug)
+            ),
+                let form = try? await AO3Client.shared.challengeSettings(
+                    slug: collectionSlug, request: settingsRequest
+                ),
+                let closeDate = form.settings.signupsCloseAt.dateText {
+                closeDateText = "open until \(closeDate)"
+            }
         }
 
         do {
