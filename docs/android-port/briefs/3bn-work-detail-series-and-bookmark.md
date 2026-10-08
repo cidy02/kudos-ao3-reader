@@ -95,3 +95,16 @@ at `isAccessibilityFontScale()`.
   works already held; Cancel after the second work); the reads made, counted, and their
   pacing with a virtual clock; the threshold coming from the setting and not a constant; the
   bookmark sheet's fields reaching the existing write unchanged; nothing removed.
+
+## Added 2026-10-08 (from audits A8 and A4, and from landing 3bm)
+
+- Audit A8 found the same series controls missing from the queue sheet: iOS's
+  `Features/Library/ReadingQueues.swift` (about lines 500-535) has "Add Series to Selected
+  Queues", **"Cancel Series Addition"** while it runs, the completion line, and the footnote
+  "Kudos adds series works only after you choose Add Series, one work at a time." Android's
+  `works/WorkDetailScreen.kt` has the first only. Build the rest with this brief.
+- The bookmark write's verdict: AO3's validation list (`#error li`) is a refusal, read by
+  `AO3WriteFormParser.writeErrorMessage`; the sheet stays open with what was typed and shows
+  AO3's reason (notes over 5,000 characters is the case to test).
+- A row with a long label shows a short value as its `trailing` content, not as `value`. No
+  stock Material `Button`, progress ring colours or unstyled `Text`.
