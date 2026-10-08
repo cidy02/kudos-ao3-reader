@@ -6,6 +6,8 @@ import io.github.cidy02.kudos.auth.MemorySessionStore
 import io.github.cidy02.kudos.auth.testSession
 import io.github.cidy02.kudos.network.ao3.*
 import io.github.cidy02.kudos.network.ao3.account.*
+import io.github.cidy02.kudos.network.ao3.writes.AO3WriteRepository
+import io.github.cidy02.kudos.network.ao3.writes.DefaultAO3AuthenticatedClient
 import java.io.File
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
@@ -29,8 +31,13 @@ class AO3TagSetTest {
         assertTrue(edit.isVisible)
         assertTrue(edit.isNominated)
         assertEquals(listOf(2, 3, 2, 4), AO3TagSetField.entries.map { edit.nominationLimits[it] })
-        assertEquals(listOf("The Lantern Archipelago, Cloudbound Courier", "Mira Vale, Oren Reed",
-            "Mira Vale/Oren Reed", "Winter Letters, Found Family"), AO3TagSetField.entries.map { edit.tagnames[it] })
+        assertTrue(edit.tagnames.values.all(String::isEmpty))
+        assertEquals(AO3TagSetUrls.page(42), edit.actionUrl)
+        assertEquals("put", edit.httpMethodOverride)
+        assertNull(base.actionUrl)
+        // A signed-in POST never follows a form address that is not AO3's own.
+        assertNull(AO3TagSetParser().parse(tagSetFixture("ao3_demo_tag_set_42_edit")
+            .replace("action=\"/tag_sets/42\"", "action=\"https://example.com/tag_sets/42\""), 42).actionUrl)
         assertEquals(base.counts, edit.counts)
         assertEquals("Paper Harbor", base.reviewQueue.single().tagName)
         val queue = parser.parseNominations(tagSetFixture("ao3_demo_tag_set_42_nominations"))
@@ -89,8 +96,8 @@ class AO3TagSetTest {
 
     @Test fun ownerAndOtherViewerEachMakeExactlyThreeSequentialAuthenticatedReadsAndRefreshRepeatsOnlyThose() = runTest {
         for ((id, username) in listOf(42 to "AO3_Reader", 44 to "Other_Viewer")) {
-            val (_, client, repository) = tagSetSetup(id, username)
-            val model = AO3TagSetState(id, repository)
+            val (auth, client, repository) = tagSetSetup(id, username)
+            val model = AO3TagSetState(id, repository, tagSetWrites(client, auth))
             model.load()
             assertEquals(tagSetReadUrls(id), client.gets)
             assertEquals(3, client.authenticatedReads.size)
@@ -105,8 +112,8 @@ class AO3TagSetTest {
     }
 
     @Test fun signedOutMakesExactlyOnePublicClientGetAndNoAuthenticatedReadIncludingOnRetry() = runTest {
-        val (_, client, repository) = tagSetSetup(42, username = null)
-        val model = AO3TagSetState(42, repository)
+        val (auth, client, repository) = tagSetSetup(42, username = null)
+        val model = AO3TagSetState(42, repository, tagSetWrites(client, auth))
         model.load()
         assertEquals(listOf(AO3TagSetUrls.page(42)), client.publicReads)
         assertTrue(client.authenticatedReads.isEmpty())
@@ -120,10 +127,10 @@ class AO3TagSetTest {
 
     @Test fun optionalReadFailuresKeepEarlierValuesAndNeverHideTheScreenOrSkipTheNextRead() = runTest {
         for (failed in listOf("edit", "nominations", "both")) {
-            val (_, client, repository) = tagSetSetup()
+            val (auth, client, repository) = tagSetSetup()
             if (failed != "nominations") client.replies[AO3TagSetUrls.edit(42)] = AO3Result.Failure(AO3Error.Forbidden)
             if (failed != "edit") client.replies[AO3TagSetUrls.nominations(42)] = AO3Result.Failure(AO3Error.Server(503))
-            val model = AO3TagSetState(42, repository)
+            val model = AO3TagSetState(42, repository, tagSetWrites(client, auth))
             model.load()
             assertEquals(tagSetReadUrls(42), client.gets)
             val data = model.state.value.data!!
@@ -133,7 +140,7 @@ class AO3TagSetTest {
             assertNull(model.state.value.failure)
             assertEquals(0, client.posts)
         }
-        val (_, client, repository) = tagSetSetup(44, "Other_Viewer")
+        val (auth, client, repository) = tagSetSetup(44, "Other_Viewer")
         val result = repository.getTagSet(44) as AO3Result.Success<AO3TagSetSnapshot>
         assertEquals(3, result.value.totalTagCount)
         assertEquals(2, result.value.reviewQueue.size)
@@ -142,9 +149,9 @@ class AO3TagSetTest {
     }
 
     @Test fun requiredFailureStopsAfterOneReadAndTryAgainCanLoad() = runTest {
-        val (_, client, repository) = tagSetSetup()
+        val (auth, client, repository) = tagSetSetup()
         client.replies[AO3TagSetUrls.page(42)] = AO3Result.Failure(AO3Error.Forbidden)
-        val model = AO3TagSetState(42, repository)
+        val model = AO3TagSetState(42, repository, tagSetWrites(client, auth))
         model.load()
         assertNull(model.state.value.data)
         assertEquals("AO3 refused the request (HTTP 403). Wait a while before trying again.", model.state.value.failure)
@@ -160,15 +167,15 @@ class AO3TagSetTest {
         for (url in tagSetReadUrls(42)) {
             val (auth, client, repository) = tagSetSetup()
             client.afterGet = { if (it == url) auth.logout() }
-            val model = AO3TagSetState(42, repository)
+            val model = AO3TagSetState(42, repository, tagSetWrites(client, auth))
             try { model.load(); fail("Expected cancellation") } catch (_: kotlinx.coroutines.CancellationException) { }
             assertNull(model.state.value.data)
             assertEquals(tagSetReadUrls(42).take(tagSetReadUrls(42).indexOf(url) + 1), client.gets)
             assertEquals(0, client.posts)
         }
-        val (_, client, repository) = tagSetSetup()
+        val (auth, client, repository) = tagSetSetup()
         client.hold = true
-        val model = AO3TagSetState(42, repository)
+        val model = AO3TagSetState(42, repository, tagSetWrites(client, auth))
         val load = async { model.load() }
         client.entered.await()
         assertTrue(model.state.value.loading)
@@ -196,6 +203,13 @@ internal class TagSetReadClient(private val id: Int) : AO3Client, AO3FormPostCli
     val authenticatedReads = mutableListOf<String>()
     val replies = mutableMapOf<String, AO3Result<AO3HttpResponse>>()
     var posts = 0
+    val postRequests = mutableListOf<TagSetPost>()
+    var postReply: AO3Result<AO3HttpResponse> = AO3Result.Success(AO3HttpResponse(
+        AO3TagSetUrls.page(id), 200, emptyMap(), "<div class='flash notice'>Saved.</div>"))
+    var holdPost = false
+    val postEntered = CompletableDeferred<Unit>()
+    val postRelease = CompletableDeferred<Unit>()
+    var afterPost: suspend () -> Unit = {}
     var hold = false
     val entered = CompletableDeferred<Unit>()
     val release = CompletableDeferred<Unit>()
@@ -221,6 +235,15 @@ internal class TagSetReadClient(private val id: Int) : AO3Client, AO3FormPostCli
     }
     override suspend fun postForm(url: String, formFields: List<Pair<String, String>>, headers: Map<String, String>): AO3Result<AO3HttpResponse> {
         posts++
-        throw AssertionError("Tag set is read only; POST is forbidden")
+        check(headers["Cookie"].orEmpty().isNotEmpty())
+        postRequests += TagSetPost(url, formFields, headers)
+        postEntered.complete(Unit)
+        if (holdPost) postRelease.await()
+        afterPost()
+        return postReply
     }
 }
+
+internal data class TagSetPost(val url: String, val fields: List<Pair<String, String>>, val headers: Map<String, String>)
+internal fun tagSetWrites(client: TagSetReadClient, auth: AO3AuthRepository) =
+    AO3WriteRepository(DefaultAO3AuthenticatedClient(client, client, auth))

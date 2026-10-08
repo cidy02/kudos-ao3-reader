@@ -1,6 +1,8 @@
 package io.github.cidy02.kudos.network.ao3.account
 
 import io.github.cidy02.kudos.network.ao3.AO3OverloadDetector
+import io.github.cidy02.kudos.network.ao3.AO3RedirectCookieRelay
+import io.github.cidy02.kudos.network.ao3.writes.AO3WriteUrls
 import org.jsoup.Jsoup
 
 enum class AO3TagSetField(val wireName: String, val rowLabel: String, val nominationLabel: String, val editorLabel: String) {
@@ -20,7 +22,7 @@ data class AO3TagNomination(
     val parentTagName: String = ""
 )
 
-/** Remote read values only; not a persisted record or a writable form. */
+/** Remote form/read values; never persisted in Room or backups. */
 data class AO3TagSetSnapshot(
     val id: Int,
     val title: String,
@@ -29,10 +31,22 @@ data class AO3TagSetSnapshot(
     val counts: Map<AO3TagSetField, Int>,
     val nominationLimits: Map<AO3TagSetField, Int>,
     val tagnames: Map<AO3TagSetField, String>,
-    val reviewQueue: List<AO3TagNomination>
+    val reviewQueue: List<AO3TagNomination>,
+    val actionUrl: String? = null,
+    val httpMethodOverride: String? = null
 ) {
     val totalTagCount get() = counts.values.sum()
+
+    fun saveParameters(fields: Map<AO3TagSetField, String>, token: String): List<Pair<String, String>> = buildList {
+        add("authenticity_token" to token)
+        httpMethodOverride?.takeIf { it.isNotEmpty() }?.let { add("_method" to it) }
+        AO3TagSetField.entries.forEach { add(it.tagnamesParameter to fields[it].orEmpty()) }
+    }
 }
+
+internal val AO3TagSetField.tagnamesParameter get() = "owned_tag_set[tag_set_attributes][${wireName}_tagnames_to_add]"
+internal fun AO3TagNomination.rejectParameter(): Pair<String, String> =
+    "${field.wireName}_reject_${tagName.replace("[", "#LBRACKET").replace("]", "#RBRACKET")}" to "1"
 
 object AO3TagSetUrls {
     fun page(id: Int) = ChallengeSettingsDestinations.tagSetView(id)
@@ -71,7 +85,10 @@ class AO3TagSetParser {
                 val area = form?.select("textarea")?.firstOrNull { it.attr("name") == name }?.text().orEmpty().trim()
                 area.ifEmpty { input(name) }
             },
-            parseNominations(html)
+            parseNominations(html),
+            // The signed-in POST goes to this address: AO3's own hosts only, as Unsubscribe's captured action.
+            form?.attr("action")?.let(AO3WriteUrls::absoluteUrl)?.takeIf { AO3RedirectCookieRelay.isTrustedUrl(it) },
+            input("_method").takeIf { it.isNotEmpty() }
         )
     }
 
