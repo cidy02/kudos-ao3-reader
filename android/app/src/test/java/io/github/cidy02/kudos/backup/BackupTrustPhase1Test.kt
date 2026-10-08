@@ -250,7 +250,10 @@ class BackupTrustPhase1Test {
         val restored = database.workDao().getById(WORK_J)
         assertEquals(false, restored?.isDeleted)
         assertEquals(null, restored?.deletedAt)
-        assertEquals("J from later backup", restored?.title)
+        // The work comes back; its fields are then decided by the clocks, as iOS's `apply`
+        // does. This archive's copy is dated before the row was parked, so the row's own
+        // title stays (audit A3-2: the archive row used to be copied over it whole).
+        assertEquals("Keep me out of the snapshot", restored?.title)
         assertEquals(1, laterSummary.worksUpdated)
         assertTrue(database.syncTombstoneDao().getAll().isEmpty())
     }

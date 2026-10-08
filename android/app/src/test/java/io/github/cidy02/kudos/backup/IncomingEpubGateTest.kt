@@ -8,6 +8,7 @@ import java.time.Instant
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 import org.junit.Assert.assertArrayEquals
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -94,6 +95,33 @@ class IncomingEpubGateTest {
 
         assertTrue(result.epubFilesToWriteByWorkId.isEmpty())
         assertTrue(result.snapshot.works.single().hasEpub)
+    }
+
+    /** iOS `apply`: local "preserved" is the floor, whatever the archive's clock says (audit A3-1). */
+    @Test
+    fun aWinningArchiveNeverDemotesAPreservedWork() {
+        val result = BackupMergeService.merge(
+            current = BackupLibrarySnapshot(works = listOf(local(status = "preserved")), epubWorkIds = setOf(WORK)),
+            backup = archive(incoming, status = "notPreserved")
+        )
+        val work = result.snapshot.works.single()
+        assertEquals("the archive's clock won", "Archived", work.title)
+        assertEquals("preserved", work.epubPreservationStatusRaw)
+        assertTrue(result.epubFilesToWriteByWorkId.isEmpty())
+        // The second pass is where the bytes were lost: still protected.
+        assertTrue(BackupMergeService.merge(result.snapshot, archive(incoming, status = "notPreserved"))
+            .epubFilesToWriteByWorkId.isEmpty())
+    }
+
+    /** File Merge returns a work from Recently Deleted and the clocks decide its fields (audit A3-2). */
+    @Test
+    fun fileMergeBringsBackADeletedWorkAndKeepsItsNewerState() {
+        val deleted = local(modified = AFTER_ARCHIVE).copy(isDeleted = true, deletedAt = AFTER_ARCHIVE, lastSpineIndex = 20)
+        val work = restore(deleted, hasFile = true, epub = incoming, mode = BackupImportMode.MERGE).snapshot.works.single()
+        assertFalse(work.isDeleted)
+        assertEquals(null, work.deletedAt)
+        assertEquals("Local", work.title)
+        assertEquals(20, work.lastSpineIndex)
     }
 
     @Test
@@ -188,7 +216,7 @@ class IncomingEpubGateTest {
         epubPreservationStatusRaw = status
     )
 
-    private fun archive(epub: ByteArray) = KudosBackupPackage(
+    private fun archive(epub: ByteArray, status: String? = null) = KudosBackupPackage(
         manifest = KudosBackupManifest(
             version = BackupVersion.CURRENT,
             exportedAt = "2026-03-01T00:00:00Z",
@@ -212,7 +240,8 @@ class IncomingEpubGateTest {
                     isComplete = true,
                     lastSpineIndex = 0,
                     lastScrollFraction = 0.0,
-                    lastModifiedAt = "2026-02-01T00:00:00Z"
+                    lastModifiedAt = "2026-02-01T00:00:00Z",
+                    epubPreservationStatusRaw = status
                 )
             ),
             settings = BackupSettingsPayload()

@@ -911,3 +911,10 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   refusal. Unsubscribe on a work page and Mark for later need AO3's notice or a redirect.
   iOS: T-362. Checked against otwarchive's source; never run against AO3.
   Reverse: `needsEvidence = false` in `AO3WriteRepository.toOutcome`'s two callers.
+
+## 2026-10-08: two backup merge rules brought to iOS's (audit A3)
+
+- Preservation never goes down in a merge: a local "preserved" stays, whatever the archive's
+  clock. File Merge of a work in Recently Deleted returns it and lets the clocks decide its
+  fields; the archive row is no longer copied over it. Both are iOS's `apply`.
+  Reverse: the two edits in `BackupMergeService.kt` marked "audit A3-1" and "audit A3-2".
