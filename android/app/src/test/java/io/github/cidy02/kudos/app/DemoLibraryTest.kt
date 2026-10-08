@@ -19,6 +19,8 @@ import io.github.cidy02.kudos.data.preferences.SettingsRepository
 import io.github.cidy02.kudos.files.WorkFileStore
 import io.github.cidy02.kudos.library.ReadingQueueRepository
 import io.github.cidy02.kudos.works.WorkRepository
+import io.github.cidy02.kudos.library.FavoriteScope
+import io.github.cidy02.kudos.library.ReadingAffinities
 import io.github.cidy02.kudos.library.LibraryHistoryGrouping
 import io.github.cidy02.kudos.library.ReadingAbandonment
 import io.github.cidy02.kudos.library.LibraryFilterState
@@ -108,6 +110,31 @@ class DemoLibraryTest {
         context.getSharedPreferences("ao3_subscription_watermarks", Context.MODE_PRIVATE).edit().clear().commit()
         context.getSharedPreferences("kudos_demo_fixtures", Context.MODE_PRIVATE).edit().clear().commit()
         tempDir.toFile().deleteRecursively()
+    }
+
+    @Test fun demoAffinityScopesHaveThreeRowsAndNoUnreadWithoutAddingWorksOrSessions() = runTest {
+        DemoLibrary.seed(database, workRepository, queueRepository, fileStore, clock = { fixedNow })
+        val count = database.workDao().getAll().size
+        suspend fun assertScopes() {
+            val snapshot = LibraryRepository(workRepository).observeSnapshot().first()
+            val state = LibraryQuery.buildState(snapshot, "", LibraryFilterState(), LibrarySort.Natural)
+            val summaries = ReadingAffinities.summaries(database.readingLogDao().observeSessions().first())
+            for (scope in listOf(FavoriteScope.Authors, FavoriteScope.Fandoms, FavoriteScope.Tags)) {
+                val rows = ReadingAffinities.forScope(scope, state.collectionMembers, summaries, ReadingAffinities.Order.Recent)
+                assertTrue("$scope needs three rows, has ${rows.map { it.name }}", rows.size >= 3)
+                assertTrue("$scope needs a no-unread row", rows.any { it.unreadInLibrary == 0 })
+            }
+        }
+        assertScopes()
+        assertTrue(database.readingLogDao().observeSessions().first().isEmpty())
+        // Recreate an installed demo from before this brief and run its additive upgrade.
+        val sodium = workRepository.observeLibraryWorks().first().first { it.title == "Sodium Lights" }
+        workRepository.upsert(sodium.copy(workFreeforms = emptyList()))
+        DemoLibrary.seed(database, workRepository, queueRepository, fileStore, clock = { fixedNow.plusSeconds(86_400) })
+        assertScopes()
+        assertEquals(count, database.workDao().getAll().size)
+        assertEquals(sodium.lastReadDate, workRepository.getWork(sodium.id)!!.lastReadDate)
+        assertEquals(listOf("Slow Burn"), workRepository.getWork(sodium.id)!!.workFreeforms)
     }
 
     @Test

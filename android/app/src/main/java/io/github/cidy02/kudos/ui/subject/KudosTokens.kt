@@ -114,6 +114,9 @@ data class KudosTokens(
     val tertiaryInk: Color,
     val separator: Color
 ) {
+    /** Shared favorite star, as on the existing work cards. */
+    val favoriteGold: Color get() = Color(0xFFFFC107)
+
     val scopePalette: SubjectPalette
         get() = theme.scopePalette(accent)
 

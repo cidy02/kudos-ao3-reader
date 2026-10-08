@@ -288,6 +288,12 @@ object DemoLibrary {
                         lastModifiedAt = changedAt, progressModifiedAt = changedAt))
                 }
             }
+            // Add only missing tags; keep demo row counts and every reading/user flag intact.
+            for (row in allWorks) {
+                val work = workRepository.getWork(row.id) ?: continue
+                val tagged = withDemoAffinityTags(work)
+                if (tagged != work) workRepository.upsert(tagged)
+            }
             seedRecentlyDeleted(database, workRepository, fileStore, clock)
             return
         }
@@ -303,6 +309,9 @@ object DemoLibrary {
             val lastReadDate = when {
                 sample.lastReadDaysAgo != null -> now.minusSeconds(sample.lastReadDaysAgo * 86_400L)
                 sample.progress != null -> now.minusSeconds(index.toLong() * 3_600L * 7L)
+                // A finished work was read: without a date it counted as never opened, and
+                // Favorites' Authors, Fandoms and Tags (which rank what was read) had two rows.
+                sample.finished -> now.minusSeconds((index + 12L) * 86_400L)
                 else -> null
             }
             val lastSpineIndex = if (sample.progress != null) 1 else 0
@@ -339,7 +348,7 @@ object DemoLibrary {
                 writePlaceholderEpub(work.id, work.title, fileStore)
             }
 
-            val savedWork = workRepository.upsert(withDemoListLinks(work))
+            val savedWork = workRepository.upsert(withDemoAffinityTags(withDemoListLinks(work)))
             seededWorks.add(savedWork)
         }
 
@@ -417,6 +426,19 @@ object DemoLibrary {
         }
 
         seedRecentlyDeleted(database, workRepository, fileStore, clock)
+    }
+
+    private fun withDemoAffinityTags(work: SavedWork): SavedWork {
+        if (work.workFreeforms.isNotEmpty() || work.workTags.isNotEmpty()) return work
+        val tag = when (work.title) {
+            "Sodium Lights", "Paper Cranes" -> "Slow Burn"
+            // One of them read (Lighthouse Hours is finished), so the tag has a row at all.
+            "Unanswered Is Not Unread", "Burn my heart, heed my eyes", "Lighthouse Hours" -> "Fix-It"
+            "Winter Garden" -> "Found Family"
+            "What the River Keeps" -> "Hurt/Comfort"
+            else -> return work
+        }
+        return work.copy(workFreeforms = listOf(tag))
     }
 
     private fun withDemoListLinks(work: SavedWork): SavedWork = when {
