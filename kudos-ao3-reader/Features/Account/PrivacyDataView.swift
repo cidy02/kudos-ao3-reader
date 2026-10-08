@@ -34,6 +34,8 @@ struct PrivacyDataView: View {
     @Environment(ThemeManager.self) private var theme
     @ScaledMetric(relativeTo: .headline) private var promiseTitleSize = 17
     @ScaledMetric(relativeTo: .body) private var promiseBodySize = 13
+    @ScaledMetric(relativeTo: .headline) private var voicePackTitleSize: CGFloat = 15
+    @ScaledMetric(relativeTo: .footnote) private var voicePackBodySize: CGFloat = 12.5
 
     /// Every live work, for the stored-on-device counts and the two bulk clears.
     /// Soft-deleted works are excluded here and again inside `LocalDataClearing`
@@ -421,14 +423,14 @@ struct PrivacyDataView: View {
     private var voicePackPanel: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text("Optional Voice Pack downloads stay separate from your reading data.")
-                .font(.system(size: 15, weight: .semibold))
+                .font(.system(size: voicePackTitleSize, weight: .semibold))
                 .fixedSize(horizontal: false, vertical: true)
             Text("Kudos never sends a work's text, spoken audio, your AO3 sign-in, saved works, "
                 + "reading history, usage information, or anything that identifies your account "
                 + "to the Voice Pack provider. The provider can see your IP address and basic "
                 + "details about the connection. Kudos tells you this before downloading a "
                 + "Voice Pack, and the installed voices stay on this device.")
-                .font(.system(size: 12.5))
+                .font(.system(size: voicePackBodySize))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -458,7 +460,7 @@ struct PrivacyDataView: View {
 
     private func footnote(_ text: String) -> some View {
         Text(text)
-            .font(.system(size: 12.5))
+            .font(.system(size: voicePackBodySize))
             .foregroundStyle(.secondary)
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)

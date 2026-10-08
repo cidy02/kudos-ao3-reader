@@ -116,6 +116,7 @@ struct AO3BookmarksWorksBrowser: View {
     @AppStorage("matureContentMode") private var matureMode: MaturePrivacyMode = .obscure
     @State private var pendingLocalDelete: SavedWork?
     @State private var pendingLocalRemoval: PendingLibraryRemoval?
+    @ScaledMetric(relativeTo: .caption) private var footerSize: CGFloat = 11.5
 
     private var shownEntries: [CanonicalWork] {
         entries.filter { entry in
@@ -226,7 +227,7 @@ struct AO3BookmarksWorksBrowser: View {
 
     private var footer: some View {
         Text(AO3BookmarksCopy.footer(currentPage: currentPage, totalPages: totalPages))
-            .font(.system(size: 11.5))
+            .font(.system(size: footerSize))
             .foregroundStyle(.secondary)
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)

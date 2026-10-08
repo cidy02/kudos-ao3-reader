@@ -169,6 +169,10 @@ struct AO3SeriesRow: View {
     let series: AO3SeriesSummary
     var presentation: WorkRow.Presentation = .standard
 
+    @ScaledMetric(relativeTo: .body) private var titleSize: CGFloat = 19
+    @ScaledMetric(relativeTo: .footnote) private var summarySize: CGFloat = 13.5
+    @ScaledMetric(relativeTo: .caption) private var metaSize: CGFloat = 11.5
+
     var body: some View {
         Group {
             if presentation == .ledger {
@@ -216,7 +220,7 @@ struct AO3SeriesRow: View {
                         .frame(width: 22, height: 2.5)
 
                     Text(series.title)
-                        .font(.system(size: 19, weight: .semibold))
+                        .font(.system(size: titleSize, weight: .semibold))
                         .foregroundStyle(.primary)
                         .padding(.top, 1)
                         .lineLimit(2)
@@ -225,7 +229,7 @@ struct AO3SeriesRow: View {
 
             if !series.summary.isEmpty {
                 Text(series.summary)
-                    .font(.system(size: 13.5))
+                    .font(.system(size: summarySize))
                     .lineSpacing(1.5)
                     .foregroundStyle(.secondary)
                     .lineLimit(3)
@@ -252,7 +256,7 @@ struct AO3SeriesRow: View {
                     Text(series.dateUpdated)
                 }
             }
-            .font(.system(size: 11.5))
+            .font(.system(size: metaSize))
             .foregroundStyle(.secondary)
 
             AO3AuthorBylineView(names: series.creatorNames, identities: series.creatorIdentities, compact: true)
@@ -397,6 +401,7 @@ struct AO3BookmarkFootnote: View {
     var showsStatus = false
 
     @Environment(ThemeManager.self) private var theme
+    @ScaledMetric(relativeTo: .caption) private var dateSize: CGFloat = 11.5
 
     private var palette: SubjectPalette {
         theme.appTheme.subjectPalette(
@@ -413,7 +418,7 @@ struct AO3BookmarkFootnote: View {
                     Spacer(minLength: 0)
                     if !bookmark.date.isEmpty {
                         Text(bookmark.date)
-                            .font(.system(size: 11.5))
+                            .font(.system(size: dateSize))
                             .foregroundStyle(.secondary)
                             .accessibilityLabel("Bookmarked \(bookmark.date)")
                     }
@@ -446,10 +451,11 @@ struct AO3BookmarkFootnote: View {
 private struct BookmarkTagPill: View {
     let text: String
     @Environment(ThemeManager.self) private var theme
+    @ScaledMetric(relativeTo: .footnote) private var tagTextSize: CGFloat = 13
 
     var body: some View {
         Text(text)
-            .font(.system(size: 13))
+            .font(.system(size: tagTextSize))
             .foregroundStyle(.primary)
             .padding(.horizontal, 11)
             .padding(.vertical, 6)
