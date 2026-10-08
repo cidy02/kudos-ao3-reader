@@ -63,6 +63,13 @@ class ShellChromeState {
         revisionState.intValue = revisionState.intValue + 1
     }
 
+    /** Shows the chrome again without touching where the content is. For a new screen on the same route. */
+    fun reveal(route: String) {
+        if (hiddenByRoute[route] != true) return
+        hiddenByRoute[route] = false
+        revisionState.intValue = revisionState.intValue + 1
+    }
+
     /**
      * Compose nested-scroll sign: a negative [consumedYPx] is a downward scroll
      * (content offset grows), the same convention as a collapsing toolbar.

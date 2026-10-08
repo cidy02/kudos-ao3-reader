@@ -43,7 +43,19 @@ class PushedShellChrome {
         showNewest()
     }
 
-    private fun showNewest() = screens.values.lastOrNull()?.invoke() ?: reset()
+    /**
+     * Which screen holds the row now. It changes when a screen takes over, across routes or
+     * inside one (an editor opened from a form). The shell watches it to bring back a row the
+     * previous holder had scrolled away, with Back and the newcomer's own buttons on it.
+     */
+    var holder by mutableStateOf<Any?>(null)
+        private set
+
+    private fun showNewest() {
+        val newest = screens.entries.lastOrNull()
+        holder = newest?.key
+        newest?.value?.invoke() ?: reset()
+    }
 
     private fun reset() {
         mounted = false

@@ -51,6 +51,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -153,6 +154,10 @@ fun MainScaffold(
     val isPushedSubject = !shell && !reader && hasSubjectHeader
 
     val activeRoute = if (reader) null else currentRoute
+    // A screen that takes over inside one route (an editor opened from a scrolled form) must start
+    // with its buttons showing: the row its predecessor scrolled away otherwise stayed away.
+    val pushedHolder = pushedChrome.holder
+    LaunchedEffect(pushedHolder) { if (pushedHolder != null) activeRoute?.let(chrome::reveal) }
     val chromeHidden = chrome.isHidden(activeRoute)
     val bridge = remember { ShellScrollBridge() }
     bridge.route = activeRoute
