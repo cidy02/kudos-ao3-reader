@@ -97,7 +97,7 @@ struct LibraryFilterCollisionCard: View {
                     Text("Clear all filters")
                         .font(.system(size: buttonLabelSize, weight: .semibold))
                         .frame(maxWidth: .infinity)
-                        .frame(height: 42)
+                        .frame(minHeight: 42)
                         .foregroundStyle(clearLabelColor)
                         .background(
                             Capsule().fill(themeManager.appTheme.errorColor)
@@ -110,7 +110,7 @@ struct LibraryFilterCollisionCard: View {
                     Text("Edit")
                         .font(.system(size: buttonLabelSize, weight: .medium))
                         .padding(.horizontal, 18)
-                        .frame(height: 42)
+                        .frame(minHeight: 42)
                         .foregroundStyle(.primary)
                         .overlay(
                             Capsule().strokeBorder(
