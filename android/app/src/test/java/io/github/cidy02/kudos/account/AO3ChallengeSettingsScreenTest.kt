@@ -18,9 +18,11 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34], application = Application::class, qualifiers = "w411dp-h1600dp")
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
 class AO3ChallengeSettingsScreenTest {
     @get:Rule val compose = createComposeRule()
     private lateinit var client: ChallengeReadClient
@@ -37,7 +39,7 @@ class AO3ChallengeSettingsScreenTest {
         if (meme) {
             client.replies[giftUrl] = AO3Result.Failure(AO3Error.NotFound)
             client.replies[profileUrl] = challengeResponse(profileUrl,
-                "<dl><dt>Tag set:</dt><dd><a href='/tag_sets/42'>Summer Prompt Tags</a></dd></dl>")
+                "<dl><dt>Tag set:</dt><dd><a href='/tag_sets/44'>Summer Prompt Tags</a></dd></dl>")
         }
         if (countFails) client.replies[signupUrl] = AO3Result.Failure(AO3Error.Forbidden)
         if (formFails) client.replies[giftUrl] = AO3Result.Failure(AO3Error.Forbidden)
@@ -54,7 +56,8 @@ class AO3ChallengeSettingsScreenTest {
                             opened = true
                         })
                     else AO3ChallengeSettingsScreen("winter_exchange", "Winter Exchange 2026", owner, repository,
-                        onOpenWeb = { browser += it }, onOpenExternal = { external += it })
+                        onOpenWeb = { browser += it }, onOpenExternal = { external += it },
+                        onOpenTagSet = { id, title -> native += Routes.ao3TagSet(id, title, isModerator = true) })
                 }
             }
         }
@@ -85,7 +88,9 @@ class AO3ChallengeSettingsScreenTest {
         compose.onAllNodesWithText("Assignments").filter(hasClickAction()).onFirst().performClick()
         compose.onNodeWithText("Defaults and pinch hits").performClick()
         click("Run matching")
-        assertEquals(listOf(giftUrl, ChallengeSettingsDestinations.tagSetView(42), ChallengeSettingsDestinations.tagSetView(43), signupUrl,
+        assertEquals(listOf(Routes.ao3ChallengeSettings("winter_exchange", "Winter Exchange 2026", true),
+            Routes.ao3TagSet(42, "Winter Exchange Tags", true), Routes.ao3TagSet(43, "Snowbound Characters", true)), native)
+        assertEquals(listOf(giftUrl, signupUrl,
             ChallengeSettingsDestinations.challengeAssignmentsView("winter_exchange"), ChallengeSettingsDestinations.challengeAssignmentsView("winter_exchange")), browser)
         assertEquals(listOf(ChallengeSettingsDestinations.runMatching("winter_exchange")), external)
         assertEquals(4, client.gets.size) // row taps navigate; no native follow-up/read/write here
@@ -103,6 +108,8 @@ class AO3ChallengeSettingsScreenTest {
         compose.onNodeWithText("Require a fandom match").assertDoesNotExist()
         reach("TAG SET")
         compose.onNodeWithText("Summer Prompt Tags").assertExists()
+        compose.onNodeWithText("Summer Prompt Tags").performClick()
+        assertEquals(listOf(Routes.ao3TagSet(44, "Summer Prompt Tags", true)), native)
         compose.onNodeWithText("TAG SETS").assertDoesNotExist()
         reach("Prompts posted anonymously")
         compose.onNodeWithText("Claim and fill").performClick()

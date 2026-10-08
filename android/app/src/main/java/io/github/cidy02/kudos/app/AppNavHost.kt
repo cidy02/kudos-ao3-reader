@@ -664,12 +664,29 @@ fun AppNavHost(
                 viewerIsOwner = entry.arguments?.getBoolean("owner") == true,
                 repository = container.collectionDetailRepository,
                 onOpenWeb = { navController.navigate(Routes.webFallback(it)) },
+                onOpenTagSet = { id, title -> navController.navigate(Routes.ao3TagSet(id, title, isModerator = true)) },
                 onOpenExternal = { url ->
                     // The fixture-only demo must never launch an OS browser that can contact AO3.
                     if (io.github.cidy02.kudos.network.ao3.DemoNetwork.isActive) navController.navigate(Routes.webFallback(url))
                     else runCatching { context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW,
                         android.net.Uri.parse(url))) }
                 }
+            )
+        }
+        sharedComposable(
+            Routes.AO3TagSet,
+            arguments = listOf(
+                navArgument("tagSetId") { type = NavType.IntType },
+                navArgument("tagSetTitle") { type = NavType.StringType; defaultValue = "" },
+                navArgument("moderator") { type = NavType.BoolType; defaultValue = false }
+            )
+        ) { entry ->
+            io.github.cidy02.kudos.account.AO3TagSetScreen(
+                id = entry.arguments?.getInt("tagSetId") ?: return@sharedComposable,
+                title = Routes.routeArg(entry, "tagSetTitle").orEmpty(),
+                isModerator = entry.arguments?.getBoolean("moderator") == true,
+                repository = container.collectionDetailRepository,
+                onOpenWeb = { navController.navigate(Routes.webFallback(it)) }
             )
         }
         sharedComposable(

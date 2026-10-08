@@ -1,5 +1,12 @@
 # Brief 3ba — Challenge Settings (read only)
 
+**3be follow-up (Codex, 2026-10-05; unbuilt handoff).** Tag-set rows now request the
+native numeric-ID Tag set screen, passing the served title and `isModerator = true`
+as iOS does. Their earlier browser detour in the historical notes below is superseded.
+Summer's shared demo profile now links **Summer Prompt Tags** to **44**, as authorized
+by Claude, rather than sharing Winter's 42. All other Summer profile content is unchanged.
+See [3be-result.md](3be-result.md) for the read counts, fixtures and pending verification.
+
 **Landing note (Claude, 2026-10-05).** Landed with one fix. Gate green (1,687 tests).
 
 **The reads were counted first.** For one opening or refresh `getChallengeSettings` reads, one

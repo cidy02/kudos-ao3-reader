@@ -34,7 +34,8 @@ fun AO3ChallengeSettingsScreen(
     viewerIsOwner: Boolean,
     repository: AO3CollectionDetailRepository,
     onOpenWeb: (String) -> Unit,
-    onOpenExternal: (String) -> Unit
+    onOpenExternal: (String) -> Unit,
+    onOpenTagSet: (Int, String) -> Unit
 ) {
     val auth = repository.authRepository
     val generation by auth.generation.collectAsState()
@@ -159,7 +160,7 @@ fun AO3ChallengeSettingsScreen(
                                     data.tagSets.forEachIndexed { index, link ->
                                         if (index > 0) SubjectRowSeparator()
                                         SubjectFormRow(link.title, showsDisclosure = true,
-                                            onClick = { onOpenWeb(ChallengeSettingsDestinations.tagSetView(link.id)) })
+                                            onClick = { onOpenTagSet(link.id, link.title) })
                                     }
                                 }
                             }
@@ -202,16 +203,16 @@ fun AO3ChallengeSettingsScreen(
     }
 }
 
-@Composable private fun ChallengeSection(title: String) {
-    SectionRuleHeader(title, modifier = Modifier.padding(top = 18.dp))
+@Composable internal fun ChallengeSection(title: String, count: Int? = null) {
+    SectionRuleHeader(title, count = count, modifier = Modifier.padding(top = 18.dp))
 }
 
-@Composable private fun ChallengeFootnote(text: String) {
+@Composable internal fun ChallengeFootnote(text: String) {
     Text(text, color = LocalKudosTokens.current.secondaryInk.copy(alpha = 0.7f), fontSize = 11.5.sp, lineHeight = 17.sp,
         modifier = Modifier.padding(horizontal = SubjectMetrics.accountGutter + 4.dp).padding(top = 8.dp))
 }
 
-@Composable private fun ChallengeReadOnlyToggle(label: String, checked: Boolean, palette: SubjectPalette, large: Boolean) {
+@Composable internal fun ChallengeReadOnlyToggle(label: String, checked: Boolean, palette: SubjectPalette, large: Boolean) {
     if (large) Column(Modifier.fillMaxWidth().padding(horizontal = 13.dp, vertical = 11.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(label, color = LocalKudosTokens.current.primaryInk, fontSize = 14.5.sp, lineHeight = 20.sp)
         SubjectToggle(checked, onCheckedChange = {}, enabled = false, accent = palette.accent, contentDescription = label)
