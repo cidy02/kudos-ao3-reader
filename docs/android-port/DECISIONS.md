@@ -894,3 +894,12 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   landing, where the collection page's Prompts row must also open the screen for any
   participant, as on iOS. Still open: a participant never sees "open until" on either app.
   Reverse: pass `viewerIsOwner: true` from both callers.
+
+## 2026-10-08: the work form's Chapters list reads only, and reads once (brief 3bm)
+
+- The Chapters row on a posted work opens iOS's list (`WritingChaptersView`): one signed-in
+  read of the work's chapter index per opening and per Try Again, through the form's own
+  repository. A row opens nothing until the chapter form exists on Android. Gemini Pro wrote
+  the brief; its screen read twice per opening and used stock Material parts, so the screen
+  and its tests were rewritten on landing and its fixture and wiring kept.
+  Reverse: remove `viewingChapters` from `WritingWorkFormScreen.kt`.

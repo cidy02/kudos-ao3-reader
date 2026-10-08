@@ -131,7 +131,7 @@ class WritingWorkFormScreenTest {
 
     @Test fun waitingRowsHaveNoActionOrDestination() {
         show(995006L)
-        for (label in listOf("Chapters", "Add chapter", "Edit tags")) {
+        for (label in listOf("Add chapter", "Edit tags")) { // Chapters opens its list since brief 3bm
             reach(label)
             compose.onNodeWithText(label).assertHasNoClickAction()
         }

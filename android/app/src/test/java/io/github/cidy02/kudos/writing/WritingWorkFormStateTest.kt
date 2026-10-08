@@ -254,6 +254,7 @@ internal class WorkFormScreenClient : AO3Client, AO3FormPostClient {
         val fixture = when {
             url.endsWith("/995001/edit") -> "ao3_demo_work_draft_edit"
             url.endsWith("/995006/edit") -> "ao3_demo_work_posted_edit"
+            url.endsWith("/995006/navigate") -> "ao3_demo_work_posted_navigate"
             else -> "ao3_work_new_draft"
         }
         return AO3Result.Success(AO3HttpResponse(url, 200, emptyMap(), body ?: workFixture(fixture)))
