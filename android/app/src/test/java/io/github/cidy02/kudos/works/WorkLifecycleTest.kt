@@ -721,35 +721,61 @@ class WorkLifecycleRepositoryTest {
         assertNull(kept.freedAt)
     }
 
+    /**
+     * iOS `PrivacyDataView.freedHistory`. Clear reading history used to take every finished
+     * work, saved and downloaded ones included, under a message promising otherwise (audit A14).
+     */
     @Test
-    fun softDeleteAllFinishedMovesOnlyActiveFinishedWorksToRecentlyDeleted() = runTest {
-        val finished1 = sampleSavedWork("11111111-1111-1111-1111-111111111111").copy(isFinished = true)
-        val finished2 = sampleSavedWork("22222222-2222-2222-2222-222222222222").copy(isFinished = true)
-        val unfinished = sampleSavedWork("33333333-3333-3333-3333-333333333333").copy(isFinished = false)
-        val alreadyDeleted = sampleSavedWork("44444444-4444-4444-4444-444444444444").copy(isFinished = true, isDeleted = true)
-        repository.upsert(finished1)
-        repository.upsert(finished2)
-        repository.upsert(unfinished)
-        repository.upsert(alreadyDeleted)
+    fun clearReadingHistoryTakesOnlyWorksThatRemainInTheHistoryAlone() = runTest {
+        fun work(n: Int) = sampleSavedWork("${n}${n}${n}${n}${n}${n}${n}${n}-1111-1111-1111-111111111111")
+            .copy(isFinished = true, isSaved = false, hasEpub = false)
+        val historyOnly = repository.upsert(work(1))
+        val kept = listOf(
+            repository.upsert(work(2).copy(isSaved = true)),
+            repository.upsert(work(3).copy(isFavorite = true)),
+            repository.upsert(work(4).copy(hasEpub = true)),
+            repository.upsert(work(5).copy(sourceUrl = "")), // imported: nowhere to get it again
+            repository.upsert(work(6).copy(ao3Unavailable = true)), // gone from AO3: the last record of it
+            repository.upsert(work(7).copy(isQueuedForLater = true))
+        )
+        repository.upsert(work(8).copy(isDeleted = true))
 
-        val beforeCount = repository.observeFinishedWorks().first().size
-        assertEquals(2, beforeCount)
+        assertEquals(listOf(historyOnly.id), repository.observeHistoryOnlyWorks().first().map { it.id })
+        assertEquals(1, repository.softDeleteHistoryOnly())
 
-        val clearedCount = repository.softDeleteAllFinished()
-        assertEquals(2, clearedCount)
+        val deleted = repository.listRecentlyDeleted().map { it.id }
+        assertTrue(historyOnly.id in deleted)
+        for (work in kept) {
+            assertFalse("${work.id} was promised to stay", repository.getWork(work.id)!!.isDeleted)
+        }
+        assertTrue(repository.observeHistoryOnlyWorks().first().isEmpty())
+    }
 
-        val afterCount = repository.observeFinishedWorks().first().size
-        assertEquals(0, afterCount)
+    /** iOS `LocalDataClearing.clearReadingPositions`: the place goes, the work and its shelf order stay. */
+    @Test
+    fun clearReadingPositionsForgetsThePlaceAndKeepsTheWorkAndItsShelfDate() = runTest {
+        val read = Instant.parse("2026-07-01T10:00:00Z")
+        val a = repository.upsert(sampleSavedWork("aaaaaaaa-1111-1111-1111-111111111111")
+            .copy(readiumLocator = "locator", lastSpineIndex = 3, lastScrollFraction = 0.4, lastReadDate = read))
+        val b = repository.upsert(sampleSavedWork("bbbbbbbb-1111-1111-1111-111111111111")
+            .copy(legacyReaderProgress = 0.5, lastReadDate = read))
+        val untouched = repository.upsert(sampleSavedWork("cccccccc-1111-1111-1111-111111111111"))
 
-        // Unfinished work is unaffected
-        val activeUnfinished = repository.getWork("33333333-3333-3333-3333-333333333333")
-        assertNotNull(activeUnfinished)
-        assertFalse(activeUnfinished!!.isDeleted)
+        assertEquals(setOf(a.id, b.id), repository.observePositionedWorks().first().map { it.id }.toSet())
+        assertEquals(2, repository.clearReadingPositions())
 
-        // Finished works are now in Recently Deleted
-        val recentlyDeletedIds = repository.listRecentlyDeleted().map { it.id }
-        assertTrue(recentlyDeletedIds.contains("11111111-1111-1111-1111-111111111111"))
-        assertTrue(recentlyDeletedIds.contains("22222222-2222-2222-2222-222222222222"))
+        for (id in listOf(a.id, b.id)) {
+            val work = repository.getWork(id)!!
+            assertTrue(work.readiumLocator.isNullOrEmpty())
+            assertEquals(0, work.lastSpineIndex)
+            assertEquals(0.0, work.lastScrollFraction, 0.0)
+            assertNull(work.legacyReaderProgress)
+            assertEquals(read, work.lastReadDate)
+            assertNotNull(work.progressModifiedAt)
+            assertFalse(work.isDeleted)
+        }
+        assertEquals(untouched.lastModifiedAt, repository.getWork(untouched.id)!!.lastModifiedAt)
+        assertTrue(repository.observePositionedWorks().first().isEmpty())
     }
 }
 
