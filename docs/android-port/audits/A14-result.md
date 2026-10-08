@@ -285,3 +285,37 @@ No commentary. A second row with the same iOS line is the audit's separate acces
 - The subscription POST is the scraped `form.actionURL` (`AO3AuthorProfileService.swift:909-917`). No path was synthesized for it.
 - Comment-cache storage past `AO3CommentRepository.kt:48-50`.
 - How `series.url` is first built. The series stale row cites `seriesPageURL(series.url, page:)` only.
+
+## Triage (Claude, 2026-10-08, first pass)
+
+Grok classed all 132 rows: 21 missing, 49 behaving differently, 46 worded differently, 16 not
+applicable. It also corrects the triage of A9: five Search and Browse rows are missing
+features, not wording. The three gravest were read against both codebases and fixed at once:
+
+- **Clear Reading History took every finished work**, saved and downloaded ones included,
+  under a message promising otherwise. **P1, fixed** (`903ec596`): only works left in the
+  history alone, as iOS, and none still in a queue.
+- **Clear reading positions did nothing.** **P2, fixed** (`903ec596`).
+- **"Delete from History" hid the row and told AO3 nothing.** **P2, fixed**: iOS's write
+  (`deleteReading`: a fresh token from the history page, one POST with the reading's id),
+  the row removed only on AO3's confirmation, seen in the demo. The screen's "Clear your
+  entire history" confirmation has no control that opens it; iOS's write for it
+  (`clearReadingHistory`) is not built.
+
+**Missing features to brief** (none reads or writes AO3 unless said):
+the Account shortcut editor (choose, reorder, reset the grid: local); the account-wide
+"Manage collection items" card (one GET on tap); a chapter's comments from an inbox row;
+Share Profile on an author page; the Privacy page's Read Aloud section; "Showing cached AO3
+data" on five screens; a fandom's most-used tags in the tag picker (one GET per fandom);
+sort and completion on an author's works (a reload with a query); a bookmark button in the
+in-app browser (local); "Nearby" pages in the page jump; "Show in Library" after an import.
+
+**Behaviour to bring in line** (the ones a reader would meet): the comment composer's
+"checking whether this posted" state with Check Again; the offline banner over cached
+comments; an author page's later-page failure (no error, no retry today); subscribing to an
+author from the app with iOS's confirmation (Android opens the browser); the History and
+Subscriptions signed-out and empty states; the tag page's two empty states with Clear
+Filters; accessibility names on comment avatars, the fandom index strip and blurred works in
+selection.
+
+The 46 wording rows are a table in the file: one mechanical batch.

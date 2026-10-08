@@ -395,7 +395,8 @@ fun AccountWorksListScreen(
                                         expandAll = expandAll,
                                         palette = palette,
                                         onLoadPage = viewModel::load,
-                                        onOpenWork = onOpenWork
+                                        onOpenWork = onOpenWork,
+                                        writer = unsubscribeState
                                     )
                                 }
                                 else -> {
@@ -774,8 +775,13 @@ private fun HistoryBrowser(
     expandAll: Boolean,
     palette: SubjectPalette,
     onLoadPage: (Int) -> Unit,
-    onOpenWork: (AO3WorkSummary) -> Unit
+    onOpenWork: (AO3WorkSummary) -> Unit,
+    writer: SubscriptionUnsubscribeState? = null
 ) {
+    val scope = rememberCoroutineScope()
+    val busy = writer?.busyPath?.collectAsState()?.value != null
+    val writeError = writer?.error?.collectAsState()?.value
+    var missingLink by remember { mutableStateOf(false) }
     val readingsByWorkId = remember(readings) {
         readings.mapNotNull { r -> r.workId?.let { it to r } }.toMap()
     }
@@ -813,10 +819,33 @@ private fun HistoryBrowser(
         onConfirm = {
             val pending = pendingDelete ?: return@DestructiveConfirmation
             pendingDelete = null
-            deletedIds = deletedIds + pending.remote.id
+            // iOS `deleteHistoryEntry`. This used to hide the row on the device and tell AO3
+            // nothing, under a confirmation that said AO3's history would change (audit A14).
+            val readingId = readingsByWorkId[pending.remote.id]?.readingId?.toLongOrNull()
+            if (readingId == null || writer == null) missingLink = true
+            else scope.launch {
+                writer.confirmDeleteReading(readingId, currentPage) { deletedIds = deletedIds + pending.remote.id }
+            }
         },
         onDismissRequest = { pendingDelete = null }
     )
+
+    val historyError = writeError
+        ?: if (missingLink) "AO3 didn't show a delete link for this row, so nothing was removed." else null
+    if (historyError != null) {
+        val tokens = LocalKudosTokens.current
+        AlertDialog(
+            onDismissRequest = { writer?.dismissError(); missingLink = false },
+            title = { Text("Couldn't remove from history", color = tokens.primaryInk) },
+            text = { Text(historyError, color = tokens.secondaryInk) },
+            containerColor = tokens.theme.cardSurface,
+            confirmButton = {
+                TextButton(onClick = { writer?.dismissError(); missingLink = false }) {
+                    Text("OK", color = palette.accent)
+                }
+            }
+        )
+    }
 
     DestructiveConfirmation(
         show = confirmClearHistory,
@@ -922,7 +951,7 @@ private fun HistoryBrowser(
                             style = SubjectChipStyle.Neutral,
                             leadingIcon = Icons.Outlined.Delete,
                             palette = palette,
-                            modifier = Modifier.clickable { pendingDelete = work }
+                            modifier = Modifier.clickable(enabled = !busy) { pendingDelete = work }
                         )
                     }
                 }
