@@ -531,17 +531,20 @@ struct CollectionDetailView: View {
 
     // MARK: Multi-select / bulk actions
 
+    /// On what the filter still shows, as `LibrarySectionListView` does: Select All
+    /// with a filter on used to take every member, and Remove detached works the
+    /// reader could not see (audit A12-5).
     private var selectedWorks: [SavedWork] {
-        works.filter { selection.contains($0.id) }
+        visibleWorks.filter { selection.contains($0.id) }
     }
 
     private var allSelected: Bool {
-        let ids = Set(works.map(\.id))
+        let ids = Set(visibleWorks.map(\.id))
         return !ids.isEmpty && ids.isSubset(of: selection)
     }
 
     private func toggleSelectAll() {
-        selection = allSelected ? [] : Set(works.map(\.id))
+        selection = allSelected ? [] : Set(visibleWorks.map(\.id))
     }
 
     private func toggleSelection(_ work: SavedWork) {
