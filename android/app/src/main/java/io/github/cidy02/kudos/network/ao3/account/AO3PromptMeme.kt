@@ -2,6 +2,7 @@ package io.github.cidy02.kudos.network.ao3.account
 
 import io.github.cidy02.kudos.network.ao3.AO3Constants
 import io.github.cidy02.kudos.network.ao3.AO3OverloadDetector
+import io.github.cidy02.kudos.network.ao3.AO3RedirectCookieRelay
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import org.jsoup.Jsoup
 
@@ -42,6 +43,9 @@ enum class AO3PromptMemeFilter(val label: String) {
 object AO3PromptMemeUrls {
     fun requests(slug: String, page: Int = 1): String = ChallengeSettingsDestinations.promptMemeView(slug).toHttpUrl()
         .newBuilder().apply { if (page > 1) addQueryParameter("page", page.toString()) }.build().toString()
+    fun claims(slug: String, forUser: Boolean = false): String = "${AO3CollectionFormUrls.show(slug)}/claims".toHttpUrl()
+        .newBuilder().apply { if (forUser) addQueryParameter("for_user", "true") }.build().toString()
+    fun claim(slug: String, id: Int) = "${claims(slug)}/$id"
     fun meme(slug: String) = "${AO3CollectionFormUrls.show(slug)}/prompt_meme"
 }
 
@@ -53,10 +57,12 @@ class AO3PromptMemeParser {
         require(doc.selectFirst("form#new_user, form[action='/users/login']") == null) { "Log in to AO3 first." }
         fun resourceID(href: String, resource: String) = Regex("/$resource/(\\d+)(?:/|$|[?#])")
             .find(href)?.groupValues?.get(1)?.toIntOrNull()
+        fun trustedAddress(href: String) = if (href.isBlank()) null else
+            AO3Constants.BASE_URL.toHttpUrl().resolve(href)?.takeIf { AO3RedirectCookieRelay.isTrustedUrl(it.toString()) }
         val prompts = doc.select("ul.prompt.index > li.blurb").mapIndexed { index, li ->
             val claimAction = li.selectFirst("form[action*='/claims']")?.attr("action").orEmpty()
             val promptID = runCatching {
-                AO3Constants.BASE_URL.toHttpUrl().resolve(claimAction)?.queryParameter("prompt_id")?.toIntOrNull()
+                trustedAddress(claimAction)?.queryParameter("prompt_id")?.toIntOrNull()
             }.getOrNull()
             val promptLink = li.selectFirst("a[href*='/prompts/']")?.attr("href").orEmpty()
             val dropClaim = li.selectFirst("a[href*='/claims/'][data-method=delete]")?.attr("href").orEmpty()
@@ -81,7 +87,7 @@ class AO3PromptMemeParser {
                 fandoms = li.select("h5.fandoms a.tag").map { it.text() },
                 tags = li.select("ul.tags:not(.optional) a.tag, ul.tags:not(.optional) li.tag").map { it.text() },
                 isAnonymous = anonymous, ownerPseud = if (anonymous) null else owner,
-                claimID = resourceID(dropClaim, "claims"),
+                claimID = trustedAddress(dropClaim)?.let { resourceID(it.toString(), "claims") },
                 claimantCount = maxOf(li.select("div.claims li").size, anonymousClaims),
                 canClaim = promptID != null
             )

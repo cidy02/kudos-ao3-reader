@@ -114,6 +114,13 @@ data class KudosTokens(
     val tertiaryInk: Color,
     val separator: Color
 ) {
+    /** Warning ink for AO3 action refusals, independent of the reader's chosen accent. */
+    val errorInk: Color
+        get() = when (theme) {
+            ReaderTheme.Dark, ReaderTheme.Oled -> Color(0xFFFF6961)
+            ReaderTheme.Light, ReaderTheme.Sepia -> Ao3Red
+        }
+
     val scopePalette: SubjectPalette
         get() = theme.scopePalette(accent)
 

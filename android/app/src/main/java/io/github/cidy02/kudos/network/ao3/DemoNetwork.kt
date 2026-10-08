@@ -270,6 +270,7 @@ internal class DemoNetworkInterceptor(
     private val collectionForms = DemoCollectionForms()
     private val collectionParticipants = DemoCollectionParticipants()
     private val tagSets = DemoTagSetWrites()
+    private val promptMeme = DemoPromptMemeWrites()
 
     override fun intercept(chain: Interceptor.Chain): Response {
         if (!isActive()) return chain.proceed(chain.request())
@@ -290,6 +291,11 @@ internal class DemoNetworkInterceptor(
             return Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1)
                 .code(if (term == "fail") 403 else 200).message("Local autocomplete answer")
                 .header("Content-Type", type).body(json.toString().toResponseBody(type.toMediaType())).build()
+        }
+        promptMeme.answer(chain.request(), fixtures())?.let { answer ->
+            return Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1)
+                .code(answer.first).message("Local prompt-meme answer").header("Content-Type", HTML)
+                .body(answer.second.toResponseBody(HTML_TYPE)).build()
         }
         tagSets.answer(chain.request(), fixtures())?.let { answer ->
             return Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1)
@@ -718,5 +724,76 @@ private class DemoTagSetWrites {
             }
         }
         return 200 to "<div class='flash notice'>Tag set updated.</div>"
+    }
+}
+
+/** Summer's local claim state belongs to this interceptor and resets with the app process. */
+private class DemoPromptMemeWrites {
+    private val ownClaims = mutableMapOf(702 to 801)
+    private val changed = mutableSetOf<Int>()
+    private val base = "/collections/summer_meme"
+
+    @Synchronized
+    fun answer(request: okhttp3.Request, source: FixtureSource): Pair<Int, String>? {
+        val path = DemoNetworkRoutes.decodedPath(request.url).trimEnd('/')
+        if (path != "$base/requests" && path != "$base/claims" && !path.startsWith("$base/claims/")) return null
+        val page = if (path == "$base/requests") request.url.queryParameter("page") ?: "1" else "1"
+        if (page !in setOf("1", "2")) return 404 to ""
+        val raw = source.read("ao3_demo_meme_requests_$page")?.decodeToString() ?: return 404 to ""
+        val doc = Jsoup.parse(raw)
+        fun promptID(row: org.jsoup.nodes.Element): Int? =
+            row.selectFirst("a[href*='/prompts/']")?.attr("href")?.substringAfterLast('/')?.toIntOrNull()
+                ?: row.selectFirst("form[action*='/claims']")?.attr("action")?.substringAfter("prompt_id=")?.toIntOrNull()
+        if (request.method == "GET") {
+            if (path == "$base/requests" && changed.isEmpty()) return 200 to raw
+            if (path != "$base/requests" && (path != "$base/claims" || request.url.queryParameter("for_user") != "true"))
+                return 404 to ""
+            doc.select("ul.prompt.index > li.blurb").forEach { row ->
+                val id = promptID(row)
+                if (id in changed) {
+                    row.select("form[action*='/claims'], a[data-method=delete]").remove()
+                    row.select("div.claims li").filter { it.text() == "AO3_Reader" }.forEach { it.remove() }
+                    if (row.selectFirst("div.claims ul")?.text().isNullOrBlank()) row.select("div.claims").remove()
+                    val claim = ownClaims[id]
+                    if (claim != null) {
+                        val list = row.selectFirst("div.claims ul") ?: row.appendElement("div").addClass("claims").appendElement("ul")
+                        list.appendElement("li").text("AO3_Reader")
+                        row.appendElement("a").attr("href", "$base/claims/$claim").attr("data-method", "delete").text("Drop Claim")
+                    } else row.appendElement("form").attr("action", "$base/claims?prompt_id=$id").attr("method", "post")
+                        .appendElement("input").attr("type", "submit").attr("value", "Claim")
+                }
+                if (path == "$base/claims" && id !in ownClaims) row.remove()
+            }
+            if (path == "$base/claims") {
+                doc.selectFirst("meta[name=csrf-token]")?.attr("content", "demo-meme-claims")
+                doc.selectFirst("h2.heading")?.text("Your claims for Summer Prompt Meme")
+                doc.select("ol.pagination").remove()
+            }
+            return 200 to doc.outerHtml()
+        }
+        if (request.method != "POST" || path == "$base/requests") return 405 to ""
+        val buffer = Buffer()
+        request.body?.writeTo(buffer)
+        val fields = buffer.readUtf8().split('&').associate { encoded ->
+            val parts = encoded.split('=', limit = 2)
+            URLDecoder.decode(parts[0], "UTF-8") to URLDecoder.decode(parts.getOrElse(1) { "" }, "UTF-8")
+        }
+        fun refusal(message: String) = 422 to "<div class='flash error'>$message</div>"
+        if (path == "$base/claims") {
+            val id = fields["prompt_id"]?.toIntOrNull() ?: return refusal("AO3 couldn't claim that prompt.")
+            if (fields != mapOf("authenticity_token" to "demo-meme-requests", "prompt_id" to id.toString()) ||
+                id !in setOf(701, 702, 704, 705, 706) || id in ownClaims) return refusal("AO3 couldn't claim that prompt.")
+            if (id == 704) return refusal("This prompt is closed to new claims.")
+            ownClaims[id] = 1000 + id
+            changed += id
+            return 200 to "<div class='flash notice'>Prompt claimed.</div>"
+        }
+        val claim = path.substringAfterLast('/').toIntOrNull()
+        val id = ownClaims.entries.firstOrNull { it.value == claim }?.key
+        if (fields != mapOf("_method" to "delete", "authenticity_token" to "demo-meme-claims") || id == null)
+            return refusal("AO3 couldn't release that prompt.")
+        ownClaims.remove(id)
+        changed += id
+        return 200 to "<div class='flash notice'>Claim released.</div>"
     }
 }
