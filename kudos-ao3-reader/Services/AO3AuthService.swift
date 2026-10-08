@@ -664,6 +664,15 @@ final class AO3AuthService {
                 guard sessionGeneration == expectedGeneration,
                       currentSession == session
                 else { return }
+                // A session restored offline had no name, and verification has just named it:
+                // the comment drafts typed meanwhile were filed under the session, and no
+                // screen would ever read them again (audit A20-1).
+                let verifiedName = refreshed.username.trimmingCharacters(in: .whitespacesAndNewlines)
+                if session.username.isEmpty, !verifiedName.isEmpty {
+                    CommentDraftStore().move(
+                        from: CommentDraftIdentity.unnamedSession(expectedGeneration), to: verifiedName
+                    )
+                }
                 sessionGeneration += 1
                 let refreshedGeneration = sessionGeneration
                 do {
