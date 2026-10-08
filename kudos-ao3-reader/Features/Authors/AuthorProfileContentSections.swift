@@ -461,6 +461,10 @@ struct AO3AuthorSeriesSection: View {
     @State private var editingSeries: AO3SeriesSummary?
     @State private var reorderingSeries: AO3SeriesSummary?
 
+    @ScaledMetric(relativeTo: .body) private var emptyTitleSize: CGFloat = 18
+    @ScaledMetric(relativeTo: .footnote) private var emptyBodySize: CGFloat = 13.5
+    @ScaledMetric(relativeTo: .caption) private var emptyFootnoteSize: CGFloat = 11.5
+
     var body: some View {
         Section {
             if model.contentPhase == .loading, model.series.isEmpty {
@@ -480,10 +484,10 @@ struct AO3AuthorSeriesSection: View {
                     VStack(alignment: .leading, spacing: 12) {
                         VStack(alignment: .leading, spacing: 6) {
                             Text("You have not made a series.")
-                                .font(.system(size: 18, weight: .semibold))
+                                .font(.system(size: emptyTitleSize, weight: .semibold))
                             Text("A series groups your works in reading order. Create one on AO3, "
                                 + "then refresh this page to see it here.")
-                                .font(.system(size: 13.5))
+                                .font(.system(size: emptyBodySize))
                                 .foregroundStyle(.secondary)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
@@ -504,7 +508,7 @@ struct AO3AuthorSeriesSection: View {
                             )
                             .padding(.horizontal, -14)
                             Text("This opens AO3 in Browse, where you can create the series.")
-                                .font(.system(size: 11.5))
+                                .font(.system(size: emptyFootnoteSize))
                                 .foregroundStyle(.secondary)
                                 .fixedSize(horizontal: false, vertical: true)
                         }

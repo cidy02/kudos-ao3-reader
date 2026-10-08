@@ -23,6 +23,8 @@ struct AccountProfileCard: View {
     /// because here it shares the line with a 56pt avatar.
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @ScaledMetric(relativeTo: .title2) private var nameSize: CGFloat = 27
+    @ScaledMetric(relativeTo: .footnote) private var postingAsSize: CGFloat = 13
+    @ScaledMetric(relativeTo: .footnote) private var signedOutBodySize: CGFloat = 13
 
     var body: some View {
         switch auth.status {
@@ -131,7 +133,7 @@ struct AccountProfileCard: View {
             }
         } label: {
             Text("Posting as \(postingPseudName ?? "Account Default")")
-                .font(.system(size: 13, weight: .medium))
+                .font(.system(size: postingAsSize, weight: .medium))
                 .lineLimit(1)
                 .foregroundStyle(.primary)
                 .padding(.horizontal, 13)
@@ -313,7 +315,7 @@ struct AccountProfileCard: View {
 
             Text("Log in to see your AO3 works, bookmarks, subscriptions, "
                 + "history and inbox. Your sign-in stays on this device.")
-                .font(.system(size: 13))
+                .font(.system(size: signedOutBodySize))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 

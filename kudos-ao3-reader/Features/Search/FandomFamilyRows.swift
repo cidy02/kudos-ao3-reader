@@ -15,6 +15,7 @@ struct FandomFamilyBlock: View {
     @Environment(ThemeManager.self) private var themeManager
     @ScaledMetric(relativeTo: .caption) private var starSize = 14.5
     @ScaledMetric(relativeTo: .caption2) private var downloadFontSize = 11.5
+    @ScaledMetric(relativeTo: .caption) private var allTagsSize: CGFloat = 11
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -68,7 +69,7 @@ struct FandomFamilyBlock: View {
                 }
 
                 Text("All \(family.memberCount) tags")
-                    .font(.system(size: 11, weight: .medium, design: .monospaced))
+                    .font(.system(size: allTagsSize, weight: .medium, design: .monospaced))
                     .foregroundStyle(palette.accent)
                     .monospacedDigit()
             }
