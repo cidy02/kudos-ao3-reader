@@ -73,8 +73,11 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
     /// user switches tabs (see `cancelRefreshOnTabChange`) — this can be the whole Library.
     @State private var refreshTask: Task<Void, Never>?
 
+    /// Selection acts on what is on screen, as the queue browser and the section
+    /// lists already do (L3 B2 #1). A fandom chip or the privacy toggle used during
+    /// Select hid rows that stayed selected, and Delete took them unseen (audit A12-4).
     private var selectedWorks: [SavedWork] {
-        works.filter { selection.contains($0.id) }
+        selectableWorks.filter { selection.contains($0.id) }
     }
 
     /// Keeps privacy-hidden works out of aggregate counts and fandom labels.
@@ -133,7 +136,7 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
             .scrollAwayTopChrome()
             .heroWash(dashboardWorks(for: .readingNow).first)
             .background((themeManager.appTheme.appBaseBackground ?? Color.clear).ignoresSafeArea())
-            .navigationTitle(isSelecting ? WorkSelectionTitle.text(selectedCount: selection.count) : "Library")
+            .navigationTitle(isSelecting ? WorkSelectionTitle.text(selectedCount: selectedWorks.count) : "Library")
             #if os(iOS)
                 .toolbarTitleDisplayMode(.inlineLarge)
             #endif

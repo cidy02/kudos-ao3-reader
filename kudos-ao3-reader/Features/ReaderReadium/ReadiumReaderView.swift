@@ -717,12 +717,10 @@ struct ReadiumReaderView: View {
     /// `docs/DATA_AND_PERSISTENCE_INVARIANTS.md`).
     private func toggleBookmarkAtCurrentPosition() {
         if let existing = bookmarkAtCurrentPosition {
-            modelContext.insert(SyncTombstone(
-                recordID: existing.id,
-                recordType: .readingAnnotation,
-                sourceURL: work.sourceURL,
-                ao3WorkID: ao3WorkID
-            ))
+            // Signed, as every other deletion is: an unsigned tombstone is dropped by
+            // the other device (`TombstoneSigning.shouldAdopt`), so this one told
+            // nobody (audit A12-2).
+            SyncTombstones.recordDeletion(of: existing, in: modelContext, reason: "annotationDeleted")
             modelContext.delete(existing)
             try? modelContext.save()
             FolderSyncService.markDirty()
@@ -748,6 +746,20 @@ struct ReadiumReaderView: View {
     private func spineIndex(for locator: Locator) -> Int? {
         let key = ReaderSectionBuilder.hrefKey(locator.href.string)
         return book.sections.first { ReaderSectionBuilder.hrefKey($0.href) == key }?.spineIndex
+    }
+
+    /// Every position write. Beside the locator it stores the chapter and the
+    /// place in it (`lastSpineIndex`, `lastScrollFraction`): the Mac reader opens
+    /// from that pair and never reads the locator, so a work read on the iPhone
+    /// opened on the Mac at its first chapter, and a newer iPhone snapshot carried
+    /// a pair of zeros over the chapter the Mac had saved (audit A12-1). The pair
+    /// is left alone when the locator's chapter cannot be found.
+    private func writePosition(_ locatorString: String, at date: Date = Date()) {
+        work.applyDebouncedReadiumLocator(locatorString, at: date)
+        guard let locator = Locator(persistenceString: locatorString),
+              let index = spineIndex(for: locator) else { return }
+        work.lastSpineIndex = index
+        work.lastScrollFraction = min(max(locator.locations.progression ?? 0, 0), 1)
     }
 
     /// The reader's live chapter, on the same `sections`-href basis as
@@ -843,12 +855,8 @@ struct ReadiumReaderView: View {
         if colorBarAnnotationID == annotation.id {
             colorBarAnnotationID = nil
         }
-        modelContext.insert(SyncTombstone(
-            recordID: annotation.id,
-            recordType: .readingAnnotation,
-            sourceURL: work.sourceURL,
-            ao3WorkID: ao3WorkID
-        ))
+        // Signed: see `toggleBookmarkAtCurrentPosition` (audit A12-2).
+        SyncTombstones.recordDeletion(of: annotation, in: modelContext, reason: "annotationDeleted")
         modelContext.delete(annotation)
         try? modelContext.save()
         FolderSyncService.markDirty()
@@ -914,7 +922,7 @@ struct ReadiumReaderView: View {
         }
         let now = Date()
         if let toWrite = progressPersistence.locatorForFlush() {
-            work.applyDebouncedReadiumLocator(toWrite, at: now)
+            writePosition(toWrite, at: now)
             if shelfStamp { work.markProgressModified(now) }
             progressPersistence.markPersisted(
                 locatorString: toWrite,
@@ -1356,7 +1364,7 @@ struct ReadiumReaderView: View {
         try? context.save()
 
         progressPersistence.onDebouncedWrite = { locatorString in
-            work.applyDebouncedReadiumLocator(locatorString)
+            writePosition(locatorString)
             try? context.save()
             // Durable dirty flag only — does not schedule an immediate package
             // syncUp (that still waits for flush/close/background or launch).
@@ -1378,7 +1386,7 @@ struct ReadiumReaderView: View {
             // Keep locator + progressModifiedAt in sync for merge; full shelf stamp
             // only when we actually auto-finish (below).
             if let string = book.currentLocator?.persistenceString {
-                work.applyDebouncedReadiumLocator(string)
+                writePosition(string)
                 progressPersistence.markPersisted(
                     locatorString: string,
                     totalProgression: book.currentLocator?.locations.totalProgression
