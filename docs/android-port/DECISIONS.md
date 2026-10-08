@@ -1030,3 +1030,13 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   the native form. After a confirmed Save the drafts list reads its current page once; an
   unsaved Back reads nothing (the more sparing choice).
   Reverse: the commit "The work form saves".
+
+## 2026-10-08: what audit A19 found on iOS, on Android
+
+- Every blurred surface (card row, ledger row, cover, hero, queue row) says "Hidden mature
+  work. Activate to reveal." to a screen reader and nothing else, through one modifier.
+  A blurred work has no long-press menu, on Home and the collection page as in the Library.
+- "Check Availability" lists a mature work as "Hidden mature work" while Hide or Blur
+  conceals it; a tap reveals it.
+- Home's subscriptions are applied only for the session that asked for them.
+  Reverse: the commit "A blurred mature work is unnamed and unopened everywhere".

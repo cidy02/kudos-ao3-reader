@@ -1,5 +1,10 @@
 package io.github.cidy02.kudos.settings
 
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.flowOf
+import io.github.cidy02.kudos.library.LibraryPrivacyVisibility
+import io.github.cidy02.kudos.library.LibraryPrivacy
+import io.github.cidy02.kudos.core.model.PrivacySettings
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -49,9 +54,18 @@ import kotlinx.coroutines.launch
 fun AvailabilitySweepScreen(
     workRepository: WorkRepository,
     sweep: WorkAvailabilitySweep,
-    onOpenWork: (String) -> Unit
+    onOpenWork: (String) -> Unit,
+    settingsRepository: io.github.cidy02.kudos.data.preferences.SettingsRepository? = null,
+    privacyGate: io.github.cidy02.kudos.app.PrivacyGate = io.github.cidy02.kudos.app.PrivacyGate()
 ) {
     val tokens = LocalKudosTokens.current
+    // The Library's rule for a mature work, here too: this list named every one that had
+    // left AO3, with Hide or Blur on (audit A19-9, the same on iOS).
+    val privacy by remember(settingsRepository) {
+        settingsRepository?.settings?.map { it.privacy } ?: flowOf(PrivacySettings())
+    }.collectAsState(initial = PrivacySettings())
+    val reveal by privacyGate.state.collectAsState()
+    val activity = androidx.compose.ui.platform.LocalContext.current as? androidx.fragment.app.FragmentActivity
     val scope = rememberCoroutineScope()
     val works by workRepository.observeLibraryWorks().collectAsState(initial = emptyList())
     // Every work marked unavailable, not just the ones this run found: the mark lasts.
@@ -176,7 +190,21 @@ fun AvailabilitySweepScreen(
                 ) {
                     unavailableWorks.forEachIndexed { index, work ->
                         if (index > 0) SubjectRowSeparator()
-                        Column(
+                        val concealed = LibraryPrivacy.visibility(work, privacy, reveal) != LibraryPrivacyVisibility.Visible
+                        if (concealed) {
+                            Text(
+                                text = "Hidden mature work",
+                                color = tokens.secondaryInk,
+                                fontSize = 15.sp,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable(
+                                        onClickLabel = "reveal",
+                                        role = androidx.compose.ui.semantics.Role.Button
+                                    ) { privacyGate.reveal(work.id, activity) }
+                                    .padding(horizontal = 13.dp, vertical = 16.dp)
+                            )
+                        } else Column(
                             Modifier
                                 .fillMaxWidth()
                                 .clickable { onOpenWork(work.id) }

@@ -835,7 +835,8 @@ private fun CollectionWorkListItem(
                         onReveal = onReveal,
                         onSelect = onToggleSelection,
                         onLongClick = {
-                            if (!isSelecting) menuOpen = true
+                            // Not on a blurred work: its menu opens what the blur hides.
+                            if (!isSelecting && !obscured) menuOpen = true
                         },
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
                     )
@@ -853,7 +854,8 @@ private fun CollectionWorkListItem(
                             }
                         },
                         onLongClick = {
-                            if (!isSelecting) menuOpen = true
+                            // Not on a blurred work: its menu opens what the blur hides.
+                            if (!isSelecting && !obscured) menuOpen = true
                         }
                     )
                 }

@@ -1055,6 +1055,8 @@ fun AppNavHost(
         }
         sharedComposable(Routes.AvailabilitySweep) {
             AvailabilitySweepScreen(
+                settingsRepository = container.settingsRepository,
+                privacyGate = container.privacyGate,
                 workRepository = container.workRepository,
                 sweep = remember {
                     io.github.cidy02.kudos.works.WorkAvailabilitySweep(

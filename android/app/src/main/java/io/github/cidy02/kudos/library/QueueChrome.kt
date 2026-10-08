@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.library
 
+import io.github.cidy02.kudos.ui.components.hiddenMatureWorkSemantics
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -255,7 +256,8 @@ fun QueueLedgerCard(
                 Modifier
                     .fillMaxWidth()
                     .then(if (obscured) Modifier.blur(8.dp) else Modifier)
-                    .padding(horizontal = 16.dp, vertical = 15.dp),
+                    .padding(horizontal = 16.dp, vertical = 15.dp)
+                    .hiddenMatureWorkSemantics(obscured, selecting),
                 horizontalArrangement = Arrangement.spacedBy(13.dp),
                 verticalAlignment = Alignment.Top
             ) {

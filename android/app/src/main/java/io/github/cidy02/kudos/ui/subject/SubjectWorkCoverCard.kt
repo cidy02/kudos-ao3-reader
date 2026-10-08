@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.ui.subject
 
+import io.github.cidy02.kudos.ui.components.hiddenMatureWorkSemantics
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
@@ -137,6 +138,7 @@ fun SubjectWorkCoverCard(
             Modifier
                 .fillMaxSize()
                 .then(if (obscured) Modifier.blur(8.dp) else Modifier)
+                .hiddenMatureWorkSemantics(obscured, isSelecting)
         ) {
             CoverSurface(palette = palette, shape = shape, hero = false) {
                 Column(

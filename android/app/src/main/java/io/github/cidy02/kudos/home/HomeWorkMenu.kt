@@ -97,7 +97,9 @@ fun HomeLocalWorkFrame(
                         else -> onOpen(work)
                     }
                 },
-                onLongClick = { menuOpen = true }
+                // Read and Work Details in this menu opened a work the blur was hiding, past
+                // the reveal and its device check (audit A19-6, the same on iOS).
+                onLongClick = { if (!obscured) menuOpen = true }
             )
         ) {
             content()

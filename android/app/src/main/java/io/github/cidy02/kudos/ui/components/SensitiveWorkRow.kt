@@ -61,6 +61,17 @@ import androidx.compose.material3.Checkbox
 
 
 /**
+ * What a blurred mature work tells a screen reader: that it is hidden, and nothing else. It
+ * takes everything drawn under the blur out of what accessibility is given. Put it **last**
+ * on the blurred surface: before a click on the same chain it would take the click's action
+ * too. iOS says the same words (`Features/Privacy/MatureContent.swift`); audits A18-5, A19-8.
+ */
+fun Modifier.hiddenMatureWorkSemantics(obscured: Boolean, selecting: Boolean = false): Modifier =
+    if (!obscured) this else clearAndSetSemantics {
+        contentDescription = if (selecting) "Hidden mature work" else "Hidden mature work. Activate to reveal."
+    }
+
+/**
  * Dense AO3 work summary for Search / Browse / Account lists.
  *
  * Material 3 [Card] expressing Apple `AO3WorkRow` hierarchy:
@@ -166,14 +177,8 @@ fun SensitiveWorkRow(
             // nothing of the work. It used to read out the title and author it had just
             // blurred (audit A18-5; iOS `SensitiveWorkRow`, the same words as `WorkLedgerRow`).
             .then(
-                if (obscured) {
-                    Modifier.clearAndSetSemantics {
-                        contentDescription =
-                            if (selecting) "Hidden mature work" else "Hidden mature work. Activate to reveal."
-                    }
-                } else {
-                    Modifier.semantics { contentDescription = "$title, by ${author.ifBlank { "Anonymous" }}" }
-                }
+                if (obscured) Modifier.hiddenMatureWorkSemantics(true, selecting)
+                else Modifier.semantics { contentDescription = "$title, by ${author.ifBlank { "Anonymous" }}" }
             )
 
         Card(

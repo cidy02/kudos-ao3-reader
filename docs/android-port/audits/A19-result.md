@@ -310,3 +310,24 @@ Log.library.error("Opening \(fileName, privacy: .public) failed: \(reason, priva
 ## What was not read
 
 End to end: `docs/REDESIGN_DECISIONS.md`, `docs/AO3_NETWORKING_POLICY.md`, and most of `TASKS.md` (the demo, browser-gate, and bookmark-blur notes that a search hit were used). Most of `Features/WorkDetail/` past the refresh and bookmark entry points, the author moderation screens past `AO3AuthorProfileService.submitScrapedHTMLForm`, Onboarding, Support, and the Settings forms. Comment thread layout, the filter panel's draft fields, saved-search persistence, tag pickers, and the native fandom index. Login UI past the coordinator's navigation delegate. The rest of `AO3CollectionsList.load` after the fetch starts. Reader web policy was seen only as the contrast for the missing browser action policy (`Features/Reader/ReaderController.swift:188`); the reader itself is A12's scope. Test bodies other than `DemoNetworkBlockTests`. Android sources were not re-audited.
+
+## Triage (Claude, 2026-10-08)
+
+All ten read against the code; all real. Fixed on iOS in **T-367** (`86389972` on
+`claude/polish-loop`, `494ff3cf` on integrate; full suite 2,320 with the one known failure;
+macOS builds). Nothing was seen on a device.
+
+| id | iOS | Android |
+| --- | --- | --- |
+| A19-1 | Fixed: one rule (`BrowserThemeStyle.navigationVerdict`) for the browser and the login web view. Only `https` AO3 stays in the view; other web addresses open in the system browser; other schemes are cancelled; a frame from another host is allowed (AO3 permits embeds). Only AO3's own page becomes a download. Its "shares the cookie store" is overstated (cookies are per host), but the import with no tap and the router's rule being skipped were real. | Already kept to AO3 (`AO3WebUrlPolicy`). |
+| A19-2 | Fixed: in the demo the rule cancels everything remote and the browser shows one line saying so. | The demo's browser already answers locally. |
+| A19-3 | Fixed: Search skips what Hide mode hides, for works and for library fandoms; the key that recomputes the matches includes the reveal. | The same fault; fixed in `4e254aa7`. |
+| A19-4 | Fixed: a load token on both pagers. | Already had one (`loadGeneration`). |
+| A19-5 | Fixed: Home and `accountSubscriptions` check the session after the await. | A weaker form (the previous account's list stayed until the next load finished); fixed with the same check. |
+| A19-6 | Fixed: the long-press menu is empty while a work is blurred (one guard in the shared modifier), and a blurred Home cover sits in no link. | The same fault on Home's covers and hero, and on the collection page's rows; fixed. The Library's lists already had the guard. |
+| A19-7 | Fixed: the drafts of an unnamed session move to the account that Verify Session names (one step of the generation and a real name; never over a draft that account has). | Android has no unnamed-session state. |
+| A19-8 | Fixed: "Hidden mature work" in Select mode. | Covers, the hero, the queue page's rows and the ledger rows still gave the title to a screen reader under the blur (A18-5 fixed only the card row). One shared modifier now (`hiddenMatureWorkSemantics`), on every blurred surface. |
+| A19-9 | Fixed: a concealed work is listed as "Hidden mature work" and a tap reveals it. | The same fault; fixed the same way. |
+| A19-10 | Fixed: the file's name and the system's reason are private in the log. | Not checked. |
+
+Unconfirmed items: handed to Grok's A20, which also reviews these fixes.
