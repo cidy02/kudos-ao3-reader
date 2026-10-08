@@ -425,7 +425,8 @@ fun SubjectChip(
     palette: SubjectPalette? = null,
     fontWeight: FontWeight? = null,
     horizontalPadding: Dp? = null,
-    verticalPadding: Dp? = null
+    verticalPadding: Dp? = null,
+    maxLines: Int = 1
 ) {
     val tokens = LocalKudosTokens.current
     val pill = style is SubjectChipStyle.Pill
@@ -480,7 +481,7 @@ fun SubjectChip(
                 lineHeight = 18.sp,
                 fontWeight = fontWeight ?: if (style == SubjectChipStyle.Tinted) FontWeight.Medium else FontWeight.Normal,
                 style = TextStyle(fontFeatureSettings = "tnum"),
-                maxLines = 1,
+                maxLines = maxLines,
                 overflow = TextOverflow.Ellipsis
             )
             if (trailingIcon != null) {

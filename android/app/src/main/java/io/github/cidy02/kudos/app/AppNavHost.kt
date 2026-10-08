@@ -662,6 +662,7 @@ fun AppNavHost(
                     onOpenSettings = { navController.navigate(Routes.ao3CollectionForm(slug)) },
                     onOpenMaintainers = { navController.navigate(Routes.ao3CollectionMaintainers(slug, title ?: slug)) },
                     onOpenChallengeSettings = { owner -> navController.navigate(Routes.ao3ChallengeSettings(slug, title ?: slug, owner)) },
+                    onOpenPrompts = { owner -> navController.navigate(Routes.ao3PromptMeme(slug, title ?: slug, owner)) },
                     settingsRepository = container.settingsRepository,
                     privacyGate = container.privacyGate,
                     onOpenWork = { work ->
@@ -690,12 +691,32 @@ fun AppNavHost(
                 repository = container.collectionDetailRepository,
                 onOpenWeb = { navController.navigate(Routes.webFallback(it)) },
                 onOpenTagSet = { id, title -> navController.navigate(Routes.ao3TagSet(id, title, isModerator = true)) },
+                onOpenPrompts = { slug, title ->
+                    navController.navigate(Routes.ao3PromptMeme(slug, title, entry.arguments?.getBoolean("owner") == true))
+                },
                 onOpenExternal = { url ->
                     // The fixture-only demo must never launch an OS browser that can contact AO3.
                     if (io.github.cidy02.kudos.network.ao3.DemoNetwork.isActive) navController.navigate(Routes.webFallback(url))
                     else runCatching { context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW,
                         android.net.Uri.parse(url))) }
                 }
+            )
+        }
+        sharedComposable(
+            Routes.AO3PromptMeme,
+            arguments = listOf(
+                Routes.navArgOf("collectionSlug"),
+                navArgument("collectionTitle") { type = NavType.StringType; defaultValue = "" },
+                navArgument("owner") { type = NavType.BoolType; defaultValue = false }
+            )
+        ) { entry ->
+            val slug = Routes.routeArg(entry, "collectionSlug")
+            if (slug == null) navController.popBackStack()
+            else io.github.cidy02.kudos.account.AO3PromptMemeScreen(
+                slug = slug, title = Routes.routeArg(entry, "collectionTitle").orEmpty(),
+                viewerIsOwner = entry.arguments?.getBoolean("owner") == true,
+                repository = container.collectionDetailRepository,
+                onOpenWeb = { navController.navigate(Routes.webFallback(it)) }
             )
         }
         sharedComposable(
