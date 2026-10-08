@@ -163,6 +163,50 @@ class CommentsViewModelDraftTest {
         // Actually, updateDraft is called by the user. If the user types fast, it should win.
     }
 
+    /** Audit A18-1 (iOS `saveDraft`): an edit never writes the draft store. */
+    @Test
+    fun anEditNeverReplacesTheNewCommentWaitingInTheDraftStore() = runTest(testDispatcher) {
+        draftStore.saveDraft("thanks for the chapter", workId, parentId = null)
+        testDispatcher.scheduler.advanceUntilIdle()
+        val viewModel = createViewModel(target)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        viewModel.openComposer(editing = commentStub(9, "me").copy(body = "I loved this"))
+        viewModel.updateDraft("I loved this!")
+        viewModel.closeComposer()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals("thanks for the chapter", draftStore.getDraft(workId, parentId = null))
+
+        // A new comment opens with its own draft, not with what the edit left in the field.
+        viewModel.openComposer()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals("thanks for the chapter", viewModel.draft.value)
+        assertEquals(true, viewModel.composerPresented.value)
+    }
+
+    /** Audit A18-2: the name is read when a draft is saved, not when the screen first drew. */
+    @Test
+    fun aDraftBelongsToWhoeverIsSignedInWhenItIsSaved() = runTest(testDispatcher) {
+        var signedIn: String? = null // the first frame did not know yet
+        val repo = AO3CommentRepository(
+            publicClient = FakePublicClient(success(writeResource("ao3/comments/comments_basic.html"))),
+            authenticatedClient = FakeAuthenticatedClient(
+                getResults = listOf(AO3Result.Failure(io.github.cidy02.kudos.network.ao3.AO3Error.AuthenticationRequired)),
+                postResults = emptyList()
+            )
+        )
+        val viewModel = CommentsViewModel(repo, target, draftStore) { signedIn }
+        signedIn = "alice"
+        viewModel.openComposer()
+        testDispatcher.scheduler.advanceUntilIdle()
+        viewModel.updateDraft("see you at the con")
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertEquals("see you at the con", draftStore.getDraft(workId, parentId = null, username = "alice"))
+        assertEquals(null, draftStore.getDraft(workId, parentId = null, username = null))
+        assertEquals(null, draftStore.getDraft(workId, parentId = null, username = "bob"))
+    }
+
     private fun createViewModel(
         target: AO3CommentTarget?,
         focusedId: Long? = null,
@@ -175,7 +219,7 @@ class CommentsViewModelDraftTest {
                 postResults = emptyList()
             )
         )
-        val vm = CommentsViewModel(repo, target, draftStore, username)
+        val vm = CommentsViewModel(repo, target, draftStore) { username }
         if (focusedId != null) {
             vm.load(1, focusedId)
         }
