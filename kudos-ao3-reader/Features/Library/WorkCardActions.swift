@@ -322,6 +322,9 @@ private struct LocalWorkContextMenuModifier: ViewModifier {
     var scopedRemoval: ScopedRemoval?
 
     @Environment(\.modelContext) private var context
+    @Environment(PrivacyGate.self) private var gate
+    @AppStorage("hideMatureContent") private var hideMature = true
+    @AppStorage("matureContentMode") private var matureMode: MaturePrivacyMode = .obscure
     @AppStorage("confirmBeforeDelete") private var confirmBeforeDelete = true
     @State private var showingAddToQueue = false
     @State private var showingAddToCollection = false
@@ -334,104 +337,110 @@ private struct LocalWorkContextMenuModifier: ViewModifier {
         work.ao3WorkID ?? WorkTags.ao3WorkID(from: work.sourceURL)
     }
 
+    private var isBlurred: Bool { gate.isBlurred(work, enabled: hideMature, mode: matureMode) }
+
     func body(content: Content) -> some View {
         content
             .contextMenu {
-                NavigationLink(value: LocalWorkDestination.reader(work)) {
-                    Label("Read", systemImage: "book")
-                }
+                // A blurred work offers nothing until it is revealed: Read and Work Details
+                // here opened it, past the blur and past a required Face ID (audit A19-6).
+                if !isBlurred {
+                    NavigationLink(value: LocalWorkDestination.reader(work)) {
+                        Label("Read", systemImage: "book")
+                    }
 
-                if commentsWorkID != nil {
+                    if commentsWorkID != nil {
+                        Button {
+                            showingComments = true
+                        } label: {
+                            Label("Comments", systemImage: "bubble.left.and.bubble.right")
+                        }
+                    }
+
+                    if let onSelect {
+                        Button(action: onSelect) {
+                            Label("Select", systemImage: "checklist")
+                        }
+                    }
+
+                    // Save and Delete are different axes, so both are always offered.
+                    // Previously this was an either/or — saved works got Delete, unsaved
+                    // works got Save — which meant a work the user had never explicitly
+                    // saved (an imported file, say) had **no way to delete it from this
+                    // menu at all**. Delete now lives at the bottom, where a destructive
+                    // action belongs.
+                    WorkDownloadButton(work: work)
+
                     Button {
-                        showingComments = true
+                        toggleFavorite()
                     } label: {
-                        Label("Comments", systemImage: "bubble.left.and.bubble.right")
+                        let labels = WorkActionLabels.favorite(isFavorite: work.isFavorite)
+                        Label(labels.title, systemImage: labels.systemImage)
                     }
-                }
 
-                if let onSelect {
-                    Button(action: onSelect) {
-                        Label("Select", systemImage: "checklist")
-                    }
-                }
-
-                // Save and Delete are different axes, so both are always offered.
-                // Previously this was an either/or — saved works got Delete, unsaved
-                // works got Save — which meant a work the user had never explicitly
-                // saved (an imported file, say) had **no way to delete it from this
-                // menu at all**. Delete now lives at the bottom, where a destructive
-                // action belongs.
-                WorkDownloadButton(work: work)
-
-                Button {
-                    toggleFavorite()
-                } label: {
-                    let labels = WorkActionLabels.favorite(isFavorite: work.isFavorite)
-                    Label(labels.title, systemImage: labels.systemImage)
-                }
-
-                Button {
-                    toggleSavedForLater()
-                } label: {
-                    let labels = WorkActionLabels.savedForLater(isQueued: work.isInSavedForLaterQueue)
-                    Label(labels.title, systemImage: labels.systemImage)
-                }
-
-                Button {
-                    showingAddToQueue = true
-                } label: {
-                    Label("Add to Queue", systemImage: "list.bullet.rectangle")
-                }
-
-                Button {
-                    toggleFinished()
-                } label: {
-                    let labels = WorkActionLabels.finished(isFinished: work.isFinished)
-                    Label(labels.title, systemImage: labels.systemImage)
-                }
-
-                Button {
-                    showingAddToCollection = true
-                } label: {
-                    Label("Add to Collection", systemImage: "square.stack")
-                }
-
-                // Offered for any converted import, not just a stale one: a rebuild also
-                // applies *importer* fixes the converter version cannot know about, so an
-                // up-to-date work still has a reason to be rebuilt. A redundant rebuild
-                // asks first, since it costs time and changes the file.
-                if let rebuildable = WorkReconversion.candidate(for: work) {
                     Button {
-                        if rebuildable.isStale {
-                            Task { await rebuildFromOriginal() }
+                        toggleSavedForLater()
+                    } label: {
+                        let labels = WorkActionLabels.savedForLater(isQueued: work.isInSavedForLaterQueue)
+                        Label(labels.title, systemImage: labels.systemImage)
+                    }
+
+                    Button {
+                        showingAddToQueue = true
+                    } label: {
+                        Label("Add to Queue", systemImage: "list.bullet.rectangle")
+                    }
+
+                    Button {
+                        toggleFinished()
+                    } label: {
+                        let labels = WorkActionLabels.finished(isFinished: work.isFinished)
+                        Label(labels.title, systemImage: labels.systemImage)
+                    }
+
+                    Button {
+                        showingAddToCollection = true
+                    } label: {
+                        Label("Add to Collection", systemImage: "square.stack")
+                    }
+
+                    // Offered for any converted import, not just a stale one: a rebuild also
+                    // applies *importer* fixes the converter version cannot know about, so an
+                    // up-to-date work still has a reason to be rebuilt. A redundant rebuild
+                    // asks first, since it costs time and changes the file.
+                    if let rebuildable = WorkReconversion.candidate(for: work) {
+                        Button {
+                            if rebuildable.isStale {
+                                Task { await rebuildFromOriginal() }
+                            } else {
+                                confirmingRebuild = true
+                            }
+                        } label: {
+                            Label("Rebuild from Original", systemImage: "arrow.triangle.2.circlepath")
+                        }
+                    }
+
+                    NavigationLink(value: LocalWorkDestination.detail(work)) {
+                        Label("Work Details", systemImage: "info.circle")
+                    }
+
+                    Divider()
+
+                    if let scopedRemoval {
+                        Button(role: .destructive, action: scopedRemoval.action) {
+                            Label(scopedRemoval.title, systemImage: "minus.circle")
+                        }
+                    }
+
+                    Button(role: .destructive) {
+                        if confirmBeforeDelete {
+                            pendingDelete = work
                         } else {
-                            confirmingRebuild = true
+                            PreservedWorkService.softDelete(work, in: context)
                         }
                     } label: {
-                        Label("Rebuild from Original", systemImage: "arrow.triangle.2.circlepath")
+                        Label("Delete", systemImage: "trash")
                     }
-                }
-
-                NavigationLink(value: LocalWorkDestination.detail(work)) {
-                    Label("Work Details", systemImage: "info.circle")
-                }
-
-                Divider()
-
-                if let scopedRemoval {
-                    Button(role: .destructive, action: scopedRemoval.action) {
-                        Label(scopedRemoval.title, systemImage: "minus.circle")
-                    }
-                }
-
-                Button(role: .destructive) {
-                    if confirmBeforeDelete {
-                        pendingDelete = work
-                    } else {
-                        PreservedWorkService.softDelete(work, in: context)
-                    }
-                } label: {
-                    Label("Delete", systemImage: "trash")
                 }
             }
             // Neutral, not the ambient accent (red) — matches WorkListMoreMenu.

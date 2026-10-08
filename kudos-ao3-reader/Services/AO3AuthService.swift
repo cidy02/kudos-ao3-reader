@@ -805,7 +805,11 @@ final class AO3AuthService {
         guard isLoggedIn, let username,
               let url = AO3Client.subscriptionsURL(username: username, page: page) else { return [] }
         let request = try authenticatedRequest(for: url)
+        let generation = sessionGeneration
         let result = try await AO3Client.shared.subscriptionsPage(for: request, page: page)
+        // Signed out, or someone else, since the request left: the page is nobody's now,
+        // and its count must not be filed under the session that replaced it.
+        guard isLoggedIn, sessionGeneration == generation else { return [] }
         AO3AccountListCountsCache.shared.record(
             page: result,
             kind: .subscriptions,

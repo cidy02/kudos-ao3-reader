@@ -408,6 +408,15 @@ final class AO3WebLoginCoordinator: NSObject, AO3LoginPerforming {
 }
 
 extension AO3WebLoginCoordinator: WKNavigationDelegate {
+    /// The login view keeps the same AO3 session as the browser, and follows the same rule.
+    func webView(
+        _: WKWebView,
+        decidePolicyFor navigationAction: WKNavigationAction,
+        decisionHandler: @escaping (WKNavigationActionPolicy) -> Void
+    ) {
+        decisionHandler(BrowserThemeStyle.decide(navigationAction))
+    }
+
     func webView(_: WKWebView, didFinish _: WKNavigation!) {
         Task { [weak self] in
             guard let self else { return }
