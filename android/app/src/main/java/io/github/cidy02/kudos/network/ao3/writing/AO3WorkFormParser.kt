@@ -37,20 +37,7 @@ class AO3WorkFormParser {
         // The broad iOS fallback must not accept search or deletion forms as an editor.
         if (element.selectFirst("input[name='work[title]']") == null) invalid("AO3 didn't return a work editor.")
 
-        val rawControls = doc.select("input, select, textarea, button").filter { control ->
-            if (control.hasAttr("form")) element.id().isNotEmpty() && control.attr("form") == element.id()
-            else control.parents().firstOrNull { it.tagName() == "form" } == element
-        }.map(::snapshot)
-        // A browser resolves malformed multiple-checked radios to the last checked
-        // control in the group. Keep all served checked attributes independently.
-        val lastCheckedRadio = rawControls.withIndex().filter {
-            it.value.tag == "input" && it.value.type == "radio" && "checked" in it.value.attributes
-        }.associate { it.value.name to it.index }
-        val controls = rawControls.mapIndexed { index, control ->
-            if (control.tag == "input" && control.type == "radio")
-                control.copy(browserChecked = lastCheckedRadio[control.name] == index)
-            else control
-        }
+        val controls = servedControls(doc, element)
         fun inputs(name: String) = controls.filter { it.tag == "input" && it.name == name }
         fun input(name: String): String? {
             val matches = inputs(name)
@@ -156,6 +143,24 @@ class AO3WorkFormParser {
             anonymous = optionalChecked(AO3WorkFormField.anonymous), collectionInbox = optionalChecked(AO3WorkFormField.collectionInbox),
             workSkinID = selected(AO3WorkFormField.workSkinID), workSkinOptions = select(AO3WorkFormField.workSkinID)
         )
+    }
+
+    /** Shared by work and challenge forms: preserve all controls, even unsuccessful ones. */
+    internal fun servedControls(doc: org.jsoup.nodes.Document, element: Element): List<AO3ServedControl> {
+        val rawControls = doc.select("input, select, textarea, button").filter { control ->
+            if (control.hasAttr("form")) element.id().isNotEmpty() && control.attr("form") == element.id()
+            else control.parents().firstOrNull { it.tagName() == "form" } == element
+        }.map(::snapshot)
+        // A browser resolves malformed multiple-checked radios to the last checked
+        // control in the group. Keep all served checked attributes independently.
+        val lastCheckedRadio = rawControls.withIndex().filter {
+            it.value.tag == "input" && it.value.type == "radio" && "checked" in it.value.attributes
+        }.associate { it.value.name to it.index }
+        return rawControls.mapIndexed { index, control ->
+            if (control.tag == "input" && control.type == "radio")
+                control.copy(browserChecked = lastCheckedRadio[control.name] == index)
+            else control
+        }
     }
 
     private fun snapshot(element: Element): AO3ServedControl {

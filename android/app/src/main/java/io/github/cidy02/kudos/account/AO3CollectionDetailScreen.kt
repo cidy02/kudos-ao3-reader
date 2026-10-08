@@ -48,6 +48,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.fragment.app.FragmentActivity
+import io.github.cidy02.kudos.auth.isSignedIn
 import io.github.cidy02.kudos.app.PrivacyGate
 import io.github.cidy02.kudos.app.ProvidePushedShellChrome
 import io.github.cidy02.kudos.core.model.KudosSettings
@@ -92,7 +93,8 @@ fun AO3CollectionDetailScreen(
     onOpenSettings: () -> Unit,
     onOpenMaintainers: () -> Unit,
     onOpenChallengeSettings: (Boolean) -> Unit,
-    onOpenPrompts: (Boolean) -> Unit
+    onOpenPrompts: (Boolean) -> Unit,
+    onOpenSignUp: () -> Unit = {}
 ) {
     var show by remember(slug) { mutableStateOf<AO3CollectionShow?>(null) }
     var segment by remember(slug) { mutableStateOf(AO3CollectionSegment.Works) }
@@ -103,6 +105,7 @@ fun AO3CollectionDetailScreen(
     var phase by remember(slug) { mutableStateOf<AO3CollectionDetailPhase>(AO3CollectionDetailPhase.Idle) }
     var loadGeneration by remember(slug) { mutableIntStateOf(0) }
     var showMenu by remember(slug) { mutableStateOf(false) }
+    val signedIn by repository.authRepository.state.collectAsState()
     val scope = rememberCoroutineScope()
     val settings by settingsRepository.settings.collectAsState(initial = KudosSettings.Defaults)
     val reveal by privacyGate.state.collectAsState()
@@ -279,7 +282,7 @@ fun AO3CollectionDetailScreen(
             }
 
             show?.let { collectionShow ->
-                val actions = collectionManageActions(collectionShow, slug)
+                val actions = collectionManageActions(collectionShow, slug, signedIn.isSignedIn)
                 if (actions.isNotEmpty()) {
                     item {
                         SectionRuleHeader(
@@ -300,7 +303,7 @@ fun AO3CollectionDetailScreen(
                                     onOpenSettings, onOpenMaintainers, onOpenWebFallback,
                                     { onOpenChallengeSettings(collectionShow.collection.viewerIsOwner) },
                                     // Any participant opens Prompts; only an owner's opening asks AO3 for the close date.
-                                    { onOpenPrompts(collectionShow.collection.viewerIsOwner) })
+                                    { onOpenPrompts(collectionShow.collection.viewerIsOwner) }, onOpenSignUp)
                             }
                         }
                     }
@@ -381,7 +384,8 @@ fun AO3CollectionDetailScreen(
 internal fun CollectionManageRow(label: String, url: String, onOpenModeration: () -> Unit,
     onOpenSettings: () -> Unit, onOpenMaintainers: () -> Unit, onOpenWebFallback: (String) -> Unit,
     onOpenChallengeSettings: () -> Unit = { onOpenWebFallback(url) },
-    onOpenPrompts: () -> Unit = { onOpenWebFallback(url) }) {
+    onOpenPrompts: () -> Unit = { onOpenWebFallback(url) },
+    onOpenSignUp: () -> Unit = {}) {
     SubjectFormRow(label = label, showsDisclosure = true, onClick = {
         when (label) {
             "Moderation" -> onOpenModeration()
@@ -389,6 +393,7 @@ internal fun CollectionManageRow(label: String, url: String, onOpenModeration: (
             "Maintainers" -> onOpenMaintainers()
             "Challenge Settings" -> onOpenChallengeSettings()
             "Prompts" -> onOpenPrompts()
+            "Your Sign-up" -> onOpenSignUp()
             else -> onOpenWebFallback(url)
         }
     })
@@ -599,7 +604,8 @@ private fun segmentRowsAreEmpty(
 
 private fun collectionManageActions(
     show: AO3CollectionShow,
-    slug: String
+    slug: String,
+    signedIn: Boolean
 ): List<AO3CollectionManageAction> = buildList {
     val root = "${AO3Constants.BASE_URL}/collections/$slug"
     if (show.isMaintainer) {
@@ -614,7 +620,7 @@ private fun collectionManageActions(
         show.dashboard.assignmentsUrl?.let { add(AO3CollectionManageAction("Assignments", it)) }
     }
     show.dashboard.promptsUrl?.let { add(AO3CollectionManageAction("Prompts", it)) }
-    show.dashboard.signUpsUrl?.let { add(AO3CollectionManageAction("Your Sign-up", it)) }
+    if (signedIn) show.dashboard.signUpsUrl?.let { add(AO3CollectionManageAction("Your Sign-up", it)) }
     if (show.collection.viewerIsOwner) {
         show.dashboard.challengeSettingsUrl?.let {
             add(AO3CollectionManageAction("Challenge Settings", it))

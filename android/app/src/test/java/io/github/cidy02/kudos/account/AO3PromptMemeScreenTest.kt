@@ -70,7 +70,7 @@ class AO3PromptMemeScreenTest {
     }
     private fun action(title: String, id: Int) = compose.onNode(hasText(title) and hasAnyAncestor(hasTestTag("prompt-$id")))
     private fun noWrites() {
-        listOf("New prompt", "Submit sign-up").forEach { compose.onNodeWithText(it).assertDoesNotExist() }
+        listOf("Submit sign-up").forEach { compose.onNodeWithText(it).assertDoesNotExist() }
         assertEquals(0, client.posts)
     }
 
@@ -303,7 +303,8 @@ class AO3PromptMemeScreenTest {
         assertTrue(releaseLayouts.all { !it.didOverflowHeight && !it.isLineEllipsized(it.lineCount - 1) })
         assertEquals(listOf(promptFirstUrl), client.gets.drop(3))
         assertEquals(1, client.posts)
-        compose.onNodeWithText("New prompt").assertDoesNotExist()
+        // Since brief 3bl the prompt meme offers New prompt (the sign-up form).
+        compose.onNodeWithText("New prompt").assertExists()
     }
     @Test fun lightAtAccessibilityScale() = accessibleTheme(KudosThemeMode.Light)
     @Test fun darkAtAccessibilityScale() = accessibleTheme(KudosThemeMode.Dark)

@@ -348,6 +348,7 @@ returns the colour as given. Android copies it.
 - **C.** Change only the default accent in Dark and OLED to a lighter red, and leave a
   chosen colour alone.
 
-Until answered: unchanged (B), except that new sheets use the palette's accent for their
-text actions, as the newer screens already do.
+Until answered: iOS unchanged. On Android the action rows (Settings, and the new forms'
+buttons) now use the palette's accent, which is readable on every theme and keeps the
+chosen hue; about forty other places still use the raw accent for text or an icon.
 

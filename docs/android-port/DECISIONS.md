@@ -946,3 +946,20 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   the old Material dialogs. Android now stamps the preservation status and time it used to
   carry only for iOS.
   Reverse: revert the 3bn commit; no schema or backup key changed.
+
+## 2026-10-08: a challenge sign-up can be filled in and submitted (brief 3bl)
+
+- "Your Sign-up" on a collection and "New prompt" on a prompt meme open the app's own form
+  (iOS 1ca), no longer AO3's page. One read on opening; Submit is one fresh token read and
+  one POST, never retried. Android replays every served control iOS's encoder leaves out,
+  each prompt's hidden tag-set id included; iOS does not send those (audit A4).
+  Fixtures only: never run against AO3.
+  Reverse: point the two entry points back at the in-app browser (`onOpenSignUp`).
+
+## 2026-10-08: action rows are drawn in the palette's accent
+
+- `SettingsActionRow`'s text and icon use `tokens.scopePalette.accent`, not the raw accent:
+  AO3 red on a dark panel was about 1.8 to 1 ("Export Backup…" in Dark). The palette's
+  accent follows the reader's chosen hue and is tuned per theme, as iOS's palette does for
+  its text roles. Other text in the raw accent, and iOS's tinted rows, are owner question 19.
+  Reverse: `else -> tokens.accent` in `settings/SettingsChrome.kt`.

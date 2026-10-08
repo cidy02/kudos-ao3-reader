@@ -145,6 +145,9 @@ internal object DemoNetworkRoutes {
         "^/collections/new/?$" to "ao3_demo_collection_new",
         "^/collections/winter_exchange/edit/?$" to "ao3_demo_collection_edit",
         "^/collections/winter_exchange/confirm_delete/?$" to "ao3_demo_collection_destroy",
+        "^/collections/winter_exchange/signups/new/?$" to "ao3_demo_signup_winter_new",
+        "^/collections/winter_exchange/signups/4/edit/?$" to "ao3_demo_signup_winter_edit",
+        "^/collections/summer_meme/signups/new/?$" to "ao3_demo_signup_summer_new",
         "^/collections/[^/]+/signups/\\d+" to "ao3_challenge_signup",
         "^/collections/[^/]+/signups" to "ao3_challenge_signups",
         "^/collections/[^/]+/assignments" to "ao3_challenge_assignments",
@@ -278,6 +281,7 @@ internal class DemoNetworkInterceptor(
     private val collectionParticipants = DemoCollectionParticipants()
     private val tagSets = DemoTagSetWrites()
     private val promptMeme = DemoPromptMemeWrites()
+    private val signUps = DemoChallengeSignUps()
 
     override fun intercept(chain: Interceptor.Chain): Response {
         if (!isActive()) return chain.proceed(chain.request())
@@ -332,6 +336,11 @@ internal class DemoNetworkInterceptor(
             return Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1)
                 .code(if (term == "fail") 403 else 200).message("Local autocomplete answer")
                 .header("Content-Type", type).body(json.toString().toResponseBody(type.toMediaType())).build()
+        }
+        signUps.answer(chain.request(), fixtures())?.let { answer ->
+            return Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1)
+                .code(answer.first).message("Local sign-up answer").header("Content-Type", HTML)
+                .body(answer.second.toResponseBody(HTML_TYPE)).build()
         }
         promptMeme.answer(chain.request(), fixtures())?.let { answer ->
             return Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1)
@@ -836,5 +845,88 @@ private class DemoPromptMemeWrites {
         ownClaims.remove(id)
         changed += id
         return 200 to "<div class='flash notice'>Claim released.</div>"
+    }
+}
+
+/** One local form per address. All mutations die with the interceptor/process. */
+private class DemoChallengeSignUps {
+    private val saved = mutableMapOf<String, String>()
+
+    @Synchronized
+    fun answer(request: okhttp3.Request, source: FixtureSource): Pair<Int, String>? {
+        val path = DemoNetworkRoutes.decodedPath(request.url).trimEnd('/')
+        val slug = request.url.pathSegments.getOrNull(1) ?: return null
+        if (slug !in setOf("winter_exchange", "summer_meme") ||
+            !path.startsWith("/collections/$slug/signups")) return null
+        val base = "/collections/$slug/signups"
+        if (request.method == "GET") {
+            if (path !in setOf("$base/new", "$base/4/edit")) return if (path == base) null else 404 to ""
+            saved[slug]?.let { return 200 to it }
+            val fixture = DemoNetworkRoutes.fixtureName(request.url) ?: return 404 to ""
+            return 200 to (source.read(fixture)?.decodeToString() ?: return 404 to "")
+        }
+        if (request.method != "POST" || path !in setOf(base, "$base/4")) return 405 to ""
+        val buffer = Buffer()
+        request.body?.writeTo(buffer)
+        val fields = buffer.readUtf8().split('&').map { encoded ->
+            val pair = encoded.split('=', limit = 2)
+            URLDecoder.decode(pair[0], "UTF-8") to URLDecoder.decode(pair.getOrElse(1) { "" }, "UTF-8")
+        }
+        val override = fields.lastOrNull { it.first == "_method" }?.second
+        if (override != if (path == "$base/4") "put" else null) return 405 to ""
+        val fixture = if (slug == "summer_meme") "ao3_demo_signup_summer_new"
+            else if (path == "$base/4") "ao3_demo_signup_winter_edit" else "ao3_demo_signup_winter_new"
+        val raw = saved[slug] ?: source.read(fixture)?.decodeToString() ?: return 404 to ""
+        val doc = Jsoup.parse(raw)
+        val token = doc.selectFirst("meta[name=csrf-token]")?.attr("content")
+        if (fields.lastOrNull { it.first == "authenticity_token" }?.second != token)
+            return 422 to "<div class='flash error'>Couldn't prepare the request. Try again, or open the work on AO3.</div>"
+        val form = doc.selectFirst("form[action*='/signups']") ?: return 404 to ""
+        // Echo modeled posted values in the response; unknown controls stay as served.
+        for ((name, value) in fields) {
+            val controls = form.select("input, textarea, select").filter { it.attr("name") == name }
+            if (controls.isEmpty() && name.startsWith("challenge_signup[")) {
+                val flag = Regex("\\[(?:anonymous|any_fandom|any_character|any_relationship|any_freeform|_destroy)]$").containsMatchIn(name)
+                when {
+                    name.endsWith("[description]") -> form.appendElement("textarea").attr("name", name).text(value)
+                    flag -> {
+                        form.appendElement("input").attr("type", "hidden").attr("name", name).attr("value", "0")
+                        val box = form.appendElement("input").attr("type", "checkbox").attr("name", name).attr("value", "1")
+                        if (value == "1") box.attr("checked", "checked")
+                    }
+                    else -> form.appendElement("input").attr("type", "hidden").attr("name", name).attr("value", value)
+                }
+            }
+            controls.forEach { control ->
+                when {
+                    control.tagName() == "textarea" -> control.text(value)
+                    control.attr("type") == "checkbox" -> {
+                        if (value == control.attr("value")) control.attr("checked", "checked") else control.removeAttr("checked")
+                    }
+                    control.tagName() == "input" && control.attr("type") != "hidden" -> control.attr("value", value)
+                }
+            }
+        }
+        if (fields.any { it.first.endsWith("[description]") && it.second.contains("Uncharted Lantern", true) }) {
+            val error = source.read("ao3_demo_signup_refused")?.decodeToString() ?: return 404 to ""
+            doc.body().prepend(Jsoup.parse(error).body().html())
+            return 422 to doc.outerHtml() // no saved state changed
+        }
+        form.attr("action", "$base/4")
+        if (form.selectFirst("input[name=_method]") == null)
+            form.appendElement("input").attr("type", "hidden").attr("name", "_method").attr("value", "put")
+        for (kind in listOf("requests", "offers")) {
+            val indices = fields.mapNotNull { Regex("^challenge_signup\\[${kind}_attributes]\\[([0-9]+)]")
+                .find(it.first)?.groupValues?.get(1)?.toIntOrNull() }.distinct()
+            for (index in indices) {
+                val name = "challenge_signup[${kind}_attributes][$index][id]"
+                if (form.select("input").none { it.attr("name") == name })
+                    form.appendElement("input").attr("type", "hidden").attr("name", name).attr("value", (100 + index + if (kind == "offers") 10 else 0).toString())
+            }
+        }
+        saved[slug] = doc.outerHtml()
+        val notice = source.read("ao3_demo_signup_saved")?.decodeToString() ?: return 404 to ""
+        doc.body().prepend(Jsoup.parse(notice).body().html())
+        return 200 to doc.outerHtml()
     }
 }
