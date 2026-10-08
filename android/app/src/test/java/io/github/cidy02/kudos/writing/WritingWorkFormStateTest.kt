@@ -232,7 +232,8 @@ internal fun assertDelta(old: AO3WorkForm, changed: AO3WorkForm, expected: Map<S
 }
 
 internal data class WorkFormTestSetup(val auth: AO3AuthRepository, val client: WorkFormScreenClient, val repository: AO3WorkFormRepository) {
-    fun model(id: Long?) = WritingWorkFormState(id, repository, auth, today = { LocalDate.of(2026, 10, 7) })
+    val writes = io.github.cidy02.kudos.network.ao3.writes.AO3WriteRepository(DefaultAO3AuthenticatedClient(client, client, auth))
+    fun model(id: Long?) = WritingWorkFormState(id, repository, auth, today = { LocalDate.of(2026, 10, 7) }, writes = writes)
 }
 internal suspend fun workFormSetup(signedIn: Boolean = true): WorkFormTestSetup {
     val auth = AO3AuthRepository(MemorySessionStore(if (signedIn) testSession() else null), MemoryCookieStore())
@@ -247,6 +248,11 @@ internal class WorkFormScreenClient : AO3Client, AO3FormPostClient {
     var body: String? = null
     var failure: AO3Error? = null
     var beforeResponse: suspend () -> Unit = {}
+    val recordedPosts = mutableListOf<WorkFormPost>()
+    var postFailure: AO3Error? = null
+    var postBody = "<main id='main'><div class='flash notice'>Draft was successfully saved.</div></main>"
+    var postStatus = 200
+    var beforePostResponse: suspend () -> Unit = {}
     override suspend fun get(url: String, headers: Map<String, String>): AO3Result<AO3HttpResponse> {
         gets += url
         beforeResponse()
@@ -261,6 +267,10 @@ internal class WorkFormScreenClient : AO3Client, AO3FormPostClient {
     }
     override suspend fun postForm(url: String, formFields: List<Pair<String, String>>, headers: Map<String, String>): AO3Result<AO3HttpResponse> {
         posts++
-        error("Brief 3bf must never send anything")
+        recordedPosts += WorkFormPost(url, formFields, headers)
+        beforePostResponse()
+        postFailure?.let { return AO3Result.Failure(it) }
+        return AO3Result.Success(AO3HttpResponse(url, postStatus, emptyMap(), postBody))
     }
 }
+internal data class WorkFormPost(val url: String, val fields: List<Pair<String, String>>, val headers: Map<String, String>)

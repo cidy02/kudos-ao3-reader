@@ -282,12 +282,18 @@ internal class DemoNetworkInterceptor(
     private val tagSets = DemoTagSetWrites()
     private val promptMeme = DemoPromptMemeWrites()
     private val signUps = DemoChallengeSignUps()
+    private val workForms = DemoWorkSaves()
 
     override fun intercept(chain: Interceptor.Chain): Response {
         if (!isActive()) return chain.proceed(chain.request())
         val url = chain.request().url
         if (!DemoNetworkRoutes.isAo3Host(url.host)) return chain.proceed(chain.request())
         val path = DemoNetworkRoutes.decodedPath(url)
+        workForms.answer(chain.request(), fixtures(), clock)?.let { answer ->
+            return Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1)
+                .code(answer.first).message("Local work Save answer").header("Content-Type", HTML)
+                .body(answer.second.toResponseBody(HTML_TYPE)).build()
+        }
         // Real local EPUBs for this brief's batch; no background download escapes to AO3.
         val seriesDownload = Regex("^/downloads/(99511[0-5]|995120|99900000[2-5])/work\\.epub$").matchEntire(path)
         if (chain.request().method == "GET" && seriesDownload != null) {
@@ -450,6 +456,95 @@ internal class DemoNetworkInterceptor(
     private companion object {
         const val HTML = "text/html; charset=utf-8"
         val HTML_TYPE = HTML.toMediaType()
+    }
+}
+
+/** Process-local AO3 answers. Every supported write terminates here, never at a socket. */
+private class DemoWorkSaves {
+    private val edited = ConcurrentHashMap<Long, String>()
+    private val values = ConcurrentHashMap<Long, Map<String, List<String>>>()
+
+    fun answer(request: okhttp3.Request, source: FixtureSource, clock: Clock?): Pair<Int, String>? {
+        val path = DemoNetworkRoutes.decodedPath(request.url).trimEnd('/')
+        val id = Regex("^/works/(995001|995006|995007)(?:/edit)?$").matchEntire(path)?.groupValues?.get(1)?.toLong()
+        if (request.method == "GET") {
+            if (id != null && path.endsWith("/edit")) edited[id]?.let { return 200 to it }
+            if (!DemoNetworkRoutes.isDraftsPath(path) || values.isEmpty()) return null
+            val name = DemoNetworkRoutes.fixtureName(request.url) ?: return 404 to ""
+            val bytes = source.read(name) ?: return 404 to ""
+            val doc = Jsoup.parse(demoDraftsPage(bytes, clock).decodeToString())
+            if (request.url.queryParameter("page") in listOf(null, "1") && values.containsKey(995007L)) {
+                doc.selectFirst("li#work_995001")?.clone()?.let { row ->
+                    row.attr("id", "work_995007")
+                    row.selectFirst("h4.heading a")?.attr("href", "/works/995007")
+                    doc.selectFirst("ol.work.index")?.prependChild(row)
+                }
+            }
+            for ((workId, fields) in values) {
+                val row = doc.selectFirst("li#work_$workId") ?: continue
+                row.selectFirst("h4.heading a")?.text(fields["work[title]"]?.firstOrNull().orEmpty().ifEmpty { "Untitled" })
+                row.selectFirst("blockquote.summary")?.html(fields["work[summary]"]?.firstOrNull().orEmpty())
+                row.selectFirst("h5.fandoms")?.let { fandoms ->
+                    fandoms.empty()
+                    io.github.cidy02.kudos.network.ao3.writing.splitWorkList(fields["work[fandom_string]"]?.firstOrNull().orEmpty())
+                        .forEach { fandoms.appendElement("a").addClass("tag").text(it) }
+                }
+                for ((kind, name) in listOf("rating" to "work[rating_string]", "category" to "work[category_strings][]",
+                    "warnings" to "work[archive_warning_strings][]")) {
+                    row.selectFirst(".$kind .text")?.text(fields[name].orEmpty().filter { it.isNotEmpty() }.joinToString(", "))
+                }
+                fields["work[chapter_attributes][content]"]?.firstOrNull()?.let {
+                    row.selectFirst("dd.words")?.text(io.github.cidy02.kudos.network.ao3.writing.AO3WordCounter.count(it).toString())
+                }
+            }
+            return 200 to doc.outerHtml()
+        }
+        if (request.method != "POST" || (path != "/works" && (id == null || path.endsWith("/edit")))) return null
+        val workId = id ?: 995007L
+        val fixture = when (workId) {
+            995001L -> "ao3_demo_work_draft_edit"
+            995006L -> "ao3_demo_work_posted_edit"
+            else -> "ao3_work_new_draft"
+        }
+        val html = edited[workId] ?: source.read(fixture)?.decodeToString() ?: return 404 to ""
+        val doc = Jsoup.parse(html)
+        val buffer = okio.Buffer()
+        request.body?.writeTo(buffer)
+        val fields = buffer.readUtf8().split('&').filter { it.isNotEmpty() }.map {
+            val pair = it.split('=', limit = 2)
+            URLDecoder.decode(pair[0], "UTF-8") to URLDecoder.decode(pair.getOrElse(1) { "" }, "UTF-8")
+        }.groupBy({ it.first }, { it.second })
+        val token = doc.selectFirst("meta[name=csrf-token]")?.attr("content")
+        val submit = if (workId == 995006L) "update_button" else "save_button"
+        val valid = fields["authenticity_token"] == listOf(token) && request.header("X-CSRF-Token") == token &&
+            fields[submit] == listOf("1") && fields.keys.none { it in setOf("post_button", "post_without_preview_button", "preview_button", "edit_button") }
+        val reason = when {
+            !valid -> "AO3 didn't accept the change."
+            fields["work[title]"] == listOf("Refuse this draft") -> "Title is too long (maximum is 255 characters)"
+            else -> null
+        }
+        if (reason != null) return 422 to "<main id='main'><form><div id='error'><ul><li>$reason</li></ul></div></form></main>"
+        for (control in doc.select("form#work-form [name]")) {
+            val sent = fields[control.attr("name")] ?: continue
+            when (control.tagName()) {
+                "textarea" -> control.text(sent.firstOrNull().orEmpty())
+                "select" -> control.select("option").forEach { option ->
+                    if (option.attr("value") in sent) option.attr("selected", "selected") else option.removeAttr("selected")
+                }
+                "input" -> if (control.attr("type") in setOf("checkbox", "radio")) {
+                    if (control.attr("value") in sent) control.attr("checked", "checked") else control.removeAttr("checked")
+                } else control.attr("value", sent.firstOrNull().orEmpty())
+            }
+        }
+        doc.selectFirst("form#work-form")?.attr("action", "/works/$workId")
+        if (id == null) {
+            doc.selectFirst("h2.heading")?.text("Edit Work")
+            doc.selectFirst("form#work-form")?.prependElement("input")
+                ?.attr("type", "hidden")?.attr("name", "_method")?.attr("value", "put")
+        }
+        edited[workId] = doc.outerHtml()
+        values[workId] = fields
+        return 200 to "<main id='main'><div class='flash notice'>${if (workId == 995006L) "Work was successfully updated." else "Draft was successfully saved."}</div></main>"
     }
 }
 

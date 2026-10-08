@@ -18,9 +18,14 @@ class WritingWorkFormRoutesTest {
         }
     }
 
-    @Test fun draftsAndNewWorkStillHaveTheirExactBrowserDestinations() {
-        assertEquals("https://archiveofourown.org/works/new", WritingWorkDestination.url())
-        assertEquals("https://archiveofourown.org/works/995001/edit", WritingWorkDestination.url(995001L))
+    @Test fun draftsAndNewWorkAskForTheNativeForm() {
+        assertEquals("writing-work", WritingWorkDestination.route())
+        assertEquals("writing-work?workId=995001", WritingWorkDestination.route(995001L))
+        for (route in listOf(WritingWorkDestination.route(), WritingWorkDestination.route(995001L))) {
+            assertTrue(Routes.hasSubjectHeader(route))
+            assertTrue(Routes.hidesTabBar(route))
+            assertFalse(Routes.isShellRoot(route))
+        }
         assertEquals("Drafts", Routes.titleFor(Routes.WritingDrafts))
         assertTrue(Routes.hasSubjectHeader(Routes.WritingDrafts))
         assertTrue(Routes.hidesTabBar(Routes.WritingDrafts))
