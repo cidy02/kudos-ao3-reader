@@ -133,6 +133,18 @@ struct WritingSeriesCollectionsTests {
 
     // MARK: 1br reorder metadata
 
+    /// The series form has a co-creator field and AO3 permits it
+    /// (`series_params`); it was never sent (audit A4-2).
+    @Test func aSeriesCoCreatorBylineIsPosted() throws {
+        var form = AO3SeriesForm(
+            seriesID: 7, actionURL: try #require(URL(string: "https://archiveofourown.org/series/7")),
+            httpMethodOverride: "patch", csrfToken: "t", title: "Tides"
+        )
+        #expect(!form.parameters().contains { $0.0 == AO3WorkFormField.seriesAuthorByline })
+        form.creators.coauthorByline = "friend (friend)"
+        #expect(form.parameters().first { $0.0 == AO3WorkFormField.seriesAuthorByline }?.1 == "friend (friend)")
+    }
+
     private func row(_ serial: Int, _ title: String, position: Int, draft: Bool = false) -> AO3SeriesWorkRow {
         AO3SeriesWorkRow(workID: nil, serialWorkID: serial, title: title, position: position, isDraft: draft)
     }
