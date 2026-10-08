@@ -371,7 +371,10 @@ struct AO3CollectionDetailView: View {
         // Not maintainer-gated: any participant claims/fills prompts.
         if show.dashboard.promptsURL != nil {
             rows.append(AnyView(manageRow("Prompts") {
-                PromptMemeView(collectionSlug: slug, collectionTitle: title)
+                PromptMemeView(
+                    collectionSlug: slug, collectionTitle: title,
+                    viewerIsOwner: show.collection.viewerIsOwner
+                )
             }))
         }
         // A maintainer can also be a participant, so this is independent of

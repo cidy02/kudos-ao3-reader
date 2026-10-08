@@ -193,7 +193,9 @@ struct ChallengeSettingsView: View {
     private var promptsRows: some View {
         SubjectFormRow(label: "Prompts", value: "Claim and fill", showsDisclosure: true)
             .subjectRowNavigation(accessibilityLabel: "Prompts") {
-                PromptMemeView(collectionSlug: collectionSlug, collectionTitle: effectiveTitle)
+                PromptMemeView(
+                    collectionSlug: collectionSlug, collectionTitle: effectiveTitle, viewerIsOwner: viewerIsOwner
+                )
             }
             .panelSegment(0, of: 2, gutter: gutter)
         SubjectFormRow(label: "Prompts posted anonymously", value: settings.isAnonymous ? "Yes" : "No")
