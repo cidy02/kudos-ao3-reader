@@ -146,6 +146,7 @@ struct AO3AccountWorksList: View {
     @State private var currentPage = 1
     @State private var totalPages = 1
     @State private var phase: Phase = .idle
+    @State private var loadToken = 0
     @State private var showLogin = false
     /// Spec 1p's "X New" badge. Loaded once per appearance rather than read from
     /// `UserDefaults` per row — a decode per row of a two-hundred row list is the
@@ -919,119 +920,6 @@ struct AO3AccountWorksList: View {
 
     // MARK: Loading
 
-    private func load(page: Int) async {
-        let expectedSessionGeneration = auth.sessionGeneration
-        guard let username = auth.username,
-              let url = kind.url(username: username, page: page)
-        else {
-            phase = .failed("You need to be logged in to AO3.")
-            return
-        }
-        phase = .loading
-        do {
-            let request = try auth.authenticatedRequest(for: url)
-            // 1q: a bookmark row is the work plus a note, tags, a privacy flag,
-            // and a date. `AO3SearchPage` has nowhere to put those, and a second
-            // fetch of the same URL would spend another paced request to recover
-            // them. One `accountBookmarksPage` feeds both the work list and
-            // `bookmarkDetails`. Subscriptions does the same with the unsubscribe
-            // form already on the index. Every other kind still goes through `fetch`.
-            let result: AO3SearchPage
-            let details: [Int: AO3AuthorBookmark]
-            let paths: [Int: String]
-            if kind == .bookmarks {
-                let parsed = try await AO3Client.shared.accountBookmarksPage(for: request, page: page)
-                result = AO3SearchPage(
-                    works: parsed.bookmarks.map(\.work),
-                    currentPage: parsed.currentPage,
-                    totalPages: parsed.totalPages
-                )
-                details = Dictionary(
-                    parsed.bookmarks.map { ($0.work.id, $0) },
-                    uniquingKeysWith: { first, _ in first }
-                )
-                paths = [:]
-            } else if kind == .subscriptions {
-                // The unsubscribe action is the `<dd><form>` beside each work.
-                // `AO3SearchPage` has nowhere to put it. One `subscriptionsIndex`
-                // feeds both the work list and `unsubscribePaths`.
-                let parsed = try await AO3Client.shared.subscriptionsIndex(for: request, page: page)
-                result = parsed.page
-                details = [:]
-                paths = parsed.unsubscribePaths
-            } else {
-                result = try await kind.fetch(for: request, page: page)
-                details = [:]
-                paths = [:]
-            }
-            guard auth.sessionGeneration == expectedSessionGeneration else { return }
-            works = result.works
-            readingEntries = Dictionary(
-                result.readingEntries.compactMap { entry in
-                    entry.workID.map { ($0, entry) }
-                },
-                uniquingKeysWith: { first, _ in first }
-            )
-            bookmarkDetails = details
-            unsubscribePaths = paths
-            currentPage = result.currentPage
-            totalPages = result.totalPages
-            if kind == .markedForLater {
-                lastSyncedAt = Date()
-                for work in result.works {
-                    markedForLaterSeenThisVisit[work.id] = work
-                }
-            }
-            phase = .loaded
-            // First sight baselines rather than badges. Runs after `works` is
-            // replaced so it sees the page that just arrived, and only ever adds
-            // entries — a work already watermarked keeps its badge through the load
-            // that displayed it.
-            baselineWatermarks()
-            baselineMarkedForLater(result.works)
-            // After the page is stored, so the list is not held empty while
-            // chapter counts arrive. No-op for every kind but subscriptions.
-            enrichLoadedSubscriptionPage(result.works, generation: expectedSessionGeneration)
-            if let countsKind = kind.countsKind {
-                // Bookmarks' rows are only the bookmarks that parse as works, so
-                // its page is a floor under AO3's count (1m.3; see the init).
-                AO3AccountListCountsCache.shared.record(
-                    AO3AccountListCount(
-                        itemsOnPage: result.works.count,
-                        totalPages: result.totalPages,
-                        mayOmitRows: kind == .bookmarks
-                    ),
-                    kind: countsKind,
-                    authenticationScope: AO3AuthorProfileFetcher.sessionScopedCacheScope(for: auth)
-                )
-            }
-        } catch AO3Error.authenticationRequired {
-            guard await auth.sessionDidExpire(expectedGeneration: expectedSessionGeneration) else { return }
-            works = []
-            readingEntries = [:]
-            bookmarkDetails = [:]
-            unsubscribePaths = [:]
-            phase = .idle // back to the signed-out prompt
-        } catch is CancellationError {
-            // This view's load task restarts (cancelling whatever load was in
-            // flight) when the session generation or the signed-in flag
-            // changes. That's not a failure the user caused or can fix with
-            // "Try Again": the restarted task loads again, or the view is
-            // already gone and nothing is watching `phase`. Leaving `phase`
-            // alone (instead of surfacing the raw system error) avoids a
-            // permanent-looking "Swift.CancellationError" card for what is,
-            // from the user's side, nothing happening at all.
-        } catch let urlError as URLError where urlError.code == .cancelled {
-            // Same reasoning as the CancellationError case above.
-        } catch let error as AO3Error {
-            guard auth.sessionGeneration == expectedSessionGeneration else { return }
-            phase = .failed(error.errorDescription ?? "Something went wrong.")
-        } catch {
-            guard auth.sessionGeneration == expectedSessionGeneration else { return }
-            phase = .failed(UserFacingError.message(for: error))
-        }
-    }
-
     /// AO3 history removal always asks first. `confirmBeforeDelete` gates the
     /// local trash; this write is not that trash, and a swipe must not post.
     private func deleteHistoryEntry(_ entry: CanonicalWork) async {
@@ -1313,5 +1201,125 @@ extension AO3AccountWorksList {
             }
         }
         .subjectScreenWash(palette: accountPalette)
+    }
+}
+
+/// Outside the struct's body only to keep that body within the length the linter allows.
+extension AO3AccountWorksList {
+    fileprivate func load(page: Int) async {
+        let expectedSessionGeneration = auth.sessionGeneration
+        // Only the newest load may write to the screen. A pull to refresh while Next was on
+        // its way left whichever page answered last (audit A20-2).
+        loadToken += 1
+        let token = loadToken
+        guard let username = auth.username,
+              let url = kind.url(username: username, page: page)
+        else {
+            phase = .failed("You need to be logged in to AO3.")
+            return
+        }
+        phase = .loading
+        do {
+            let request = try auth.authenticatedRequest(for: url)
+            // 1q: a bookmark row is the work plus a note, tags, a privacy flag,
+            // and a date. `AO3SearchPage` has nowhere to put those, and a second
+            // fetch of the same URL would spend another paced request to recover
+            // them. One `accountBookmarksPage` feeds both the work list and
+            // `bookmarkDetails`. Subscriptions does the same with the unsubscribe
+            // form already on the index. Every other kind still goes through `fetch`.
+            let result: AO3SearchPage
+            let details: [Int: AO3AuthorBookmark]
+            let paths: [Int: String]
+            if kind == .bookmarks {
+                let parsed = try await AO3Client.shared.accountBookmarksPage(for: request, page: page)
+                result = AO3SearchPage(
+                    works: parsed.bookmarks.map(\.work),
+                    currentPage: parsed.currentPage,
+                    totalPages: parsed.totalPages
+                )
+                details = Dictionary(
+                    parsed.bookmarks.map { ($0.work.id, $0) },
+                    uniquingKeysWith: { first, _ in first }
+                )
+                paths = [:]
+            } else if kind == .subscriptions {
+                // The unsubscribe action is the `<dd><form>` beside each work.
+                // `AO3SearchPage` has nowhere to put it. One `subscriptionsIndex`
+                // feeds both the work list and `unsubscribePaths`.
+                let parsed = try await AO3Client.shared.subscriptionsIndex(for: request, page: page)
+                result = parsed.page
+                details = [:]
+                paths = parsed.unsubscribePaths
+            } else {
+                result = try await kind.fetch(for: request, page: page)
+                details = [:]
+                paths = [:]
+            }
+            guard auth.sessionGeneration == expectedSessionGeneration, token == loadToken else { return }
+            works = result.works
+            readingEntries = Dictionary(
+                result.readingEntries.compactMap { entry in
+                    entry.workID.map { ($0, entry) }
+                },
+                uniquingKeysWith: { first, _ in first }
+            )
+            bookmarkDetails = details
+            unsubscribePaths = paths
+            currentPage = result.currentPage
+            totalPages = result.totalPages
+            if kind == .markedForLater {
+                lastSyncedAt = Date()
+                for work in result.works {
+                    markedForLaterSeenThisVisit[work.id] = work
+                }
+            }
+            phase = .loaded
+            // First sight baselines rather than badges. Runs after `works` is
+            // replaced so it sees the page that just arrived, and only ever adds
+            // entries — a work already watermarked keeps its badge through the load
+            // that displayed it.
+            baselineWatermarks()
+            baselineMarkedForLater(result.works)
+            // After the page is stored, so the list is not held empty while
+            // chapter counts arrive. No-op for every kind but subscriptions.
+            enrichLoadedSubscriptionPage(result.works, generation: expectedSessionGeneration)
+            if let countsKind = kind.countsKind {
+                // Bookmarks' rows are only the bookmarks that parse as works, so
+                // its page is a floor under AO3's count (1m.3; see the init).
+                AO3AccountListCountsCache.shared.record(
+                    AO3AccountListCount(
+                        itemsOnPage: result.works.count,
+                        totalPages: result.totalPages,
+                        mayOmitRows: kind == .bookmarks
+                    ),
+                    kind: countsKind,
+                    authenticationScope: AO3AuthorProfileFetcher.sessionScopedCacheScope(for: auth)
+                )
+            }
+        } catch AO3Error.authenticationRequired {
+            guard await auth.sessionDidExpire(expectedGeneration: expectedSessionGeneration) else { return }
+            works = []
+            readingEntries = [:]
+            bookmarkDetails = [:]
+            unsubscribePaths = [:]
+            phase = .idle // back to the signed-out prompt
+        } catch is CancellationError {
+            // This view's load task restarts (cancelling whatever load was in
+            // flight) when the session generation or the signed-in flag
+            // changes. That's not a failure the user caused or can fix with
+            // "Try Again": the restarted task loads again, or the view is
+            // already gone and nothing is watching `phase`. Leaving `phase`
+            // alone (instead of surfacing the raw system error) avoids a
+            // permanent-looking "Swift.CancellationError" card for what is,
+            // from the user's side, nothing happening at all.
+        } catch let urlError as URLError where urlError.code == .cancelled {
+            // Same reasoning as the CancellationError case above.
+        } catch let error as AO3Error {
+            guard auth.sessionGeneration == expectedSessionGeneration, token == loadToken else { return }
+            phase = .failed(error.errorDescription ?? "Something went wrong.")
+        } catch {
+            guard auth.sessionGeneration == expectedSessionGeneration, token == loadToken else { return }
+            phase = .failed(UserFacingError.message(for: error))
+        }
     }
 }

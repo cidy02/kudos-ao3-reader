@@ -547,8 +547,8 @@ struct CommentSubmissionTests {
         #expect(store.draft(for: reply).isEmpty)
     }
 
-    /// Audit A19-7: a draft typed before the session had a name follows the account that
-    /// verification names, and never replaces a draft that account already has.
+    /// Audits A19-7 and A20-1: a draft typed before the session had a name follows the account
+    /// that verification names, and never replaces a draft that account already has.
     @Test func anUnnamedSessionsDraftsMoveToTheAccountThatIsThenNamed() {
         let suiteName = "CommentSubmissionTests-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
@@ -557,15 +557,18 @@ struct CommentSubmissionTests {
         let chapter = AO3CommentContext(workID: 42, chapterID: 7)
         let reply = AO3CommentContext(workID: 42, chapterID: 7, parentCommentID: 5)
 
-        store.save("typed offline", for: chapter, identity: "unknown-session:3")
-        store.save("a reply typed offline", for: reply, identity: "unknown-session:3")
+        let unnamed = CommentDraftIdentity.unnamedSession(3)
+        #expect(unnamed == "unknown-session:3")
+        store.save("typed offline", for: chapter, identity: unnamed)
+        store.save("a reply typed offline", for: reply, identity: unnamed)
         store.save("alice's own reply", for: reply, identity: "alice")
         store.save("someone else", for: chapter, identity: "bob")
 
         store.move(from: "unknown-session:3", to: "alice")
 
         #expect(store.draft(for: chapter, identity: "alice") == "typed offline")
-        #expect(store.draft(for: reply, identity: "alice") == "alice's own reply")
+        // Both kept where the account already had a draft there, the one just typed first.
+        #expect(store.draft(for: reply, identity: "alice") == "a reply typed offline\n\nalice's own reply")
         #expect(store.draft(for: chapter, identity: "unknown-session:3").isEmpty)
         #expect(store.draft(for: reply, identity: "unknown-session:3").isEmpty)
         #expect(store.draft(for: chapter, identity: "bob") == "someone else")

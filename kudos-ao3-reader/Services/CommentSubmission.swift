@@ -340,6 +340,13 @@ final class CommentSubmissionGuard {
     }
 }
 
+/// How a draft's owner is named while a session has no account name yet (a session restored
+/// offline): by the session, so that it is never mistaken for another account's.
+enum CommentDraftIdentity {
+    static let unnamedSessionPrefix = "unknown-session:"
+    static func unnamedSession(_ generation: Int) -> String { "\(unnamedSessionPrefix)\(generation)" }
+}
+
 /// Per-context comment drafts, persisted so nothing typed is lost to a dismissal,
 /// an app exit, or an offline gap. Cleared only on *verified* success.
 @MainActor
@@ -359,15 +366,21 @@ final class CommentDraftStore {
         drafts()[key(for: context, identity: identity)] ?? ""
     }
 
-    /// Hands every draft filed under one identity to another, never over a draft the other
-    /// already has.
+    /// Hands every draft filed under one identity to another. Where the other already has a
+    /// different draft for the same place both are kept, the moved one first: it is the one
+    /// just typed, and nothing typed is thrown away.
     func move(from old: String, to new: String) {
+        guard old != new else { return }
         var all = drafts()
         let prefix = old + "|"
         var changed = false
         for (key, text) in all where key.hasPrefix(prefix) {
             let moved = new + "|" + key.dropFirst(prefix.count)
-            if all[moved] == nil { all[moved] = text }
+            if let existing = all[moved], existing != text {
+                all[moved] = text + "\n\n" + existing
+            } else {
+                all[moved] = text
+            }
             all.removeValue(forKey: key)
             changed = true
         }
