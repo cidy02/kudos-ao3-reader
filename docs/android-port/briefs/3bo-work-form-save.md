@@ -110,3 +110,19 @@ form's). Tokens only. Light, Dark, Sepia and OLED; nothing clipped at
   every kind of failure; the session-changed case; the Save button disabled in flight; a
   second tap while one is in flight sends nothing; the drafts screen's tap and New Work
   asking for this form.
+
+## Added 2026-10-08 (audits A4 and A5, and landings since this was written)
+
+- **A work with more than one chapter has no chapter text box on AO3's edit page.** The
+  parser records that (`AO3WorkChapterDraft.contentServed`), the encoder already leaves the
+  text out, and the form hides its "Work text" row (audit A4-1, fixed on both apps). Test
+  Save on such a form: the body has the chapter's title and no
+  `work[chapter_attributes][content]`.
+- `AO3WriteFormParser.writeErrorMessage` reads AO3's validation list (`#error li`). A page
+  with no notice and no error is `AO3CollectionFields.UNCONFIRMED`, never success.
+- Text actions and action rows use the palette's accent (`tokens.scopePalette.accent`;
+  `SettingsActionRow` already does): the raw `tokens.accent` cannot be read in Dark.
+- A `SubjectFormRow` given a `trailing` slot draws no `value`, even when the slot is empty
+  (3bl's Fandoms row showed nothing): pass one or the other.
+- A section header is drawn in capitals: a test that waits for its text must ask for
+  "REQUIRED", not "Required".
