@@ -108,6 +108,11 @@ struct FandomWorksView: View {
     /// AO3's own result-count heading for these results, when it sent one.
     @State private var resultSummary: AO3ResultSummary?
     @State private var phase: Phase = .loading
+    /// Each load takes the next number; only the newest may write to the screen. A sort
+    /// change or a pull to refresh while a page was on its way used to leave whichever
+    /// answer came last, which could be the other query's works (audit A19-4; Search's
+    /// `loadToken` is the same guard).
+    @State private var loadToken = 0
     @State private var expandAll = false
     /// The active filters for this fandom's works — seeded to just the fandom, then
     /// refined via the same filter panel the Search tab uses.
@@ -343,6 +348,8 @@ struct FandomWorksView: View {
         // being empty), so nothing flashes — the pager just stops pretending
         // the tap did nothing.
         phase = .loading
+        loadToken += 1
+        let token = loadToken
         do {
             // A single fandom still reads AO3's tag listing so the heading names
             // the tag. A sibling family has no one path, so it goes to
@@ -377,6 +384,7 @@ struct FandomWorksView: View {
                     request: auth.authenticatedRequest()
                 )
             }
+            guard token == loadToken else { return }
             results = result.works
             currentPage = result.currentPage
             totalPages = result.totalPages
@@ -396,8 +404,10 @@ struct FandomWorksView: View {
                 )
             }
         } catch let error as AO3Error {
+            guard token == loadToken else { return }
             phase = .failed(error.errorDescription ?? "Something went wrong.")
         } catch {
+            guard token == loadToken else { return }
             phase = .failed(UserFacingError.message(for: error))
         }
     }
@@ -480,6 +490,11 @@ struct TagWorksView: View {
     /// AO3's own result-count heading for these results, when it sent one.
     @State private var resultSummary: AO3ResultSummary?
     @State private var phase: Phase = .loading
+    /// Each load takes the next number; only the newest may write to the screen. A sort
+    /// change or a pull to refresh while a page was on its way used to leave whichever
+    /// answer came last, which could be the other query's works (audit A19-4; Search's
+    /// `loadToken` is the same guard).
+    @State private var loadToken = 0
     @State private var expandAll = false
     @State private var filters = Self.baseline
     @State private var showingFilters = false
@@ -710,18 +725,23 @@ struct TagWorksView: View {
         // being empty), so nothing flashes — the pager just stops pretending
         // the tap did nothing.
         phase = .loading
+        loadToken += 1
+        let token = loadToken
         do {
             let result = try await AO3Client.shared.worksPage(
                 at: request.url, filters: filters, page: page, request: auth.authenticatedRequest()
             )
+            guard token == loadToken else { return }
             results = result.works
             currentPage = result.currentPage
             totalPages = result.totalPages
             resultSummary = result.summary
             phase = .loaded
         } catch let error as AO3Error {
+            guard token == loadToken else { return }
             phase = .failed(error.errorDescription ?? "Something went wrong.")
         } catch {
+            guard token == loadToken else { return }
             phase = .failed(UserFacingError.message(for: error))
         }
     }

@@ -493,6 +493,14 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
                         onToggleSelection: { toggleSelection(work) }
                     )
                     .localWorkContextMenu(work: work, onSelect: selectAction(for: work))
+                } else if gate.isBlurred(work, enabled: hideMature, mode: matureMode) {
+                    // A blurred cover is its own button, and its tap reveals. Inside a link to
+                    // the reader the same tap could open the work it was hiding.
+                    SensitiveWorkCoverCard(
+                        work: work,
+                        footer: footer(kind, work),
+                        progress: progress(kind, work)
+                    )
                 } else {
                     NavigationLink(value: LocalWorkDestination.reader(work)) {
                         SensitiveWorkCoverCard(
@@ -563,8 +571,14 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
             return
         }
         isLoadingSubscriptions = true
+        // Whose list this is. An answer that arrives after Sign Out (the task is cancelled,
+        // but an await that already has its value still returns it) used to put the
+        // signed-out reader's Home back under the account's private list (audit A19-5).
+        let generation = auth.sessionGeneration
         do {
-            subscriptions = try await auth.accountSubscriptions()
+            let loaded = try await auth.accountSubscriptions()
+            guard !Task.isCancelled, auth.isLoggedIn, auth.sessionGeneration == generation else { return }
+            subscriptions = loaded
             subscriptionsListCount = AO3AccountListCountsCache.shared.count(
                 for: .subscriptions,
                 authenticationScope: AO3AuthorProfileFetcher.sessionScopedCacheScope(for: auth)

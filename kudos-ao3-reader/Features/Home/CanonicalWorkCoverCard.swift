@@ -8,9 +8,15 @@ import SwiftUI
 /// carries `AO3ProvenanceBadge`, since a canonical row is by definition a mix.
 struct CanonicalWorkCoverCard: View {
     let entry: CanonicalWork
+    @Environment(PrivacyGate.self) private var gate
+    @AppStorage("hideMatureContent") private var hideMature = true
+    @AppStorage("matureContentMode") private var matureMode: MaturePrivacyMode = .obscure
 
     var body: some View {
-        if let work = entry.local {
+        if let work = entry.local, gate.isBlurred(work, enabled: hideMature, mode: matureMode) {
+            // A blurred cover is its own button: its tap reveals, and it sits in no link.
+            SensitiveWorkCoverCard(work: work, progress: work.readingProgress)
+        } else if let work = entry.local {
             NavigationLink(value: LocalWorkDestination.reader(work)) {
                 // readingProgress is nil until there's something meaningful to show,
                 // so a freshly-saved work keeps the clean cover.

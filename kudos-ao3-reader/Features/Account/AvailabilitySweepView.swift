@@ -10,6 +10,9 @@ struct AvailabilitySweepView: View {
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
     @Environment(ThemeManager.self) private var theme
+    @Environment(PrivacyGate.self) private var gate
+    @AppStorage("hideMatureContent") private var hideMature = true
+    @AppStorage("matureContentMode") private var matureMode: MaturePrivacyMode = .obscure
 
     @State private var pendingCount = 0
     @State private var unverifiableCount = 0
@@ -64,18 +67,35 @@ struct AvailabilitySweepView: View {
     private var unavailableWorksSection: some View {
         Section {
             ForEach(unavailableWorks) { work in
-                NavigationLink(value: work) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(work.title)
+                if gate.isHidden(work, enabled: hideMature, mode: matureMode)
+                    || gate.isBlurred(work, enabled: hideMature, mode: matureMode) {
+                    // This list named every mature work that had left AO3, with Hide or Blur
+                    // on (audit A19-9). The row reveals, as a blurred row does anywhere else.
+                    Button {
+                        gate.reveal(work)
+                    } label: {
+                        Text("Hidden mature work")
                             .font(.subheadline)
-                            .lineLimit(1)
-                        Text(work.author)
-                            .font(.caption)
                             .foregroundStyle(.secondary)
-                            .lineLimit(1)
+                            .frame(maxWidth: .infinity, alignment: .leading)
                     }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Hidden mature work. Activate to reveal.")
+                    .cardRow()
+                } else {
+                    NavigationLink(value: work) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(work.title)
+                                .font(.subheadline)
+                                .lineLimit(1)
+                            Text(work.author)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                        }
+                    }
+                    .cardRow()
                 }
-                .cardRow()
             }
         } header: {
             Text("No longer on AO3 (\(unavailableWorks.count.formatted()))")
