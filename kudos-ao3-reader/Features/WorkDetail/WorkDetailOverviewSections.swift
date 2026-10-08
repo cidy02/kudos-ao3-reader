@@ -154,16 +154,34 @@ extension WorkDetailView {
                     }
 
                     ForEach(seriesWorks) { other in
-                        NavigationLink {
-                            WorkDetailView(work: other)
-                        } label: {
-                            HStack {
-                                if other.seriesPosition > 0 {
-                                    Text("\(other.seriesPosition).")
-                                        .foregroundStyle(.secondary)
-                                        .monospacedDigit()
+                        if gate.isBlurred(other, enabled: hideMature, mode: matureMode) {
+                            // Blur mode: unnamed until revealed, and the tap reveals. This
+                            // row gave the title and opened the work's page with no reveal.
+                            Button {
+                                gate.reveal(other)
+                            } label: {
+                                HStack {
+                                    if other.seriesPosition > 0 {
+                                        Text("\(other.seriesPosition).")
+                                            .foregroundStyle(.secondary)
+                                            .monospacedDigit()
+                                    }
+                                    Text("Hidden mature work").foregroundStyle(.secondary)
                                 }
-                                Text(other.title).lineLimit(1)
+                            }
+                            .accessibilityLabel("Hidden mature work. Activate to reveal.")
+                        } else {
+                            NavigationLink {
+                                WorkDetailView(work: other)
+                            } label: {
+                                HStack {
+                                    if other.seriesPosition > 0 {
+                                        Text("\(other.seriesPosition).")
+                                            .foregroundStyle(.secondary)
+                                            .monospacedDigit()
+                                    }
+                                    Text(other.title).lineLimit(1)
+                                }
                             }
                         }
                     }

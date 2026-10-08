@@ -16,8 +16,6 @@ final class CommentsModel {
         let cacheScope: String
         let generation: Int
 
-        static let unknownSessionPrefix = "unknown-session:"
-
         static func current(_ auth: AO3AuthService) -> AuthContext {
             let username = auth.username?
                 .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -29,7 +27,7 @@ final class CommentsModel {
             // which account owns it. Keep those drafts session-local instead
             // of collapsing every unknown account into the empty identity.
             let identity = knownUsername
-                ?? (auth.isLoggedIn ? "\(unknownSessionPrefix)\(auth.sessionGeneration)" : "")
+                ?? (auth.isLoggedIn ? CommentDraftIdentity.unnamedSession(auth.sessionGeneration) : "")
             return AuthContext(
                 identity: identity,
                 cacheScope: AO3AuthorProfileFetcher.authenticationScope(for: auth),
@@ -239,14 +237,14 @@ final class CommentsModel {
         if hadContext, let composerContext, composerEditTarget == nil {
             drafts.save(composerText, for: composerContext, identity: authContext.identity)
         }
-        // A session restored offline has no name yet, and its drafts were filed under the
-        // session. Verify Session then names the account (one step of the generation, and
-        // a real name): hand the drafts to it, or nothing would ever read them again
-        // (audit A19-7). Any other change of account moves nothing.
-        if authContext.identity.hasPrefix(AuthContext.unknownSessionPrefix),
+        // A session restored offline has no name yet, and its drafts are filed under the
+        // session. While this screen is open the session can move on a step and then get its
+        // name (Verify Session publishes the two apart): the drafts follow it each time, or
+        // nothing would read them again (audits A19-7, A20-1). `AO3AuthService.verifySession`
+        // does the same for drafts left by a screen that has since closed.
+        if authContext.identity.hasPrefix(CommentDraftIdentity.unnamedSessionPrefix),
            !current.identity.isEmpty,
-           !current.identity.hasPrefix(AuthContext.unknownSessionPrefix),
-           current.generation == authContext.generation + 1 {
+           (0...1).contains(current.generation - authContext.generation) {
             drafts.move(from: authContext.identity, to: current.identity)
         }
         authContext = current
@@ -1185,10 +1183,19 @@ final class CommentsModel {
               submissionGuard.phase == .succeeded,
               composerContext != nil
         else { return }
+        // A reply or an edit belongs to the page the reader is on. The default reload goes to
+        // the newest or the first page, where an open thread's comment is not: the thread
+        // then said the comment was gone, just after AO3 accepted the reply (audit A20-5).
+        let staysOnPage = composerContext?.parentCommentID != nil || composerEditTarget != nil
+        let pageOnScreen = currentPageNumber
         closeComposer()
         composerText = ""
         // One refresh so the new/updated comment is visible (bypasses cache).
-        await load(auth: auth, forceRefresh: true, expected: expected)
+        if staysOnPage {
+            await loadPage(pageOnScreen, auth: auth, forceRefresh: true, expected: expected)
+        } else {
+            await load(auth: auth, forceRefresh: true, expected: expected)
+        }
     }
 
     // MARK: Error classification

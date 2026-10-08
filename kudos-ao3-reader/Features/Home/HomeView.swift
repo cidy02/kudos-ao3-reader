@@ -577,7 +577,14 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
         let generation = auth.sessionGeneration
         do {
             let loaded = try await auth.accountSubscriptions()
-            guard !Task.isCancelled, auth.isLoggedIn, auth.sessionGeneration == generation else { return }
+            guard !Task.isCancelled, auth.isLoggedIn, auth.sessionGeneration == generation else {
+                // Not this session's answer. Signed out: the signed-out pass clears the shelf.
+                // Still signed in (Verify Session moved the session on): nothing else would
+                // ask again, and the skeleton stayed up for good (audit A20-6).
+                isLoadingSubscriptions = false
+                if !Task.isCancelled, auth.isLoggedIn { await loadSubscriptions() }
+                return
+            }
             subscriptions = loaded
             subscriptionsListCount = AO3AccountListCountsCache.shared.count(
                 for: .subscriptions,
