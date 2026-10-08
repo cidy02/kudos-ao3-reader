@@ -596,7 +596,8 @@ fun AppNavHost(
                                 container.authenticatedClient, container.authRepository)
                         }
                         io.github.cidy02.kudos.writing.WritingWorkFormScreen(workID, repository, container.authRepository,
-                            onClose = { navController.popBackStack() })
+                            onClose = { navController.popBackStack() }, autocompleteRepository = container.tagAutocompleteRepository,
+                            settingsRepository = container.settingsRepository)
                     } else LaunchedEffect(Unit) { navController.popBackStack() }
                 }
             }

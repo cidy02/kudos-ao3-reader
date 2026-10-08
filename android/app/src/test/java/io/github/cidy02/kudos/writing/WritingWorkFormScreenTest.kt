@@ -131,7 +131,7 @@ class WritingWorkFormScreenTest {
 
     @Test fun waitingRowsHaveNoActionOrDestination() {
         show(995006L)
-        for (label in listOf("Fandoms ∗", "Relationships", "Characters", "Additional tags", "Series", "Add to collections",
+        for (label in listOf("Series", "Add to collections",
             "Gift recipients", "Co-creators", "Inspired by", "Chapters", "Add chapter", "Edit tags")) {
             reach(label)
             compose.onNodeWithText(label).assertHasNoClickAction()

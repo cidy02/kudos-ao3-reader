@@ -91,6 +91,13 @@ internal class WritingWorkFormState(
         }
     }
 
+    fun writingTags(kind: WritingTagKind, values: List<String>) = change { form -> when (kind) {
+        WritingTagKind.Fandom -> form.copy(fandoms = values)
+        WritingTagKind.Relationship -> form.copy(relationships = values)
+        WritingTagKind.Character -> form.copy(characters = values)
+        WritingTagKind.Freeform -> form.copy(additionalTags = values)
+    } }
+
     fun checkpoint(field: WorkFormText, text: String) = change { form -> when (field) {
         WorkFormText.Summary -> form.copy(summary = text)
         WorkFormText.Notes -> form.copy(notes = text)

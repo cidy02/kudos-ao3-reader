@@ -178,3 +178,11 @@ data class AO3WorkForm(
 
 internal fun splitWorkList(raw: String): List<String> = raw.split(',').map(String::trim).filter(String::isNotEmpty)
 internal fun joinWorkList(names: List<String>): String = names.map(String::trim).filter(String::isNotEmpty).joinToString(", ")
+
+/** Foundation whitespacesAndNewlines, rather than Kotlin's extra C0 separators. */
+internal fun trimWritingTag(name: String): String = name.trim { char ->
+    char in '\u0009'..'\u000d' || char == '\u0020' || char == '\u0085' || char == '\u00a0' ||
+        char == '\u1680' || char in '\u2000'..'\u200b' || char == '\u2028' || char == '\u2029' ||
+        char == '\u202f' || char == '\u205f' || char == '\u3000'
+}
+internal fun joinWritingTags(names: List<String>): String = names.map(::trimWritingTag).filter(String::isNotEmpty).joinToString(", ")
