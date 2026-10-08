@@ -1,21 +1,25 @@
 package io.github.cidy02.kudos.network.ao3
 
-import io.github.cidy02.kudos.network.ao3.writing.AO3WorkFormParser
-import io.github.cidy02.kudos.network.ao3.writing.AO3WorkFormKind
-import io.github.cidy02.kudos.network.ao3.writing.AO3WorkFormRepository
 import io.github.cidy02.kudos.auth.AO3AuthRepository
 import io.github.cidy02.kudos.auth.MemoryCookieStore
 import io.github.cidy02.kudos.auth.MemorySessionStore
 import io.github.cidy02.kudos.auth.testSession
+import io.github.cidy02.kudos.network.ao3.writes.AO3WriteFormParser
 import io.github.cidy02.kudos.network.ao3.writes.DefaultAO3AuthenticatedClient
+import io.github.cidy02.kudos.network.ao3.writing.AO3WorkFormKind
+import io.github.cidy02.kudos.network.ao3.writing.AO3WorkFormParser
+import io.github.cidy02.kudos.network.ao3.writing.AO3WorkFormRepository
+import io.github.cidy02.kudos.network.ao3.writing.AO3WorkFormUrls
+import io.github.cidy02.kudos.network.ao3.writing.AO3WorkSubmitAction
+import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.test.runTest
+import okhttp3.FormBody
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.junit.Assert.*
 import org.junit.Test
-import java.io.File
 
 class DemoWorkFormTest {
     private val source = FixtureSource { name ->
@@ -64,6 +68,48 @@ class DemoWorkFormTest {
             val url = "https://archiveofourown.org/works/$path"
             client.newCall(Request.Builder().url(url).build()).execute().use { assertEquals(404, it.code) }
             assertNull(DemoNetwork.webFixture(url.toHttpUrl(), empty))
+        }
+    }
+
+    @Test fun postedTagsDemoReadsPostsRefusesAndRefreshesLocallyWithoutChangingText() {
+        val network = localClient(source)
+        val parser = AO3WorkFormParser()
+        val tagsUrl = AO3WorkFormUrls.editTags(995006)
+        fun read(url: String): String = network.newCall(Request.Builder().url(url).build()).execute().use {
+            assertEquals(200, it.code); it.body.string()
+        }
+        val initial = parser.parse(read(AO3WorkFormUrls.editWork(995006)))
+        val tagsHtml = read(tagsUrl)
+        assertEquals(DemoNetwork.webFixture(tagsUrl.toHttpUrl(), source)!!.decodeToString(), tagsHtml)
+        val tags = parser.parse(tagsHtml, tagsUrl)
+        assertEquals(AO3WorkFormKind.EditTags, tags.kind)
+        fun post(fields: List<Pair<String, String>>): Pair<Int, String> {
+            val body = FormBody.Builder().apply { fields.forEach { (key, value) -> add(key, value) } }.build()
+            return network.newCall(Request.Builder().url(tags.actionUrl).post(body)
+                .header("X-CSRF-Token", tags.csrfToken).header("Referer", tagsUrl).build()).execute().use { it.code to it.body.string() }
+        }
+        val accepted = tags.copy(fandoms = listOf("A new fandom & 星"), categories = emptyList(),
+            relationships = emptyList(), characters = listOf("New character"), additionalTags = emptyList(), rating = "Mature")
+        val saved = post(accepted.parameters(AO3WorkSubmitAction.Update))
+        assertEquals(200, saved.first); assertNotNull(AO3WriteFormParser().workWriteNotice(saved.second))
+        val fresh = parser.parse(read(AO3WorkFormUrls.editWork(995006)))
+        assertEquals(accepted.fandoms, fresh.fandoms); assertEquals(emptyList<String>(), fresh.categories)
+        assertEquals(accepted.rating, fresh.rating); assertEquals(accepted.characters, fresh.characters)
+        assertEquals(emptyList<String>(), fresh.relationships); assertEquals(emptyList<String>(), fresh.additionalTags)
+        assertEquals(initial.title, fresh.title); assertEquals(initial.summary, fresh.summary)
+        assertEquals(initial.notes, fresh.notes); assertEquals(initial.chapter, fresh.chapter)
+        assertEquals(accepted.fandoms, parser.parse(read(tagsUrl), tagsUrl).fandoms)
+        val refused = post(accepted.copy(additionalTags = listOf("Refuse this tag")).parameters(AO3WorkSubmitAction.Update))
+        assertEquals(422, refused.first)
+        assertEquals("Additional tags: Refuse this tag could not be saved.", AO3WriteFormParser().writeErrorMessage(refused.second))
+        assertEquals(fresh, parser.parse(read(AO3WorkFormUrls.editWork(995006))))
+        assertEquals(emptyList<String>(), parser.parse(read(tagsUrl), tagsUrl).additionalTags)
+        val badToken = post(accepted.copy(csrfToken = "bad").parameters(AO3WorkSubmitAction.Update))
+        assertEquals(422, badToken.first)
+        assertEquals("AO3 didn't accept the change.", AO3WriteFormParser().writeErrorMessage(badToken.second))
+        val restarted = localClient(source)
+        restarted.newCall(Request.Builder().url(tagsUrl).build()).execute().use {
+            assertEquals(tags, parser.parse(it.body.string(), tagsUrl))
         }
     }
 

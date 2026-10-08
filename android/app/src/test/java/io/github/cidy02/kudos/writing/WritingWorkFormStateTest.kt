@@ -260,6 +260,7 @@ internal class WorkFormScreenClient : AO3Client, AO3FormPostClient {
         val fixture = when {
             url.endsWith("/995001/edit") -> "ao3_demo_work_draft_edit"
             url.endsWith("/995006/edit") -> "ao3_demo_work_posted_edit"
+            url.endsWith("/995006/edit_tags") -> "ao3_demo_work_edit_tags"
             url.endsWith("/995006/navigate") -> "ao3_demo_work_posted_navigate"
             else -> "ao3_work_new_draft"
         }
