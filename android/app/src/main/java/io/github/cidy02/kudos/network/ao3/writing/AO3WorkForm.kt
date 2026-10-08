@@ -78,11 +78,13 @@ data class AO3ServedControl(
     val name: String get() = attributes["name"].orEmpty()
     val type: String get() = attributes["type"]?.lowercase() ?: if (tag == "button") "submit" else "text"
 
-    fun successfulValues(submit: AO3WorkSubmitAction): List<String> = when {
+    fun successfulValues(submit: AO3WorkSubmitAction): List<String> = successfulValues(submit.fieldName)
+
+    fun successfulValues(submitName: String? = null): List<String> = when {
         name.isEmpty() || disabled -> emptyList()
         tag == "input" && type in setOf("button", "reset", "image") -> emptyList()
         tag == "button" && type != "submit" -> emptyList()
-        (tag == "button" || tag == "input" && type == "submit") && name != submit.fieldName -> emptyList()
+        (tag == "button" || tag == "input" && type == "submit") && name != submitName -> emptyList()
         tag == "input" && type in setOf("checkbox", "radio") && !browserChecked -> emptyList()
         else -> values
     }

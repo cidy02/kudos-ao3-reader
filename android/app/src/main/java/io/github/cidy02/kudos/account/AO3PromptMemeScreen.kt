@@ -44,7 +44,8 @@ import kotlinx.coroutines.launch
 @Composable
 fun AO3PromptMemeScreen(
     slug: String, title: String, viewerIsOwner: Boolean,
-    repository: AO3CollectionDetailRepository, writes: AO3WriteRepository, onOpenWeb: (String) -> Unit
+    repository: AO3CollectionDetailRepository, writes: AO3WriteRepository, onOpenWeb: (String) -> Unit,
+    onOpenSignUp: () -> Unit = {}
 ) {
     val auth = repository.authRepository
     val generation by auth.generation.collectAsState()
@@ -79,12 +80,13 @@ fun AO3PromptMemeScreen(
         background = tokens.background, onBackground = tokens.primaryInk,
         outline = tokens.separator, outlineVariant = tokens.separator, surfaceTint = palette.accent
     )) {
+        Box(Modifier.fillMaxSize()) {
         KudosRefreshBox(onRefresh = { model.load(readSchedule = true) }, modifier = Modifier.fillMaxSize().subjectScreenWash(palette)) {
             // A refusal is drawn under the header. Tapped from a card further down it was out of sight,
             // and the reader saw nothing happen (iOS the same until T-360): bring it into view.
             val list = rememberLazyListState()
             LaunchedEffect(state.actionError) { if (state.actionError != null) list.animateScrollToItem(0) }
-            LazyColumn(Modifier.fillMaxSize(), state = list, contentPadding = PaddingValues(bottom = 24.dp)) {
+            LazyColumn(Modifier.fillMaxSize(), state = list, contentPadding = PaddingValues(bottom = if (authState.isSignedIn) 120.dp else 24.dp)) {
                 item {
                     Spacer(Modifier.windowInsetsTopHeight(WindowInsets.statusBars))
                     Spacer(Modifier.height(76.dp))
@@ -159,7 +161,8 @@ fun AO3PromptMemeScreen(
                                 onOpenWeb = { onOpenWeb(AO3PromptMemeUrls.meme(slug)) })
                         }
                         item {
-                            ChallengeFootnote("A Prompt Meme has no matching or assignments. You can claim a prompt here and release it later.")
+                            ChallengeFootnote("A Prompt Meme has no matching or assignments. You can claim a prompt here and release it " +
+                                "later. Add a new prompt through your sign-up, and post fills on AO3.")
                             if (state.loading && totalPages > 1) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
                                 CircularProgressIndicator(color = palette.accent, trackColor = tokens.separator,
                                     modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
@@ -172,6 +175,12 @@ fun AO3PromptMemeScreen(
                 }
             }
         }
+        if (authState.isSignedIn) io.github.cidy02.kudos.settings.SettingsPanel(
+            Modifier.align(Alignment.BottomCenter).padding(top = 12.dp, bottom = 26.dp)) {
+            io.github.cidy02.kudos.settings.SettingsActionRow("New prompt", onOpenSignUp)
+        }
+        }
+
     }
 }
 

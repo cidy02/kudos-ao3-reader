@@ -664,6 +664,7 @@ fun AppNavHost(
                     onOpenMaintainers = { navController.navigate(Routes.ao3CollectionMaintainers(slug, title ?: slug)) },
                     onOpenChallengeSettings = { owner -> navController.navigate(Routes.ao3ChallengeSettings(slug, title ?: slug, owner)) },
                     onOpenPrompts = { owner -> navController.navigate(Routes.ao3PromptMeme(slug, title ?: slug, owner)) },
+                    onOpenSignUp = { navController.navigate(Routes.ao3ChallengeSignUp(slug, title ?: slug)) },
                     settingsRepository = container.settingsRepository,
                     privacyGate = container.privacyGate,
                     onOpenWork = { work ->
@@ -704,6 +705,21 @@ fun AppNavHost(
             )
         }
         sharedComposable(
+            Routes.AO3ChallengeSignUp,
+            arguments = listOf(
+                Routes.navArgOf("collectionSlug"),
+                navArgument("collectionTitle") { type = NavType.StringType; defaultValue = "" },
+                navArgument("signUpId") { type = NavType.IntType; defaultValue = 0 }
+            )
+        ) { entry ->
+            val slug = Routes.routeArg(entry, "collectionSlug")
+            if (slug == null) navController.popBackStack()
+            else io.github.cidy02.kudos.account.AO3ChallengeSignUpScreen(
+                slug = slug, title = Routes.routeArg(entry, "collectionTitle").orEmpty(),
+                existingID = entry.arguments?.getInt("signUpId")?.takeIf { it > 0 },
+                repository = container.collectionDetailRepository, writes = container.writeRepository)
+        }
+        sharedComposable(
             Routes.AO3PromptMeme,
             arguments = listOf(
                 Routes.navArgOf("collectionSlug"),
@@ -717,6 +733,7 @@ fun AppNavHost(
                 slug = slug, title = Routes.routeArg(entry, "collectionTitle").orEmpty(),
                 viewerIsOwner = entry.arguments?.getBoolean("owner") == true,
                 repository = container.collectionDetailRepository, writes = container.writeRepository,
+                onOpenSignUp = { navController.navigate(Routes.ao3ChallengeSignUp(slug, Routes.routeArg(entry, "collectionTitle").orEmpty())) },
                 onOpenWeb = { navController.navigate(Routes.webFallback(it)) }
             )
         }

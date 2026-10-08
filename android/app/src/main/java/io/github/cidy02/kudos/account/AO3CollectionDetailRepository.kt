@@ -25,6 +25,9 @@ import io.github.cidy02.kudos.network.ao3.account.collectionNameFormatIsValid
 import io.github.cidy02.kudos.network.ao3.account.reservedCollectionNames
 import io.github.cidy02.kudos.network.ao3.search.AO3SearchPage
 import io.github.cidy02.kudos.network.ao3.search.AO3SearchParser
+import io.github.cidy02.kudos.network.ao3.account.AO3ChallengeSignUpForm
+import io.github.cidy02.kudos.network.ao3.account.AO3ChallengeSignUpUrls
+import io.github.cidy02.kudos.network.ao3.account.AO3ChallengeSignUpParser
 import io.github.cidy02.kudos.network.ao3.account.AO3PromptMemePage
 import io.github.cidy02.kudos.network.ao3.account.AO3PromptMemeParser
 import io.github.cidy02.kudos.network.ao3.account.AO3PromptMemeUrls
@@ -56,6 +59,15 @@ class AO3CollectionDetailRepository(
      */
     private val parseDispatcher: CoroutineDispatcher = Dispatchers.Default
 ) {
+    /** One explicitly opened own sign-up form; no settings, tag-set or pseud enrichment. */
+    suspend fun getChallengeSignUp(slug: String, id: Int? = null): AO3Result<AO3ChallengeSignUpForm> {
+        if (!authRepository.state.value.isSignedIn) return AO3Result.Failure(
+            AO3Error.Validation("Log in to AO3 before using this feature."))
+        return fetch(AO3ChallengeSignUpUrls.form(slug, id)) {
+            AO3ChallengeSignUpParser().parse(it, slug)
+        }
+    }
+
     /** iOS: public/base page, then optional edit and nominations for every signed-in viewer. */
     suspend fun getTagSet(id: Int): AO3Result<AO3TagSetSnapshot> {
         val generation = authRepository.generation.value

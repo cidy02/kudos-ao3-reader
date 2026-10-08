@@ -425,3 +425,40 @@ passing tests and compilation are not claimed. Review airplane-mode demo in all 
 themes at normal and accessibility scales, long fandoms/offers and keyboard focus,
 Tags → Done/Back shell chrome, pending/refused Save and visible errors. No live AO3
 verification is authorized. Existing iOS writes likewise remain live-unverified.
+
+## Landing note (Claude, 2026-10-08)
+
+Applied cleanly. Gate: 2,048 tests, green.
+
+Changed on landing:
+
+- **The Fandoms row showed nothing.** It was given a value and an empty trailing slot, and
+  the shared row draws no value when it has a trailing slot at all. It now has no slot.
+  Found on the emulator; no test caught it (the tests look for the row's label).
+- **Nine tests** failed for two reasons, both in the tests: five waited for "Request 1",
+  which the screen draws as a section header in capitals ("REQUEST 1"); four older prompt
+  meme tests asserted that "New prompt" does not exist, which this brief adds.
+- "Add request" and "Submit sign-up" could barely be read in Dark (the raw accent, about
+  1.8 to 1). `SettingsActionRow` now uses the palette's accent for its text and icon in
+  every theme, which also fixes Settings' action rows (see DECISIONS, and owner question 19
+  for what is left).
+
+**The request, read against iOS's** (`challengeSignUpParameters`, `submitChallengeSignUp`):
+one read of the form on opening; on Submit one fresh read of the same form for its token,
+then one POST to the served action, never retried; iOS's fields in iOS's order
+(`authenticity_token`, `_method`, `pseud_id`, then requests and offers numbered from 0 with
+id, title, description, url, anonymous, the four "any" flags, `_destroy`, and the four tag
+lists joined by commas). **Android sends more than iOS, deliberately:** every served control
+iOS's encoder leaves out is replayed as a browser would send it, each prompt's hidden
+`tag_set_attributes[id]` among them (audit A4's suspicion about iOS, confirmed by reading:
+iOS collects the hidden fields and never sends them). Whether AO3 needs that id is not
+known: nothing here has run against AO3.
+
+Seen on `emulator-5556` in airplane mode, Dark: the form for Winter Exchange 2026 (one
+request with its four tag rows, "Any of these is fine", the prompt and its counter, the
+limits footnote, one offer, Add request, Submit sign-up); the tags editor (four fields with
+their values); a submit with the refusal phrase in the prompt (AO3's two reasons at the top,
+the form kept); a clean submit ("Sign-up submitted successfully!").
+
+Not seen: the prompt meme's New prompt, an existing sign-up (`id=4`), the entry from a
+collection's Manage row, Sepia, Light, OLED, large text. Not built, as briefed: withdrawal.

@@ -251,7 +251,10 @@ fun SettingsActionRow(
     val color = when {
         !enabled -> tokens.secondaryInk.copy(alpha = 0.45f)
         destructive -> MaterialTheme.colorScheme.error
-        else -> tokens.accent
+        // The palette's accent, which is tuned to be read on each theme's page. The raw
+        // accent (AO3 red by default) is about 1.8 to 1 on a dark panel: "Export Backup…"
+        // and "Submit sign-up" could barely be read in Dark and OLED (audit A6).
+        else -> tokens.scopePalette.accent
     }
     SettingsIconRow(
         label = label,
