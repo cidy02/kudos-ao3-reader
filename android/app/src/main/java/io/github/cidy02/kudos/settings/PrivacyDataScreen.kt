@@ -62,7 +62,9 @@ fun PrivacyDataScreen(
 
     // Observe works to count
     val works by (workRepository?.observeSavedWorks() ?: kotlinx.coroutines.flow.flowOf(emptyList())).collectAsState(initial = emptyList())
-    val finishedWorks by (workRepository?.observeFinishedWorks() ?: kotlinx.coroutines.flow.flowOf(emptyList())).collectAsState(initial = emptyList())
+    val historyOnlyWorks by (workRepository?.observeHistoryOnlyWorks() ?: kotlinx.coroutines.flow.flowOf(emptyList())).collectAsState(initial = emptyList())
+    val positionedWorks by (workRepository?.observePositionedWorks() ?: kotlinx.coroutines.flow.flowOf(emptyList())).collectAsState(initial = emptyList())
+    var showClearPositionsConfirm by remember { mutableStateOf(false) }
     val freeableCopies by (workRepository?.observeFreeableCopies() ?: kotlinx.coroutines.flow.flowOf(emptyList())).collectAsState(initial = emptyList())
 
     val readingCopies = works.size
@@ -145,9 +147,11 @@ fun PrivacyDataScreen(
                 ) {
                     SubjectFormRow("Free up space", value = "${freeableCopies.size} files", showsDisclosure = true, onClick = { if (freeableCopies.isNotEmpty()) showFreeUpSpaceConfirm = true })
                     SubjectRowSeparator()
-                    SubjectFormRow("Clear reading positions", showsDisclosure = true, onClick = {})
+                    SubjectFormRow("Clear reading positions", value = countLabel(positionedWorks.size, "work"), showsDisclosure = true,
+                        onClick = { if (positionedWorks.isNotEmpty()) showClearPositionsConfirm = true })
                     SubjectRowSeparator()
-                    SubjectFormRow("Clear reading history", value = "${finishedWorks.size} works", showsDisclosure = true, onClick = { if (finishedWorks.isNotEmpty()) showClearHistoryConfirm = true })
+                    SubjectFormRow("Clear reading history", value = countLabel(historyOnlyWorks.size, "work"), showsDisclosure = true,
+                        onClick = { if (historyOnlyWorks.isNotEmpty()) showClearHistoryConfirm = true })
                     SubjectRowSeparator()
                     SubjectFormRow(if (browseCacheCleared) "Browse Cache Cleared" else "Clear browse cache", showsDisclosure = true, onClick = { if (!browseCacheCleared) showClearBrowseCacheConfirm = true })
                 }
@@ -180,14 +184,27 @@ fun PrivacyDataScreen(
     DestructiveConfirmation(
         show = showClearHistoryConfirm,
         title = "Clear Reading History?",
-        text = "Moves your local reading-history records to Recently Deleted for 90 days. The works themselves can also be re-downloaded from AO3 anytime. Your saved and downloaded works aren't affected.",
-        confirmText = "Clear ${finishedWorks.size} Work${if (finishedWorks.size == 1) "" else "s"}",
+        text = "Moves works that only remain in your reading history to Recently Deleted for 90 days. Your saved and downloaded works stay where they are, and you can download these works from AO3 again.",
+        confirmText = "Clear ${countLabel(historyOnlyWorks.size, "Work")}",
         confirmBeforeDelete = settings.app.confirmBeforeDelete,
         onConfirm = {
             showClearHistoryConfirm = false
-            scope.launch { workRepository?.softDeleteAllFinished() }
+            scope.launch { workRepository?.softDeleteHistoryOnly() }
         },
         onDismissRequest = { showClearHistoryConfirm = false }
+    )
+
+    DestructiveConfirmation(
+        show = showClearPositionsConfirm,
+        title = "Clear Reading Positions?",
+        text = "Clears your place in every work. Your works and their order in Continue Reading stay the same.",
+        confirmText = "Clear ${countLabel(positionedWorks.size, "Position")}",
+        confirmBeforeDelete = settings.app.confirmBeforeDelete,
+        onConfirm = {
+            showClearPositionsConfirm = false
+            scope.launch { workRepository?.clearReadingPositions() }
+        },
+        onDismissRequest = { showClearPositionsConfirm = false }
     )
 
     DestructiveConfirmation(
@@ -206,3 +223,6 @@ fun PrivacyDataScreen(
         onDismissRequest = { showClearBrowseCacheConfirm = false }
     )
 }
+
+/** iOS `PrivacyDataView.countLabel`. */
+private fun countLabel(count: Int, noun: String): String = "$count $noun${if (count == 1) "" else "s"}"

@@ -131,15 +131,48 @@ class WorkRepository(
     }
 
     /**
-     * Soft-deletes all active finished works into Recently Deleted for [RECOVERY_WINDOW] (90 days).
-     * Mirrors Apple `PrivacyDataView` clear reading history intent. Returns the count of works cleared.
+     * iOS `PrivacyDataView.freedHistory`: works that only remain in the reading history. No
+     * copy on this device and nothing the reader chose to keep (`isProtected`: saved,
+     * favourited, kept offline, imported, or gone from AO3). Also not in a queue, which iOS
+     * does not ask: a queued work is not "only in the history", and the confirmation
+     * promises to take nothing else.
+     *
+     * Settings › Clear reading history used to take every finished work, saved and downloaded
+     * ones included, under a message saying they were not affected (audit A14).
      */
-    suspend fun softDeleteAllFinished(): Int {
-        val finished = listFinishedWorks()
-        for (work in finished) {
-            softDelete(work.id)
+    private fun isHistoryOnly(work: SavedWork): Boolean =
+        !work.hasEpub && !work.isProtected && !work.isQueuedForLater && !work.isDeleted
+
+    fun observeHistoryOnlyWorks(): Flow<List<SavedWork>> =
+        observeLibraryWorks().map { works -> works.filter(::isHistoryOnly) }
+
+    /** Moves those works to Recently Deleted for [RECOVERY_WINDOW]. Returns how many. */
+    suspend fun softDeleteHistoryOnly(): Int {
+        val history = decorate(workDao.getAll().map { it.toDomain() }).filter(::isHistoryOnly)
+        for (work in history) softDelete(work.id)
+        return history.size
+    }
+
+    /** iOS `LocalDataClearing.hasReadingPosition`: either reader's resume point, or the Mac's percent. */
+    private fun hasReadingPosition(work: SavedWork): Boolean =
+        !work.readiumLocator.isNullOrEmpty() || work.lastSpineIndex > 0 || work.lastScrollFraction > 0.0 ||
+            work.legacyReaderProgress != null
+
+    fun observePositionedWorks(): Flow<List<SavedWork>> =
+        observeLibraryWorks().map { works -> works.filter { hasReadingPosition(it) && !it.isDeleted } }
+
+    /**
+     * iOS `LocalDataClearing.clearReadingPositions`: forgets the place in every work and keeps
+     * the works. `lastReadDate` stays: it is Continue Reading's order, a fact about the shelf.
+     */
+    suspend fun clearReadingPositions(): Int {
+        val positioned = workDao.getAll().map { it.toDomain() }.filter { hasReadingPosition(it) && !it.isDeleted }
+        val now = clock()
+        for (work in positioned) {
+            upsert(work.copy(readiumLocator = "", lastSpineIndex = 0, lastScrollFraction = 0.0,
+                legacyReaderProgress = null, progressModifiedAt = now, lastModifiedAt = now))
         }
-        return finished.size
+        return positioned.size
     }
 
 
