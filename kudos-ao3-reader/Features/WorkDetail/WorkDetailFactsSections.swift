@@ -226,12 +226,13 @@ struct WorkDetailOutlineButton: View {
     let title: String
     let action: () -> Void
 
+    @ScaledMetric(relativeTo: .subheadline) private var buttonLabelSize: CGFloat = 15
     @Environment(ThemeManager.self) private var themeManager
 
     var body: some View {
         Button(action: action) {
             Text(title)
-                .font(.system(size: 15, weight: .medium))
+                .font(.system(size: buttonLabelSize, weight: .medium))
                 .foregroundStyle(.primary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.75)
@@ -253,6 +254,9 @@ struct WorkDetailMyCopyRow: View {
     let summary: String
     let action: () -> Void
 
+    @ScaledMetric(relativeTo: .subheadline) private var titleSize: CGFloat = 15
+    @ScaledMetric(relativeTo: .caption) private var summarySize: CGFloat = 12
+
     var body: some View {
         Button(action: action) {
             HStack(spacing: 12) {
@@ -262,10 +266,10 @@ struct WorkDetailMyCopyRow: View {
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text("My copy")
-                        .font(.system(size: 15, weight: .medium))
+                        .font(.system(size: titleSize, weight: .medium))
                         .foregroundStyle(.primary)
                     Text(summary)
-                        .font(.system(size: 12))
+                        .font(.system(size: summarySize))
                         .foregroundStyle(.secondary)
                 }
                 .lineLimit(1)

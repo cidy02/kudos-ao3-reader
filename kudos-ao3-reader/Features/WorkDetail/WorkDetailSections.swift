@@ -273,7 +273,7 @@ extension WorkDetailView {
         Button(action: action) {
             HStack(spacing: 10) {
                 Text(title)
-                    .font(.system(size: 14.5))
+                    .font(.system(size: myCopyRowTitleSize))
                     .foregroundStyle(.primary)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 if isOn {
@@ -300,7 +300,7 @@ extension WorkDetailView {
     func myCopyValueRow(_ title: String, _ value: String) -> some View {
         HStack(spacing: 10) {
             Text(title)
-                .font(.system(size: 14.5))
+                .font(.system(size: myCopyRowTitleSize))
                 .frame(maxWidth: .infinity, alignment: .leading)
             myCopyValue(value)
         }
@@ -310,7 +310,7 @@ extension WorkDetailView {
 
     private func myCopyValue(_ value: String) -> some View {
         Text(value)
-            .font(.system(size: 13))
+            .font(.system(size: myCopyValueSize))
             .monospacedDigit()
             .foregroundStyle(.secondary)
             .lineLimit(1)
@@ -323,7 +323,7 @@ extension WorkDetailView {
             Image(systemName: systemImage)
                 .font(.system(size: 13, weight: .semibold))
             Text(title)
-                .font(.system(size: 14, weight: .medium))
+                .font(.system(size: myCopyActionSize, weight: .medium))
         }
         .foregroundStyle(.tint)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -391,7 +391,7 @@ extension WorkDetailView {
             myCopyHeader("Collections")
             ForEach(names, id: \.self) { name in
                 Text(name)
-                    .font(.system(size: 14.5))
+                    .font(.system(size: myCopyRowTitleSize))
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .myCopyRow()
             }
@@ -444,7 +444,7 @@ extension WorkDetailView {
             Button { showingDownloadedDateEditor = true } label: {
                 HStack(spacing: 10) {
                     Text("Downloaded")
-                        .font(.system(size: 14.5))
+                        .font(.system(size: myCopyRowTitleSize))
                         .foregroundStyle(.primary)
                         .frame(maxWidth: .infinity, alignment: .leading)
                     myCopyValue(
@@ -471,7 +471,7 @@ extension WorkDetailView {
                 VStack(spacing: 8) {
                     HStack(spacing: 10) {
                         Text("Progress")
-                            .font(.system(size: 14.5))
+                            .font(.system(size: myCopyRowTitleSize))
                             .frame(maxWidth: .infinity, alignment: .leading)
                         myCopyValue(progressLabel)
                     }
@@ -502,10 +502,10 @@ extension WorkDetailView {
 
                 HStack(spacing: 10) {
                     TextField("Add a tag", text: $newTagName)
-                        .font(.system(size: 14))
+                        .font(.system(size: myCopyActionSize))
                         .onSubmit(addTypedTag)
                     Button("Add", action: addTypedTag)
-                        .font(.system(size: 14, weight: .medium))
+                        .font(.system(size: myCopyActionSize, weight: .medium))
                         .buttonStyle(.borderless)
                         .disabled(newTagName.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
@@ -519,7 +519,7 @@ extension WorkDetailView {
                             ForEach(suggestions, id: \.self) { name in
                                 Button { apply(named: name) } label: {
                                     Text(name)
-                                        .font(.system(size: 13.5))
+                                        .font(.system(size: tagChipSize))
                                         .foregroundStyle(.primary)
                                         .padding(.horizontal, 11)
                                         .padding(.vertical, 6)
@@ -541,7 +541,7 @@ extension WorkDetailView {
         HStack(spacing: 7) {
             Button { router.filterLibrary(.userTag, tag.name) } label: {
                 Text(tag.name)
-                    .font(.system(size: 13.5, weight: .medium))
+                    .font(.system(size: tagChipSize, weight: .medium))
             }
             .buttonStyle(.plain)
             Button { removeTag(tag) } label: {

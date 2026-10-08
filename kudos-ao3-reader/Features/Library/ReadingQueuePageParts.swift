@@ -220,10 +220,13 @@ struct QueueSelectionStatusRow: View {
     let selectedCount: Int
     let total: Int
 
+    @ScaledMetric(relativeTo: .caption) private var queueNameSize: CGFloat = 11
+    @ScaledMetric(relativeTo: .caption) private var countSize: CGFloat = 11
+
     var body: some View {
         HStack(spacing: 8) {
             Text(queueName.uppercased())
-                .font(.system(size: 11, weight: .bold))
+                .font(.system(size: queueNameSize, weight: .bold))
                 .tracking(11 * 0.13)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
@@ -231,7 +234,7 @@ struct QueueSelectionStatusRow: View {
                 .fill(Color.primary.opacity(0.14))
                 .frame(height: 0.5)
             Text("\(selectedCount) / \(total)")
-                .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                .font(.system(size: countSize, weight: .semibold, design: .monospaced))
                 .foregroundStyle(.secondary)
         }
         .combinedAccessibilityRow("\(queueName), \(selectedCount) of \(total) selected")

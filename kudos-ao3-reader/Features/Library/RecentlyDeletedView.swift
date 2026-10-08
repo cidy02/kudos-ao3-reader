@@ -48,6 +48,10 @@ struct RecentlyDeletedView: View {
     /// The selection waiting on the bulk alert, captured when it was asked for.
     @State private var pendingBulkDelete: Set<UUID> = []
 
+    @ScaledMetric(relativeTo: .caption) private var sectionNoteSize: CGFloat = 11.5
+    @ScaledMetric(relativeTo: .footnote) private var deleteButtonSize: CGFloat = 14
+    @ScaledMetric(relativeTo: .footnote) private var reassuranceSize: CGFloat = 12.5
+
     var body: some View {
         // Bound once. `entries` flattens and sorts three `@Query` results, and the
         // body reads it four times — emptiness, the header count, and both groups.
@@ -268,7 +272,7 @@ struct RecentlyDeletedView: View {
 
     private func sectionNote(_ text: String) -> some View {
         Text(text)
-            .font(.system(size: 11.5))
+            .font(.system(size: sectionNoteSize))
             .foregroundStyle(.secondary)
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -281,7 +285,7 @@ struct RecentlyDeletedView: View {
             confirmingDeleteAll = true
         } label: {
             Label("Delete All Permanently", systemImage: "trash")
-                .font(.system(size: 14, weight: .semibold))
+                .font(.system(size: deleteButtonSize, weight: .semibold))
                 .foregroundStyle(.red)
                 .frame(maxWidth: .infinity, minHeight: 44)
                 .overlay(Capsule().strokeBorder(Color.red.opacity(0.42), lineWidth: 0.5))
@@ -306,7 +310,7 @@ struct RecentlyDeletedView: View {
     private var reassurance: some View {
         Text("Deleting an item here removes only the copy in Kudos, including its download, your progress, "
             + "and your notes. The work stays on AO3.")
-            .font(.system(size: 12.5))
+            .font(.system(size: reassuranceSize))
             .foregroundStyle(.secondary)
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)

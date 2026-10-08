@@ -18,6 +18,9 @@ struct CollectionLedgerRow: View {
         Array(previewWorks.prefix(4))
     }
 
+    @ScaledMetric(relativeTo: .headline) private var rowTitleSize: CGFloat = 15
+    @ScaledMetric(relativeTo: .caption) private var detailSize: CGFloat = 12
+
     var body: some View {
         HStack(spacing: 13) {
             previewGrid
@@ -75,12 +78,12 @@ struct CollectionLedgerRow: View {
     private var labelColumn: some View {
         VStack(alignment: .leading, spacing: 3) {
             Text(collection.name)
-                .font(.system(size: 15, weight: .semibold))
+                .font(.system(size: rowTitleSize, weight: .semibold))
                 .foregroundStyle(Color.primary)
                 .lineLimit(1)
 
             Text("\(totalWorkCount) work\(totalWorkCount == 1 ? "" : "s")")
-                .font(.system(size: 12))
+                .font(.system(size: detailSize))
                 .foregroundStyle(Color.secondary)
                 .lineLimit(1)
         }

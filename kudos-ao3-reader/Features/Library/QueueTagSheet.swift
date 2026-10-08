@@ -33,6 +33,11 @@ struct QueueTagSheet: View {
     @Query(sort: \Tag.name) private var allTags: [Tag]
     @State private var newTagName = ""
 
+    @ScaledMetric(relativeTo: .caption) private var footnoteSize: CGFloat = 11.5
+    @ScaledMetric(relativeTo: .subheadline) private var inputSize: CGFloat = 15
+    @ScaledMetric(relativeTo: .headline) private var buttonLabelSize: CGFloat = 15
+    @ScaledMetric(relativeTo: .footnote) private var someCoverageSize: CGFloat = 13
+
     private enum Coverage {
         case all, some, none
     }
@@ -107,7 +112,7 @@ struct QueueTagSheet: View {
 
     private func footnote(_ text: String) -> some View {
         Text(text)
-            .font(.system(size: 11.5))
+            .font(.system(size: footnoteSize))
             .foregroundStyle(.secondary.opacity(0.7))
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -125,10 +130,10 @@ struct QueueTagSheet: View {
                 .frame(width: 20)
                 .accessibilityHidden(true)
             TextField("New tag", text: $newTagName)
-                .font(.system(size: 15))
+                .font(.system(size: inputSize))
                 .onSubmit(addTypedTag)
             Button("Add", action: addTypedTag)
-                .font(.system(size: 15, weight: .semibold))
+                .font(.system(size: buttonLabelSize, weight: .semibold))
                 .foregroundStyle(palette.accent)
                 .buttonStyle(.plain)
                 .disabled(trimmedNewTag.isEmpty)
@@ -159,7 +164,7 @@ struct QueueTagSheet: View {
                     .foregroundStyle(palette.accent)
             case .some:
                 Text("some")
-                    .font(.system(size: 13))
+                    .font(.system(size: someCoverageSize))
                     .foregroundStyle(.secondary)
             case .none:
                 EmptyView()

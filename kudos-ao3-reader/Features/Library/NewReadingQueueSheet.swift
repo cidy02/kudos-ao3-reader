@@ -71,6 +71,11 @@ struct NewReadingQueueSheet: View {
     /// memberships on every body evaluation would walk the whole shelf.
     @State private var seedCount: Int?
 
+    @ScaledMetric(relativeTo: .subheadline) private var nameFieldSize: CGFloat = 16
+    @ScaledMetric(relativeTo: .subheadline) private var seedTitleSize: CGFloat = 14.5
+    @ScaledMetric(relativeTo: .caption) private var seedSubtitleSize: CGFloat = 11.5
+    @ScaledMetric(relativeTo: .caption) private var footnoteSize: CGFloat = 11.5
+
     private var gutter: CGFloat { SubjectMetrics.gutter }
 
     private var trimmedName: String {
@@ -214,7 +219,7 @@ struct NewReadingQueueSheet: View {
             // The title doubles as the accessibility label, so without this
             // VoiceOver reads the example placeholder as if it were the name.
             .accessibilityLabel("Name")
-            .font(.system(size: 16))
+            .font(.system(size: nameFieldSize))
             #if os(iOS)
             .textInputAutocapitalization(.words)
             #endif
@@ -260,10 +265,10 @@ struct NewReadingQueueSheet: View {
                 radioMark(isSelected: isSelected)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(seed.title)
-                        .font(.system(size: 14.5))
+                        .font(.system(size: seedTitleSize))
                     if let subtitle = seedSubtitle(seed) {
                         Text(subtitle)
-                            .font(.system(size: 11.5))
+                            .font(.system(size: seedSubtitleSize))
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
@@ -318,7 +323,7 @@ struct NewReadingQueueSheet: View {
 
     private func footnote(_ text: String) -> some View {
         Text(text)
-            .font(.system(size: 11.5))
+            .font(.system(size: footnoteSize))
             .foregroundStyle(.secondary.opacity(0.7))
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)
