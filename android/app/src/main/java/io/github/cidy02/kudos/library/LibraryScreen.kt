@@ -229,6 +229,12 @@ fun LibraryScreen(
         }
         val allSelected = selectableIds.isNotEmpty() &&
             state.selectedWorkIds.containsAll(selectableIds)
+        // The filter stays reachable during Select: a row it hides leaves the selection, as in
+        // the section lists (audits A5-5 and A12-4, the same fault on iOS).
+        LaunchedEffect(selectableIds, state.selectedWorkIds, state.selectionMode) {
+            val seen = LibrarySelection.visible(state.selectedWorkIds, selectableIds)
+            if (state.selectionMode && seen.size != state.selectedWorkIds.size) viewModel.setSelection(seen)
+        }
         val selectionTitle = if (state.selectionMode) {
             if (state.selectedCount == 0) "Select Works" else "${state.selectedCount} Selected"
         } else null

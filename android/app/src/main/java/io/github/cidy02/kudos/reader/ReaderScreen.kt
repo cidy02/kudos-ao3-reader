@@ -757,8 +757,15 @@ private fun ReaderReading(
             }
 
             state.highlights.firstOrNull { it.id == state.editingAnnotationId }?.let { annotation ->
+                // A swatch writes straight to the highlight so the page shows it at once.
+                // Cancel, and dismissing the sheet, take that back too (audit A12-6, iOS the same).
+                val colourOnOpen = remember(annotation.id) { annotation.colorRaw }
+                val cancelNote = {
+                    if (annotation.colorRaw != colourOnOpen) viewModel.recolorHighlight(annotation.id, colourOnOpen)
+                    viewModel.closeNoteEditor()
+                }
                 ModalBottomSheet(
-                    onDismissRequest = viewModel::closeNoteEditor,
+                    onDismissRequest = cancelNote,
                     sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
                     containerColor = tokens.background,
                     contentColor = tokens.primaryInk,
@@ -767,7 +774,7 @@ private fun ReaderReading(
                     CompositionLocalProvider(LocalKudosTokens provides tokens) {
                         ReaderNoteEditor(
                             annotation = annotation,
-                            onCancel = viewModel::closeNoteEditor,
+                            onCancel = cancelNote,
                             onDone = { note ->
                                 viewModel.updateNote(annotation.id, note)
                                 viewModel.closeNoteEditor()
