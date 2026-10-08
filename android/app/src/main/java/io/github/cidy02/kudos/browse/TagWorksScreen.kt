@@ -72,6 +72,10 @@ fun TagWorksScreen(
 ) {
     var state by remember(tagName) { mutableStateOf<TagWorksState>(TagWorksState.Loading) }
     var filters by remember { mutableStateOf(AO3SearchFilters()) }
+    // The filters the page on screen was asked for. The sheet edits `filters` itself, so closing
+    // it without Apply left edits that the next page then sent: page 7 of a filter nobody
+    // applied (audit A20-3, the same on iOS).
+    var loadedFilters by remember { mutableStateOf(filters) }
     var refine by remember { mutableStateOf("") }
     var showFilterSheet by remember { mutableStateOf(false) }
     var expandAllCards by remember { mutableStateOf(false) }
@@ -93,6 +97,7 @@ fun TagWorksScreen(
     val activeFilters = remember(filters) { activeFilterCount(filters) }
 
     fun load(page: Int = 1) {
+        loadedFilters = filters
         state = TagWorksState.Loading
         val generation = ++loadGeneration
         scope.launch {
@@ -279,7 +284,7 @@ fun TagWorksScreen(
             onFiltersChange = { filters = it },
             onApply = { showFilterSheet = false; load() },
             onClear = { filters = AO3SearchFilters(); load() },
-            onDismiss = { showFilterSheet = false },
+            onDismiss = { showFilterSheet = false; filters = loadedFilters },
             localTagSuggestions = localTagSuggestions
         )
     }

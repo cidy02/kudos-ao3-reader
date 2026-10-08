@@ -128,6 +128,16 @@ class SearchViewModel(
         launchSearch(page, searchFilters, keepResults = false)
     }
 
+    /**
+     * The filter sheet was closed without Apply while results are on screen: its edits are
+     * dropped (the typed search text is not the sheet's, and stays). The next page tap used
+     * to run them as a new search (audit A20-3, the same on iOS).
+     */
+    fun discardFilterEdits() {
+        if (_state.value !is SearchUiState.Results) return
+        _filters.value = lastFilters.copy(query = _filters.value.query)
+    }
+
     fun loadPage(page: Int) {
         val current = _state.value as? SearchUiState.Results ?: return
         if (page == current.page.currentPage || page < 1 || page > current.page.totalPages) return

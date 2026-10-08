@@ -516,7 +516,7 @@ fun SearchScreen(
                 viewModel.runSearch(page = 1, searchFilters = filters)
             },
             onClear = { viewModel.clearFilters() },
-            onDismiss = { showFilterSheet = false },
+            onDismiss = { showFilterSheet = false; viewModel.discardFilterEdits() },
             onSave = if (savedSearchRepository != null) {
                 {
                     showFilterSheet = false
