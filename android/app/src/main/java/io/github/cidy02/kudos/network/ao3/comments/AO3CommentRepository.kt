@@ -36,6 +36,7 @@ class AO3CommentRepository(
         } else {
             target.pageUrl(safePage)
         }
+        val viewer = authenticatedClient.username()
         val authAttempt = authenticatedClient.getAuthenticated(pageUrl)
         val response = when (authAttempt) {
             is AO3Result.Success -> authAttempt.value
@@ -46,8 +47,12 @@ class AO3CommentRepository(
                 }
                 when (val public = publicClient.get(pageUrl)) {
                     is AO3Result.Failure -> {
-                        // Network failure: try cache if available.
-                        cache?.load(target, safePage)?.let { return AO3Result.Success(it) }
+                        // Only when AO3 could not be reached, and only this viewer's own copy:
+                        // a refusal ("log in", "not found") is AO3's answer, not a reason to
+                        // show what someone else was allowed to see (audit A17-4).
+                        if (public.error is AO3Error.Network) {
+                            cache?.load(target, safePage, viewer)?.let { return AO3Result.Success(it) }
+                        }
                         return public
                     }
                     is AO3Result.Success -> {
@@ -58,7 +63,7 @@ class AO3CommentRepository(
         }
         val thread = parseThread(response.body, response.url, target, response.statusCode, safePage)
         if (thread is AO3Result.Success) {
-            cache?.save(thread.value, safePage)
+            cache?.save(thread.value, safePage, viewer)
         }
         return thread
     }
