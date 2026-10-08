@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.app
 
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -585,6 +586,20 @@ fun AppNavHost(
             )
         }
         if (io.github.cidy02.kudos.BuildConfig.DEBUG) {
+            listOf(Routes.WritingWorkNewDemo to null, Routes.WritingWorkDraftDemo to 995001L,
+                Routes.WritingWorkPostedDemo to 995006L).forEach { (route, workID) ->
+                sharedComposable(route) {
+                    // These are fixture-only entrances. Without demo isolation, never construct a live read.
+                    if (io.github.cidy02.kudos.network.ao3.DemoNetwork.isActive) {
+                        val repository = remember(container) {
+                            io.github.cidy02.kudos.network.ao3.writing.AO3WorkFormRepository(
+                                container.authenticatedClient, container.authRepository)
+                        }
+                        io.github.cidy02.kudos.writing.WritingWorkFormScreen(workID, repository, container.authRepository,
+                            onClose = { navController.popBackStack() })
+                    } else LaunchedEffect(Unit) { navController.popBackStack() }
+                }
+            }
             sharedComposable(Routes.WritingEditorDemo) {
                 io.github.cidy02.kudos.writing.WritingEditorDemoScreen(fromFile = false,
                     onClose = { navController.popBackStack() })
