@@ -1,0 +1,39 @@
+# Audit A7: a string check, the reader and Work Detail
+
+**Read-only.** Work only in this worktree. Change no source file. Do not build, commit, push,
+switch branches, sign in or contact archiveofourown.org. Write exactly one file:
+`docs/android-port/audits/A7-result.md`.
+
+This is a mechanical check, and its value is exactness. Report only what you found by
+searching; never infer, never describe a file you did not open, never invent a line number.
+
+## The check
+
+For every user-visible string literal in these iOS folders (in this worktree):
+
+- `kudos-ao3-reader/Features/ReaderReadium/`
+- `kudos-ao3-reader/Features/WorkDetail/`
+
+that is, the text of a `Text("…")`, `Button("…")`, `Label("…", …)`, `Toggle("…")`,
+`Picker("…")`, `.navigationTitle("…")`, an alert's or dialog's title, message and buttons, a
+menu item, a placeholder, an accessibility label, or a string returned by a function whose
+result is shown: search the Android tree for it
+
+- `android/app/src/main/java/io/github/cidy02/kudos/reader/` and `…/kudos/works/`, then the
+  whole of `android/app/src/main/` if not found there (Kotlin files and `res/values/strings.xml`)
+
+with an exact, case-sensitive search of the whole string (for a string with interpolation,
+search its longest fixed part).
+
+## The result file
+
+1. Counts: iOS files read, strings checked, found, not found.
+2. **Not found on Android**: a table, one row per string: the string exactly as written; the
+   iOS `path:line` (open the file and copy the real line number); what kind of thing it is
+   (button, row label, alert message…); the exact search you ran. Group by iOS file.
+3. **Found, but worded differently on Android** only when you saw it by reading the Android
+   counterpart: the iOS string, the Android string, both `path:line`.
+4. What you did not read.
+
+Do not list strings that are only in comments, in `#Preview` blocks, in debug-only code
+(`#if DEBUG`), or log messages.
