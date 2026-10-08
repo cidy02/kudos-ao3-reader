@@ -88,7 +88,11 @@ class ReadingQueueRepository(
         }
     }
 
-    suspend fun addWork(queueId: String, workId: String): ReadingQueueMembership {
+    suspend fun addWork(
+        queueId: String,
+        workId: String,
+        enqueueMissingEpub: Boolean = true
+    ): ReadingQueueMembership {
         val queue = queueDao.getQueueById(queueId)
             ?: error("Queue not found: $queueId")
         require(!queue.isDeleted) { "Cannot add works to a deleted queue." }
@@ -129,7 +133,7 @@ class ReadingQueueRepository(
             }
         }
 
-        if (KeepOffline.queueKeeps(queue.keepsWorksOffline)) {
+        if (enqueueMissingEpub && KeepOffline.queueKeeps(queue.keepsWorksOffline)) {
             workDao.getById(workId)?.toDomain()?.let { enqueueMissing(listOf(it)) }
         }
 
@@ -562,9 +566,9 @@ class ReadingQueueRepository(
         queueDao.upsertQueue(queue.copy(dateUpdated = now))
     }
 
-    suspend fun addToSavedForLater(workId: String): ReadingQueueMembership {
+    suspend fun addToSavedForLater(workId: String, enqueueMissingEpub: Boolean = true): ReadingQueueMembership {
         val queue = ensureSavedForLaterQueue()
-        return addWork(queue.id, workId)
+        return addWork(queue.id, workId, enqueueMissingEpub)
     }
 
     suspend fun isInSavedForLater(workId: String): Boolean {
@@ -697,8 +701,7 @@ class ReadingQueueRepository(
         seriesRepository: AO3SeriesRepository,
         workImporter: WorkImporter,
         pauseMillis: Long = 2000L,
-        progress: ((SeriesPreservationResult) -> Unit)? = null,
-        enqueueDownload: ((AO3WorkSummary) -> Unit)? = null
+        progress: ((SeriesPreservationResult) -> Unit)? = null
     ): SeriesPreservationResult {
         if (seriesUrl.isBlank()) return SeriesPreservationResult()
 
@@ -718,8 +721,7 @@ class ReadingQueueRepository(
             targetQueues = targetQueues,
             workImporter = workImporter,
             pauseMillis = pauseMillis,
-            progress = progress,
-            enqueueDownload = enqueueDownload
+            progress = progress
         )
     }
 
@@ -728,112 +730,151 @@ class ReadingQueueRepository(
         targetQueues: List<ReadingQueue>?,
         workImporter: WorkImporter,
         pauseMillis: Long = 2000L,
-        progress: ((SeriesPreservationResult) -> Unit)? = null,
-        enqueueDownload: ((AO3WorkSummary) -> Unit)? = null
+        progress: ((SeriesPreservationResult) -> Unit)? = null
     ): SeriesPreservationResult {
         val result = SeriesPreservationResult(total = summaries.size)
-        val queues = targetQueues ?: listOf(ensureSavedForLaterQueue())
-        progress?.invoke(result.copy())
-
-        for (summary in summaries) {
-            if (!currentCoroutineContext().isActive) {
-                result.cancelled += max(0, result.total - result.completed)
-                progress?.invoke(result.copy())
-                break
-            }
-
-            val existing = workDao.getBySourceUrl(summary.workUrl)?.toDomain()
-                ?: workDao.getById(summary.id.toString())?.toDomain()
-
-            if (existing != null) {
-                if (existing.isDeleted) {
-                    val now = clock()
-                    val entity = workDao.getById(existing.id)
-                    if (entity != null) {
-                        workDao.upsert(entity.copy(
-                            isDeleted = false,
-                            deletedAt = null,
-                            permanentDeletionScheduledAt = null,
-                            lastModifiedAt = now
-                        ))
-                        val ao3Id = WorkTags.ao3WorkIdFromUrl(existing.sourceUrl)
-                            ?.takeIf { it in Int.MIN_VALUE.toLong()..Int.MAX_VALUE.toLong() }
-                            ?.toInt()
-                        tombstoneDao.deleteSavedWorkByIdentity(
-                            recordId = existing.id,
-                            ao3WorkId = ao3Id,
-                            canonicalSourceUrl = WorkTags.canonicalAO3WorkURL(existing.sourceUrl)
-                                .orEmpty(),
-                            sourceUrl = existing.sourceUrl,
-                            recordType = SyncTombstoneRecordType.SAVED_WORK
-                        )
-                    }
-                }
-
-                val isInAllQueues = queues.all { q ->
-                    queueDao.getMembershipForWork(q.id, existing.id) != null
-                }
-
-                if (existing.hasEpub && isInAllQueues) {
-                    result.alreadyPreserved += 1
-                    progress?.invoke(result.copy())
-                    continue
-                }
-
-                if (existing.hasEpub) {
-                    for (queue in queues) {
-                        addWork(queue.id, existing.id)
-                    }
-                    result.alreadyPreserved += 1
-                    progress?.invoke(result.copy())
-                    continue
-                }
-            }
-
-            if (queues.isEmpty()) {
-                result.skipped += 1
-                progress?.invoke(result.copy())
-                continue
-            }
-
-            try {
-                currentCoroutineContext().ensureActive()
-                val importResult = workImporter.saveMetadataOnly(
-                    summary,
-                    markSaved = false,
-                    isQueuedForLater = true
-                )
-                when (importResult) {
-                    is WorkImportResult.Success -> {
-                        val saved = importResult.work
-                        for (queue in queues) {
-                            addWork(queue.id, saved.id)
-                        }
-                        enqueueDownload?.invoke(summary)
-                        result.preserved += 1
-                    }
-                    is WorkImportResult.Failure -> {
-                        result.failed += 1
-                    }
-                }
-            } catch (e: kotlinx.coroutines.CancellationException) {
-                result.cancelled += max(1, result.total - result.completed)
-                progress?.invoke(result.copy())
-                break
-            } catch (e: Exception) {
-                result.failed += 1
-            }
+        // Room reads/writes suspend too: Cancel can arrive during a local lookup or queue add.
+        try {
+            val queues = targetQueues ?: listOf(ensureSavedForLaterQueue())
             progress?.invoke(result.copy())
 
-            if (result.completed < result.total && pauseMillis > 0) {
-                try {
-                    delay(pauseMillis)
-                } catch (e: kotlinx.coroutines.CancellationException) {
+            for (summary in summaries) {
+                if (!currentCoroutineContext().isActive) {
                     result.cancelled += max(0, result.total - result.completed)
                     progress?.invoke(result.copy())
                     break
                 }
+
+                // The shared identity matcher handles UUID-backed and canonical AO3 identities.
+                val existing = io.github.cidy02.kudos.works.WorkIdentityIndex.findExisting(
+                    candidateSourceUrl = summary.workUrl,
+                    byId = { workDao.getById(it)?.toDomain() },
+                    bySourceUrl = { workDao.getBySourceUrl(it)?.toDomain() }
+                )
+
+                if (existing != null) {
+                    if (existing.isDeleted) {
+                        val now = clock()
+                        val entity = workDao.getById(existing.id)
+                        if (entity != null) {
+                            workDao.upsert(entity.copy(
+                                isDeleted = false,
+                                deletedAt = null,
+                                permanentDeletionScheduledAt = null,
+                                lastModifiedAt = now
+                            ))
+                            val ao3Id = WorkTags.ao3WorkIdFromUrl(existing.sourceUrl)
+                                ?.takeIf { it in Int.MIN_VALUE.toLong()..Int.MAX_VALUE.toLong() }
+                                ?.toInt()
+                            tombstoneDao.deleteSavedWorkByIdentity(
+                                recordId = existing.id,
+                                ao3WorkId = ao3Id,
+                                canonicalSourceUrl = WorkTags.canonicalAO3WorkURL(existing.sourceUrl)
+                                    .orEmpty(),
+                                sourceUrl = existing.sourceUrl,
+                                recordType = SyncTombstoneRecordType.SAVED_WORK
+                            )
+                        }
+                    }
+
+                    // ReadingQueueService.swift:623–627: unavailable copies never cause another read.
+                    if (existing.ao3Unavailable) {
+                        result.unavailable += 1
+                        progress?.invoke(result.copy())
+                        continue
+                    }
+
+                    val isInAllQueues = queues.all { q ->
+                        queueDao.getMembershipForWork(q.id, existing.id) != null
+                    }
+
+                    // ReadingQueueService.swift:628–646 uses the preservation status for accounting.
+                    if (existing.epubPreservationStatusRaw == "preserved" && isInAllQueues) {
+                        result.alreadyPreserved += 1
+                        progress?.invoke(result.copy())
+                        continue
+                    }
+
+                    if (existing.epubPreservationStatusRaw == "preserved") {
+                        for (queue in queues) {
+                            addWork(queue.id, existing.id, enqueueMissingEpub = false)
+                        }
+                        result.alreadyPreserved += 1
+                        progress?.invoke(result.copy())
+                        continue
+                    }
+                }
+
+                if (queues.isEmpty()) {
+                    result.skipped += 1
+                    progress?.invoke(result.copy())
+                    continue
+                }
+
+                // Owner 2026-10-07: anonymous EPUB endpoints cannot serve restricted works.
+                // Do not attempt a known refusal (nor add an authenticated bulk read).
+                if (summary.isRestricted && (existing == null || !existing.hasEpub || !epubOnDisk(existing.id))) {
+                    result.skipped += 1
+                    progress?.invoke(result.copy())
+                    continue
+                }
+
+                try {
+                    currentCoroutineContext().ensureActive()
+                    val importResult = workImporter.saveMetadataOnly(
+                        summary,
+                        markSaved = false,
+                        isQueuedForLater = true,
+                        enrichMetadata = false
+                    )
+                    when (importResult) {
+                        is WorkImportResult.Success -> {
+                            val saved = importResult.work
+                            // ReadingQueueService.swift:725–732: membership first, then await this EPUB.
+                            // Avoid addWork's background enqueue: Cancel owns this batch alone.
+                            for (queue in queues) {
+                                addWork(queue.id, saved.id, enqueueMissingEpub = false)
+                            }
+                            // Re-read after the memberships; a row removed meanwhile is a failure, not a crash.
+                            val queued = workDao.getById(saved.id)?.toDomain() ?: saved
+                            when (val download = workImporter.preserveQueuedWork(queued, allowDownload = !summary.isRestricted)) {
+                                is WorkImportResult.Success -> result.preserved += 1
+                                is WorkImportResult.Failure -> {
+                                    if (download.error == io.github.cidy02.kudos.network.ao3.AO3Error.NotFound) {
+                                        result.unavailable += 1
+                                    } else {
+                                        result.failed += 1
+                                    }
+                                }
+                            }
+                        }
+                        is WorkImportResult.Failure -> {
+                            result.failed += 1
+                        }
+                    }
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    result.cancelled += max(1, result.total - result.completed)
+                    progress?.invoke(result.copy())
+                    break
+                } catch (e: Exception) {
+                    result.failed += 1
+                }
+                progress?.invoke(result.copy())
+
+                // ReadingQueueService.swift:668–679: 2s after each attempt, cancellable.
+                if (result.completed < result.total && pauseMillis > 0) {
+                    try {
+                        delay(pauseMillis)
+                    } catch (e: kotlinx.coroutines.CancellationException) {
+                        result.cancelled += max(0, result.total - result.completed)
+                        progress?.invoke(result.copy())
+                        break
+                    }
+                }
             }
+        } catch (_: kotlinx.coroutines.CancellationException) {
+            result.cancelled += max(0, result.total - result.completed)
+            progress?.invoke(result.copy())
         }
         return result
     }

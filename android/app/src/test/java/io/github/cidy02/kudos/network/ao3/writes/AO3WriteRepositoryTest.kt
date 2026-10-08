@@ -134,6 +134,40 @@ class AO3MarkForLaterRepositoryTest {
 
 class AO3BookmarkRepositoryTest {
     @Test
+    fun workActionLabelsShareOnePageAndSignedOutDoesNotRead() = runTest {
+        val signedIn = FakeAuthenticatedClient(listOf(success(writeResource("ao3/writes/work_bookmarked.html"))), emptyList())
+        val result = (AO3WriteRepository(signedIn).fetchWorkActionStates(123) as AO3Result.Success).value
+        assertEquals(false, result.first.isSubscribed)
+        assertTrue(result.second.exists)
+        assertEquals(1, signedIn.gets.size)
+        val signedOut = FakeAuthenticatedClient(emptyList(), emptyList(), username = null)
+        assertEquals(AO3Error.AuthenticationRequired,
+            (AO3WriteRepository(signedOut).fetchWorkActionStates(123) as AO3Result.Failure).error)
+        assertTrue(signedOut.gets.isEmpty())
+    }
+
+    @Test
+    fun bookmarkRefusalPreservesExactFieldsAndReturnsAO3ReasonWithoutRetry() = runTest {
+        val notes = "n".repeat(5001)
+        val client = FakeAuthenticatedClient(
+            getResults = listOf(success(writeResource("ao3/writes/work_with_forms.html"))),
+            postResults = listOf(success("<div id='error'><ul><li>Notes must be less than 5000 characters long.</li></ul></div>"))
+        )
+        val input = AO3BookmarkInput(notes, " keep, spaces & 星 ", true, true, "99")
+        val result = AO3WriteRepository(client).createBookmark(123, input)
+        assertEquals("Notes must be less than 5000 characters long.",
+            ((result as AO3Result.Failure).error as AO3Error.Validation).message)
+        assertEquals(1, client.gets.size)
+        assertEquals(1, client.posts.size)
+        val fields = client.posts.single().fields.toMap()
+        assertEquals(notes, fields["bookmark[bookmarker_notes]"])
+        assertEquals(input.tags, fields["bookmark[tag_string]"])
+        assertEquals("1", fields["bookmark[private]"])
+        assertEquals("1", fields["bookmark[rec]"])
+        assertEquals("99", fields["bookmark[pseud_id]"])
+    }
+
+    @Test
     fun createBookmarkPostsNativeCreateFieldsWhereFeasible() = runTest {
         val client = FakeAuthenticatedClient(
             getResults = listOf(success(writeResource("ao3/writes/work_with_forms.html"))),

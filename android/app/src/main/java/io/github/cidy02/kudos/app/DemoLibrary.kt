@@ -259,7 +259,7 @@ object DemoLibrary {
         val allWorks = database.workDao().getAllIncludingDeleted()
         if (allWorks.any { it.title == SAMPLES[0].title }) {
             // Add list fixture links to an installed demo without replacing its reading state.
-            for (row in allWorks.filter { it.title == "Sodium Lights" || it.title == "Ashfall" }) {
+            for (row in allWorks.filter { it.title in setOf("Sodium Lights", "Ashfall", "Unanswered Is Not Unread", "Burn my heart, heed my eyes") }) {
                 val work = workRepository.getWork(row.id) ?: continue
                 val linked = withDemoListLinks(work)
                 if (linked != work) workRepository.upsert(linked)
@@ -400,11 +400,23 @@ object DemoLibrary {
     }
 
     private fun withDemoListLinks(work: SavedWork): SavedWork = when {
-        work.title == "Sodium Lights" && work.seriesUrl.isBlank() -> work.copy(
+        work.title == "Sodium Lights" -> work.copy(
+            sourceUrl = AO3URLResolver.canonicalWorkUrl(999_000_005L),
+            ao3WorkID = 999_000_005,
             seriesTitle = "My Series",
             seriesPosition = 1,
             seriesUrl = "https://archiveofourown.org/series/999",
             ao3SeriesID = 999
+        )
+        work.title == "Unanswered Is Not Unread" -> work.copy(
+            sourceUrl = AO3URLResolver.canonicalWorkUrl(995_110L), ao3WorkID = 995_110,
+            seriesTitle = "Letters Across Two Pages", seriesPosition = 1,
+            seriesUrl = "https://archiveofourown.org/series/1000", ao3SeriesID = 1000
+        )
+        work.title == "Burn my heart, heed my eyes" -> work.copy(
+            sourceUrl = AO3URLResolver.canonicalWorkUrl(995_120L), ao3WorkID = 995_120,
+            seriesTitle = "The Missing Series", seriesPosition = 1,
+            seriesUrl = "https://archiveofourown.org/series/1001", ao3SeriesID = 1001
         )
         work.title == "Ashfall" && work.sourceUrl.isBlank() -> work.copy(
             sourceUrl = AO3URLResolver.canonicalWorkUrl(999_000_003L),

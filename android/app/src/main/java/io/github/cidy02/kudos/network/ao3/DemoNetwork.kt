@@ -205,6 +205,12 @@ internal object DemoNetworkRoutes {
     /** Subscriptions share a path, so their type query selects the fixture. */
     fun fixtureName(url: HttpUrl): String? {
         val path = decodedPath(url)
+        if (path.trimEnd('/') == "/series/1001") return null // terminal failed preview, same for browser
+        if (path.trimEnd('/') == "/series/1000") return when (url.queryParameter("page")) {
+            null, "1" -> "ao3_demo_series_two_pages_1"
+            "2" -> "ao3_demo_series_two_pages_2"
+            else -> null
+        }
         // One answer per address for both OkHttp and the demo's read-only WebView.
         if (path.trimEnd('/') == "/collections/summer_meme/requests") return when (url.queryParameter("page")) {
             null, "1" -> "ao3_demo_meme_requests_1"
@@ -278,6 +284,35 @@ internal class DemoNetworkInterceptor(
         val url = chain.request().url
         if (!DemoNetworkRoutes.isAo3Host(url.host)) return chain.proceed(chain.request())
         val path = DemoNetworkRoutes.decodedPath(url)
+        // Real local EPUBs for this brief's batch; no background download escapes to AO3.
+        val seriesDownload = Regex("^/downloads/(99511[0-5]|995120|99900000[2-5])/work\\.epub$").matchEntire(path)
+        if (chain.request().method == "GET" && seriesDownload != null) {
+            val id = seriesDownload.groupValues[1]
+            val bytes = io.github.cidy02.kudos.works.converters.EpubBuilder.buildEpub(
+                "Series work $id", "<p>The lantern keeper leaves a letter for the next traveller.</p>" +
+                    "<p>At dawn, the reply arrives folded around a map of the road ahead.</p>")
+            val type = "application/epub+zip"
+            return Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1)
+                .code(200).message("Local series EPUB").header("Content-Type", type)
+                .body(bytes.toResponseBody(type.toMediaType())).build()
+        }
+        if (chain.request().method == "POST" && (path.trimEnd('/') == "/bookmarks/2997787566" ||
+                Regex("^/works/\\d+/bookmarks/?$").matches(path))) {
+            val fields = (chain.request().body as? okhttp3.FormBody)
+            val notes = fields?.let { form -> (0 until form.size).firstOrNull {
+                form.name(it) == "bookmark[bookmarker_notes]"
+            }?.let { form.value(it) } } ?: chain.request().body?.let { body ->
+                val buffer = okio.Buffer(); body.writeTo(buffer)
+                buffer.readUtf8().split('&').firstOrNull { it.startsWith("bookmark%5Bbookmarker_notes%5D=") }
+                    ?.substringAfter('=')?.let { java.net.URLDecoder.decode(it, "UTF-8") }
+            }.orEmpty()
+            val refused = notes.length > 5000
+            val html = if (refused) "<div id='error'><ul><li>Notes must be less than 5000 characters long.</li></ul></div>"
+                else "<div class='flash notice'>Bookmark updated.</div>"
+            return Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1)
+                .code(if (refused) 422 else 200).message("Local bookmark answer").header("Content-Type", HTML)
+                .body(html.toResponseBody(HTML_TYPE)).build()
+        }
         if (chain.request().method == "GET" && path.trimEnd('/') in setOf(
                 "/autocomplete/fandom", "/autocomplete/relationship", "/autocomplete/character", "/autocomplete/freeform",
                 "/autocomplete/open_collection_names")) {

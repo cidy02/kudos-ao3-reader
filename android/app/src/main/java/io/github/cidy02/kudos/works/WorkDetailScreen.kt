@@ -40,7 +40,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -71,6 +70,14 @@ import io.github.cidy02.kudos.core.strippingHtml
 import io.github.cidy02.kudos.data.preferences.SettingsRepository
 import io.github.cidy02.kudos.home.HomeFacts
 import io.github.cidy02.kudos.library.ReadingQueueRepository
+import io.github.cidy02.kudos.library.SeriesPreservationPrompt
+import io.github.cidy02.kudos.library.SeriesPreservationResult
+import io.github.cidy02.kudos.library.completionText
+import io.github.cidy02.kudos.library.progressText
+import io.github.cidy02.kudos.works.detail.WorkDetailBookmarkForm
+import io.github.cidy02.kudos.works.detail.WorkDetailSeriesForm
+import io.github.cidy02.kudos.works.detail.WorkDetailQueueForm
+import io.github.cidy02.kudos.works.detail.WorkDetailSeriesStatus
 import io.github.cidy02.kudos.network.ao3.AO3Error
 import io.github.cidy02.kudos.network.ao3.AO3Result
 import io.github.cidy02.kudos.network.ao3.AO3URLResolver
@@ -80,7 +87,7 @@ import io.github.cidy02.kudos.network.ao3.series.AO3SeriesRepository
 import io.github.cidy02.kudos.network.ao3.work.AO3WorkMetadata
 import io.github.cidy02.kudos.network.ao3.work.AO3WorkMetadataRepository
 import io.github.cidy02.kudos.network.ao3.writes.AO3BookmarkInput
-import io.github.cidy02.kudos.network.ao3.writes.AO3PostingPseudOption
+import io.github.cidy02.kudos.network.ao3.writes.AO3BookmarkState
 import io.github.cidy02.kudos.network.ao3.writes.AO3WriteActionKind
 import io.github.cidy02.kudos.network.ao3.writes.AO3WriteOutcome
 import io.github.cidy02.kudos.network.ao3.writes.AO3WriteRepository
@@ -138,23 +145,32 @@ fun WorkDetailScreen(
     var confirmRemove by remember { mutableStateOf(false) }
     var showingMyCopy by remember { mutableStateOf(false) }
     var bookmarkDialog by remember { mutableStateOf(false) }
-    var bookmarkLoading by remember { mutableStateOf(false) }
     var bookmarkIsEdit by remember { mutableStateOf(false) }
     var bookmarkNotes by remember { mutableStateOf("") }
     var bookmarkTags by remember { mutableStateOf("") }
-    var bookmarkCollections by remember { mutableStateOf("") }
     var bookmarkPrivate by remember { mutableStateOf(false) }
     var bookmarkRecommendation by remember { mutableStateOf(false) }
-    var bookmarkAvailablePseuds by remember { mutableStateOf<List<AO3PostingPseudOption>>(emptyList()) }
+    var advisoryBookmark by remember(source) { mutableStateOf<AO3BookmarkState?>(null) }
     var bookmarkPseudId by remember { mutableStateOf<String?>(null) }
     var queuePickerOpen by remember { mutableStateOf(false) }
-    var createQueueDraft by remember { mutableStateOf<String?>(null) }
+    var createQueueDraft by remember { mutableStateOf("") }
     var availableQueues by remember { mutableStateOf<List<ReadingQueue>>(emptyList()) }
     var includeSeriesInQueue by remember { mutableStateOf(false) }
     var checkingSeriesPreview by remember { mutableStateOf(false) }
     var seriesPrompt by remember { mutableStateOf<io.github.cidy02.kudos.library.SeriesPreservationPrompt?>(null) }
     var preservingSeries by remember { mutableStateOf(false) }
     var seriesResult by remember { mutableStateOf<io.github.cidy02.kudos.library.SeriesPreservationResult?>(null) }
+    var seriesTask by remember(source) { mutableStateOf<Job?>(null) }
+    var showingSeriesPrompt by remember(source) { mutableStateOf(false) }
+    var laterSeriesPrompt by remember(source) { mutableStateOf<SeriesPreservationPrompt?>(null) }
+    var laterSeriesProgress by remember(source) { mutableStateOf<SeriesPreservationResult?>(null) }
+    var laterSeriesRunning by remember(source) { mutableStateOf(false) }
+    var laterSeriesNotice by remember(source) { mutableStateOf<String?>(null) }
+    var laterSeriesTask by remember(source) { mutableStateOf<Job?>(null) }
+    var bookmarkError by remember { mutableStateOf<String?>(null) }
+    var workingQueueId by remember(source) { mutableStateOf<String?>(null) }
+    var selectedQueueIds by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var queuePreviewAttempted by remember(source) { mutableStateOf(false) }
     var collectionDialogOpen by remember { mutableStateOf(false) }
     var allCollections by remember { mutableStateOf<List<WorkCollection>>(emptyList()) }
     var collectionMemberIds by remember { mutableStateOf<Set<String>>(emptySet()) }
@@ -282,19 +298,13 @@ fun WorkDetailScreen(
     LaunchedEffect(state.ao3WorkId, state.loading) {
         val workId = state.ao3WorkId
         if (state.loading || workId == null) return@LaunchedEffect
-        when (val result = writeRepository.fetchSubscriptionState(workId)) {
-            is AO3Result.Success -> {
-                if (state.isSubscribed == null && state.ao3WorkId == workId) {
-                    state = state.copy(isSubscribed = result.value.isSubscribed)
-                }
-            }
-            is AO3Result.Failure -> Unit
-        }
-        when (val bResult = writeRepository.fetchBookmarkState(workId)) {
-            is AO3Result.Success -> {
-                if (state.ao3WorkId == workId) {
-                    bookmarkIsEdit = bResult.value.exists
-                }
+        // AO3WriteActions.swift:342–351; AO3WorkActionsModel.swift:41–65.
+        // A refused/failed advisory attempt is not retried by recomposition or by opening the sheet.
+        when (val result = writeRepository.fetchWorkActionStates(workId)) {
+            is AO3Result.Success -> if (state.ao3WorkId == workId) {
+                state = state.copy(isSubscribed = result.value.first.isSubscribed)
+                advisoryBookmark = result.value.second
+                bookmarkIsEdit = result.value.second.exists
             }
             is AO3Result.Failure -> Unit
         }
@@ -426,7 +436,8 @@ fun WorkDetailScreen(
                 val result = workImporter.saveMetadataOnly(
                     remote,
                     markSaved = !queueOnly,
-                    isQueuedForLater = queueOnly
+                    isQueuedForLater = queueOnly,
+                    enrichMetadata = !queueOnly
                 )
             ) {
                 is WorkImportResult.Failure -> state = state.copy(error = result.error.displayMessage())
@@ -444,6 +455,79 @@ fun WorkDetailScreen(
             sourceUrl = work.sourceUrl,
             force = false
         )
+    }
+
+    // ReadingQueueService.swift:405–420; ReadingQueues.swift:653–664,683–700.
+    // Await the anchor too: a queued background EPUB must not race the series batch.
+    suspend fun addToQueue(work: SavedWork, queue: ReadingQueue) {
+        workingQueueId = queue.id
+        try {
+            readingQueueRepository.addWork(queue.id, work.id, enqueueMissingEpub = false)
+            selectedQueueIds = selectedQueueIds + queue.id
+            if (queue.keepsWorksOffline != false && !work.ao3Unavailable) {
+                workImporter.preserveQueuedWork(workRepository.getWork(work.id) ?: work,
+                    allowDownload = state.remote?.isRestricted != true)
+            }
+            refreshLocal(work.id, state.remote)
+        } finally {
+            workingQueueId = null
+        }
+    }
+
+    // WorkDetailView.swift:980–1014. One owned, cancellable sequential batch.
+    fun startLaterSeries(prompt: SeriesPreservationPrompt) {
+        if (laterSeriesTask != null) return
+        showingSeriesPrompt = false
+        laterSeriesRunning = true
+        laterSeriesProgress = null
+        laterSeriesNotice = "Preserving series…"
+        laterSeriesTask = scope.launch {
+            val progress: (SeriesPreservationResult) -> Unit = {
+                laterSeriesProgress = it
+                laterSeriesNotice = it.progressText()
+            }
+            val result = if (prompt.canUsePreviewForPreservation) {
+                readingQueueRepository.preserveSeries(prompt.preview!!.works, null, workImporter, progress = progress)
+            } else {
+                readingQueueRepository.preserveSeries(state.seriesUrl, null, seriesRepository, workImporter, progress = progress)
+            }
+            laterSeriesRunning = false
+            laterSeriesTask = null
+            laterSeriesProgress = null
+            laterSeriesNotice = result.completionText()
+        }
+    }
+
+    // WorkDetailView.swift:836–872,926–972. Check only after saving the anchor; never crawl ahead.
+    suspend fun saveForLater(work: SavedWork) {
+        readingQueueRepository.addToSavedForLater(work.id, enqueueMissingEpub = false)
+        if (!work.ao3Unavailable) {
+            workImporter.preserveQueuedWork(workRepository.getWork(work.id) ?: work,
+                allowDownload = state.remote?.isRestricted != true)
+        }
+        refreshLocal(work.id, state.remote)
+        state = state.copy(ao3Message = "Saved for Later.")
+        if (state.seriesUrl.isBlank()) return
+        state = state.copy(ao3Message = null)
+        showingMyCopy = false
+        laterSeriesNotice = "Checking series size…"
+        val preview = try {
+            when (val result = seriesRepository.seriesPage(state.seriesUrl)) {
+                is AO3Result.Success -> result.value
+                is AO3Result.Failure -> null
+            }
+        } catch (error: kotlinx.coroutines.CancellationException) {
+            throw error
+        } catch (_: Exception) {
+            null
+        }
+        val prompt = SeriesPreservationPrompt(preview, settings.app.autoPreserveSeriesWorkThreshold, preview == null)
+        laterSeriesPrompt = prompt
+        if (prompt.shouldAutoPreserve(settings.app.autoPreserveSmallSeriesOnSaveForLater)) startLaterSeries(prompt)
+        else {
+            laterSeriesNotice = "Saved for Later."
+            showingSeriesPrompt = true
+        }
     }
 
     fun handleWriteResult(result: AO3Result<AO3WriteOutcome>) {
@@ -529,267 +613,25 @@ fun WorkDetailScreen(
         onDismissRequest = { confirmRemove = false }
     )
 
-    if (bookmarkDialog) {
-        AlertDialog(
-            onDismissRequest = { if (!bookmarkLoading) bookmarkDialog = false },
-            title = { Text(if (bookmarkIsEdit) "Edit Bookmark" else "AO3 Bookmark") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    if (bookmarkLoading) {
-                        Text(
-                            text = "Loading bookmark…",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    OutlinedTextField(
-                        value = bookmarkNotes,
-                        onValueChange = { bookmarkNotes = it },
-                        label = { Text("Notes") },
-                        minLines = 3,
-                        enabled = !bookmarkLoading
-                    )
-                    OutlinedTextField(
-                        value = bookmarkTags,
-                        onValueChange = { bookmarkTags = it },
-                        label = { Text("Tags, comma-separated") },
-                        singleLine = true,
-                        enabled = !bookmarkLoading
-                    )
-                    if (bookmarkCollections.isNotBlank()) {
-                        Text(
-                            text = "AO3 collections: $bookmarkCollections",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-
-                    if (bookmarkAvailablePseuds.size > 1) {
-                        var pseudExpanded by remember { mutableStateOf(false) }
-                        val currentPseud = bookmarkAvailablePseuds.find { it.id == bookmarkPseudId }
-                        Box {
-                            OutlinedButton(
-                                onClick = { pseudExpanded = true },
-                                enabled = !bookmarkLoading,
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Text("Posting as: ${currentPseud?.name ?: "Default"}")
-                            }
-                            DropdownMenu(
-                                expanded = pseudExpanded,
-                                onDismissRequest = { pseudExpanded = false }
-                            ) {
-                                bookmarkAvailablePseuds.forEach { option ->
-                                    DropdownMenuItem(
-                                        text = { Text(option.name) },
-                                        onClick = {
-                                            bookmarkPseudId = option.id
-                                            pseudExpanded = false
-                                        }
-                                    )
-                                }
-                            }
-                        }
-                    }
-
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Checkbox(
-                            checked = bookmarkPrivate,
-                            onCheckedChange = { bookmarkPrivate = it },
-                            enabled = !bookmarkLoading
-                        )
-                        Text("Private")
-                    }
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Checkbox(
-                            checked = bookmarkRecommendation,
-                            onCheckedChange = { bookmarkRecommendation = it },
-                            enabled = !bookmarkLoading
-                        )
-                        Text("Recommendation")
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(
-                    enabled = !bookmarkLoading,
-                    onClick = {
-                        bookmarkDialog = false
-                        val input = AO3BookmarkInput(
-                            notes = bookmarkNotes,
-                            tags = bookmarkTags,
-                            isPrivate = bookmarkPrivate,
-                            isRecommendation = bookmarkRecommendation,
-                            pseudId = bookmarkPseudId
-                        )
-                        runAo3Write { writeRepository.createBookmark(it, input, postingPseudStore) }
-                    }
-                ) {
-                    Text(if (bookmarkIsEdit) "Save" else "Create")
-                }
-            },
-            dismissButton = {
-                TextButton(
-                    enabled = !bookmarkLoading,
-                    onClick = { bookmarkDialog = false }
-                ) { Text("Cancel") }
-            }
-        )
-    }
-
-    if (queuePickerOpen) {
-        if (createQueueDraft != null) {
-            AlertDialog(
-                onDismissRequest = { createQueueDraft = null },
-                title = { Text("New Queue") },
-                text = {
-                    OutlinedTextField(
-                        value = createQueueDraft!!,
-                        onValueChange = { createQueueDraft = it },
-                        label = { Text("Queue name") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                },
-                confirmButton = {
-                    TextButton(
-                        enabled = createQueueDraft!!.trim().isNotEmpty() && !state.working,
-                        onClick = {
-                            val name = createQueueDraft!!.trim()
-                            createQueueDraft = null
-                            runWorkAction {
-                                readingQueueRepository.createQueue(name)
-                                availableQueues = readingQueueRepository.listQueues()
-                                    .filter { it.kindRaw != ReadingQueueKind.SAVED_FOR_LATER }
-                            }
-                        }
-                    ) { Text("Create") }
-                },
-                dismissButton = {
-                    TextButton(onClick = { createQueueDraft = null }) { Text("Cancel") }
-                }
-            )
-        }
-
-        AlertDialog(
-            onDismissRequest = { queuePickerOpen = false },
-            title = { Text("Add to Queue") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    TextButton(
-                        onClick = { createQueueDraft = "" },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Icon(Icons.Default.Add, contentDescription = null)
-                        Spacer(Modifier.size(8.dp))
-                        Text("Create New Queue", modifier = Modifier.weight(1f))
-                    }
-                    HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
-
-                    if (state.seriesUrl.isNotBlank()) {
-                        HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .toggleable(value = includeSeriesInQueue, role = Role.Switch) { includeSeriesInQueue = it }
-                                .padding(vertical = 8.dp)
-                        ) {
-                            Text("Also add works from this AO3 series", modifier = Modifier.weight(1f))
-                            Switch(checked = includeSeriesInQueue, onCheckedChange = null)
-                        }
-                        if (includeSeriesInQueue) {
-                            if (checkingSeriesPreview) {
-                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
-                                    Text("Checking series size…", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                }
-                            } else if (seriesPrompt != null) {
-                                Text(seriesPrompt!!.message, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                OutlinedButton(
-                                    onClick = {
-                                        if (preservingSeries) return@OutlinedButton
-                                        preservingSeries = true
-                                        seriesResult = null
-                                        scope.launch {
-                                            seriesResult = readingQueueRepository.preserveSeries(
-                                                seriesUrl = state.seriesUrl,
-                                                targetQueues = availableQueues,
-                                                seriesRepository = seriesRepository,
-                                                workImporter = workImporter,
-                                                enqueueDownload = { s -> downloadQueue.enqueue(s, force = false) }
-                                            )
-                                            preservingSeries = false
-                                        }
-                                    },
-                                    enabled = !preservingSeries && availableQueues.isNotEmpty(),
-                                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
-                                ) {
-                                    if (preservingSeries) {
-                                        CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
-                                        Spacer(Modifier.size(8.dp))
-                                    }
-                                    Text("Add Series to Selected Queues")
-                                }
-                                if (seriesResult != null) {
-                                    val parts = seriesResult!!.summaryParts("added")
-                                    val text = if (parts.isEmpty()) "Done." else parts.joinToString(", ")
-                                    Text(text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                }
-                            }
-                        }
-                    }
-
-                    if (availableQueues.isEmpty()) {
-                        Text(
-                            text = "No reading queues yet. Create one from Library → Reading Queues.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    } else {
-                        availableQueues.forEach { queue ->
-                            TextButton(
-                                onClick = {
-                                    queuePickerOpen = false
-                                    ensureLocalThen(queueOnly = true) { work ->
-                                        readingQueueRepository.addWork(queue.id, work.id)
-                                        preserveEpubForQueue(work)
-                                        state = state.copy(
-                                            ao3Message = "Added to ${queue.displayName}."
-                                        )
-                                        refreshLocal(work.id, state.remote)
-                                    }
-                                },
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Text(queue.displayName, modifier = Modifier.fillMaxWidth())
-                            }
-                        }
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = { queuePickerOpen = false }) { Text("Close") }
-            }
-        )
-    }
-
-    LaunchedEffect(includeSeriesInQueue) {
-        if (includeSeriesInQueue && state.seriesUrl.isNotBlank()) {
+    // ReadingQueues.swift:605–617. One bounded attempt per sheet, including failures.
+    LaunchedEffect(includeSeriesInQueue, queuePickerOpen) {
+        if (queuePickerOpen && includeSeriesInQueue && !queuePreviewAttempted && state.seriesUrl.isNotBlank()) {
+            queuePreviewAttempted = true
             checkingSeriesPreview = true
             try {
                 val page = when (val result = seriesRepository.seriesPage(state.seriesUrl)) {
                     is AO3Result.Success -> result.value
                     is AO3Result.Failure -> null
                 }
-                seriesPrompt = io.github.cidy02.kudos.library.SeriesPreservationPrompt(preview = page, threshold = 5, previewFailed = page == null)
+                // Swift's queue preview intentionally uses 5; only the Later sheet auto-preserves.
+                seriesPrompt = SeriesPreservationPrompt(page, threshold = 5, previewFailed = page == null)
+            } catch (error: kotlinx.coroutines.CancellationException) {
+                throw error
             } catch (_: Exception) {
-                seriesPrompt = io.github.cidy02.kudos.library.SeriesPreservationPrompt(preview = null, threshold = 5, previewFailed = true)
+                seriesPrompt = SeriesPreservationPrompt(null, threshold = 5, previewFailed = true)
+            } finally {
+                checkingSeriesPreview = false
             }
-            checkingSeriesPreview = false
-        } else {
-            seriesPrompt = null
-            seriesResult = null
         }
     }
 
@@ -991,6 +833,105 @@ fun WorkDetailScreen(
         }
     }
 
+    if (bookmarkDialog) {
+        WorkDetailBookmarkForm(
+            input = AO3BookmarkInput(bookmarkNotes, bookmarkTags, bookmarkPrivate, bookmarkRecommendation, bookmarkPseudId),
+            isEdit = bookmarkIsEdit, working = state.working, error = bookmarkError,
+            onChange = {
+                bookmarkNotes = it.notes; bookmarkTags = it.tags
+                bookmarkPrivate = it.isPrivate; bookmarkRecommendation = it.isRecommendation
+            },
+            onSave = {
+                val workId = state.ao3WorkId
+                if (workId != null && !state.working) {
+                    val input = AO3BookmarkInput(bookmarkNotes, bookmarkTags, bookmarkPrivate, bookmarkRecommendation, bookmarkPseudId)
+                    scope.launch {
+                        state = state.copy(working = true)
+                        bookmarkError = null
+                        // AO3WorkActionsModel.swift:146–162: refusal keeps the draft and sheet.
+                        when (val result = writeRepository.createBookmark(workId, input, postingPseudStore)) {
+                            is AO3Result.Failure -> bookmarkError = result.error.displayMessage()
+                            is AO3Result.Success -> {
+                                bookmarkDialog = false
+                                bookmarkIsEdit = true
+                                handleWriteResult(result)
+                                when (val refreshed = writeRepository.fetchWorkActionStates(workId)) {
+                                    is AO3Result.Success -> {
+                                        advisoryBookmark = refreshed.value.second
+                                        state = state.copy(isSubscribed = refreshed.value.first.isSubscribed)
+                                    }
+                                    is AO3Result.Failure -> Unit
+                                }
+                            }
+                        }
+                        state = state.copy(working = false)
+                    }
+                }
+            },
+            onClose = { bookmarkDialog = false }
+        )
+        return
+    }
+    if (showingSeriesPrompt) {
+        laterSeriesPrompt?.let { prompt ->
+            WorkDetailSeriesForm(prompt.copy(threshold = settings.app.autoPreserveSeriesWorkThreshold),
+                settings.app.autoPreserveSmallSeriesOnSaveForLater,
+                onAutoPreserveChange = { enabled -> scope.launch { settingsRepository?.updateAutoPreserveSmallSeries(enabled) } },
+                onOnlyThisWork = { showingSeriesPrompt = false }, onPreserve = { startLaterSeries(prompt) })
+        }
+        return
+    }
+    if (queuePickerOpen) {
+        WorkDetailQueueForm(availableQueues, selectedQueueIds, createQueueDraft, state.working,
+            state.seriesUrl.isNotBlank(), includeSeriesInQueue, checkingSeriesPreview, seriesPrompt,
+            preservingSeries, seriesResult,
+            onName = { createQueueDraft = it },
+            onCreate = {
+                val name = createQueueDraft.trim()
+                if (name.isNotEmpty()) ensureLocalThen(queueOnly = true) { work ->
+                    val queue = readingQueueRepository.createQueue(name)
+                    availableQueues = readingQueueRepository.listQueues()
+                    createQueueDraft = ""
+                    addToQueue(work, queue)
+                }
+            },
+            onAdd = { queue ->
+                // Brief data safety: selected queues stay selected; no membership removal.
+                ensureLocalThen(queueOnly = true) { work ->
+                    addToQueue(work, queue)
+                }
+            },
+            onIncludeSeries = { includeSeriesInQueue = it },
+            onPreserve = {
+                val queues = availableQueues.filter { it.id in selectedQueueIds }
+                if (seriesTask == null && !preservingSeries && !state.working && queues.isNotEmpty()) {
+                    preservingSeries = true
+                    seriesResult = null
+                    seriesTask = scope.launch {
+                        val progress: (SeriesPreservationResult) -> Unit = { seriesResult = it }
+                        val prompt = seriesPrompt
+                        val result = if (prompt?.canUsePreviewForPreservation == true) {
+                            readingQueueRepository.preserveSeries(prompt.preview!!.works, queues, workImporter, progress = progress)
+                        } else {
+                            readingQueueRepository.preserveSeries(state.seriesUrl, queues, seriesRepository, workImporter, progress = progress)
+                        }
+                        seriesResult = result
+                        preservingSeries = false
+                        seriesTask = null
+                    }
+                }
+            },
+            onCancel = {
+                // ReadingQueues.swift:647–650 hides Cancel immediately; saved work stays.
+                seriesTask?.cancel()
+                preservingSeries = false
+            },
+            onClose = { queuePickerOpen = false },
+            workingQueueId = workingQueueId
+        )
+        return
+    }
+
     if (showingMyCopy) {
         val tokens = LocalKudosTokens.current
         val workHue = remember(state.fandoms, state.title) {
@@ -1052,9 +993,7 @@ fun WorkDetailScreen(
                             state = state.copy(ao3Message = "Removed from Saved for Later.")
                         }
                     } else {
-                        readingQueueRepository.addToSavedForLater(work.id)
-                        preserveEpubForQueue(work)
-                        refreshLocal(work.id, state.remote)
+                        saveForLater(work)
                     }
                 }
             },
@@ -1065,10 +1004,18 @@ fun WorkDetailScreen(
                 }
             },
             onAddToQueue = {
+                showingMyCopy = false
                 queuePickerOpen = true
+                queuePreviewAttempted = false
+                includeSeriesInQueue = false
+                seriesPrompt = null
+                seriesResult = null
                 scope.launch {
+                    readingQueueRepository.ensureSavedForLaterQueue()
                     availableQueues = readingQueueRepository.listQueues()
-                        .filter { it.kindRaw != ReadingQueueKind.SAVED_FOR_LATER }
+                    selectedQueueIds = availableQueues.filter { queue ->
+                        readingQueueRepository.listWorks(queue.id).any { it.work?.id == state.local?.id }
+                    }.map { it.id }.toSet()
                 }
             },
             onAddToCollection = { collectionDialogOpen = true },
@@ -1097,6 +1044,13 @@ fun WorkDetailScreen(
     WorkDetailContent(
         state = state,
         isDownloading = isDownloading,
+        seriesRunning = laterSeriesRunning,
+        seriesProgress = laterSeriesProgress,
+        seriesNotice = laterSeriesNotice,
+        onCancelSeries = {
+            laterSeriesTask?.cancel()
+            laterSeriesNotice = "Cancelling series preservation…"
+        },
         isBookmarked = bookmarkIsEdit,
         onToggleFavorite = {
             ensureLocalThen { work ->
@@ -1184,17 +1138,22 @@ fun WorkDetailScreen(
                         state = state.copy(ao3Message = "Removed from Saved for Later.")
                     }
                 } else {
-                    readingQueueRepository.addToSavedForLater(work.id)
-                    preserveEpubForQueue(work)
-                    refreshLocal(work.id, state.remote)
+                    saveForLater(work)
                 }
             }
         },
         onAddToQueue = {
             queuePickerOpen = true
+            queuePreviewAttempted = false
+            includeSeriesInQueue = false
+            seriesPrompt = null
+            seriesResult = null
             scope.launch {
+                readingQueueRepository.ensureSavedForLaterQueue()
                 availableQueues = readingQueueRepository.listQueues()
-                    .filter { it.kindRaw != ReadingQueueKind.SAVED_FOR_LATER }
+                selectedQueueIds = availableQueues.filter { queue ->
+                    readingQueueRepository.listWorks(queue.id).any { it.work?.id == state.local?.id }
+                }.map { it.id }.toSet()
             }
         },
         onAddToCollection = { collectionDialogOpen = true },
@@ -1204,37 +1163,17 @@ fun WorkDetailScreen(
                 state = state.copy(error = "This action needs a canonical AO3 work URL.")
                 return@WorkDetailContent
             }
-            bookmarkNotes = ""
-            bookmarkTags = ""
-            bookmarkCollections = ""
-            bookmarkPrivate = false
-            bookmarkRecommendation = false
-            bookmarkPseudId = null
-            bookmarkAvailablePseuds = emptyList()
-            bookmarkIsEdit = false
-            bookmarkLoading = true
+            // AO3WorkActionsModel.swift:130–140 uses advisory values; opening adds no GET.
+            showingMyCopy = false
+            bookmarkError = null
+            val input = advisoryBookmark?.input ?: AO3BookmarkInput()
+            bookmarkNotes = input.notes
+            bookmarkTags = input.tags
+            bookmarkPrivate = input.isPrivate
+            bookmarkRecommendation = input.isRecommendation
+            bookmarkPseudId = input.pseudId
+            bookmarkIsEdit = advisoryBookmark?.exists == true
             bookmarkDialog = true
-            scope.launch {
-                when (val result = writeRepository.fetchBookmarkState(workId)) {
-                    is AO3Result.Success -> {
-                        val bookmarkState = result.value
-                        bookmarkIsEdit = bookmarkState.exists
-                        bookmarkNotes = bookmarkState.input.notes
-                        bookmarkTags = bookmarkState.input.tags
-                        bookmarkCollections = bookmarkState.collectionNames
-                        bookmarkPrivate = bookmarkState.input.isPrivate
-                        bookmarkRecommendation = bookmarkState.input.isRecommendation
-                        bookmarkAvailablePseuds = bookmarkState.availablePseuds
-                        bookmarkPseudId = bookmarkState.input.pseudId
-                    }
-                    is AO3Result.Failure -> {
-                        if (result.error is AO3Error.AuthenticationRequired) {
-                            state = state.copy(error = result.error.displayMessage())
-                        }
-                    }
-                }
-                bookmarkLoading = false
-            }
         },
         onComments = {
             state.ao3WorkId?.let(onOpenComments)
@@ -1258,6 +1197,10 @@ fun WorkDetailScreen(
 private fun WorkDetailContent(
     state: WorkDetailUiState,
     isDownloading: Boolean,
+    seriesRunning: Boolean,
+    seriesProgress: SeriesPreservationResult?,
+    seriesNotice: String?,
+    onCancelSeries: () -> Unit,
     isBookmarked: Boolean,
     onToggleFavorite: () -> Unit,
     onToggleSaved: () -> Unit,
@@ -1587,6 +1530,11 @@ private fun WorkDetailContent(
                 palette = palette,
                 onClick = onResumeClick
             )
+
+            // WorkDetailView.swift:328–356: progress, result and Cancel stay in Detail.
+            if (seriesRunning || seriesNotice != null) {
+                WorkDetailSeriesStatus(seriesProgress, seriesNotice, seriesRunning, onCancelSeries)
+            }
 
             // 4. Status section: Transient feedback
             state.error?.let {

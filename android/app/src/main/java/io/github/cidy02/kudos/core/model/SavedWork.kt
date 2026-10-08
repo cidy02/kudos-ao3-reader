@@ -73,14 +73,13 @@ data class SavedWork(
     val searchIndexVersion: Int = 0,
     val lastTagRefreshAttemptAt: Instant? = null,
     /**
-     * EPUB preservation pass-through for cross-platform backup (iOS
+     * EPUB preservation state shared with cross-platform backup (iOS
      * `SavedWork.epubPreservationStatusRaw` / `preservedAt` /
      * `lastPreservationAttemptAt`).
      *
-     * Android has no preservation feature. These fields exist only so an
-     * iOS→Android→iOS round trip does not destroy the other platform's data:
-     * store what arrived, re-emit it unchanged. Do not default null to a
-     * status string, and do not drive Android UI or file cleanup from them.
+     * Explicit Android queue/series preservation stamps these existing fields.
+     * Imported rows retain their nullable state until an actual attempt; no backfill.
+     * Never use a failed/cancelled status to remove an EPUB or a membership.
      */
     val epubPreservationStatusRaw: String? = null,
     val metadataSyncStatusRaw: String? = null,
