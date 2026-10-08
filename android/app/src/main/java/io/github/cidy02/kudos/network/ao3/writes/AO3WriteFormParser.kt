@@ -120,9 +120,15 @@ class AO3WriteFormParser {
     fun writeSuccessMessage(html: String): String? = Jsoup.parse(html)
         .selectFirst(".flash.comment_notice, .flash.notice")?.normalizedText()?.takeIf { it.isNotBlank() }
 
+    /**
+     * iOS `AO3Client.writeErrorMessage`. `#error li` is AO3's validation list
+     * (`error_messages_for`: a `div#error.error` holding an `h4` and a `ul`), which nothing else
+     * here matches: a form AO3 re-rendered with its reasons read as "no error", and a refused
+     * bookmark said "Bookmarked." (audit A4-3).
+     */
     fun writeErrorMessage(html: String): String? {
         val document = Jsoup.parse(html)
-        return document.selectFirst(".errorlist li, .error p, .flash.error")
+        return document.selectFirst("#error li, .errorlist li, .error p, .flash.error, .flash.comment_error, .flash.caution")
             ?.normalizedText()
             ?.takeIf { it.isNotBlank() }
     }

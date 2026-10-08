@@ -1,0 +1,362 @@
+# Brief I1 Audit Result: Dynamic Type Scaling in Library and Work Detail
+
+This document records the audit and replacement of fixed-size fonts (`.font(.system(size: ...))`) with `@ScaledMetric` dynamic type properties across all Swift views in `kudos-ao3-reader/Features/Library/` and `kudos-ao3-reader/Features/WorkDetail/`.
+
+## Summary Statistics
+
+- **Total view files audited**: All files in `Features/Library/` and `Features/WorkDetail/`
+- **Files modified**: 18 files
+- **Call sites updated to `@ScaledMetric`**: 77 call sites
+- **Call sites left alone**: 27 call sites (SF Symbols, fixed-size miniature covers/avatar tiles, design kickers, or dynamic card geometry scaling)
+- **Call sites needing layout work**: 2 call sites (buttons with fixed 42pt height)
+
+## Detailed Changes
+
+Each change is listed as `path:line`, old code, and new code:
+
+- **`kudos-ao3-reader/Features/Library/CollectionLedgerRow.swift:81`**
+  - **Old**: `.font(.system(size: 15, weight: .semibold))`
+  - **New**: `.font(.system(size: rowTitleSize, weight: .semibold))`
+- **`kudos-ao3-reader/Features/Library/CollectionLedgerRow.swift:86`**
+  - **Old**: `.font(.system(size: 12))`
+  - **New**: `.font(.system(size: detailSize))`
+- **`kudos-ao3-reader/Features/Library/FavoriteAffinityRow.swift:106`**
+  - **Old**: `.font(.system(size: 16, weight: .semibold))`
+  - **New**: `.font(.system(size: rowTitleSize, weight: .semibold))`
+- **`kudos-ao3-reader/Features/Library/FavoriteAffinityRow.swift:119`**
+  - **Old**: `.font(.system(size: 11.5))`
+  - **New**: `.font(.system(size: captionSize))`
+- **`kudos-ao3-reader/Features/Library/FavoriteAffinityRow.swift:163`**
+  - **Old**: `.font(.system(size: 14, weight: .semibold))`
+  - **New**: `.font(.system(size: unreadCountSize, weight: .semibold))`
+- **`kudos-ao3-reader/Features/Library/FavoriteAffinityRow.swift:167`**
+  - **Old**: `.font(.system(size: 11.5))`
+  - **New**: `.font(.system(size: captionSize))`
+- **`kudos-ao3-reader/Features/Library/FavoriteAffinityRow.swift:196`**
+  - **Old**: `.font(.system(size: 14, weight: .semibold))`
+  - **New**: `.font(.system(size: workTitleSize, weight: .semibold))`
+- **`kudos-ao3-reader/Features/Library/FavoriteAffinityRow.swift:199`**
+  - **Old**: `.font(.system(size: 11.5))`
+  - **New**: `.font(.system(size: captionSize))`
+- **`kudos-ao3-reader/Features/Library/FavoriteAffinityRow.swift:302`**
+  - **Old**: `.font(.system(size: 11))`
+  - **New**: `.font(.system(size: libraryLineSize))`
+- **`kudos-ao3-reader/Features/Library/FavoriteAffinityRow.swift:343`**
+  - **Old**: `.font(.system(size: 15, weight: .semibold))`
+  - **New**: `.font(.system(size: titleSize, weight: .semibold))`
+- **`kudos-ao3-reader/Features/Library/FavoriteAffinityRow.swift:345`**
+  - **Old**: `.font(.system(size: 12.5))`
+  - **New**: `.font(.system(size: detailSize))`
+- **`kudos-ao3-reader/Features/Library/LibraryFilterEmptyState.swift:39`**
+  - **Old**: `.font(.system(size: 18, weight: .semibold))`
+  - **New**: `.font(.system(size: titleSize, weight: .semibold))`
+- **`kudos-ao3-reader/Features/Library/LibraryFilterEmptyState.swift:43`**
+  - **Old**: `.font(.system(size: 13.5))`
+  - **New**: `.font(.system(size: detailSize))`
+- **`kudos-ao3-reader/Features/Library/LibraryFilterEmptyState.swift:67`**
+  - **Old**: `.font(.system(size: 13.5, weight: .medium))`
+  - **New**: `.font(.system(size: dropLabelSize, weight: .medium))`
+- **`kudos-ao3-reader/Features/Library/LibraryFilterEmptyState.swift:72`**
+  - **Old**: `.font(.system(size: 12, weight: .semibold))`
+  - **New**: `.font(.system(size: countSize, weight: .semibold))`
+- **`kudos-ao3-reader/Features/Library/LibraryFilterEmptyState.swift:98`**
+  - **Old**: `.font(.system(size: 14, weight: .semibold))`
+  - **New**: `.font(.system(size: buttonLabelSize, weight: .semibold))`
+- **`kudos-ao3-reader/Features/Library/LibraryFilterEmptyState.swift:111`**
+  - **Old**: `.font(.system(size: 14, weight: .medium))`
+  - **New**: `.font(.system(size: buttonLabelSize, weight: .medium))`
+- **`kudos-ao3-reader/Features/Library/LibraryView.swift:481`**
+  - **Old**: `.font(.system(size: 14, weight: .semibold))`
+  - **New**: `.font(.system(size: recentlyDeletedTitleSize, weight: .semibold))`
+- **`kudos-ao3-reader/Features/Library/LibraryView.swift:484`**
+  - **Old**: `.font(.system(size: 13))`
+  - **New**: `.font(.system(size: recentlyDeletedCountSize))`
+- **`kudos-ao3-reader/Features/Library/NewCollectionSheet.swift:135`**
+  - **Old**: `.font(.system(size: 11.5))`
+  - **New**: `.font(.system(size: footnoteSize))`
+- **`kudos-ao3-reader/Features/Library/NewCollectionSheet.swift:260`**
+  - **Old**: `.font(.system(size: 11.5))`
+  - **New**: `.font(.system(size: footnoteSize))`
+- **`kudos-ao3-reader/Features/Library/NewCollectionSheet.swift:301`**
+  - **Old**: `.font(.system(size: 13, weight: .semibold, design: .monospaced))`
+  - **New**: `.font(.system(size: positionSize, weight: .semibold, design: .monospaced))`
+- **`kudos-ao3-reader/Features/Library/NewCollectionSheet.swift:308`**
+  - **Old**: `.font(.system(size: 15, weight: .medium))`
+  - **New**: `.font(.system(size: titleSize, weight: .medium))`
+- **`kudos-ao3-reader/Features/Library/NewCollectionSheet.swift:314`**
+  - **Old**: `.font(.system(size: 11.5))`
+  - **New**: `.font(.system(size: authorSize))`
+- **`kudos-ao3-reader/Features/Library/NewReadingQueueSheet.swift:222`**
+  - **Old**: `.font(.system(size: 16))`
+  - **New**: `.font(.system(size: nameFieldSize))`
+- **`kudos-ao3-reader/Features/Library/NewReadingQueueSheet.swift:268`**
+  - **Old**: `.font(.system(size: 14.5))`
+  - **New**: `.font(.system(size: seedTitleSize))`
+- **`kudos-ao3-reader/Features/Library/NewReadingQueueSheet.swift:271`**
+  - **Old**: `.font(.system(size: 11.5))`
+  - **New**: `.font(.system(size: seedSubtitleSize))`
+- **`kudos-ao3-reader/Features/Library/NewReadingQueueSheet.swift:326`**
+  - **Old**: `.font(.system(size: 11.5))`
+  - **New**: `.font(.system(size: footnoteSize))`
+- **`kudos-ao3-reader/Features/Library/QueueTagManagerView.swift:161`**
+  - **Old**: `.font(.system(size: 15))`
+  - **New**: `.font(.system(size: countSize))`
+- **`kudos-ao3-reader/Features/Library/QueueTagManagerView.swift:233`**
+  - **Old**: `.font(.system(size: 15))`
+  - **New**: `.font(.system(size: inputSize))`
+- **`kudos-ao3-reader/Features/Library/QueueTagManagerView.swift:239`**
+  - **Old**: `.font(.system(size: 15, weight: .semibold))`
+  - **New**: `.font(.system(size: buttonLabelSize, weight: .semibold))`
+- **`kudos-ao3-reader/Features/Library/QueueTagManagerView.swift:252`**
+  - **Old**: `.font(.system(size: 11.5))`
+  - **New**: `.font(.system(size: footnoteSize))`
+- **`kudos-ao3-reader/Features/Library/QueueTagManagerView.swift:457`**
+  - **Old**: `.font(.system(size: 11.5))`
+  - **New**: `.font(.system(size: footnoteSize))`
+- **`kudos-ao3-reader/Features/Library/QueueTagSheet.swift:115`**
+  - **Old**: `.font(.system(size: 11.5))`
+  - **New**: `.font(.system(size: footnoteSize))`
+- **`kudos-ao3-reader/Features/Library/QueueTagSheet.swift:133`**
+  - **Old**: `.font(.system(size: 15))`
+  - **New**: `.font(.system(size: inputSize))`
+- **`kudos-ao3-reader/Features/Library/QueueTagSheet.swift:136`**
+  - **Old**: `.font(.system(size: 15, weight: .semibold))`
+  - **New**: `.font(.system(size: buttonLabelSize, weight: .semibold))`
+- **`kudos-ao3-reader/Features/Library/QueueTagSheet.swift:167`**
+  - **Old**: `.font(.system(size: 13))`
+  - **New**: `.font(.system(size: someCoverageSize))`
+- **`kudos-ao3-reader/Features/Library/ReadingHistoryFactsStrip.swift:17`**
+  - **Old**: `.font(.system(size: 12.5, weight: .medium))`
+  - **New**: `.font(.system(size: buttonLabelSize, weight: .medium))`
+- **`kudos-ao3-reader/Features/Library/ReadingHistoryFactsStrip.swift:105`**
+  - **Old**: `.font(.system(size: 11.5, weight: .semibold))`
+  - **New**: `.font(.system(size: factSize, weight: .semibold))`
+- **`kudos-ao3-reader/Features/Library/ReadingInsightsView.swift:172`**
+  - **Old**: `.font(.system(size: 12.5))`
+  - **New**: `.font(.system(size: periodLabelSize))`
+- **`kudos-ao3-reader/Features/Library/ReadingInsightsView.swift:201`**
+  - **Old**: `.font(.system(size: 13, weight: .medium))`
+  - **New**: `.font(.system(size: deltaSize, weight: .medium))`
+- **`kudos-ao3-reader/Features/Library/ReadingInsightsView.swift:204`**
+  - **Old**: `.font(.system(size: 11, weight: .semibold, design: .monospaced))`
+  - **New**: `.font(.system(size: deltaPeriodSize, weight: .semibold, design: .monospaced))`
+- **`kudos-ao3-reader/Features/Library/ReadingInsightsView.swift:233`**
+  - **Old**: `.font(.system(size: 9.5, weight: .semibold, design: .monospaced))`
+  - **New**: `.font(.system(size: barValueSize, weight: .semibold, design: .monospaced))`
+- **`kudos-ao3-reader/Features/Library/ReadingInsightsView.swift:254`**
+  - **Old**: `.font(.system(size: 8.5))`
+  - **New**: `.font(.system(size: barLabelSize))`
+- **`kudos-ao3-reader/Features/Library/ReadingInsightsView.swift:295`**
+  - **Old**: `.font(.system(size: 14, weight: .medium))`
+  - **New**: `.font(.system(size: fandomNameSize, weight: .medium))`
+- **`kudos-ao3-reader/Features/Library/ReadingInsightsView.swift:300`**
+  - **Old**: `.font(.system(size: 11, weight: .semibold, design: .monospaced))`
+  - **New**: `.font(.system(size: fandomValueSize, weight: .semibold, design: .monospaced))`
+- **`kudos-ao3-reader/Features/Library/ReadingInsightsView.swift:334`**
+  - **Old**: `.font(.system(size: 12))`
+  - **New**: `.font(.system(size: footnoteSize))`
+- **`kudos-ao3-reader/Features/Library/ReadingInsightsView.swift:373`**
+  - **Old**: `.font(.system(size: 11.5))`
+  - **New**: `.font(.system(size: paceCaptionSize))`
+- **`kudos-ao3-reader/Features/Library/ReadingInsightsView.swift:411`**
+  - **Old**: `.font(.system(size: 15, weight: .semibold))`
+  - **New**: `.font(.system(size: noteTitleSize, weight: .semibold))`
+- **`kudos-ao3-reader/Features/Library/ReadingInsightsView.swift:414`**
+  - **Old**: `.font(.system(size: 12.5))`
+  - **New**: `.font(.system(size: noteBodySize))`
+- **`kudos-ao3-reader/Features/Library/ReadingInsightsView.swift:441`**
+  - **Old**: `.font(.system(size: 12))`
+  - **New**: `.font(.system(size: footnoteSize))`
+- **`kudos-ao3-reader/Features/Library/ReadingQueuePageParts.swift:229`**
+  - **Old**: `.font(.system(size: 11, weight: .bold))`
+  - **New**: `.font(.system(size: queueNameSize, weight: .bold))`
+- **`kudos-ao3-reader/Features/Library/ReadingQueuePageParts.swift:237`**
+  - **Old**: `.font(.system(size: 11, weight: .semibold, design: .monospaced))`
+  - **New**: `.font(.system(size: countSize, weight: .semibold, design: .monospaced))`
+- **`kudos-ao3-reader/Features/Library/ReadingQueueSettingsView.swift:133`**
+  - **Old**: `.font(.system(size: 11.5))`
+  - **New**: `.font(.system(size: legendSize))`
+- **`kudos-ao3-reader/Features/Library/ReadingQueueSettingsView.swift:163`**
+  - **Old**: `.font(.system(size: 11.5))`
+  - **New**: `.font(.system(size: footnoteSize))`
+- **`kudos-ao3-reader/Features/Library/RecentlyDeletedView.swift:275`**
+  - **Old**: `.font(.system(size: 11.5))`
+  - **New**: `.font(.system(size: sectionNoteSize))`
+- **`kudos-ao3-reader/Features/Library/RecentlyDeletedView.swift:288`**
+  - **Old**: `.font(.system(size: 14, weight: .semibold))`
+  - **New**: `.font(.system(size: deleteButtonSize, weight: .semibold))`
+- **`kudos-ao3-reader/Features/Library/RecentlyDeletedView.swift:313`**
+  - **Old**: `.font(.system(size: 12.5))`
+  - **New**: `.font(.system(size: reassuranceSize))`
+- **`kudos-ao3-reader/Features/WorkDetail/WorkDetailFactsSections.swift:235`**
+  - **Old**: `.font(.system(size: 15, weight: .medium))`
+  - **New**: `.font(.system(size: buttonLabelSize, weight: .medium))`
+- **`kudos-ao3-reader/Features/WorkDetail/WorkDetailFactsSections.swift:269`**
+  - **Old**: `.font(.system(size: 15, weight: .medium))`
+  - **New**: `.font(.system(size: titleSize, weight: .medium))`
+- **`kudos-ao3-reader/Features/WorkDetail/WorkDetailFactsSections.swift:272`**
+  - **Old**: `.font(.system(size: 12))`
+  - **New**: `.font(.system(size: summarySize))`
+- **`kudos-ao3-reader/Features/WorkDetail/WorkDetailOverviewSections.swift:52`**
+  - **Old**: `.font(.system(size: 16, design: .serif))`
+  - **New**: `.font(.system(size: summarySize, design: .serif))`
+- **`kudos-ao3-reader/Features/WorkDetail/WorkDetailSections.swift:276`**
+  - **Old**: `.font(.system(size: 14.5))`
+  - **New**: `.font(.system(size: myCopyRowTitleSize))`
+- **`kudos-ao3-reader/Features/WorkDetail/WorkDetailSections.swift:303`**
+  - **Old**: `.font(.system(size: 14.5))`
+  - **New**: `.font(.system(size: myCopyRowTitleSize))`
+- **`kudos-ao3-reader/Features/WorkDetail/WorkDetailSections.swift:313`**
+  - **Old**: `.font(.system(size: 13))`
+  - **New**: `.font(.system(size: myCopyValueSize))`
+- **`kudos-ao3-reader/Features/WorkDetail/WorkDetailSections.swift:326`**
+  - **Old**: `.font(.system(size: 14, weight: .medium))`
+  - **New**: `.font(.system(size: myCopyActionSize, weight: .medium))`
+- **`kudos-ao3-reader/Features/WorkDetail/WorkDetailSections.swift:394`**
+  - **Old**: `.font(.system(size: 14.5))`
+  - **New**: `.font(.system(size: myCopyRowTitleSize))`
+- **`kudos-ao3-reader/Features/WorkDetail/WorkDetailSections.swift:447`**
+  - **Old**: `.font(.system(size: 14.5))`
+  - **New**: `.font(.system(size: myCopyRowTitleSize))`
+- **`kudos-ao3-reader/Features/WorkDetail/WorkDetailSections.swift:474`**
+  - **Old**: `.font(.system(size: 14.5))`
+  - **New**: `.font(.system(size: myCopyRowTitleSize))`
+- **`kudos-ao3-reader/Features/WorkDetail/WorkDetailSections.swift:505`**
+  - **Old**: `.font(.system(size: 14))`
+  - **New**: `.font(.system(size: myCopyActionSize))`
+- **`kudos-ao3-reader/Features/WorkDetail/WorkDetailSections.swift:508`**
+  - **Old**: `.font(.system(size: 14, weight: .medium))`
+  - **New**: `.font(.system(size: myCopyActionSize, weight: .medium))`
+- **`kudos-ao3-reader/Features/WorkDetail/WorkDetailSections.swift:522`**
+  - **Old**: `.font(.system(size: 13.5))`
+  - **New**: `.font(.system(size: tagChipSize))`
+- **`kudos-ao3-reader/Features/WorkDetail/WorkDetailSections.swift:544`**
+  - **Old**: `.font(.system(size: 13.5, weight: .medium))`
+  - **New**: `.font(.system(size: tagChipSize, weight: .medium))`
+- **`kudos-ao3-reader/Features/WorkDetail/WorkDetailView.swift:407`**
+  - **Old**: `.font(.system(size: 19, weight: .semibold))`
+  - **New**: `.font(.system(size: myCopyTitleSize, weight: .semibold))`
+- **`kudos-ao3-reader/Features/WorkDetail/WorkDetailView.swift:410`**
+  - **Old**: `.font(.system(size: 12))`
+  - **New**: `.font(.system(size: myCopySubtitleSize))`
+- **`kudos-ao3-reader/Features/WorkDetail/WorkProvenanceSections.swift:76`**
+  - **Old**: `.font(.system(size: 14.5))`
+  - **New**: `.font(.system(size: rowContentSize))`
+- **`kudos-ao3-reader/Features/WorkDetail/WorkProvenanceSections.swift:135`**
+  - **Old**: `.font(.system(size: 14.5))`
+  - **New**: `.font(.system(size: rowContentSize))`
+
+## Changed
+
+- `kudos-ao3-reader/Features/Library/CollectionLedgerRow.swift:81`: replaced `.font(.system(size: 15, weight: .semibold))` with `.font(.system(size: rowTitleSize, weight: .semibold))`
+- `kudos-ao3-reader/Features/Library/CollectionLedgerRow.swift:86`: replaced `.font(.system(size: 12))` with `.font(.system(size: detailSize))`
+- `kudos-ao3-reader/Features/Library/FavoriteAffinityRow.swift:106`: replaced `.font(.system(size: 16, weight: .semibold))` with `.font(.system(size: rowTitleSize, weight: .semibold))`
+- `kudos-ao3-reader/Features/Library/FavoriteAffinityRow.swift:119`: replaced `.font(.system(size: 11.5))` with `.font(.system(size: captionSize))`
+- `kudos-ao3-reader/Features/Library/FavoriteAffinityRow.swift:163`: replaced `.font(.system(size: 14, weight: .semibold))` with `.font(.system(size: unreadCountSize, weight: .semibold))`
+- `kudos-ao3-reader/Features/Library/FavoriteAffinityRow.swift:167`: replaced `.font(.system(size: 11.5))` with `.font(.system(size: captionSize))`
+- `kudos-ao3-reader/Features/Library/FavoriteAffinityRow.swift:196`: replaced `.font(.system(size: 14, weight: .semibold))` with `.font(.system(size: workTitleSize, weight: .semibold))`
+- `kudos-ao3-reader/Features/Library/FavoriteAffinityRow.swift:199`: replaced `.font(.system(size: 11.5))` with `.font(.system(size: captionSize))`
+- `kudos-ao3-reader/Features/Library/FavoriteAffinityRow.swift:302`: replaced `.font(.system(size: 11))` with `.font(.system(size: libraryLineSize))`
+- `kudos-ao3-reader/Features/Library/FavoriteAffinityRow.swift:343`: replaced `.font(.system(size: 15, weight: .semibold))` with `.font(.system(size: titleSize, weight: .semibold))`
+- `kudos-ao3-reader/Features/Library/FavoriteAffinityRow.swift:345`: replaced `.font(.system(size: 12.5))` with `.font(.system(size: detailSize))`
+- `kudos-ao3-reader/Features/Library/LibraryFilterEmptyState.swift:39`: replaced `.font(.system(size: 18, weight: .semibold))` with `.font(.system(size: titleSize, weight: .semibold))`
+- `kudos-ao3-reader/Features/Library/LibraryFilterEmptyState.swift:43`: replaced `.font(.system(size: 13.5))` with `.font(.system(size: detailSize))`
+- `kudos-ao3-reader/Features/Library/LibraryFilterEmptyState.swift:67`: replaced `.font(.system(size: 13.5, weight: .medium))` with `.font(.system(size: dropLabelSize, weight: .medium))`
+- `kudos-ao3-reader/Features/Library/LibraryFilterEmptyState.swift:72`: replaced `.font(.system(size: 12, weight: .semibold))` with `.font(.system(size: countSize, weight: .semibold))`
+- `kudos-ao3-reader/Features/Library/LibraryFilterEmptyState.swift:98`: replaced `.font(.system(size: 14, weight: .semibold))` with `.font(.system(size: buttonLabelSize, weight: .semibold))`
+- `kudos-ao3-reader/Features/Library/LibraryFilterEmptyState.swift:111`: replaced `.font(.system(size: 14, weight: .medium))` with `.font(.system(size: buttonLabelSize, weight: .medium))`
+- `kudos-ao3-reader/Features/Library/LibraryView.swift:481`: replaced `.font(.system(size: 14, weight: .semibold))` with `.font(.system(size: recentlyDeletedTitleSize, weight: .semibold))`
+- `kudos-ao3-reader/Features/Library/LibraryView.swift:484`: replaced `.font(.system(size: 13))` with `.font(.system(size: recentlyDeletedCountSize))`
+- `kudos-ao3-reader/Features/Library/NewCollectionSheet.swift:135`: replaced `.font(.system(size: 11.5))` with `.font(.system(size: footnoteSize))`
+- `kudos-ao3-reader/Features/Library/NewCollectionSheet.swift:260`: replaced `.font(.system(size: 11.5))` with `.font(.system(size: footnoteSize))`
+- `kudos-ao3-reader/Features/Library/NewCollectionSheet.swift:301`: replaced `.font(.system(size: 13, weight: .semibold, design: .monospaced))` with `.font(.system(size: positionSize, weight: .semibold, design: .monospaced))`
+- `kudos-ao3-reader/Features/Library/NewCollectionSheet.swift:308`: replaced `.font(.system(size: 15, weight: .medium))` with `.font(.system(size: titleSize, weight: .medium))`
+- `kudos-ao3-reader/Features/Library/NewCollectionSheet.swift:314`: replaced `.font(.system(size: 11.5))` with `.font(.system(size: authorSize))`
+- `kudos-ao3-reader/Features/Library/NewReadingQueueSheet.swift:222`: replaced `.font(.system(size: 16))` with `.font(.system(size: nameFieldSize))`
+- `kudos-ao3-reader/Features/Library/NewReadingQueueSheet.swift:268`: replaced `.font(.system(size: 14.5))` with `.font(.system(size: seedTitleSize))`
+- `kudos-ao3-reader/Features/Library/NewReadingQueueSheet.swift:271`: replaced `.font(.system(size: 11.5))` with `.font(.system(size: seedSubtitleSize))`
+- `kudos-ao3-reader/Features/Library/NewReadingQueueSheet.swift:326`: replaced `.font(.system(size: 11.5))` with `.font(.system(size: footnoteSize))`
+- `kudos-ao3-reader/Features/Library/QueueTagManagerView.swift:161`: replaced `.font(.system(size: 15))` with `.font(.system(size: countSize))`
+- `kudos-ao3-reader/Features/Library/QueueTagManagerView.swift:233`: replaced `.font(.system(size: 15))` with `.font(.system(size: inputSize))`
+- `kudos-ao3-reader/Features/Library/QueueTagManagerView.swift:239`: replaced `.font(.system(size: 15, weight: .semibold))` with `.font(.system(size: buttonLabelSize, weight: .semibold))`
+- `kudos-ao3-reader/Features/Library/QueueTagManagerView.swift:252`: replaced `.font(.system(size: 11.5))` with `.font(.system(size: footnoteSize))`
+- `kudos-ao3-reader/Features/Library/QueueTagManagerView.swift:457`: replaced `.font(.system(size: 11.5))` with `.font(.system(size: footnoteSize))`
+- `kudos-ao3-reader/Features/Library/QueueTagSheet.swift:115`: replaced `.font(.system(size: 11.5))` with `.font(.system(size: footnoteSize))`
+- `kudos-ao3-reader/Features/Library/QueueTagSheet.swift:133`: replaced `.font(.system(size: 15))` with `.font(.system(size: inputSize))`
+- `kudos-ao3-reader/Features/Library/QueueTagSheet.swift:136`: replaced `.font(.system(size: 15, weight: .semibold))` with `.font(.system(size: buttonLabelSize, weight: .semibold))`
+- `kudos-ao3-reader/Features/Library/QueueTagSheet.swift:167`: replaced `.font(.system(size: 13))` with `.font(.system(size: someCoverageSize))`
+- `kudos-ao3-reader/Features/Library/ReadingHistoryFactsStrip.swift:17`: replaced `.font(.system(size: 12.5, weight: .medium))` with `.font(.system(size: buttonLabelSize, weight: .medium))`
+- `kudos-ao3-reader/Features/Library/ReadingHistoryFactsStrip.swift:105`: replaced `.font(.system(size: 11.5, weight: .semibold))` with `.font(.system(size: factSize, weight: .semibold))`
+- `kudos-ao3-reader/Features/Library/ReadingInsightsView.swift:172`: replaced `.font(.system(size: 12.5))` with `.font(.system(size: periodLabelSize))`
+- `kudos-ao3-reader/Features/Library/ReadingInsightsView.swift:201`: replaced `.font(.system(size: 13, weight: .medium))` with `.font(.system(size: deltaSize, weight: .medium))`
+- `kudos-ao3-reader/Features/Library/ReadingInsightsView.swift:204`: replaced `.font(.system(size: 11, weight: .semibold, design: .monospaced))` with `.font(.system(size: deltaPeriodSize, weight: .semibold, design: .monospaced))`
+- `kudos-ao3-reader/Features/Library/ReadingInsightsView.swift:233`: replaced `.font(.system(size: 9.5, weight: .semibold, design: .monospaced))` with `.font(.system(size: barValueSize, weight: .semibold, design: .monospaced))`
+- `kudos-ao3-reader/Features/Library/ReadingInsightsView.swift:254`: replaced `.font(.system(size: 8.5))` with `.font(.system(size: barLabelSize))`
+- `kudos-ao3-reader/Features/Library/ReadingInsightsView.swift:295`: replaced `.font(.system(size: 14, weight: .medium))` with `.font(.system(size: fandomNameSize, weight: .medium))`
+- `kudos-ao3-reader/Features/Library/ReadingInsightsView.swift:300`: replaced `.font(.system(size: 11, weight: .semibold, design: .monospaced))` with `.font(.system(size: fandomValueSize, weight: .semibold, design: .monospaced))`
+- `kudos-ao3-reader/Features/Library/ReadingInsightsView.swift:334`: replaced `.font(.system(size: 12))` with `.font(.system(size: footnoteSize))`
+- `kudos-ao3-reader/Features/Library/ReadingInsightsView.swift:373`: replaced `.font(.system(size: 11.5))` with `.font(.system(size: paceCaptionSize))`
+- `kudos-ao3-reader/Features/Library/ReadingInsightsView.swift:411`: replaced `.font(.system(size: 15, weight: .semibold))` with `.font(.system(size: noteTitleSize, weight: .semibold))`
+- `kudos-ao3-reader/Features/Library/ReadingInsightsView.swift:414`: replaced `.font(.system(size: 12.5))` with `.font(.system(size: noteBodySize))`
+- `kudos-ao3-reader/Features/Library/ReadingInsightsView.swift:441`: replaced `.font(.system(size: 12))` with `.font(.system(size: footnoteSize))`
+- `kudos-ao3-reader/Features/Library/ReadingQueuePageParts.swift:229`: replaced `.font(.system(size: 11, weight: .bold))` with `.font(.system(size: queueNameSize, weight: .bold))`
+- `kudos-ao3-reader/Features/Library/ReadingQueuePageParts.swift:237`: replaced `.font(.system(size: 11, weight: .semibold, design: .monospaced))` with `.font(.system(size: countSize, weight: .semibold, design: .monospaced))`
+- `kudos-ao3-reader/Features/Library/ReadingQueueSettingsView.swift:133`: replaced `.font(.system(size: 11.5))` with `.font(.system(size: legendSize))`
+- `kudos-ao3-reader/Features/Library/ReadingQueueSettingsView.swift:163`: replaced `.font(.system(size: 11.5))` with `.font(.system(size: footnoteSize))`
+- `kudos-ao3-reader/Features/Library/RecentlyDeletedView.swift:275`: replaced `.font(.system(size: 11.5))` with `.font(.system(size: sectionNoteSize))`
+- `kudos-ao3-reader/Features/Library/RecentlyDeletedView.swift:288`: replaced `.font(.system(size: 14, weight: .semibold))` with `.font(.system(size: deleteButtonSize, weight: .semibold))`
+- `kudos-ao3-reader/Features/Library/RecentlyDeletedView.swift:313`: replaced `.font(.system(size: 12.5))` with `.font(.system(size: reassuranceSize))`
+- `kudos-ao3-reader/Features/WorkDetail/WorkDetailFactsSections.swift:235`: replaced `.font(.system(size: 15, weight: .medium))` with `.font(.system(size: buttonLabelSize, weight: .medium))`
+- `kudos-ao3-reader/Features/WorkDetail/WorkDetailFactsSections.swift:269`: replaced `.font(.system(size: 15, weight: .medium))` with `.font(.system(size: titleSize, weight: .medium))`
+- `kudos-ao3-reader/Features/WorkDetail/WorkDetailFactsSections.swift:272`: replaced `.font(.system(size: 12))` with `.font(.system(size: summarySize))`
+- `kudos-ao3-reader/Features/WorkDetail/WorkDetailOverviewSections.swift:52`: replaced `.font(.system(size: 16, design: .serif))` with `.font(.system(size: summarySize, design: .serif))`
+- `kudos-ao3-reader/Features/WorkDetail/WorkDetailSections.swift:276`: replaced `.font(.system(size: 14.5))` with `.font(.system(size: myCopyRowTitleSize))`
+- `kudos-ao3-reader/Features/WorkDetail/WorkDetailSections.swift:303`: replaced `.font(.system(size: 14.5))` with `.font(.system(size: myCopyRowTitleSize))`
+- `kudos-ao3-reader/Features/WorkDetail/WorkDetailSections.swift:313`: replaced `.font(.system(size: 13))` with `.font(.system(size: myCopyValueSize))`
+- `kudos-ao3-reader/Features/WorkDetail/WorkDetailSections.swift:326`: replaced `.font(.system(size: 14, weight: .medium))` with `.font(.system(size: myCopyActionSize, weight: .medium))`
+- `kudos-ao3-reader/Features/WorkDetail/WorkDetailSections.swift:394`: replaced `.font(.system(size: 14.5))` with `.font(.system(size: myCopyRowTitleSize))`
+- `kudos-ao3-reader/Features/WorkDetail/WorkDetailSections.swift:447`: replaced `.font(.system(size: 14.5))` with `.font(.system(size: myCopyRowTitleSize))`
+- `kudos-ao3-reader/Features/WorkDetail/WorkDetailSections.swift:474`: replaced `.font(.system(size: 14.5))` with `.font(.system(size: myCopyRowTitleSize))`
+- `kudos-ao3-reader/Features/WorkDetail/WorkDetailSections.swift:505`: replaced `.font(.system(size: 14))` with `.font(.system(size: myCopyActionSize))`
+- `kudos-ao3-reader/Features/WorkDetail/WorkDetailSections.swift:508`: replaced `.font(.system(size: 14, weight: .medium))` with `.font(.system(size: myCopyActionSize, weight: .medium))`
+- `kudos-ao3-reader/Features/WorkDetail/WorkDetailSections.swift:522`: replaced `.font(.system(size: 13.5))` with `.font(.system(size: tagChipSize))`
+- `kudos-ao3-reader/Features/WorkDetail/WorkDetailSections.swift:544`: replaced `.font(.system(size: 13.5, weight: .medium))` with `.font(.system(size: tagChipSize, weight: .medium))`
+- `kudos-ao3-reader/Features/WorkDetail/WorkDetailView.swift:407`: replaced `.font(.system(size: 19, weight: .semibold))` with `.font(.system(size: myCopyTitleSize, weight: .semibold))`
+- `kudos-ao3-reader/Features/WorkDetail/WorkDetailView.swift:410`: replaced `.font(.system(size: 12))` with `.font(.system(size: myCopySubtitleSize))`
+- `kudos-ao3-reader/Features/WorkDetail/WorkProvenanceSections.swift:76`: replaced `.font(.system(size: 14.5))` with `.font(.system(size: rowContentSize))`
+- `kudos-ao3-reader/Features/WorkDetail/WorkProvenanceSections.swift:135`: replaced `.font(.system(size: 14.5))` with `.font(.system(size: rowContentSize))`
+
+## Left alone
+
+- `kudos-ao3-reader/Features/Library/CollectionLedgerRow.swift:94`: `.font(.system(size: 13, weight: .semibold))` — SF Symbol image (`Image(systemName: "chevron.right")`)
+- `kudos-ao3-reader/Features/Library/CollectionLedgerRow.swift:122`: `.font(.system(size: 9, weight: .semibold))` — Text inside fixed-size miniature cover (fixed 61x54 pt container)
+- `kudos-ao3-reader/Features/Library/CollectionLedgerRow.swift:136`: `.font(.system(size: 8))` — Text inside fixed-size miniature cover (fixed 61x54 pt container)
+- `kudos-ao3-reader/Features/Library/Collections.swift:50`: `.font(.system(size: 15 * scale, weight: .semibold))` — Card geometry already scaled dynamically via `scale` (`cardSize / ScaledCarouselCardSize.standardWidth`)
+- `kudos-ao3-reader/Features/Library/Collections.swift:54`: `.font(.system(size: 12 * scale))` — Card geometry already scaled dynamically via `scale`
+- `kudos-ao3-reader/Features/Library/Collections.swift:89`: `.font(.system(size: 38))` — SF Symbol image (`Image(systemName: "folder")` in fixed placeholder cover)
+- `kudos-ao3-reader/Features/Library/FavoriteAffinityRow.swift:114`: `.font(.system(size: 11, weight: .semibold))` — SF Symbol image (`Image(systemName: "heart.fill")`)
+- `kudos-ao3-reader/Features/Library/FavoriteAffinityRow.swift:142`: `.font(.system(size: 12, weight: .semibold))` — SF Symbol image (`Image(systemName: "chevron.right")`)
+- `kudos-ao3-reader/Features/Library/FavoriteAffinityRow.swift:157`: `.font(.system(size: 8.5, weight: .bold))` — Small-caps kicker / badge (`AUTHOR`) fixed by design
+- `kudos-ao3-reader/Features/Library/FavoriteAffinityRow.swift:189`: `.font(.system(size: 8.5, weight: .bold))` — Small-caps kicker / badge (`FANDOM`) fixed by design
+- `kudos-ao3-reader/Features/Library/FavoriteAffinityRow.swift:206`: `.font(.system(size: 8.5, weight: .bold))` — Small-caps kicker / badge (`TAG`) fixed by design
+- `kudos-ao3-reader/Features/Library/FavoriteAffinityRow.swift:263`: `.font(.system(size: 15, weight: .bold, design: usesHashTile ? .monospaced : .default))` — Text inside fixed-size avatar tile (fixed 38x38 pt frame)
+- `kudos-ao3-reader/Features/Library/LibraryFilterEmptyState.swift:56`: `.font(.system(size: 8.5, weight: .bold))` — Small-caps kicker / badge (`DROP`) fixed by design
+- `kudos-ao3-reader/Features/Library/LibraryView.swift:478`: `.font(.system(size: 14))` — SF Symbol image (`Image(systemName: "trash")`)
+- `kudos-ao3-reader/Features/Library/LibraryView.swift:488`: `.font(.system(size: 11, weight: .semibold))` — SF Symbol image (`Image(systemName: "chevron.right")`)
+- `kudos-ao3-reader/Features/Library/QueueTagManagerView.swift:165`: `.font(.system(size: 15, weight: .semibold))` — SF Symbol image (`Image(systemName: "number")`)
+- `kudos-ao3-reader/Features/Library/QueueTagManagerView.swift:228`: `.font(.system(size: 14, weight: .semibold))` — SF Symbol image (`Image(systemName: "plus.circle.fill")`)
+- `kudos-ao3-reader/Features/Library/QueueTagSheet.swift:128`: `.font(.system(size: 14, weight: .semibold))` — SF Symbol image (`Image(systemName: "plus.circle.fill")`)
+- `kudos-ao3-reader/Features/Library/QueueTagSheet.swift:163`: `.font(.system(size: 14, weight: .semibold))` — SF Symbol image (`Image(systemName: "checkmark")`)
+- `kudos-ao3-reader/Features/Library/ReadingInsightsView.swift:198`: `.font(.system(size: 11, weight: .bold))` — SF Symbol image (`Image(systemName: trend.symbolName)`)
+- `kudos-ao3-reader/Features/Library/ReadingQueues.swift:107`: `.font(.system(size: 13 * scale, weight: .bold))` — Card geometry already scaled dynamically via `scale` (`cardSize / ScaledCarouselCardSize.standardWidth`)
+- `kudos-ao3-reader/Features/WorkDetail/WorkDetailFactsSections.swift:264`: `.font(.system(size: 17))` — SF Symbol image (`Image(systemName: "iphone")`)
+- `kudos-ao3-reader/Features/WorkDetail/WorkDetailFactsSections.swift:280`: `.font(.system(size: 12, weight: .semibold))` — SF Symbol image (`Image(systemName: "chevron.right")`)
+- `kudos-ao3-reader/Features/WorkDetail/WorkDetailSections.swift:281`: `.font(.system(size: 15))` — SF Symbol image (`Image(systemName: "checkmark.circle.fill")`)
+- `kudos-ao3-reader/Features/WorkDetail/WorkDetailSections.swift:324`: `.font(.system(size: 13, weight: .semibold))` — SF Symbol image (`Image(systemName: systemImage)`)
+- `kudos-ao3-reader/Features/WorkDetail/WorkDetailSections.swift:549`: `.font(.system(size: 11, weight: .semibold))` — SF Symbol image (`Image(systemName: "minus")`)
+- `kudos-ao3-reader/Features/WorkDetail/WorkDetailView.swift:416`: `.font(.system(size: 12, weight: .semibold))` — SF Symbol image (`Image(systemName: "xmark")`)
+
+## Needs layout work
+
+- `kudos-ao3-reader/Features/Library/LibraryFilterEmptyState.swift:98`: Button label "Clear all filters" scaled with `buttonLabelSize` is contained within a fixed-height frame `.frame(height: 42)` (line 100); at large Dynamic Type sizes the label may clip vertically.
+- `kudos-ao3-reader/Features/Library/LibraryFilterEmptyState.swift:111`: Button label "Edit" scaled with `buttonLabelSize` is contained within a fixed-height frame `.frame(height: 42)` (line 113); at large Dynamic Type sizes the label may clip vertically.

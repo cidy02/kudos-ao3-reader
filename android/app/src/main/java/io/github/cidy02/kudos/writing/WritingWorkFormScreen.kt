@@ -194,7 +194,9 @@ internal fun WritingWorkFormContent(model: WritingWorkFormState, account: String
                     WorkFormTextRow(form, WorkFormText.Notes) { editing = it }
                     SubjectRowSeparator()
                     WorkFormTextRow(form, WorkFormText.Endnotes) { editing = it }
-                    if (form.kind == AO3WorkFormKind.New || form.isDraft) {
+                    // Not for a draft with several chapters: AO3 serves no text box there, and this
+                    // row would be an empty one that replaces chapter 1 (audit A4-1).
+                    if ((form.kind == AO3WorkFormKind.New || form.isDraft) && form.chapter?.contentServed != false) {
                         SubjectRowSeparator()
                         WorkFormTextRow(form, WorkFormText.Content) { editing = it }
                     }

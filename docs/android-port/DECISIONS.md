@@ -903,3 +903,11 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   the brief; its screen read twice per opening and used stock Material parts, so the screen
   and its tests were rewritten on landing and its fixture and wiring kept.
   Reverse: remove `viewingChapters` from `WritingWorkFormScreen.kt`.
+
+## 2026-10-08: audit A4's faults fixed on both apps
+
+- A work with several chapters: AO3 serves no chapter text box, so none is sent, shown or
+  required (`AO3WorkChapterDraft.contentServed`). AO3's validation list (`#error li`) is a
+  refusal. Unsubscribe on a work page and Mark for later need AO3's notice or a redirect.
+  iOS: T-362. Checked against otwarchive's source; never run against AO3.
+  Reverse: `needsEvidence = false` in `AO3WriteRepository.toOutcome`'s two callers.

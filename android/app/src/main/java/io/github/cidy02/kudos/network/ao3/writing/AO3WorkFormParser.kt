@@ -99,7 +99,7 @@ class AO3WorkFormParser {
         val chapter = if (contentControl != null || chapterTitle.isNotEmpty() || chapterSummary.isNotEmpty()) {
             AO3WorkChapterDraft(chapterTitle, chapterSummary, chapterContent,
                 date(AO3WorkFormField.chapterPublishedYear), date(AO3WorkFormField.chapterPublishedMonth),
-                date(AO3WorkFormField.chapterPublishedDay))
+                date(AO3WorkFormField.chapterPublishedDay), contentServed = contentControl != null)
         } else null
         val pseudOptions = select(AO3WorkFormField.authorIDs)
         val ids = pseudOptions.filter { it.isSelected }.map { it.value }.ifEmpty {

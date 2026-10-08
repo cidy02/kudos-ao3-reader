@@ -67,6 +67,28 @@ class AO3WorkFormTest {
         assertEquals("draft-csrf==", parser.parse(noMeta).csrfToken)
     }
 
+    /**
+     * A work with more than one chapter: AO3's edit page serves chapter 1's title and no text
+     * box, and `works#update` assigns what it is sent to chapter 1. An empty text was refused
+     * and took the whole save with it (audit A4-1).
+     */
+    @Test fun aWorkWithSeveralChaptersSendsNoChapterText() {
+        val titled = workFixture("ao3_demo_work_posted_edit").replace("</form>",
+            """<input type="text" name="work[chapter_attributes][title]" value="Prologue"></form>""")
+        val form = parser.parse(titled)
+        assertEquals("Prologue", form.chapter?.title)
+        assertEquals(false, form.chapter?.contentServed)
+        val sent = form.parameters(AO3WorkSubmitAction.Update)
+        assertEquals(listOf("Prologue"), sent.filter { it.first == AO3WorkFormField.chapterTitle }.map { it.second })
+        assertTrue(sent.none { it.first == AO3WorkFormField.chapterContent })
+        // A draft in that state is not missing its text: there is no box to fill.
+        assertFalse("Work Text" in form.copy(isPosted = false).missingRequiredFields())
+
+        val single = parser.parse(workFixture("ao3_demo_work_draft_edit"))
+        assertEquals(true, single.chapter?.contentServed)
+        assertEquals(1, single.parameters(AO3WorkSubmitAction.SaveDraft).count { it.first == AO3WorkFormField.chapterContent })
+    }
+
     @Test fun originalFillerFixturesCoverTheAccountDraftAndPostedAssociations() {
         val draft = parser.parse(workFixture("ao3_demo_work_draft_edit"))
         assertEquals(995001L, draft.workID)

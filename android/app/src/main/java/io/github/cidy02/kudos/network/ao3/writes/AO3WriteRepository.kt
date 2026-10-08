@@ -478,7 +478,7 @@ class AO3WriteRepository(
                 formFields = listOf("_method" to "delete", "authenticity_token" to token),
                 headers = writeHeaders(token, workUrl)
             )
-            response.toOutcome(AO3WriteActionKind.Unsubscribe, "Unsubscribed.", "Couldn't unsubscribe.")
+            response.toOutcome(AO3WriteActionKind.Unsubscribe, "Unsubscribed.", "Couldn't unsubscribe.", needsEvidence = true)
         } else {
             val response = client.postAuthenticated(
                 url = AO3WriteUrls.subscriptionsEndpoint(username),
@@ -559,7 +559,8 @@ class AO3WriteRepository(
             formFields = listOf("_method" to "patch", "authenticity_token" to token),
             headers = writeHeaders(token, workUrl)
         )
-        return response.toOutcome(AO3WriteActionKind.MarkForLater, "Marked for later.", "Couldn't mark for later.")
+        return response.toOutcome(AO3WriteActionKind.MarkForLater, "Marked for later.", "Couldn't mark for later.",
+            needsEvidence = true)
     }
 
     suspend fun fetchBookmarkState(workId: Long): AO3Result<AO3BookmarkState> {
@@ -642,16 +643,19 @@ class AO3WriteRepository(
     private fun AO3Result<AO3HttpResponse>.toOutcome(
         kind: AO3WriteActionKind,
         successMessage: String,
-        fallbackError: String
+        fallbackError: String,
+        needsEvidence: Boolean = false
     ): AO3Result<AO3WriteOutcome> {
         return when (this) {
             is AO3Result.Failure -> this
-            is AO3Result.Success -> {
-                if (value.statusCode in 200..399 && parser.writeErrorMessage(value.body) == null) {
-                    success(kind, successMessage)
-                } else {
+            is AO3Result.Success -> when {
+                value.statusCode !in 200..399 || parser.writeErrorMessage(value.body) != null ->
                     rejected(value.body, fallbackError)
-                }
+                !needsEvidence || value.statusCode in 300..399 || parser.writeSuccessMessage(value.body) != null ->
+                    success(kind, successMessage)
+                // iOS readingsWriteResult: a flashless 2xx (a maintenance page) is not AO3
+                // confirming this write (audit A4-6).
+                else -> AO3Result.Failure(AO3Error.Validation(AO3CollectionFields.UNCONFIRMED))
             }
         }
     }
