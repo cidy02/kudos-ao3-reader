@@ -1188,3 +1188,15 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
 - Kept from Android: the "confirm before delete" preference still governs the four Clear
   confirmations (iOS always asks); Clear reading history leaves a queued work alone.
   Reverse: the commit "The Privacy screen as iOS has it".
+
+## 2026-10-09: fifteen small differences from iOS (brief 3ca, from reading R5)
+
+- An empty tag page says whether filters emptied it; a missing author is "Author unavailable"
+  with no retry; a later page that fails keeps the pages already shown; the Account identity
+  waits for a restoring session; a preference kept after a refused save; signed-out named
+  subscriptions show the ordinary failure card; the comment format sheet offers all six
+  heading levels and re-levels a heading in place; a page-local bookmark filter that empties
+  the page says so. Each is iOS's behaviour, with a test per row.
+- An author page and a search make one read in the session they have. The anonymous second
+  read after a failed signed-in read is gone.
+  Reverse: the commit "Fifteen small differences from iOS".

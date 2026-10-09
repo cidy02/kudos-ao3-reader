@@ -286,7 +286,15 @@ fun AccountWorksListScreen(
             Spacer(modifier = Modifier.windowInsetsTopHeight(WindowInsets.statusBars))
             Spacer(modifier = Modifier.height(56.dp))
 
-            if (type == AccountListType.Subscriptions) {
+            if (loaded != null && pageWorks.isNotEmpty() && refinedWorks.isEmpty() &&
+                (type != AccountListType.Subscriptions || subscriptionsScope == "works")) {
+                SubjectHeaderBlock(kicker = "AO3 Account", title = type.title, palette = palette)
+                EmptyStateCard(
+                    "No matching works", "No works on this page match the current filters.",
+                    modifier = Modifier.padding(SubjectMetrics.accountGutter),
+                    primaryActionLabel = "Clear Filters", onPrimaryAction = { filters = AO3SearchFilters() }
+                )
+            } else if (type == AccountListType.Subscriptions) {
                 val rowPrivacy = remember(settings.privacy, reveal, activity) {
                     PairedRowPrivacy(
                         isObscured = { LibraryPrivacy.visibility(it, settings.privacy, reveal) == LibraryPrivacyVisibility.Obscured },
@@ -1269,8 +1277,8 @@ internal fun SubscriptionsBrowser(
                             })
                     }
                     NamedSubscriptionsUiState.AuthRequired -> item {
-                        EmptyStateCard("AO3 session required", "Your AO3 session needs to be refreshed.",
-                            primaryActionLabel = "Log In Again", onPrimaryAction = onLogin)
+                        ErrorStateCard("Couldn't load your list", "Log in to AO3 to see your subscriptions.",
+                            primaryActionLabel = "Try Again", onPrimaryAction = { retryNamed++ })
                     }
                     else -> item { LoadingStateCard("Loading Subscriptions") }
                 }

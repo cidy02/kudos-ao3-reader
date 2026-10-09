@@ -65,17 +65,10 @@ class AO3AuthorRepository(
     }
 
     private suspend fun getHtml(url: String): AO3Result<String> {
-        val auth = authenticatedClient
-        if (auth != null) {
-            return when (val result = auth.getAuthenticated(url)) {
-                is AO3Result.Failure -> {
-                    // Fall back to public for private-profile soft failures.
-                    publicClient.get(url).map { it.body }
-                }
-                is AO3Result.Success -> AO3Result.Success(result.value.body)
-            }
-        }
-        return publicClient.get(url).map { it.body }
+        // One read in the chosen session. A refusal must not probe the page anonymously.
+        val auth = authenticatedClient?.takeIf { it.username() != null }
+        val result = if (auth == null) publicClient.get(url) else auth.getAuthenticated(url)
+        return result.map { it.body }
     }
 
     private suspend fun <T> AO3Result<String>.mapParse(

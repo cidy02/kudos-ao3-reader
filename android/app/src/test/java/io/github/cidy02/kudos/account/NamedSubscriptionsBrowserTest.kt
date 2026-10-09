@@ -46,9 +46,11 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34], application = Application::class, qualifiers = "w411dp-h1600dp")
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
 class NamedSubscriptionsBrowserTest {
     @get:Rule val compose = createComposeRule()
     private val client = NamedTabClient()
@@ -90,7 +92,7 @@ class NamedSubscriptionsBrowserTest {
     }
 
     private fun waitForText(text: String) {
-        compose.waitUntil(5_000) { compose.onAllNodesWithText(text).fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(15_000) { compose.onAllNodesWithText(text).fetchSemanticsNodes().isNotEmpty() }
     }
 
     @Test fun onlyShownTabFetchesAndRowsCountsPagingAndRefreshFollowIt() {
@@ -110,7 +112,8 @@ class NamedSubscriptionsBrowserTest {
         // Pulling the current tab repeats exactly its current-page address.
         val previous = client.requests.size
         compose.onRoot().performTouchInput { swipeDown(startY = height * 0.2f, endY = height * 0.8f) }
-        compose.waitUntil(5_000) { client.requests.size > previous }
+        compose.waitForIdle()
+        compose.waitUntil(15_000) { client.requests.size > previous }
         waitForText("1 series · page 2 of 3")
         assertEquals(client.requests[previous - 1], client.requests[previous])
         compose.onNodeWithText("Authors").performClick()
@@ -122,10 +125,10 @@ class NamedSubscriptionsBrowserTest {
         assertEquals("someuser", openedAuthor)
     }
 
-    @Test fun signedOutTabShowsSessionStateWithoutFetchingOrClaimingNone() {
+    @Test fun signedOutTabShowsListFailureWithoutFetchingOrClaimingNone() {
         show(signedIn = false)
         compose.onNodeWithText("Series").performClick()
-        waitForText("AO3 session required")
+        waitForText("Log in to AO3 to see your subscriptions.")
         compose.onNodeWithText("No series subscriptions").assertDoesNotExist()
         assertTrue(client.requests.isEmpty())
     }

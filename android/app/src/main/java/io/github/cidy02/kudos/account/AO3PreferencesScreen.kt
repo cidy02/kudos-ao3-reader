@@ -38,6 +38,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.testTag
+import io.github.cidy02.kudos.network.ao3.AO3Error
 import io.github.cidy02.kudos.app.LocalPushedShellChrome
 import io.github.cidy02.kudos.network.ao3.AO3Result
 import io.github.cidy02.kudos.network.ao3.displayMessage
@@ -136,7 +139,10 @@ fun AO3PreferencesScreen(
                                 }
                             }
                             is AO3Result.Failure -> {
-                                status = "Save failed: ${result.error.displayMessage()}"
+                                // The authenticated client expires only the session that submitted the form.
+                                status = if (result.error == AO3Error.AuthenticationRequired) {
+                                    "Your AO3 session expired. Sign in again from Account."
+                                } else "Save failed: ${result.error.displayMessage()}"
                             }
                         }
                         saving = false
@@ -171,6 +177,7 @@ fun AO3PreferencesScreen(
             LazyColumn(
                 modifier = Modifier
                     .fillMaxSize()
+                    .testTag("AO3 preferences")
                     .subjectScreenWash(palette),
                 contentPadding = PaddingValues(bottom = 20.dp)
             ) {
@@ -187,8 +194,9 @@ fun AO3PreferencesScreen(
                     if (status != null) {
                         Text(
                             text = status!!,
-                            color = if (status!!.startsWith("Saved")) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
-                            style = MaterialTheme.typography.bodyMedium,
+                            color = if (status!!.startsWith("Saved")) LocalKudosTokens.current.accent else LocalKudosTokens.current.secondaryInk,
+                            fontSize = 14.sp,
+                            lineHeight = 20.sp,
                             modifier = Modifier.padding(horizontal = SubjectMetrics.accountGutter, vertical = 8.dp)
                         )
                     }
@@ -256,7 +264,8 @@ fun AO3PreferencesScreen(
                                                     toggles[toggle.name] = it
                                                     hasEdits = true
                                                     status = null
-                                                }
+                                                },
+                                                contentDescription = toggle.label
                                             )
                                         }
                                     }

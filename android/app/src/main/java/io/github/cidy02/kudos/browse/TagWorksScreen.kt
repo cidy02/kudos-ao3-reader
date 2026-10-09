@@ -71,7 +71,8 @@ fun TagWorksScreen(
     repository: AO3SearchRepository = remember { AO3SearchRepository() }
 ) {
     var state by remember(tagName) { mutableStateOf<TagWorksState>(TagWorksState.Loading) }
-    var filters by remember { mutableStateOf(AO3SearchFilters()) }
+    val baseline = remember { io.github.cidy02.kudos.network.ao3.browse.AO3BrowseRepository.browseBaseline() }
+    var filters by remember { mutableStateOf(baseline) }
     // The filters the page on screen was asked for. The sheet edits `filters` itself, so closing
     // it without Apply left edits that the next page then sent: page 7 of a filter nobody
     // applied (audit A20-3, the same on iOS).
@@ -129,7 +130,7 @@ fun TagWorksScreen(
                     IconButton(onClick = { showFilterSheet = true }) {
                         BadgedBox(
                             badge = {
-                                if (activeFilters > 0) {
+                                if (filters != baseline && activeFilters > 0) {
                                     androidx.compose.material3.Badge {
                                         Text(activeFilters.toString())
                                     }
@@ -197,8 +198,13 @@ fun TagWorksScreen(
                     )
                 } else if (current.page.works.isEmpty()) {
                     EmptyStateCard(
-                        title = "No works found",
-                        message = "AO3 has no works for this tag right now."
+                        title = if (loadedFilters != baseline) "No matching works" else "No works found",
+                        message = if (loadedFilters != baseline) "No works with this tag match your filters."
+                            else "AO3 has no works for this tag right now.",
+                        primaryActionLabel = if (loadedFilters != baseline) "Clear Filters" else null,
+                        onPrimaryAction = if (loadedFilters != baseline) {
+                            { filters = baseline; load() }
+                        } else null
                     )
                 } else {
                     LazyColumn(
@@ -281,9 +287,11 @@ fun TagWorksScreen(
     if (showFilterSheet) {
         SearchFilterSheet(
             filters = filters,
+            allowsRelevanceSort = false,
+            canReset = filters != baseline,
             onFiltersChange = { filters = it },
             onApply = { showFilterSheet = false; load() },
-            onClear = { filters = AO3SearchFilters(); load() },
+            onClear = { filters = baseline; load() },
             onDismiss = { showFilterSheet = false; filters = loadedFilters },
             localTagSuggestions = localTagSuggestions
         )
