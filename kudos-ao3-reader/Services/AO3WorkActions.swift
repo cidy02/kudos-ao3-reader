@@ -81,20 +81,18 @@ extension AO3AuthService {
         return try AO3Client.parseBulkEditForm(from: body)
     }
 
-    func loadDeleteImplications(workID: Int) async throws -> AO3DeleteImplications {
+    func loadDeleteImplications(
+        workID: Int, using client: AO3Client = .shared
+    ) async throws -> AO3DeleteImplications {
         try requireWorkSession()
-        var implications = try AO3Client.parseDeleteImplications(
-            from: try await workFormHTML(at: AO3Client.workConfirmDeleteURL(workID: workID))
+        // T-372. This used to go on to read the work's own page for the counts AO3's
+        // confirmation page lacks, here and again on the confirmed delete. Nothing shows
+        // those counts (the alert is AO3's caution, verbatim), so it was two requests for
+        // every delete, and a delete that failed whenever that page could not be read,
+        // which is the usual case for an unposted draft. Android never made the read.
+        return try AO3Client.parseDeleteImplications(
+            from: try await workFormHTML(at: AO3Client.workConfirmDeleteURL(workID: workID), using: client)
         )
-        let stats = AO3Client.parseWorkStatCounts(
-            from: try await workFormHTML(at: AO3Client.workURL(workID: workID))
-        )
-        if implications.chapters == nil { implications.chapters = stats.chapters }
-        if implications.kudos == nil { implications.kudos = stats.kudos }
-        if implications.comments == nil { implications.comments = stats.comments }
-        if implications.bookmarks == nil { implications.bookmarks = stats.bookmarks }
-        if implications.words == nil { implications.words = stats.words }
-        return implications
     }
 
     func loadChapterDeleteImplications(
@@ -416,10 +414,10 @@ extension AO3AuthService {
     // MARK: Delete
 
     @discardableResult
-    func deleteWork(workID: Int) async throws -> String {
+    func deleteWork(workID: Int, using client: AO3Client = .shared) async throws -> String {
         try requireWorkSession()
-        let implications = try await loadDeleteImplications(workID: workID)
-        return try await submitDelete(implications)
+        let implications = try await loadDeleteImplications(workID: workID, using: client)
+        return try await submitDelete(implications, using: client)
     }
 
     /// 1bn's bulk Delete: AO3's own last step. Edit Multiple Works' Delete
