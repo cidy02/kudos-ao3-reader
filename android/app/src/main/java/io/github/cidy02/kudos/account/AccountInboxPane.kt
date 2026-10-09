@@ -103,6 +103,8 @@ fun AccountInboxPane(
     commentRepository: AO3CommentRepository,
     currentUsername: String?,
     onOpenWorkComments: (workId: Long, focusedId: Long?) -> Unit,
+    /** iOS's "Chapter Comments": the comments of the chapter an inbox comment was left on. */
+    onOpenChapterComments: (workId: Long, chapterPosition: Int) -> Unit = { _, _ -> },
     settingsRepository: SettingsRepository? = null,
     modifier: Modifier = Modifier,
     viewModel: AccountInboxViewModel = viewModel(
@@ -313,6 +315,9 @@ fun AccountInboxPane(
                             ),
                             onOpen = {
                                 item.workId?.let { onOpenWorkComments(it, item.id) }
+                            },
+                            onOpenChapter = item.workId?.let { workId ->
+                                item.chapterPosition?.let { position -> { onOpenChapterComments(workId, position) } }
                             },
                             onToggleSelection = { viewModel.toggleSelection(item) },
                             onMarkRead = {
@@ -657,6 +662,7 @@ internal fun InboxItemCard(
     canMarkUnread: Boolean,
     canDelete: Boolean,
     onOpen: () -> Unit,
+    onOpenChapter: (() -> Unit)? = null,
     onToggleSelection: () -> Unit,
     onMarkRead: () -> Unit,
     onMarkUnread: () -> Unit,
@@ -763,6 +769,7 @@ internal fun InboxItemCard(
                                 canMarkUnread = canMarkUnread,
                                 canDelete = canDelete,
                                 onOpen = onOpen,
+                                onOpenChapter = onOpenChapter,
                                 onMarkRead = onMarkRead,
                                 onMarkUnread = onMarkUnread,
                                 onDelete = onDelete
@@ -961,6 +968,7 @@ private fun InboxItemOverflowMenu(
     canMarkUnread: Boolean,
     canDelete: Boolean,
     onOpen: () -> Unit,
+    onOpenChapter: (() -> Unit)?,
     onMarkRead: () -> Unit,
     onMarkUnread: () -> Unit,
     onDelete: () -> Unit
@@ -980,6 +988,15 @@ private fun InboxItemOverflowMenu(
                     onClick = {
                         expanded = false
                         onOpen()
+                    }
+                )
+            }
+            if (onOpenChapter != null) {
+                DropdownMenuItem(
+                    text = { Text("Chapter Comments") },
+                    onClick = {
+                        expanded = false
+                        onOpenChapter()
                     }
                 )
             }

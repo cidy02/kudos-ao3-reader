@@ -115,7 +115,11 @@ A reading, not an audit: eleven features, each checked against the code as it wa
 - **"Nearby" pages in the page jump: done** (2026-10-09): ten tiles around the chosen page,
   by iOS's window rule with its four tests. **Not seen on the emulator** (it would not stay
   up: the Mac was out of memory).
-- Small, still to do by hand: "Open Chapter Comments" in the inbox menu, the "Showing cached
-  AO3 data" banner.
+- **"Chapter Comments" in the Inbox row's menu: done** (2026-10-09), shown when the comment
+  was left on a chapter; opens that chapter's comments. Not seen on the emulator.
+- **Read Aloud downloads on Privacy** turned out to be part of something larger: Android's
+  Privacy screen shows figures written into the code ("Reading positions 0", "Caches
+  Unknown") where iOS measures them, and lacks iOS's "AO3 session" section too. Brief `3bz`.
+- Small, still to do by hand: the "Showing cached AO3 data" banner (R6 has the full reading).
 - Medium, to brief for Codex: the Account shortcut editor, Read Aloud downloads on Privacy,
   popular tags in the tag picker, works sort and completion on an author.
