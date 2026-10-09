@@ -15,6 +15,22 @@ class WritingEditTagsTest {
     private fun fixture() = workFixture("ao3_demo_work_edit_tags")
     private fun parse(html: String = fixture()) = AO3WorkFormParser().parse(html, AO3WorkFormUrls.editTags(995006))
 
+    /**
+     * Audit A23-1: AO3 may give the token only in the page's meta tag, which is no form
+     * control. The body must still begin with it, as iOS's does; the encoder used to drop it.
+     */
+    @Test fun theTokenGoesInTheBodyEvenWhenOnlyTheMetaTagCarriesIt() {
+        val html = fixture().replace("<input type=\"hidden\" name=\"authenticity_token\" value=\"demo-tags-995006==\">", "")
+        assertTrue("the fixture's hidden token is gone", "name=\"authenticity_token\"" !in html)
+        val form = parse(html)
+        assertEquals("demo-tags-995006==", form.csrfToken)
+        val body = form.parameters(AO3WorkSubmitAction.Update)
+        assertEquals(AO3WorkFormField.authenticityToken to "demo-tags-995006==", body.first())
+        assertEquals(1, body.count { it.first == AO3WorkFormField.authenticityToken })
+        assertTrue(body.any { it.first == AO3WorkFormField.methodOverride && it.second == "patch" })
+        assertTrue(body.any { it.first == AO3WorkSubmitAction.Update.fieldName })
+    }
+
     @Test fun tagsOnlyFixtureParsesWithoutTitleOrTextAndReplaysUntouchedBrowserFields() {
         val form = parse()
         assertEquals(AO3WorkFormKind.EditTags, form.kind)
@@ -82,7 +98,11 @@ class WritingEditTagsTest {
         """)
         val form = parse(doc.outerHtml()).copy(relationships = listOf("invented"), characters = listOf("disabled"), languageID = "999")
         val fields = form.parameters(AO3WorkSubmitAction.Update)
-        assertTrue(fields.none { it.first in listOf(AO3WorkFormField.relationships, AO3WorkFormField.characters, AO3WorkFormField.languageID, "update_button") })
+        assertTrue(fields.none { it.first in listOf(AO3WorkFormField.relationships, AO3WorkFormField.characters, AO3WorkFormField.languageID) })
+        // The action is always named, as on iOS, whether or not the page drew its button
+        // (audit A23-1: the served-name rule is for the tag fields, not for the token, the
+        // method or the submit).
+        assertEquals(listOf("update_button" to "1"), fields.filter { it.first == "update_button" })
         assertEquals(browserControls(doc.outerHtml(), AO3WorkSubmitAction.Update).filter { it.first.startsWith("future") || it.first == "external" },
             fields.filter { it.first.startsWith("future") || it.first == "external" })
     }

@@ -5,8 +5,13 @@ object AO3WorkFormEncoder {
     fun encode(form: AO3WorkForm, submit: AO3WorkSubmitAction): List<Pair<String, String>> {
         val modeled = iosParameters(form, submit).let { pairs ->
             if (form.kind != AO3WorkFormKind.EditTags) pairs else {
+                // The seven tag fields are sent only if AO3 served them (3bt). The token, the
+                // method and the submit are sent always, as iOS does: the token is read from
+                // the page's meta tag, which is no form control, and this filter used to drop
+                // it from the body whenever AO3 gave it nowhere else (audit A23-1).
+                val always = setOf(AO3WorkFormField.authenticityToken, AO3WorkFormField.methodOverride, submit.fieldName)
                 val served = form.servedControls.filterNot { it.disabled }.map { it.name }.toSet()
-                pairs.filter { it.first in served }
+                pairs.filter { it.first in always || it.first in served }
             }
         }
         val overridden = modeled.map { it.first }.toSet()
