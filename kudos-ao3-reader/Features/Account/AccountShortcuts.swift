@@ -87,8 +87,15 @@ nonisolated enum AccountShortcut: String, CaseIterable, Identifiable, Sendable {
 enum AccountShortcutStore {
     static let key = "account.shortcuts"
 
+    /// What an explicit "none" is stored as. An empty string is "never chosen" and
+    /// means the defaults, so removing every shortcut used to bring all six back
+    /// and the editor's footer ("If you choose none, the grid is hidden") could
+    /// never be true (audit A27-11). Android stores the same word.
+    static let noneChosen = "none"
+
     static func decode(_ raw: String) -> [AccountShortcut] {
         guard !raw.isEmpty else { return AccountShortcut.defaults }
+        if raw == noneChosen { return [] }
         let chosen = raw.split(separator: ",").compactMap { AccountShortcut(rawValue: String($0)) }
         // An empty result means every stored name is now unknown; the defaults
         // are a better answer than an empty grid the reader cannot refill.
@@ -96,7 +103,7 @@ enum AccountShortcutStore {
     }
 
     static func encode(_ shortcuts: [AccountShortcut]) -> String {
-        shortcuts.map(\.rawValue).joined(separator: ",")
+        shortcuts.isEmpty ? noneChosen : shortcuts.map(\.rawValue).joined(separator: ",")
     }
 }
 

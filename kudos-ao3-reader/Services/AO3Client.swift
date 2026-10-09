@@ -1323,7 +1323,7 @@ actor AO3Client { // swiftlint:disable:this type_body_length
 
     /// `onProgress` gets 0…1 as the file arrives, when AO3 sends its size.
     func downloadEPUB(workID: Int, onProgress: (@Sendable (Double) -> Void)? = nil) async throws -> URL {
-        Log.network.info("Downloading EPUB for work \(workID)")
+        Log.network.info("Downloading EPUB for work \(workID, privacy: .private(mask: .hash))")
         guard let url = URL(string: "\(base)/downloads/\(workID)/work.epub") else {
             throw AO3Error.network("Bad download URL.")
         }

@@ -259,8 +259,10 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                 .onChange(of: router.panel == .searchFilters) { _, showing in
                     // Closed without Apply while results are on screen: the panel's edits are
                     // dropped (the typed search text is not the panel's, and stays). The next
-                    // page tap used to run them as a new search (audit A20-3).
-                    guard !showing, phase == .loaded, var restored = loadedFilters else { return }
+                    // page tap used to run them as a new search (audit A20-3). Whatever the
+                    // phase: during a page load or after a failed one the edits were kept
+                    // (A27-10). Apply clears `loadedFilters` first, so it is not undone here.
+                    guard !showing, var restored = loadedFilters else { return }
                     restored.query = filters.query
                     if filters != restored { filters = restored }
                 }
