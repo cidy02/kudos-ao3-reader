@@ -80,6 +80,41 @@ class AO3SeriesRepositoryParseTest {
         assertEquals(AO3Error.Network("offline"), (result as AO3Result.Failure).error)
     }
 
+    @Test fun detailIdentityComesFromSameShowReadAndNeverDisplayedPseudOrWorkByline() = runTest {
+        val url = "https://archiveofourown.org/series/321"
+        val html = io.github.cidy02.kudos.writing.seriesFixture("ao3_demo_dawn_series")
+        val client = FakeSeriesClient(mapOf(url to html))
+        val detail = (AO3SeriesRepository(client).detailPage(url) as AO3Result.Success).value
+        assertEquals("The Dawn Cycle", detail.title)
+        assertEquals(listOf("AO3_Reader"), detail.creatorUsernames)
+        assertEquals(3, detail.workCount); assertEquals(45678, detail.words)
+        assertEquals(listOf(url), client.requestedUrls)
+        val other = FakeSeriesClient(mapOf(url to html.replace("/users/AO3_Reader/pseuds/Avery%20Writes",
+            "/users/stranger/pseuds/AO3_Reader")))
+        assertEquals(listOf("stranger"), (AO3SeriesRepository(other).detailPage(url) as AO3Result.Success).value.creatorUsernames)
+        val summaries = io.github.cidy02.kudos.network.ao3.author.AO3AuthorParser().parseSeriesPage(
+            io.github.cidy02.kudos.writing.seriesFixture("ao3_author_series"), 1).series
+        assertEquals(listOf("Avery Writes"), summaries.first().creators)
+        assertEquals(listOf("AO3_Reader"), summaries.first().creatorUsernames)
+        assertTrue(summaries.last().creatorUsernames.isEmpty())
+    }
+
+    @Test fun signedInDetailUsesOneAuthenticatedReadWithoutAnonymousFallback() = runTest {
+        val url = "https://archiveofourown.org/series/321"
+        val anonymous = FakeSeriesClient(emptyMap())
+        val reads = mutableListOf<String>()
+        val authenticated = object : io.github.cidy02.kudos.network.ao3.writes.AO3AuthenticatedClient {
+            override fun username() = "AO3_Reader"
+            override suspend fun getAuthenticated(url: String): AO3Result<AO3HttpResponse> {
+                reads += url; return AO3Result.Failure(AO3Error.Forbidden)
+            }
+            override suspend fun postAuthenticated(url: String, formFields: List<Pair<String, String>>, headers: Map<String, String>): AO3Result<AO3HttpResponse> =
+                error("A detail read must never post")
+        }
+        assertEquals(AO3Result.Failure(AO3Error.Forbidden), AO3SeriesRepository(anonymous, authenticatedClient = authenticated).detailPage(url))
+        assertEquals(listOf(url), reads); assertTrue(anonymous.requestedUrls.isEmpty())
+    }
+
     private class FakeSeriesClient(
         private val bodiesByUrl: Map<String, String>
     ) : AO3Client {

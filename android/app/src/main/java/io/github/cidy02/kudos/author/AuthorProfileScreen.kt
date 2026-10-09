@@ -42,6 +42,7 @@ enum class AuthorTab(val label: String) {
 fun AuthorProfileScreen(
     username: String,
     initialPseud: String? = null,
+    initialTab: AuthorTab = AuthorTab.Works,
     authorRepository: AO3AuthorRepository,
     onOpenWork: (AO3WorkSummary) -> Unit,
     onOpenSeries: (String) -> Unit = {},
@@ -49,8 +50,15 @@ fun AuthorProfileScreen(
     isDashboard: Boolean = false,
     onOpenDashboardList: ((AccountListType) -> Unit)? = null,
     onOpenAO3Collections: (() -> Unit)? = null,
+    seriesFormRepository: io.github.cidy02.kudos.network.ao3.writing.AO3SeriesFormRepository? = null,
+    seriesWrites: io.github.cidy02.kudos.network.ao3.writes.AO3WriteRepository? = null,
     modifier: Modifier = Modifier
 ) {
+    val account by (seriesFormRepository?.auth?.state?.collectAsState() ?: remember {
+        mutableStateOf<io.github.cidy02.kudos.auth.AO3AuthState>(io.github.cidy02.kudos.auth.AO3AuthState.SignedOut) })
+    val signedInUsername = (account as? io.github.cidy02.kudos.auth.AO3AuthState.SignedIn)?.username
+    val ownSeriesList = signedInUsername?.equals(username, true) == true
+    var editingSeries by remember(username) { mutableStateOf<Pair<AO3AuthorSeriesSummary, Boolean>?>(null) }
     var route by remember(username, initialPseud) {
         mutableStateOf(AO3AuthorRoute(username.trim(), initialPseud?.trim()?.takeIf { it.isNotBlank() }))
     }
@@ -58,7 +66,7 @@ fun AuthorProfileScreen(
     var headerError by remember { mutableStateOf<String?>(null) }
     var headerLoading by remember { mutableStateOf(true) }
     
-    var tab by remember { mutableStateOf(AuthorTab.Works) }
+    var tab by remember { mutableStateOf(initialTab) }
     var page by remember { mutableIntStateOf(1) }
     
     var works by remember { mutableStateOf<AO3SearchPage?>(null) }
@@ -131,6 +139,16 @@ fun AuthorProfileScreen(
 
     val workHue = remember(route.displayName) { HomeFacts.workHue(emptyList(), route.displayName) }
     val palette = remember(workHue, tokens.theme) { SubjectPalette.fromHue(workHue, tokens.theme) }
+
+    val edit = editingSeries
+    if (edit != null && seriesFormRepository != null && seriesWrites != null) {
+        val series = edit.first
+        val subtitle = listOfNotNull(series.title, series.workCount?.let { "$it ${if (it == 1) "work" else "works"}" },
+            series.words?.takeIf { it > 0 }?.let { "%,d words".format(it) }).joinToString(" · ")
+        io.github.cidy02.kudos.writing.WritingSeriesScreen(series.id, series.title, seriesFormRepository, seriesWrites,
+            onBack = { editingSeries = null }, onOpenAo3 = onOpenWeb, reorderOnly = edit.second, subtitle = subtitle)
+        return
+    }
 
     ProvidePushedShellChrome(
         hasSubjectHeader = true,
@@ -418,14 +436,35 @@ fun AuthorProfileScreen(
                         AuthorTab.Series -> {
                             val pageData = series
                             if (pageData == null || pageData.series.isEmpty()) {
-                                item { EmptyStateCard("No series", "No series by this author are visible to you on AO3.") }
+                                if (pageData != null && ownSeriesList) item {
+                                    EmptyStateCard("You have not made a series.",
+                                        "A series groups your works in reading order. Create one on AO3, then refresh this page to see it here.")
+                                    SubjectFormRow("New series on AO3", showsDisclosure = true,
+                                        onClick = { onOpenWeb("https://archiveofourown.org/series/new") })
+                                    Text("This opens AO3 in Browse, where you can create the series.", color = tokens.secondaryInk,
+                                        fontSize = 11.5.sp, lineHeight = 17.sp)
+                                } else item { EmptyStateCard("No series", "No series by this author are visible to you on AO3.") }
                             } else {
                                 items(pageData.series, key = { it.id }) { s ->
-                                    AO3SeriesRow(
-                                        series = s,
-                                        displayMode = displayMode,
-                                        onOpenSeries = onOpenSeries
-                                    )
+                                    val canEdit = signedInUsername != null && s.creatorUsernames.any { it.equals(signedInUsername, true) } &&
+                                        seriesFormRepository != null && seriesWrites != null
+                                    var menu by remember(s.id) { mutableStateOf(false) }
+                                    val actions: (@Composable () -> Unit)? = if (!canEdit) null else {
+                                        {
+                                            Box {
+                                                ToolbarCircleButton(onClick = { menu = true }, accessibilityName = "Actions for ${s.title}",
+                                                    palette = palette) { Icon(Icons.Default.MoreVert, null) }
+                                                DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                                                    DropdownMenuItem(text = { Text("Edit", color = tokens.primaryInk, lineHeight = 20.sp) },
+                                                        onClick = { menu = false; editingSeries = s to false })
+                                                    DropdownMenuItem(text = { Text("Reorder", color = tokens.primaryInk, lineHeight = 20.sp) },
+                                                        onClick = { menu = false; editingSeries = s to true })
+                                                }
+                                            }
+                                        }
+                                    }
+                                    AO3SeriesRow(series = s, displayMode = displayMode, onOpenSeries = onOpenSeries,
+                                        trailingContent = actions)
                                 }
                                 item {
                                     PagerRow(

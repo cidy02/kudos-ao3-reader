@@ -509,7 +509,8 @@ fun AppNavHost(
                     navController.navigate(Routes.accountList(NavArgCodecs.encodeAccountListType(type)))
                 },
                 onOpenSeries = { seriesUrl ->
-                    navController.navigate(Routes.seriesWorks(seriesUrl))
+                    val username = Regex("/users/([^/]+)/series").find(seriesUrl)?.groupValues?.get(1)
+                    navController.navigate(if (username == null) Routes.seriesWorks(seriesUrl) else Routes.authorSeries(username))
                 },
                 inboxRepository = container.inboxRepository,
                 commentRepository = container.commentRepository,
@@ -606,7 +607,9 @@ fun AppNavHost(
                         }
                         io.github.cidy02.kudos.writing.WritingWorkFormScreen(workID, repository, container.authRepository,
                             onClose = { navController.popBackStack() }, autocompleteRepository = container.tagAutocompleteRepository,
-                            settingsRepository = container.settingsRepository, writeRepository = container.writeRepository)
+                            settingsRepository = container.settingsRepository, writeRepository = container.writeRepository,
+                            seriesRepository = remember(container) { io.github.cidy02.kudos.network.ao3.writing.AO3SeriesFormRepository(
+                                container.authenticatedClient, container.authRepository) })
                     } else LaunchedEffect(Unit) { navController.popBackStack() }
                 }
             }
@@ -630,6 +633,8 @@ fun AppNavHost(
             io.github.cidy02.kudos.writing.WritingWorkFormScreen(workID, repository, container.authRepository,
                 onClose = { navController.popBackStack() }, autocompleteRepository = container.tagAutocompleteRepository,
                 settingsRepository = container.settingsRepository, writeRepository = container.writeRepository,
+                seriesRepository = remember(container) { io.github.cidy02.kudos.network.ao3.writing.AO3SeriesFormRepository(
+                    container.authenticatedClient, container.authRepository) },
                 onSaved = {
                     navController.previousBackStackEntry?.takeIf { it.destination.route == Routes.WritingDrafts }?.let {
                         val revision = it.savedStateHandle.get<Int>("writingWorkSaved") ?: 0
@@ -1095,8 +1100,8 @@ fun AppNavHost(
             )
         }
 
-        sharedComposable(
-            Routes.AuthorProfile,
+        listOf(Routes.AuthorProfile, Routes.AuthorSeries).forEach { authorRoute -> sharedComposable(
+            authorRoute,
             arguments = listOf(Routes.navArgOf("authorUsername"))
         ) { backStackEntry ->
             val authorUsername = Routes.routeArg(backStackEntry, "authorUsername")
@@ -1105,7 +1110,12 @@ fun AppNavHost(
             } else {
                 AuthorProfileScreen(
                     username = authorUsername,
+                    initialTab = if (authorRoute == Routes.AuthorSeries) io.github.cidy02.kudos.author.AuthorTab.Series
+                        else io.github.cidy02.kudos.author.AuthorTab.Works,
                     authorRepository = container.authorRepository,
+                    seriesFormRepository = remember(container) { io.github.cidy02.kudos.network.ao3.writing.AO3SeriesFormRepository(
+                        container.authenticatedClient, container.authRepository) },
+                    seriesWrites = container.writeRepository,
                     onOpenWork = { work ->
                         navigateToWorkDetail(WorkDetailSource.RemoteSummary(work))
                     },
@@ -1117,6 +1127,7 @@ fun AppNavHost(
                     }
                 )
             }
+        }
         }
 
         sharedComposable(
@@ -1130,6 +1141,9 @@ fun AppNavHost(
                 SeriesWorksScreen(
                     seriesUrl = seriesUrl,
                     seriesRepository = container.seriesRepository,
+                    formRepository = remember(container) { io.github.cidy02.kudos.network.ao3.writing.AO3SeriesFormRepository(
+                        container.authenticatedClient, container.authRepository) },
+                    writes = container.writeRepository,
                     workImporter = container.workImporter,
                     readingQueueRepository = container.readingQueueRepository,
                     onOpenAo3 = { url -> navController.navigate(Routes.webFallback(url)) },

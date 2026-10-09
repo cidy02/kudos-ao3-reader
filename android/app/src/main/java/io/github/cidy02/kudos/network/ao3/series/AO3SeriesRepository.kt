@@ -18,7 +18,8 @@ import kotlinx.coroutines.withContext
  */
 class AO3SeriesRepository(
     private val client: AO3Client = OkHttpAO3Client(),
-    private val parser: AO3SearchParser = AO3SearchParser()
+    private val parser: AO3SearchParser = AO3SearchParser(),
+    private val authenticatedClient: io.github.cidy02.kudos.network.ao3.writes.AO3AuthenticatedClient? = null
 ) {
     /**
      * Every work in a series across all of the series page's pages.
@@ -54,6 +55,29 @@ class AO3SeriesRepository(
         }
     }
 
+    /** The show page's header and creator identities from the SAME listing read, never from a work byline. */
+    suspend fun detailPage(seriesUrl: String, page: Int = 1): AO3Result<AO3SeriesDetailPage> {
+        val url = AO3SeriesUrls.seriesPageUrl(seriesUrl, page)
+            ?: return AO3Result.Failure(AO3Error.Validation("Not a valid AO3 series URL."))
+        val result = if (authenticatedClient?.username() != null) authenticatedClient.getAuthenticated(url) else client.get(url)
+        return when (result) {
+            is AO3Result.Failure -> result
+            is AO3Result.Success -> when (val works = parse(result.value.body, result.value.statusCode, page)) {
+                is AO3Result.Failure -> works
+                is AO3Result.Success -> withContext(Dispatchers.Default) {
+                    val doc = org.jsoup.Jsoup.parse(result.value.body, url)
+                    val meta = doc.selectFirst("dl.series.meta")
+                    val usernames = io.github.cidy02.kudos.network.ao3.author.ao3CreatorUsernames(
+                        meta?.select("a[rel=author][href]").orEmpty().map { it.attr("abs:href") })
+                    val title = doc.selectFirst(".primary h2.heading, #main > h2.heading")?.text().orEmpty()
+                        .ifEmpty { works.value.works.firstOrNull()?.seriesTitle ?: "Series" }
+                    fun stat(name: String) = meta?.selectFirst("dd.$name")?.text()?.replace(",", "")?.trim()?.toIntOrNull()
+                    AO3Result.Success(AO3SeriesDetailPage(works.value, title, usernames, stat("works"), stat("words")))
+                }
+            }
+        }
+    }
+
     private suspend fun parse(
         html: String,
         statusCode: Int,
@@ -75,3 +99,7 @@ class AO3SeriesRepository(
         }
     }
 }
+
+/** Display-only metadata; no persistence/backup format. */
+data class AO3SeriesDetailPage(val page: AO3SearchPage, val title: String, val creatorUsernames: List<String>,
+    val workCount: Int? = null, val words: Int? = null)

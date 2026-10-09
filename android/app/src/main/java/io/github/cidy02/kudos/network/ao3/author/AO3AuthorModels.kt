@@ -1,5 +1,7 @@
 package io.github.cidy02.kudos.network.ao3.author
 
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
+
 import io.github.cidy02.kudos.network.ao3.search.AO3WorkSummary
 
 data class AO3AuthorRoute(
@@ -146,7 +148,8 @@ data class AO3AuthorSeriesSummary(
     val workCount: Int?,
     val dateUpdated: String,
     val isComplete: Boolean?,
-    val url: String
+    val url: String,
+    val creatorUsernames: List<String> = emptyList()
 )
 
 data class AO3AuthorSeriesPage(
@@ -170,3 +173,9 @@ data class AO3AuthorBookmarksPage(
     val currentPage: Int,
     val totalPages: Int
 )
+
+/** Registered identities, never displayed pseuds; shared by series blurbs and show pages. */
+internal fun ao3CreatorUsernames(addresses: Iterable<String>): List<String> = addresses.mapNotNull { address ->
+    if (!io.github.cidy02.kudos.network.ao3.AO3RedirectCookieRelay.isTrustedUrl(address)) null
+    else address.toHttpUrlOrNull()?.pathSegments?.takeIf { it.firstOrNull() == "users" }?.getOrNull(1)
+}.distinct()

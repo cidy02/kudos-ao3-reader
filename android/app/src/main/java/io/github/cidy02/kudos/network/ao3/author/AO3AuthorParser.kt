@@ -179,7 +179,9 @@ class AO3AuthorParser(
                 status.contains("wip", true) || status.contains("progress", true) -> false
                 else -> null
             },
-            url = url
+            url = url,
+            creatorUsernames = ao3CreatorUsernames(element.select("h4.heading a[rel=author], h4.heading a[href*=/pseuds/]")
+                .mapNotNull { absoluteUrl(it.attr("href")) })
         )
     }
 

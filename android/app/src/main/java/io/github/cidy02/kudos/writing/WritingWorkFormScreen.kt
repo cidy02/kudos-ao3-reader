@@ -52,7 +52,8 @@ fun WritingWorkFormScreen(
     autocompleteRepository: AO3TagAutocompleteRepository? = null,
     settingsRepository: SettingsRepository? = null,
     writeRepository: AO3WriteRepository,
-    onSaved: () -> Unit = onClose
+    onSaved: () -> Unit = onClose,
+    seriesRepository: AO3SeriesFormRepository? = null
 ) {
     val generation by auth.generation.collectAsState()
     val accountState by auth.state.collectAsState()
@@ -66,13 +67,14 @@ fun WritingWorkFormScreen(
     LaunchedEffect(model) { model.load() }
     DisposableEffect(model) { onDispose { model.close() } }
     WritingWorkFormContent(model, model.account, if (workID == null) "New work" else "Edit work", onClose,
-        autocompleteRepository, settingsRepository, onSaved = onSaved, onSaving = { savingModel = model })
+        autocompleteRepository, settingsRepository, onSaved = onSaved, onSaving = { savingModel = model },
+        seriesRepository = seriesRepository, seriesWrites = writeRepository)
 }
 
 @Composable
 internal fun WritingWorkFormContent(model: WritingWorkFormState, account: String, loadingTitle: String, onClose: () -> Unit,
     autocompleteRepository: AO3TagAutocompleteRepository? = null, settingsRepository: SettingsRepository? = null,
-    onSaved: () -> Unit = onClose, onSaving: () -> Unit = {}) {
+    onSaved: () -> Unit = onClose, onSaving: () -> Unit = {}, seriesRepository: AO3SeriesFormRepository? = null, seriesWrites: AO3WriteRepository? = null) {
     val state by model.state.collectAsState()
     val form = state.form
     val tokens = LocalKudosTokens.current
@@ -108,6 +110,15 @@ internal fun WritingWorkFormContent(model: WritingWorkFormState, account: String
             })
         return
     }
+    var reorder by remember(model) { mutableStateOf<Pair<Long, String>?>(null) }
+    val onReorderSeries: ((Long, String) -> Unit)? = if (seriesRepository == null || seriesWrites == null) null
+        else ({ id, title -> reorder = id to title })
+    val order = reorder
+    if (order != null && seriesRepository != null && seriesWrites != null) {
+        WritingSeriesScreen(order.first, order.second, seriesRepository, seriesWrites,
+            onBack = { reorder = null }, reorderOnly = true)
+        return
+    }
     val field = editing
     if (field != null && form != null) {
         WritingTextEditorScreen(field.text(form), field.title, account, form.recoveryTarget(), field.field,
@@ -125,7 +136,7 @@ internal fun WritingWorkFormContent(model: WritingWorkFormState, account: String
     }
     val associationKind = association
     if (associationKind != null && form != null) {
-        WritingAssociationPicker(associationKind, form, model, autocompleteRepository) { association = null }
+        WritingAssociationPicker(associationKind, form, model, autocompleteRepository, onReorderSeries) { association = null }
         return
     }
     if (viewingChapters && form?.isPosted == true && form.workID != null) {
