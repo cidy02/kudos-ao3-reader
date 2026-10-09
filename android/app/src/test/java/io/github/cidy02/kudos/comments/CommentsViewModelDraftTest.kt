@@ -240,43 +240,113 @@ class CommentsViewModelDraftTest {
         assertEquals(null, draftStore.getDraft(workId, parentId = null, username = "bob"))
     }
 
+    private val inboxComment = 1252794206L
+    /** A comment's own page as AO3 serves it for a chapter comment: the byline names the chapter. */
+    private fun threadPage() = writeResource("ao3/comments/comment_thread_reply_form.html").replace(
+        "AO3_Reader</a></h4>",
+        "AO3_Reader</a> <span class=\"parent\">on <a href=\"/works/123/chapters/77\">Chapter 3</a></span></h4>")
+    private fun settle(viewModel: CommentsViewModel, urls: List<String>, reads: Int) {
+        // The pages are parsed off the test's clock, so this waits in real time.
+        for (attempt in 1..500) {
+            testDispatcher.scheduler.advanceUntilIdle()
+            if (urls.size >= reads && viewModel.state.value !is CommentsUiState.Loading) break
+            Thread.sleep(10)
+        }
+        testDispatcher.scheduler.advanceUntilIdle()
+    }
+
     /**
-     * Audit A26-4. The Inbox's "Chapter Comments" opened the chapter's first page alone: an inbox comment
-     * AO3 has on a later page was not there. Now its thread, read once when the screen opens, is the page's
-     * first row, as on iOS; and one already on the page is not shown twice.
+     * Audits A26-4 and A28. The Inbox's "Chapter Comments" is the comment's thread, then its chapter's first
+     * page with that thread first when AO3 has it on a later page (iOS); one already on the page is not
+     * shown twice; the chapter is the one the thread's page names, so no index is read.
      */
     @Test
     fun chapterCommentsFromTheInboxPutTheInboxThreadFirstAndReadItOnce() = runTest(testDispatcher) {
         for (alreadyOnThePage in listOf(false, true)) {
             val urls = mutableListOf<String>()
-            val threadPage = success(writeResource("ao3/comments/comment_thread_reply_form.html"))
-            val chapterPage = success(writeResource(
-                if (alreadyOnThePage) "ao3/comments/comment_thread_reply_form.html" else "ao3/comments/comments_basic.html"))
+            val chapterPage = success(if (alreadyOnThePage) threadPage() else writeResource("ao3/comments/comments_basic.html"))
             val repo = AO3CommentRepository(
                 publicClient = FakePublicClient(chapterPage),
-                authenticatedClient = FakeAuthenticatedClient(listOf(threadPage, chapterPage), emptyList(), "alice", urls)
+                authenticatedClient = FakeAuthenticatedClient(listOf(success(threadPage()), chapterPage), emptyList(), "alice", urls)
             )
-            val viewModel = CommentsViewModel(repo, target, draftStore, 1252794206L) { "alice" }
-            viewModel.showChapterIncluding(AO3CommentTarget.Chapter(workId, 77L), 1252794206L)
-            // The pages are parsed off the test's clock, so this waits in real time for both reads.
-            for (attempt in 1..500) {
-                testDispatcher.scheduler.advanceUntilIdle()
-                if (urls.size == 2 && viewModel.state.value !is CommentsUiState.Loading) break
-                Thread.sleep(10)
-            }
+            val viewModel = CommentsViewModel(repo, target, draftStore, inboxComment, 3) { "alice" }
+            settle(viewModel, urls, 2)
 
             val shown = (viewModel.state.value as CommentsUiState.Loaded).thread.comments.map { it.numericId }
-            assertEquals(1252794206L, shown.first())
-            assertEquals(1, shown.count { it == 1252794206L })
+            assertEquals(inboxComment, shown.first())
+            assertEquals(1, shown.count { it == inboxComment })
             assertEquals(!alreadyOnThePage, shown.size > 1)
             assertEquals(2, urls.size)
-            assertEquals(true, urls[0].endsWith("/comments/1252794206")); assertEquals(true, "/chapters/77" in urls[1])
+            assertEquals(true, urls[0].endsWith("/comments/$inboxComment")); assertEquals(true, "/chapters/77" in urls[1])
             assertEquals(null, viewModel.focusedCommentId.value)
-            // Asked again (the screen coming back into view) it reads nothing more.
-            viewModel.showChapterIncluding(AO3CommentTarget.Chapter(workId, 77L), 1252794206L)
-            testDispatcher.scheduler.advanceUntilIdle()
-            assertEquals(2, urls.size)
+            assertEquals(CommentScope.ByChapter, viewModel.scope.value)
+            assertEquals("Chapter 3", viewModel.selectedChapter.value?.displayName)
         }
+    }
+
+    /** A28-3: a thread that cannot be read is a failure, not "nothing to add"; Try Again asks for it again. */
+    @Test
+    fun chapterCommentsWhoseThreadFailsSayItFailedAndTryAgainRepeatsTheWholeRequest() = runTest(testDispatcher) {
+        val urls = mutableListOf<String>()
+        val refused = AO3Result.Failure(io.github.cidy02.kudos.network.ao3.AO3Error.Forbidden)
+        val repo = AO3CommentRepository(
+            publicClient = FakePublicClient(refused),
+            authenticatedClient = FakeAuthenticatedClient(
+                listOf(refused, success(threadPage()), success(writeResource("ao3/comments/comments_basic.html"))),
+                emptyList(), "alice", urls)
+        )
+        val viewModel = CommentsViewModel(repo, target, draftStore, inboxComment, 3) { "alice" }
+        settle(viewModel, urls, 1)
+        assertEquals(true, viewModel.state.value is CommentsUiState.Error)
+        assertEquals(1, urls.size) // the chapter's page is not read for a thread that was refused
+
+        viewModel.retry()
+        settle(viewModel, urls, 3)
+        val shown = (viewModel.state.value as CommentsUiState.Loaded).thread.comments.map { it.numericId }
+        assertEquals(inboxComment, shown.first())
+        assertEquals(true, urls[1].endsWith("/comments/$inboxComment")); assertEquals(true, "/chapters/77" in urls[2])
+    }
+
+    /** A28-2: a page the reader chooses while Chapter Comments is still loading is not overwritten by it. */
+    @Test
+    fun aPageChosenWhileChapterCommentsLoadIsNotOverwrittenByThem() = runTest(testDispatcher) {
+        val urls = mutableListOf<String>()
+        val basic = success(writeResource("ao3/comments/comments_basic.html"))
+        val repo = AO3CommentRepository(
+            publicClient = FakePublicClient(basic),
+            authenticatedClient = FakeAuthenticatedClient(listOf(success(threadPage()), basic, basic), emptyList(), "alice", urls)
+        )
+        val viewModel = CommentsViewModel(repo, target, draftStore, inboxComment, 3) { "alice" }
+        testDispatcher.scheduler.runCurrent() // the thread has been asked for and is being read
+        assertEquals(1, urls.size)
+        viewModel.load(1) // what a page tap or a pull to refresh does
+        settle(viewModel, urls, 2)
+        Thread.sleep(150); testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(2, urls.size)
+
+        val shown = (viewModel.state.value as CommentsUiState.Loaded).thread.comments.map { it.numericId }
+        assertEquals(false, inboxComment in shown)
+        assertEquals(null, viewModel.focusedCommentId.value)
+        assertEquals(true, urls.none { "/chapters/" in it })
+    }
+
+    /**
+     * A28-1: reading the draft store suspends, and a page load that finished just after Reply was tapped
+     * put the work's own draft into the reply, where it was saved and sent as that reply.
+     */
+    @Test
+    fun aPageLoadNeverPutsTheWorksDraftIntoAnOpenReply() = runTest(testDispatcher) {
+        draftStore.saveDraft("for the work, not for a reply", workId, parentId = null)
+        testDispatcher.scheduler.advanceUntilIdle()
+        val viewModel = createViewModel(target)
+        viewModel.startReply(commentStub(101L, "Author A")) // before the page's draft lookup has answered
+        while (!viewModel.isDraftRestored.value) {
+            testDispatcher.scheduler.advanceTimeBy(100)
+            testDispatcher.scheduler.runCurrent()
+        }
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals("", viewModel.draft.value)
+        assertEquals("for the work, not for a reply", draftStore.getDraft(workId, parentId = null, username = null))
     }
 
     private fun createViewModel(
