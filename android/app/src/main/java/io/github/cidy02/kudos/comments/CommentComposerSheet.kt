@@ -37,6 +37,8 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
@@ -121,15 +123,23 @@ fun CommentComposerSheet(
                     Text(
                         text = "Cancel",
                         fontSize = 16.sp,
+                        maxLines = 1,
+                        softWrap = false,
                         color = if (submitting) tokens.secondaryInk else palette.accent
                     )
                 }
 
+                // The title is what gives way. Unweighted, it kept its full width at large text and
+                // the action beside it was broken across two lines ("Pos" / "t").
                 Text(
                     text = title,
                     fontSize = 16.sp,
                     fontWeight = FontWeight.SemiBold,
-                    color = tokens.primaryInk
+                    color = tokens.primaryInk,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.weight(1f)
                 )
 
                 TextButton(
@@ -147,6 +157,8 @@ fun CommentComposerSheet(
                             text = confirmationAction,
                             fontSize = 16.sp,
                             fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            softWrap = false,
                             color = if (canPost) palette.accent else tokens.secondaryInk
                         )
                     }
