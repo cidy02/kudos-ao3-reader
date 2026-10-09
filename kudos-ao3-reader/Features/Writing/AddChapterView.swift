@@ -451,6 +451,10 @@ extension AddChapterView {
             } catch is CancellationError {
                 errorMessage = "Your AO3 session changed, so nothing was deleted."
                 isSaving = false
+            } catch AO3WorkWriteError.unconfirmed {
+                // "Was not deleted" is untrue of a delete AO3 may have carried out.
+                errorMessage = UserFacingError.message(for: AO3WorkWriteError.unconfirmed)
+                isSaving = false
             } catch {
                 errorMessage = "The chapter was not deleted. " + UserFacingError.message(for: error)
                 isSaving = false

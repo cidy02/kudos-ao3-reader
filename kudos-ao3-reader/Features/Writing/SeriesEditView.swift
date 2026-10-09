@@ -61,71 +61,83 @@ struct SeriesEditView: View {
         return parts.joined(separator: " · ")
     }
 
+    private static let verdictID = "verdict"
+
     var body: some View {
-        List {
-            Section {
-                SubjectHeaderBlock(
-                    kicker: "AO3 Account",
-                    title: "Edit series",
-                    subtitle: subtitle,
-                    palette: accountPalette,
-                    gutter: gutter
-                )
-                .pageBodyRow(top: 20, gutter: selfGuttered)
-            }
-
-            // One `List` row per field, as AddChapterView does: summary and
-            // notes each push an editor, and a `List` row fires every
-            // `NavigationLink` inside it.
-            Section {
-                SectionRuleHeader(title: "Series")
-                    .padding(.bottom, 8)
-                    .pageBodyRow(top: 18, gutter: selfGuttered)
-            }
-            Section {
-                Group { seriesRows }.disabled(isSaving)
-            }
-
-            Section {
-                SectionRuleHeader(title: "State")
-                    .pageBodyRow(top: 18, gutter: selfGuttered)
-                statePanel.disabled(isSaving).pageBodyRow(top: 8, gutter: gutter)
-                footnote("Complete appears on the AO3 series page and its description. "
-                    + "You can still add works to a complete series.")
-            }
-
-            Section {
-                SectionRuleHeader(title: "Works")
-                    .pageBodyRow(top: 18, gutter: selfGuttered)
-                worksPanel.pageBodyRow(top: 8, gutter: gutter)
-                footnote(reorderFootnote)
-            }
-
-            Section {
-                SectionRuleHeader(title: "Delete")
-                    .pageBodyRow(top: 18, gutter: selfGuttered)
-                deletePanel.pageBodyRow(top: 8, gutter: gutter)
-                footnote("Deleting the series leaves \(worksPhrase) posted and unlinks them.")
-            }
-
-            if let errorMessage {
+        ScrollViewReader { proxy in
+            List {
                 Section {
-                    Text(errorMessage)
-                        .font(.footnote)
-                        .foregroundStyle(theme.appTheme.errorColor)
-                        .pageBodyRow(top: 12, gutter: gutter)
+                    SubjectHeaderBlock(
+                        kicker: "AO3 Account",
+                        title: "Edit series",
+                        subtitle: subtitle,
+                        palette: accountPalette,
+                        gutter: gutter
+                    )
+                    .pageBodyRow(top: 20, gutter: selfGuttered)
+                }
+
+                // One `List` row per field, as AddChapterView does: summary and
+                // notes each push an editor, and a `List` row fires every
+                // `NavigationLink` inside it.
+                Section {
+                    SectionRuleHeader(title: "Series")
+                        .padding(.bottom, 8)
+                        .pageBodyRow(top: 18, gutter: selfGuttered)
+                }
+                Section {
+                    Group { seriesRows }.disabled(isSaving)
+                }
+
+                Section {
+                    SectionRuleHeader(title: "State")
+                        .pageBodyRow(top: 18, gutter: selfGuttered)
+                    statePanel.disabled(isSaving).pageBodyRow(top: 8, gutter: gutter)
+                    footnote("Complete appears on the AO3 series page and its description. "
+                        + "You can still add works to a complete series.")
+                }
+
+                Section {
+                    SectionRuleHeader(title: "Works")
+                        .pageBodyRow(top: 18, gutter: selfGuttered)
+                    worksPanel.pageBodyRow(top: 8, gutter: gutter)
+                    footnote(reorderFootnote)
+                }
+
+                Section {
+                    SectionRuleHeader(title: "Delete")
+                        .pageBodyRow(top: 18, gutter: selfGuttered)
+                    deletePanel.pageBodyRow(top: 8, gutter: gutter)
+                    footnote("Deleting the series leaves \(worksPhrase) posted and unlinks them.")
+                }
+
+                if let errorMessage {
+                    Section {
+                        Text(errorMessage)
+                            .font(.footnote)
+                            .foregroundStyle(theme.appTheme.errorColor)
+                            .pageBodyRow(top: 12, gutter: gutter)
+                            .id(Self.verdictID)
+                    }
+                }
+                if let savedMessage {
+                    Section {
+                        Text(savedMessage)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .pageBodyRow(top: 12, gutter: gutter)
+                            .id(Self.verdictID)
+                    }
                 }
             }
-            if let savedMessage {
-                Section {
-                    Text(savedMessage)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                        .pageBodyRow(top: 12, gutter: gutter)
-                }
+            .cardList()
+            // AO3's answer is the list's last row, below the fold on a phone: a Save that
+            // seemed to do nothing (seen on Android's copy of this screen, 2026-10-09).
+            .onChange(of: errorMessage ?? savedMessage) { _, message in
+                guard message != nil else { return }
+                withAnimation { proxy.scrollTo(Self.verdictID, anchor: .bottom) }
             }
         }
-        .cardList()
         // Rows at their own padding, not the List minimum (L3-FORM-1).
         .environment(\.defaultMinListRowHeight, 0)
         .subjectScreenWash(palette: accountPalette)
@@ -556,6 +568,9 @@ struct SeriesRemoveWorksView: View {
                 onChanged(rows)
             } catch is CancellationError {
                 errorMessage = "Your AO3 session changed, so nothing was removed."
+            } catch AO3WorkWriteError.unconfirmed {
+                // "Was not removed" is untrue of a removal AO3 may have carried out.
+                errorMessage = UserFacingError.message(for: AO3WorkWriteError.unconfirmed)
             } catch {
                 errorMessage = "\(Self.title(row)) was not removed. " + UserFacingError.message(for: error)
             }

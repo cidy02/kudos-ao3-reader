@@ -255,6 +255,61 @@ struct TombstoneSweepsExistingRecordsTests {
         #expect(left.compactMap { $0.work?.title } == ["Moved here since"])
     }
 
+    /// Audit A27-3. The copy here was deleted on the other device, which has since made
+    /// its own mark on the same passage. Swept after the dedupe, the copy here first won
+    /// the passage (the other device's mark was deleted and tombstoned as a duplicate)
+    /// and was then removed itself: both marks gone, on both devices.
+    @Test func aDeletedCopyDoesNotTakeTheOtherDevicesMarkOnTheSamePassageWithIt() throws {
+        let defaults = try testDefaults()
+        let peer = try trustedPeer(defaults)
+        let context = try context()
+        let workID = UUID()
+        let work = SavedWork(id: workID, title: "A work", author: "Someone")
+        work.isSaved = true
+        context.insert(work)
+        let local = ReadingAnnotation(
+            work: work, kind: .highlight, locatorString: "passage", note: "deleted elsewhere",
+            createdAt: Date(timeIntervalSince1970: 100)
+        )
+        local.lastModifiedAt = Date(timeIntervalSince1970: 300)
+        context.insert(local)
+        try context.save()
+
+        let donor = try self.context()
+        let donorWork = SavedWork(id: workID, title: "A work", author: "Someone")
+        donorWork.isSaved = true
+        donorWork.hasEPUB = false
+        donor.insert(donorWork)
+        let remote = ReadingAnnotation(
+            work: donorWork, kind: .highlight, locatorString: "passage", note: "made since",
+            createdAt: Date(timeIntervalSince1970: 100)
+        )
+        remote.lastModifiedAt = Date(timeIntervalSince1970: 100)
+        donor.insert(remote)
+        try donor.save()
+
+        let snapshot = try KudosBackupService.makeContents(
+            works: [donorWork], bookmarks: [], fonts: [], readingQueues: [],
+            annotations: [remote],
+            tombstones: [signedTombstone(.readingAnnotation, id: local.id, at: 400, key: peer)],
+            defaults: defaults
+        )
+        _ = try KudosBackupService.restore(snapshot, into: context, defaults: defaults, mode: .merge)
+
+        let live = try context.fetch(FetchDescriptor<ReadingAnnotation>())
+            .filter { !$0.isPendingDeletion && $0.deletedAt == nil }
+        #expect(live.map(\.note) == ["made since"])
+    }
+
+    /// Audit A27-11. Removing every Account shortcut is a choice and stays one; only a
+    /// value never written means the defaults. (Here because it needs no file of its own.)
+    @Test func choosingNoAccountShortcutsStaysEmpty() {
+        #expect(AccountShortcutStore.decode(AccountShortcutStore.encode([])).isEmpty)
+        #expect(AccountShortcutStore.decode("") == AccountShortcut.defaults)
+        #expect(AccountShortcutStore.decode("nothing-known") == AccountShortcut.defaults)
+        #expect(AccountShortcutStore.decode(AccountShortcutStore.encode([.inbox, .works])) == [.inbox, .works])
+    }
+
     /// The lesson in `applyTombstonesToExisting` holds for the new passes too:
     /// Replace does not sweep.
     @Test func replaceLibraryDoesNotSweepExistingSavedLinks() throws {
