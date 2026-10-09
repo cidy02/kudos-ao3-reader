@@ -18,8 +18,6 @@ import io.github.cidy02.kudos.network.ao3.writing.*
 import io.github.cidy02.kudos.settings.SubjectTextFieldRow
 import io.github.cidy02.kudos.ui.subject.*
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import kotlinx.coroutines.launch
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
@@ -50,8 +48,8 @@ internal fun WritingChapterFormScreen(model: WritingChapterFormState, workTitle:
     }
     val preview = state.preview
     if (preview != null) {
-        WritingChapterPreviewScreen(preview, form?.let { chapterSubtitle(workTitle, it) }.orEmpty(),
-            posts = form?.posts == true, busy = state.busy, error = state.saveError,
+        WritingAO3PreviewScreen(preview, form?.let { chapterSubtitle(workTitle, it) }.orEmpty(),
+            postTitle = if (form?.posts == true) "Post chapter" else "Update", busy = state.busy, error = state.saveError,
             dismissError = model::dismissError, onBack = model::closePreview,
             onPost = { run { model.save(if (form?.posts == true) AO3WorkSubmitAction.Post else AO3WorkSubmitAction.Update) } })
         return
@@ -72,7 +70,7 @@ internal fun WritingChapterFormScreen(model: WritingChapterFormState, workTitle:
     }
     BackHandler(onBack = onBack)
     ProvidePushedShellChrome(hasSubjectHeader = true, hideTabBar = true, onBack = onBack)
-    state.saveError?.let { ChapterErrorAlert("AO3 could not save the chapter", it, model::dismissError) }
+    state.saveError?.let { WritingErrorAlert("AO3 could not save the chapter", it, model::dismissError) }
     LazyColumn(Modifier.fillMaxSize().subjectScreenWash(palette).testTag("Writing chapter form"),
         contentPadding = PaddingValues(bottom = 24.dp)) {
         item {
@@ -97,10 +95,10 @@ internal fun WritingChapterFormScreen(model: WritingChapterFormState, workTitle:
         } else {
             val enabled = !state.busy && !state.chapterSaved && !state.finished
             item { WorkFormSection("Chapter") }
-            item { ChapterPanelRow(first = true, last = false) {
+            item { WritingPanelRow(first = true, last = false) {
                 SubjectTextFieldRow("Title", form.title, "Title", model::title, enabled = enabled)
             } }
-            item { ChapterPanelRow(first = false, last = !form.includePosition) {
+            item { WritingPanelRow(first = false, last = !form.includePosition) {
                 WorkFormControlRow(if (form.includePosition && chapterNumber(form.position) != null) "Chapter number" else "Expected chapter total") {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         if (form.includePosition) chapterNumber(form.position)?.let {
@@ -110,7 +108,7 @@ internal fun WritingChapterFormScreen(model: WritingChapterFormState, workTitle:
                     }
                 }
             } }
-            if (form.includePosition) item { ChapterPanelRow(first = false, last = true) {
+            if (form.includePosition) item { WritingPanelRow(first = false, last = true) {
                 WorkFormControlRow("Position") {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text("After chapter", color = tokens.secondaryInk, fontSize = 14.5.sp, lineHeight = 20.sp)
@@ -120,7 +118,7 @@ internal fun WritingChapterFormScreen(model: WritingChapterFormState, workTitle:
             } }
             item { WorkFormSection("Text") }
             itemsIndexed(ChapterFormText.entries) { index, text ->
-                ChapterPanelRow(first = index == 0, last = index == ChapterFormText.entries.lastIndex) {
+                WritingPanelRow(first = index == 0, last = index == ChapterFormText.entries.lastIndex) {
                     val emptyContent = text == ChapterFormText.Content && form.content.isEmpty()
                     SubjectFormRow(text.title, showsDisclosure = true, onClick = if (enabled) ({ editing = text }) else null,
                         trailing = if (emptyContent) null else ({
@@ -133,30 +131,30 @@ internal fun WritingChapterFormScreen(model: WritingChapterFormState, workTitle:
                 }
             }
             item { WorkFormSection("Publication") }
-            item { ChapterPanelRow(first = true, last = false) {
+            item { WritingPanelRow(first = true, last = false) {
                 WorkFormToggle("Set a different publication date", form.publishedYear.isNotEmpty(), enabled, model::dateEnabled)
             } }
-            if (form.publishedYear.isNotEmpty()) item { ChapterPanelRow(first = false, last = false) {
+            if (form.publishedYear.isNotEmpty()) item { WritingPanelRow(first = false, last = false) {
                 SubjectFormRow("Publication date", onClick = if (enabled) ({ dating = true }) else null, trailing = {
                     Text(form.publicationDate().format(DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM)),
                         color = tokens.secondaryInk, fontSize = 14.5.sp, lineHeight = 20.sp)
                 })
             } }
-            if (form.posts) item { ChapterPanelRow(first = false, last = false) {
+            if (form.posts) item { WritingPanelRow(first = false, last = false) {
                 WorkFormToggle("Post without preview", state.postWithoutPreview, enabled, model::withoutPreview)
             } }
-            item { ChapterPanelRow(first = false, last = true) {
+            item { WritingPanelRow(first = false, last = true) {
                 WorkFormToggle("This is the last chapter", state.isLastChapter, enabled, model::lastChapter)
             } }
             item { WorkFormFootnote(CHAPTER_LAST_NOTE) }
             item { WorkFormSection("Post") }
             if (state.chapterSaved) {
-                item { ChapterPanelRow(first = true, last = true) {
+                item { WritingPanelRow(first = true, last = true) {
                     SubjectFormRow("Retry updating the work total", onClick = if (state.busy) null else ({ run { model.save(AO3WorkSubmitAction.Update) } }))
                 } }
                 item { WorkFormFootnote("The chapter was saved. Only the work total will be retried.") }
             } else {
-                item { ChapterPanelRow(first = true, last = !form.posts) {
+                item { WritingPanelRow(first = true, last = !form.posts) {
                     SubjectFormRow(if (form.posts) "Post chapter now" else "Save chapter changes",
                         onClick = if (state.busy) null else ({ run {
                             if (form.posts && !state.postWithoutPreview) model.openPreview()
@@ -164,7 +162,7 @@ internal fun WritingChapterFormScreen(model: WritingChapterFormState, workTitle:
                         } }), trailing = { if (state.busy) CircularProgressIndicator(color = palette.accent,
                             trackColor = tokens.separator, modifier = Modifier.size(20.dp), strokeWidth = 2.dp) })
                 } }
-                if (form.posts) item { ChapterPanelRow(first = false, last = true) {
+                if (form.posts) item { WritingPanelRow(first = false, last = true) {
                     SubjectFormRow("Save as draft", onClick = if (state.busy) null else ({ run { model.save(AO3WorkSubmitAction.SaveDraft) } }))
                 } }
             }
@@ -175,7 +173,7 @@ internal fun WritingChapterFormScreen(model: WritingChapterFormState, workTitle:
 }
 
 @Composable
-internal fun ChapterPanelRow(first: Boolean, last: Boolean, content: @Composable () -> Unit) {
+internal fun WritingPanelRow(first: Boolean, last: Boolean, content: @Composable () -> Unit) {
     Column(Modifier.padding(horizontal = SubjectMetrics.accountGutter).padding(top = if (first) 8.dp else 0.dp)
         .writingSuggestionPanel(first, last)) {
         content()
@@ -202,58 +200,12 @@ internal const val CHAPTER_LAST_NOTE = "When you turn on Last chapter, Kudos set
 internal const val CHAPTER_POST_NOTE = "Posting a chapter notifies your subscribers. Save it as a draft if you want to work on it over several sittings without sending a notification."
 
 @Composable
-private fun ChapterErrorAlert(title: String, message: String, dismiss: () -> Unit) {
+internal fun WritingErrorAlert(title: String, message: String, dismiss: () -> Unit) {
     val tokens = LocalKudosTokens.current
     AlertDialog(onDismissRequest = dismiss, containerColor = tokens.cardFill,
         titleContentColor = tokens.primaryInk, textContentColor = tokens.secondaryInk,
         title = { Text(title, lineHeight = 28.sp) }, text = { Text(message, lineHeight = 22.sp) },
         confirmButton = { TextButton(onClick = dismiss) { Text("OK", color = tokens.scopePalette.accent, lineHeight = 20.sp) } })
-}
-
-private data class ChapterPreviewRow(val kind: AO3ChapterPreview.Kind, val text: String = "", val paragraph: WritingBufferPreview.Block? = null)
-
-@Composable
-private fun WritingChapterPreviewScreen(preview: AO3ChapterPreview, subtitle: String, posts: Boolean, busy: Boolean,
-    error: String?, dismissError: () -> Unit, onBack: () -> Unit, onPost: () -> Unit) {
-    val tokens = LocalKudosTokens.current
-    val palette = tokens.scopePalette
-    var rows by remember(preview) { mutableStateOf<List<ChapterPreviewRow>?>(null) }
-    LaunchedEffect(preview) {
-        rows = withContext(Dispatchers.Default) { preview.blocks.flatMap { block ->
-            if (block.kind != AO3ChapterPreview.Kind.Html) listOf(ChapterPreviewRow(block.kind, block.text))
-            else (WritingBufferPreview.state(block.text) as? WritingBufferPreview.State.Rendered)?.blocks.orEmpty()
-                .map { ChapterPreviewRow(block.kind, paragraph = it) }
-        } }
-    }
-    val back = { if (!busy) onBack() }
-    BackHandler(onBack = back)
-    ProvidePushedShellChrome(hasSubjectHeader = true, hideTabBar = true, onBack = back)
-    error?.let { ChapterErrorAlert("AO3 could not post this", it, dismissError) }
-    LazyColumn(Modifier.fillMaxSize().subjectScreenWash(palette).testTag("Writing chapter preview"),
-        contentPadding = PaddingValues(bottom = 24.dp)) {
-        item {
-            Spacer(Modifier.windowInsetsTopHeight(WindowInsets.statusBars))
-            Spacer(Modifier.height(76.dp))
-            SubjectHeaderBlock(kicker = "AO3 Account", title = "Preview", subtitle = subtitle, palette = palette, gutter = SubjectMetrics.accountGutter)
-            preview.notice?.let { WorkFormFootnote(it) }
-        }
-        val paragraphs = rows
-        if (paragraphs == null) item { Box(Modifier.fillMaxWidth().padding(18.dp), contentAlignment = Alignment.Center) {
-            CircularProgressIndicator(color = palette.accent, trackColor = tokens.separator)
-        } } else itemsIndexed(paragraphs) { _, row ->
-            Column(Modifier.padding(horizontal = SubjectMetrics.accountGutter).padding(top = 10.dp)) {
-                val paragraph = row.paragraph
-                if (paragraph != null) WritingPreviewParagraph(paragraph)
-                else Text(row.text, color = if (row.kind == AO3ChapterPreview.Kind.Heading) tokens.primaryInk else tokens.secondaryInk,
-                    fontSize = if (row.kind == AO3ChapterPreview.Kind.Heading) 18.sp else 12.sp, lineHeight = if (row.kind == AO3ChapterPreview.Kind.Heading) 25.sp else 18.sp)
-            }
-        }
-        item { WorkFormSection("Post") }
-        item { ChapterPanelRow(first = true, last = false) {
-            SubjectFormRow(if (posts) "Post chapter" else "Update", onClick = if (busy || rows == null) null else onPost)
-        } }
-        item { ChapterPanelRow(first = false, last = true) { SubjectFormRow("Edit", onClick = if (busy) null else onBack) } }
-    }
 }
 
 /** Draft work chapter entrances are debug-only: iOS's production work form exposes only posted chapters. */

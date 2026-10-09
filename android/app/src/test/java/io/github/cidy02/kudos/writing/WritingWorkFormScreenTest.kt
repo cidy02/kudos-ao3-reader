@@ -121,8 +121,17 @@ class WritingWorkFormScreenTest {
         row("Who can comment", if (posted) "Only registered users" else "Registered users and guests")
         // Posted fixture is metadata-only, despite served backdate inputs.
         compose.onNodeWithText("Publication date").assertDoesNotExist()
-        for (omitted in listOf("Post work", "Preview on AO3", "Delete draft", "Delete work on AO3", "Chapter title", "Anonymous", "Collection inbox")) {
+        for (omitted in listOf("Chapter title", "Anonymous", "Collection inbox")) {
             compose.onNodeWithText(omitted).assertDoesNotExist()
+        }
+        if (posted) {
+            reach("Delete work on AO3"); compose.onNodeWithText("Delete work on AO3").assertHasClickAction()
+            compose.onNodeWithText("Post work").assertDoesNotExist()
+        } else {
+            reach("Post work"); compose.onNodeWithText("Post work").assertHasClickAction()
+            compose.onNodeWithText("Preview on AO3").assertHasClickAction()
+            if (id != null) { reach("Delete draft"); compose.onNodeWithText("Delete draft").assertHasClickAction() }
+            else compose.onNodeWithText("Delete draft").assertDoesNotExist()
         }
         noWrites()
     }
@@ -268,7 +277,7 @@ class WritingWorkFormScreenTest {
         compose.onNodeWithContentDescription("Title ∗").performTextReplacement("  Screen title & 星  ")
         val before = model.state.value.form!!
         compose.onNodeWithText("Save").assertIsEnabled().performClick()
-        compose.waitUntil(15_000) { leaves == 1 }
+        compose.waitForIdle(); compose.waitUntil(15_000) { leaves == 1 }
         val submit = if (id == 995006L) AO3WorkSubmitAction.Update else AO3WorkSubmitAction.SaveDraft
         assertEquals(before.parameters(submit), setup.client.recordedPosts.single().fields)
         assertEquals(iosFixtureSaveFields(id, title = "  Screen title & 星  "), setup.client.recordedPosts.single().fields)
@@ -285,11 +294,11 @@ class WritingWorkFormScreenTest {
         val release = CompletableDeferred<Unit>()
         compose.runOnIdle { setup.client.beforePostResponse = { release.await() } }
         compose.onNodeWithText("Save").performClick()
-        compose.waitUntil(15_000) { setup.client.posts == 1 }
+        compose.waitForIdle(); compose.waitUntil(15_000) { setup.client.posts == 1 }
         compose.onNodeWithText("Save").assertIsNotEnabled().performClick()
         compose.runOnIdle { assertEquals(0, leaves); assertEquals(1, setup.client.posts) }
         compose.runOnIdle { release.complete(Unit) }
-        compose.waitUntil(15_000) { leaves == 1 }
+        compose.waitForIdle(); compose.waitUntil(15_000) { leaves == 1 }
         assertEquals(1, setup.client.posts)
     }
 
@@ -335,7 +344,7 @@ class WritingWorkFormScreenTest {
         reach("Work skin")
         compose.onNodeWithText("Work text").assertDoesNotExist()
         compose.onNodeWithText("Save").performClick()
-        compose.waitUntil(15_000) { leaves == 1 }
+        compose.waitForIdle(); compose.waitUntil(15_000) { leaves == 1 }
         assertTrue(setup.client.recordedPosts.single().fields.none { it.first == AO3WorkFormField.chapterContent })
     }
 
@@ -354,7 +363,7 @@ class WritingWorkFormScreenTest {
         awaitText("Lanterns Above the Mill · never posted")
         compose.onNodeWithContentDescription("Title ∗").performTextReplacement("Retained on session failure")
         compose.onNodeWithText("Save").performClick()
-        compose.waitUntil(15_000) { setup.client.posts == 1 }
+        compose.waitForIdle(); compose.waitUntil(15_000) { setup.client.posts == 1 }
         compose.runOnIdle { runBlocking { setup.auth.logout() }; release.complete(Unit) }
         awaitText("AO3 could not save the change")
         compose.onNodeWithText(io.github.cidy02.kudos.network.ao3.account.AO3CollectionFields.UNCONFIRMED).assertExists()

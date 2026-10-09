@@ -24,8 +24,12 @@ internal data class WritingWorkFormUiState(
     val refreshingPublication: Boolean = false,
     val tagsNeedRefresh: Boolean = false,
     val refreshingTags: Boolean = false,
-    val saveError: String? = null
+    val saveError: String? = null,
+    val preview: AO3WorkPreview? = null,
+    val deleteImplications: AO3WorkDeleteImplications? = null
 )
+
+internal enum class WorkFormAction { Save, Post, Preview, CheckDelete, Delete }
 
 internal enum class WorkFormChoice { Rating, Language, Comments, Skin }
 internal enum class WorkFormTags { Warnings, Categories }
@@ -42,7 +46,7 @@ internal enum class WorkFormText(val title: String, val field: String) {
     }
 }
 
-/** Owns one opening, one form read, in-memory edits and a single guarded Save. */
+/** Owns one opening, one form read, in-memory edits and guarded work actions. */
 internal class WritingWorkFormState(
     private val workID: Long?,
     private val repository: AO3WorkFormRepository,
@@ -63,10 +67,41 @@ internal class WritingWorkFormState(
     val state = mutable.asStateFlow()
     private fun ownsSession() = active && generation == auth.generation.value
 
-    suspend fun save() {
+    suspend fun save() = perform(WorkFormAction.Save,
+        request = { form -> if (editTagsOnly) writes.editWorkTags(form, generation) else writes.saveWork(form, generation) },
+        confirmed = { old, _ -> old.copy(saved = true, preview = null) })
+
+    suspend fun post() = perform(WorkFormAction.Post,
+        request = { writes.postWork(it, generation) },
+        confirmed = { old, _ -> old.copy(saved = true, preview = null) })
+
+    suspend fun openPreview() = perform(WorkFormAction.Preview,
+        request = { writes.previewWork(it, generation) },
+        confirmed = { old, preview -> old.copy(form = old.form!!.adopting(preview), preview = preview) })
+
+    suspend fun prepareDelete() {
+        if (state.value.form?.workID == null || state.value.deleteImplications != null) return
+        perform(WorkFormAction.CheckDelete,
+            request = { writes.loadDeleteImplications(it.workID!!, generation) },
+            confirmed = { old, implications -> old.copy(deleteImplications = implications) })
+    }
+
+    suspend fun delete() {
+        if (state.value.deleteImplications == null || state.value.form?.workID == null) return
+        perform(WorkFormAction.Delete,
+            request = { writes.deleteWork(it.workID!!, generation) },
+            confirmed = { old, _ -> old.copy(saved = true, preview = null, deleteImplications = null) })
+    }
+
+    fun closePreview() { if (!state.value.saving) mutable.value = state.value.copy(preview = null) }
+    fun dismissDelete() { if (!state.value.saving) mutable.value = state.value.copy(deleteImplications = null) }
+
+    /** A synchronous busy guard spans preparation, dispatch and verdict for every work action. */
+    private suspend fun <T> perform(action: WorkFormAction, request: suspend (AO3WorkForm) -> AO3Result<T>,
+        confirmed: (WritingWorkFormUiState, T) -> WritingWorkFormUiState) {
         val old = state.value
         val form = old.form ?: return
-        // EditTagsView keeps fields editable during Save; a refusal keeps even edits made in flight.
+        // EditTagsView permits in-flight edits. Other work actions freeze their exact snapshot.
         fun retained() = if (editTagsOnly) old.copy(form = state.value.form) else old
         if (!active || old.saving || old.saved || old.tagsNeedRefresh || old.publicationNeedRefresh) return
         if (generation != auth.generation.value) {
@@ -75,27 +110,30 @@ internal class WritingWorkFormState(
         }
         mutable.value = retained().copy(saving = true, saveError = null)
         try {
-            val result = if (editTagsOnly) writes.editWorkTags(form, generation) else writes.saveWork(form, generation)
-            currentCoroutineContext().ensureActive()
+            val result = request(form)
             if (!active) return
-            // The repository's verdict as it is: for a session that moved on after the POST it is already
-            // "didn't confirm", which the session sentence used to replace (audit A26-1).
-            mutable.value = when (result) {
-                is AO3Result.Success -> retained().copy(saved = true, saveError = null)
-                is AO3Result.Failure -> retained().copy(saveError = workFormFailure(result.error))
+            mutable.value = when {
+                result is AO3Result.Success -> confirmed(retained(), result.value).copy(saving = false, saveError = null)
+                result is AO3Result.Failure -> retained().copy(saveError = workFormFailure(result.error),
+                    deleteImplications = if (action == WorkFormAction.Delete) null else old.deleteImplications)
+                else -> retained()
             }
         } catch (cancelled: CancellationException) {
             if (active && generation != auth.generation.value) {
-                mutable.value = retained().copy(saveError = WORK_FORM_SESSION_CHANGED)
+                mutable.value = retained().copy(saveError = WORK_FORM_SESSION_CHANGED, deleteImplications = null)
             } else {
                 if (active) mutable.value = retained()
                 throw cancelled
             }
         } catch (error: Exception) {
-            val failure = if (error is java.io.IOException) AO3Error.networkFromTransport(error)
+            val failure = if (error is IllegalArgumentException && error.message ==
+                io.github.cidy02.kudos.network.ao3.account.AO3CollectionFields.UNCONFIRMED)
+                AO3Error.Validation(error.message.orEmpty())
+                else if (error is java.io.IOException) AO3Error.networkFromTransport(error)
                 else AO3Error.Network(error.message.orEmpty(), error)
-            if (active) mutable.value = retained().copy(saveError = if (generation != auth.generation.value)
-                WORK_FORM_SESSION_CHANGED else workFormFailure(failure))
+            if (active) mutable.value = retained().copy(saveError = workFormFailure(failure), deleteImplications = null)
+        } finally {
+            if (active) mutable.value = state.value.copy(saving = false)
         }
     }
 
@@ -431,4 +469,17 @@ internal fun workFormFailure(error: AO3Error): String = when (error) {
     is AO3Error.Http -> "AO3 returned an unexpected response (HTTP ${error.statusCode})."
     is AO3Error.Validation -> error.message
     AO3Error.BadRequest -> "AO3 returned an unexpected response (HTTP 400)."
+}
+
+/** WorkEditView.postConfirmationMessage, with the locale's list joining for its six phrases. */
+internal fun workPostConfirmation(missing: List<String>): String {
+    val consequence = "notifies your subscribers and can't be undone. You can edit a posted work, but you can't return it to a draft."
+    if (missing.isEmpty()) return "Posting $consequence"
+    val phrases = mapOf("Title" to "a title", "Rating" to "a rating", "Archive Warning" to "an archive warning",
+        "Fandoms" to "a fandom", "Language" to "a language", "Work Text" to "the work text")
+    val things = missing.map { phrases[it] ?: it.lowercase() }
+    val list = android.icu.text.ListFormatter.getInstance().format(things)
+    val lead = when (missing.size) { 1 -> "One thing is missing"; 2 -> "Two things are missing"; else -> "${missing.size} things are missing" }
+    val requires = when (missing.size) { 1 -> "it"; 2 -> "both"; else -> "all of them" }
+    return "$lead. Add $list. AO3 requires $requires. Posting also $consequence"
 }

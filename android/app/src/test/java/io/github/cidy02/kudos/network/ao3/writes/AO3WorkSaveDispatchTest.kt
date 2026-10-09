@@ -45,6 +45,74 @@ class AO3WorkSaveDispatchTest {
         }
     }
 
+    @Test fun postPreviewAndDeleteUseRealClientHeadersAndAreSingleShotOn429And503() = runTest {
+        for (action in listOf("post", "preview", "delete")) for (code in listOf(200, 429, 503)) {
+            val requests = CopyOnWriteArrayList<Request>()
+            val bodies = CopyOnWriteArrayList<String>()
+            val form = AO3WorkFormParser().parse(workFixture("ao3_demo_work_draft_edit"))
+            val http = OkHttpClient.Builder().addInterceptor { chain ->
+                val request = chain.request(); requests += request
+                if (request.method == "POST") {
+                    val buffer = okio.Buffer(); request.body!!.writeTo(buffer); bodies += buffer.readUtf8()
+                }
+                val html = if (request.method == "GET") "<main id=main><p class=caution>Delete draft?</p><form class=destroy method=post action='/works/995001'><input name=authenticity_token value=delete-token><input name=_method value=delete></form></main>"
+                    else if (action == "preview") "<main id=main><div id=previewpane><h2 class=title>Preview</h2></div></main>"
+                    else "<main id=main><div class='flash notice'>Confirmed.</div></main>"
+                Response.Builder().request(request).protocol(Protocol.HTTP_1_1).code(if (request.method == "GET") 200 else code)
+                    .message("Terminal local answer").body(html.toResponseBody()).build()
+            }.addInterceptor { error("No work action may reach a socket in this test") }.build()
+            val auth = AO3AuthRepository(MemorySessionStore(testSession()), MemoryCookieStore()).also { it.restoreSession() }
+            val client = OkHttpAO3Client(http, AO3NetworkConfig(minDelayBetweenRequestsMillis = 0))
+            val writes = AO3WriteRepository(DefaultAO3AuthenticatedClient(client, client, auth))
+            val result = when (action) {
+                "post" -> writes.postWork(form, auth.generation.value)
+                "preview" -> writes.previewWork(form, auth.generation.value)
+                else -> writes.deleteWork(995001, auth.generation.value)
+            }
+            assertEquals(code == 200, result is AO3Result.Success)
+            val post = requests.single { it.method == "POST" }
+            val token = if (action == "delete") "delete-token" else form.csrfToken
+            assertEquals(AO3UserAgent.VALUE, post.header("User-Agent")); assertTrue(post.header("Cookie").orEmpty().isNotEmpty())
+            assertEquals(token, post.header("X-CSRF-Token")); assertEquals(form.actionUrl, post.header("Referer"))
+            assertEquals("application/x-www-form-urlencoded; charset=UTF-8", post.body!!.contentType().toString())
+            assertNull(post.header("X-Requested-With")); assertNull(post.header("Accept"))
+            val fields = if (action == "delete") listOf("authenticity_token" to "delete-token", "_method" to "delete")
+                else form.parameters(if (action == "preview") AO3WorkSubmitAction.Preview else AO3WorkSubmitAction.Post)
+            assertEquals(AO3FormEncoding.encode(fields), bodies.single())
+            assertEquals(if (action == "delete") 2 else 1, requests.size)
+        }
+    }
+
+    @Test fun realClientSessionMovingAfterDispatchReturnsUnconfirmedForEveryWorkWrite() = runTest {
+        for (action in listOf("save", "post", "preview", "delete")) for (code in listOf(200, 401)) {
+            val auth = AO3AuthRepository(MemorySessionStore(testSession()), MemoryCookieStore()).also { it.restoreSession() }
+            val requests = CopyOnWriteArrayList<String>()
+            val http = OkHttpClient.Builder().addInterceptor { chain ->
+                val request = chain.request(); requests += request.method
+                val html = if (request.method == "GET") "<main id=main><p class=caution>Delete draft?</p><form class=destroy method=post action='/works/995001'><input name=authenticity_token value=delete-token><input name=_method value=delete></form></main>"
+                    else "<main id=main><div class='flash notice'>Confirmed.</div><div id=previewpane></div></main>"
+                if (request.method == "POST" && code == 200) kotlinx.coroutines.runBlocking<Unit> { auth.logout() }
+                Response.Builder().request(request).protocol(Protocol.HTTP_1_1).code(if (request.method == "GET") 200 else code)
+                    .message("Terminal local answer").body(html.toResponseBody()).build()
+            }.addInterceptor { error("No work write may reach a socket") }.build()
+            val client = OkHttpAO3Client(http, AO3NetworkConfig(minDelayBetweenRequestsMillis = 0))
+            val writes = AO3WriteRepository(DefaultAO3AuthenticatedClient(client, client, auth))
+            val form = AO3WorkFormParser().parse(workFixture("ao3_demo_work_draft_edit"))
+            val generation = auth.generation.value
+            val result = when (action) {
+                "save" -> writes.saveWork(form, generation)
+                "post" -> writes.postWork(form, generation)
+                "preview" -> writes.previewWork(form, generation)
+                else -> writes.deleteWork(995001, generation)
+            }
+            // A 401 is AO3 refusing the cookie, and is itself what ended the session: "session expired, log
+            // in again", not "didn't confirm" (decision of 2026-10-09, audit A26).
+            assertEquals(if (code == 401) AO3Result.Failure(AO3Error.AuthenticationRequired) else AO3Result.Failure(AO3Error.Validation(
+                io.github.cidy02.kudos.network.ao3.account.AO3CollectionFields.UNCONFIRMED)), result)
+            assertEquals(if (action == "delete") listOf("GET", "POST") else listOf("POST"), requests)
+        }
+    }
+
     @Test fun aSessionChangeDuringSharedPacingPreventsWorkPostDispatch() = runTest {
         val auth = AO3AuthRepository(MemorySessionStore(testSession()), MemoryCookieStore()).also { it.restoreSession() }
         val requests = CopyOnWriteArrayList<String>()

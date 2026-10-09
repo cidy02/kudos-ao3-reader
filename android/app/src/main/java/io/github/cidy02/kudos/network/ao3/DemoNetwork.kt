@@ -527,10 +527,14 @@ private class DemoWorkSaves {
     private val values = ConcurrentHashMap<Long, Map<String, List<String>>>()
     private var editedTags: String? = null
     private val chapters = DemoWritingChapters()
+    private val posted = mutableSetOf(995006L)
+    private val deleted = mutableSetOf<Long>()
 
     @Synchronized
     fun answer(request: okhttp3.Request, source: FixtureSource, clock: Clock?): Pair<Int, String>? {
         val path = DemoNetworkRoutes.decodedPath(request.url).trimEnd('/')
+        val ownerID = Regex("^/works/(995001|995006|995007)(?:/.*)?$").matchEntire(path)?.groupValues?.get(1)?.toLong()
+        if (ownerID != null && ownerID in deleted) return 404 to ""
         chapters.answer(request, source)?.let { return it }
         if (path == "/works/995006/edit_tags" && request.method == "GET")
             return editedTags?.let { 200 to it }
@@ -575,8 +579,24 @@ private class DemoWorkSaves {
             edited[995006L] = workDoc.outerHtml()
             return 200 to "<main id='main'><div class='flash notice'>Tags were successfully updated.</div></main>"
         }
-        val id = Regex("^/works/(995001|995006|995007)(?:/edit)?$").matchEntire(path)?.groupValues?.get(1)?.toLong()
+        val id = Regex("^/works/(995001|995006|995007)(?:/edit|/confirm_delete)?$").matchEntire(path)?.groupValues?.get(1)?.toLong()
         if (request.method == "GET") {
+            if (id != null && path.endsWith("/confirm_delete")) {
+                val base = edited[id] ?: source.read(if (id == 995006L) "ao3_demo_work_posted_edit" else "ao3_demo_work_draft_edit")?.decodeToString()
+                    ?: return 404 to ""
+                val title = Jsoup.parse(base).selectFirst("[name='work[title]']")?.attr("value").orEmpty()
+                val draft = id !in posted
+                val page = Jsoup.parse("<main id='main'><h2 class='heading'></h2><p class='caution'></p><form class='destroy' method='post' action='/works/$id'><input name='authenticity_token' value='demo-delete-$id=='><input name='_method' value='delete'></form></main>")
+                page.selectFirst("h2")?.text(if (draft) "Delete Draft" else "Delete Work")
+                page.selectFirst("p.caution")?.text("Are you sure you want to delete ${if (draft) "the draft" else "the work"} \"$title\"? This will delete 7 comments, 23 kudos and 4 bookmarks and cannot be undone.")
+                page.head().appendElement("meta").attr("name", "csrf-token").attr("content", "demo-delete-$id==")
+                return 200 to page.outerHtml()
+            }
+            if (id != null && !path.endsWith("/edit")) {
+                if (id !in posted) return 404 to "" // Never pretend an unposted public work exists.
+                val fixture = DemoNetworkRoutes.fixtureName(request.url) ?: return 404 to ""
+                return source.read(fixture)?.decodeToString()?.let { 200 to it } ?: (404 to "")
+            }
             if (id != null && path.endsWith("/edit")) {
                 val held = edited[id]
                 if (chapters.hasChanges(id)) {
@@ -588,7 +608,7 @@ private class DemoWorkSaves {
                 }
                 held?.let { return 200 to it }
             }
-            if (!DemoNetworkRoutes.isDraftsPath(path) || values.isEmpty()) return null
+            if (!DemoNetworkRoutes.isDraftsPath(path) || (values.isEmpty() && deleted.isEmpty() && posted == setOf(995006L))) return null
             val name = DemoNetworkRoutes.fixtureName(request.url) ?: return 404 to ""
             val bytes = source.read(name) ?: return 404 to ""
             val doc = Jsoup.parse(demoDraftsPage(bytes, clock).decodeToString())
@@ -616,6 +636,7 @@ private class DemoWorkSaves {
                     row.selectFirst("dd.words")?.text(io.github.cidy02.kudos.network.ao3.writing.AO3WordCounter.count(it).toString())
                 }
             }
+            for (removed in deleted + posted) doc.select("li#work_$removed").remove()
             return 200 to doc.outerHtml()
         }
         if (request.method != "POST" || (path != "/works" && (id == null || path.endsWith("/edit")))) return null
@@ -635,12 +656,34 @@ private class DemoWorkSaves {
             URLDecoder.decode(pair[0], "UTF-8") to URLDecoder.decode(pair.getOrElse(1) { "" }, "UTF-8")
         }.groupBy({ it.first }, { it.second })
         val token = doc.selectFirst("meta[name=csrf-token]")?.attr("content")
-        val submit = if (workId == 995006L) "update_button" else "save_button"
+        if (fields["_method"] == listOf("delete")) {
+            val deleteToken = "demo-delete-$workId=="
+            val valid = id != null && fields.keys == setOf("authenticity_token", "_method") &&
+                fields["authenticity_token"] == listOf(deleteToken) && request.header("X-CSRF-Token") == deleteToken
+            val title = doc.selectFirst("[name='work[title]']")?.attr("value")
+            val reason = when {
+                !valid -> "AO3 didn't accept the change."
+                title == "Refuse this delete" -> "This work could not be deleted."
+                else -> null
+            }
+            if (reason != null) return 422 to "<main id='main'><div class='flash error'>$reason</div></main>"
+            deleted += workId
+            return 200 to "<main id='main'><div class='flash notice'>Your work was deleted.</div></main>"
+        }
+        val submits = fields.keys.filter { it in setOf("save_button", "update_button", "post_button", "preview_button", "edit_button", "post_without_preview_button") }
+        val submit = submits.singleOrNull()
         val valid = fields["authenticity_token"] == listOf(token) && request.header("X-CSRF-Token") == token &&
-            fields[submit] == listOf("1") && fields.keys.none { it in setOf("post_button", "post_without_preview_button", "preview_button", "edit_button") }
+            submit != null && fields[submit] == listOf("1") && submit in
+            (if (workId in posted) setOf("update_button", "preview_button") else setOf("save_button", "post_button", "preview_button"))
         val reason = when {
             !valid -> "AO3 didn't accept the change."
             fields["work[title]"] == listOf("Refuse this draft") -> "Title is too long (maximum is 255 characters)"
+            submit == "post_button" && fields["work[title]"] == listOf("Refuse this post") -> "This draft could not be posted."
+            submit == "post_button" && fields["work[title]"].orEmpty().all { it.isBlank() } -> "Title can't be blank"
+            submit == "post_button" && fields["work[rating_string]"].orEmpty().all { it.isBlank() } -> "Please select a rating"
+            submit == "post_button" && fields["work[archive_warning_strings][]"].orEmpty().all { it.isEmpty() } -> "Please select at least one warning"
+            submit == "post_button" && fields["work[fandom_string]"].orEmpty().all { it.isBlank() } -> "Fandom can't be blank"
+            submit == "post_button" && fields["work[language_id]"].orEmpty().all { it.isBlank() } -> "Language can't be blank"
             else -> chapters.totalFailure(workId)
         }
         if (reason != null) return 422 to "<main id='main'><form><div id='error'><ul><li>$reason</li></ul></div></form></main>"
@@ -660,11 +703,37 @@ private class DemoWorkSaves {
         if (id == null) {
             doc.selectFirst("h2.heading")?.text("Edit Work")
             doc.selectFirst("form#work-form")?.prependElement("input")
-                ?.attr("type", "hidden")?.attr("name", "_method")?.attr("value", "put")
+                ?.attr("type", "hidden")?.attr("name", "_method")?.attr("value", "patch")
         }
-        edited[workId] = doc.outerHtml()
-        values[workId] = fields
-        return 200 to "<main id='main'><div class='flash notice'>${if (workId == 995006L) "Work was successfully updated." else "Draft was successfully saved."}</div></main>"
+        if (submit == "post_button") {
+            posted += workId
+            doc.select("[name=save_button], [name=post_button]").remove()
+            doc.selectFirst("form#work-form")?.appendElement("input")?.attr("type", "submit")?.attr("name", "update_button")?.attr("value", "Update")
+        }
+        // Existing preview renders the current buffer, but does not save those edits on AO3.
+        if (submit != "preview_button" || id == null) {
+            edited[workId] = doc.outerHtml()
+            values[workId] = fields
+        }
+        if (submit == "preview_button") {
+            val page = Jsoup.parse("<main id='main'><div id='previewpane'><h2 class='title'></h2></div></main>")
+            page.head().appendElement("meta").attr("name", "csrf-token").attr("content", token.orEmpty())
+            if (id == null) page.selectFirst("#main")?.prependElement("div")?.addClass("flash notice")?.text("Draft was successfully created.")
+            val pane = page.selectFirst("#previewpane")!!
+            pane.selectFirst("h2.title")?.text(fields["work[title]"]?.firstOrNull().orEmpty().ifEmpty { "Untitled" })
+            for ((label, name) in listOf("Summary:" to "work[summary]", "Notes:" to "work[notes]", "" to "work[chapter_attributes][content]", "End notes:" to "work[endnotes]")) {
+                val text = fields[name]?.firstOrNull().orEmpty()
+                if (text.isEmpty()) continue
+                val module = pane.appendElement("div").addClass("module")
+                if (label.isNotEmpty()) module.appendElement("h3").addClass("heading").text(label)
+                module.appendElement("div").addClass("userstuff").html(text)
+            }
+            pane.appendElement("form").attr("method", "post").attr("action", "/works/$workId")
+                .appendElement("input").attr("name", "edit_button").attr("type", "submit").attr("value", "Edit")
+            return 200 to page.outerHtml()
+        }
+        val notice = when (submit) { "post_button" -> "Work was successfully posted."; "update_button" -> "Work was successfully updated."; else -> "Draft was successfully saved." }
+        return 200 to "<main id='main'><div class='flash notice'>$notice</div></main>"
     }
 }
 

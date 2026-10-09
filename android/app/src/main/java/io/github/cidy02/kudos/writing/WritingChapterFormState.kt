@@ -110,7 +110,6 @@ internal class WritingChapterFormState(
                 when (val result = writes.saveChapter(form, submit, generation)) {
                     is AO3Result.Failure -> throw ChapterFailure(result.error)
                     is AO3Result.Success -> {
-                        currentCoroutineContext().ensureActive()
                         if (!active) return
                         mutable.value = state.value.copy(chapterSaved = true)
                     }
@@ -122,17 +121,16 @@ internal class WritingChapterFormState(
                     is AO3Result.Success -> Unit
                 }
             }
-            currentCoroutineContext().ensureActive()
-            // AO3 confirmed it: the form finishes even if the session has moved on since (it used to stay busy).
             if (active) mutable.value = state.value.copy(busy = false, finished = true, preview = null, saveError = null)
         } catch (cancelled: CancellationException) {
             if (active && generation != auth.generation.value) failSave(WORK_FORM_SESSION_CHANGED)
             else { if (active) mutable.value = state.value.copy(busy = false); throw cancelled }
         } catch (error: Exception) {
-            if (active) failSave(if (sentNothing(error)) WORK_FORM_SESSION_CHANGED else chapterFailure(error))
+            if (active) failSave(chapterFailure(error))
         } finally {
             // iOS calls onSaved for every attempt after the chapter has succeeded, including a total-only retry.
-            if (active && state.value.chapterSaved) mutable.value = state.value.copy(savedRevision = state.value.savedRevision + 1)
+            if (active) mutable.value = state.value.copy(busy = false,
+                savedRevision = state.value.savedRevision + if (state.value.chapterSaved) 1 else 0)
         }
     }
 
@@ -146,9 +144,7 @@ internal class WritingChapterFormState(
             when (val result = writes.previewChapter(form, generation)) {
                 is AO3Result.Failure -> throw ChapterFailure(result.error)
                 is AO3Result.Success -> {
-                    currentCoroutineContext().ensureActive()
                     if (!active) return
-                    // Adopted whatever the session did meanwhile, as iOS: AO3 has created this draft.
                     val adopted = form.adopting(result.value)
                     mutable.value = old.copy(form = adopted, preview = result.value,
                         savedRevision = old.savedRevision + if (form.chapterID == null) 1 else 0)
@@ -158,7 +154,9 @@ internal class WritingChapterFormState(
             if (active && generation != auth.generation.value) mutable.value = old.copy(saveError = WORK_FORM_SESSION_CHANGED)
             else { if (active) mutable.value = old; throw cancelled }
         } catch (error: Exception) {
-            if (active) mutable.value = old.copy(saveError = if (sentNothing(error)) WORK_FORM_SESSION_CHANGED else chapterFailure(error))
+            if (active) mutable.value = old.copy(saveError = chapterFailure(error))
+        } finally {
+            if (active) mutable.value = state.value.copy(busy = false)
         }
     }
 
@@ -173,7 +171,6 @@ internal class WritingChapterFormState(
             when (val result = writes.deleteChapter(form.workID, id, generation)) {
                 is AO3Result.Failure -> throw ChapterFailure(result.error)
                 is AO3Result.Success -> {
-                    currentCoroutineContext().ensureActive()
                     if (active) mutable.value = old.copy(finished = true, savedRevision = old.savedRevision + 1)
                 }
             }
@@ -181,27 +178,19 @@ internal class WritingChapterFormState(
             if (active && generation != auth.generation.value) mutable.value = old.copy(saveError = CHAPTER_DELETE_SESSION_CHANGED)
             else { if (active) mutable.value = old; throw cancelled }
         } catch (error: Exception) {
-            // "Was not deleted" is untrue of a delete AO3 may have carried out; iOS says both sentences.
             val message = chapterFailure(error)
-            if (active) mutable.value = old.copy(saveError = when {
-                sentNothing(error) -> CHAPTER_DELETE_SESSION_CHANGED
-                message == AO3CollectionFields.UNCONFIRMED -> message
-                else -> "The chapter was not deleted. $message"
-            })
+            if (active) mutable.value = old.copy(saveError = if (message == AO3CollectionFields.UNCONFIRMED) message
+                else "The chapter was not deleted. " + message)
+        } finally {
+            if (active) mutable.value = state.value.copy(busy = false)
         }
     }
 
-    /**
-     * A verdict the write repository returned is shown as it is: once the POST has gone out the repository
-     * says "didn't confirm" for a session that moved on, and these catches used to replace that with
-     * "session changed, reopen this form before saving" (audit A26-1). Anything else that fails while the
-     * session is no longer ours failed before a POST.
-     */
-    private fun sentNothing(error: Exception) = error !is ChapterFailure && generation != auth.generation.value
 
     private fun failSave(message: String) {
         mutable.value = state.value.copy(busy = false, saveError =
-            (if (state.value.chapterSaved) "The chapter was saved, but the work total was not updated. " else "") + message)
+            (if (state.value.chapterSaved && message != AO3CollectionFields.UNCONFIRMED)
+                "The chapter was saved, but the work total was not updated. " else "") + message)
     }
 
     fun dismissError() { mutable.value = state.value.copy(saveError = null) }

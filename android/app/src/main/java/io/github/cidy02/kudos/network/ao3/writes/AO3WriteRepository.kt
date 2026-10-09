@@ -162,8 +162,9 @@ class AO3WriteRepository(
     }
 
     private suspend fun submitWork(form: AO3WorkForm, expectedGeneration: Int, referer: String,
-        tagsOnly: Boolean = false, servedOnly: Boolean = false): AO3Result<Unit> {
-        val fields = form.parameters(if (tagsOnly || form.isPosted) AO3WorkSubmitAction.Update else AO3WorkSubmitAction.SaveDraft)
+        tagsOnly: Boolean = false, servedOnly: Boolean = false,
+        submit: AO3WorkSubmitAction = if (tagsOnly || form.isPosted) AO3WorkSubmitAction.Update else AO3WorkSubmitAction.SaveDraft): AO3Result<Unit> {
+        val fields = form.parameters(submit)
             .let { pairs -> if (!servedOnly) pairs else {
                 val names = form.servedControls.filterNot { it.disabled }.map { it.name }.toSet()
                 pairs.filter { it.first in names }
@@ -172,6 +173,55 @@ class AO3WriteRepository(
             return AO3Result.Failure(AO3Error.Validation(AO3CollectionFields.UNCONFIRMED))
         val token = if (tagsOnly) form.csrfToken else fields.firstOrNull { it.first == AO3WorkFormField.authenticityToken }?.second.orEmpty()
         return workVerdict(postWriting(form.actionUrl, fields, token, referer, expectedGeneration), tagsOnly)
+    }
+
+    /** Work Post is direct (not the chapter's preview-first path), including a new work. */
+    suspend fun postWork(form: AO3WorkForm, expectedGeneration: Int): AO3Result<Unit> {
+        requireCollectionSession(expectedGeneration)
+        if (client.username() == null) return AO3Result.Failure(AO3Error.Validation("Log in to AO3 first."))
+        val missing = form.missingRequiredFields()
+        if (missing.isNotEmpty()) return AO3Result.Failure(AO3Error.Validation("AO3 still needs ${missing.joinToString(" and ")}."))
+        return submitWork(form, expectedGeneration, form.actionUrl, submit = AO3WorkSubmitAction.Post)
+    }
+
+    /** Preview is a write: one POST, same dispatch fence/verdict, then authoritative pane. */
+    suspend fun previewWork(form: AO3WorkForm, expectedGeneration: Int): AO3Result<AO3WorkPreview> {
+        val fields = form.parameters(AO3WorkSubmitAction.Preview)
+        return parseWritingPreview(postWriting(form.actionUrl, fields,
+            fields.firstOrNull { it.first == "authenticity_token" }?.second.orEmpty(), form.actionUrl, expectedGeneration,
+            judgedByCaller = true), expectedGeneration, workOnly = true)
+    }
+
+    /** iOS reads confirm_delete then the work stats. Draft public pages would be refused. */
+    suspend fun loadDeleteImplications(workID: Long, expectedGeneration: Int): AO3Result<AO3WorkDeleteImplications> {
+        requireCollectionSession(expectedGeneration)
+        if (client.username() == null) return AO3Result.Failure(AO3Error.Validation("Log in to AO3 first."))
+        val page = when (val result = client.getAuthenticated(workConfirmDeleteUrl(workID))) {
+            is AO3Result.Failure -> return result
+            is AO3Result.Success -> result.value
+        }
+        currentCoroutineContext().ensureActive()
+        requireCollectionSession(expectedGeneration)
+        val implications = try { withContext(Dispatchers.Default) {
+            AO3WorkDeleteParser.parse(page.body, page.url, workID)
+        } } catch (cancelled: CancellationException) { throw cancelled }
+          catch (_: Exception) { return AO3Result.Failure(AO3Error.Parse("Couldn't read AO3's work form.")) }
+        // iOS goes on to read the work's own page for the counts its confirmation page lacks, here and
+        // again on the confirmed delete. Neither app shows those counts (the alert is AO3's caution,
+        // verbatim), so Android does not make the read: two fewer requests for every posted work deleted.
+        currentCoroutineContext().ensureActive()
+        requireCollectionSession(expectedGeneration)
+        return AO3Result.Success(implications)
+    }
+
+    /** Swift re-reads the delete form on confirmation, then submits only token + method. */
+    suspend fun deleteWork(workID: Long, expectedGeneration: Int): AO3Result<Unit> {
+        val implications = when (val result = loadDeleteImplications(workID, expectedGeneration)) {
+            is AO3Result.Failure -> return result
+            is AO3Result.Success -> result.value
+        }
+        return workVerdict(postWriting(implications.actionUrl, listOf("authenticity_token" to implications.csrfToken,
+            "_method" to implications.methodOverride), implications.csrfToken, implications.actionUrl, expectedGeneration))
     }
 
     /** Captured chapter action/token; no preparation GET, one single-shot POST. */
@@ -191,30 +241,40 @@ class AO3WriteRepository(
         if (client.username() == null) return AO3Result.Failure(AO3Error.Validation("Log in to AO3 first."))
         val fields = form.parameters(AO3WorkSubmitAction.Preview)
         if (fields.none { it.first == "preview_button" }) return AO3Result.Failure(AO3Error.Validation(CHAPTER_PREVIEW_UNAVAILABLE))
-        // iOS judges the preview it received. Previewing a new chapter makes AO3 create its draft, and that
-        // draft's id is in this answer: thrown away because the session has since moved on, the next Preview
-        // would create a second chapter (audit A26-1). So a preview AO3 did return is returned; only an answer
-        // that confirms nothing becomes "didn't confirm".
-        return when (val result = postWriting(form.actionUrl, fields, form.csrfToken, form.actionUrl, expectedGeneration,
-            judgedByCaller = true)) {
-            is AO3Result.Failure -> movedOnAfterWrite(expectedGeneration, result) ?: result
-            is AO3Result.Success -> {
-                val page = result.value
+        return parseWritingPreview(postWriting(form.actionUrl, fields, form.csrfToken, form.actionUrl, expectedGeneration,
+            judgedByCaller = true), expectedGeneration, workOnly = false)
+    }
+
+    /**
+     * iOS judges the preview it received. Previewing a new work or chapter makes AO3 create its draft, and
+     * that draft's id is in this answer: thrown away because the session has since moved on, the next
+     * Preview would create a second one (audit A26-1). So a preview AO3 did return is returned, and so is
+     * AO3's own named refusal; only an answer that confirms nothing becomes "didn't confirm".
+     */
+    private suspend fun parseWritingPreview(result: AO3Result<AO3HttpResponse>, expectedGeneration: Int,
+        workOnly: Boolean): AO3Result<AO3ChapterPreview> {
+        if (result is AO3Result.Failure) return movedOnAfterWrite(expectedGeneration, result) ?: result
+        val page = (result as AO3Result.Success).value
+        var refused = false
+        // A returned write must reach a verdict even if its screen departs while parsing.
+        val verdict: AO3Result<AO3ChapterPreview> = withContext(NonCancellable) {
+            withContext(Dispatchers.Default) {
                 val error = parser.workWriteError(page.body)
+                refused = error != null
                 when {
                     error != null -> AO3Result.Failure(AO3Error.Validation(error))
-                    page.statusCode !in 200..399 -> movedOnAfterWrite(expectedGeneration)
-                        ?: AO3Result.Failure(AO3Error.Validation(CHAPTER_PREVIEW_UNAVAILABLE))
+                    page.statusCode !in 200..399 -> AO3Result.Failure(AO3Error.Validation(CHAPTER_PREVIEW_UNAVAILABLE))
                     else -> try {
-                        AO3Result.Success(withContext(Dispatchers.Default) { AO3ChapterFormParser().preview(page.body, page.url) })
-                    } catch (cancelled: CancellationException) { throw cancelled }
-                      catch (_: AO3WorkFormParseException.LoginRequired) {
-                          movedOnAfterWrite(expectedGeneration) ?: AO3Result.Failure(AO3Error.AuthenticationRequired) }
-                      catch (_: Exception) {
-                          movedOnAfterWrite(expectedGeneration) ?: AO3Result.Failure(AO3Error.Validation(CHAPTER_PREVIEW_UNAVAILABLE)) }
+                        AO3Result.Success(AO3ChapterFormParser().preview(page.body, page.url, workOnly))
+                    } catch (_: AO3WorkFormParseException.LoginRequired) { AO3Result.Failure(AO3Error.AuthenticationRequired) }
+                      catch (_: Exception) { AO3Result.Failure(AO3Error.Validation(CHAPTER_PREVIEW_UNAVAILABLE)) }
                 }
             }
         }
+        // "Did return" means a preview that names what it previews: a pane with no work behind it adopts
+        // nothing, and from a session that has moved on it confirms nothing either.
+        val adoptable = verdict is AO3Result.Success && verdict.value.workID != null
+        return if (adoptable || refused) verdict else movedOnAfterWrite(expectedGeneration, verdict) ?: verdict
     }
 
     /** iOS updateWorkTotals: a fresh work form, change only its total, SaveDraft/Update. */
@@ -880,7 +940,8 @@ class AO3WriteRepository(
         val response = withContext(NonCancellable) {
             client.postAuthenticatedInSession(endpoint, fields(token), writeHeaders(token, referer), generation)
         }
-        if (client.sessionGeneration() != generation) throw CancellationException()
+        if (client.sessionGeneration() != generation)
+            return AO3Result.Failure(AO3Error.Validation(AO3CollectionFields.UNCONFIRMED))
         return when (response) {
             is AO3Result.Failure -> response
             is AO3Result.Success -> {
