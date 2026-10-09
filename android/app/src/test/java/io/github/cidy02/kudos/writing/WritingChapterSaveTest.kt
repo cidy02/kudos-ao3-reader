@@ -174,8 +174,8 @@ class WritingChapterSaveTest {
         // The request had gone out when the session ended: AO3 may hold the chapter, so the truthful
         // answer is "didn't confirm", not a sentence that says to reopen the form "before saving" (A26-1).
         setup.client.beforePostResponse = { setup.auth.logout() }; model.save(AO3WorkSubmitAction.SaveDraft)
-        assertEquals(io.github.cidy02.kudos.network.ao3.account.AO3CollectionFields.UNCONFIRMED, model.state.value.saveError)
-        assertFalse(model.state.value.finished); assertFalse(model.state.value.busy)
+        assertEquals(AO3CollectionFields.UNCONFIRMED, model.state.value.saveError); assertFalse(model.state.value.finished)
+        assertFalse(model.state.value.busy)
         assertEquals(2, setup.client.posts)
     }
 

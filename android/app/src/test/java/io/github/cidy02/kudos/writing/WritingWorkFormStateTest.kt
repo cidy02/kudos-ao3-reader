@@ -244,6 +244,8 @@ internal suspend fun workFormSetup(signedIn: Boolean = true): WorkFormTestSetup 
 }
 internal class WorkFormScreenClient : AO3Client, AO3FormPostClient {
     val gets = mutableListOf<String>()
+    val requests = mutableListOf<String>()
+    val getBodies = mutableMapOf<String, String>()
     var posts = 0
     var body: String? = null
     var failure: AO3Error? = null
@@ -255,6 +257,7 @@ internal class WorkFormScreenClient : AO3Client, AO3FormPostClient {
     var beforePostResponse: suspend () -> Unit = {}
     override suspend fun get(url: String, headers: Map<String, String>): AO3Result<AO3HttpResponse> {
         gets += url
+        requests += "GET $url"
         beforeResponse()
         failure?.let { return AO3Result.Failure(it) }
         val fixture = when {
@@ -264,10 +267,11 @@ internal class WorkFormScreenClient : AO3Client, AO3FormPostClient {
             url.endsWith("/995006/navigate") -> "ao3_demo_work_posted_navigate"
             else -> "ao3_work_new_draft"
         }
-        return AO3Result.Success(AO3HttpResponse(url, 200, emptyMap(), body ?: workFixture(fixture)))
+        return AO3Result.Success(AO3HttpResponse(url, 200, emptyMap(), getBodies[url] ?: body ?: workFixture(fixture)))
     }
     override suspend fun postForm(url: String, formFields: List<Pair<String, String>>, headers: Map<String, String>): AO3Result<AO3HttpResponse> {
         posts++
+        requests += "POST $url"
         recordedPosts += WorkFormPost(url, formFields, headers)
         beforePostResponse()
         postFailure?.let { return AO3Result.Failure(it) }

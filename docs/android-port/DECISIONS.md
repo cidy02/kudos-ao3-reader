@@ -1162,3 +1162,17 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   on its own, on either app, and Replace Library treats a later deletion in two different
   ways. Android's restore has the same rules as iOS's here (`BackupMergeService`).
   Reverse: the commit "Choosing no Account shortcuts stays empty".
+
+## 2026-10-09: the work form posts, previews on AO3 and deletes (brief 3bx)
+
+- Post is one POST of the form as it stands (`post_button`), after iOS's confirmation; missing
+  required fields are named and nothing is sent. Preview on AO3 is one POST
+  (`preview_button`); a new work's preview adopts the draft AO3 created, so a later Save or
+  Post updates it. Delete reads AO3's confirmation page, shows its caution verbatim, and on
+  confirmation reads that page again for a fresh token and sends one POST.
+- A deleted work's copy in the reader's library is not touched (iOS).
+- Android does not read the work's own page for a delete (iOS does, twice, for counts it
+  never shows).
+- A preview that names its work is kept even if the session has moved on since; AO3's login
+  page in answer to a POST is "session expired".
+  Reverse: the commit "The work form posts, previews on AO3 and deletes".

@@ -45,8 +45,8 @@ class WritingChapterDeleteTest {
             model.checkpoint(ChapterFormText.Content, "retained & 星"); val form = model.state.value.form
             setup.client.body = workFixture("ao3_demo_chapter_995006_delete"); setup.client.postBody = body
             model.deleteChapter(confirmed = true)
-            // A delete AO3 may have carried out is not called "not deleted".
             assertEquals(if (error == AO3CollectionFields.UNCONFIRMED) error else "The chapter was not deleted. $error", model.state.value.saveError)
+            assertFalse(model.state.value.busy)
             assertEquals(form, model.state.value.form); assertEquals(0, model.state.value.savedRevision); assertFalse(model.state.value.finished)
             assertEquals(1, setup.client.posts); assertEquals(2, setup.client.gets.size)
         }
@@ -65,6 +65,18 @@ class WritingChapterDeleteTest {
         assertEquals(2, setup.client.gets.size); assertEquals(0, setup.client.posts)
         setup.auth.logout(); release.complete(Unit); deletion.await()
         assertEquals(CHAPTER_DELETE_SESSION_CHANGED, model.state.value.saveError); assertEquals(0, setup.client.posts)
-        assertFalse(model.state.value.finished)
+        assertFalse(model.state.value.finished); assertFalse(model.state.value.busy)
+    }
+
+    @Test fun changedSessionAfterDeletePostReturnsUnconfirmedAloneAndClearsBusy() = runTest {
+        val setup = workFormSetup(); val model = setup.chapter("posted").also { it.load() }
+        model.checkpoint(ChapterFormText.Content, "private typed text"); val form = model.state.value.form
+        setup.client.body = workFixture("ao3_demo_chapter_995006_delete")
+        setup.client.beforePostResponse = { setup.auth.logout() }
+        model.deleteChapter(confirmed = true)
+        assertEquals(AO3CollectionFields.UNCONFIRMED, model.state.value.saveError)
+        assertEquals(form, model.state.value.form); assertFalse(model.state.value.finished)
+        assertFalse(model.state.value.busy); assertEquals(0, model.state.value.savedRevision)
+        assertEquals(1, setup.client.posts)
     }
 }

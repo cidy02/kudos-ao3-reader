@@ -9,6 +9,9 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.ArrowUpward
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -33,6 +36,7 @@ import io.github.cidy02.kudos.network.ao3.writes.AO3WriteRepository
 import io.github.cidy02.kudos.settings.SettingsPanel
 import io.github.cidy02.kudos.settings.SubjectTextFieldRow
 import io.github.cidy02.kudos.ui.subject.*
+import io.github.cidy02.kudos.ui.theme.SuccessGreen
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -82,6 +86,16 @@ internal fun WritingWorkFormContent(model: WritingWorkFormState, account: String
     val list = rememberLazyListState()
     val scope = rememberCoroutineScope()
     LaunchedEffect(state.saved) { if (state.saved) onSaved() }
+    val preview = state.preview
+    if (preview != null && form != null) {
+        WritingAO3PreviewScreen(preview, form.subtitle(), if (form.isPosted) "Update" else "Post work",
+            busy = state.saving, error = state.saveError, dismissError = model::dismissSaveError,
+            onBack = model::closePreview, onPost = { onSaving(); scope.launch { if (form.isPosted) model.save() else model.post() } },
+            confirmation = if (form.isPosted) null else workPostConfirmation(form.missingRequiredFields()),
+            screenTag = "Writing work preview")
+        return
+    }
+    var confirmingPost by remember(model) { mutableStateOf(false) }
     var editing by remember(model) { mutableStateOf<WorkFormText?>(null) }
     var association by remember(model) { mutableStateOf<WorkAssociation?>(null) }
     var writingTags by remember(model) { mutableStateOf<WritingTagKind?>(null) }
@@ -173,13 +187,25 @@ internal fun WritingWorkFormContent(model: WritingWorkFormState, account: String
         }
     }
     ProvidePushedShellChrome(hasSubjectHeader = true, hideTabBar = true, onBack = onClose, trailingContent = saveButton)
-    state.saveError?.let { message ->
-        AlertDialog(onDismissRequest = model::dismissSaveError, containerColor = tokens.cardFill,
-            titleContentColor = tokens.primaryInk, textContentColor = tokens.secondaryInk,
-            title = { Text("AO3 could not save the change", lineHeight = 28.sp) },
-            text = { Text(message, lineHeight = 22.sp) }, confirmButton = {
-                TextButton(onClick = model::dismissSaveError) { Text("OK", color = palette.accent, lineHeight = 20.sp) }
+    state.saveError?.let { WritingErrorAlert("AO3 could not save the change", it, model::dismissSaveError) }
+    if (confirmingPost && form != null) {
+        val missing = form.missingRequiredFields()
+        WorkPostAlert(workPostConfirmation(missing), if (missing.isEmpty()) "Post work" else "Fill in what is missing",
+            onDismiss = { confirmingPost = false }, onConfirm = {
+                confirmingPost = false
+                if (missing.isEmpty()) { onSaving(); scope.launch { model.post() } }
             })
+    }
+    state.deleteImplications?.let { implications ->
+        if (form != null && !state.saving) AlertDialog(onDismissRequest = model::dismissDelete,
+            containerColor = tokens.cardFill, titleContentColor = tokens.primaryInk, textContentColor = tokens.secondaryInk,
+            title = { Text(if (form.isDraft) "Delete this draft?" else "Delete this work?", lineHeight = 28.sp) },
+            text = { Text(implications.cautionText, lineHeight = 22.sp) },
+            confirmButton = { TextButton(onClick = { onSaving(); scope.launch { model.delete() } }) {
+                Text(if (form.isDraft) "Delete" else "Delete on AO3", color = MaterialTheme.colorScheme.error, lineHeight = 20.sp)
+            } }, dismissButton = { TextButton(onClick = model::dismissDelete) {
+                Text("Cancel", color = palette.accent, lineHeight = 20.sp)
+            } })
     }
     LazyColumn(Modifier.fillMaxSize().subjectScreenWash(palette).testTag("Writing work form"), state = list,
         contentPadding = PaddingValues(bottom = 24.dp)) {
@@ -338,6 +364,33 @@ internal fun WritingWorkFormContent(model: WritingWorkFormState, account: String
                 }
                 if (form.isPosted) WorkFormFootnote("AO3 marks a work in progress when its total chapters are higher than the number " +
                     "posted. Complete sets both numbers to the same value.")
+            }
+            val actionsEnabled = !state.saving && !state.saved && !state.tagsNeedRefresh && !state.publicationNeedRefresh
+            if (!form.isPosted) {
+                item { WorkFormSection("Post") }
+                item { WritingPanelRow(first = true, last = false) {
+                    WritingPostRow("Post work", Icons.Filled.ArrowUpward, SuccessGreen, enabled = actionsEnabled) { confirmingPost = true }
+                } }
+                item { WritingPanelRow(first = false, last = form.workID == null) {
+                    WritingPostRow("Preview on AO3", Icons.Filled.Visibility, tokens.primaryInk, enabled = actionsEnabled) {
+                        onSaving(); scope.launch { model.openPreview() }
+                    }
+                } }
+                if (form.workID != null) {
+                    item { WritingPanelRow(first = false, last = true) {
+                        WritingPostRow("Delete draft", Icons.Filled.Delete, MaterialTheme.colorScheme.error, enabled = actionsEnabled) {
+                            onSaving(); scope.launch { model.prepareDelete() }
+                        }
+                    } }
+                    item { WorkFormFootnote("AO3 deletes an unposted draft 30 days after it is created.") }
+                }
+            } else if (form.workID != null) {
+                item { WorkFormSection("Delete") }
+                item { WritingPanelRow(first = true, last = true) {
+                    WritingPostRow("Delete work on AO3", null, MaterialTheme.colorScheme.error, enabled = actionsEnabled) {
+                        onSaving(); scope.launch { model.prepareDelete() }
+                    }
+                } }
             }
         }
     }

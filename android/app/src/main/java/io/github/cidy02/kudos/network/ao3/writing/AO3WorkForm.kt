@@ -203,12 +203,12 @@ data class AO3WorkForm(
     }
 
     fun missingRequiredFields(): List<String> = buildList {
-        if (title.isBlank()) add("Title")
-        if (rating.isBlank()) add("Rating")
+        if (trimWritingTag(title).isEmpty()) add("Title")
+        if (trimWritingTag(rating).isEmpty()) add("Rating")
         if (warnings.isEmpty()) add("Archive Warning")
         if (fandoms.isEmpty()) add("Fandoms")
-        if (languageID.isBlank()) add("Language")
-        if ((kind == AO3WorkFormKind.New || isDraft) && chapter?.let { it.contentServed && it.content.isBlank() } == true) add("Work Text")
+        if (trimWritingTag(languageID).isEmpty()) add("Language")
+        if ((kind == AO3WorkFormKind.New || isDraft) && chapter?.let { it.contentServed && trimWritingTag(it.content).isEmpty() } == true) add("Work Text")
     }
 
     fun parameters(submit: AO3WorkSubmitAction): List<Pair<String, String>> = AO3WorkFormEncoder.encode(this, submit)
