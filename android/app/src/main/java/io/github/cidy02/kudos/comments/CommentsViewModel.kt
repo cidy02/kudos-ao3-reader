@@ -60,6 +60,11 @@ class CommentsViewModel(
     /** The comment an Inbox row asked for: the first load is that thread, not the work's page 1. */
     initialFocusedCommentId: Long? = null,
     /**
+     * With [initialFocusedCommentId], the Inbox's "Chapter Comments": that comment's chapter, with its
+     * thread on the chapter's first page. The number is only the chapter's label until the index is read.
+     */
+    initialChapterPosition: Int? = null,
+    /**
      * Read at each save and load, never kept: the screen's first frame did not yet know who
      * was signed in, the name was captured then, and every signed-in reader's drafts were
      * stored as the guest's, where the next account found them (audit A18-2).
@@ -131,8 +136,23 @@ class CommentsViewModel(
     /** The load that owns the screen. A newer one cancels it, and its answer is not applied. */
     private var loadJob: Job? = null
 
+    /** The Inbox's "Chapter Comments" until it has been shown whole: Try Again repeats it, not page 1. */
+    private var pendingChapterComments: Pair<Long, Int>? = null
+    private var lastPage = 1
+
     init {
-        load(1, initialFocusedCommentId)
+        if (initialFocusedCommentId != null && initialChapterPosition != null) {
+            loadChapterComments(initialFocusedCommentId, initialChapterPosition)
+        } else {
+            load(1, initialFocusedCommentId)
+        }
+    }
+
+    /** Try Again: the request that failed, not always the work's first page (audit A28-3). */
+    fun retry() {
+        val chapterComments = pendingChapterComments
+        if (chapterComments != null) loadChapterComments(chapterComments.first, chapterComments.second)
+        else load(lastPage, _focusedCommentId.value)
     }
 
     data class ReplyTarget(val commentId: Long, val authorName: String)
@@ -140,6 +160,8 @@ class CommentsViewModel(
     fun load(page: Int = 1, focusedId: Long? = null, forceRefresh: Boolean = false) {
         val target = _currentTarget.value ?: return
         _focusedCommentId.value = focusedId
+        lastPage = page
+        pendingChapterComments = null
         // Reading a page again is not closing the composer. While the sheet is open its reply
         // or edit target stays: a reload after a post AO3 did not confirm used to clear it,
         // and the same text then went out as a new comment on the work (audit A22-1).
@@ -162,42 +184,67 @@ class CommentsViewModel(
     private var openedOnChapter = false
 
     /**
-     * The chapter this screen was opened for (the reader's comments button, the Inbox's "Chapter
-     * Comments"). Once: the screen coming back into view must not undo a scope the reader chose since.
-     * The scope and its label follow, as iOS's `scope = .byChapter`: the chapter's comments used to be
-     * shown under "All comments".
+     * The chapter this screen was opened for by the reader's comments button. Once: the screen coming
+     * back into view must not undo a scope the reader chose since. The scope and its label follow, as
+     * iOS's `scope = .byChapter`: the chapter's comments used to be shown under "All comments".
      */
-    fun openOnChapter(chapter: AO3ChapterRef, includingCommentId: Long? = null) {
+    fun openOnChapter(chapter: AO3ChapterRef) {
         val workId = _currentTarget.value?.workId ?: return
         if (openedOnChapter) return
         openedOnChapter = true
         _selectedChapter.value = chapter
         _scope.value = CommentScope.ByChapter
-        val target = AO3CommentTarget.Chapter(workId, chapter.chapterId)
-        if (includingCommentId == null) setTarget(target) else showChapterIncluding(target, includingCommentId)
+        setTarget(AO3CommentTarget.Chapter(workId, chapter.chapterId))
     }
 
     /**
-     * The Inbox's "Chapter Comments": the chapter's first page, with the inbox comment's thread put first
-     * when AO3 has it on a later page (iOS `CommentsModel.chapterPage(_:including:focusedRootID:)`). It used
-     * to open the chapter's first page alone, after reading the work's first page for nothing (audit A26-4).
-     * The thread was asked for when this view model was made; its answer is waited for, not asked again.
+     * The Inbox's "Chapter Comments" (iOS `CommentsModel.loadFocusedThread` with a chapter focus): the
+     * comment's thread, then its chapter's first page with that thread put first when AO3 has it on a
+     * later page. **One operation owned by [loadJob]**, so a scope or page the reader chooses meanwhile
+     * cancels all of it; the first version joined the thread read as a separate job, which could then
+     * overwrite that choice, and took a failed thread read for "nothing to add" (audits A26-4, A28-2,
+     * A28-3). The chapter is the one the thread's own page names, as iOS reads it first; iOS then
+     * falls back to the chapter index by position, which Android does not (the index is read without
+     * the session and a signed-in-only work refuses it: A28-4). Without a named chapter the thread is
+     * shown by itself, as the Inbox row's own tap shows it.
      */
-    fun showChapterIncluding(target: AO3CommentTarget.Chapter, commentId: Long) {
-        if (_currentTarget.value == target) return
-        _currentTarget.value = target
-        val threadRead = loadJob
+    private fun loadChapterComments(commentId: Long, position: Int) {
+        val workId = _currentTarget.value?.workId ?: return
+        pendingChapterComments = commentId to position
+        loadJob?.cancel()
         loadJob = viewModelScope.launch {
-            threadRead?.join()
-            val thread = (_state.value as? CommentsUiState.Loaded)?.thread?.comments
-                ?.firstOrNull { findCommentRecursive(listOf(it), commentId) != null }
-            // From here it is the chapter's page: paging and refresh read the chapter, not the one thread.
-            _focusedCommentId.value = null
             _state.value = CommentsUiState.Loading
-            val result = repository.loadThread(target, 1, null)
+            _focusedCommentId.value = commentId
+            val work = AO3CommentTarget.Work(workId)
+            val thread = repository.loadThread(work, 1, commentId)
             ensureActive()
-            present(target, result, first = thread?.takeIf {
-                result is AO3Result.Success && findCommentRecursive(result.value.comments, commentId) == null
+            val root = (thread as? AO3Result.Success)?.value?.comments
+                ?.firstOrNull { findCommentRecursive(listOf(it), commentId) != null }
+            val chapterId = root?.let { findCommentRecursive(listOf(it), commentId)?.chapterId ?: it.chapterId }
+            if (root == null || chapterId == null) {
+                // A failure is shown as one and Try Again asks again; a thread that names no chapter is the screen.
+                if (thread is AO3Result.Success) pendingChapterComments = null
+                _currentTarget.value = work
+                present(work, thread)
+                return@launch
+            }
+            val chapter = AO3CommentTarget.Chapter(workId, chapterId)
+            val page = repository.loadThread(chapter, 1, null)
+            ensureActive()
+            if (page is AO3Result.Success) {
+                // Only now is it the chapter's page: paging and refresh read the chapter, not the one thread.
+                pendingChapterComments = null
+                openedOnChapter = true
+                _currentTarget.value = chapter
+                _focusedCommentId.value = null
+                _scope.value = CommentScope.ByChapter
+                if (_selectedChapter.value?.chapterId != chapterId) {
+                    _selectedChapter.value = _chapters.value.firstOrNull { it.chapterId == chapterId }
+                        ?: AO3ChapterRef(chapterId, position, "")
+                }
+            }
+            present(chapter, page, first = root.takeIf {
+                page is AO3Result.Success && findCommentRecursive(page.value.comments, commentId) == null
             })
         }
     }
@@ -215,8 +262,12 @@ class CommentsViewModel(
                     parentId = null,
                     username = currentUsername()
                 )
-                // Never over text already in the field, nor into an edit.
-                if (draftContent != null && _draft.value.isEmpty() && _editTarget.value == null) {
+                // Only into a field nobody has opened. Reading the store suspends: a load that finished
+                // just after Reply was tapped put the work's own draft into the reply, where it was
+                // saved, and sent, as that reply (audit A28-1). Each composer reads its own draft when
+                // it opens.
+                if (draftContent != null && _draft.value.isEmpty() && _editTarget.value == null &&
+                    _replyTarget.value == null && !_composerPresented.value && _currentTarget.value == target) {
                     _draft.value = draftContent
                 }
                 _isDraftRestored.value = true
@@ -529,10 +580,12 @@ class CommentsViewModel(
             initialTarget: AO3CommentTarget?,
             draftStore: CommentDraftStore? = null,
             initialFocusedCommentId: Long? = null,
+            initialChapterPosition: Int? = null,
             currentUsername: () -> String? = { null }
         ): ViewModelProvider.Factory = viewModelFactory {
             initializer {
-                CommentsViewModel(repository, initialTarget, draftStore, initialFocusedCommentId, currentUsername)
+                CommentsViewModel(repository, initialTarget, draftStore, initialFocusedCommentId,
+                    initialChapterPosition, currentUsername)
             }
         }
     }

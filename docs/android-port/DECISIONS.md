@@ -1200,3 +1200,13 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
 - An author page and a search make one read in the session they have. The anonymous second
   read after a failed signed-in read is gone.
   Reverse: the commit "Fifteen small differences from iOS".
+
+## 2026-10-09: Chapter Comments from the Inbox, second version (audit A28)
+
+- One operation: the comment's thread, then its chapter's first page with the thread first
+  when it is not on that page. The chapter is the one the thread's own page names; no chapter
+  index is read (two reads). A thread naming no chapter is shown by itself. This replaces the
+  three-read version recorded earlier the same day.
+- Try Again on a failed comments load repeats the request that failed.
+- A page load puts the work's draft only into a field nobody has opened.
+  Reverse: the commit "Chapter Comments is one operation; a page load never fills an open reply".

@@ -120,7 +120,8 @@ fun CommentsScreen(
     val latestUsername by androidx.compose.runtime.rememberUpdatedState(currentUsername)
     val viewModel: CommentsViewModel = viewModel(
         key = target?.workId?.toString(),
-        factory = CommentsViewModel.factory(repository, target, draftStore, focusedCommentId) { latestUsername }
+        factory = CommentsViewModel.factory(repository, target, draftStore, focusedCommentId,
+            initialChapterPosition.takeIf { focusedCommentId != null }) { latestUsername }
     )
 
     LaunchedEffect(viewModel, initialComposes) {
@@ -130,7 +131,7 @@ fun CommentsScreen(
     // Deep link focus (e.g. Inbox notification)
     LaunchedEffect(focusedCommentId) {
         // A new view model has already asked for this thread; only a different one is new. With a chapter
-        // named too the thread is one row of that chapter's page (the effect below), not the screen.
+        // named too (the Inbox's "Chapter Comments") the view model shows the thread on its chapter's page.
         if (focusedCommentId != null && initialChapterPosition == null && viewModel.focusedCommentId.value != focusedCommentId) {
             viewModel.load(focusedId = focusedCommentId)
         }
@@ -140,8 +141,10 @@ fun CommentsScreen(
     LaunchedEffect(initialChapterPosition, target?.workId) {
         val workId = target?.workId ?: return@LaunchedEffect
         val position = initialChapterPosition ?: return@LaunchedEffect
-        // The Inbox's "Chapter Comments" names its comment too.
-        chapterIndexRepository?.chapterForPosition(workId, position)?.let { viewModel.openOnChapter(it, focusedCommentId) }
+        // The Inbox's "Chapter Comments" names its comment too: the view model takes the chapter from
+        // that comment's own page and needs no index.
+        if (focusedCommentId != null) return@LaunchedEffect
+        chapterIndexRepository?.chapterForPosition(workId, position)?.let { viewModel.openOnChapter(it) }
     }
 
     val state by viewModel.state.collectAsState()
@@ -545,7 +548,7 @@ fun CommentsScreen(
                             description = current.message,
                             icon = Icons.Outlined.ErrorOutline,
                             actionLabel = "Try Again",
-                            onAction = { viewModel.load() },
+                            onAction = { viewModel.retry() },
                             palette = palette
                         )
                     }
