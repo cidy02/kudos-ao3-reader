@@ -1076,3 +1076,12 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   screen; blocked and muted users have their own screens elsewhere.
 - The author menu has "Share Profile".
   Reverse: the commit "More on AO3: iOS's rows, and they open".
+
+## 2026-10-09: comments after audit A22
+
+- A reload of the comments page leaves an open composer's reply or edit target alone. An
+  edit AO3 did not confirm shows the failure and is not reloaded (iOS).
+- The offline comment cache holds only a work's or chapter's own pages, opened by the
+  reader: not one comment's thread, and not the Inbox's author lookup.
+- One comments load at a time; an Inbox row loads its thread and nothing else.
+  Reverse: the commit "A reply AO3 did not confirm stays a reply".

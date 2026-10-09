@@ -380,7 +380,7 @@ class AccountInboxViewModel(
                     coordinator.coordinate {
                         when (
                             val result = commentRepository.loadThread(
-                                AO3CommentTarget.Work(workId)
+                                AO3CommentTarget.Work(workId), useCache = false
                             )
                         ) {
                             is AO3Result.Success -> {
