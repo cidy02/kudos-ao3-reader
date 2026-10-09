@@ -285,7 +285,7 @@ class KudosAppContainer(
 
     val chapterIndexRepository:
         io.github.cidy02.kudos.network.ao3.chapters.AO3ChapterIndexRepository by lazy {
-        io.github.cidy02.kudos.network.ao3.chapters.AO3ChapterIndexRepository(ao3Client)
+        io.github.cidy02.kudos.network.ao3.chapters.AO3ChapterIndexRepository(ao3Client, authenticatedClient)
     }
 
     val persistenceGate: io.github.cidy02.kudos.backup.PersistenceGate by lazy {
