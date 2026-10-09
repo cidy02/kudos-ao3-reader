@@ -37,6 +37,38 @@ class SettingsRepositoryTest {
         scope = scope, produceFile = { File(tempDir, "settings.preferences_pb") })
     private val repository = SettingsRepository(dataStore)
 
+    @Test fun accountShortcutsUseIosEncodingAndSurviveBackupRestore() = runBlocking<Unit> {
+        val store = io.github.cidy02.kudos.account.AccountShortcutStore
+        val inbox = io.github.cidy02.kudos.account.AccountShortcut.Inbox
+        val drafts = io.github.cidy02.kudos.account.AccountShortcut.Drafts
+        assertEquals("account.shortcuts", store.key)
+        assertEquals(listOf("dashboard", "subscriptions", "works", "bookmarks", "collections", "history"),
+            store.defaults.map { it.id })
+        assertEquals(store.defaults, repository.accountShortcuts.first())
+        val before = BackupJson.encodeToString(BackupSettings.fromSettings(repository.snapshot()).toBackupSettingsPayload())
+        repository.updateAccountShortcuts(listOf(inbox, drafts))
+        assertEquals("inbox,drafts", dataStore.data.first()[stringPreferencesKey(store.key)])
+        assertEquals(listOf(inbox, drafts), SettingsRepository(dataStore).accountShortcuts.first())
+        assertEquals(before, BackupJson.encodeToString(BackupSettings.fromSettings(repository.snapshot()).toBackupSettingsPayload()))
+        assertFalse(before.contains("account.shortcuts"))
+        repository.replaceAll(KudosSettings.Defaults)
+        assertEquals(listOf(inbox, drafts), repository.accountShortcuts.first())
+        for (raw in listOf("", "future", ",future,,", "series")) {
+            dataStore.edit { it[stringPreferencesKey(store.key)] = raw }
+            assertEquals(store.defaults, repository.accountShortcuts.first())
+        }
+        dataStore.edit { it[stringPreferencesKey(store.key)] = "future,inbox,drafts,Inbox, drafts,inbox" }
+        assertEquals(listOf(inbox, drafts, inbox), repository.accountShortcuts.first())
+        dataStore.edit { it.remove(stringPreferencesKey(store.key)) }
+        assertEquals(store.defaults, repository.accountShortcuts.first())
+        for (shortcut in io.github.cidy02.kudos.account.AccountShortcut.entries) {
+            repository.updateAccountShortcuts(listOf(shortcut))
+            assertEquals(listOf(shortcut), repository.accountShortcuts.first())
+        }
+        repository.updateAccountShortcuts(emptyList())
+        assertEquals(store.defaults, repository.accountShortcuts.first()) // Swift's unreachable empty choice.
+    }
+
     @After
     fun tearDown() {
         scope.cancel()

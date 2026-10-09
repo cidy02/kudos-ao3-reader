@@ -121,6 +121,9 @@ data class AO3AuthorWorksSort(
     val direction: AO3AuthorWorksSortDirection = AO3AuthorWorksSortDirection.Descending,
     val completion: AO3AuthorWorksCompletion = AO3AuthorWorksCompletion.Any
 ) {
+    fun select(column: AO3AuthorWorksSortColumn): AO3AuthorWorksSort =
+        if (column == this.column) this else copy(column = column, direction = column.defaultDirection)
+
     val activeCount: Int
         get() = listOf(
             column != AO3AuthorWorksSortColumn.DateUpdated,

@@ -1115,3 +1115,11 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   AO3's notice or its redirect. A chapter has no "Post?" confirmation, because iOS has none.
   After a confirmed write the work form reads its own form once for the new chapter count.
   Reverse: the commit "Chapters can be added, edited, posted and deleted".
+
+## 2026-10-09: the Account shortcuts editor, and an author's works sorted (brief 3by)
+
+- The Account grid shows the shortcuts the reader chose, in their order; the choice is kept
+  per device under iOS's key and is not in the backup. Choosing none hides the grid.
+- An author's works can be sorted and filtered by completion as on iOS: one read per Apply,
+  page 1, and a dismissed sheet applies nothing.
+  Reverse: the commit "The Account shortcuts can be chosen; an author's works can be sorted".

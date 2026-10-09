@@ -181,6 +181,8 @@ fun AccountScreen(
     onOpenWorkComments: (workId: Long, focusedId: Long?) -> Unit = { _, _ -> },
     // Inbox is its own pushed route (iOS pushes AccountInboxScreen); see Routes.AccountInbox.
     onOpenInbox: () -> Unit = {},
+    settingsRepository: io.github.cidy02.kudos.data.preferences.SettingsRepository? = null,
+    onEditShortcuts: () -> Unit = {},
     modifier: Modifier = Modifier,
     viewModel: AccountViewModel = viewModel(
         factory = AccountViewModel.factory(
@@ -192,6 +194,8 @@ fun AccountScreen(
     )
 ) {
     val state by viewModel.uiState.collectAsState()
+    val shortcuts by (settingsRepository?.accountShortcuts ?: kotlinx.coroutines.flow.flowOf(AccountShortcutStore.defaults))
+        .collectAsState(initial = AccountShortcutStore.defaults)
     val signedIn = state.authState is AO3AuthState.SignedIn
     val username = (state.authState as? AO3AuthState.SignedIn)?.username
     val palette = LocalSubjectPalette.current
@@ -220,14 +224,17 @@ fun AccountScreen(
             item { Spacer(Modifier.height(16.dp)) }
             
             item {
-                AccountHubShortcuts(
-                    counts = state.counts,
-                    onOpenDashboard = onOpenDashboard,
-                    onOpenList = onOpenList,
-                    onOpenAO3Collections = onOpenAO3Collections,
-                    onOpenWeb = onOpenWeb,
-                    onOpenInbox = onOpenInbox
-                )
+                AccountHubShortcuts(shortcuts, state.counts, onEditShortcuts) { shortcut ->
+                    shortcut.listType?.let(onOpenList) ?: when (shortcut) {
+                        AccountShortcut.Dashboard -> onOpenDashboard()
+                        AccountShortcut.Collections -> onOpenAO3Collections()
+                        AccountShortcut.Drafts -> onOpenDrafts()
+                        AccountShortcut.Inbox -> onOpenInbox()
+                        AccountShortcut.Preferences -> onOpenWeb("native:preferences")
+                        AccountShortcut.MoreOnAO3 -> onOpenWeb("native:more-on-ao3")
+                        else -> Unit
+                    }
+                }
             }
             
             item { Spacer(Modifier.height(16.dp)) }
@@ -756,6 +763,8 @@ private fun AccountShortcutGridTile(
     count: String? = null,
     onClick: () -> Unit
 ) {
+    val tokens = LocalKudosTokens.current
+    val accessibility = isAccessibilityFontScale()
     Card(
         onClick = onClick,
         // A glass panel, as iOS draws the hub and as `subjectPanel` draws every other screen.
@@ -780,17 +789,17 @@ private fun AccountShortcutGridTile(
                         text = count,
                         style = MaterialTheme.typography.labelSmall.copy(
                             fontFamily = FontFamily.Monospace,
-                            fontWeight = FontWeight.Medium
+                            fontWeight = FontWeight.Medium, lineHeight = 17.sp
                         ),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = tokens.secondaryInk
                     )
                 }
             }
             Text(
                 text = title,
-                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Medium),
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 2,
+                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Medium, lineHeight = 17.sp),
+                color = tokens.primaryInk,
+                maxLines = if (accessibility) Int.MAX_VALUE else 2,
                 overflow = TextOverflow.Ellipsis
             )
         }
@@ -863,33 +872,23 @@ fun AccountScopeGroup(
 }
 
 @Composable
-private fun AccountHubShortcuts(
+internal fun AccountHubShortcuts(
+    shortcuts: List<AccountShortcut>,
     counts: Map<String, AO3AccountListCountsCache.Count>,
-    onOpenDashboard: () -> Unit,
-    onOpenList: (AccountListType) -> Unit,
-    onOpenAO3Collections: () -> Unit,
-    onOpenWeb: (String) -> Unit,
-    onOpenInbox: () -> Unit
+    onEdit: () -> Unit,
+    onOpen: (AccountShortcut) -> Unit
 ) {
-    val defaults = listOf(
-        ShortcutItem("Dashboard", Icons.Outlined.GridView, onClick = onOpenDashboard),
-        ShortcutItem("Subscriptions", Icons.Outlined.NotificationsNone, count = counts[AccountListType.Subscriptions.listKey], onClick = { onOpenList(AccountListType.Subscriptions) }),
-        ShortcutItem("Works", Icons.Outlined.Description, count = counts[AccountListType.MyWorks.listKey], onClick = { onOpenList(AccountListType.MyWorks) }),
-        ShortcutItem("Bookmarks", Icons.Outlined.BookmarkBorder, count = counts[AccountListType.Bookmarks.listKey], onClick = { onOpenList(AccountListType.Bookmarks) }),
-        ShortcutItem("Collections", Icons.Outlined.Collections, onClick = onOpenAO3Collections),
-        ShortcutItem("History", Icons.Outlined.History, count = counts[AccountListType.History.listKey], onClick = { onOpenList(AccountListType.History) })
-    )
-
+    if (shortcuts.isEmpty()) return
     Column(modifier = Modifier.padding(horizontal = 12.dp)) {
         SectionRuleHeader(
             title = "Shortcuts",
-            onSeeAll = { /* TODO implement shortcut editor */ }
+            onSeeAll = onEdit
         )
         // iOS `shortcutGridColumns`: three across, two at accessibility text sizes on a phone, so
         // a label reflows instead of breaking mid-word.
         val columns = if (isAccessibilityFontScale()) 2 else 3
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            defaults.chunked(columns).forEach { row ->
+            shortcuts.chunked(columns).forEach { row ->
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -899,8 +898,8 @@ private fun AccountHubShortcuts(
                             AccountShortcutGridTile(
                                 title = item.title,
                                 icon = item.icon,
-                                count = item.count?.displayText,
-                                onClick = item.onClick
+                                count = item.listType?.listKey?.let { counts[it]?.displayText },
+                                onClick = { onOpen(item) }
                             )
                         }
                     }
@@ -912,13 +911,6 @@ private fun AccountHubShortcuts(
         }
     }
 }
-
-private data class ShortcutItem(
-    val title: String,
-    val icon: ImageVector,
-    val count: AO3AccountListCountsCache.Count? = null,
-    val onClick: () -> Unit
-)
 
 @Composable
 private fun SignedOutPreviewSection() {

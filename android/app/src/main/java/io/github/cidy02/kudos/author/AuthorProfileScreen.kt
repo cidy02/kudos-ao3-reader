@@ -7,10 +7,21 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.outlined.FilterList
+import io.github.cidy02.kudos.auth.AO3AuthRepository
+import io.github.cidy02.kudos.search.SearchFilterSheet
+import io.github.cidy02.kudos.search.matchesSummary
+import io.github.cidy02.kudos.search.refineMatchText
+import io.github.cidy02.kudos.search.LocalTagSuggestions
+import io.github.cidy02.kudos.network.ao3.search.AO3SearchFilters
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -37,7 +48,7 @@ enum class AuthorTab(val label: String) {
     About("About")
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun AuthorProfileScreen(
     username: String,
@@ -52,7 +63,8 @@ fun AuthorProfileScreen(
     onOpenAO3Collections: (() -> Unit)? = null,
     seriesFormRepository: io.github.cidy02.kudos.network.ao3.writing.AO3SeriesFormRepository? = null,
     seriesWrites: io.github.cidy02.kudos.network.ao3.writes.AO3WriteRepository? = null,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    authRepository: AO3AuthRepository? = null
 ) {
     val account by (seriesFormRepository?.auth?.state?.collectAsState() ?: remember {
         mutableStateOf<io.github.cidy02.kudos.auth.AO3AuthState>(io.github.cidy02.kudos.auth.AO3AuthState.SignedOut) })
@@ -80,60 +92,102 @@ fun AuthorProfileScreen(
     var scopeState by remember { mutableStateOf(AO3AuthorWorksScope.Works) }
     var displayMode by remember { mutableStateOf(AuthorDisplayMode.Detailed) }
     
+    val sessionGeneration by (authRepository?.generation ?: kotlinx.coroutines.flow.flowOf(0)).collectAsState(initial = 0)
+    var worksSort by remember(route.id, sessionGeneration) { mutableStateOf(AO3AuthorWorksSort()) }
+    var worksFilters by remember(route.id, sessionGeneration) { mutableStateOf(AO3SearchFilters()) }
+    var showingWorksFilters by remember(route.id, sessionGeneration) { mutableStateOf(false) }
+    // Same generation fence as AuthorWorksScreen, shared by tab/page/scope/sort changes.
+    var loadGeneration by remember { mutableIntStateOf(0) }
+    var headerGeneration by remember { mutableIntStateOf(0) }
+    var tabTask by remember { mutableStateOf<Job?>(null) }
+    var headerTask by remember { mutableStateOf<Job?>(null) }
     val scope = rememberCoroutineScope()
     val tokens = LocalKudosTokens.current
 
     fun loadHeader() {
+        val expectedRoute = route
+        val expectedSession = sessionGeneration
+        val generation = ++headerGeneration
+        headerTask?.cancel()
         headerLoading = true
         headerError = null
-        scope.launch {
-            when (val result = authorRepository.loadDashboard(route)) {
-                is AO3Result.Success -> {
-                    header = result.value
-                    headerError = null
-                }
-                is AO3Result.Failure -> {
-                    headerError = result.error.displayMessage()
-                }
+        headerTask = scope.launch {
+            val result = authorRepository.loadDashboard(expectedRoute)
+            currentCoroutineContext().ensureActive()
+            if (generation != headerGeneration || route != expectedRoute || sessionGeneration != expectedSession) return@launch
+            when (result) {
+                is AO3Result.Success -> { header = result.value; headerError = null }
+                is AO3Result.Failure -> headerError = result.error.displayMessage()
             }
             headerLoading = false
         }
     }
 
     fun loadTab(target: AuthorTab, pageNum: Int = 1) {
+        val expectedRoute = route
+        val expectedScope = scopeState
+        val expectedSort = worksSort
+        val expectedSession = sessionGeneration
+        val generation = ++loadGeneration
+        tabTask?.cancel()
         tabLoading = true
         tabError = null
         page = pageNum
-        scope.launch {
+        if (target == AuthorTab.Works && pageNum == 1) works = null
+        tabTask = scope.launch {
+            fun current(): Boolean = generation == loadGeneration && route == expectedRoute &&
+                sessionGeneration == expectedSession && tab == target && page == pageNum &&
+                (target != AuthorTab.Works || (scopeState == expectedScope && worksSort == expectedSort))
             when (target) {
-                AuthorTab.Works -> when (val r = authorRepository.loadWorks(route, pageNum, scopeState)) {
-                    is AO3Result.Success -> works = r.value
-                    is AO3Result.Failure -> tabError = r.error.displayMessage()
+                AuthorTab.Works -> {
+                    val r = authorRepository.loadWorks(expectedRoute, pageNum, expectedScope, expectedSort)
+                    currentCoroutineContext().ensureActive()
+                    if (!current()) return@launch
+                    when (r) {
+                        is AO3Result.Success -> works = r.value
+                        is AO3Result.Failure -> tabError = r.error.displayMessage()
+                    }
                 }
-                AuthorTab.Series -> when (val r = authorRepository.loadSeries(route, pageNum)) {
-                    is AO3Result.Success -> series = r.value
-                    is AO3Result.Failure -> tabError = r.error.displayMessage()
+                AuthorTab.Series -> {
+                    val r = authorRepository.loadSeries(expectedRoute, pageNum)
+                    currentCoroutineContext().ensureActive()
+                    if (!current()) return@launch
+                    when (r) {
+                        is AO3Result.Success -> series = r.value
+                        is AO3Result.Failure -> tabError = r.error.displayMessage()
+                    }
                 }
-                AuthorTab.Bookmarks -> when (val r = authorRepository.loadBookmarks(route, pageNum)) {
-                    is AO3Result.Success -> bookmarks = r.value
-                    is AO3Result.Failure -> tabError = r.error.displayMessage()
+                AuthorTab.Bookmarks -> {
+                    val r = authorRepository.loadBookmarks(expectedRoute, pageNum)
+                    currentCoroutineContext().ensureActive()
+                    if (!current()) return@launch
+                    when (r) {
+                        is AO3Result.Success -> bookmarks = r.value
+                        is AO3Result.Failure -> tabError = r.error.displayMessage()
+                    }
                 }
-                AuthorTab.About -> when (val r = authorRepository.loadAbout(route)) {
-                    is AO3Result.Success -> about = r.value
-                    is AO3Result.Failure -> tabError = r.error.displayMessage()
+                AuthorTab.About -> {
+                    val r = authorRepository.loadAbout(expectedRoute)
+                    currentCoroutineContext().ensureActive()
+                    if (!current()) return@launch
+                    when (r) {
+                        is AO3Result.Success -> about = r.value
+                        is AO3Result.Failure -> tabError = r.error.displayMessage()
+                    }
                 }
             }
             tabLoading = false
         }
     }
 
-    LaunchedEffect(route.id, scopeState) {
+    LaunchedEffect(route.id, sessionGeneration) {
+        scopeState = AO3AuthorWorksScope.Works
+        tab = AuthorTab.Works
+        header = null; works = null; series = null; bookmarks = null; about = null
         loadHeader()
-        if (!isDashboard) {
-            loadTab(tab, 1)
-        }
+        if (!isDashboard) loadTab(AuthorTab.Works, 1)
     }
-    
+
     val shareContext = androidx.compose.ui.platform.LocalContext.current
     var showMenu by remember { mutableStateOf(false) }
 
@@ -153,6 +207,14 @@ fun AuthorProfileScreen(
     ProvidePushedShellChrome(
         hasSubjectHeader = true,
         trailingContent = {
+            if (!isDashboard && tab == AuthorTab.Works) {
+                val activeCount = worksSort.activeCount + worksFilters.activeCountForRefine
+                ToolbarCircleButton(onClick = { showingWorksFilters = true }, accessibilityName = "Sort and filter",
+                    palette = tokens.scopePalette, isAccented = activeCount > 0,
+                    badge = activeCount.takeIf { it > 0 }?.toString()) {
+                    Icon(Icons.Outlined.FilterList, null)
+                }
+            }
             Box {
                 ToolbarCircleButton(
                     onClick = { showMenu = true },
@@ -220,8 +282,27 @@ fun AuthorProfileScreen(
         }
     )
 
+    if (showingWorksFilters && tab == AuthorTab.Works && !isDashboard) {
+        val source = works?.works.orEmpty()
+        val visible = source.count { worksFilters.matchesSummary(it) }
+        SearchFilterSheet(filters = worksFilters, onFiltersChange = { worksFilters = it },
+            onApply = { showingWorksFilters = false }, onDismiss = { showingWorksFilters = false },
+            onClear = { worksFilters = AO3SearchFilters() }, refine = true,
+            canReset = worksFilters.activeCountForRefine > 0,
+            refineMatchText = refineMatchText(source.size, visible, 0),
+            localTagSuggestions = LocalTagSuggestions(
+                fandoms = source.flatMap { it.fandoms }.distinct(),
+                characters = source.flatMap { it.characters }.distinct(),
+                relationships = source.flatMap { it.relationships }.distinct(),
+                freeforms = source.flatMap { it.freeforms }.distinct()),
+            worksSort = worksSort, onApplyWorksSort = { next ->
+                if (next != worksSort) { worksSort = next; loadTab(AuthorTab.Works, 1) }
+            })
+    }
+
     LazyColumn(
         modifier = modifier
+            .testTag("Author profile")
             .fillMaxSize()
             .subjectScreenWash(palette = SubjectPalette.fromHue(HomeFacts.workHue(emptyList(), route.displayName), tokens.theme))
             .padding(horizontal = 16.dp),
@@ -302,8 +383,7 @@ fun AuthorProfileScreen(
                             items = AuthorTab.entries,
                             selectedItem = tab,
                             onItemSelected = {
-                                tab = it
-                                loadTab(it, 1)
+                                if (tab != it) { tab = it; loadTab(it, 1) }
                             },
                             labelProvider = { it.label }
                         )
@@ -402,8 +482,7 @@ fun AuthorProfileScreen(
                                             text = scopeVal.label,
                                             style = SubjectChipStyle.Pill(scopeState == scopeVal),
                                             modifier = Modifier.clickable {
-                                                scopeState = scopeVal
-                                                loadTab(tab, 1)
+                                                if (scopeState != scopeVal) { scopeState = scopeVal; loadTab(tab, 1) }
                                             }
                                         )
                                     }
@@ -411,10 +490,11 @@ fun AuthorProfileScreen(
                             }
                             
                             val pageData = works
-                            if (pageData == null || pageData.works.isEmpty()) {
+                            val visibleWorks = pageData?.works.orEmpty().filter { worksFilters.matchesSummary(it) }
+                            if (pageData == null || visibleWorks.isEmpty()) {
                                 item { EmptyStateCard("No works", "No works by this author are visible to you on AO3.") }
                             } else {
-                                items(pageData.works, key = { it.id }) { work ->
+                                items(visibleWorks, key = { it.id }) { work ->
                                     AO3AuthorWorkCard(
                                         work = work,
                                         displayMode = displayMode,
@@ -531,9 +611,7 @@ fun AuthorProfileScreen(
                                                     modifier = Modifier
                                                         .fillMaxWidth()
                                                         .clickable {
-                                                            route = p.route
-                                                            tab = AuthorTab.Works
-                                                            loadTab(AuthorTab.Works, 1)
+                                                            if (route != p.route) route = p.route
                                                         }
                                                         .padding(vertical = 4.dp)
                                                 )
