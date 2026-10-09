@@ -54,6 +54,7 @@ internal object DemoNetwork {
             when {
                 DemoNetworkRoutes.isDraftsPath(path) -> demoDraftsPage(it, clock)
                 DemoNetworkRoutes.isAuthorWorksPath(path) -> demoAuthorWorksPage(it, url)
+                isDemoCommentThread(path) -> demoCommentThreadPage(it, path)
                 else -> demoChallengeCollectionPage(it, path)
             }
         }
@@ -286,6 +287,14 @@ internal object DemoNetworkRoutes {
         Regex("^/users/[^/]+/(pseuds/[^/]+/)?(works(/collected)?|gifts)/?$").matches(path)
 }
 
+/**
+ * One comment's own page carries that comment, as AO3's does: the Inbox's Chapter Comments looks its
+ * comment up there, and the one comments fixture has ids of its own.
+ */
+internal fun isDemoCommentThread(path: String) = Regex("^/comments/\\d+$").matches(path)
+internal fun demoCommentThreadPage(bytes: ByteArray, path: String): ByteArray =
+    bytes.decodeToString().replace("comment_1001", "comment_${path.substringAfterLast('/')}").encodeToByteArray()
+
 /** Only the drafts fixtures are rebased to today. Tests pin the same clock used by the chips. */
 internal fun demoDraftsPage(bytes: ByteArray, clock: Clock? = null): ByteArray {
     val document = Jsoup.parse(bytes.decodeToString())
@@ -505,6 +514,7 @@ internal class DemoNetworkInterceptor(
             bytes = when {
                 DemoNetworkRoutes.isDraftsPath(path) -> demoDraftsPage(bytes, clock)
                 DemoNetworkRoutes.isAuthorWorksPath(path) -> demoAuthorWorksPage(bytes, url)
+                isDemoCommentThread(path.trimEnd('/')) -> demoCommentThreadPage(bytes, path.trimEnd('/'))
                 else -> demoChallengeCollectionPage(bytes, path.trimEnd('/'))
             }
         }

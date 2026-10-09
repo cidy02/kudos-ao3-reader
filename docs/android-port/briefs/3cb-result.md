@@ -134,3 +134,15 @@ cleared on every path. A moderator's list makes two reads and shows no match sta
 the read that would say sign-ups are closed is the owner's (iOS tries it and swallows the
 refusal); an owner's list reads the first page of each assignment list only (owner question
 16).
+
+## Seen on the emulator (Claude, 2026-10-09, afternoon)
+
+Account → Collections → Winter Exchange 2026 → Manage → Sign-ups: "6 sign-ups · closed", four
+rows with MATCHED and UNMATCHED chips, the Unmatched filter (2 rows), a participant's read
+(Request 1, Offer 1, Back), "Load page 2 of 2" (6 rows), Your sign-up → Withdraw sign-up →
+"Withdraw this sign-up?" → Cancel sends nothing; Withdraw Sign-up closes the form and the
+list reads "5 sign-ups"; Your sign-up then opens the second one, whose withdrawal AO3's demo
+answer refuses: "Sign-ups are closed. You cannot delete your sign-up." at the top of the
+form, which scrolls to it. Not seen: a moderator's list, Sepia and large text. A debug route
+with neither owner nor moderator shows the refusal as "AO3 refused the request (HTTP 403)",
+though no request is made: no production path reaches it.

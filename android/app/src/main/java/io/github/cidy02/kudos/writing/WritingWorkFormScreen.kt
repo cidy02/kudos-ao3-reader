@@ -36,7 +36,6 @@ import io.github.cidy02.kudos.network.ao3.writes.AO3WriteRepository
 import io.github.cidy02.kudos.settings.SettingsPanel
 import io.github.cidy02.kudos.settings.SubjectTextFieldRow
 import io.github.cidy02.kudos.ui.subject.*
-import io.github.cidy02.kudos.ui.theme.SuccessGreen
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -369,7 +368,7 @@ internal fun WritingWorkFormContent(model: WritingWorkFormState, account: String
             if (!form.isPosted) {
                 item { WorkFormSection("Post") }
                 item { WritingPanelRow(first = true, last = false) {
-                    WritingPostRow("Post work", Icons.Filled.ArrowUpward, SuccessGreen, enabled = actionsEnabled) { confirmingPost = true }
+                    WritingPostRow("Post work", Icons.Filled.ArrowUpward, statusSuccessColor(tokens.theme), enabled = actionsEnabled) { confirmingPost = true }
                 } }
                 item { WritingPanelRow(first = false, last = form.workID == null) {
                     WritingPostRow("Preview on AO3", Icons.Filled.Visibility, tokens.primaryInk, enabled = actionsEnabled) {

@@ -137,3 +137,14 @@ expired, logged out, and the two sentences for a saved session that could not be
 nothing in it reads from or writes to AO3, and Remove AO3 session is the existing local
 logout. The four Clear actions keep the reader's "confirm before delete" preference, where
 iOS always asks.
+
+## Seen on the emulator (Claude, 2026-10-09, afternoon)
+
+`kudosDebugRoute=nav:settings`, `kudosSettingsPage=privacy`, Dark: the opening card; Stored on
+this device with every row above zero in the demo (Downloaded works 106 KB, Works you're
+reading 4 KB, Original files kept 8 KB, Imported fonts 12 KB, Draft recovery 8 KB, Caches
+8 KB, 7 positions, 2 collections, 1 saved search, "Not recorded"); Clear with its four rows
+(Clear reading history disabled at 0 works); Clear reading positions → its confirmation →
+"0 works"; Remove AO3 session → "Log out of AO3?" → "AO3 account · Not signed in" and the
+footnote ending "Logged out of AO3."; the Read Aloud note. Not seen: the other three Clears,
+Light, Sepia and large text.

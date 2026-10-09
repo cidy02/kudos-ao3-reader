@@ -284,6 +284,32 @@ class CommentsViewModelDraftTest {
         }
     }
 
+    /**
+     * The thread put first shares replies with the chapter's page (here the same page under another id for
+     * its first comment, as the demo serves it): no comment may be listed twice, because the list keys its
+     * rows by comment id and a repeated key crashed the app on the emulator.
+     */
+    @Test
+    fun theThreadPutFirstNeverRepeatsACommentTheChapterPageShows() = runTest(testDispatcher) {
+        val urls = mutableListOf<String>()
+        val basic = writeResource("ao3/comments/comments_basic.html")
+        val first = Regex("id=\"comment_(\\d+)\"").find(basic)!!.groupValues[1]
+        val thread = basic.replaceFirst("id=\"comment_$first\"", "id=\"comment_$inboxComment\"")
+            .replaceFirst("</h4>", " <span class=\"parent\">on <a href=\"/works/123/chapters/77\">Chapter 3</a></span></h4>")
+        val repo = AO3CommentRepository(
+            publicClient = FakePublicClient(success(basic)),
+            authenticatedClient = FakeAuthenticatedClient(listOf(success(thread), success(basic)), emptyList(), "alice", urls)
+        )
+        val viewModel = CommentsViewModel(repo, target, draftStore, inboxComment, 3) { "alice" }
+        settle(viewModel, urls, 2)
+
+        val all = mutableListOf<String>()
+        fun walk(comments: List<AO3Comment>) { for (c in comments) { c.id?.let(all::add); walk(c.replies) } }
+        walk((viewModel.state.value as CommentsUiState.Loaded).thread.comments)
+        assertEquals("comment_$inboxComment", all.first())
+        assertEquals(all.size, all.toSet().size)
+    }
+
     /** A28-3: a thread that cannot be read is a failure, not "nothing to add"; Try Again asks for it again. */
     @Test
     fun chapterCommentsWhoseThreadFailsSayItFailedAndTryAgainRepeatsTheWholeRequest() = runTest(testDispatcher) {

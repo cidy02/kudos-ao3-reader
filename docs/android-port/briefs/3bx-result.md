@@ -443,3 +443,15 @@ Changed on landing:
 
 Left as written: an unconfirmed total after a saved chapter shows the unconfirmed sentence
 without "The chapter was saved, but the work total was not updated."
+
+## Seen on the emulator (Claude, 2026-10-09, afternoon)
+
+`nav:writing-work-draft-demo`: the Post section (Post work, Preview on AO3, Delete draft, the
+30-day footnote); Post work → "Post this work?" with iOS's sentence → the form closes;
+Preview on AO3 → the preview with Post work and Edit, Edit returns to the form; Delete draft
+→ "Delete this draft?" with AO3's caution verbatim. `nav:writing-work-posted-demo`: only
+Delete work on AO3 → "Delete this work?" → Delete on AO3 closes the form.
+
+**Changed after seeing it:** "Post work" was drawn in the theme file's one fixed green, which
+is too dark to read on a dark panel. It uses iOS's `statusSuccessColor` now, a green for each
+theme. Not seen: the missing-fields wording, a refusal, Sepia and large text.
