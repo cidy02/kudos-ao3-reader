@@ -7,7 +7,11 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -71,6 +75,7 @@ import io.github.cidy02.kudos.network.ao3.comments.AO3CommentParticipantRole
 import io.github.cidy02.kudos.network.ao3.comments.AO3CommentWorkAuthor
 import io.github.cidy02.kudos.ui.components.CommentAvatar
 import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
+import io.github.cidy02.kudos.ui.subject.isAccessibilityFontScale
 import io.github.cidy02.kudos.ui.subject.SubjectPalette
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -385,6 +390,7 @@ fun CommentConversationRow(
 /**
  * One comment post: Avatar on left, content on right.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun CommentPostRow(
     comment: AO3Comment,
@@ -447,14 +453,8 @@ fun CommentPostRow(
             modifier = Modifier.weight(1f),
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            // Byline row: Name, Role chip, timestamp, chapter badge, collapse pill
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(avatarSize),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
+            // Byline: Name, Role chip, timestamp, chapter badge, collapse pill.
+            val nameAndRole: @Composable RowScope.() -> Unit = {
                 // Name
                 Text(
                     text = comment.author.name,
@@ -480,9 +480,8 @@ fun CommentPostRow(
                 if (participantRole != AO3CommentParticipantRole.User && participantRole != AO3CommentParticipantRole.Guest) {
                     CommentParticipantBadge(role = participantRole, palette = palette)
                 }
-
-                Spacer(Modifier.weight(1f))
-
+            }
+            val meta: @Composable () -> Unit = {
                 if (timestamp.isNotEmpty()) {
                     Text(
                         text = timestamp,
@@ -520,6 +519,34 @@ fun CommentPostRow(
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
                         )
                     }
+                }
+            }
+            if (isAccessibilityFontScale()) {
+                // At large text the date, the chapter and Hide are wider than the row by themselves,
+                // and the row was as tall as the avatar: the name was squeezed to a letter or out,
+                // and the rest was cut in half (iOS had the same line run off the screen: T-373).
+                // The name takes its own line and the rest wraps under it.
+                Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp), content = nameAndRole)
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                        itemVerticalAlignment = Alignment.CenterVertically) { meta() }
+                }
+            } else {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = avatarSize),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    // The name's block takes the room that is left, so the name is cut short only when
+                    // the line is really full. With a weighted gap beside it the two split that room
+                    // in half, and "Calytrix" was drawn "Calyt…" next to empty space.
+                    Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp), content = nameAndRole)
+                    meta()
                 }
             }
 
