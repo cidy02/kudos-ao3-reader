@@ -68,6 +68,27 @@ class WritingChapterDeleteTest {
         assertFalse(model.state.value.finished); assertFalse(model.state.value.busy)
     }
 
+    /**
+     * The half the test above names and never ran (audit A28-5): the delete POST is out and the writer
+     * taps again. Only the confirmation read was ever held there, so a busy flag released after that
+     * read, which would let a second delete go out, passed.
+     */
+    @Test fun secondTapWhileTheDeletePostIsHeldSendsExactlyOneDelete() = runTest {
+        val setup = workFormSetup(); val model = setup.chapter("posted").also { it.load() }
+        setup.client.body = workFixture("ao3_demo_chapter_995006_delete")
+        setup.client.postBody = "<main id=main><div class='flash notice'>The chapter was deleted.</div></main>"
+        val release = CompletableDeferred<Unit>(); setup.client.beforePostResponse = { release.await() }
+        val deletion = async { model.deleteChapter(confirmed = true) }
+        // The confirmation page is parsed off the test's clock: wait in real time for the POST to go out.
+        for (attempt in 1..500) { runCurrent(); if (setup.client.posts == 1) break; Thread.sleep(10) }
+        assertEquals(1, setup.client.posts); assertTrue(model.state.value.busy)
+        val reads = setup.client.gets.size
+        model.deleteChapter(confirmed = true); model.save(AO3WorkSubmitAction.Update); model.openPreview(); runCurrent()
+        assertEquals(1, setup.client.posts); assertEquals(reads, setup.client.gets.size)
+        release.complete(Unit); deletion.await()
+        assertEquals(1, setup.client.posts); assertTrue(model.state.value.finished); assertFalse(model.state.value.busy)
+    }
+
     @Test fun changedSessionAfterDeletePostReturnsUnconfirmedAloneAndClearsBusy() = runTest {
         val setup = workFormSetup(); val model = setup.chapter("posted").also { it.load() }
         model.checkpoint(ChapterFormText.Content, "private typed text"); val form = model.state.value.form

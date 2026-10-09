@@ -37,7 +37,13 @@ class AO3ChapterFormTest {
             assertEquals(browser.filter { it.first in names && it.first != submit.fieldName }, modeled.filter { it.first != submit.fieldName })
             assertEquals(listOf(submit.fieldName to "1"), modeled.filter { it.first == submit.fieldName })
             assertEquals(browser.filterNot { it.first in names }, encoded.filterNot { it.first in names })
-            assertTrue(encoded.filterNot { it.first in names }.none { it.first in modeled.map { pair -> pair.first } })
+            // Each single-valued modeled field goes out once. (The line that stood here compared the names
+            // outside the modeled set with the names inside it, which no body can fail: audit A28-5.)
+            assertEquals(1, encoded.count { it.first == "authenticity_token" })
+            assertEquals(1, encoded.count { it.first == submit.fieldName })
+            assertTrue(encoded.count { it.first == "_method" } <= 1)
+            assertEquals(1, encoded.count { it.first == AO3ChapterField.title })
+            assertEquals(1, encoded.count { it.first == AO3ChapterField.content })
         }
     }
 
