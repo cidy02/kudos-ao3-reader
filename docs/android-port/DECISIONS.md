@@ -1151,3 +1151,14 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
 - A series Save scrolls AO3's answer into view.
   Reverse: the commit "A sent chapter or work write keeps AO3's verdict; Chapter Comments
   shows the inbox thread".
+
+## 2026-10-09: no Account shortcuts is a choice (audit A27-11)
+
+- An explicit empty choice is stored as `none` and stays empty; a value never written, an
+  empty one, or one with no known name is still the six defaults. iOS stores the same word
+  since T-371. Android had copied iOS's fault (removing the last shortcut brought all six
+  back) with two tests that pinned it.
+- Not changed, **owner question 21**: a deletion does not reach a copy the other device made
+  on its own, on either app, and Replace Library treats a later deletion in two different
+  ways. Android's restore has the same rules as iOS's here (`BackupMergeService`).
+  Reverse: the commit "Choosing no Account shortcuts stays empty".

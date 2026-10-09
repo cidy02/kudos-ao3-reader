@@ -357,3 +357,51 @@ chosen hue; about forty other places still use the raw accent for text or an ico
 Not a question after all: iOS's own code says Hide mode filters a work out before any row
 is drawn, and Home does so. Search was the list that forgot. Both apps now leave a hidden
 mature work out of Search's library matches until it is revealed.
+
+## 21. A deletion does not reach a copy the other device made on its own (both apps) (2026-10-09)
+
+Found by audit A27. When you delete something, the app writes a signed deletion record that
+names the deleted row by its id. That works when both devices hold the same row (it arrived
+by sync). It does not when each device made its own row for the same thing before they
+synced, because a restore matches such rows by what they are (a link's address, a work in a
+queue, a starred author) and each keeps its own id. The record names an id the other device
+never had, so the copy there stays, and goes back to the first device at the next sync.
+
+What is affected, on iOS and Android alike:
+
+- a saved link both devices saved separately;
+- a work both devices put in Saved for Later, or in the same queue, separately;
+- a work in a collection, when each device downloaded the work itself;
+- a star on an author, fandom or tag, and a fandom's "read up to here" mark, made separately;
+- and one of another kind: after a work is taken out of a collection on one device, **any**
+  later change to that collection on the other device keeps the work there (one clock covers
+  the whole collection).
+
+Nothing is lost by any of these: the fault is that a deleted thing comes back. Rows that
+arrived by sync (the usual case once two devices are paired) are deleted correctly, and since
+today that includes highlights, queue memberships and saved links (iOS T-366; Android has had
+it since brief 3bs).
+
+Fixing it means a deletion record must also say **what** was deleted (the link's address, the
+work's AO3 number with the queue or collection, the starred name), and that part must be
+signed like the rest or anyone who can write to the sync folder could delete rows with it.
+The signature today covers the record's type, id, date, signer, and the AO3 work number and
+work address when there is one. Adding to it changes what a released iOS version will accept.
+
+- **A (recommended).** A second, additive signature form for new records that also covers
+  what was deleted. A version that does not know it ignores the new part and behaves as now.
+  Both apps, with tests for each kind. One piece of work on each platform.
+- **B.** Only what fits the fields already signed: a saved link to a work, and a star on a
+  work. Small, and leaves the rest as now.
+- **C.** Leave it. A deleted thing that comes back can be deleted again on the other device.
+
+A related choice the same audit raised: **Replace Library and a later deletion.** Replace
+brings back a saved link, a search or a star you deleted after the backup was made, and the
+next sync then removes it again (the deletion record is still on file). A highlight, a queue
+membership, a collection or a queue deleted after the backup is not brought back at all. One
+rule is wanted for all of them: either Replace also retires the deletion records its backup
+contradicts and stamps what it brought back as changed now (so it survives and returns to the
+other device), or Replace keeps every later deletion. **Recommended: the first**, because
+Replace is the reader saying "make it like this backup".
+
+Until answered: no change to the deletion records or to Replace on either app.

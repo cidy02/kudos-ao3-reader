@@ -109,14 +109,15 @@ class AccountShortcutsScreenTest {
         compose.onNodeWithText("Dashboard").assertDoesNotExist()
     }
 
-    @Test fun footerOnlyDrawsForEmptyContentAndLastRemovalThroughStoreRestoresDefaults() {
+    /** Removing the last shortcut used to bring the six defaults back, on iOS too (audit A27-11). */
+    @Test fun footerOnlyDrawsForEmptyContentAndLastRemovalThroughStoreStaysEmpty() {
         compose.setContent { KudosTheme(KudosThemeMode.Light) { AccountShortcutsEditorContent(emptyList(), {}, {}) } }
         compose.onNodeWithText(AccountShortcutStore.emptyFooter).assertExists()
         compose.onNodeWithText("Not on the grid", ignoreCase = true).assertExists()
         runBlocking<Unit> {
             repo.updateAccountShortcuts(listOf(AccountShortcut.Inbox))
             repo.updateAccountShortcuts(repo.accountShortcuts.first().filterNot { it == AccountShortcut.Inbox })
-            assertEquals(AccountShortcutStore.defaults, repo.accountShortcuts.first())
+            assertEquals(emptyList<AccountShortcut>(), repo.accountShortcuts.first())
         }
     }
 
