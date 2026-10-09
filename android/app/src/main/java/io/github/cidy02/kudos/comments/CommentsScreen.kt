@@ -129,8 +129,9 @@ fun CommentsScreen(
 
     // Deep link focus (e.g. Inbox notification)
     LaunchedEffect(focusedCommentId) {
-        // A new view model has already asked for this thread; only a different one is new.
-        if (focusedCommentId != null && viewModel.focusedCommentId.value != focusedCommentId) {
+        // A new view model has already asked for this thread; only a different one is new. With a chapter
+        // named too the thread is one row of that chapter's page (the effect below), not the screen.
+        if (focusedCommentId != null && initialChapterPosition == null && viewModel.focusedCommentId.value != focusedCommentId) {
             viewModel.load(focusedId = focusedCommentId)
         }
     }
@@ -139,11 +140,8 @@ fun CommentsScreen(
     LaunchedEffect(initialChapterPosition, target?.workId) {
         val workId = target?.workId ?: return@LaunchedEffect
         val position = initialChapterPosition ?: return@LaunchedEffect
-        if (focusedCommentId != null) return@LaunchedEffect
-        val chapterId = chapterIndexRepository?.chapterIdForPosition(workId, position)
-        if (chapterId != null) {
-            viewModel.setTarget(AO3CommentTarget.Chapter(workId = workId, chapterId = chapterId))
-        }
+        // The Inbox's "Chapter Comments" names its comment too.
+        chapterIndexRepository?.chapterForPosition(workId, position)?.let { viewModel.openOnChapter(it, focusedCommentId) }
     }
 
     val state by viewModel.state.collectAsState()

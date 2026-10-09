@@ -130,8 +130,10 @@ internal class WritingSeriesState(val id: Long, private val repository: AO3Serie
             when (val result = writes.removeWorkFromSeries(id, row.serialWorkID, generation)) {
                 is AO3Result.Success -> if (current()) mutable.value = state.value.copy(form = state.value.form?.let {
                     it.copy(works = keepingMetadata(it.works, result.value)) })
-                is AO3Result.Failure -> if (active) mutable.value = state.value.copy(
-                    error = "${row.displayTitle} was not removed. " + workFormFailure(result.error))
+                // "Was not removed" is untrue of a removal AO3 may have carried out; iOS says both sentences.
+                is AO3Result.Failure -> if (active) mutable.value = state.value.copy(error = workFormFailure(result.error).let {
+                    if (it == io.github.cidy02.kudos.network.ao3.account.AO3CollectionFields.UNCONFIRMED) it
+                    else "${row.displayTitle} was not removed. $it" })
             }
         } catch (_: CancellationException) {
             if (active) mutable.value = state.value.copy(error = "Your AO3 session changed, so nothing was removed.")

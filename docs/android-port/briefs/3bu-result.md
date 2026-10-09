@@ -419,3 +419,9 @@ from a draft and from a posted work; editing a chapter from the Chapters list; S
 refusal; the preview and Post from it; Delete chapter with its confirmation; the work
 form's chapter count after each; four themes and large text. Nothing here has run against
 AO3.
+
+## Seen on the emulator (Claude, 2026-10-09)
+
+`nav:writing-chapter-new-draft-demo`: the form with its sections and switches; Post chapter
+now opens the Preview with "Draft saved." and Post chapter / Edit; Save as draft closes the
+form. Not seen: Delete, the posted work's chapter list, Sepia and large text.

@@ -121,7 +121,9 @@ class AO3WriteRepository(
                 is AO3Result.Failure -> null
                 is AO3Result.Success -> try { seriesParser.parseManage(result.value.body, url) } catch (_: Exception) { null }
             }
-        } catch (cancelled: CancellationException) { throw cancelled }
+        // The POST has returned. A session that moved on during this read is "didn't confirm" just below,
+        // not a cancellation the screen words as "not saved" (audit A26-2); a closed screen still cancels.
+        } catch (_: CancellationException) { currentCoroutineContext().ensureActive(); null }
         catch (_: Exception) { null }
         movedOnAfterWrite(expectedGeneration)?.let { return it }
         if (fresh == null || order != null && fresh.sortedBy { it.position }.map { it.serialWorkID } != order ||
@@ -189,20 +191,27 @@ class AO3WriteRepository(
         if (client.username() == null) return AO3Result.Failure(AO3Error.Validation("Log in to AO3 first."))
         val fields = form.parameters(AO3WorkSubmitAction.Preview)
         if (fields.none { it.first == "preview_button" }) return AO3Result.Failure(AO3Error.Validation(CHAPTER_PREVIEW_UNAVAILABLE))
-        return when (val result = postWriting(form.actionUrl, fields, form.csrfToken, form.actionUrl, expectedGeneration)) {
-            is AO3Result.Failure -> result
+        // iOS judges the preview it received. Previewing a new chapter makes AO3 create its draft, and that
+        // draft's id is in this answer: thrown away because the session has since moved on, the next Preview
+        // would create a second chapter (audit A26-1). So a preview AO3 did return is returned; only an answer
+        // that confirms nothing becomes "didn't confirm".
+        return when (val result = postWriting(form.actionUrl, fields, form.csrfToken, form.actionUrl, expectedGeneration,
+            judgedByCaller = true)) {
+            is AO3Result.Failure -> movedOnAfterWrite(expectedGeneration, result) ?: result
             is AO3Result.Success -> {
                 val page = result.value
                 val error = parser.workWriteError(page.body)
                 when {
                     error != null -> AO3Result.Failure(AO3Error.Validation(error))
-                    page.statusCode !in 200..399 -> AO3Result.Failure(AO3Error.Validation(CHAPTER_PREVIEW_UNAVAILABLE))
+                    page.statusCode !in 200..399 -> movedOnAfterWrite(expectedGeneration)
+                        ?: AO3Result.Failure(AO3Error.Validation(CHAPTER_PREVIEW_UNAVAILABLE))
                     else -> try {
-                        val preview = withContext(Dispatchers.Default) { AO3ChapterFormParser().preview(page.body, page.url) }
-                        movedOnAfterWrite(expectedGeneration) ?: AO3Result.Success(preview)
+                        AO3Result.Success(withContext(Dispatchers.Default) { AO3ChapterFormParser().preview(page.body, page.url) })
                     } catch (cancelled: CancellationException) { throw cancelled }
-                      catch (_: AO3WorkFormParseException.LoginRequired) { AO3Result.Failure(AO3Error.AuthenticationRequired) }
-                      catch (_: Exception) { AO3Result.Failure(AO3Error.Validation(CHAPTER_PREVIEW_UNAVAILABLE)) }
+                      catch (_: AO3WorkFormParseException.LoginRequired) {
+                          movedOnAfterWrite(expectedGeneration) ?: AO3Result.Failure(AO3Error.AuthenticationRequired) }
+                      catch (_: Exception) {
+                          movedOnAfterWrite(expectedGeneration) ?: AO3Result.Failure(AO3Error.Validation(CHAPTER_PREVIEW_UNAVAILABLE)) }
                 }
             }
         }
@@ -251,7 +260,7 @@ class AO3WriteRepository(
 
     /** The existing authenticated client owns pacing, cookies, transport and the dispatch fence. */
     private suspend fun postWriting(action: String, fields: List<Pair<String, String>>, token: String,
-        referer: String, expectedGeneration: Int): AO3Result<AO3HttpResponse> {
+        referer: String, expectedGeneration: Int, judgedByCaller: Boolean = false): AO3Result<AO3HttpResponse> {
         requireCollectionSession(expectedGeneration)
         if (client.username() == null) return AO3Result.Failure(AO3Error.Validation("Log in to AO3 first."))
         if (!AO3RedirectCookieRelay.isTrustedUrl(action)) return AO3Result.Failure(AO3Error.Parse("Couldn't read AO3's work form."))
@@ -259,7 +268,7 @@ class AO3WriteRepository(
         val response = withContext(NonCancellable) {
             client.postAuthenticatedInSession(action, fields, writeHeaders(token, referer), expectedGeneration)
         }
-        movedOnAfterWrite(expectedGeneration)?.let { return it }
+        if (!judgedByCaller) movedOnAfterWrite(expectedGeneration, response)?.let { return it }
         return response
     }
 
@@ -572,9 +581,12 @@ class AO3WriteRepository(
      * there (audit A24-1; iOS judges the answer it has and calls the rest unconfirmed).
      * Before the POST, [requireCollectionSession] still stops the write outright.
      */
-    private fun movedOnAfterWrite(generation: Int): AO3Result.Failure? =
-        if (client.sessionGeneration() == generation) null
-        else AO3Result.Failure(AO3Error.Validation(AO3CollectionFields.UNCONFIRMED))
+    private fun movedOnAfterWrite(generation: Int, answer: AO3Result<*>? = null): AO3Result.Failure? = when {
+        client.sessionGeneration() == generation -> null
+        // AO3 answering the POST with its login page is AO3's refusal, and is itself what ended the session.
+        answer is AO3Result.Failure && answer.error == AO3Error.AuthenticationRequired -> answer
+        else -> AO3Result.Failure(AO3Error.Validation(AO3CollectionFields.UNCONFIRMED))
+    }
 
     private fun requireCollectionSession(generation: Int) {
         if (client.sessionGeneration() != generation) throw CancellationException()

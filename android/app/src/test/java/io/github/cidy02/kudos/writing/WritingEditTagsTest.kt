@@ -228,7 +228,7 @@ class WritingEditTagsTest {
             }
             model.save()
             assertEquals(before, model.state.value.form); assertFalse(model.state.value.saved)
-            assertEquals(if (sessionChange) WORK_FORM_SESSION_CHANGED else "Couldn't reach AO3. Check your connection and try again.",
+            assertEquals(if (sessionChange) io.github.cidy02.kudos.network.ao3.account.AO3CollectionFields.UNCONFIRMED else "Couldn't reach AO3. Check your connection and try again.",
                 model.state.value.saveError)
             assertFalse(parent.state.value.tagsNeedRefresh)
             assertEquals(3, setup.client.gets.size); assertEquals(1, setup.client.posts)

@@ -61,6 +61,17 @@ class AO3ChapterFormTest {
         assertEquals(listOf(AO3ChapterField.year to "2026"), blank.parameters(AO3WorkSubmitAction.SaveDraft).filter { it.first == AO3ChapterField.year })
     }
 
+    @Test fun theTokenGoesInTheBodyEvenWhenOnlyTheMetaTagCarriesIt() {
+        val whole = workFixture("ao3_demo_chapter_995006_draft")
+        val html = whole.replace("<input type=\"hidden\" name=\"authenticity_token\" value=\"demo-chapter-995006==\">", "")
+        assertTrue("name=\"authenticity_token\"" !in html)
+        val body = AO3ChapterFormParser().parse(html, AO3ChapterUrls.form(995006, 12311)).parameters(AO3WorkSubmitAction.SaveDraft)
+        assertEquals("authenticity_token" to "demo-chapter-995006==", body.first())
+        assertEquals(1, body.count { it.first == "authenticity_token" })
+        assertTrue(body.any { it.first == "_method" && it.second == "patch" })
+        assertEquals(AO3ChapterFormParser().parse(whole, AO3ChapterUrls.form(995006, 12311)).parameters(AO3WorkSubmitAction.SaveDraft).toSet(), body.toSet())
+    }
+
     @Test fun datesDefaultToFirstOptionTokenPrefersMetaAndUnsafeOrNonChapterFormsFail() {
         val html = workFixture("ao3_demo_chapter_995006_new")
         val doc = Jsoup.parse(html)

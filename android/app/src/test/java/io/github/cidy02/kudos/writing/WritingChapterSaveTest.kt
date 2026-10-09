@@ -163,16 +163,48 @@ class WritingChapterSaveTest {
             val form = model.state.value.form; setup.client.postFailure = failure
             model.save(AO3WorkSubmitAction.SaveDraft)
             assertEquals(form, model.state.value.form); assertFalse(model.state.value.finished)
-            assertEquals(if (failure == AO3Error.AuthenticationRequired) WORK_FORM_SESSION_CHANGED else workFormFailure(failure), model.state.value.saveError)
+            // Each is AO3's own answer to the POST, the login page included ("session expired, log in again").
+            assertEquals(workFormFailure(failure), model.state.value.saveError)
             assertEquals(1, setup.client.posts); assertEquals(1, setup.client.gets.size)
         }
         val setup = workFormSetup(); val model = setup.chapter("draft").also { it.load() }; val form = model.state.value.form
         setup.client.beforePostResponse = { throw java.io.IOException("local") }
         model.save(AO3WorkSubmitAction.SaveDraft)
         assertEquals("Couldn't reach AO3. Check your connection and try again.", model.state.value.saveError); assertEquals(form, model.state.value.form)
+        // The request had gone out when the session ended: AO3 may hold the chapter, so the truthful
+        // answer is "didn't confirm", not a sentence that says to reopen the form "before saving" (A26-1).
         setup.client.beforePostResponse = { setup.auth.logout() }; model.save(AO3WorkSubmitAction.SaveDraft)
-        assertEquals(WORK_FORM_SESSION_CHANGED, model.state.value.saveError); assertFalse(model.state.value.finished)
+        assertEquals(io.github.cidy02.kudos.network.ao3.account.AO3CollectionFields.UNCONFIRMED, model.state.value.saveError)
+        assertFalse(model.state.value.finished); assertFalse(model.state.value.busy)
         assertEquals(2, setup.client.posts)
+    }
+
+    /**
+     * Audit A26-1. Previewing a new chapter makes AO3 create its draft. The answer used to be thrown away
+     * when the session had moved on meanwhile, so the form forgot the draft and said "reopen this form
+     * before saving": the writer's next Preview created a second chapter.
+     */
+    @Test fun aPreviewAnsweredAfterTheSessionMovedOnStillAdoptsTheDraftAo3Created() = runTest {
+        val setup = workFormSetup(); val model = setup.chapter("new").also { it.load() }
+        setup.client.postBody = chapterPreviewHtml()
+        setup.client.beforePostResponse = { setup.auth.logout() }
+        model.openPreview()
+        assertEquals(12303L, model.state.value.form!!.chapterID); assertNotNull(model.state.value.preview)
+        assertEquals(null, model.state.value.saveError); assertFalse(model.state.value.busy)
+        // The form is no longer this session's, so nothing more leaves it.
+        setup.client.beforePostResponse = {}
+        model.save(AO3WorkSubmitAction.Post)
+        assertEquals(WORK_FORM_SESSION_CHANGED, model.state.value.saveError); assertEquals(1, setup.client.posts)
+    }
+
+    /** The same answer with nothing in it to adopt is "didn't confirm", never "session changed". */
+    @Test fun aPreviewThatConfirmsNothingAfterTheSessionMovedOnIsUnconfirmed() = runTest {
+        val setup = workFormSetup(); val model = setup.chapter("new").also { it.load() }
+        setup.client.postBody = "<main id=main><p>Nothing a preview has.</p></main>"
+        setup.client.beforePostResponse = { setup.auth.logout() }
+        model.openPreview()
+        assertEquals(io.github.cidy02.kudos.network.ao3.account.AO3CollectionFields.UNCONFIRMED, model.state.value.saveError)
+        assertEquals(null, model.state.value.form!!.chapterID); assertFalse(model.state.value.busy)
     }
 
     private data class PreviewCase(val kind: String, val html: String, val reason: String?, val revision: Int)

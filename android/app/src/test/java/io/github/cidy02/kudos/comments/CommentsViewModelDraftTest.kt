@@ -240,6 +240,45 @@ class CommentsViewModelDraftTest {
         assertEquals(null, draftStore.getDraft(workId, parentId = null, username = "bob"))
     }
 
+    /**
+     * Audit A26-4. The Inbox's "Chapter Comments" opened the chapter's first page alone: an inbox comment
+     * AO3 has on a later page was not there. Now its thread, read once when the screen opens, is the page's
+     * first row, as on iOS; and one already on the page is not shown twice.
+     */
+    @Test
+    fun chapterCommentsFromTheInboxPutTheInboxThreadFirstAndReadItOnce() = runTest(testDispatcher) {
+        for (alreadyOnThePage in listOf(false, true)) {
+            val urls = mutableListOf<String>()
+            val threadPage = success(writeResource("ao3/comments/comment_thread_reply_form.html"))
+            val chapterPage = success(writeResource(
+                if (alreadyOnThePage) "ao3/comments/comment_thread_reply_form.html" else "ao3/comments/comments_basic.html"))
+            val repo = AO3CommentRepository(
+                publicClient = FakePublicClient(chapterPage),
+                authenticatedClient = FakeAuthenticatedClient(listOf(threadPage, chapterPage), emptyList(), "alice", urls)
+            )
+            val viewModel = CommentsViewModel(repo, target, draftStore, 1252794206L) { "alice" }
+            viewModel.showChapterIncluding(AO3CommentTarget.Chapter(workId, 77L), 1252794206L)
+            // The pages are parsed off the test's clock, so this waits in real time for both reads.
+            for (attempt in 1..500) {
+                testDispatcher.scheduler.advanceUntilIdle()
+                if (urls.size == 2 && viewModel.state.value !is CommentsUiState.Loading) break
+                Thread.sleep(10)
+            }
+
+            val shown = (viewModel.state.value as CommentsUiState.Loaded).thread.comments.map { it.numericId }
+            assertEquals(1252794206L, shown.first())
+            assertEquals(1, shown.count { it == 1252794206L })
+            assertEquals(!alreadyOnThePage, shown.size > 1)
+            assertEquals(2, urls.size)
+            assertEquals(true, urls[0].endsWith("/comments/1252794206")); assertEquals(true, "/chapters/77" in urls[1])
+            assertEquals(null, viewModel.focusedCommentId.value)
+            // Asked again (the screen coming back into view) it reads nothing more.
+            viewModel.showChapterIncluding(AO3CommentTarget.Chapter(workId, 77L), 1252794206L)
+            testDispatcher.scheduler.advanceUntilIdle()
+            assertEquals(2, urls.size)
+        }
+    }
+
     private fun createViewModel(
         target: AO3CommentTarget?,
         focusedId: Long? = null,
@@ -275,10 +314,11 @@ private class FakePublicClient(private val result: AO3Result<AO3HttpResponse>) :
 private class FakeAuthenticatedClient(
     private val getResults: List<AO3Result<AO3HttpResponse>>,
     private val postResults: List<AO3Result<AO3HttpResponse>>,
-    private val username: String? = null
+    private val username: String? = null,
+    private val urls: MutableList<String> = mutableListOf()
 ) : AO3AuthenticatedClient {
     private val gets = ArrayDeque(getResults)
     override fun username(): String? = username
-    override suspend fun getAuthenticated(url: String): AO3Result<AO3HttpResponse> = gets.removeFirst()
+    override suspend fun getAuthenticated(url: String): AO3Result<AO3HttpResponse> { urls += url; return gets.removeFirst() }
     override suspend fun postAuthenticated(url: String, formFields: List<Pair<String, String>>, headers: Map<String, String>): AO3Result<AO3HttpResponse> = TODO()
 }

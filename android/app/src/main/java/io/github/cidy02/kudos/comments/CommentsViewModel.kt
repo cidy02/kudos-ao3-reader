@@ -155,29 +155,77 @@ class CommentsViewModel(
             _state.value = CommentsUiState.Loading
             val result = repository.loadThread(target, page, focusedId)
             ensureActive()
-            when (result) {
-                is AO3Result.Success -> {
-                    val thread = result.value.withSort(_order.value)
-                    _state.value = CommentsUiState.Loaded(thread)
-                    // Restore a top-level draft on initial load.
-                    val draftContent = draftStore?.getDraft(
-                        workId = target.workId,
-                        chapterId = (target as? AO3CommentTarget.Chapter)?.chapterId,
-                        parentId = null,
-                        username = currentUsername()
-                    )
-                    // Never over text already in the field, nor into an edit.
-                    if (draftContent != null && _draft.value.isEmpty() && _editTarget.value == null) {
-                        _draft.value = draftContent
-                    }
-                    _isDraftRestored.value = true
+            present(target, result)
+        }
+    }
+
+    private var openedOnChapter = false
+
+    /**
+     * The chapter this screen was opened for (the reader's comments button, the Inbox's "Chapter
+     * Comments"). Once: the screen coming back into view must not undo a scope the reader chose since.
+     * The scope and its label follow, as iOS's `scope = .byChapter`: the chapter's comments used to be
+     * shown under "All comments".
+     */
+    fun openOnChapter(chapter: AO3ChapterRef, includingCommentId: Long? = null) {
+        val workId = _currentTarget.value?.workId ?: return
+        if (openedOnChapter) return
+        openedOnChapter = true
+        _selectedChapter.value = chapter
+        _scope.value = CommentScope.ByChapter
+        val target = AO3CommentTarget.Chapter(workId, chapter.chapterId)
+        if (includingCommentId == null) setTarget(target) else showChapterIncluding(target, includingCommentId)
+    }
+
+    /**
+     * The Inbox's "Chapter Comments": the chapter's first page, with the inbox comment's thread put first
+     * when AO3 has it on a later page (iOS `CommentsModel.chapterPage(_:including:focusedRootID:)`). It used
+     * to open the chapter's first page alone, after reading the work's first page for nothing (audit A26-4).
+     * The thread was asked for when this view model was made; its answer is waited for, not asked again.
+     */
+    fun showChapterIncluding(target: AO3CommentTarget.Chapter, commentId: Long) {
+        if (_currentTarget.value == target) return
+        _currentTarget.value = target
+        val threadRead = loadJob
+        loadJob = viewModelScope.launch {
+            threadRead?.join()
+            val thread = (_state.value as? CommentsUiState.Loaded)?.thread?.comments
+                ?.firstOrNull { findCommentRecursive(listOf(it), commentId) != null }
+            // From here it is the chapter's page: paging and refresh read the chapter, not the one thread.
+            _focusedCommentId.value = null
+            _state.value = CommentsUiState.Loading
+            val result = repository.loadThread(target, 1, null)
+            ensureActive()
+            present(target, result, first = thread?.takeIf {
+                result is AO3Result.Success && findCommentRecursive(result.value.comments, commentId) == null
+            })
+        }
+    }
+
+    private suspend fun present(target: AO3CommentTarget, result: AO3Result<AO3CommentThread>, first: AO3Comment? = null) {
+        when (result) {
+            is AO3Result.Success -> {
+                val sorted = result.value.withSort(_order.value)
+                val thread = if (first == null) sorted else sorted.copy(comments = listOf(first) + sorted.comments)
+                _state.value = CommentsUiState.Loaded(thread)
+                // Restore a top-level draft on initial load.
+                val draftContent = draftStore?.getDraft(
+                    workId = target.workId,
+                    chapterId = (target as? AO3CommentTarget.Chapter)?.chapterId,
+                    parentId = null,
+                    username = currentUsername()
+                )
+                // Never over text already in the field, nor into an edit.
+                if (draftContent != null && _draft.value.isEmpty() && _editTarget.value == null) {
+                    _draft.value = draftContent
                 }
-                is AO3Result.Failure -> {
-                    _state.value = if (result.error == AO3Error.AuthenticationRequired) {
-                        CommentsUiState.AuthRequired(commentsReadErrorMessage(result.error))
-                    } else {
-                        CommentsUiState.Error(commentsReadErrorMessage(result.error))
-                    }
+                _isDraftRestored.value = true
+            }
+            is AO3Result.Failure -> {
+                _state.value = if (result.error == AO3Error.AuthenticationRequired) {
+                    CommentsUiState.AuthRequired(commentsReadErrorMessage(result.error))
+                } else {
+                    CommentsUiState.Error(commentsReadErrorMessage(result.error))
                 }
             }
         }

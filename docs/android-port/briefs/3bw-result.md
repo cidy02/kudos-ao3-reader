@@ -114,3 +114,11 @@ the author's own series list; Save, with a refusal; Reorder by drag and by Move 
 Later, with Save; Remove from series and its confirmation; a series the reader does not own
 offering none of it; four themes and large text. The open question about dragging past the
 edge of the screen needs a device. Nothing here has run against AO3.
+
+## Seen on the emulator (Claude, 2026-10-09)
+
+`nav:series-works/…321` → More actions → Edit series: the form opens with its four sections;
+Reorder works: a long-press drag moved the third work to the top, Save returned to the form
+and the order was kept on reopening; the complete switch and Save give "Series was
+successfully updated." (below the fold until the landing of audit A26 made Save scroll to it).
+Not seen: Remove works, a refusal, Sepia and large text.

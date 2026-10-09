@@ -119,7 +119,7 @@ internal class AO3CollectionFormState(
         try {
             val result = writes.saveCollection(form.copy(generalErrors = emptyList()), generation)
             currentCoroutineContext().ensureActive()
-            if (!owns(generation)) return
+            if (!owns(generation)) { sentUnderAnEarlierSession(); return }
             mutable.value = when (result) {
                 is AO3Result.Failure -> failed(result.error.displayMessage())
                 is AO3Result.Success -> when (val outcome = result.value) {
@@ -135,7 +135,7 @@ internal class AO3CollectionFormState(
                 }
             }
         } catch (_: CancellationException) {
-            if (owns(generation)) mutable.value = failed("Not saved: your AO3 session changed since this form opened.")
+            if (active) mutable.value = failed("Not saved: your AO3 session changed since this form opened.")
         }
     }
 
@@ -147,13 +147,13 @@ internal class AO3CollectionFormState(
         try {
             val result = writes.deleteCollection(slug, generation)
             currentCoroutineContext().ensureActive()
-            if (!owns(generation)) return
+            if (!owns(generation)) { sentUnderAnEarlierSession(); return }
             mutable.value = when (result) {
                 is AO3Result.Success -> state.value.copy(saving = false, deleted = true)
                 is AO3Result.Failure -> failed(result.error.displayMessage())
             }
         } catch (_: CancellationException) {
-            if (owns(generation)) mutable.value = failed("Not deleted: your AO3 session changed since this form opened.")
+            if (active) mutable.value = failed("Not deleted: your AO3 session changed since this form opened.")
         }
     }
 
@@ -169,6 +169,13 @@ internal class AO3CollectionFormState(
         formGeneration = current
         return current
     }
+
+    /**
+     * This form outlives a session change (it is not rebuilt for the new one), so a write that returned
+     * after the session moved on must still end: it used to leave Save busy for good and say nothing
+     * (audit A26-3). Nothing from the answer is applied to the form.
+     */
+    private fun sentUnderAnEarlierSession() { if (active) mutable.value = failed(AO3CollectionFields.UNCONFIRMED) }
 
     private fun failed(message: String) = state.value.copy(saving = false,
         form = state.value.form?.copy(generalErrors = listOf(message)))
