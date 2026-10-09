@@ -130,22 +130,41 @@ struct SearchPaginationBar: View {
 
     /// The position, in words. Spec 1k displays `Page 2 / 3,216` with a chevron up
     /// that indicates the tappable page sheet trigger.
+    ///
+    /// T-375. In a narrow bar at the accessibility sizes "Page 1" was cut to "Pag…":
+    /// the one thing the bar is for went missing. Whole variants are tried in turn, the
+    /// spec's first: with the word, then the numbers alone ("1 / 3"), then the page
+    /// alone. None is ever truncated while a shorter one fits.
     private var positionLabel: some View {
+        ViewThatFits(in: .horizontal) {
+            positionRow(showsWord: true, showsTotal: true)
+            positionRow(showsWord: false, showsTotal: true)
+            positionRow(showsWord: false, showsTotal: false)
+        }
+        .lineLimit(1)
+        .padding(.horizontal, 12)
+        .frame(minHeight: 44)
+        .contentShape(Rectangle())
+    }
+
+    private func positionRow(showsWord: Bool, showsTotal: Bool) -> some View {
         HStack(spacing: 7) {
-            Text("Page \(currentPage)")
+            Text(showsWord ? "Page \(currentPage)" : "\(currentPage)")
                 .font(.system(size: currentPageSize, weight: .semibold))
                 .foregroundStyle(Color.primary)
                 .monospacedDigit()
                 .contentTransition(.numericText())
                 .animation(reduceMotion ? nil : .snappy, value: currentPage)
 
-            Text("/ \(totalPages.formatted())")
-                .font(.system(size: totalPagesSize, weight: .medium, design: .monospaced))
-                .foregroundStyle(
-                    themeManager.appTheme.isDarkFamily
-                        ? Color.white.opacity(0.60)
-                        : Color.secondary
-                )
+            if showsTotal {
+                Text("/ \(totalPages.formatted())")
+                    .font(.system(size: totalPagesSize, weight: .medium, design: .monospaced))
+                    .foregroundStyle(
+                        themeManager.appTheme.isDarkFamily
+                            ? Color.white.opacity(0.60)
+                            : Color.secondary
+                    )
+            }
 
             if isLoading {
                 ProgressView()
@@ -161,9 +180,6 @@ struct SearchPaginationBar: View {
             }
         }
         .lineLimit(1)
-        .padding(.horizontal, 12)
-        .frame(minHeight: 44)
-        .contentShape(Rectangle())
     }
 
     private func navButton(_ direction: Direction) -> some View {
