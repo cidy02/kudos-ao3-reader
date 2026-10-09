@@ -84,6 +84,10 @@ class WritingWorkFormScreenTest {
         row("Rating", if (id == null) "Please select a rating" else "Teen And Up Audiences")
         row("Archive warnings ∗", if (id == null) "None" else "1")
         row("Fandoms ∗", if (id == null) "None" else "2")
+        // Drawn with the marker, spoken as iOS speaks it: TalkBack used to read the marker aloud.
+        compose.onNodeWithContentDescription("Archive warnings, required", useUnmergedTree = true).assertExists()
+        compose.onNodeWithContentDescription("Fandoms, required", useUnmergedTree = true).assertExists()
+        compose.onNodeWithContentDescription("Title, required").assertExists()
         row("Language", if (id == null) "Please select a language" else "English")
         row("Categories", if (id == null) "None" else "2")
         row("Relationships", if (id == null) "None" else "2")
@@ -151,7 +155,7 @@ class WritingWorkFormScreenTest {
     @Test fun titleAndServedSingleChoiceAndSwitchEditTheActualScreenStateWithoutAnotherRead() {
         show(995001L)
         val old = model.state.value.form!!
-        compose.onNodeWithContentDescription("Title ∗").performTextReplacement("Changed through screen")
+        compose.onNodeWithContentDescription("Title, required").performTextReplacement("Changed through screen")
         compose.onNodeWithText("Rating").performClick()
         awaitText("Mature")
         compose.onNodeWithText("Mature").performClick()
@@ -164,7 +168,7 @@ class WritingWorkFormScreenTest {
 
     @Test fun multipleChoicePushUsesOnlyServedOptionsAndBackKeepsTitleAndSelections() {
         show(995001L)
-        compose.onNodeWithContentDescription("Title ∗").performTextReplacement("Keep title")
+        compose.onNodeWithContentDescription("Title, required").performTextReplacement("Keep title")
         val old = model.state.value.form!!
         compose.onNodeWithText("Archive warnings ∗").performClick()
         awaitText("1 chosen")
@@ -209,7 +213,7 @@ class WritingWorkFormScreenTest {
 
     @Test fun editorDoneAndBackReturnExactTextAndNeverReloadForm() {
         show(995001L)
-        compose.onNodeWithContentDescription("Title ∗").performTextReplacement("Kept while editing")
+        compose.onNodeWithContentDescription("Title, required").performTextReplacement("Kept while editing")
         val old = model.state.value.form!!
         reach("Work text")
         compose.onNodeWithText("Work text").performClick()
@@ -231,7 +235,7 @@ class WritingWorkFormScreenTest {
 
     @Test fun leavingHasNoUnsavedDialogOrWrite() {
         show()
-        compose.onNodeWithContentDescription("Title ∗").performTextReplacement("Unsaved")
+        compose.onNodeWithContentDescription("Title, required").performTextReplacement("Unsaved")
         compose.runOnIdle { chrome.onBack!!.invoke() }
         assertEquals(1, leaves)
         compose.onNodeWithText("Discard changes?").assertDoesNotExist()
@@ -274,7 +278,7 @@ class WritingWorkFormScreenTest {
 
     private fun saveEditedForm(id: Long?) {
         show(id)
-        compose.onNodeWithContentDescription("Title ∗").performTextReplacement("  Screen title & 星  ")
+        compose.onNodeWithContentDescription("Title, required").performTextReplacement("  Screen title & 星  ")
         val before = model.state.value.form!!
         compose.onNodeWithText("Save").assertIsEnabled().performClick()
         compose.waitForIdle(); compose.waitUntil(15_000) { leaves == 1 }
@@ -308,12 +312,12 @@ class WritingWorkFormScreenTest {
             setup.client.postBody = "<main id=main><div id=error><ul><li>Title is too long (maximum is 255 characters)</li></ul></div></main>"
             setup.client.postStatus = 422
         }
-        compose.onNodeWithContentDescription("Title ∗").performTextReplacement("Keep this title")
+        compose.onNodeWithContentDescription("Title, required").performTextReplacement("Keep this title")
         compose.onNodeWithText("Save").performClick()
         awaitText("AO3 could not save the change")
         compose.onNodeWithText("Title is too long (maximum is 255 characters)").assertExists()
         compose.onNodeWithText("OK").performClick()
-        compose.onNodeWithContentDescription("Title ∗").assertTextContains("Keep this title")
+        compose.onNodeWithContentDescription("Title, required").assertTextContains("Keep this title")
         assertEquals(0, leaves); assertEquals(1, setup.client.posts); assertEquals(1, setup.client.gets.size)
     }
 
@@ -361,14 +365,14 @@ class WritingWorkFormScreenTest {
             }
         } }
         awaitText("Lanterns Above the Mill · never posted")
-        compose.onNodeWithContentDescription("Title ∗").performTextReplacement("Retained on session failure")
+        compose.onNodeWithContentDescription("Title, required").performTextReplacement("Retained on session failure")
         compose.onNodeWithText("Save").performClick()
         compose.waitForIdle(); compose.waitUntil(15_000) { setup.client.posts == 1 }
         compose.runOnIdle { runBlocking { setup.auth.logout() }; release.complete(Unit) }
         awaitText("AO3 could not save the change")
         compose.onNodeWithText(io.github.cidy02.kudos.network.ao3.account.AO3CollectionFields.UNCONFIRMED).assertExists()
         compose.onNodeWithText("OK").performClick()
-        compose.onNodeWithContentDescription("Title ∗").assertTextContains("Retained on session failure")
+        compose.onNodeWithContentDescription("Title, required").assertTextContains("Retained on session failure")
         assertEquals(0, leaves); assertEquals(1, setup.client.posts); assertEquals(1, setup.client.gets.size)
     }
 

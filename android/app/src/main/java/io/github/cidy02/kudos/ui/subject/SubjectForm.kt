@@ -93,6 +93,23 @@ fun SubjectFieldLabel(
     )
 }
 
+/** The marker a required field's label ends with on screen. */
+const val REQUIRED_MARK = " ∗"
+
+/**
+ * What a screen reader says for a label: "Title, required" where the screen draws "Title ∗", as iOS's
+ * `SubjectFormRow(isRequired:)` does. The marker itself was being read aloud.
+ */
+fun spokenFormLabel(label: String): String =
+    if (label.endsWith(REQUIRED_MARK)) label.removeSuffix(REQUIRED_MARK) + ", required" else label
+
+/** [byControl]: the row's own control (a text field) says "…, required"; the label beside it says the name. */
+private fun Modifier.spokenAs(label: String, byControl: Boolean = false): Modifier = when {
+    !label.endsWith(REQUIRED_MARK) -> this
+    byControl -> semantics { contentDescription = label.removeSuffix(REQUIRED_MARK) }
+    else -> semantics { contentDescription = spokenFormLabel(label) }
+}
+
 /**
  * A labelled form row. [trailing] replaces the value, as a switch or a swatch does.
  * [valueMaxLines] above one lets a value the reader has to see whole wrap instead of being cut.
@@ -122,7 +139,7 @@ fun SubjectFormRow(
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(2.dp)
             ) {
-                Text(text = label, color = tokens.primaryInk, fontSize = 14.5.sp, lineHeight = 20.sp)
+                Text(text = label, modifier = Modifier.spokenAs(label), color = tokens.primaryInk, fontSize = 14.5.sp, lineHeight = 20.sp)
                 Text(
                     text = value.orEmpty(),
                     color = tokens.secondaryInk,
@@ -139,7 +156,7 @@ fun SubjectFormRow(
             val hasValue = trailing == null && value != null
             Text(
                 text = label,
-                modifier = if (hasValue) Modifier else Modifier.weight(1f),
+                modifier = (if (hasValue) Modifier else Modifier.weight(1f)).spokenAs(label, byControl = trailing != null),
                 color = tokens.primaryInk,
                 fontSize = 14.5.sp,
                 lineHeight = 20.sp

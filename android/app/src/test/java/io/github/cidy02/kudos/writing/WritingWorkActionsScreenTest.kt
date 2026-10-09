@@ -85,7 +85,7 @@ class WritingWorkActionsScreenTest {
 
     @Test fun draftPostAsksThenRefusalKeepsAllTypedFieldsAndDoesNotClose() {
         show()
-        compose.onNodeWithContentDescription("Title ∗").performTextReplacement("Typed private title")
+        compose.onNodeWithContentDescription("Title, required").performTextReplacement("Typed private title")
         compose.runOnIdle { setup.client.postBody = "<main id=main><div class='flash error'>This draft could not be posted.</div></main>" }
         reach("Post work"); compose.onNodeWithText("Post work").performClick()
         awaitText("Post this work?")
@@ -167,7 +167,7 @@ class WritingWorkActionsScreenTest {
         show(wrapper = true)
         val release = CompletableDeferred<Unit>()
         compose.runOnIdle { setup.client.beforePostResponse = { release.await() } }
-        compose.onNodeWithContentDescription("Title ∗").performTextReplacement("Retained across sessions")
+        compose.onNodeWithContentDescription("Title, required").performTextReplacement("Retained across sessions")
         reach("Post work"); compose.onNodeWithText("Post work").performClick(); confirmPost()
         compose.waitForIdle(); compose.waitUntil(15_000) { setup.client.posts == 1 }
         compose.onNodeWithText("Post work").assertIsNotEnabled().performClick()

@@ -1226,3 +1226,12 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
 - Left out: withdrawing after sign-ups close (it records a default on the assignment), and
   everything else about assignments.
   Reverse: the commit "A challenge's sign-ups list, and withdrawing a sign-up".
+
+## 2026-10-09: a required field is spoken as "…, required"
+
+- A form label drawn with the required marker ("Title ∗", "Archive warnings ∗", "Fandoms ∗")
+  is spoken as "Title, required", as iOS's row does; the marker itself was being read aloud.
+  Beside a text field the field says "…, required" and the label says the name alone. The
+  rule is in the two shared form rows (`SubjectFormRow`, `SubjectTextFieldRow`), keyed on the
+  marker, so nothing else changes.
+  Reverse: the commit "A required field is spoken as required".
