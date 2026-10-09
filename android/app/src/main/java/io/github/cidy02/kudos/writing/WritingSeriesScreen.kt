@@ -103,7 +103,7 @@ internal fun WritingSeriesContent(model: WritingSeriesState, title: String, subt
             Spacer(Modifier.windowInsetsTopHeight(WindowInsets.statusBars))
             Spacer(Modifier.height(76.dp))
             SubjectHeaderBlock(kicker = "AO3 Account", title = if (ordering) "Reorder" else if (removing) "Remove works" else "Edit series",
-                subtitle = if (ordering) title else if (removing) "$title · ${rows?.size ?: 0} works" else subtitle,
+                subtitle = if (ordering) title else if (removing) "$title · ${rows?.size ?: 0} ${if (rows?.size == 1) "work" else "works"}" else subtitle,
                 palette = palette, gutter = SubjectMetrics.accountGutter)
         }
         if (form == null && state.rows == null) item {

@@ -87,6 +87,17 @@ class WritingSeriesTest {
             creators = invited.creators.copy(coauthorByline = "")).parameters().filter { it.first == AO3SeriesField.byline })
     }
 
+    /** The rule audit A23-1 set for Edit tags, here too: the token is in the body even when only the meta tag has it. */
+    @Test fun theTokenAndMethodGoInTheBodyEvenWhenOnlyTheMetaTagCarriesTheToken() {
+        val html = seriesFixture("ao3_demo_series_edit")
+            .replace("<input type=\"hidden\" name=\"authenticity_token\" value=\"demo-series-token\">", "")
+        assertTrue("name=\"authenticity_token\"" !in html)
+        val body = parser.parse(html, AO3SeriesFormUrls.edit(321)).parameters()
+        assertEquals("authenticity_token" to "demo-series-token", body.first())
+        assertEquals(1, body.count { it.first == "authenticity_token" })
+        assertTrue(body.any { it.first == "_method" && it.second == "put" })
+    }
+
     @Test fun unsafeActionsLoginOverloadAndMissingManageLandmarkAreRefused() {
         val html = seriesFixture("ao3_demo_series_edit")
         for (action in listOf("https://archiveofourown.org.evil.test/series/321", "https://evil.test/series/321", "/series/321/delete"))
@@ -267,7 +278,10 @@ class WritingSeriesTest {
         setup.client.beforePost = { setup.auth.logout() }
         model.save()
         assertEquals(draft, model.state.value.form); assertNull(model.state.value.notice)
-        assertEquals(WORK_FORM_SESSION_CHANGED, model.state.value.error)
+        // The request had gone out when the session ended (one POST is recorded), so the
+        // truthful answer is that AO3 did not confirm it, not that nothing was saved
+        // (audit A24-1).
+        assertEquals(io.github.cidy02.kudos.network.ao3.account.AO3CollectionFields.UNCONFIRMED, model.state.value.error)
         assertEquals(1, setup.client.posts.size)
         model.save(); assertEquals(1, setup.client.posts.size)
     }
