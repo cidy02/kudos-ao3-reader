@@ -58,7 +58,7 @@ enum WorkAvailability {
             record(.present, on: work, in: context)
         } catch AO3Error.notFound {
             guard work.modelContext != nil else { return }
-            Log.library.info("AO3 no longer has work \(id); marking the local copy as the last one")
+            Log.library.info("AO3 no longer has work \(id, privacy: .private(mask: .hash)); marking the local copy as the last one")
             record(.deleted, on: work, in: context)
         } catch {
             // A timeout or a parse failure says nothing about whether the work exists,
@@ -85,7 +85,7 @@ enum WorkAvailability {
         if wasUnavailable != work.ao3Unavailable {
             work.markModified()
             if outcome == .present {
-                Log.library.info("Work \(work.ao3WorkID ?? 0) is back on AO3; clearing the last-copy flag")
+                Log.library.info("Work \(work.ao3WorkID ?? 0, privacy: .private(mask: .hash)) is back on AO3; clearing the last-copy flag")
             }
         }
         context.saveBestEffort(reason: "Saving the availability check failed")

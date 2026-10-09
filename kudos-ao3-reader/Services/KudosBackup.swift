@@ -3158,8 +3158,13 @@ enum KudosBackupService {
         // too, judged on this copy's own Date Added, so one saved again after the
         // removal survives. Links match by address and keep their local id, so a
         // copy here can carry a different id from the one the tombstone names: when
-        // the archive's copy at the same address was suppressed, this copy is tested
-        // against that marker as well (Android's rule, `briefs/3bs-result.md` item 7).
+        // the archive still lists a copy at the same address and that copy was
+        // suppressed, this copy is tested against that marker as well (Android's
+        // rule, `briefs/3bs-result.md` item 7). **Not covered** (audit A27-1): a link
+        // each device saved on its own, deleted on one. The deleting device's archive
+        // no longer lists the address and the record names only its own id, so the
+        // copy here stays and goes back. A deletion record would have to carry the
+        // address; that is a change to what is signed (owner question 20).
         applyTombstonesToExisting(existingBookmarks, in: context, mode: mode) { bookmark in
             if case .suppressStaleData = tombstones.bookmarkResolution(
                 id: bookmark.id, incomingModifiedAt: bookmark.dateAdded
@@ -3813,13 +3818,23 @@ enum KudosBackupService {
         // Run even when the archive lists no annotations at all (the usual shape of
         // "deleted the last one"), and on the copy's own clock: one edited after the
         // deletion survives.
-        func removeDeletedElsewhere() {
-            applyTombstonesToExisting(existing, in: context, mode: mode) {
-                tombstones.annotationResolution(id: $0.id, incomingModifiedAt: $0.lastModifiedAt)
+        // Returns what it removed: a row deleted here is still in the context until
+        // the save, and the dedupe below must not rank it against a live one.
+        func removeDeletedElsewhere() -> Set<UUID> {
+            guard mode != .replaceLibrary else { return [] }
+            var removed: Set<UUID> = []
+            for annotation in existing {
+                if case .suppressStaleData = tombstones.annotationResolution(
+                    id: annotation.id, incomingModifiedAt: annotation.lastModifiedAt
+                ) {
+                    removed.insert(annotation.id)
+                    context.delete(annotation)
+                }
             }
+            return removed
         }
         guard !contents.manifest.annotations.isEmpty else {
-            removeDeletedElsewhere()
+            _ = removeDeletedElsewhere()
             return
         }
         var byID = Dictionary(existing.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
@@ -3908,8 +3923,12 @@ enum KudosBackupService {
             byID[archived.id] = restored
         }
 
-        dedupeSamePassageAnnotations(context: context, preexistingIDs: preexistingIDs)
-        removeDeletedElsewhere()
+        // Before the dedupe, not after (audit A27-3). After it, a copy here that the
+        // other device had deleted could first win the passage over that device's
+        // newer mark (which the dedupe then deleted and tombstoned), and be removed
+        // itself: both marks gone, on both devices. Android has always swept first.
+        let removed = removeDeletedElsewhere()
+        dedupeSamePassageAnnotations(context: context, preexistingIDs: preexistingIDs, excluding: removed)
     }
 
     /// Parks note text that a merge is about to overwrite onto a hidden, already-soft-deleted
@@ -3988,10 +4007,11 @@ enum KudosBackupService {
     /// (see `parkDisplacedNote` for why this is not a concatenation).
     private static func dedupeSamePassageAnnotations(
         context: ModelContext,
-        preexistingIDs: Set<UUID>
+        preexistingIDs: Set<UUID>,
+        excluding removed: Set<UUID> = []
     ) {
         let live = ((try? context.fetch(FetchDescriptor<ReadingAnnotation>())) ?? [])
-            .filter { !$0.isPendingDeletion && $0.deletedAt == nil }
+            .filter { !$0.isPendingDeletion && $0.deletedAt == nil && !removed.contains($0.id) }
 
         var groups: [String: [ReadingAnnotation]] = [:]
         for annotation in live {

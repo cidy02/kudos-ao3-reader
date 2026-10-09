@@ -981,6 +981,16 @@ final class AO3AuthService {
                 guard await finishAccepting(
                     refreshed, expectedGeneration: restoringGeneration
                 ) else { return }
+                // The same hand-over as Verify Session's (audit A20-1), on the other path
+                // that names a session: a launch with no network signs in as "AO3 Account"
+                // and files comment drafts under the session; the next launch names it
+                // here, and Verify Session then sees a name and skips the move (A27-8).
+                let restoredName = refreshed.username.trimmingCharacters(in: .whitespacesAndNewlines)
+                if saved.username.isEmpty, !restoredName.isEmpty {
+                    CommentDraftStore().move(
+                        from: CommentDraftIdentity.unnamedSession(restoringGeneration), to: restoredName
+                    )
+                }
                 Log.auth.info("Restored and validated an AO3 session")
             case .expired:
                 guard await clearStoredSession(expectedGeneration: restoringGeneration) else { return }
