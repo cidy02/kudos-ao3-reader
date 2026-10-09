@@ -142,5 +142,138 @@ struct TombstoneSweepsExistingRecordsTests {
 
         #expect(try context.fetch(FetchDescriptor<SavedSearch>()).count == 1)
     }
+
+    // MARK: T-366: the three kinds that had no second pass (audit A12)
+
+    private func signedTombstone(
+        _ type: SyncTombstoneRecordType, id: UUID, at seconds: TimeInterval,
+        key: Curve25519.Signing.PrivateKey
+    ) -> SyncTombstone {
+        let tomb = SyncTombstone(
+            recordID: id, recordType: type, createdAt: Date(timeIntervalSince1970: seconds)
+        )
+        TombstoneSigning.sign(tomb, key: key)
+        return tomb
+    }
+
+    /// A saved link removed on the other device goes here too; one saved again
+    /// after the removal is a new decision and stays.
+    @Test func aTrustedTombstoneRemovesASavedLinkButNotOneSavedAgainLater() throws {
+        let defaults = try testDefaults()
+        let peer = try trustedPeer(defaults)
+        let context = try context()
+        let old = Bookmark(title: "Old", urlString: "https://archiveofourown.org/works/1")
+        old.dateAdded = Date(timeIntervalSince1970: 100)
+        let later = Bookmark(title: "Later", urlString: "https://archiveofourown.org/works/2")
+        later.dateAdded = Date(timeIntervalSince1970: 900)
+        context.insert(old)
+        context.insert(later)
+        try context.save()
+
+        let snapshot = try KudosBackupService.makeContents(
+            works: [], bookmarks: [], fonts: [], readingQueues: [],
+            tombstones: [
+                signedTombstone(.bookmark, id: old.id, at: 400, key: peer),
+                signedTombstone(.bookmark, id: later.id, at: 400, key: peer)
+            ],
+            defaults: defaults
+        )
+        _ = try KudosBackupService.restore(snapshot, into: context, defaults: defaults, mode: .merge)
+
+        #expect(try context.fetch(FetchDescriptor<Bookmark>()).map(\.title) == ["Later"])
+    }
+
+    /// A highlight deleted on the other device goes here too, even when the
+    /// archive lists no annotations at all; one edited after the deletion stays.
+    @Test func aTrustedTombstoneRemovesAHighlightButNotOneEditedLater() throws {
+        let defaults = try testDefaults()
+        let peer = try trustedPeer(defaults)
+        let context = try context()
+        let work = SavedWork(title: "A work", author: "Someone")
+        context.insert(work)
+        let gone = ReadingAnnotation(
+            work: work, kind: .highlight, locatorString: "a",
+            createdAt: Date(timeIntervalSince1970: 100)
+        )
+        gone.lastModifiedAt = Date(timeIntervalSince1970: 100)
+        let edited = ReadingAnnotation(
+            work: work, kind: .highlight, locatorString: "b", note: "kept",
+            createdAt: Date(timeIntervalSince1970: 100)
+        )
+        edited.lastModifiedAt = Date(timeIntervalSince1970: 900)
+        context.insert(gone)
+        context.insert(edited)
+        try context.save()
+
+        let snapshot = try KudosBackupService.makeContents(
+            works: [], bookmarks: [], fonts: [], readingQueues: [],
+            tombstones: [
+                signedTombstone(.readingAnnotation, id: gone.id, at: 400, key: peer),
+                signedTombstone(.readingAnnotation, id: edited.id, at: 400, key: peer)
+            ],
+            defaults: defaults
+        )
+        _ = try KudosBackupService.restore(snapshot, into: context, defaults: defaults, mode: .merge)
+
+        #expect(try context.fetch(FetchDescriptor<ReadingAnnotation>()).map(\.note) == ["kept"])
+    }
+
+    /// A work taken out of a queue on the other device leaves it here too; a
+    /// membership changed after the removal stays.
+    @Test func aTrustedTombstoneRemovesAQueueMembershipButNotOneChangedLater() throws {
+        let defaults = try testDefaults()
+        let peer = try trustedPeer(defaults)
+        let context = try context()
+        let queue = ReadingQueue(name: "To read")
+        let first = SavedWork(title: "Removed elsewhere", author: "Someone")
+        let second = SavedWork(title: "Moved here since", author: "Someone")
+        context.insert(queue)
+        context.insert(first)
+        context.insert(second)
+        let gone = ReadingQueueMembership(
+            queue: queue, work: first, queuedAt: Date(timeIntervalSince1970: 100)
+        )
+        let kept = ReadingQueueMembership(
+            queue: queue, work: second, queuedAt: Date(timeIntervalSince1970: 100)
+        )
+        kept.lastModifiedAt = Date(timeIntervalSince1970: 900)
+        context.insert(gone)
+        context.insert(kept)
+        try context.save()
+
+        let snapshot = try KudosBackupService.makeContents(
+            works: [], bookmarks: [], fonts: [], readingQueues: [],
+            tombstones: [
+                signedTombstone(.readingQueueMembership, id: gone.id, at: 400, key: peer),
+                signedTombstone(.readingQueueMembership, id: kept.id, at: 400, key: peer)
+            ],
+            defaults: defaults
+        )
+        _ = try KudosBackupService.restore(snapshot, into: context, defaults: defaults, mode: .merge)
+
+        let left = try context.fetch(FetchDescriptor<ReadingQueueMembership>())
+        #expect(left.compactMap { $0.work?.title } == ["Moved here since"])
+    }
+
+    /// The lesson in `applyTombstonesToExisting` holds for the new passes too:
+    /// Replace does not sweep.
+    @Test func replaceLibraryDoesNotSweepExistingSavedLinks() throws {
+        let defaults = try testDefaults()
+        let peer = try trustedPeer(defaults)
+        let context = try context()
+        let link = Bookmark(title: "Kept by Replace", urlString: "https://archiveofourown.org/works/3")
+        link.dateAdded = Date(timeIntervalSince1970: 100)
+        context.insert(link)
+        try context.save()
+
+        let snapshot = try KudosBackupService.makeContents(
+            works: [], bookmarks: [link], fonts: [], readingQueues: [],
+            tombstones: [signedTombstone(.bookmark, id: link.id, at: 400, key: peer)],
+            defaults: defaults
+        )
+        _ = try KudosBackupService.restore(snapshot, into: context, defaults: defaults, mode: .replaceLibrary)
+
+        #expect(try context.fetch(FetchDescriptor<Bookmark>()).count == 1)
+    }
 }
 }
