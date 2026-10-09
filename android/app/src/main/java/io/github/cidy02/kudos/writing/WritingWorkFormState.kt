@@ -20,6 +20,8 @@ internal data class WritingWorkFormUiState(
     val failure: String? = null,
     val saving: Boolean = false,
     val saved: Boolean = false,
+    val publicationNeedRefresh: Boolean = false,
+    val refreshingPublication: Boolean = false,
     val tagsNeedRefresh: Boolean = false,
     val refreshingTags: Boolean = false,
     val saveError: String? = null
@@ -55,6 +57,8 @@ internal class WritingWorkFormState(
     private var attempted = false
     private var collectionsAttempted = false
     private var tagRefreshAttempted = false
+    private var publicationRefreshAttempted = false
+    private var loadedChapter: AO3WorkChapterDraft? = null
     private val mutable = MutableStateFlow(WritingWorkFormUiState())
     val state = mutable.asStateFlow()
     private fun ownsSession() = active && generation == auth.generation.value
@@ -64,7 +68,7 @@ internal class WritingWorkFormState(
         val form = old.form ?: return
         // EditTagsView keeps fields editable during Save; a refusal keeps even edits made in flight.
         fun retained() = if (editTagsOnly) old.copy(form = state.value.form) else old
-        if (!active || old.saving || old.saved || old.tagsNeedRefresh) return
+        if (!active || old.saving || old.saved || old.tagsNeedRefresh || old.publicationNeedRefresh) return
         if (generation != auth.generation.value) {
             mutable.value = retained().copy(saveError = WORK_FORM_SESSION_CHANGED)
             return
@@ -110,7 +114,7 @@ internal class WritingWorkFormState(
         currentCoroutineContext().ensureActive()
         if (!ownsSession()) return
         mutable.value = when (result) {
-            is AO3Result.Success -> WritingWorkFormUiState(form = result.value)
+            is AO3Result.Success -> { loadedChapter = result.value.chapter; WritingWorkFormUiState(form = result.value) }
             is AO3Result.Failure -> WritingWorkFormUiState(failure = workFormFailure(result.error))
         }
     }
@@ -121,6 +125,61 @@ internal class WritingWorkFormState(
         if (!ownsSession() || !auth.state.value.isSignedIn || old.saving || old.saved ||
             !form.isPosted || form.workID == null) return null
         return WritingWorkFormState(form.workID, repository, auth, writes, today, editTagsOnly = true)
+    }
+
+    fun chapterModel(chapterID: Long?, chapterCount: Int?): WritingChapterFormState? {
+        val old = state.value
+        val form = old.form ?: return null
+        if (!ownsSession() || !auth.state.value.isSignedIn || old.saving || old.saved || !form.isPosted) return null
+        val id = form.workID ?: return null
+        return WritingChapterFormState(id, chapterID, chapterCount, repository, auth, today, writes)
+    }
+
+    fun chapterSaved() {
+        if (!ownsSession()) return
+        publicationRefreshAttempted = false
+        mutable.value = state.value.copy(publicationNeedRefresh = true)
+    }
+
+    /** Chapter success refreshes only publication and chapter-1 fields, never unsaved metadata. */
+    suspend fun refreshPublication(retry: Boolean = false) {
+        val old = state.value
+        val id = old.form?.workID ?: return
+        if (!ownsSession() || !old.publicationNeedRefresh || old.refreshingPublication || (publicationRefreshAttempted && !retry)) return
+        publicationRefreshAttempted = true
+        mutable.value = old.copy(refreshingPublication = true)
+        try {
+            when (val result = repository.loadWorkForm(id)) {
+                is AO3Result.Success -> {
+                    currentCoroutineContext().ensureActive()
+                    if (!ownsSession()) return
+                    val current = state.value.form ?: return
+                    val fresh = result.value
+                    val freshChapter = fresh.chapter
+                    val currentChapter = current.chapter
+                    fun date(value: AO3WorkChapterDraft?) = listOf(value?.publishedYear, value?.publishedMonth, value?.publishedDay)
+                    val chapter = if (currentChapter != null && freshChapter != null && date(currentChapter) != date(loadedChapter))
+                        freshChapter.copy(publishedYear = currentChapter.publishedYear,
+                            publishedMonth = currentChapter.publishedMonth, publishedDay = currentChapter.publishedDay) else freshChapter
+                    loadedChapter = fresh.chapter
+                    // Remove stale replay of chapter 1 as well: AO3 may have removed its text box after an Add.
+                    val controls = current.servedControls.filterNot { it.name.startsWith("work[chapter_attributes]") } +
+                        fresh.servedControls.filter { it.name.startsWith("work[chapter_attributes]") }
+                    mutable.value = state.value.copy(form = current.copy(chapterTotal = fresh.chapterTotal,
+                        chaptersPosted = fresh.chaptersPosted, isChaptered = fresh.isChaptered, chapter = chapter,
+                        servedControls = controls), publicationNeedRefresh = false, refreshingPublication = false, saveError = null)
+                }
+                is AO3Result.Failure -> if (ownsSession()) mutable.value = state.value.copy(refreshingPublication = false,
+                    saveError = "Reload chapter totals before saving this work. " + workFormFailure(result.error))
+            }
+        } catch (cancelled: CancellationException) {
+            if (active) mutable.value = state.value.copy(refreshingPublication = false)
+            throw cancelled
+        } catch (error: Exception) {
+            if (ownsSession()) mutable.value = state.value.copy(refreshingPublication = false,
+                saveError = "Reload chapter totals before saving this work. " + workFormFailure(
+                    if (error is java.io.IOException) AO3Error.networkFromTransport(error) else AO3Error.Network(error.message.orEmpty(), error)))
+        }
     }
 
     fun tagsSaved() {
@@ -266,8 +325,8 @@ internal class WritingWorkFormState(
         WorkFormText.Content -> form.copy(chapter = (form.chapter ?: AO3WorkChapterDraft()).copy(content = text))
     } }
 
-    fun chapterTotal(value: String) = change { if (it.isPosted) it.copy(chapterTotal = value) else it }
-    fun toggle(kind: WorkFormSwitch, value: Boolean) = change { form -> when (kind) {
+    fun chapterTotal(value: String) = change { if (it.isPosted && !state.value.publicationNeedRefresh) it.copy(chapterTotal = value) else it }
+    fun toggle(kind: WorkFormSwitch, value: Boolean) = change { form -> if (state.value.publicationNeedRefresh) form else when (kind) {
         WorkFormSwitch.Restricted -> form.copy(restricted = value)
         WorkFormSwitch.Moderation -> form.copy(moderatedCommenting = value)
         WorkFormSwitch.Complete -> if (form.isPosted) form.copy(chapterTotal = if (value) "${form.chaptersPosted ?: 1}" else "") else form
@@ -277,7 +336,7 @@ internal class WritingWorkFormState(
         }
     } }
     fun publicationDate(date: LocalDate) = change { form ->
-        if (date < LocalDate.of(1950, 1, 1) || date > today()) form else form.withPublicationDate(date)
+        if (state.value.publicationNeedRefresh || date < LocalDate.of(1950, 1, 1) || date > today()) form else form.withPublicationDate(date)
     }
     fun close() { active = false }
 }

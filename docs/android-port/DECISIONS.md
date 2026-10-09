@@ -1107,3 +1107,11 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   already has it, in every mode but Replace, unless the archive lists it and is newer.
 - Edit tags always sends the token, the method and the submit in the body.
   Reverse: the commit "Replace keeps what the archive does not carry".
+
+## 2026-10-09: chapters can be added, edited, posted and deleted (brief 3bu)
+
+- The chapter form as iOS has it: a new chapter, an existing one, its preview on AO3 and
+  Post from the preview, and Delete. Every write is one POST, never retried, done only on
+  AO3's notice or its redirect. A chapter has no "Post?" confirmation, because iOS has none.
+  After a confirmed write the work form reads its own form once for the new chapter count.
+  Reverse: the commit "Chapters can be added, edited, posted and deleted".

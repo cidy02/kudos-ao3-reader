@@ -88,8 +88,10 @@ internal fun WritingWorkFormContent(model: WritingWorkFormState, account: String
     var choosingTags by remember(model) { mutableStateOf<WorkFormTags?>(null) }
     var choosing by remember(model) { mutableStateOf<WorkFormChoice?>(null) }
     var dating by remember(model) { mutableStateOf(false) }
+    var chapterModel by remember(model) { mutableStateOf<WritingChapterFormState?>(null) }
     var viewingChapters by remember(model) { mutableStateOf(false) }
     var editingPostedTags by remember(model) { mutableStateOf<WritingWorkFormState?>(null) }
+    LaunchedEffect(state.publicationNeedRefresh) { if (state.publicationNeedRefresh) model.refreshPublication() }
     LaunchedEffect(state.tagsNeedRefresh) { if (state.tagsNeedRefresh) model.refreshTags() }
     editingPostedTags?.let { tagsModel ->
         WritingEditTagsScreen(tagsModel, form?.title.orEmpty(), autocompleteRepository, settingsRepository,
@@ -119,6 +121,12 @@ internal fun WritingWorkFormContent(model: WritingWorkFormState, account: String
             onBack = { reorder = null }, reorderOnly = true)
         return
     }
+    chapterModel?.let { chapter ->
+        WritingChapterFormScreen(chapter, form?.title.orEmpty(), operationScope = scope,
+            onSaved = { model.chapterSaved(); scope.launch { model.refreshPublication() } },
+            onBack = { if (!chapter.state.value.busy) chapter.close(); if (chapterModel === chapter) chapterModel = null })
+        return
+    }
     val field = editing
     if (field != null && form != null) {
         WritingTextEditorScreen(field.text(form), field.title, account, form.recoveryTarget(), field.field,
@@ -140,7 +148,11 @@ internal fun WritingWorkFormContent(model: WritingWorkFormState, account: String
         return
     }
     if (viewingChapters && form?.isPosted == true && form.workID != null) {
-        WritingChaptersScreen(form.title, model::loadChapters) { viewingChapters = false }
+        WritingChaptersScreen(form.title, model::loadChapters,
+            openChapter = { chapter, count -> onSaving(); model.chapterModel(chapter.chapterId, count) },
+            operationScope = scope,
+            onSaved = { model.chapterSaved(); scope.launch { model.refreshPublication() } },
+            onBack = { viewingChapters = false })
         return
     }
     val tags = choosingTags
@@ -153,7 +165,7 @@ internal fun WritingWorkFormContent(model: WritingWorkFormState, account: String
     // for the form inside its own content stayed empty when the form arrived after the screen.
     val saveButton: (@Composable RowScope.() -> Unit)? = if (form == null) null else {
         {
-            TextButton(enabled = !state.saving && !state.saved && !state.tagsNeedRefresh,
+            TextButton(enabled = !state.saving && !state.saved && !state.tagsNeedRefresh && !state.publicationNeedRefresh,
                 onClick = { onSaving(); scope.launch { model.save() } },
                 colors = ButtonDefaults.textButtonColors(contentColor = palette.accent, disabledContentColor = tokens.tertiaryInk)) {
                 Text("Save", fontSize = 15.sp, lineHeight = 21.sp)
@@ -271,7 +283,8 @@ internal fun WritingWorkFormContent(model: WritingWorkFormState, account: String
                         SubjectFormRow("Chapters", value = form.chaptersPosted?.toString().orEmpty(), valueMaxLines = Int.MAX_VALUE,
                             showsDisclosure = true, onClick = if (state.saving) null else ({ viewingChapters = true }))
                         SubjectRowSeparator()
-                        SubjectFormRow("Add chapter", value = "")
+                        SubjectFormRow("Add chapter", showsDisclosure = true,
+                            onClick = if (state.saving) null else ({ onSaving(); chapterModel = model.chapterModel(null, null) }))
                         SubjectRowSeparator()
                         SubjectFormRow("Edit tags", value = "", showsDisclosure = true,
                             onClick = if (state.saving) null else ({ model.editTagsModel()?.let { onSaving(); editingPostedTags = it } }))
@@ -282,13 +295,18 @@ internal fun WritingWorkFormContent(model: WritingWorkFormState, account: String
             }
             item {
                 WorkFormSection(if (form.isDraft) "When posted" else "Publication")
+                if (state.publicationNeedRefresh) TextButton(enabled = !state.refreshingPublication,
+                    onClick = { scope.launch { model.refreshPublication(retry = true) } },
+                    colors = ButtonDefaults.textButtonColors(contentColor = palette.accent)) {
+                    Text("Reload chapter totals", color = palette.accent, fontSize = 14.sp, lineHeight = 20.sp)
+                }
                 SettingsPanel(Modifier.padding(top = 8.dp)) {
                     if (form.isPosted) {
                         WorkFormControlRow("Chapters posted") {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text("${form.chaptersPosted ?: 1} of", color = tokens.secondaryInk, fontSize = 14.5.sp, lineHeight = 20.sp)
                                 BasicTextField(form.chapterTotal, onValueChange = model::chapterTotal,
-                                    enabled = !state.saving,
+                                    enabled = !state.saving && !state.publicationNeedRefresh,
                                     singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                                     textStyle = ComposeTextStyle(color = tokens.primaryInk, fontSize = 14.5.sp, lineHeight = 20.sp,
                                         textAlign = TextAlign.End), cursorBrush = SolidColor(palette.accent),
@@ -300,23 +318,23 @@ internal fun WritingWorkFormContent(model: WritingWorkFormState, account: String
                             }
                         }
                         SubjectRowSeparator()
-                        WorkFormToggle("Work is complete", form.chapterTotal == "${form.chaptersPosted ?: 1}", enabled = !state.saving) {
+                        WorkFormToggle("Work is complete", form.chapterTotal == "${form.chaptersPosted ?: 1}", enabled = !state.saving && !state.publicationNeedRefresh) {
                             model.toggle(WorkFormSwitch.Complete, it)
                         }
                         SubjectRowSeparator()
                     }
-                    WorkFormToggle("Set a different publication date", form.backdate, enabled = !state.saving) { model.toggle(WorkFormSwitch.Backdate, it) }
+                    WorkFormToggle("Set a different publication date", form.backdate, enabled = !state.saving && !state.publicationNeedRefresh) { model.toggle(WorkFormSwitch.Backdate, it) }
                     if (form.backdate && form.chapter != null) {
                         SubjectRowSeparator()
                         SubjectFormRow("Publication date", value = form.publicationDate().format(DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM)),
-                            onClick = if (state.saving) null else ({ dating = true }), valueMaxLines = Int.MAX_VALUE)
+                            onClick = if (state.saving || state.publicationNeedRefresh) null else ({ dating = true }), valueMaxLines = Int.MAX_VALUE)
                     }
                     SubjectRowSeparator()
-                    WorkFormToggle("Only show to registered users", form.restricted, enabled = !state.saving) { model.toggle(WorkFormSwitch.Restricted, it) }
+                    WorkFormToggle("Only show to registered users", form.restricted, enabled = !state.saving && !state.publicationNeedRefresh) { model.toggle(WorkFormSwitch.Restricted, it) }
                     SubjectRowSeparator()
-                    WorkFormToggle("Enable comment moderation", form.moderatedCommenting, enabled = !state.saving) { model.toggle(WorkFormSwitch.Moderation, it) }
+                    WorkFormToggle("Enable comment moderation", form.moderatedCommenting, enabled = !state.saving && !state.publicationNeedRefresh) { model.toggle(WorkFormSwitch.Moderation, it) }
                     SubjectRowSeparator()
-                    WorkFormChoiceRow("Who can comment", form, WorkFormChoice.Comments, enabled = !state.saving) { if (!state.saving) choosing = it }
+                    WorkFormChoiceRow("Who can comment", form, WorkFormChoice.Comments, enabled = !state.saving && !state.publicationNeedRefresh) { if (!state.saving && !state.publicationNeedRefresh) choosing = it }
                 }
                 if (form.isPosted) WorkFormFootnote("AO3 marks a work in progress when its total chapters are higher than the number " +
                     "posted. Complete sets both numbers to the same value.")
@@ -442,17 +460,17 @@ internal fun WorkFormChoiceSheet(title: String, options: List<AO3FormOption>, se
  * Bounds are iOS AO3PublicationDate.allowedRange, not an invented served-choice catalog. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun WorkFormDateSheet(date: LocalDate, onChange: (LocalDate) -> Unit, onDismiss: () -> Unit) {
+internal fun WorkFormDateSheet(date: LocalDate, onChange: (LocalDate) -> Unit, bounded: Boolean = true, onDismiss: () -> Unit) {
     val tokens = LocalKudosTokens.current
     val today = LocalDate.now()
     var component by remember { mutableStateOf<String?>(null) }
     val part = component
     val choices = when (part) {
-        "Year" -> (1950..today.year).reversed().map { AO3FormOption("$it", "$it") }
-        "Month" -> (1..if (date.year == today.year) today.monthValue else 12).map {
+        "Year" -> (if (bounded) (1950..today.year).reversed() else (date.year downTo 1).toList() + ((date.year + 1)..9999).toList()).map { AO3FormOption("$it", "$it") }
+        "Month" -> (1..if (bounded && date.year == today.year) today.monthValue else 12).map {
             AO3FormOption("$it", java.time.Month.of(it).getDisplayName(TextStyle.FULL, Locale.getDefault()))
         }
-        "Day" -> (1..if (date.year == today.year && date.monthValue == today.monthValue) today.dayOfMonth else date.lengthOfMonth())
+        "Day" -> (1..if (bounded && date.year == today.year && date.monthValue == today.monthValue) today.dayOfMonth else date.lengthOfMonth())
             .map { AO3FormOption("$it", "$it") }
         else -> emptyList()
     }
@@ -470,7 +488,7 @@ private fun WorkFormDateSheet(date: LocalDate, onChange: (LocalDate) -> Unit, on
                 WorkFormOptionRow(option.title, option.value == "$selected") {
                     val number = option.value.toInt()
                     val changed = when (part) { "Year" -> date.withYear(number); "Month" -> date.withMonth(number); else -> date.withDayOfMonth(number) }
-                    onChange(if (changed > today) today else changed)
+                    onChange(if (bounded && changed > today) today else changed)
                     component = null
                 }
             }

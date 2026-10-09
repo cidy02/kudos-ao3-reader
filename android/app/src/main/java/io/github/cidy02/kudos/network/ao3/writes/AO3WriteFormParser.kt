@@ -13,7 +13,11 @@ class AO3WriteFormParser {
             .firstOrNull { element ->
                 element.parents().none { it.id() == "workskin" || it.id() == "previewpane" || it.hasClass("userstuff") } &&
                     element.normalizedText().isNotEmpty()
-            }?.normalizedText()
+            }?.let { evidence ->
+                // Scope first, then use the shared AO3 validation-list reader (A4-3).
+                if (evidence.tagName() == "li") writeErrorMessage("<div id='error'><ul>${evidence.outerHtml()}</ul></div>")
+                else writeErrorMessage(evidence.outerHtml())
+            }
     }
 
     fun workWriteNotice(html: String): String? = Jsoup.parse(html)

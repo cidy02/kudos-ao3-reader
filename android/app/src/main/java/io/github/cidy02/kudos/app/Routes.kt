@@ -36,6 +36,8 @@ object Routes {
     const val WritingWorkNewDemo = "writing-work-new-demo"
     const val WritingWorkDraftDemo = "writing-work-draft-demo"
     const val WritingWorkPostedDemo = "writing-work-posted-demo"
+    const val WritingChapterNewDraftDemo = "writing-chapter-new-draft-demo"
+    const val WritingChapterDraftDemo = "writing-chapter-draft-demo"
     const val WritingEditorDemo = "writing-editor-demo"
     const val WritingEditorFixture = "writing-editor-fixture"
     const val Settings = "settings"
@@ -262,6 +264,8 @@ object Routes {
             WritingWorkNewDemo -> "New work"
             WritingWorkDraftDemo -> "Draft"
             WritingWorkPostedDemo -> "Edit work"
+            WritingChapterNewDraftDemo -> "Add chapter"
+            WritingChapterDraftDemo -> "Edit chapter"
             WritingEditorDemo, WritingEditorFixture -> "Chapter text"
             AO3CollectionItems -> "Collection items"
             AO3ChallengeSettings -> "Challenge"
@@ -332,7 +336,7 @@ object Routes {
         val base = route.substringBefore("?").substringBefore("/")
         return base == ReadingQueues.substringBefore("?").substringBefore("/") ||
             base == WritingDrafts || base == WritingWork.substringBefore("?") || base == WritingWorkNewDemo || base == WritingWorkDraftDemo ||
-            base == WritingWorkPostedDemo || base == WritingEditorDemo || base == WritingEditorFixture ||
+            base == WritingWorkPostedDemo || base == WritingChapterNewDraftDemo || base == WritingChapterDraftDemo || base == WritingEditorDemo || base == WritingEditorFixture ||
             base == QueueDetail.substringBefore("?").substringBefore("/") ||
             base == Collections.substringBefore("?").substringBefore("/") ||
             base == CollectionDetail.substringBefore("?").substringBefore("/") ||
@@ -361,6 +365,7 @@ object Routes {
      */
     private val tabBarHiddenBases: Set<String> = listOf(
         AO3Collections, WritingDrafts, WritingWork, WritingWorkNewDemo, WritingWorkDraftDemo, WritingWorkPostedDemo,
+        WritingChapterNewDraftDemo, WritingChapterDraftDemo,
         WritingEditorDemo, WritingEditorFixture, SeriesWorks, AuthorProfile, AuthorSeries, AuthorWorks, Comments, Reader,
         WorkDetail, // WorkDetailView
         BrowseFandoms, BrowseWorks, TagWorks, // FandomListView, NativeBrowseView

@@ -160,29 +160,119 @@ class AO3WriteRepository(
     }
 
     private suspend fun submitWork(form: AO3WorkForm, expectedGeneration: Int, referer: String,
-        tagsOnly: Boolean = false): AO3Result<Unit> {
+        tagsOnly: Boolean = false, servedOnly: Boolean = false): AO3Result<Unit> {
+        val fields = form.parameters(if (tagsOnly || form.isPosted) AO3WorkSubmitAction.Update else AO3WorkSubmitAction.SaveDraft)
+            .let { pairs -> if (!servedOnly) pairs else {
+                val names = form.servedControls.filterNot { it.disabled }.map { it.name }.toSet()
+                pairs.filter { it.first in names }
+            } }
+        if (servedOnly && fields.none { it.first == (if (form.isPosted) "update_button" else "save_button") })
+            return AO3Result.Failure(AO3Error.Validation(AO3CollectionFields.UNCONFIRMED))
+        val token = if (tagsOnly) form.csrfToken else fields.firstOrNull { it.first == AO3WorkFormField.authenticityToken }?.second.orEmpty()
+        return workVerdict(postWriting(form.actionUrl, fields, token, referer, expectedGeneration), tagsOnly)
+    }
+
+    /** Captured chapter action/token; no preparation GET, one single-shot POST. */
+    suspend fun saveChapter(form: AO3ChapterForm, submit: AO3WorkSubmitAction, expectedGeneration: Int): AO3Result<Unit> {
         requireCollectionSession(expectedGeneration)
         if (client.username() == null) return AO3Result.Failure(AO3Error.Validation("Log in to AO3 first."))
-        if (!AO3RedirectCookieRelay.isTrustedUrl(form.actionUrl)) return AO3Result.Failure(
-            AO3Error.Parse("Couldn't read AO3's work form."))
-        val fields = form.parameters(if (tagsOnly || form.isPosted) AO3WorkSubmitAction.Update else AO3WorkSubmitAction.SaveDraft)
-        val token = if (tagsOnly) form.csrfToken else fields.firstOrNull { it.first == AO3WorkFormField.authenticityToken }?.second.orEmpty()
-        currentCoroutineContext().ensureActive()
-        val response = withContext(NonCancellable) {
-            client.postAuthenticatedInSession(form.actionUrl, fields, writeHeaders(token, referer), expectedGeneration)
-        }
+        if (submit !in listOf(AO3WorkSubmitAction.SaveDraft, AO3WorkSubmitAction.Post,
+                AO3WorkSubmitAction.PostWithoutPreview, AO3WorkSubmitAction.Update))
+            return AO3Result.Failure(AO3Error.Validation("AO3 didn't accept the change."))
+        val fields = form.parameters(submit)
+        if (fields.none { it.first == submit.fieldName }) return AO3Result.Failure(AO3Error.Validation(AO3CollectionFields.UNCONFIRMED))
+        return workVerdict(postWriting(form.actionUrl, fields, form.csrfToken, form.actionUrl, expectedGeneration))
+    }
+
+    suspend fun previewChapter(form: AO3ChapterForm, expectedGeneration: Int): AO3Result<AO3ChapterPreview> {
         requireCollectionSession(expectedGeneration)
-        return when (response) {
-            is AO3Result.Failure -> response
+        if (client.username() == null) return AO3Result.Failure(AO3Error.Validation("Log in to AO3 first."))
+        val fields = form.parameters(AO3WorkSubmitAction.Preview)
+        if (fields.none { it.first == "preview_button" }) return AO3Result.Failure(AO3Error.Validation(CHAPTER_PREVIEW_UNAVAILABLE))
+        return when (val result = postWriting(form.actionUrl, fields, form.csrfToken, form.actionUrl, expectedGeneration)) {
+            is AO3Result.Failure -> result
             is AO3Result.Success -> {
-                val error = if (tagsOnly) parser.writeErrorMessage(response.value.body) else parser.workWriteError(response.value.body)
+                val page = result.value
+                val error = parser.workWriteError(page.body)
                 when {
                     error != null -> AO3Result.Failure(AO3Error.Validation(error))
-                    parser.workWriteNotice(response.value.body) != null || response.value.statusCode in 300..399 ->
-                        AO3Result.Success(Unit)
-                    response.value.statusCode in 200..299 -> AO3Result.Failure(AO3Error.Validation(AO3CollectionFields.UNCONFIRMED))
-                    else -> AO3Result.Failure(AO3Error.Validation("AO3 didn't accept the change."))
+                    page.statusCode !in 200..399 -> AO3Result.Failure(AO3Error.Validation(CHAPTER_PREVIEW_UNAVAILABLE))
+                    else -> try {
+                        val preview = withContext(Dispatchers.Default) { AO3ChapterFormParser().preview(page.body, page.url) }
+                        requireCollectionSession(expectedGeneration)
+                        AO3Result.Success(preview)
+                    } catch (cancelled: CancellationException) { throw cancelled }
+                      catch (_: AO3WorkFormParseException.LoginRequired) { AO3Result.Failure(AO3Error.AuthenticationRequired) }
+                      catch (_: Exception) { AO3Result.Failure(AO3Error.Validation(CHAPTER_PREVIEW_UNAVAILABLE)) }
                 }
+            }
+        }
+    }
+
+    /** iOS updateWorkTotals: a fresh work form, change only its total, SaveDraft/Update. */
+    suspend fun updateWorkTotals(workID: Long, total: Long, expectedGeneration: Int): AO3Result<Unit> {
+        requireCollectionSession(expectedGeneration)
+        if (client.username() == null) return AO3Result.Failure(AO3Error.Validation("Log in to AO3 first."))
+        val page = when (val result = client.getAuthenticated(AO3WorkFormUrls.editWork(workID))) {
+            is AO3Result.Failure -> return result
+            is AO3Result.Success -> result.value
+        }
+        currentCoroutineContext().ensureActive()
+        requireCollectionSession(expectedGeneration)
+        val fresh = try { withContext(Dispatchers.Default) { AO3WorkFormParser().parse(page.body, page.url) } }
+            catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: AO3WorkFormParseException.LoginRequired) { return AO3Result.Failure(AO3Error.AuthenticationRequired) }
+            catch (_: AO3WorkFormParseException.Overloaded) { return AO3Result.Failure(AO3Error.Overloaded(page.statusCode, null)) }
+            catch (_: Exception) { return AO3Result.Failure(AO3Error.Parse("Couldn't read AO3's work form.")) }
+        if (fresh.workID != workID || fresh.kind == AO3WorkFormKind.EditTags ||
+            fresh.servedControls.none { !it.disabled && it.name == AO3WorkFormField.wipLength })
+            return AO3Result.Failure(AO3Error.Parse("Couldn't read AO3's work form."))
+        return submitWork(fresh.copy(chapterTotal = total.toString()), expectedGeneration, fresh.actionUrl, servedOnly = true)
+    }
+
+    /** Only after the editor's explicit confirmation: AO3's confirm_delete GET, one delete POST. */
+    suspend fun deleteChapter(workID: Long, chapterID: Long, expectedGeneration: Int): AO3Result<Unit> {
+        requireCollectionSession(expectedGeneration)
+        if (client.username() == null) return AO3Result.Failure(AO3Error.Validation("Log in to AO3 first."))
+        val page = when (val result = client.getAuthenticated(AO3ChapterUrls.confirmDelete(workID, chapterID))) {
+            is AO3Result.Failure -> return result
+            is AO3Result.Success -> result.value
+        }
+        currentCoroutineContext().ensureActive()
+        requireCollectionSession(expectedGeneration)
+        val form = try { withContext(Dispatchers.Default) {
+            AO3ChapterFormParser().deleteForm(page.body, page.url, workID, chapterID)
+        } } catch (cancelled: CancellationException) { throw cancelled }
+          catch (_: AO3WorkFormParseException.LoginRequired) { return AO3Result.Failure(AO3Error.AuthenticationRequired) }
+          catch (_: AO3WorkFormParseException.Overloaded) { return AO3Result.Failure(AO3Error.Overloaded(page.statusCode, null)) }
+          catch (_: Exception) { return AO3Result.Failure(AO3Error.Parse("Couldn't read AO3's chapter form.")) }
+        return workVerdict(postWriting(form.actionUrl, listOf("authenticity_token" to form.csrfToken,
+            "_method" to form.methodOverride), form.csrfToken, form.actionUrl, expectedGeneration))
+    }
+
+    /** The existing authenticated client owns pacing, cookies, transport and the dispatch fence. */
+    private suspend fun postWriting(action: String, fields: List<Pair<String, String>>, token: String,
+        referer: String, expectedGeneration: Int): AO3Result<AO3HttpResponse> {
+        requireCollectionSession(expectedGeneration)
+        if (client.username() == null) return AO3Result.Failure(AO3Error.Validation("Log in to AO3 first."))
+        if (!AO3RedirectCookieRelay.isTrustedUrl(action)) return AO3Result.Failure(AO3Error.Parse("Couldn't read AO3's work form."))
+        currentCoroutineContext().ensureActive()
+        val response = withContext(NonCancellable) {
+            client.postAuthenticatedInSession(action, fields, writeHeaders(token, referer), expectedGeneration)
+        }
+        requireCollectionSession(expectedGeneration)
+        return response
+    }
+
+    private fun workVerdict(response: AO3Result<AO3HttpResponse>, sharedErrors: Boolean = false): AO3Result<Unit> = when (response) {
+        is AO3Result.Failure -> response
+        is AO3Result.Success -> {
+            val error = if (sharedErrors) parser.writeErrorMessage(response.value.body) else parser.workWriteError(response.value.body)
+            when {
+                error != null -> AO3Result.Failure(AO3Error.Validation(error))
+                parser.workWriteNotice(response.value.body) != null || response.value.statusCode in 300..399 -> AO3Result.Success(Unit)
+                response.value.statusCode in 200..299 -> AO3Result.Failure(AO3Error.Validation(AO3CollectionFields.UNCONFIRMED))
+                else -> AO3Result.Failure(AO3Error.Validation("AO3 didn't accept the change."))
             }
         }
     }

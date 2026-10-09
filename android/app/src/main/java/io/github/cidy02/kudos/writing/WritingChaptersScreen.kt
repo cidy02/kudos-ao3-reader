@@ -19,6 +19,7 @@ import io.github.cidy02.kudos.app.ProvidePushedShellChrome
 import io.github.cidy02.kudos.network.ao3.AO3Result
 import io.github.cidy02.kudos.network.ao3.chapters.AO3ChapterRef
 import io.github.cidy02.kudos.ui.subject.*
+import kotlinx.coroutines.CoroutineScope
 
 /** iOS WritingChaptersView.subtitle. */
 internal fun writingChaptersSubtitle(workTitle: String, count: Int?): String =
@@ -26,15 +27,19 @@ internal fun writingChaptersSubtitle(workTitle: String, count: Int?): String =
 
 /**
  * iOS WritingChaptersView (part of 1bo): the work's chapters from AO3's own index, one read per
- * opening and per Try Again. Reading only: on iOS a row opens the chapter's edit form, which
- * Android has not got yet, so a row here has no mark and no action.
+ * opening, confirmed chapter change and Try Again. A row opens the chapter form with the index count.
  */
 @Composable
 internal fun WritingChaptersScreen(
     workTitle: String,
     load: suspend () -> AO3Result<List<AO3ChapterRef>>,
+    openChapter: ((AO3ChapterRef, Int) -> WritingChapterFormState?)? = null,
+    onSaved: () -> Unit = {},
+    operationScope: CoroutineScope? = null,
     onBack: () -> Unit
 ) {
+    val scope = rememberCoroutineScope()
+    var chapterModel by remember { mutableStateOf<WritingChapterFormState?>(null) }
     val tokens = LocalKudosTokens.current
     val palette = tokens.scopePalette
     var chapters by remember { mutableStateOf<List<AO3ChapterRef>?>(null) }
@@ -47,6 +52,11 @@ internal fun WritingChaptersScreen(
             // iOS keeps rows already shown when a later read fails.
             is AO3Result.Failure -> if (chapters == null) failure = workFormFailure(result.error)
         }
+    }
+    chapterModel?.let { model ->
+        WritingChapterFormScreen(model, workTitle, operationScope = operationScope ?: scope, onSaved = { attempt++; onSaved() },
+            onBack = { if (!model.state.value.busy) model.close(); if (chapterModel === model) chapterModel = null })
+        return
     }
     BackHandler(onBack = onBack)
     ProvidePushedShellChrome(hasSubjectHeader = true, hideTabBar = true, onBack = onBack)
@@ -68,9 +78,11 @@ internal fun WritingChaptersScreen(
                     .writingSuggestionPanel(first = index == 0, last = index == rows.lastIndex)) {
                     // The date as trailing content keeps its own width and the title wraps beside it. As a
                     // `value`, the shared row gave a long title the width and the date one letter to a line.
-                    if (isAccessibilityFontScale()) SubjectFormRow(chapter.displayName, value = chapter.dateText,
+                    if (isAccessibilityFontScale()) SubjectFormRow(chapter.displayName, value = chapter.dateText, showsDisclosure = openChapter != null,
+                        onClick = openChapter?.let { open -> ({ chapterModel = open(chapter, rows.size) }) },
                         valueMaxLines = Int.MAX_VALUE)
-                    else SubjectFormRow(chapter.displayName, trailing = {
+                    else SubjectFormRow(chapter.displayName, showsDisclosure = openChapter != null,
+                        onClick = openChapter?.let { open -> ({ chapterModel = open(chapter, rows.size) }) }, trailing = {
                         Text(chapter.dateText, color = tokens.secondaryInk, fontSize = 14.5.sp, lineHeight = 20.sp, maxLines = 1)
                     })
                     if (index < rows.lastIndex) SubjectRowSeparator()
