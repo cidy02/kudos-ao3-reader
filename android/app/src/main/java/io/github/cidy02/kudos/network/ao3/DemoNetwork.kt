@@ -53,6 +53,7 @@ internal object DemoNetwork {
         return bytes?.let {
             when {
                 DemoNetworkRoutes.isDraftsPath(path) -> demoDraftsPage(it, clock)
+                DemoNetworkRoutes.isAuthorWorksPath(path) -> demoAuthorWorksPage(it, url)
                 else -> demoChallengeCollectionPage(it, path)
             }
         }
@@ -262,6 +263,9 @@ internal object DemoNetworkRoutes {
     }
 
     fun isDraftsPath(path: String): Boolean = Regex("^/users/[^/]+/works/drafts/?$").matches(path)
+
+    fun isAuthorWorksPath(path: String): Boolean =
+        Regex("^/users/[^/]+/(pseuds/[^/]+/)?(works(/collected)?|gifts)/?$").matches(path)
 }
 
 /** Only the drafts fixtures are rebased to today. Tests pin the same clock used by the chips. */
@@ -277,6 +281,45 @@ internal fun demoDraftsPage(bytes: ByteArray, clock: Clock? = null): ByteArray {
         notice.selectFirst("span.year")?.text(date.year.toString())
     }
     return document.outerHtml().encodeToByteArray()
+}
+
+/** Same address, same ordered/filter answer in OkHttp and the read-only demo browser. */
+internal fun demoAuthorWorksPage(bytes: ByteArray, url: HttpUrl): ByteArray {
+    if (DemoNetworkRoutes.decodedPath(url).trimEnd('/').endsWith("/gifts")) return bytes
+    val column = url.queryParameter("work_search[sort_column]") ?: "revised_at"
+    val direction = url.queryParameter("work_search[sort_direction]")
+        ?: if (column in setOf("authors_to_sort_on", "title_to_sort_on")) "asc" else "desc"
+    val completion = url.queryParameter("work_search[complete]")
+    val doc = Jsoup.parse(bytes.decodeToString())
+    val index = doc.selectFirst("ol.work.index") ?: return bytes
+    val rows = index.select("li.work.blurb").toList()
+    val matching = rows.filter { row ->
+        when (completion) {
+            "T" -> row.selectFirst(".iswip .text")?.text() == "Complete Work"
+            "F" -> row.selectFirst(".iswip .text")?.text() == "Work in Progress"
+            else -> true
+        }
+    }
+    fun number(row: org.jsoup.nodes.Element, field: String): Long =
+        row.selectFirst("dd.$field")?.text()?.filter(Char::isDigit)?.toLongOrNull() ?: 0
+    fun key(row: org.jsoup.nodes.Element): String = when (column) {
+        "authors_to_sort_on" -> row.select("a[rel=author]").text().ifBlank { "Anonymous" }.lowercase(Locale.ROOT)
+        "title_to_sort_on" -> row.selectFirst("h4.heading a")?.text().orEmpty().lowercase(Locale.ROOT)
+        "created_at" -> row.attr("data-demo-posted")
+        "revised_at" -> LocalDate.parse(row.selectFirst("p.datetime")?.text(),
+            java.time.format.DateTimeFormatter.ofPattern("dd MMM uuuu", Locale.ENGLISH)).toString()
+        else -> number(row, when (column) {
+            "word_count" -> "words"
+            "kudos_count" -> "kudos"
+            "comments_count" -> "comments"
+            "bookmarks_count" -> "bookmarks"
+            else -> "hits"
+        }).toString().padStart(12, '0')
+    }
+    val ordered = matching.sortedBy(::key).let { if (direction == "desc") it.reversed() else it }
+    rows.forEach { it.remove() }
+    ordered.forEach { index.appendChild(it) }
+    return doc.outerHtml().encodeToByteArray()
 }
 
 internal class DemoNetworkInterceptor(
@@ -441,8 +484,11 @@ internal class DemoNetworkInterceptor(
         val name = if (matchTarget == path) DemoNetworkRoutes.fixtureName(url) else DemoNetworkRoutes.fixtureName(matchTarget)
         var bytes = name?.let { fixtures().read(it) }
         if (bytes != null && chain.request().method == "GET") {
-            bytes = if (DemoNetworkRoutes.isDraftsPath(path)) demoDraftsPage(bytes, clock)
-                else demoChallengeCollectionPage(bytes, path.trimEnd('/'))
+            bytes = when {
+                DemoNetworkRoutes.isDraftsPath(path) -> demoDraftsPage(bytes, clock)
+                DemoNetworkRoutes.isAuthorWorksPath(path) -> demoAuthorWorksPage(bytes, url)
+                else -> demoChallengeCollectionPage(bytes, path.trimEnd('/'))
+            }
         }
         if (bytes != null && chain.request().method == "GET" &&
             Regex("^/users/[^/]+/subscriptions/?$").matches(path)

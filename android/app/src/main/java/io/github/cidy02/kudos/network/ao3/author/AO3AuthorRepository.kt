@@ -8,12 +8,15 @@ import io.github.cidy02.kudos.network.ao3.search.AO3SearchPage
 import io.github.cidy02.kudos.network.ao3.search.AO3SearchParseException
 import io.github.cidy02.kudos.network.ao3.writes.AO3AuthenticatedClient
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.withContext
 
 class AO3AuthorRepository(
     private val publicClient: AO3Client = OkHttpAO3Client(),
     private val authenticatedClient: AO3AuthenticatedClient? = null,
-    private val parser: AO3AuthorParser = AO3AuthorParser()
+    private val parser: AO3AuthorParser = AO3AuthorParser(),
+    private val parseDispatcher: CoroutineDispatcher = Dispatchers.Default
 ) {
     suspend fun loadDashboard(route: AO3AuthorRoute): AO3Result<AO3AuthorHeader> {
         val url = route.dashboardUrl
@@ -33,7 +36,10 @@ class AO3AuthorRepository(
     ): AO3Result<AO3SearchPage> {
         val url = AO3AuthorUrls.userWorksUrl(route.username, page, route.pseud, scope, sort)
             ?: return AO3Result.Failure(AO3Error.Validation("No author selected."))
-        return getHtml(url).mapParse { parser.parseWorksPage(it, page) }
+        // One requested index read. An authenticated refusal must not probe anonymously.
+        val auth = authenticatedClient?.takeIf { it.username() != null }
+        val result = if (auth == null) publicClient.get(url) else auth.getAuthenticated(url)
+        return result.map { it.body }.mapParse { parser.parseWorksPage(it, page) }
     }
 
     suspend fun loadFandomWorks(
@@ -79,7 +85,9 @@ class AO3AuthorRepository(
             is AO3Result.Failure -> this
             is AO3Result.Success -> {
                 try {
-                    AO3Result.Success(withContext(Dispatchers.Default) { block(value) })
+                    AO3Result.Success(withContext(parseDispatcher) { block(value) })
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (e: AO3AuthorParseException) {
                     AO3Result.Failure(AO3Error.Parse(e.message ?: "Author page parse failed."))
                 } catch (e: AO3SearchParseException.Overloaded) {

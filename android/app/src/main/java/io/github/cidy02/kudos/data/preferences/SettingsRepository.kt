@@ -75,6 +75,15 @@ class SettingsRepository(
 ) {
     val settings: Flow<KudosSettings> = dataStore.data.map(::settingsFromPreferences)
 
+    /** iOS account.shortcuts: ordered device-local layout, outside KudosSettings/backup. */
+    val accountShortcuts: Flow<List<io.github.cidy02.kudos.account.AccountShortcut>> = dataStore.data.map {
+        io.github.cidy02.kudos.account.AccountShortcutStore.decode(it[Keys.AccountShortcuts])
+    }
+
+    suspend fun updateAccountShortcuts(shortcuts: List<io.github.cidy02.kudos.account.AccountShortcut>) {
+        dataStore.edit { it[Keys.AccountShortcuts] = io.github.cidy02.kudos.account.AccountShortcutStore.encode(shortcuts) }
+    }
+
     /** iOS library.history.grouping: per-device layout, outside KudosSettings/backup/sync. */
     val historyGrouping: Flow<LibraryHistoryGrouping> = dataStore.data.map { prefs ->
         LibraryHistoryGrouping.fromId(prefs[Keys.HistoryGrouping]) ?: LibraryHistoryGrouping.Default
@@ -599,6 +608,7 @@ class SettingsRepository(
     }
 
     private object Keys {
+        val AccountShortcuts = stringPreferencesKey(io.github.cidy02.kudos.account.AccountShortcutStore.key)
         val FavoriteScope = stringPreferencesKey("library.favorites.scope")
         val FavoriteOrder = stringPreferencesKey("library.favorites.order")
         val TagsUnreadOnly = booleanPreferencesKey("library.favorites.tagsUnreadOnly")
