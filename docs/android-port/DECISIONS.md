@@ -1235,3 +1235,13 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   rule is in the two shared form rows (`SubjectFormRow`, `SubjectTextFieldRow`), keyed on the
   marker, so nothing else changes.
   Reverse: the commit "A required field is spoken as required".
+
+## 2026-10-09: the chapter index is read in the reader's session (audit A28-4)
+
+- A work's chapter index (`/works/:id/navigate`, for the comments screen's chapter scope and
+  the reader's comments button) is read through the session when the reader is signed in,
+  as iOS reads it, and without one otherwise. One read; a refusal is not asked again without
+  the session.
+- Its cache is per work and per session: what one account was shown is not served to the
+  next account or to a signed-out reader.
+  Reverse: the commit "The chapter index is read in the reader's session".

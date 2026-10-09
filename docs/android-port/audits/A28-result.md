@@ -298,3 +298,6 @@ put first now leaves out any comment the page already shows
 (`theThreadPutFirstNeverRepeatsACommentTheChapterPageShows`). The demo's single-comment page
 now carries the comment that was asked for, as AO3's does, so the feature can be seen: header
 "Chapter 3", scope "Chapter 3", the inbox thread first, two reads.
+
+**A28-4, the part left open, is closed too** (the same afternoon): the chapter index is read
+in the reader's session and cached per session (`AO3ChapterIndexRepositoryTest`).
