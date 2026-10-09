@@ -4,6 +4,13 @@ import androidx.compose.foundation.background
 import io.github.cidy02.kudos.R
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.platform.testTag
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.only
@@ -194,6 +201,7 @@ fun AccountScreen(
     )
 ) {
     val state by viewModel.uiState.collectAsState()
+    val profileUnavailable by viewModel.profileUnavailable.collectAsState()
     val shortcuts by (settingsRepository?.accountShortcuts ?: kotlinx.coroutines.flow.flowOf(AccountShortcutStore.defaults))
         .collectAsState(initial = AccountShortcutStore.defaults)
     val signedIn = state.authState is AO3AuthState.SignedIn
@@ -221,6 +229,13 @@ fun AccountScreen(
         }
 
         if (signedIn) {
+            if (profileUnavailable) item {
+                EmptyStateCard(
+                    "Profile unavailable",
+                    "AO3 could not load your profile. It may be temporarily unavailable.",
+                    modifier = Modifier.padding(horizontal = SubjectMetrics.accountGutter, vertical = 16.dp)
+                )
+            }
             item { Spacer(Modifier.height(16.dp)) }
             
             item {
@@ -395,8 +410,34 @@ private fun AccountProfileHeader(
             onLogout = onLogout,
             onOpenWeb = onOpenWeb
         )
+    } else if (authState is AO3AuthState.Restoring) {
+        AccountRestoringHeader()
     } else {
         AccountSignedOutHeader(authState = authState, onLogin = onLogin)
+    }
+}
+
+@Composable
+private fun AccountRestoringHeader() {
+    val tokens = LocalKudosTokens.current
+    val alpha by rememberInfiniteTransition(label = "accountRestoring").animateFloat(
+        initialValue = 0.08f, targetValue = 0.18f,
+        animationSpec = infiniteRepeatable(tween(900), RepeatMode.Reverse), label = "skeletonAlpha"
+    )
+    Row(
+        modifier = Modifier.fillMaxWidth()
+            .padding(horizontal = SubjectMetrics.accountGutter, vertical = 4.dp)
+            .testTag("Restoring account header")
+            .clearAndSetSemantics { contentDescription = "Restoring AO3 session" },
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(Modifier.size(72.dp).background(tokens.primaryInk.copy(alpha = alpha), RoundedCornerShape(8.dp)))
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+            Box(Modifier.fillMaxWidth(0.72f).height(20.dp).background(tokens.primaryInk.copy(alpha = alpha), RoundedCornerShape(4.dp)))
+            Box(Modifier.fillMaxWidth(0.53f).height(13.dp).background(tokens.primaryInk.copy(alpha = alpha), RoundedCornerShape(4.dp)))
+            Box(Modifier.fillMaxWidth(0.86f).height(13.dp).background(tokens.primaryInk.copy(alpha = alpha), RoundedCornerShape(4.dp)))
+        }
     }
 }
 

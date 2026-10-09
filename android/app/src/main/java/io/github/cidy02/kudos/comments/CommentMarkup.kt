@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -47,6 +48,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -54,6 +57,8 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
+import io.github.cidy02.kudos.ui.subject.SubjectChip
+import io.github.cidy02.kudos.ui.subject.SubjectChipStyle
 
 /**
  * AO3 Comment Formatting tags — matching iOS `CommentMarkupTag` (CommentMarkup.swift:30).
@@ -96,24 +101,51 @@ enum class CommentMarkupTag(
 }
 
 object CommentMarkup {
+    val headingLevels = 1..6
+    const val defaultHeadingLevel = 3
+
     /**
      * Applies [tag] around the current selection of [value].
      */
-    fun applyTag(tag: CommentMarkupTag, value: TextFieldValue): TextFieldValue {
+    fun applyTag(tag: CommentMarkupTag, value: TextFieldValue, headingLevel: Int = defaultHeadingLevel): TextFieldValue {
         val text = value.text
         val selection = value.selection
         val min = minOf(selection.start, selection.end)
         val max = maxOf(selection.start, selection.end)
 
-        val before = text.substring(0, min)
-        val selected = text.substring(min, max)
-        val after = text.substring(max)
+        var replaceStart = min
+        var replaceEnd = max
+        var bodyStart = min
+        var bodyEnd = max
+        if (tag == CommentMarkupTag.Heading) {
+            // iOS re-levels the whole enclosing heading, even when only a word is selected.
+            // TextFieldValue offsets and Kotlin substrings both use UTF-16 code units.
+            for (existing in headingLevels) {
+                val open = "<h$existing>"
+                val close = "</h$existing>"
+                val start = text.lastIndexOf(open, (min - 1).coerceAtLeast(0))
+                if (start < 0 || start + open.length > min) continue
+                val firstClose = text.indexOf(close, start + open.length)
+                val end = text.indexOf(close, max)
+                val selectionText = text.substring(min, max)
+                if (firstClose < min || end < 0 || selectionText.contains(open) || selectionText.contains(close)) continue
+                replaceStart = start
+                replaceEnd = end + close.length
+                bodyStart = start + open.length
+                bodyEnd = end
+                break
+            }
+        }
+        val before = text.substring(0, replaceStart)
+        val selected = text.substring(bodyStart, bodyEnd)
+        val after = text.substring(replaceEnd)
 
-        val open = tag.openTag
-        val close = tag.closeTag
+        val level = headingLevel.takeIf { it in headingLevels } ?: defaultHeadingLevel
+        val open = if (tag == CommentMarkupTag.Heading) "<h$level>" else tag.openTag
+        val close = if (tag == CommentMarkupTag.Heading) "</h$level>" else tag.closeTag
 
         val newText = before + open + selected + close + after
-        val newSelection = if (min == max) {
+        val newSelection = if (selected.isEmpty()) {
             if (tag == CommentMarkupTag.Link) {
                 // Put caret inside href quotes
                 TextRange(before.length + 9)
@@ -217,6 +249,7 @@ fun CommentFormattingTray(
             Text(
                 text = "Format Comment",
                 fontSize = 18.sp,
+                lineHeight = 24.sp,
                 fontWeight = FontWeight.Bold,
                 color = tokens.primaryInk
             )
@@ -226,6 +259,7 @@ fun CommentFormattingTray(
                     Text(
                         text = group.title.uppercase(),
                         fontSize = 11.sp,
+                        lineHeight = 16.sp,
                         fontWeight = FontWeight.Bold,
                         letterSpacing = 1.sp,
                         color = tokens.secondaryInk
@@ -241,7 +275,7 @@ fun CommentFormattingTray(
                                 modifier = Modifier
                                     .clickable {
                                         onValueChange(CommentMarkup.applyTag(tag, value))
-                                        onDismiss()
+                                        if (tag != CommentMarkupTag.Heading) onDismiss()
                                     },
                                 shape = RoundedCornerShape(10.dp),
                                 color = tokens.glassFill(0.08)
@@ -261,16 +295,38 @@ fun CommentFormattingTray(
                                         Text(
                                             text = tag.label,
                                             fontSize = 13.sp,
+                                            lineHeight = 18.sp,
                                             fontWeight = FontWeight.Medium,
                                             color = tokens.primaryInk
                                         )
                                         Text(
                                             text = tag.element,
                                             fontSize = 10.sp,
+                                            lineHeight = 15.sp,
                                             fontFamily = FontFamily.Monospace,
                                             color = tokens.secondaryInk
                                         )
                                     }
+                                }
+                            }
+                        }
+                    }
+                    if (group == CommentMarkupTag.TagGroup.Blocks) {
+                        FlowRow(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            for (level in CommentMarkup.headingLevels) {
+                                Box(
+                                    modifier = Modifier.heightIn(min = 44.dp)
+                                        .clickable {
+                                            onValueChange(CommentMarkup.applyTag(CommentMarkupTag.Heading, value, level))
+                                        }
+                                        .semantics { contentDescription = "Heading $level" },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    SubjectChip("h$level", style = SubjectChipStyle.Neutral)
                                 }
                             }
                         }
