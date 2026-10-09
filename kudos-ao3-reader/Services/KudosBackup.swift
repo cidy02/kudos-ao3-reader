@@ -3039,6 +3039,15 @@ enum KudosBackupService {
                 restoredRevivedQueueMemberships += 1
             }
         }
+        // T-366 (audit A12). A membership removed on another device arrives as a
+        // tombstone with no record behind it, so the loop above never meets it and
+        // the work stayed in the queue here, and went out again in the next export.
+        // The same second pass saved searches and reading sessions have, on the
+        // membership's own clock: one changed after the removal survives.
+        let membershipsAfterRestore = (try? context.fetch(FetchDescriptor<ReadingQueueMembership>())) ?? []
+        applyTombstonesToExisting(membershipsAfterRestore, in: context, mode: mode) {
+            tombstones.membershipResolution(id: $0.id, incomingModifiedAt: $0.lastModifiedAt)
+        }
         ReadingQueueService.normalizeAllQueuedWorks(in: context)
 
         restoreAnnotations(
@@ -3119,6 +3128,7 @@ enum KudosBackupService {
             existingBookmarks.map { ($0.urlString, $0) },
             uniquingKeysWith: { first, _ in first }
         )
+        var suppressedBookmarkIDsByURL: [String: UUID] = [:]
         for archived in contents.manifest.bookmarks {
             if mode != .replaceLibrary {
                 switch tombstones.bookmarkResolution(
@@ -3126,6 +3136,7 @@ enum KudosBackupService {
                     incomingModifiedAt: archived.dateAdded
                 ) {
                 case .suppressStaleData:
+                    suppressedBookmarkIDsByURL[archived.urlString] = archived.id
                     continue
                 case .reviveNewerData, .preserveAmbiguous, .noTombstone:
                     break
@@ -3142,6 +3153,19 @@ enum KudosBackupService {
             }
             bookmark.title = archived.title
             bookmark.dateAdded = archived.dateAdded
+        }
+        // T-366 (audit A12): a saved link removed on another device is removed here
+        // too, judged on this copy's own Date Added, so one saved again after the
+        // removal survives. Links match by address and keep their local id, so a
+        // copy here can carry a different id from the one the tombstone names: when
+        // the archive's copy at the same address was suppressed, this copy is tested
+        // against that marker as well (Android's rule, `briefs/3bs-result.md` item 7).
+        applyTombstonesToExisting(existingBookmarks, in: context, mode: mode) { bookmark in
+            if case .suppressStaleData = tombstones.bookmarkResolution(
+                id: bookmark.id, incomingModifiedAt: bookmark.dateAdded
+            ) { return .suppressStaleData }
+            guard let archivedID = suppressedBookmarkIDsByURL[bookmark.urlString] else { return .noTombstone }
+            return tombstones.bookmarkResolution(id: archivedID, incomingModifiedAt: bookmark.dateAdded)
         }
         if mode == .replaceLibrary {
             // Immediate-delete class, same as ReadingAnnotation: mint a
@@ -3782,8 +3806,22 @@ enum KudosBackupService {
         mode: BackupImportMode,
         suppressed: inout Int
     ) {
-        guard !contents.manifest.annotations.isEmpty else { return }
         let existing = (try? context.fetch(FetchDescriptor<ReadingAnnotation>())) ?? []
+        // T-366 (audit A12). A highlight, note or bookmark deleted on another device
+        // arrives as a tombstone with no record behind it; the loop below only
+        // declines to add one back, so the copy here stayed and was published again.
+        // Run even when the archive lists no annotations at all (the usual shape of
+        // "deleted the last one"), and on the copy's own clock: one edited after the
+        // deletion survives.
+        func removeDeletedElsewhere() {
+            applyTombstonesToExisting(existing, in: context, mode: mode) {
+                tombstones.annotationResolution(id: $0.id, incomingModifiedAt: $0.lastModifiedAt)
+            }
+        }
+        guard !contents.manifest.annotations.isEmpty else {
+            removeDeletedElsewhere()
+            return
+        }
         var byID = Dictionary(existing.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         // Everything that already belonged to this device before the archive was
         // applied. `dedupeSamePassageAnnotations` must never hard-delete one of these
@@ -3871,6 +3909,7 @@ enum KudosBackupService {
         }
 
         dedupeSamePassageAnnotations(context: context, preexistingIDs: preexistingIDs)
+        removeDeletedElsewhere()
     }
 
     /// Parks note text that a merge is about to overwrite onto a hidden, already-soft-deleted
