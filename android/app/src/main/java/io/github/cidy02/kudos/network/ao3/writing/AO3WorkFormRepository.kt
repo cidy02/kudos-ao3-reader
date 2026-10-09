@@ -52,6 +52,31 @@ class AO3WorkFormRepository(
         }
     }
 
+    /** Exactly one chapter form GET; no work/collection enrichment. */
+    suspend fun loadChapterForm(workID: Long, chapterID: Long?): AO3Result<AO3ChapterForm> {
+        if (!authRepository.state.value.isSignedIn) return AO3Result.Failure(AO3Error.AuthenticationRequired)
+        val generation = authRepository.generation.value
+        val response = client.getAuthenticated(AO3ChapterUrls.form(workID, chapterID))
+        currentCoroutineContext().ensureActive()
+        if (generation != authRepository.generation.value) throw CancellationException()
+        return when (response) {
+            is AO3Result.Failure -> response
+            is AO3Result.Success -> try {
+                val form = withContext(parseDispatcher) { AO3ChapterFormParser().parse(response.value.body, response.value.url) }
+                currentCoroutineContext().ensureActive()
+                if (generation != authRepository.generation.value) throw CancellationException()
+                if (form.workID != workID || form.chapterID != chapterID)
+                    AO3Result.Failure(AO3Error.Parse("Couldn't read AO3's chapter form.")) else AO3Result.Success(form)
+            } catch (cancelled: CancellationException) { throw cancelled }
+              catch (_: AO3WorkFormParseException.LoginRequired) {
+                authRepository.sessionDidExpire(generation)
+                AO3Result.Failure(AO3Error.AuthenticationRequired)
+            } catch (_: AO3WorkFormParseException.Overloaded) {
+                AO3Result.Failure(AO3Error.Overloaded(response.value.statusCode, null))
+            } catch (_: Exception) { AO3Result.Failure(AO3Error.Parse("Couldn't read AO3's chapter form.")) }
+        }
+    }
+
     suspend fun loadCollectionOffers(): AO3Result<List<AO3CollectionOffer>> {
         if (!authRepository.state.value.isSignedIn) return AO3Result.Failure(AO3Error.AuthenticationRequired)
         val username = authRepository.username()?.let(::trimWritingTag)?.takeIf { it.isNotEmpty() }

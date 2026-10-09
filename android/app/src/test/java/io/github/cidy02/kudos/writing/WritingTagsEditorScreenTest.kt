@@ -157,7 +157,7 @@ class WritingTagsEditorScreenTest {
     }
 
     @OptIn(androidx.compose.ui.test.ExperimentalTestApi::class)
-    @Test fun accessibilityReorderChangesPayloadInBothDirectionsAndWaitingRowsStayInert() {
+    @Test fun accessibilityReorderChangesPayloadInBothDirectionsAndAddChapterHasItsAction() {
         show(995006L)
         open(WritingTagKind.Fandom)
         val old = form.state.value.form!!
@@ -170,10 +170,9 @@ class WritingTagsEditorScreenTest {
         compose.waitForIdle()
         assertEquals(old.fandoms, form.state.value.form!!.fandoms)
         back()
-        // The association rows open their pickers since brief 3bj; these three still wait for their screens.
-        // Chapters opens its list since brief 3bm, and Edit tags its screen since 3bt.
+        // Add chapter opens its chapter form since brief 3bu.
         for (label in listOf("Add chapter")) {
-            reach(label); compose.onNodeWithText(label).assertHasNoClickAction()
+            reach(label); compose.onNodeWithText(label).assertHasClickAction()
         }
         assertEquals(0, setup.client.posts); assertEquals(0, tags.posts)
     }

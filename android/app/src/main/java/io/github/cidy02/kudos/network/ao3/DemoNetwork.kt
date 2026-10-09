@@ -127,6 +127,12 @@ private class AssetFixtureSource(
  */
 internal object DemoNetworkRoutes {
     private val routes: List<Pair<Regex, String>> = listOf(
+        "^/works/995006/chapters/new/?$" to "ao3_demo_chapter_995006_new",
+        "^/works/995006/chapters/12302/edit/?$" to "ao3_demo_chapter_995006_posted",
+        "^/works/995006/chapters/12302/confirm_delete/?$" to "ao3_demo_chapter_995006_delete",
+        "^/works/995001/chapters/new/?$" to "ao3_demo_chapter_995001_new",
+        "^/works/995001/chapters/12311/edit/?$" to "ao3_demo_chapter_995001_draft",
+        "^/works/995001/chapters/12311/confirm_delete/?$" to "ao3_demo_chapter_995001_delete",
         "^/works/new" to "ao3_work_new_draft",
         "^/works/995001/edit/?$" to "ao3_demo_work_draft_edit",
         "^/works/995006/edit/?$" to "ao3_demo_work_posted_edit",
@@ -474,10 +480,12 @@ private class DemoWorkSaves {
     private val edited = ConcurrentHashMap<Long, String>()
     private val values = ConcurrentHashMap<Long, Map<String, List<String>>>()
     private var editedTags: String? = null
+    private val chapters = DemoWritingChapters()
 
     @Synchronized
     fun answer(request: okhttp3.Request, source: FixtureSource, clock: Clock?): Pair<Int, String>? {
         val path = DemoNetworkRoutes.decodedPath(request.url).trimEnd('/')
+        chapters.answer(request, source)?.let { return it }
         if (path == "/works/995006/edit_tags" && request.method == "GET")
             return editedTags?.let { 200 to it }
         if (path == "/works/995006/update_tags" && request.method == "POST") {
@@ -523,7 +531,17 @@ private class DemoWorkSaves {
         }
         val id = Regex("^/works/(995001|995006|995007)(?:/edit)?$").matchEntire(path)?.groupValues?.get(1)?.toLong()
         if (request.method == "GET") {
-            if (id != null && path.endsWith("/edit")) edited[id]?.let { return 200 to it }
+            if (id != null && path.endsWith("/edit")) {
+                val held = edited[id]
+                if (chapters.hasChanges(id)) {
+                    val base = held ?: source.read(if (id == 995006L) "ao3_demo_work_posted_edit" else "ao3_demo_work_draft_edit")?.decodeToString()
+                        ?: return 404 to ""
+                    val doc = Jsoup.parse(base).apply { outputSettings().prettyPrint(false) }
+                    chapters.applyToWork(doc, id)
+                    return 200 to doc.outerHtml()
+                }
+                held?.let { return 200 to it }
+            }
             if (!DemoNetworkRoutes.isDraftsPath(path) || values.isEmpty()) return null
             val name = DemoNetworkRoutes.fixtureName(request.url) ?: return 404 to ""
             val bytes = source.read(name) ?: return 404 to ""
@@ -563,6 +581,7 @@ private class DemoWorkSaves {
         }
         val html = edited[workId] ?: source.read(fixture)?.decodeToString() ?: return 404 to ""
         val doc = Jsoup.parse(html)
+        chapters.applyToWork(doc, workId)
         val buffer = okio.Buffer()
         request.body?.writeTo(buffer)
         val fields = buffer.readUtf8().split('&').filter { it.isNotEmpty() }.map {
@@ -576,7 +595,7 @@ private class DemoWorkSaves {
         val reason = when {
             !valid -> "AO3 didn't accept the change."
             fields["work[title]"] == listOf("Refuse this draft") -> "Title is too long (maximum is 255 characters)"
-            else -> null
+            else -> chapters.totalFailure(workId)
         }
         if (reason != null) return 422 to "<main id='main'><form><div id='error'><ul><li>$reason</li></ul></div></form></main>"
         for (control in doc.select("form#work-form [name]")) {

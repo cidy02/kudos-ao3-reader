@@ -613,6 +613,17 @@ fun AppNavHost(
                     } else LaunchedEffect(Unit) { navController.popBackStack() }
                 }
             }
+            listOf(Routes.WritingChapterNewDraftDemo to null, Routes.WritingChapterDraftDemo to 12311L).forEach { (route, chapterID) ->
+                sharedComposable(route) {
+                    if (io.github.cidy02.kudos.network.ao3.DemoNetwork.isActive) {
+                        val repository = remember(container) {
+                            io.github.cidy02.kudos.network.ao3.writing.AO3WorkFormRepository(container.authenticatedClient, container.authRepository)
+                        }
+                        io.github.cidy02.kudos.writing.WritingChapterDemoScreen(chapterID, repository,
+                            container.authRepository, container.writeRepository, onClose = { navController.popBackStack() })
+                    } else LaunchedEffect(Unit) { navController.popBackStack() }
+                }
+            }
             sharedComposable(Routes.WritingEditorDemo) {
                 io.github.cidy02.kudos.writing.WritingEditorDemoScreen(fromFile = false,
                     onClose = { navController.popBackStack() })

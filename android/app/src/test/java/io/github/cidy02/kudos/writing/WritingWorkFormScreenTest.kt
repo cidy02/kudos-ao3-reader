@@ -130,11 +130,11 @@ class WritingWorkFormScreenTest {
     @Test fun draftFormHasIosSectionsRowsAndValues() = inventory(995001L)
     @Test fun postedFormHasIosSectionsRowsAndValues() = inventory(995006L)
 
-    @Test fun waitingRowsHaveNoActionOrDestination() {
+    @Test fun chapterEntryHasAnActionWithoutSendingUntilOpened() {
         show(995006L)
         for (label in listOf("Add chapter")) { // Chapters opens its list since brief 3bm
             reach(label)
-            compose.onNodeWithText(label).assertHasNoClickAction()
+            compose.onNodeWithText(label).assertHasClickAction()
         }
         noWrites()
     }

@@ -66,7 +66,10 @@ import java.text.DateFormat
 import java.text.NumberFormat
 import java.util.Date
 
-/** One string. Deliberately has no client, auth service, work form or chapter actions. */
+/** Optional chapter callbacks carry no client, auth service or form into the editor. */
+data class WritingChapterEditorActions(val preview: () -> Unit, val deleteName: String? = null, val delete: () -> Unit = {})
+
+/** One string, with optional explicit caller actions. */
 @Composable
 fun WritingTextEditorScreen(
     text: String,
@@ -78,6 +81,7 @@ fun WritingTextEditorScreen(
     onBack: () -> Unit,
     ruleTitle: String? = null,
     onCheckpoint: (String) -> Unit = {},
+    chapterActions: WritingChapterEditorActions? = null,
 ) {
     val context = LocalContext.current
     val updatedCheckpoint by rememberUpdatedState(onCheckpoint)
@@ -87,7 +91,7 @@ fun WritingTextEditorScreen(
             CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate), SystemClock::uptimeMillis,
             onCheckpoint = { updatedCheckpoint(it) })
     }
-    WritingTextEditorContent(session, title, ruleTitle, onDone, onBack)
+    WritingTextEditorContent(session, title, ruleTitle, onDone, onBack, chapterActions)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -98,17 +102,19 @@ internal fun WritingTextEditorContent(
     ruleTitle: String?,
     onDone: (String) -> Unit,
     onBack: () -> Unit,
+    chapterActions: WritingChapterEditorActions? = null,
 ) {
     val tokens = LocalKudosTokens.current
     val palette = tokens.scopePalette
     val density = LocalDensity.current
     val context = LocalContext.current.applicationContext
     val lifecycle = LocalLifecycleOwner.current.lifecycle
+    var showDeleteChapter by remember { mutableStateOf(false) }
     var more by remember { mutableStateOf(false) }
     var showLink by remember { mutableStateOf(false) }
     var link by remember { mutableStateOf("https://") }
     val leave = { session.editor.commitComposition(); session.scheduler.fireNow(); session.editor.endEditing(); onBack() }
-    BackHandler(enabled = session.recoveries.isEmpty() && !showLink && session.error == null, onBack = leave)
+    BackHandler(enabled = session.recoveries.isEmpty() && !showLink && session.error == null && !showDeleteChapter, onBack = leave)
     ProvidePushedShellChrome(hasSubjectHeader = true, hideTabBar = true, onBack = {
         if (session.recoveries.isEmpty()) leave()
     }, trailingContent = {
@@ -122,6 +128,13 @@ internal fun WritingTextEditorContent(
             DropdownMenu(expanded = more, onDismissRequest = { more = false }, containerColor = tokens.cardFill) {
                 DropdownMenuItem(text = { Text("Paste as plain text", color = tokens.primaryInk, lineHeight = 22.sp) },
                     onClick = { more = false; session.editor.pastePlainText() })
+                if (chapterActions != null) {
+                    DropdownMenuItem(text = { Text("Preview on AO3", color = tokens.primaryInk, lineHeight = 22.sp) },
+                        onClick = { more = false; onDone(session.done()); chapterActions.preview() })
+                    if (chapterActions.deleteName != null) DropdownMenuItem(
+                        text = { Text("Delete chapter", color = SubjectPalette.fromHue(0.0, tokens.theme).accent, lineHeight = 22.sp) },
+                        onClick = { more = false; showDeleteChapter = true })
+                }
             }
         }
         EditorToolbarButton("Done", Icons.Outlined.Check) { onDone(session.done()) }
@@ -189,6 +202,16 @@ internal fun WritingTextEditorContent(
                 fontSize = 10.5.sp, lineHeight = 15.sp, color = tokens.secondaryInk)
         }
     }
+
+    if (showDeleteChapter && chapterActions?.deleteName != null) AlertDialog(
+        onDismissRequest = { showDeleteChapter = false }, containerColor = tokens.cardFill,
+        titleContentColor = tokens.primaryInk, textContentColor = tokens.secondaryInk,
+        title = { Text("Delete “${chapterActions.deleteName}”?", lineHeight = 28.sp) },
+        text = { Text("This will delete all comments on the chapter as well and cannot be undone.", lineHeight = 22.sp) },
+        confirmButton = { TextButton(onClick = {
+            showDeleteChapter = false; onDone(session.done()); chapterActions.delete()
+        }) { Text("Delete on AO3", color = SubjectPalette.fromHue(0.0, tokens.theme).accent, lineHeight = 20.sp) } },
+        dismissButton = { TextButton(onClick = { showDeleteChapter = false }) { Text("Cancel", color = palette.accent, lineHeight = 20.sp) } })
 
     session.error?.let { message ->
         AlertDialog(onDismissRequest = { session.error = null }, containerColor = tokens.cardFill,
@@ -296,19 +319,25 @@ internal fun EditorPreview(state: WritingBufferPreview.State?) {
             Modifier.fillMaxSize().semantics { contentDescription = "Preview" },
             contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
             items(state.blocks) { block ->
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    if (block.listItem) Text("•", fontSize = 15.5.sp, lineHeight = 25.sp, color = tokens.primaryInk)
-                    // AO3RichTextView's own default .body overrides the editor's outer font modifier.
-                    Text(buildAnnotatedString {
-                        block.runs.forEach { run ->
-                            withStyle(SpanStyle(fontWeight = if (run.isBold) FontWeight.Bold else FontWeight.Normal,
-                                fontStyle = if (run.isItalic) FontStyle.Italic else FontStyle.Normal,
-                                color = if (run.link != null) tokens.scopePalette.accent else tokens.primaryInk,
-                                textDecoration = if (run.link != null) TextDecoration.Underline else null)) { append(run.text) }
-                        }
-                    }, fontFamily = FontFamily.Default, fontSize = 17.sp, lineHeight = 24.sp)
-                }
+                WritingPreviewParagraph(block)
             }
         }
+    }
+}
+
+@Composable
+internal fun WritingPreviewParagraph(block: WritingBufferPreview.Block) {
+    val tokens = LocalKudosTokens.current
+    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        if (block.listItem) Text("•", fontSize = 15.5.sp, lineHeight = 25.sp, color = tokens.primaryInk)
+        // AO3RichTextView's own default .body overrides the editor's outer font modifier.
+        Text(buildAnnotatedString {
+            block.runs.forEach { run ->
+                withStyle(SpanStyle(fontWeight = if (run.isBold) FontWeight.Bold else FontWeight.Normal,
+                    fontStyle = if (run.isItalic) FontStyle.Italic else FontStyle.Normal,
+                    color = if (run.link != null) tokens.scopePalette.accent else tokens.primaryInk,
+                    textDecoration = if (run.link != null) TextDecoration.Underline else null)) { append(run.text) }
+            }
+        }, fontFamily = FontFamily.Default, fontSize = 17.sp, lineHeight = 24.sp)
     }
 }
