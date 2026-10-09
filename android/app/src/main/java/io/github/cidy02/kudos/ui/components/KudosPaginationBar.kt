@@ -1,5 +1,15 @@
 package io.github.cidy02.kudos.ui.components
 
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -167,6 +177,50 @@ private fun PageScrubberSheet(
                 modifier = Modifier.fillMaxWidth()
             )
 
+            // iOS's "Nearby": ten pages around the one chosen, a tap away. A tile sets the draft,
+            // as the slider does, and nothing loads until Go.
+            val nearby = nearbyPageWindow(draftPage, totalPages)
+            if (nearby.size > 1) {
+                Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = "Nearby",
+                        lineHeight = 16.sp,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    nearby.chunked(5).forEach { rowPages ->
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            rowPages.forEach { page ->
+                                val selected = page == draftPage
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .heightIn(min = 44.dp)
+                                        .clip(RoundedCornerShape(11.dp))
+                                        .background(
+                                            if (selected) MaterialTheme.colorScheme.primaryContainer
+                                            else MaterialTheme.colorScheme.surfaceVariant
+                                        )
+                                        .selectable(selected = selected, role = Role.RadioButton) { draft = page.toFloat() }
+                                        .semantics { contentDescription = "Page $page" },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = "%,d".format(page),
+                                        maxLines = 1,
+                                        lineHeight = 20.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer
+                                        else MaterialTheme.colorScheme.onSurface
+                                    )
+                                }
+                            }
+                            repeat(5 - rowPages.size) { Spacer(Modifier.weight(1f)) }
+                        }
+                    }
+                }
+            }
+
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween
@@ -202,4 +256,17 @@ private fun PageScrubberSheet(
             }
         }
     }
+}
+
+/**
+ * The pages the jump sheet offers as tiles: [count] of them, centred on [page] and slid back
+ * inside the range at either end rather than cut off, so page 2 of 3,216 still offers ten
+ * (iOS `SearchPaginationBar.nearbyPageWindow`).
+ */
+internal fun nearbyPageWindow(page: Int, totalPages: Int, count: Int = 10): List<Int> {
+    if (totalPages <= 0) return emptyList()
+    val windowSize = minOf(count, totalPages)
+    val centred = page - (windowSize - 1) / 2
+    val start = maxOf(1, minOf(centred, totalPages - windowSize + 1))
+    return (start until start + windowSize).toList()
 }
