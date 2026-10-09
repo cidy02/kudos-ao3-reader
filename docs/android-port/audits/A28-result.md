@@ -288,3 +288,13 @@ Chapter Comments of the same morning. Gate after the fixes: 2,393 tests.
 Unconfirmed, not changed: a caller cancelled in the instant a POST returns while its state
 object stays active (collection save, series save) could word a sent write as "not saved";
 the audit found no navigation path that does it.
+
+## After the fix, on the emulator (Claude, 2026-10-09, afternoon)
+
+**The rewritten Chapter Comments crashed the app** once the demo could show it
+(`IllegalArgumentException: Key "post-comment_1002" was already used`): the thread put first
+shared a reply with the chapter's page, and the list keys its rows by comment id. The thread
+put first now leaves out any comment the page already shows
+(`theThreadPutFirstNeverRepeatsACommentTheChapterPageShows`). The demo's single-comment page
+now carries the comment that was asked for, as AO3's does, so the feature can be seen: header
+"Chapter 3", scope "Chapter 3", the inbox thread first, two reads.

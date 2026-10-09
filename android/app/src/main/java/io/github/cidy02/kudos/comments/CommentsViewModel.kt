@@ -249,11 +249,21 @@ class CommentsViewModel(
         }
     }
 
+    private fun collectIds(comments: List<AO3Comment>, into: MutableSet<String>) {
+        for (comment in comments) { comment.id?.let(into::add); collectIds(comment.replies, into) }
+    }
+    private fun AO3Comment.without(ids: Set<String>): AO3Comment =
+        copy(replies = replies.filter { it.id !in ids }.map { it.without(ids) })
+
     private suspend fun present(target: AO3CommentTarget, result: AO3Result<AO3CommentThread>, first: AO3Comment? = null) {
         when (result) {
             is AO3Result.Success -> {
                 val sorted = result.value.withSort(_order.value)
-                val thread = if (first == null) sorted else sorted.copy(comments = listOf(first) + sorted.comments)
+                // The thread put first must not repeat a comment the page already shows: the list keys
+                // its rows by comment id, and a second row with the same key crashes it (seen in the
+                // demo, whose one comments page serves as both).
+                val onPage = mutableSetOf<String>().also { collectIds(sorted.comments, it) }
+                val thread = if (first == null) sorted else sorted.copy(comments = listOf(first.without(onPage)) + sorted.comments)
                 _state.value = CommentsUiState.Loaded(thread)
                 // Restore a top-level draft on initial load.
                 val draftContent = draftStore?.getDraft(

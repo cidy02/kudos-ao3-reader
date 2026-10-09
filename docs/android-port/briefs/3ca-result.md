@@ -419,3 +419,8 @@ second time without the session when the signed-in read fails
 of a page AO3 had just refused, and it hid the refusal the rows about a missing author needed
 to show. iOS makes one read. A signed-in reader whose session has just expired now sees that
 failure once, as on iOS, where before they were quietly shown the public page.
+
+## Seen on the emulator (Claude, 2026-10-09, afternoon)
+
+The comment format sheet's six heading chips (h1 to h6, under Spoiler; a tap keeps the sheet
+open). Not seen: the other fourteen rows.

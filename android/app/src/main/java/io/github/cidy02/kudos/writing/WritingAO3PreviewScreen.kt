@@ -21,7 +21,6 @@ import androidx.compose.ui.unit.sp
 import io.github.cidy02.kudos.app.ProvidePushedShellChrome
 import io.github.cidy02.kudos.network.ao3.writing.AO3ChapterPreview
 import io.github.cidy02.kudos.ui.subject.*
-import io.github.cidy02.kudos.ui.theme.SuccessGreen
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -72,7 +71,7 @@ internal fun WritingAO3PreviewScreen(preview: AO3ChapterPreview, subtitle: Strin
         }
         item { WorkFormSection("Post") }
         item { WritingPanelRow(first = true, last = false) {
-            WritingPostRow(postTitle, Icons.Filled.ArrowUpward, SuccessGreen, enabled = !busy && rows != null, busy = busy) {
+            WritingPostRow(postTitle, Icons.Filled.ArrowUpward, statusSuccessColor(tokens.theme), enabled = !busy && rows != null, busy = busy) {
                 if (confirmation == null) onPost() else confirming = true
             }
         } }
@@ -83,6 +82,16 @@ internal fun WritingAO3PreviewScreen(preview: AO3ChapterPreview, subtitle: Strin
 }
 
 /** WorkEditView's icon/title action, no value column or fixed height at large text. */
+/**
+ * iOS `AppTheme.statusSuccessColor`, a green for each theme. The one fixed green the theme file has
+ * is too dark to read on a dark panel ("Post work" was barely visible in Dark and OLED).
+ */
+internal fun statusSuccessColor(theme: io.github.cidy02.kudos.ui.subject.ReaderTheme): Color = when (theme) {
+    io.github.cidy02.kudos.ui.subject.ReaderTheme.Light -> Color(0xFF338C40)
+    io.github.cidy02.kudos.ui.subject.ReaderTheme.Sepia -> Color(0xFF598033)
+    else -> Color(0xFF66C773)
+}
+
 @Composable
 internal fun WritingPostRow(title: String, icon: ImageVector?, color: Color, enabled: Boolean = true,
     busy: Boolean = false, onClick: () -> Unit) {
