@@ -90,6 +90,8 @@ class AccountViewModel(
     private val listRepository: AccountListRepository? = null
 ) : ViewModel() {
     private val headerFlow = MutableStateFlow<io.github.cidy02.kudos.network.ao3.author.AO3AuthorHeader?>(null)
+    private val unavailableFlow = MutableStateFlow(false)
+    val profileUnavailable: StateFlow<Boolean> = unavailableFlow
     private val countsFlow = MutableStateFlow<Map<String, AO3AccountListCountsCache.Count>>(emptyMap())
 
     val uiState: StateFlow<AccountUiState> = combine(
@@ -115,6 +117,8 @@ class AccountViewModel(
             authRepository.restoreSession()
             authRepository.state.collect { auth ->
                 val username = auth.usernameOrNull
+                unavailableFlow.value = false
+                headerFlow.value = null
                 if (username != null) {
                     refreshHeader(username)
                     refreshCounts(username)
@@ -129,10 +133,14 @@ class AccountViewModel(
 
     private fun refreshHeader(username: String) {
         val repo = authorRepository ?: return
+        val generation = authRepository.generation.value
         viewModelScope.launch {
-            when (val result = repo.loadDashboard(AO3AuthorRoute(username))) {
-                is AO3Result.Success -> headerFlow.value = result.value
-                is AO3Result.Failure -> Unit
+            val result = repo.loadDashboard(AO3AuthorRoute(username))
+            currentCoroutineContext().ensureActive()
+            if (generation != authRepository.generation.value) return@launch
+            when (result) {
+                is AO3Result.Success -> { headerFlow.value = result.value; unavailableFlow.value = false }
+                is AO3Result.Failure -> unavailableFlow.value = result.error == AO3Error.NotFound && headerFlow.value == null
             }
         }
     }

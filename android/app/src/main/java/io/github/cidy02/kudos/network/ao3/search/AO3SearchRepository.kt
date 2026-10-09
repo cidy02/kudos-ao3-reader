@@ -15,17 +15,10 @@ class AO3SearchRepository(
     private val urlBuilder: AO3SearchUrlBuilder = AO3SearchUrlBuilder(),
     private val parser: AO3SearchParser = AO3SearchParser()
 ) {
-    /**
-     * AO3 excludes restricted works from anonymous listing results.
-     * Mirrors AO3AuthorRepository's pattern: nil/failure always falls back to the exact prior anonymous GET
-     * so signed-out behavior is unchanged.
-     */
+    /** One read in the chosen session; an authenticated refusal is never retried anonymously. */
     private suspend fun fetch(url: String): AO3Result<AO3HttpResponse> {
-        val auth = authenticatedClient ?: return client.get(url)
-        return when (val result = auth.getAuthenticated(url)) {
-            is AO3Result.Success -> result
-            is AO3Result.Failure -> client.get(url)
-        }
+        val auth = authenticatedClient?.takeIf { it.username() != null }
+        return if (auth == null) client.get(url) else auth.getAuthenticated(url)
     }
 
     suspend fun search(

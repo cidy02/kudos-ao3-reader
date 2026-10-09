@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.cidy02.kudos.account.AccountListType
 import io.github.cidy02.kudos.network.ao3.AO3Result
+import io.github.cidy02.kudos.network.ao3.AO3Error
 import io.github.cidy02.kudos.network.ao3.author.*
 import io.github.cidy02.kudos.network.ao3.displayMessage
 import io.github.cidy02.kudos.network.ao3.search.AO3SearchPage
@@ -75,7 +76,7 @@ fun AuthorProfileScreen(
         mutableStateOf(AO3AuthorRoute(username.trim(), initialPseud?.trim()?.takeIf { it.isNotBlank() }))
     }
     var header by remember { mutableStateOf<AO3AuthorHeader?>(null) }
-    var headerError by remember { mutableStateOf<String?>(null) }
+    var headerError by remember { mutableStateOf<AO3Error?>(null) }
     var headerLoading by remember { mutableStateOf(true) }
     
     var tab by remember { mutableStateOf(initialTab) }
@@ -117,7 +118,7 @@ fun AuthorProfileScreen(
             if (generation != headerGeneration || route != expectedRoute || sessionGeneration != expectedSession) return@launch
             when (result) {
                 is AO3Result.Success -> { header = result.value; headerError = null }
-                is AO3Result.Failure -> headerError = result.error.displayMessage()
+                is AO3Result.Failure -> headerError = result.error
             }
             headerLoading = false
         }
@@ -185,7 +186,14 @@ fun AuthorProfileScreen(
         tab = AuthorTab.Works
         header = null; works = null; series = null; bookmarks = null; about = null
         loadHeader()
-        if (!isDashboard) loadTab(AuthorTab.Works, 1)
+    }
+
+    // iOS activation waits for a usable header before reading the selected index.
+    // A missing/refused author must not trigger another read known to be unusable.
+    LaunchedEffect(header, route.id, sessionGeneration) {
+        if (header != null && !isDashboard && works == null && tab == AuthorTab.Works) {
+            loadTab(AuthorTab.Works, 1)
+        }
     }
 
     val shareContext = androidx.compose.ui.platform.LocalContext.current
@@ -312,13 +320,35 @@ fun AuthorProfileScreen(
         if (headerLoading && header == null) {
             item { LoadingStateCard("Loading author profile") }
         } else if (headerError != null && header == null) {
-            item {
-                ErrorStateCard(
-                    title = "Couldn't load author",
-                    message = headerError!!,
-                    primaryActionLabel = "Try Again",
-                    onPrimaryAction = { loadHeader() }
-                )
+            if (headerError == AO3Error.NotFound) {
+                item {
+                    Spacer(Modifier.height(WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 56.dp))
+                    EmptyStateCard(
+                        title = "Author unavailable",
+                        message = "AO3 could not find this user or pseud. It may have been renamed or deleted.",
+                        primaryActionLabel = "Open on AO3",
+                        onPrimaryAction = { onOpenWeb(route.dashboardUrl) }
+                    )
+                }
+            } else {
+                item {
+                    Spacer(Modifier.height(WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 56.dp))
+                    SubjectHeaderBlock(
+                        kicker = if (isDashboard) "AO3 Account" else "AO3 Author",
+                        title = route.displayName,
+                        subtitle = route.pseud?.let { "Pseud of ${route.username}" },
+                        palette = palette,
+                        gutter = 0.dp
+                    )
+                }
+                item {
+                    ErrorStateCard(
+                        title = "Couldn't load author",
+                        message = headerError!!.displayMessage(),
+                        primaryActionLabel = "Try Again",
+                        onPrimaryAction = { loadHeader() }
+                    )
+                }
             }
         } else {
             val h = header
@@ -508,7 +538,9 @@ fun AuthorProfileScreen(
                                         page = pageData.currentPage,
                                         total = pageData.totalPages,
                                         onPrev = { loadTab(AuthorTab.Works, pageData.currentPage - 1) },
-                                        onNext = { loadTab(AuthorTab.Works, pageData.currentPage + 1) }
+                                        onNext = { loadTab(AuthorTab.Works, pageData.currentPage + 1) },
+                                        loadMoreError = tabError?.takeIf { page > 1 },
+                                        onRetry = { loadTab(tab, page) }
                                     )
                                 }
                             }
@@ -551,7 +583,9 @@ fun AuthorProfileScreen(
                                         page = pageData.currentPage,
                                         total = pageData.totalPages,
                                         onPrev = { loadTab(AuthorTab.Series, pageData.currentPage - 1) },
-                                        onNext = { loadTab(AuthorTab.Series, pageData.currentPage + 1) }
+                                        onNext = { loadTab(AuthorTab.Series, pageData.currentPage + 1) },
+                                        loadMoreError = tabError?.takeIf { page > 1 },
+                                        onRetry = { loadTab(tab, page) }
                                     )
                                 }
                             }
@@ -580,7 +614,9 @@ fun AuthorProfileScreen(
                                         page = pageData.currentPage,
                                         total = pageData.totalPages,
                                         onPrev = { loadTab(AuthorTab.Bookmarks, pageData.currentPage - 1) },
-                                        onNext = { loadTab(AuthorTab.Bookmarks, pageData.currentPage + 1) }
+                                        onNext = { loadTab(AuthorTab.Bookmarks, pageData.currentPage + 1) },
+                                        loadMoreError = tabError?.takeIf { page > 1 },
+                                        onRetry = { loadTab(tab, page) }
                                     )
                                 }
                             }
@@ -643,7 +679,19 @@ fun AuthorProfileScreen(
 }
 
 @Composable
-private fun PagerRow(page: Int, total: Int, onPrev: () -> Unit, onNext: () -> Unit) {
+private fun PagerRow(
+    page: Int, total: Int, onPrev: () -> Unit, onNext: () -> Unit,
+    loadMoreError: String? = null, onRetry: () -> Unit = {}
+) {
+    if (loadMoreError != null) {
+        val tokens = LocalKudosTokens.current
+        Column(Modifier.subjectPanel()) {
+            Text(loadMoreError, color = tokens.secondaryInk, fontSize = 14.sp,
+                lineHeight = 20.sp, modifier = Modifier.padding(16.dp))
+            SubjectFormRow("Try Loading More", onClick = onRetry)
+        }
+        return
+    }
     if (total <= 1) return
     Row(
         modifier = Modifier

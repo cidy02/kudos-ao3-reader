@@ -91,7 +91,7 @@ class SearchRepositoryTest {
     }
 
     @Test
-    fun authenticatedClientFailureFallsBackToPublicClient() = runTest {
+    fun authenticatedRefusalDoesNotReadThePublicPage() = runTest {
         val authFailure = AO3Result.Failure(AO3Error.AuthenticationRequired)
         val authenticatedClient = FakeAuthenticatedClient(authFailure)
         val successResponse = AO3Result.Success(
@@ -107,10 +107,9 @@ class SearchRepositoryTest {
 
         val result = repository.search(AO3SearchFilters(query = "found family"))
 
-        val page = (result as AO3Result.Success).value
-        assertEquals(1, page.works.size)
-        assertEquals(12345L, page.works.first().id)
-        assertTrue(publicClient.requestedUrl!!.contains("work_search%5Bquery%5D=found%20family"))
+        assertEquals(AO3Error.AuthenticationRequired, (result as AO3Result.Failure).error)
+        assertEquals(1, authenticatedClient.reads)
+        assertEquals(null, publicClient.requestedUrl)
     }
 
     private class FakeAO3Client(
@@ -130,8 +129,12 @@ class SearchRepositoryTest {
     private class FakeAuthenticatedClient(
         private val result: AO3Result<AO3HttpResponse>
     ) : io.github.cidy02.kudos.network.ao3.writes.AO3AuthenticatedClient {
-        override fun username() = null
-        override suspend fun getAuthenticated(url: String) = result
+        var reads = 0
+        override fun username() = "test-reader"
+        override suspend fun getAuthenticated(url: String): AO3Result<AO3HttpResponse> {
+            reads++
+            return result
+        }
         override suspend fun postAuthenticated(
             url: String,
             formFields: List<Pair<String, String>>,
