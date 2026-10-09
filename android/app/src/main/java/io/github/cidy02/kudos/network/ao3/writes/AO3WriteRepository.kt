@@ -54,7 +54,8 @@ class AO3WriteRepository(
             client.postAuthenticatedInSession(form.actionUrl, form.parameters(),
                 writeHeaders(form.csrfToken, form.actionUrl), expectedGeneration)
         }
-        requireCollectionSession(expectedGeneration)
+        if (client.sessionGeneration() != expectedGeneration)
+            return AO3Result.Failure(AO3Error.Validation(AO3CollectionFields.UNCONFIRMED))
         return when (response) {
             is AO3Result.Failure -> response
             is AO3Result.Success -> {
@@ -109,7 +110,8 @@ class AO3WriteRepository(
         val response = withContext(NonCancellable) {
             client.postAuthenticatedInSession(action, fields, writeHeaders(token, url), expectedGeneration)
         }
-        requireCollectionSession(expectedGeneration)
+        if (client.sessionGeneration() != expectedGeneration)
+            return AO3Result.Failure(AO3Error.Validation(AO3CollectionFields.UNCONFIRMED))
         when (response) {
             is AO3Result.Failure -> return response
             is AO3Result.Success -> parser.writeErrorMessage(response.value.body)?.let {
@@ -121,9 +123,14 @@ class AO3WriteRepository(
                 is AO3Result.Failure -> null
                 is AO3Result.Success -> try { seriesParser.parseManage(result.value.body, url) } catch (_: Exception) { null }
             }
-        } catch (cancelled: CancellationException) { throw cancelled }
+        } catch (cancelled: CancellationException) {
+            if (client.sessionGeneration() != expectedGeneration)
+                return AO3Result.Failure(AO3Error.Validation(AO3CollectionFields.UNCONFIRMED))
+            throw cancelled
+        }
         catch (_: Exception) { null }
-        requireCollectionSession(expectedGeneration)
+        if (client.sessionGeneration() != expectedGeneration)
+            return AO3Result.Failure(AO3Error.Validation(AO3CollectionFields.UNCONFIRMED))
         if (fresh == null || order != null && fresh.sortedBy { it.position }.map { it.serialWorkID } != order ||
             removal != null && fresh.any { it.serialWorkID == removal })
             return AO3Result.Failure(AO3Error.Validation(AO3CollectionFields.UNCONFIRMED))
@@ -160,8 +167,9 @@ class AO3WriteRepository(
     }
 
     private suspend fun submitWork(form: AO3WorkForm, expectedGeneration: Int, referer: String,
-        tagsOnly: Boolean = false, servedOnly: Boolean = false): AO3Result<Unit> {
-        val fields = form.parameters(if (tagsOnly || form.isPosted) AO3WorkSubmitAction.Update else AO3WorkSubmitAction.SaveDraft)
+        tagsOnly: Boolean = false, servedOnly: Boolean = false,
+        submit: AO3WorkSubmitAction = if (tagsOnly || form.isPosted) AO3WorkSubmitAction.Update else AO3WorkSubmitAction.SaveDraft): AO3Result<Unit> {
+        val fields = form.parameters(submit)
             .let { pairs -> if (!servedOnly) pairs else {
                 val names = form.servedControls.filterNot { it.disabled }.map { it.name }.toSet()
                 pairs.filter { it.first in names }
@@ -170,6 +178,63 @@ class AO3WriteRepository(
             return AO3Result.Failure(AO3Error.Validation(AO3CollectionFields.UNCONFIRMED))
         val token = if (tagsOnly) form.csrfToken else fields.firstOrNull { it.first == AO3WorkFormField.authenticityToken }?.second.orEmpty()
         return workVerdict(postWriting(form.actionUrl, fields, token, referer, expectedGeneration), tagsOnly)
+    }
+
+    /** Work Post is direct (not the chapter's preview-first path), including a new work. */
+    suspend fun postWork(form: AO3WorkForm, expectedGeneration: Int): AO3Result<Unit> {
+        requireCollectionSession(expectedGeneration)
+        if (client.username() == null) return AO3Result.Failure(AO3Error.Validation("Log in to AO3 first."))
+        val missing = form.missingRequiredFields()
+        if (missing.isNotEmpty()) return AO3Result.Failure(AO3Error.Validation("AO3 still needs ${missing.joinToString(" and ")}."))
+        return submitWork(form, expectedGeneration, form.actionUrl, submit = AO3WorkSubmitAction.Post)
+    }
+
+    /** Preview is a write: one POST, same dispatch fence/verdict, then authoritative pane. */
+    suspend fun previewWork(form: AO3WorkForm, expectedGeneration: Int): AO3Result<AO3WorkPreview> {
+        val fields = form.parameters(AO3WorkSubmitAction.Preview)
+        return parseWritingPreview(postWriting(form.actionUrl, fields,
+            fields.firstOrNull { it.first == "authenticity_token" }?.second.orEmpty(), form.actionUrl, expectedGeneration),
+            expectedGeneration, workOnly = true)
+    }
+
+    /** iOS reads confirm_delete then the work stats. Draft public pages would be refused. */
+    suspend fun loadDeleteImplications(workID: Long, isDraft: Boolean, expectedGeneration: Int): AO3Result<AO3WorkDeleteImplications> {
+        requireCollectionSession(expectedGeneration)
+        if (client.username() == null) return AO3Result.Failure(AO3Error.Validation("Log in to AO3 first."))
+        val page = when (val result = client.getAuthenticated(workConfirmDeleteUrl(workID))) {
+            is AO3Result.Failure -> return result
+            is AO3Result.Success -> result.value
+        }
+        currentCoroutineContext().ensureActive()
+        requireCollectionSession(expectedGeneration)
+        var implications = try { withContext(Dispatchers.Default) {
+            AO3WorkDeleteParser.parse(page.body, page.url, workID)
+        } } catch (cancelled: CancellationException) { throw cancelled }
+          catch (_: Exception) { return AO3Result.Failure(AO3Error.Parse("Couldn't read AO3's work form.")) }
+        currentCoroutineContext().ensureActive()
+        requireCollectionSession(expectedGeneration)
+        // Owner's refused-read rule: a draft's public work page does not exist yet.
+        if (!isDraft) {
+            val stats = when (val result = client.getAuthenticated(workActionUrl(workID))) {
+                is AO3Result.Failure -> return result
+                is AO3Result.Success -> result.value.body
+            }
+            currentCoroutineContext().ensureActive()
+            requireCollectionSession(expectedGeneration)
+            implications = withContext(Dispatchers.Default) { AO3WorkDeleteParser.withStats(implications, stats) }
+        }
+        requireCollectionSession(expectedGeneration)
+        return AO3Result.Success(implications)
+    }
+
+    /** Swift re-reads the delete form on confirmation, then submits only token + method. */
+    suspend fun deleteWork(workID: Long, isDraft: Boolean, expectedGeneration: Int): AO3Result<Unit> {
+        val implications = when (val result = loadDeleteImplications(workID, isDraft, expectedGeneration)) {
+            is AO3Result.Failure -> return result
+            is AO3Result.Success -> result.value
+        }
+        return workVerdict(postWriting(implications.actionUrl, listOf("authenticity_token" to implications.csrfToken,
+            "_method" to implications.methodOverride), implications.csrfToken, implications.actionUrl, expectedGeneration))
     }
 
     /** Captured chapter action/token; no preparation GET, one single-shot POST. */
@@ -189,24 +254,31 @@ class AO3WriteRepository(
         if (client.username() == null) return AO3Result.Failure(AO3Error.Validation("Log in to AO3 first."))
         val fields = form.parameters(AO3WorkSubmitAction.Preview)
         if (fields.none { it.first == "preview_button" }) return AO3Result.Failure(AO3Error.Validation(CHAPTER_PREVIEW_UNAVAILABLE))
-        return when (val result = postWriting(form.actionUrl, fields, form.csrfToken, form.actionUrl, expectedGeneration)) {
-            is AO3Result.Failure -> result
-            is AO3Result.Success -> {
-                val page = result.value
+        return parseWritingPreview(postWriting(form.actionUrl, fields, form.csrfToken, form.actionUrl, expectedGeneration),
+            expectedGeneration, workOnly = false)
+    }
+
+    private suspend fun parseWritingPreview(result: AO3Result<AO3HttpResponse>, expectedGeneration: Int,
+        workOnly: Boolean): AO3Result<AO3ChapterPreview> {
+        if (result is AO3Result.Failure) return result
+        val page = (result as AO3Result.Success).value
+        // A returned write must reach a verdict even if its screen departs while parsing.
+        val verdict: AO3Result<AO3ChapterPreview> = withContext(NonCancellable) {
+            withContext(Dispatchers.Default) {
                 val error = parser.workWriteError(page.body)
                 when {
                     error != null -> AO3Result.Failure(AO3Error.Validation(error))
                     page.statusCode !in 200..399 -> AO3Result.Failure(AO3Error.Validation(CHAPTER_PREVIEW_UNAVAILABLE))
                     else -> try {
-                        val preview = withContext(Dispatchers.Default) { AO3ChapterFormParser().preview(page.body, page.url) }
-                        requireCollectionSession(expectedGeneration)
-                        AO3Result.Success(preview)
-                    } catch (cancelled: CancellationException) { throw cancelled }
-                      catch (_: AO3WorkFormParseException.LoginRequired) { AO3Result.Failure(AO3Error.AuthenticationRequired) }
+                        AO3Result.Success(AO3ChapterFormParser().preview(page.body, page.url, workOnly))
+                    } catch (_: AO3WorkFormParseException.LoginRequired) { AO3Result.Failure(AO3Error.AuthenticationRequired) }
                       catch (_: Exception) { AO3Result.Failure(AO3Error.Validation(CHAPTER_PREVIEW_UNAVAILABLE)) }
                 }
             }
         }
+        if (client.sessionGeneration() != expectedGeneration)
+            return AO3Result.Failure(AO3Error.Validation(AO3CollectionFields.UNCONFIRMED))
+        return verdict
     }
 
     /** iOS updateWorkTotals: a fresh work form, change only its total, SaveDraft/Update. */
@@ -260,7 +332,8 @@ class AO3WriteRepository(
         val response = withContext(NonCancellable) {
             client.postAuthenticatedInSession(action, fields, writeHeaders(token, referer), expectedGeneration)
         }
-        requireCollectionSession(expectedGeneration)
+        if (client.sessionGeneration() != expectedGeneration)
+            return AO3Result.Failure(AO3Error.Validation(AO3CollectionFields.UNCONFIRMED))
         return response
     }
 
@@ -302,7 +375,8 @@ class AO3WriteRepository(
         val response = withContext(NonCancellable) {
             client.postAuthenticatedInSession(posted.actionUrl, posted.parameters(), writeHeaders(token, referer), expectedGeneration)
         }
-        requireCollectionSession(expectedGeneration)
+        if (client.sessionGeneration() != expectedGeneration)
+            return AO3Result.Failure(AO3Error.Validation(AO3CollectionFields.UNCONFIRMED))
         return when (response) {
             is AO3Result.Failure -> response
             is AO3Result.Success -> {
@@ -351,7 +425,8 @@ class AO3WriteRepository(
         val response = withContext(NonCancellable) {
             client.postAuthenticatedInSession(action, fields, writeHeaders(token, referer), expectedGeneration)
         }
-        requireCollectionSession(expectedGeneration)
+        if (client.sessionGeneration() != expectedGeneration)
+            return AO3Result.Failure(AO3Error.Validation(AO3CollectionFields.UNCONFIRMED))
         return collectionWriteVerdict(response, if (promptID != null) "AO3 couldn't claim that prompt."
             else "AO3 couldn't release that prompt.")
     }
@@ -376,7 +451,8 @@ class AO3WriteRepository(
             client.postAuthenticatedInSession(action, tagSet.saveParameters(fields, token),
                 writeHeaders(token, referer), expectedGeneration)
         }
-        requireCollectionSession(expectedGeneration)
+        if (client.sessionGeneration() != expectedGeneration)
+            return AO3Result.Failure(AO3Error.Validation(AO3CollectionFields.UNCONFIRMED))
         return collectionWriteVerdict(response, "AO3 couldn't save that tag set.")
     }
 
@@ -398,7 +474,8 @@ class AO3WriteRepository(
                 listOf("_method" to "put", "authenticity_token" to token, nomination.rejectParameter()),
                 writeHeaders(token, referer), expectedGeneration)
         }
-        requireCollectionSession(expectedGeneration)
+        if (client.sessionGeneration() != expectedGeneration)
+            return AO3Result.Failure(AO3Error.Validation(AO3CollectionFields.UNCONFIRMED))
         return collectionWriteVerdict(response, "AO3 couldn't reject that tag.")
     }
 
@@ -424,7 +501,8 @@ class AO3WriteRepository(
             client.postAuthenticatedInSession(AO3CollectionModerationUrls.participant(slug, id), fields,
                 writeHeaders(token, referer), expectedGeneration)
         }
-        requireCollectionSession(expectedGeneration)
+        if (client.sessionGeneration() != expectedGeneration)
+            return AO3Result.Failure(AO3Error.Validation(AO3CollectionFields.UNCONFIRMED))
         return collectionWriteVerdict(response, if (accept) "AO3 couldn't update that member." else "AO3 couldn't decline that member.")
     }
 
@@ -472,7 +550,8 @@ class AO3WriteRepository(
                 listOf("authenticity_token" to token, "participants_to_invite" to invite),
                 writeHeaders(token, referer), expectedGeneration)
         }
-        requireCollectionSession(expectedGeneration)
+        if (client.sessionGeneration() != expectedGeneration)
+            return AO3Result.Failure(AO3Error.Validation(AO3CollectionFields.UNCONFIRMED))
         return collectionWriteVerdict(response, "AO3 couldn't invite that maintainer.")
     }
 
@@ -494,7 +573,8 @@ class AO3WriteRepository(
                 listOf("_method" to "delete", "authenticity_token" to token),
                 writeHeaders(token, referer), expectedGeneration)
         }
-        requireCollectionSession(expectedGeneration)
+        if (client.sessionGeneration() != expectedGeneration)
+            return AO3Result.Failure(AO3Error.Validation(AO3CollectionFields.UNCONFIRMED))
         return collectionWriteVerdict(response, "AO3 couldn't leave that collection.")
     }
 
@@ -519,7 +599,8 @@ class AO3WriteRepository(
         val response = withContext(NonCancellable) {
             client.postAuthenticatedInSession(posted.actionUrl, posted.parameters(), writeHeaders(token, referer), expectedGeneration)
         }
-        requireCollectionSession(expectedGeneration)
+        if (client.sessionGeneration() != expectedGeneration)
+            return AO3Result.Failure(AO3Error.Validation(AO3CollectionFields.UNCONFIRMED))
         return when (response) {
             is AO3Result.Failure -> response
             is AO3Result.Success -> withContext(Dispatchers.Default) {
@@ -562,7 +643,8 @@ class AO3WriteRepository(
             client.postAuthenticatedInSession(AO3CollectionFormUrls.show(slug),
                 listOf("_method" to "delete", "authenticity_token" to token), writeHeaders(token, referer), expectedGeneration)
         }
-        requireCollectionSession(expectedGeneration)
+        if (client.sessionGeneration() != expectedGeneration)
+            return AO3Result.Failure(AO3Error.Validation(AO3CollectionFields.UNCONFIRMED))
         return collectionWriteVerdict(response, "AO3 couldn't delete that collection.")
     }
 
@@ -673,7 +755,8 @@ class AO3WriteRepository(
                     page.actionUrl, draft.parameters(page), writeHeaders(page.csrfToken, referer), expectedGeneration
                 )
             }
-            requireSession()
+            if (client.sessionGeneration() != expectedGeneration)
+                return AO3Result.Failure(AO3Error.Validation(AO3CollectionFields.UNCONFIRMED))
             when (response) {
                 is AO3Result.Failure -> return response
                 is AO3Result.Success -> {
@@ -858,7 +941,8 @@ class AO3WriteRepository(
         val response = withContext(NonCancellable) {
             client.postAuthenticatedInSession(endpoint, fields(token), writeHeaders(token, referer), generation)
         }
-        if (client.sessionGeneration() != generation) throw CancellationException()
+        if (client.sessionGeneration() != generation)
+            return AO3Result.Failure(AO3Error.Validation(AO3CollectionFields.UNCONFIRMED))
         return when (response) {
             is AO3Result.Failure -> response
             is AO3Result.Success -> {

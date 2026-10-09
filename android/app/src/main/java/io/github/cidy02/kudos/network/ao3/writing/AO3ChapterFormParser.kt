@@ -45,11 +45,17 @@ class AO3ChapterFormParser {
             creators = AO3CreatorDraft(ids, pseuds))
     }
 
-    fun preview(html: String, pageUrl: String): AO3ChapterPreview {
+    fun preview(html: String, pageUrl: String, workOnly: Boolean = false): AO3ChapterPreview {
         val doc = document(html, pageUrl)
         val pane = doc.selectFirst("#previewpane") ?: invalid(CHAPTER_PREVIEW_UNAVAILABLE)
         val form = doc.select("form").firstOrNull { it.selectFirst("[name=edit_button]") != null }
-        val action = form?.let(::action)
+        val action = form?.let {
+            if (!workOnly) action(it) else it.attr("abs:action").also { url ->
+                if (!AO3RedirectCookieRelay.isTrustedUrl(url) ||
+                    !Regex("^/works/[1-9][0-9]*/?$").matches(url.toHttpUrlOrNull()?.encodedPath.orEmpty()))
+                    invalid(CHAPTER_PREVIEW_UNAVAILABLE)
+            }
+        }
         val path = action?.toHttpUrlOrNull()?.pathSegments.orEmpty()
         val controls = form?.let { AO3WorkFormParser().servedControls(doc, it) }.orEmpty()
         pane.select("form, .landmark, img").remove()
@@ -60,7 +66,7 @@ class AO3ChapterFormParser {
             }
         }
         return AO3ChapterPreview(path.getOrNull(1)?.toLongOrNull(), path.getOrNull(3)?.toLongOrNull(),
-            doc.selectFirst("meta[name=csrf-token]")?.attr("content")?.trim()?.takeIf(String::isNotEmpty),
+            doc.selectFirst("meta[name=csrf-token]")?.attr("content")?.let(::trimWritingTag)?.takeIf(String::isNotEmpty),
             AO3WriteFormParser().workWriteNotice(html), blocks, controls, form?.let(::attributes).orEmpty())
     }
 

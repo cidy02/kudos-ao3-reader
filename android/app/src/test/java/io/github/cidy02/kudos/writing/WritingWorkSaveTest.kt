@@ -159,7 +159,7 @@ class WritingWorkSaveTest {
             val before = model.state.value.form
             model.save()
             assertFalse(model.state.value.saved); assertFalse(model.state.value.saving)
-            assertEquals(if (error == AO3Error.AuthenticationRequired) WORK_FORM_SESSION_CHANGED else workFormFailure(error),
+            assertEquals(if (error == AO3Error.AuthenticationRequired) AO3CollectionFields.UNCONFIRMED else workFormFailure(error),
                 model.state.value.saveError)
             assertEquals(before, model.state.value.form)
             for ((path, bytes) in copies) assertArrayEquals(bytes, Files.readAllBytes(path))
@@ -190,8 +190,8 @@ class WritingWorkSaveTest {
             val before = model.state.value.form
             if (during) setup.client.beforePostResponse = { setup.auth.logout() } else setup.auth.logout()
             model.save()
-            assertEquals(WORK_FORM_SESSION_CHANGED, model.state.value.saveError)
-            assertEquals(before, model.state.value.form); assertFalse(model.state.value.saved)
+            assertEquals(if (during) AO3CollectionFields.UNCONFIRMED else WORK_FORM_SESSION_CHANGED, model.state.value.saveError)
+            assertEquals(before, model.state.value.form); assertFalse(model.state.value.saved); assertFalse(model.state.value.saving)
             assertEquals(if (during) 1 else 0, setup.client.posts)
             assertEquals(1, setup.client.gets.size)
             model.dismissSaveError(); model.save()
@@ -229,11 +229,11 @@ class WritingWorkSaveTest {
 
 /** Literal iOS parameters order/values for the three served fixtures, independent of the encoder.
  * Only the authorized 3bb browser replay is derived from the independent DOM test oracle. */
-internal fun iosFixtureSaveFields(id: Long?, title: String? = null): List<Pair<String, String>> {
+internal fun iosFixtureSaveFields(id: Long?, title: String? = null,
+    submit: AO3WorkSubmitAction = if (id == 995006L) AO3WorkSubmitAction.Update else AO3WorkSubmitAction.SaveDraft): List<Pair<String, String>> {
     val posted = id == 995006L
     val existing = id != null
     val fixture = if (posted) "ao3_demo_work_posted_edit" else if (existing) "ao3_demo_work_draft_edit" else "ao3_work_new_draft"
-    val submit = if (posted) AO3WorkSubmitAction.Update else AO3WorkSubmitAction.SaveDraft
     val ios = buildList {
         add("authenticity_token" to if (existing) "demo-work-$id==" else "draft-csrf==")
         if (existing) add("_method" to "patch")

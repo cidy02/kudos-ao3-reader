@@ -163,7 +163,7 @@ class WritingChapterSaveTest {
             val form = model.state.value.form; setup.client.postFailure = failure
             model.save(AO3WorkSubmitAction.SaveDraft)
             assertEquals(form, model.state.value.form); assertFalse(model.state.value.finished)
-            assertEquals(if (failure == AO3Error.AuthenticationRequired) WORK_FORM_SESSION_CHANGED else workFormFailure(failure), model.state.value.saveError)
+            assertEquals(if (failure == AO3Error.AuthenticationRequired) AO3CollectionFields.UNCONFIRMED else workFormFailure(failure), model.state.value.saveError)
             assertEquals(1, setup.client.posts); assertEquals(1, setup.client.gets.size)
         }
         val setup = workFormSetup(); val model = setup.chapter("draft").also { it.load() }; val form = model.state.value.form
@@ -171,7 +171,8 @@ class WritingChapterSaveTest {
         model.save(AO3WorkSubmitAction.SaveDraft)
         assertEquals("Couldn't reach AO3. Check your connection and try again.", model.state.value.saveError); assertEquals(form, model.state.value.form)
         setup.client.beforePostResponse = { setup.auth.logout() }; model.save(AO3WorkSubmitAction.SaveDraft)
-        assertEquals(WORK_FORM_SESSION_CHANGED, model.state.value.saveError); assertFalse(model.state.value.finished)
+        assertEquals(AO3CollectionFields.UNCONFIRMED, model.state.value.saveError); assertFalse(model.state.value.finished)
+        assertFalse(model.state.value.busy)
         assertEquals(2, setup.client.posts)
     }
 
