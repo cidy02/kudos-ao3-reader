@@ -236,6 +236,25 @@ class WritingSeriesTest {
         }
     }
 
+    /**
+     * Audit A26-2. The real client cancels a read whose session moved on while it was out. For the
+     * read-back that follows the POST that used to reach the screen as "the order was not saved" and
+     * "nothing was removed", when AO3 already had the change.
+     */
+    @Test fun aSessionThatMovesOnDuringTheReadBackIsUnconfirmedNotUnsaved() = runTest {
+        for (remove in listOf(false, true)) {
+            val setup = seriesSetup(); val model = setup.model(); model.load()
+            if (!remove) { model.beginReorder(); model.move(0, 2) }
+            setup.client.beforeGet = {
+                if (setup.client.posts.isNotEmpty()) { setup.auth.logout(); throw kotlinx.coroutines.CancellationException("session") }
+            }
+            if (remove) model.remove(model.state.value.form!!.works.first()) else model.save(order = true)
+            assertEquals(1, setup.client.posts.size)
+            assertEquals(AO3CollectionFields.UNCONFIRMED, model.state.value.error)
+            assertFalse(model.state.value.saving)
+        }
+    }
+
     @Test fun staleMembershipAndSessionBeforeDispatchNeverPost() = runTest {
         val setup = seriesSetup(); val model = setup.model(); model.load(); model.beginReorder(); model.move(0, 1)
         setup.client.manage = setup.client.manage.replace("serial_3213", "serial_3214").replace("position-for-3213", "position-for-3214")
@@ -354,7 +373,8 @@ class WritingSeriesTest {
                 "last work" -> "It is the series' last work on AO3, and AO3 deletes a series with its last work."
                 else -> null
             }
-            assertEquals(reason?.let { "First Light was not removed. $it" }
+            // A removal AO3 may have carried out is not called "not removed".
+            assertEquals(reason?.let { if (it == AO3CollectionFields.UNCONFIRMED) it else "First Light was not removed. $it" }
                 ?: "Your AO3 session changed, so nothing was removed.", model.state.value.error)
         }
     }

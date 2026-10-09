@@ -232,7 +232,12 @@ class AO3CollectionFormTest {
         }
     }
 
-    @Test fun sessionChangeDuringFreshReadSendsNothingAndDuringPostDoesNotTouchScreen() = runTest {
+    /**
+     * This form is not rebuilt when the session changes, so a write caught by one must still end. It used
+     * to be left busy for good with nothing said (audit A26-3): now "not saved" when nothing went out, and
+     * "didn't confirm" once the POST had.
+     */
+    @Test fun sessionChangeDuringFreshReadSendsNothingAndDuringPostIsUnconfirmedAndNeitherStaysBusy() = runTest {
         for (duringPost in listOf(false, true)) {
             val (auth, client, model) = setup()
             model.load(); fill(model)
@@ -243,7 +248,10 @@ class AO3CollectionFormTest {
             auth.logout()
             if (duringPost) client.postRelease.complete(Unit) else client.getRelease.complete(Unit)
             save.await()
-            assertEquals(before, model.state.value)
+            assertTrue(before.saving); assertFalse(model.state.value.saving)
+            assertEquals(listOf(if (duringPost) AO3CollectionFields.UNCONFIRMED
+                else "Not saved: your AO3 session changed since this form opened."), model.state.value.form!!.generalErrors)
+            assertEquals(before.form!!.values, model.state.value.form!!.values)
             assertEquals(if (duringPost) 1 else 0, client.posts.size)
         }
     }
@@ -292,7 +300,9 @@ class AO3CollectionFormTest {
             val before = held.state.value; auth.logout()
             if (duringPost) heldClient.postRelease.complete(Unit) else heldClient.getRelease.complete(Unit)
             deleting.await()
-            assertEquals(before, held.state.value)
+            assertTrue(before.saving); assertFalse(held.state.value.saving)
+            assertEquals(listOf(if (duringPost) AO3CollectionFields.UNCONFIRMED
+                else "Not deleted: your AO3 session changed since this form opened."), held.state.value.form!!.generalErrors)
             assertFalse(held.state.value.deleted)
             assertEquals(if (duringPost) 1 else 0, heldClient.posts.size)
         }

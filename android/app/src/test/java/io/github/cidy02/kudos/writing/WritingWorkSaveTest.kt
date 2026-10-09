@@ -159,8 +159,8 @@ class WritingWorkSaveTest {
             val before = model.state.value.form
             model.save()
             assertFalse(model.state.value.saved); assertFalse(model.state.value.saving)
-            assertEquals(if (error == AO3Error.AuthenticationRequired) WORK_FORM_SESSION_CHANGED else workFormFailure(error),
-                model.state.value.saveError)
+            // Each is AO3's own answer to the POST, the login page included ("session expired, log in again").
+            assertEquals(workFormFailure(error), model.state.value.saveError)
             assertEquals(before, model.state.value.form)
             for ((path, bytes) in copies) assertArrayEquals(bytes, Files.readAllBytes(path))
             assertEquals(1, setup.client.posts); assertEquals(1, setup.client.gets.size)
@@ -190,7 +190,8 @@ class WritingWorkSaveTest {
             val before = model.state.value.form
             if (during) setup.client.beforePostResponse = { setup.auth.logout() } else setup.auth.logout()
             model.save()
-            assertEquals(WORK_FORM_SESSION_CHANGED, model.state.value.saveError)
+            // Once the POST has gone out the answer is "didn't confirm", not "reopen this form before saving" (A26-1).
+            assertEquals(if (during) io.github.cidy02.kudos.network.ao3.account.AO3CollectionFields.UNCONFIRMED else WORK_FORM_SESSION_CHANGED, model.state.value.saveError)
             assertEquals(before, model.state.value.form); assertFalse(model.state.value.saved)
             assertEquals(if (during) 1 else 0, setup.client.posts)
             assertEquals(1, setup.client.gets.size)

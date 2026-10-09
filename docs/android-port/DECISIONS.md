@@ -1132,3 +1132,22 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
 - The collection membership pass of a restore covers only collections the archive carries
   (iOS). This narrows the entry of the same day above.
   Reverse: the commit "A write that was sent is never reported as not saved".
+
+## 2026-10-09: what a sent write says, continued (audit A26)
+
+- A verdict from `AO3WriteRepository` is shown as it is by the chapter form and the work
+  form; "Your AO3 session changed. Reopen this form before saving." is kept for a failure
+  before a POST. A preview AO3 returned is adopted even if the session has since moved on.
+- AO3's login page in answer to a work, chapter or Edit tags POST is "Your AO3 session
+  expired. Please log in again.", not "didn't confirm".
+- An unconfirmed chapter delete or series removal is not prefixed "was not deleted" or "was
+  not removed" (iOS says both sentences; Android leaves out the one that may be untrue).
+- The collection form ends a write caught by a session change: "didn't confirm" after the
+  POST, "Not saved"/"Not deleted" before it.
+- The Inbox's "Chapter Comments" opens the chapter's first page with the inbox comment's
+  thread first when it is not on that page (iOS). Three reads: the thread, the chapter index,
+  the chapter's page. A comments screen opened on a chapter is labelled with that chapter.
+- A chapter POST always carries its token and method in the body.
+- A series Save scrolls AO3's answer into view.
+  Reverse: the commit "A sent chapter or work write keeps AO3's verdict; Chapter Comments
+  shows the inbox thread".

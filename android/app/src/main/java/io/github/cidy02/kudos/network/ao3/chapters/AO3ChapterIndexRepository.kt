@@ -37,12 +37,12 @@ class AO3ChapterIndexRepository(
     }
 
     /**
-     * Resolves a 1-based story-chapter position to its AO3 chapter id, or null
+     * Resolves a 1-based story-chapter position to its AO3 chapter, or null
      * when the index is unavailable or the work is single-chapter — callers fall
      * back to work-level comments, which show the same thread anyway.
      */
-    suspend fun chapterIdForPosition(workId: Long, position: Int): Long? {
+    suspend fun chapterForPosition(workId: Long, position: Int): AO3ChapterRef? {
         val chapters = (chapters(workId) as? AO3Result.Success)?.value ?: return null
-        return chapters.firstOrNull { it.position == position }?.chapterId
+        return chapters.firstOrNull { it.position == position }
     }
 }

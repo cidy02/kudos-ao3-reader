@@ -78,11 +78,11 @@ internal class WritingWorkFormState(
             val result = if (editTagsOnly) writes.editWorkTags(form, generation) else writes.saveWork(form, generation)
             currentCoroutineContext().ensureActive()
             if (!active) return
-            mutable.value = when {
-                generation != auth.generation.value -> retained().copy(saveError = WORK_FORM_SESSION_CHANGED)
-                result is AO3Result.Success -> retained().copy(saved = true, saveError = null)
-                result is AO3Result.Failure -> retained().copy(saveError = workFormFailure(result.error))
-                else -> retained()
+            // The repository's verdict as it is: for a session that moved on after the POST it is already
+            // "didn't confirm", which the session sentence used to replace (audit A26-1).
+            mutable.value = when (result) {
+                is AO3Result.Success -> retained().copy(saved = true, saveError = null)
+                is AO3Result.Failure -> retained().copy(saveError = workFormFailure(result.error))
             }
         } catch (cancelled: CancellationException) {
             if (active && generation != auth.generation.value) {

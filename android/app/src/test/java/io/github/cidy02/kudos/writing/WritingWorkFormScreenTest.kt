@@ -357,7 +357,7 @@ class WritingWorkFormScreenTest {
         compose.waitUntil(15_000) { setup.client.posts == 1 }
         compose.runOnIdle { runBlocking { setup.auth.logout() }; release.complete(Unit) }
         awaitText("AO3 could not save the change")
-        compose.onNodeWithText(WORK_FORM_SESSION_CHANGED).assertExists()
+        compose.onNodeWithText(io.github.cidy02.kudos.network.ao3.account.AO3CollectionFields.UNCONFIRMED).assertExists()
         compose.onNodeWithText("OK").performClick()
         compose.onNodeWithContentDescription("Title ∗").assertTextContains("Retained on session failure")
         assertEquals(0, leaves); assertEquals(1, setup.client.posts); assertEquals(1, setup.client.gets.size)

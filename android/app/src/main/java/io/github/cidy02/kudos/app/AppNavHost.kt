@@ -533,8 +533,8 @@ fun AppNavHost(
                 onOpenWorkComments = { workId, focusedId ->
                     navController.navigate(Routes.comments(workId, focusedId))
                 },
-                onOpenChapterComments = { workId, position ->
-                    navController.navigate(Routes.comments(workId, chapterPosition = position))
+                onOpenChapterComments = { workId, commentId, position ->
+                    navController.navigate(Routes.comments(workId, focusedCommentId = commentId, chapterPosition = position))
                 },
                 settingsRepository = container.accountListRepository.settingsRepository
             )

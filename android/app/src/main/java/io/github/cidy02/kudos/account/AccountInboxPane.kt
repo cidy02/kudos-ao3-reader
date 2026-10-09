@@ -104,7 +104,7 @@ fun AccountInboxPane(
     currentUsername: String?,
     onOpenWorkComments: (workId: Long, focusedId: Long?) -> Unit,
     /** iOS's "Chapter Comments": the comments of the chapter an inbox comment was left on. */
-    onOpenChapterComments: (workId: Long, chapterPosition: Int) -> Unit = { _, _ -> },
+    onOpenChapterComments: (workId: Long, commentId: Long, chapterPosition: Int) -> Unit = { _, _, _ -> },
     settingsRepository: SettingsRepository? = null,
     modifier: Modifier = Modifier,
     viewModel: AccountInboxViewModel = viewModel(
@@ -317,7 +317,7 @@ fun AccountInboxPane(
                                 item.workId?.let { onOpenWorkComments(it, item.id) }
                             },
                             onOpenChapter = item.workId?.let { workId ->
-                                item.chapterPosition?.let { position -> { onOpenChapterComments(workId, position) } }
+                                item.chapterPosition?.let { position -> { onOpenChapterComments(workId, item.id, position) } }
                             },
                             onToggleSelection = { viewModel.toggleSelection(item) },
                             onMarkRead = {

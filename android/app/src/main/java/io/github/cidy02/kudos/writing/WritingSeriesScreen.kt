@@ -78,6 +78,11 @@ internal fun WritingSeriesContent(model: WritingSeriesState, title: String, subt
         if (ordering && !reorderOnly) ordering = false else if (removing) removing = false else onBack()
     }
     LaunchedEffect(state.orderSaved) { if (state.orderSaved) { if (reorderOnly) onBack() else ordering = false } }
+    // AO3's verdict is the list's last row, below the fold on a phone: a Save that seemed to do nothing.
+    LaunchedEffect(state.notice, state.error) {
+        if (state.notice != null || state.error != null) (if (ordering) orderList else if (removing) removeList else formList)
+            .let { it.animateScrollToItem(it.layoutInfo.totalItemsCount) }
+    }
     BackHandler(onBack = back)
     val canSave = !state.saving && !removing && if (ordering) (state.rows?.size ?: 0) >= 2
         else form != null && !seriesTitleIsBlank(form.title)

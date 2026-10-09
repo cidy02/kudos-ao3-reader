@@ -109,7 +109,11 @@ object AO3ChapterFormEncoder {
     }
     fun encode(form: AO3ChapterForm, submit: AO3WorkSubmitAction): List<Pair<String, String>> {
         val served = form.servedControls.filterNot { it.disabled }.map { it.name }.toSet()
-        val modeled = iosParameters(form, submit).filter { it.first in served }
+        // The token and the method always, as iOS sends them: the token is read from the page's meta tag,
+        // which is no form control, and the served-name rule dropped it from the body whenever AO3 gave it
+        // nowhere else (the fault of audit A23-1 in Edit tags and the series form; here from audit A26).
+        val modeled = iosParameters(form, submit)
+            .filter { it.first == "authenticity_token" || it.first == "_method" || it.first in served }
         val names = modeled.map { it.first }.toSet()
         return modeled + form.servedControls.flatMap { control ->
             if (control.name in names) emptyList() else control.successfulValues(submit).map { control.name to it }

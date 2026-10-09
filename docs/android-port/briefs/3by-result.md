@@ -288,3 +288,10 @@ Changed on landing:
 Shortcuts editor (add, remove, reorder, Reset to Default, the empty grid), the Account grid
 following it, and an author's works under each sort and completion choice, with a dismiss
 that applies nothing; four themes and large text.
+
+## Seen on the emulator (Claude, 2026-10-09)
+
+Account → See all Shortcuts: removing Dashboard, adding Inbox and moving Works up, then Done,
+gave the grid Works, Subscriptions, Bookmarks, Collections, History, Inbox. An author's works:
+Sort and filter → Sort by → Title → Apply changed the first row from Two Voices at Dawn to A
+Name Withheld. Not seen: choosing none, Sepia and large text.
