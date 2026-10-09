@@ -166,7 +166,10 @@ internal fun WritingEditTagsScreen(
                                 } else {
                                     SubjectChip(chip.name, Modifier.width(chip.width).heightIn(min = 48.dp)
                                         .clickable(role = Role.Button) {
-                                            model.writingTags(tagKind, values.filterNot { it == chip.name })
+                                            // The list as it is now, not as it was drawn: two removes
+                                            // before a redraw used to bring the first tag back.
+                                            val now = model.state.value.form?.let(tagKind::values) ?: values
+                                            model.writingTags(tagKind, now.filterNot { it == chip.name })
                                         }.semantics { contentDescription = "Remove ${chip.name}" },
                                         trailingIcon = Icons.Default.Close, palette = palette, maxLines = Int.MAX_VALUE)
                                 }

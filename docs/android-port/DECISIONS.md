@@ -1095,3 +1095,15 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   and is done only on AO3's notice or redirect; Reorder refuses if the series changed on AO3
   since the screen opened. A work removed from a series stays posted.
   Reverse: the commit "A writer's series can be edited, reordered and trimmed".
+
+## 2026-10-09: backup merge and Edit tags after audit A23
+
+- Replace Library takes the archive's word for what the archive carries and wipes nothing
+  else on a work that is already here (iOS runs the same `apply` in Replace): the hold date
+  of a finished copy, kudos given, author identities, and optional keys an older archive
+  lacks all stay.
+- The seven AO3 tag lists of a work are merged in every mode.
+- A deletion record for a collection membership removes the work from a collection that
+  already has it, in every mode but Replace, unless the archive lists it and is newer.
+- Edit tags always sends the token, the method and the submit in the body.
+  Reverse: the commit "Replace keeps what the archive does not carry".

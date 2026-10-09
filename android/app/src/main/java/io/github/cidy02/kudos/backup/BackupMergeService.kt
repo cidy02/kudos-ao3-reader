@@ -219,7 +219,7 @@ object BackupMergeService {
                 existing.copy(downloadedAt = existing.downloadedAt ?: restored.downloadedAt)
             } else if (mode == BackupImportMode.REPLACE_LIBRARY) {
                 summary = summary.copy(worksUpdated = summary.worksUpdated + 1)
-                applyReplaceWork(existing, restored)
+                applyReplaceWork(existing, restored, archived)
             } else {
                 summary = summary.copy(worksUpdated = summary.worksUpdated + 1)
                 mergeWork(existing, restored, archived, incomingModifiedAt, exportedAt)
@@ -812,6 +812,15 @@ object BackupMergeService {
                 dateUpdated = restored.dateUpdated.ifBlank { existing.dateUpdated },
                 epubDigest = restored.epubDigest.ifBlank { existing.epubDigest },
                 assetIdentifier = existing.assetIdentifier.ifEmpty { restored.assetIdentifier },
+                // iOS `apply` merges the seven AO3 tag lists whoever wins: a fandom only this
+                // device had fetched was dropped by a newer archive (audit A23-4).
+                workWarnings = mergeStringLists(existing.workWarnings, restored.workWarnings),
+                workCategories = mergeStringLists(existing.workCategories, restored.workCategories),
+                workTags = mergeStringLists(existing.workTags, restored.workTags),
+                workFandoms = mergeStringLists(existing.workFandoms, restored.workFandoms),
+                workCharacters = mergeStringLists(existing.workCharacters, restored.workCharacters),
+                workRelationships = mergeStringLists(existing.workRelationships, restored.workRelationships),
+                workFreeforms = mergeStringLists(existing.workFreeforms, restored.workFreeforms),
                 bookmarks = archived.bookmarks ?: existing.bookmarks,
                 ao3SeriesID = archived.ao3SeriesID ?: existing.ao3SeriesID,
                 ao3WorkID = archived.ao3WorkID ?: existing.ao3WorkID
@@ -1218,14 +1227,36 @@ object BackupMergeService {
      * new-to-this-device deleted collection is suppressed by its own tombstone
      * rather than silently recreated.
      */
-    private fun applyReplaceWork(existing: SavedWork, restored: SavedWork): SavedWork {
+    private fun applyReplaceWork(existing: SavedWork, restored: SavedWork, archived: BackupWork): SavedWork {
         return restored.copy(
             id = existing.id,
             hasEpub = existing.hasEpub || restored.hasEpub,
             downloadedAt = restored.downloadedAt ?: existing.downloadedAt,
             dateAdded = minInstant(existing.dateAdded, restored.dateAdded),
             ao3Unavailable = existing.ao3Unavailable || restored.ao3Unavailable,
-            assetIdentifier = existing.assetIdentifier.ifEmpty { restored.assetIdentifier }
+            assetIdentifier = existing.assetIdentifier.ifEmpty { restored.assetIdentifier },
+            // Replace takes the archive's word for what the archive carries. What it does not
+            // carry is not wiped: iOS runs the same `apply` in Replace. This copy used to
+            // clear the date a finished copy's hold began (a new 60 days), forget that kudos
+            // had been given, and null every key an older archive lacks (audit A23-2).
+            hasGivenKudos = existing.hasGivenKudos || restored.hasGivenKudos,
+            freedAt = existing.freedAt,
+            authorIdentitiesJSON = existing.authorIdentitiesJSON,
+            keepInProgressOverride = archived.keepInProgressOverride ?: existing.keepInProgressOverride,
+            hiddenFromHistoryAt = if (archived.hiddenFromHistoryAt != null) restored.hiddenFromHistoryAt else existing.hiddenFromHistoryAt,
+            comments = archived.comments ?: existing.comments,
+            hits = archived.hits ?: existing.hits,
+            knownChapterCount = archived.knownChapterCount ?: existing.knownChapterCount,
+            bookmarks = archived.bookmarks ?: existing.bookmarks,
+            ao3SeriesID = archived.ao3SeriesID ?: existing.ao3SeriesID,
+            ao3WorkID = archived.ao3WorkID ?: existing.ao3WorkID,
+            workWarnings = mergeStringLists(existing.workWarnings, restored.workWarnings),
+            workCategories = mergeStringLists(existing.workCategories, restored.workCategories),
+            workTags = mergeStringLists(existing.workTags, restored.workTags),
+            workFandoms = mergeStringLists(existing.workFandoms, restored.workFandoms),
+            workCharacters = mergeStringLists(existing.workCharacters, restored.workCharacters),
+            workRelationships = mergeStringLists(existing.workRelationships, restored.workRelationships),
+            workFreeforms = mergeStringLists(existing.workFreeforms, restored.workFreeforms)
         )
     }
 
@@ -1278,6 +1309,7 @@ object BackupMergeService {
         val names = current.filterNot { it.isDeleted }.mapTo(mutableSetOf()) { it.name }
         var created = 0
         var updated = 0
+        val affirmedMemberships = mutableMapOf<String, Set<String>>()
 
         incoming.forEach { archived ->
             val id = BackupPaths.canonicalUuid(archived.id, "collection.id")
@@ -1287,6 +1319,16 @@ object BackupMergeService {
                 now
             ) ?: parseOptionalInstant(archived.dateAdded, exportedAt)
             val existing = collectionsById[id]
+            // What this archive itself says is in the collection, and no deletion record
+            // newer than the archive's copy contradicts (iOS `archiveAffirmedMemberships`).
+            affirmedMemberships[id] = archived.workIDs
+                .map { remapWorkId(it, workIdRemap) }
+                .filterNot { workId ->
+                    tombstoneIndex.collectionMembershipResolution(
+                        collectionMembershipRecordId(id, workId), incomingModified
+                    ) == TombstoneResolution.SUPPRESS_STALE
+                }
+                .mapTo(mutableSetOf()) { BackupPaths.normalizeIdForComparison(it) }
 
             if (existing == null) {
                 if (archived.isDeleted == true) return@forEach
@@ -1394,6 +1436,27 @@ object BackupMergeService {
                 )
                 if (!archivedIsDeleted) names += archived.name
                 updated += 1
+            }
+        }
+
+        // iOS's second pass, in every mode but Replace: a work already in a collection here is
+        // taken out by a trusted deletion record newer than the collection's last membership
+        // change, unless this archive affirms it. Without it a removal made on another device
+        // never arrived when File Merge only added, or when this device's copy of the
+        // collection was the newer one, and the next export published the work again
+        // (audit A23-3; queue memberships and annotations already have this pass).
+        if (mode != BackupImportMode.REPLACE_LIBRARY) {
+            collectionsById.entries.forEach { entry ->
+                val collection = entry.value
+                val changedAt = collection.lastMembershipChangedAt ?: collection.lastModifiedAt
+                val affirmed = affirmedMemberships[entry.key].orEmpty()
+                val kept = collection.workIds.filterNot { workId ->
+                    BackupPaths.normalizeIdForComparison(workId) !in affirmed &&
+                        tombstoneIndex.collectionMembershipResolution(
+                            collectionMembershipRecordId(entry.key, workId), changedAt
+                        ) == TombstoneResolution.SUPPRESS_STALE
+                }
+                if (kept.size != collection.workIds.size) entry.setValue(collection.copy(workIds = kept))
             }
         }
 

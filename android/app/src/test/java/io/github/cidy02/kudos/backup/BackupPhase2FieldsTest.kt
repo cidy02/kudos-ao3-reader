@@ -191,6 +191,115 @@ class BackupPhase2FieldsTest {
         assertEquals(localAuthorIdentities, merged.authorIdentitiesJSON)
     }
 
+    /** Audit A23-2: Replace takes the archive's copy of what it carries, and wipes nothing else. */
+    @Test
+    fun replaceLibraryKeepsWhatTheArchiveDoesNotCarry() {
+        val freed = Instant.parse("2026-06-01T00:00:00Z")
+        val identities = "[{\"kind\":\"registered\",\"username\":\"alice\"}]"
+        val local = sampleSavedWork().copy(
+            freedAt = freed,
+            hasGivenKudos = true,
+            authorIdentitiesJSON = identities,
+            keepInProgressOverride = true,
+            workFandoms = listOf("Good Omens", "Discworld"),
+            lastModifiedAt = Instant.parse("2026-05-01T00:00:00Z")
+        )
+        // An archive from before any of that: no kudos, no override key, one fandom.
+        val archive = sampleBackupWork().copy(
+            title = "Archive Title",
+            lastModifiedAt = "2026-04-01T00:00:00Z",
+            workFandoms = listOf("Good Omens")
+        )
+
+        val result = BackupMergeService.merge(
+            current = BackupLibrarySnapshot(works = listOf(local)),
+            backup = samplePackage(manifest = sampleManifest(works = listOf(archive))),
+            mode = BackupImportMode.REPLACE_LIBRARY,
+            now = Instant.parse("2026-09-01T00:00:00Z")
+        )
+
+        val merged = result.snapshot.works.single { it.id == WORK_ID }
+        assertEquals("Archive Title", merged.title)
+        assertEquals(freed, merged.freedAt)
+        assertTrue(merged.hasGivenKudos)
+        assertEquals(identities, merged.authorIdentitiesJSON)
+        assertTrue(merged.keepInProgressOverride)
+        assertEquals(setOf("Good Omens", "Discworld"), merged.workFandoms.toSet())
+    }
+
+    /** Audit A23-4 (iOS `apply`): the AO3 tag lists are merged whoever's copy wins. */
+    @Test
+    fun aWinningArchiveMergesTheTagListsInsteadOfReplacingThem() {
+        val local = sampleSavedWork().copy(
+            workFandoms = listOf("Good Omens", "Discworld"),
+            workFreeforms = listOf("Slow Burn"),
+            lastModifiedAt = Instant.parse("2026-05-01T00:00:00Z")
+        )
+        val archive = sampleBackupWork().copy(
+            title = "Winning Title",
+            lastModifiedAt = "2026-08-01T00:00:00Z",
+            workFandoms = listOf("Good Omens"),
+            workFreeforms = listOf("Fix-It")
+        )
+
+        val result = BackupMergeService.merge(
+            current = BackupLibrarySnapshot(works = listOf(local)),
+            backup = samplePackage(manifest = sampleManifest(works = listOf(archive))),
+            now = Instant.parse("2026-09-01T00:00:00Z")
+        )
+
+        val merged = result.snapshot.works.single { it.id == WORK_ID }
+        assertEquals("Winning Title", merged.title)
+        assertEquals(setOf("Good Omens", "Discworld"), merged.workFandoms.toSet())
+        assertEquals(setOf("Slow Burn", "Fix-It"), merged.workFreeforms.toSet())
+    }
+
+    /**
+     * Audit A23-3 (iOS's second pass): a work already in a collection here is taken out by a
+     * deletion record newer than the collection's last change, when this device's copy of
+     * the collection wins and when File Merge only adds; an archive that itself lists the
+     * work, newer than the record, keeps it.
+     */
+    @Test
+    fun aDeletionRecordRemovesAMembershipThatIsAlreadyHere() {
+        val other = "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
+        val local = WorkCollection(
+            id = COLLECTION_ID,
+            name = "Renamed here",
+            dateAdded = Instant.parse(DATE_STRING),
+            lastModifiedAt = Instant.parse("2026-07-01T00:00:00Z"),
+            lastMembershipChangedAt = Instant.parse("2026-06-01T00:00:00Z"),
+            workIds = listOf(WORK_ID, other)
+        )
+        val removedAt = Instant.parse("2026-06-15T00:00:00Z")
+        val tombstone = io.github.cidy02.kudos.core.model.SyncTombstone(
+            id = "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+            recordID = io.github.cidy02.kudos.core.model.collectionMembershipRecordId(COLLECTION_ID, WORK_ID),
+            recordTypeRaw = io.github.cidy02.kudos.core.model.SyncTombstoneRecordType.WORK_COLLECTION_MEMBERSHIP,
+            createdAt = removedAt,
+            lastModifiedAt = removedAt
+        )
+        fun merged(archive: BackupCollection, mode: BackupImportMode) = BackupMergeService.merge(
+            current = BackupLibrarySnapshot(collections = listOf(local), tombstones = listOf(tombstone)),
+            backup = samplePackage(manifest = sampleManifest(collections = listOf(archive))),
+            mode = mode,
+            now = Instant.parse("2026-09-01T00:00:00Z")
+        ).snapshot.collections.single { it.id == COLLECTION_ID }
+
+        // An older archive that does not list the work: this device's collection wins.
+        val older = BackupCollection(
+            id = COLLECTION_ID, name = "Old name", dateAdded = DATE_STRING,
+            lastModifiedAt = "2026-05-01T00:00:00Z", workIDs = listOf(other)
+        )
+        assertEquals(listOf(other), merged(older, BackupImportMode.RECONCILE).workIds)
+        assertEquals(listOf(other), merged(older, BackupImportMode.MERGE).workIds)
+        assertEquals("Renamed here", merged(older, BackupImportMode.RECONCILE).name)
+
+        // An archive newer than the record that lists the work says it is back.
+        val affirming = older.copy(lastModifiedAt = "2026-06-20T00:00:00Z", workIDs = listOf(WORK_ID, other))
+        assertEquals(setOf(WORK_ID, other), merged(affirming, BackupImportMode.MERGE).workIds.toSet())
+    }
+
     @Test
     fun chosenColorPortedFromIosExactColourBackupTests() {
         val local = 0.58 to "#1E90FF"
