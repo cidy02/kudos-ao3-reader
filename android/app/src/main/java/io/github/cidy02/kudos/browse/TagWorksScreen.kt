@@ -198,7 +198,7 @@ fun TagWorksScreen(
                 } else if (current.page.works.isEmpty()) {
                     EmptyStateCard(
                         title = "No works found",
-                        message = "AO3 returned no works for this tag."
+                        message = "AO3 has no works for this tag right now."
                     )
                 } else {
                     LazyColumn(

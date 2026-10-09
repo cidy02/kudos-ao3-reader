@@ -172,7 +172,12 @@ fun SensitiveWorkRow(
                     .background(tokens.cardFill, MaterialTheme.shapes.medium)
                     .then(if (mutedHistory) Modifier else Modifier.background(palette.cardWash, MaterialTheme.shapes.medium))
             )
-            .combinedClickable(onClick = cardTap, onLongClick = onLongClick)
+            .combinedClickable(
+                onClick = cardTap,
+                onLongClick = onLongClick,
+                // iOS's hints while selecting ("Double-tap to select this work.").
+                onClickLabel = if (!selecting) null else if (selected) "deselect this work" else "select this work"
+            )
             // After the click, so its action stays: a blurred row is one button that says
             // nothing of the work. It used to read out the title and author it had just
             // blurred (audit A18-5; iOS `SensitiveWorkRow`, the same words as `WorkLedgerRow`).

@@ -141,7 +141,7 @@ class AO3CommentRepositoryTest {
             ),
             auth.posts.single().fields
         )
-        assertEquals("Comment posted.", outcome.message)
+        assertEquals("Posted.", outcome.message)
     }
 
     @Test
@@ -170,7 +170,7 @@ class AO3CommentRepositoryTest {
             ).value
 
         assertEquals(AO3WriteActionKind.Comment, outcome.kind)
-        assertEquals("Reply posted.", outcome.message)
+        assertEquals("Posted.", outcome.message)
         assertEquals(AO3CommentUrls.commentThreadUrl(parentId, isReply = true), auth.gets.single())
         assertEquals(AO3CommentUrls.commentReplyEndpoint(parentId), auth.posts.single().url)
         assertEquals(

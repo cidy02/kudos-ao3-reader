@@ -1,5 +1,7 @@
 package io.github.cidy02.kudos.comments
 
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -180,9 +182,9 @@ fun CommentComposerSheet(
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 color = palette.accent,
-                                modifier = Modifier.clickable {
-                                    replyTarget.author.username?.let(onOpenAuthor)
-                                }
+                                modifier = Modifier
+                                    .clickable { replyTarget.author.username?.let(onOpenAuthor) }
+                                    .semantics { contentDescription = "View ${replyTarget.author.name}'s profile" }
                             )
                             if (replyTarget.chapterLabel != null && replyTarget.chapterLabel.isNotBlank()) {
                                 Text(
