@@ -153,7 +153,7 @@ fun SubjectTextFieldRow(
                     imeAction = if (onSubmit != null) ImeAction.Search else ImeAction.Default),
                 keyboardActions = if (onSubmit == null) KeyboardActions() else KeyboardActions(onAny = { onSubmit() }),
                 modifier = (if (stacked) Modifier.fillMaxWidth() else Modifier.width(hug))
-                    .focusRequester(focus).semantics { contentDescription = label },
+                    .focusRequester(focus).semantics { contentDescription = io.github.cidy02.kudos.ui.subject.spokenFormLabel(label) },
                 decorationBox = { inner ->
                     Box {
                         if (value.isEmpty()) Text(placeholder, color = tokens.tertiaryInk, style = style)
