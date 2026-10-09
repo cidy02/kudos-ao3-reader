@@ -141,6 +141,9 @@ internal object DemoNetworkRoutes {
         "^/works/999000003/?$" to "ao3_demo_ashfall",
         "^/works/\\d+" to "ao3_work_bookmarked_subscribed",
         "edit_multiple" to "ao3_edit_multiple",
+        "^/series/321/edit/?$" to "ao3_demo_series_edit",
+        "^/series/321/manage/?$" to "ao3_demo_series_manage",
+        "^/series/321/?$" to "ao3_demo_dawn_series",
         "^/series/\\d+/edit" to "ao3_series_edit",
         "^/series/999/?$" to "ao3_demo_series",
         "^/collections/new/?$" to "ao3_demo_collection_new",
@@ -284,12 +287,18 @@ internal class DemoNetworkInterceptor(
     private val promptMeme = DemoPromptMemeWrites()
     private val signUps = DemoChallengeSignUps()
     private val workForms = DemoWorkSaves()
+    private val seriesForms = DemoSeriesWrites()
 
     override fun intercept(chain: Interceptor.Chain): Response {
         if (!isActive()) return chain.proceed(chain.request())
         val url = chain.request().url
         if (!DemoNetworkRoutes.isAo3Host(url.host)) return chain.proceed(chain.request())
         val path = DemoNetworkRoutes.decodedPath(url)
+        seriesForms.answer(chain.request(), fixtures())?.let { answer ->
+            return Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1)
+                .code(answer.first).message("Local series answer").header("Content-Type", HTML)
+                .body(answer.second.toResponseBody(HTML_TYPE)).build()
+        }
         workForms.answer(chain.request(), fixtures(), clock)?.let { answer ->
             return Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1)
                 .code(answer.first).message("Local work Save answer").header("Content-Type", HTML)
@@ -1086,5 +1095,80 @@ private class DemoChallengeSignUps {
         val notice = source.read("ao3_demo_signup_saved")?.decodeToString() ?: return 404 to ""
         doc.body().prepend(Jsoup.parse(notice).body().html())
         return 200 to doc.outerHtml()
+    }
+}
+
+/** The demo author's existing Dawn Cycle, with process-local form and sortable answers. */
+private class DemoSeriesWrites {
+    private var edited: String? = null
+    private var managed: String? = null
+
+    @Synchronized
+    fun answer(request: okhttp3.Request, source: FixtureSource): Pair<Int, String>? {
+        val path = DemoNetworkRoutes.decodedPath(request.url).trimEnd('/')
+        if (path !in setOf("/series/321/edit", "/series/321/manage", "/series/321", "/series/321/update_positions") &&
+            !Regex("^/serial_works/321[123]$").matches(path)) return null
+        if (request.method == "GET") return when (path) {
+            "/series/321/edit" -> 200 to (edited ?: source.read("ao3_demo_series_edit")?.decodeToString() ?: return 404 to "")
+            "/series/321/manage" -> 200 to (managed ?: source.read("ao3_demo_series_manage")?.decodeToString() ?: return 404 to "")
+            else -> null
+        }
+        if (request.method != "POST") return 405 to ""
+        val buffer = okio.Buffer()
+        request.body?.writeTo(buffer)
+        val fields = buffer.readUtf8().split('&').filter(String::isNotEmpty).map {
+            val pair = it.split('=', limit = 2)
+            URLDecoder.decode(pair[0], "UTF-8") to URLDecoder.decode(pair.getOrElse(1) { "" }, "UTF-8")
+        }.groupBy({ it.first }, { it.second })
+        fun refused(reason: String) = 422 to "<main id='main'><div id='error'><ul><li>$reason</li></ul></div></main>"
+        if (path == "/series/321") {
+            val html = edited ?: source.read("ao3_demo_series_edit")?.decodeToString() ?: return 404 to ""
+            val doc = Jsoup.parse(html)
+            val token = doc.selectFirst("meta[name=csrf-token]")?.attr("content")
+            if (fields["authenticity_token"] != listOf(token) || request.header("X-CSRF-Token") != token ||
+                request.header("Referer") != "https://archiveofourown.org/series/321" || fields["_method"] != listOf("put"))
+                return refused("AO3 didn't accept the change.")
+            if (fields["series[title]"] == listOf("Refuse this series")) return refused("Title is too long (maximum is 255 characters)")
+            for (control in doc.select("form.series [name]")) {
+                val name = control.attr("name")
+                // Model the edited fields; retain the original unknown/duplicate controls verbatim.
+                if (name !in setOf("series[title]", "series[summary]", "series[series_notes]", "series[complete]",
+                        "series[author_attributes][ids][]", "series[author_attributes][byline]")) continue
+                val values = fields[name] ?: continue
+                when (control.tagName()) {
+                    "textarea" -> control.text(values.firstOrNull().orEmpty())
+                    "select" -> control.select("option").forEach { option ->
+                        if (option.attr("value") in values) option.attr("selected", "selected") else option.removeAttr("selected")
+                    }
+                    "input" -> if (control.attr("type") == "checkbox") {
+                        if (control.attr("value") in values) control.attr("checked", "checked") else control.removeAttr("checked")
+                    } else control.attr("value", values.firstOrNull().orEmpty())
+                }
+            }
+            edited = doc.outerHtml()
+            return 200 to "<main id='main'><div class='flash notice'>Series was successfully updated.</div></main>"
+        }
+        val html = managed ?: source.read("ao3_demo_series_manage")?.decodeToString() ?: return 404 to ""
+        val doc = Jsoup.parse(html)
+        val token = doc.selectFirst("meta[name=csrf-token]")?.attr("content")
+        if (fields["authenticity_token"] != listOf(token) || request.header("X-CSRF-Token") != token ||
+            request.header("Referer") != "https://archiveofourown.org/series/321/manage") return refused("AO3 didn't accept the change.")
+        val list = doc.selectFirst("#sortable_series_list") ?: return 404 to ""
+        val rows = list.select("li").associateBy { it.id().removePrefix("serial_") }
+        if (path == "/series/321/update_positions") {
+            val order = fields["serial[]"].orEmpty()
+            if (order.size != rows.size || order.toSet() != rows.keys || fields.containsKey("_method"))
+                return refused("The series changed on AO3 since this screen opened. Reopen it and try again.")
+            list.empty()
+            order.forEach { list.appendChild(rows.getValue(it)) }
+        } else {
+            val id = path.substringAfterLast('/')
+            if (fields["_method"] != listOf("delete") || id !in rows || rows.size <= 1)
+                return refused("It is the series' last work on AO3, and AO3 deletes a series with its last work.")
+            rows.getValue(id).remove()
+        }
+        list.select("li").forEachIndexed { index, li -> li.selectFirst("[id^=position-for-]")?.text((index + 1).toString()) }
+        managed = doc.outerHtml()
+        return 302 to ""
     }
 }

@@ -42,6 +42,94 @@ class AO3WriteRepository(
     private val client: AO3AuthenticatedClient,
     private val parser: AO3WriteFormParser = AO3WriteFormParser()
 ) {
+    /** Loaded series token/action, no preparation read, exactly one non-retried POST. */
+    suspend fun saveSeries(form: io.github.cidy02.kudos.network.ao3.writing.AO3SeriesForm,
+        expectedGeneration: Int): AO3Result<String> {
+        requireCollectionSession(expectedGeneration)
+        if (client.username() == null) return AO3Result.Failure(AO3Error.Validation("Log in to AO3 first."))
+        if (!AO3RedirectCookieRelay.isTrustedUrl(form.actionUrl) || form.seriesID == null || form.openOnAO3ForCreate)
+            return AO3Result.Failure(AO3Error.Parse("Couldn't read AO3's series form."))
+        currentCoroutineContext().ensureActive()
+        val response = withContext(NonCancellable) {
+            client.postAuthenticatedInSession(form.actionUrl, form.parameters(),
+                writeHeaders(form.csrfToken, form.actionUrl), expectedGeneration)
+        }
+        requireCollectionSession(expectedGeneration)
+        return when (response) {
+            is AO3Result.Failure -> response
+            is AO3Result.Success -> {
+                val error = parser.writeErrorMessage(response.value.body)
+                val notice = parser.workWriteNotice(response.value.body)
+                when {
+                    error != null -> AO3Result.Failure(AO3Error.Validation(error))
+                    notice != null -> AO3Result.Success(notice)
+                    response.value.statusCode in 300..399 -> AO3Result.Success("Saved.")
+                    response.value.statusCode in 200..299 -> AO3Result.Failure(AO3Error.Validation(AO3CollectionFields.UNCONFIRMED))
+                    else -> AO3Result.Failure(AO3Error.Validation("AO3 didn't accept the change."))
+                }
+            }
+        }
+    }
+
+    /** iOS's full serial order, verified by a read-back; a redirect alone proves nothing. */
+    suspend fun reorderSeries(seriesID: Long, orderedSerialWorkIDs: List<Long>, expectedGeneration: Int):
+        AO3Result<List<io.github.cidy02.kudos.network.ao3.writing.AO3SeriesWorkRow>> =
+        changeSeriesWorks(seriesID, orderedSerialWorkIDs, null, expectedGeneration)
+
+    suspend fun removeWorkFromSeries(seriesID: Long, serialWorkID: Long, expectedGeneration: Int):
+        AO3Result<List<io.github.cidy02.kudos.network.ao3.writing.AO3SeriesWorkRow>> =
+        changeSeriesWorks(seriesID, null, serialWorkID, expectedGeneration)
+
+    private suspend fun changeSeriesWorks(seriesID: Long, order: List<Long>?, removal: Long?, expectedGeneration: Int):
+        AO3Result<List<io.github.cidy02.kudos.network.ao3.writing.AO3SeriesWorkRow>> {
+        requireCollectionSession(expectedGeneration)
+        if (client.username() == null) return AO3Result.Failure(AO3Error.Validation("Log in to AO3 first."))
+        if (seriesID <= 0) return AO3Result.Failure(AO3Error.Validation("Not a valid AO3 series URL."))
+        val url = io.github.cidy02.kudos.network.ao3.writing.AO3SeriesFormUrls.manage(seriesID)
+        val html = when (val result = client.getAuthenticated(url)) {
+            is AO3Result.Failure -> return result
+            is AO3Result.Success -> result.value.body
+        }
+        requireCollectionSession(expectedGeneration)
+        val token = parser.parseAuthenticityToken(html, metaOnly = true)
+            ?: return AO3Result.Failure(AO3Error.Validation("Couldn't prepare the request. Try again, or open the form on AO3."))
+        val seriesParser = io.github.cidy02.kudos.network.ao3.writing.AO3SeriesFormParser()
+        val listed = try { seriesParser.parseManage(html, url).map { it.serialWorkID } }
+            catch (_: Exception) { return AO3Result.Failure(AO3Error.Parse("Couldn't read AO3's series form.")) }
+        if (order != null && (order.size != listed.size || order.toSet() != listed.toSet() || order.distinct().size != order.size) ||
+            removal != null && removal !in listed)
+            return AO3Result.Failure(AO3Error.Validation("The series changed on AO3 since this screen opened. Reopen it and try again."))
+        if (removal != null && listed.size <= 1) return AO3Result.Failure(AO3Error.Validation(
+            "It is the series' last work on AO3, and AO3 deletes a series with its last work."))
+        val fields = listOf("authenticity_token" to token) +
+            (order?.map { "serial[]" to it.toString() } ?: listOf("_method" to "delete"))
+        val action = if (removal == null) io.github.cidy02.kudos.network.ao3.writing.AO3SeriesFormUrls.positions(seriesID)
+            else "https://archiveofourown.org/serial_works/$removal"
+        currentCoroutineContext().ensureActive()
+        val response = withContext(NonCancellable) {
+            client.postAuthenticatedInSession(action, fields, writeHeaders(token, url), expectedGeneration)
+        }
+        requireCollectionSession(expectedGeneration)
+        when (response) {
+            is AO3Result.Failure -> return response
+            is AO3Result.Success -> parser.writeErrorMessage(response.value.body)?.let {
+                return AO3Result.Failure(AO3Error.Validation(it))
+            }
+        }
+        val fresh = try {
+            when (val result = client.getAuthenticated(url)) {
+                is AO3Result.Failure -> null
+                is AO3Result.Success -> try { seriesParser.parseManage(result.value.body, url) } catch (_: Exception) { null }
+            }
+        } catch (cancelled: CancellationException) { throw cancelled }
+        catch (_: Exception) { null }
+        requireCollectionSession(expectedGeneration)
+        if (fresh == null || order != null && fresh.sortedBy { it.position }.map { it.serialWorkID } != order ||
+            removal != null && fresh.any { it.serialWorkID == removal })
+            return AO3Result.Failure(AO3Error.Validation(AO3CollectionFields.UNCONFIRMED))
+        return AO3Result.Success(fresh)
+    }
+
     /** iOS saveWork: the loaded token/body/action, zero preparation reads, one single-shot POST. */
     suspend fun saveWork(form: AO3WorkForm, expectedGeneration: Int): AO3Result<Unit> =
         submitWork(form, expectedGeneration, form.actionUrl)

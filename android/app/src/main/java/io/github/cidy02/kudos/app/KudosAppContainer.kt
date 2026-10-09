@@ -230,7 +230,7 @@ class KudosAppContainer(
     }
 
     val seriesRepository: AO3SeriesRepository by lazy {
-        AO3SeriesRepository(client = ao3Client)
+        AO3SeriesRepository(client = ao3Client, authenticatedClient = authenticatedClient)
     }
 
     val downloadQueue: DownloadQueue by lazy {

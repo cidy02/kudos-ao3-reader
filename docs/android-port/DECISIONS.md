@@ -1085,3 +1085,13 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   reader: not one comment's thread, and not the Inbox's author lookup.
 - One comments load at a time; an Inbox row loads its thread and nothing else.
   Reverse: the commit "A reply AO3 did not confirm stays a reply".
+
+## 2026-10-09: a writer's series can be edited (brief 3bw)
+
+- Edit series (title, creators, summary, notes, complete), Reorder and Remove from series,
+  as iOS: offered only for a series whose creator links name the signed-in account. Opening
+  reads the edit form once and the works list once (best effort, and a failed attempt is not
+  repeated). Each write reads a fresh token where iOS does, is one POST, is never retried,
+  and is done only on AO3's notice or redirect; Reorder refuses if the series changed on AO3
+  since the screen opened. A work removed from a series stays posted.
+  Reverse: the commit "A writer's series can be edited, reordered and trimmed".
