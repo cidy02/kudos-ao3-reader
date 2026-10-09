@@ -267,7 +267,7 @@ fun AO3CollectionsScreen(
                             }
                             item {
                                 Text(
-                                    text = "These are your AO3 collections...", fontSize = 13.sp,
+                                    text = "These are your AO3 collections. Collections you make in Kudos are in Library.", fontSize = 13.sp, lineHeight = 18.sp,
                                     color = tokens.tertiaryInk,
                                     modifier = Modifier.padding(horizontal = SubjectMetrics.headerGutter)
                                 )

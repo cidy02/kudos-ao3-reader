@@ -429,7 +429,9 @@ fun CommentPostRow(
                 .size(avatarSize)
                 .then(
                     if (comment.author.username != null) {
-                        Modifier.clickable { handlers.onOpenAuthor(comment.author.username) }
+                        Modifier
+                            .clickable { handlers.onOpenAuthor(comment.author.username) }
+                            .semantics { contentDescription = "View ${comment.author.name}'s profile" }
                     } else Modifier
                 )
         ) {

@@ -165,7 +165,7 @@ class AO3CommentRepository(
                     AO3Result.Success(
                         AO3WriteOutcome(
                             AO3WriteActionKind.Comment,
-                            if (replyParentId != null) "Reply posted." else "Comment posted."
+                            "Posted." // iOS's one word for a comment and for a reply
                         )
                     )
                 } else {

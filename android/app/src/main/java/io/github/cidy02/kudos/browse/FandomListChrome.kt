@@ -1,5 +1,7 @@
 package io.github.cidy02.kudos.browse
 
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -355,6 +357,8 @@ fun FandomLetterIndex(
 ) {
     Column(
         modifier
+            // iOS names the strip; here it had no name at all.
+            .semantics { contentDescription = "Fandom index" }
             .pointerInput(available) {
                 fun pick(y: Float) {
                     val index = ((y / size.height.coerceAtLeast(1).toFloat()) * IndexLetters.size)

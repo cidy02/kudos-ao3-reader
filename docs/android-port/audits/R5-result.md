@@ -1033,3 +1033,26 @@ Both codebases were read as they stand on disk:
 | **F** | Feature (screen, sheet, network scrape/write, or change across several files) | 8 |
 | **A** | Deliberately Android (platform control: slider, chip row, scrollable group, inline chip) | 6 |
 | **Total** | | **49** |
+
+## Triage (Claude, 2026-10-09, first pass)
+
+A reading of A14's 49 "both have it, and they differ" rows against today's code: 6 already
+the same, 14 label-only, 15 small, 8 features, 6 deliberately Android.
+
+**The 14 label rows are applied** (eight edits, each checked against iOS's string first):
+
+- Search's summary card says what a tap does ("open filters"; iOS's hint is "Opens
+  filters", worded here as TalkBack completes "Double-tap to …").
+- The fandom list's letter strip is named "Fandom index". It is still pointer-only: iOS
+  also makes it adjustable. That is one of the small rows, not done.
+- A tag page with no works says "AO3 has no works for this tag right now."
+- **The AO3 Collections footer read "These are your AO3 collections..." with the three dots
+  in the code**: a sentence left unfinished. It has iOS's whole sentence now.
+- A comment's avatar and the composer's byline are named "View {author}'s profile".
+- A posted comment or reply says "Posted.", iOS's one word (two tests updated).
+- A work row in Select mode says what a tap does ("select this work", "deselect this work").
+
+Not seen on a device with TalkBack.
+
+Still to do: the 15 small rows and the 8 feature rows (the cached-comments banner, the
+"checking whether this posted" flow and "Check Again", the heading level chips among them).

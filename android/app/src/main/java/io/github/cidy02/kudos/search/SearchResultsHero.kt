@@ -118,7 +118,7 @@ fun SearchResultsHero(
         shape = MaterialTheme.shapes.medium,
         modifier = modifier
             .fillMaxWidth()
-            .then(if (onEditFilters != null) Modifier.clickable { onEditFilters() } else Modifier)
+            .then(if (onEditFilters != null) Modifier.clickable(onClickLabel = "open filters") { onEditFilters() } else Modifier)
             .semantics { contentDescription = spoken }
     ) {
         Column(
