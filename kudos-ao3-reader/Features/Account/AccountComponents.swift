@@ -374,6 +374,10 @@ struct AccountNavCardLabel: View {
     /// draw, so the Account family reads as one list. Scales with Dynamic Type.
     @ScaledMetric(relativeTo: .body) private var titleSize: CGFloat = 15
     @ScaledMetric(relativeTo: .subheadline) private var valueSize: CGFloat = 13
+    /// The symbol's column grows with the symbol (T-374). The symbol is drawn at the
+    /// title's size; in a column fixed at 22pt it spilled out of both sides at the
+    /// accessibility sizes, over the panel's edge and into the title.
+    @ScaledMetric(relativeTo: .body) private var iconWidth: CGFloat = 22
 
     var body: some View {
         HStack(spacing: 12) {
@@ -381,7 +385,7 @@ struct AccountNavCardLabel: View {
                 Image(systemName: systemImage)
                     .font(.system(size: titleSize, weight: .medium))
                     .foregroundStyle(.tint)
-                    .frame(width: 22, alignment: .center)
+                    .frame(width: iconWidth, alignment: .center)
             }
             Text(title)
                 .font(.system(size: titleSize, weight: .medium))
@@ -397,6 +401,9 @@ struct AccountNavCardLabel: View {
                 .font(opensExternally ? .body : .caption.weight(.semibold))
                 .foregroundStyle(.tertiary)
         }
+        // A title on two lines is taller than 44pt: without this its lines touched
+        // the separators. No effect on a one-line row, which the minimum still sets.
+        .padding(.vertical, 6)
         .frame(minHeight: 44)
         .contentShape(Rectangle())
     }
