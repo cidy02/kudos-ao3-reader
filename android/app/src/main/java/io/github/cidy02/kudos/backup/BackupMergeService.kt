@@ -1447,9 +1447,11 @@ object BackupMergeService {
         // (audit A23-3; queue memberships and annotations already have this pass).
         if (mode != BackupImportMode.REPLACE_LIBRARY) {
             collectionsById.entries.forEach { entry ->
+                // Only a collection this archive carries, as on iOS, where the pass belongs
+                // to that collection's own restore.
+                val affirmed = affirmedMemberships[entry.key] ?: return@forEach
                 val collection = entry.value
                 val changedAt = collection.lastMembershipChangedAt ?: collection.lastModifiedAt
-                val affirmed = affirmedMemberships[entry.key].orEmpty()
                 val kept = collection.workIds.filterNot { workId ->
                     BackupPaths.normalizeIdForComparison(workId) !in affirmed &&
                         tombstoneIndex.collectionMembershipResolution(

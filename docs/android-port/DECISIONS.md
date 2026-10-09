@@ -1123,3 +1123,12 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
 - An author's works can be sorted and filtered by completion as on iOS: one read per Apply,
   page 1, and a dismissed sheet applies nothing.
   Reverse: the commit "The Account shortcuts can be chosen; an author's works can be sorted".
+
+## 2026-10-09: a write that has been sent is never called "not saved" (audit A24)
+
+- After a POST has returned, a session that moved on meanwhile is reported as "AO3 replied
+  but didn't confirm the change went through", for every write in `AO3WriteRepository`. The
+  check before a POST still cancels it. iOS judges the answer it has the same way.
+- The collection membership pass of a restore covers only collections the archive carries
+  (iOS). This narrows the entry of the same day above.
+  Reverse: the commit "A write that was sent is never reported as not saved".

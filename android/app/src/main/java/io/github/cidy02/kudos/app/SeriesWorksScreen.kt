@@ -163,7 +163,8 @@ fun SeriesWorksScreen(
                     }
                     if (canEdit && formRepository != null && writes != null) {
                         DropdownMenuItem(text = { Text("Edit series", color = tokens.primaryInk, lineHeight = 21.sp) }, onClick = { showMenu = false; editing = false })
-                        DropdownMenuItem(text = { Text("Reorder", color = tokens.primaryInk, lineHeight = 21.sp) }, onClick = { showMenu = false; editing = true })
+                        // iOS offers Reorder only when more than one work is loaded.
+                        if ((page?.works?.size ?: 0) > 1) DropdownMenuItem(text = { Text("Reorder", color = tokens.primaryInk, lineHeight = 21.sp) }, onClick = { showMenu = false; editing = true })
                     }
                     DropdownMenuItem(
                         text = { Text("Open on AO3") },

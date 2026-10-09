@@ -34,7 +34,11 @@ data class AO3SeriesForm(val seriesID: Long?, val actionUrl: String, val csrfTok
     val openOnAO3ForCreate: Boolean = false) {
     fun serves(name: String) = servedControls.any { it.name == name && !it.disabled }
     fun parameters(): List<Pair<String, String>> {
-        val modeled = iosParameters().filter { serves(it.first) }
+        // The token and the method are sent always, as iOS does: the token is read from the
+        // page's meta tag, which is no form control, and the served-name rule would drop it
+        // from the body whenever AO3 gave it nowhere else (the fault audit A23-1 found in
+        // Edit tags, here too).
+        val modeled = iosParameters().filter { it.first == "authenticity_token" || it.first == "_method" || serves(it.first) }
         val overridden = modeled.map { it.first }.toSet()
         return modeled + servedControls.filter { it.name !in overridden }.flatMap { control ->
             control.successfulValues().map { control.name to it }

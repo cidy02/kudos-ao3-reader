@@ -54,7 +54,7 @@ class AO3WriteRepository(
             client.postAuthenticatedInSession(form.actionUrl, form.parameters(),
                 writeHeaders(form.csrfToken, form.actionUrl), expectedGeneration)
         }
-        requireCollectionSession(expectedGeneration)
+        movedOnAfterWrite(expectedGeneration)?.let { return it }
         return when (response) {
             is AO3Result.Failure -> response
             is AO3Result.Success -> {
@@ -109,7 +109,7 @@ class AO3WriteRepository(
         val response = withContext(NonCancellable) {
             client.postAuthenticatedInSession(action, fields, writeHeaders(token, url), expectedGeneration)
         }
-        requireCollectionSession(expectedGeneration)
+        movedOnAfterWrite(expectedGeneration)?.let { return it }
         when (response) {
             is AO3Result.Failure -> return response
             is AO3Result.Success -> parser.writeErrorMessage(response.value.body)?.let {
@@ -123,7 +123,7 @@ class AO3WriteRepository(
             }
         } catch (cancelled: CancellationException) { throw cancelled }
         catch (_: Exception) { null }
-        requireCollectionSession(expectedGeneration)
+        movedOnAfterWrite(expectedGeneration)?.let { return it }
         if (fresh == null || order != null && fresh.sortedBy { it.position }.map { it.serialWorkID } != order ||
             removal != null && fresh.any { it.serialWorkID == removal })
             return AO3Result.Failure(AO3Error.Validation(AO3CollectionFields.UNCONFIRMED))
@@ -199,8 +199,7 @@ class AO3WriteRepository(
                     page.statusCode !in 200..399 -> AO3Result.Failure(AO3Error.Validation(CHAPTER_PREVIEW_UNAVAILABLE))
                     else -> try {
                         val preview = withContext(Dispatchers.Default) { AO3ChapterFormParser().preview(page.body, page.url) }
-                        requireCollectionSession(expectedGeneration)
-                        AO3Result.Success(preview)
+                        movedOnAfterWrite(expectedGeneration) ?: AO3Result.Success(preview)
                     } catch (cancelled: CancellationException) { throw cancelled }
                       catch (_: AO3WorkFormParseException.LoginRequired) { AO3Result.Failure(AO3Error.AuthenticationRequired) }
                       catch (_: Exception) { AO3Result.Failure(AO3Error.Validation(CHAPTER_PREVIEW_UNAVAILABLE)) }
@@ -260,7 +259,7 @@ class AO3WriteRepository(
         val response = withContext(NonCancellable) {
             client.postAuthenticatedInSession(action, fields, writeHeaders(token, referer), expectedGeneration)
         }
-        requireCollectionSession(expectedGeneration)
+        movedOnAfterWrite(expectedGeneration)?.let { return it }
         return response
     }
 
@@ -302,7 +301,7 @@ class AO3WriteRepository(
         val response = withContext(NonCancellable) {
             client.postAuthenticatedInSession(posted.actionUrl, posted.parameters(), writeHeaders(token, referer), expectedGeneration)
         }
-        requireCollectionSession(expectedGeneration)
+        movedOnAfterWrite(expectedGeneration)?.let { return it }
         return when (response) {
             is AO3Result.Failure -> response
             is AO3Result.Success -> {
@@ -351,7 +350,7 @@ class AO3WriteRepository(
         val response = withContext(NonCancellable) {
             client.postAuthenticatedInSession(action, fields, writeHeaders(token, referer), expectedGeneration)
         }
-        requireCollectionSession(expectedGeneration)
+        movedOnAfterWrite(expectedGeneration)?.let { return it }
         return collectionWriteVerdict(response, if (promptID != null) "AO3 couldn't claim that prompt."
             else "AO3 couldn't release that prompt.")
     }
@@ -376,7 +375,7 @@ class AO3WriteRepository(
             client.postAuthenticatedInSession(action, tagSet.saveParameters(fields, token),
                 writeHeaders(token, referer), expectedGeneration)
         }
-        requireCollectionSession(expectedGeneration)
+        movedOnAfterWrite(expectedGeneration)?.let { return it }
         return collectionWriteVerdict(response, "AO3 couldn't save that tag set.")
     }
 
@@ -398,7 +397,7 @@ class AO3WriteRepository(
                 listOf("_method" to "put", "authenticity_token" to token, nomination.rejectParameter()),
                 writeHeaders(token, referer), expectedGeneration)
         }
-        requireCollectionSession(expectedGeneration)
+        movedOnAfterWrite(expectedGeneration)?.let { return it }
         return collectionWriteVerdict(response, "AO3 couldn't reject that tag.")
     }
 
@@ -424,7 +423,7 @@ class AO3WriteRepository(
             client.postAuthenticatedInSession(AO3CollectionModerationUrls.participant(slug, id), fields,
                 writeHeaders(token, referer), expectedGeneration)
         }
-        requireCollectionSession(expectedGeneration)
+        movedOnAfterWrite(expectedGeneration)?.let { return it }
         return collectionWriteVerdict(response, if (accept) "AO3 couldn't update that member." else "AO3 couldn't decline that member.")
     }
 
@@ -472,7 +471,7 @@ class AO3WriteRepository(
                 listOf("authenticity_token" to token, "participants_to_invite" to invite),
                 writeHeaders(token, referer), expectedGeneration)
         }
-        requireCollectionSession(expectedGeneration)
+        movedOnAfterWrite(expectedGeneration)?.let { return it }
         return collectionWriteVerdict(response, "AO3 couldn't invite that maintainer.")
     }
 
@@ -494,7 +493,7 @@ class AO3WriteRepository(
                 listOf("_method" to "delete", "authenticity_token" to token),
                 writeHeaders(token, referer), expectedGeneration)
         }
-        requireCollectionSession(expectedGeneration)
+        movedOnAfterWrite(expectedGeneration)?.let { return it }
         return collectionWriteVerdict(response, "AO3 couldn't leave that collection.")
     }
 
@@ -519,7 +518,7 @@ class AO3WriteRepository(
         val response = withContext(NonCancellable) {
             client.postAuthenticatedInSession(posted.actionUrl, posted.parameters(), writeHeaders(token, referer), expectedGeneration)
         }
-        requireCollectionSession(expectedGeneration)
+        movedOnAfterWrite(expectedGeneration)?.let { return it }
         return when (response) {
             is AO3Result.Failure -> response
             is AO3Result.Success -> withContext(Dispatchers.Default) {
@@ -562,9 +561,20 @@ class AO3WriteRepository(
             client.postAuthenticatedInSession(AO3CollectionFormUrls.show(slug),
                 listOf("_method" to "delete", "authenticity_token" to token), writeHeaders(token, referer), expectedGeneration)
         }
-        requireCollectionSession(expectedGeneration)
+        movedOnAfterWrite(expectedGeneration)?.let { return it }
         return collectionWriteVerdict(response, "AO3 couldn't delete that collection.")
     }
+
+    /**
+     * For after a POST has gone out. The write may have landed, so a session that moved on
+     * meanwhile is "AO3 didn't confirm", never the cancellation that screens word as "not
+     * saved": a writer told that would send it again, or delete what they think is still
+     * there (audit A24-1; iOS judges the answer it has and calls the rest unconfirmed).
+     * Before the POST, [requireCollectionSession] still stops the write outright.
+     */
+    private fun movedOnAfterWrite(generation: Int): AO3Result.Failure? =
+        if (client.sessionGeneration() == generation) null
+        else AO3Result.Failure(AO3Error.Validation(AO3CollectionFields.UNCONFIRMED))
 
     private fun requireCollectionSession(generation: Int) {
         if (client.sessionGeneration() != generation) throw CancellationException()
@@ -673,7 +683,7 @@ class AO3WriteRepository(
                     page.actionUrl, draft.parameters(page), writeHeaders(page.csrfToken, referer), expectedGeneration
                 )
             }
-            requireSession()
+            movedOnAfterWrite(expectedGeneration)?.let { return it }
             when (response) {
                 is AO3Result.Failure -> return response
                 is AO3Result.Success -> {
