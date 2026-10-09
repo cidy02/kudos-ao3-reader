@@ -112,7 +112,10 @@ A reading, not an audit: eleven features, each checked against the code as it wa
   ever reads those bookmarks back: a button that saves to nowhere.
 - **"Show in Library" after an import: done** (2026-10-09). The notice's second button
   switches to the Library tab, as iOS does. Not seen on the emulator.
+- **"Nearby" pages in the page jump: done** (2026-10-09): ten tiles around the chosen page,
+  by iOS's window rule with its four tests. **Not seen on the emulator** (it would not stay
+  up: the Mac was out of memory).
 - Small, still to do by hand: "Open Chapter Comments" in the inbox menu, the "Showing cached
-  AO3 data" banner, "Nearby" pages in the page jump.
+  AO3 data" banner.
 - Medium, to brief for Codex: the Account shortcut editor, Read Aloud downloads on Privacy,
   popular tags in the tag picker, works sort and completion on an author.
