@@ -25,6 +25,11 @@ import io.github.cidy02.kudos.network.ao3.account.collectionNameFormatIsValid
 import io.github.cidy02.kudos.network.ao3.account.reservedCollectionNames
 import io.github.cidy02.kudos.network.ao3.search.AO3SearchPage
 import io.github.cidy02.kudos.network.ao3.search.AO3SearchParser
+import io.github.cidy02.kudos.network.ao3.account.AO3SignUpsPage
+import io.github.cidy02.kudos.network.ao3.account.AO3ChallengeSignUpsUrls
+import io.github.cidy02.kudos.network.ao3.account.AO3ChallengeSignUpsParser
+import io.github.cidy02.kudos.network.ao3.account.SignUpAssignmentList
+import io.github.cidy02.kudos.network.ao3.account.AO3SignUpAssignment
 import io.github.cidy02.kudos.network.ao3.account.AO3ChallengeSignUpForm
 import io.github.cidy02.kudos.network.ao3.account.AO3ChallengeSignUpUrls
 import io.github.cidy02.kudos.network.ao3.account.AO3ChallengeSignUpParser
@@ -59,6 +64,17 @@ class AO3CollectionDetailRepository(
      */
     private val parseDispatcher: CoroutineDispatcher = Dispatchers.Default
 ) {
+    /** Foreground page reads; the visible list owns role/closed-state admission and pagination. */
+    suspend fun getChallengeSignUps(slug: String, page: Int = 1): AO3Result<AO3SignUpsPage> =
+        fetch(AO3ChallengeSignUpsUrls.page(slug, page)) {
+            AO3ChallengeSignUpsParser().parse(it, page)
+        }
+    suspend fun getSignUpAssignments(slug: String, list: SignUpAssignmentList):
+        AO3Result<List<AO3SignUpAssignment>> =
+        fetch(AO3ChallengeSignUpsUrls.assignments(slug, list)) {
+            AO3ChallengeSignUpsParser().parseAssignments(it)
+        }
+
     /** One explicitly opened own sign-up form; no settings, tag-set or pseud enrichment. */
     suspend fun getChallengeSignUp(slug: String, id: Int? = null): AO3Result<AO3ChallengeSignUpForm> {
         if (!authRepository.state.value.isSignedIn) return AO3Result.Failure(

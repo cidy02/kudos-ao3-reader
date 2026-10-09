@@ -1210,3 +1210,19 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
 - Try Again on a failed comments load repeats the request that failed.
 - A page load puts the work's draft only into a field nobody has opened.
   Reverse: the commit "Chapter Comments is one operation; a page load never fills an open reply".
+
+## 2026-10-09: a challenge's sign-ups list, and withdrawing a sign-up (brief 3cb)
+
+- A challenge's owner or moderator has a native Sign-ups list (All, Matched, Unmatched; a
+  participant's sign-up read from the row already loaded; "Load page N of M"). Anyone else is
+  refused before a request is made.
+- Reads for one opening: an owner of a closed gift exchange six (the schedule, the first page
+  of each of the three assignment lists, the first and last sign-ups pages); an owner of an
+  open one three; a moderator two, with no match state. iOS walks every assignment page and
+  makes the owner's reads for a moderator too: Android does neither (owner question 16, and
+  "a read AO3 will refuse is not made").
+- An existing sign-up has Withdraw, with iOS's confirmation: one fresh read of AO3's
+  confirmation page, one POST, never retried.
+- Left out: withdrawing after sign-ups close (it records a default on the assignment), and
+  everything else about assignments.
+  Reverse: the commit "A challenge's sign-ups list, and withdrawing a sign-up".

@@ -226,6 +226,24 @@ internal object DemoNetworkRoutes {
             else -> null
         }
         // One answer per address for both OkHttp and the demo's read-only WebView.
+        if (path.trimEnd('/') == "/collections/winter_exchange/signups") return when (url.queryParameter("page")) {
+            null, "1" -> "ao3_demo_winter_signups_1"
+            "2" -> "ao3_demo_winter_signups_2"
+            else -> null
+        }
+        if (path.trimEnd('/') == "/collections/winter_exchange/assignments") {
+            if (url.queryParameter("page") !in listOf(null, "1")) return null
+            return when {
+                url.queryParameter("fulfilled") == "true" -> "ao3_demo_winter_assignments_complete"
+                url.queryParameter("unfulfilled") == "true" -> "ao3_demo_winter_assignments_open"
+                else -> "ao3_demo_winter_assignments_defaults"
+            }
+        }
+        if (path.trimEnd('/') in setOf("/collections/winter_exchange/gift_exchange", "/collections/winter_exchange/gift_exchange/edit"))
+            return "ao3_demo_winter_settings"
+        if (path.trimEnd('/') == "/collections/winter_exchange/signups/5/edit") return "ao3_demo_signup_winter_5_edit"
+        if (path.trimEnd('/') == "/collections/winter_exchange/signups/4/confirm_delete") return "ao3_demo_signup_4_confirm_delete"
+        if (path.trimEnd('/') == "/collections/winter_exchange/signups/5/confirm_delete") return "ao3_demo_signup_5_confirm_delete"
         if (path.trimEnd('/') == "/collections/summer_meme/requests") return when (url.queryParameter("page")) {
             null, "1" -> "ao3_demo_meme_requests_1"
             "2" -> "ao3_demo_meme_requests_2"
@@ -1152,6 +1170,7 @@ private class DemoPromptMemeWrites {
 /** One local form per address. All mutations die with the interceptor/process. */
 private class DemoChallengeSignUps {
     private val saved = mutableMapOf<String, String>()
+    private val withdrawn = mutableSetOf<Int>()
 
     @Synchronized
     fun answer(request: okhttp3.Request, source: FixtureSource): Pair<Int, String>? {
@@ -1161,12 +1180,26 @@ private class DemoChallengeSignUps {
             !path.startsWith("/collections/$slug/signups")) return null
         val base = "/collections/$slug/signups"
         if (request.method == "GET") {
+            if (slug == "winter_exchange" && path == base) {
+                val fixture = DemoNetworkRoutes.fixtureName(request.url) ?: return 404 to ""
+                val raw = source.read(fixture)?.decodeToString() ?: return 404 to ""
+                val doc = Jsoup.parse(raw)
+                doc.select("dl.index > dt.participant").filter { heading -> withdrawn.any { id ->
+                    heading.selectFirst("a")?.attr("href") == "$base/$id"
+                } }.forEach { heading -> heading.nextElementSibling()?.remove(); heading.remove() }
+                return 200 to if (withdrawn.isEmpty()) raw else doc.outerHtml()
+            }
+            if (slug == "winter_exchange" && path in setOf("$base/4/confirm_delete", "$base/5/confirm_delete", "$base/5/edit")) {
+                val fixture = DemoNetworkRoutes.fixtureName(request.url) ?: return 404 to ""
+                return 200 to (source.read(fixture)?.decodeToString() ?: return 404 to "")
+            }
             if (path !in setOf("$base/new", "$base/4/edit")) return if (path == base) null else 404 to ""
+            if (path == "$base/4/edit" && 4 in withdrawn) return 404 to ""
             saved[slug]?.let { return 200 to it }
             val fixture = DemoNetworkRoutes.fixtureName(request.url) ?: return 404 to ""
             return 200 to (source.read(fixture)?.decodeToString() ?: return 404 to "")
         }
-        if (request.method != "POST" || path !in setOf(base, "$base/4")) return 405 to ""
+        if (request.method != "POST" || path !in setOf(base, "$base/4", "$base/5")) return 405 to ""
         val buffer = Buffer()
         request.body?.writeTo(buffer)
         val fields = buffer.readUtf8().split('&').map { encoded ->
@@ -1174,6 +1207,16 @@ private class DemoChallengeSignUps {
             URLDecoder.decode(pair[0], "UTF-8") to URLDecoder.decode(pair.getOrElse(1) { "" }, "UTF-8")
         }
         val override = fields.lastOrNull { it.first == "_method" }?.second
+        if (override == "delete" && slug == "winter_exchange" && path in setOf("$base/4", "$base/5")) {
+            val id = path.substringAfterLast('/').toInt()
+            val confirm = source.read("ao3_demo_signup_${id}_confirm_delete")?.decodeToString() ?: return 404 to ""
+            val token = Jsoup.parse(confirm).selectFirst("meta[name=csrf-token]")?.attr("content") ?: return 404 to ""
+            if (fields != listOf("_method" to "delete", "authenticity_token" to token)) return 422 to "<div class='flash error'>Invalid withdrawal fields.</div>"
+            val fixture = if (id == 5) "ao3_demo_signup_withdraw_refused" else "ao3_demo_signup_withdrawn"
+            val body = source.read(fixture)?.decodeToString() ?: return 404 to ""
+            if (id == 4) { withdrawn += id; saved.remove(slug) }
+            return (if (id == 5) 422 else 200) to body
+        }
         if (override != if (path == "$base/4") "put" else null) return 405 to ""
         val fixture = if (slug == "summer_meme") "ao3_demo_signup_summer_new"
             else if (path == "$base/4") "ao3_demo_signup_winter_edit" else "ao3_demo_signup_winter_new"

@@ -345,6 +345,28 @@ class AO3WriteRepository(
         }
     }
 
+    /** One fresh confirm-delete meta token and one POST; nothing is replayed from the form. */
+    suspend fun withdrawSignUp(slug: String, signUpID: Int, expectedGeneration: Int): AO3Result<Unit> {
+        requireCollectionSession(expectedGeneration)
+        if (client.username() == null) return AO3Result.Failure(AO3Error.Validation("Log in to AO3 first."))
+        val referer = AO3ChallengeSignUpUrls.confirmDelete(slug, signUpID)
+        val html = when (val answer = client.getAuthenticated(referer)) {
+            is AO3Result.Failure -> return answer
+            is AO3Result.Success -> answer.value.body
+        }
+        requireCollectionSession(expectedGeneration)
+        val token = parser.parseAuthenticityToken(html, metaOnly = true) ?: return AO3Result.Failure(
+            AO3Error.Validation("Couldn't prepare the request. Try again, or open the work on AO3."))
+        currentCoroutineContext().ensureActive()
+        val response = withContext(NonCancellable) {
+            client.postAuthenticatedInSession(AO3ChallengeSignUpUrls.signUp(slug, signUpID),
+                listOf("_method" to "delete", "authenticity_token" to token),
+                writeHeaders(token, referer), expectedGeneration)
+        }
+        movedOnAfterWrite(expectedGeneration, response)?.let { return it }
+        return collectionWriteVerdict(response, "AO3 couldn't withdraw that sign-up.")
+    }
+
     /** iOS saveChallengeSignUp: validate, one fresh meta token, one POST, no follow-up GET. */
     suspend fun saveChallengeSignUp(form: AO3ChallengeSignUpForm,
         expectedGeneration: Int): AO3Result<AO3SignUpSaveOutcome> {

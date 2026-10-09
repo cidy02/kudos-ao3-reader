@@ -132,6 +132,8 @@ internal fun signUpPromptPrefix(kind: SignUpPromptKind, index: Int) = "challenge
 internal fun splitSignUpTags(text: String) = text.split(',').map(String::trim).filter(String::isNotEmpty)
 
 object AO3ChallengeSignUpUrls {
+    fun signUp(slug: String, id: Int) = "${AO3CollectionFormUrls.show(slug)}/signups/$id"
+    fun confirmDelete(slug: String, id: Int) = "${signUp(slug, id)}/confirm_delete"
     fun form(slug: String, id: Int? = null) = if (id == null) "${AO3CollectionFormUrls.show(slug)}/signups/new"
         else "${AO3CollectionFormUrls.show(slug)}/signups/$id/edit"
 }

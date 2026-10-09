@@ -36,7 +36,8 @@ fun AO3ChallengeSettingsScreen(
     onOpenWeb: (String) -> Unit,
     onOpenExternal: (String) -> Unit,
     onOpenTagSet: (Int, String) -> Unit,
-    onOpenPrompts: (String, String) -> Unit
+    onOpenPrompts: (String, String) -> Unit,
+    onOpenSignUps: (String, String) -> Unit = { _, _ -> }
 ) {
     val auth = repository.authRepository
     val generation by auth.generation.collectAsState()
@@ -179,7 +180,7 @@ fun AO3ChallengeSettingsScreen(
                                     ChallengeSection("Assignments")
                                     SettingsPanel(Modifier.padding(top = 8.dp)) {
                                         SubjectFormRow("Sign-ups", value = data.signUpTotal?.toString() ?: "Couldn't load", showsDisclosure = true,
-                                            valueMaxLines = Int.MAX_VALUE, onClick = { onOpenWeb(ChallengeSettingsDestinations.challengeSignUpsView(slug)) })
+                                            valueMaxLines = Int.MAX_VALUE, onClick = { onOpenSignUps(slug, effectiveTitle) })
                                         SubjectRowSeparator()
                                         // Corrected brief: no assignment read, count, failed-count label or invented placeholder.
                                         SubjectFormRow("Assignments", showsDisclosure = true,

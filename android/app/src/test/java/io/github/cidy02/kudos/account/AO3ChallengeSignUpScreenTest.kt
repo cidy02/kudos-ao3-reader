@@ -85,13 +85,14 @@ class AO3ChallengeSignUpScreenTest {
         compose.onNodeWithText("Withdraw sign-up").assertDoesNotExist()
     }
 
-    @Test fun existingFormKeepsIosSectionsAndNoWithdrawalControl() {
+    @Test fun existingFormKeepsIosSectionsAndShowsWithdrawalWithoutReadingItsToken() {
         show(signUpFixtures[1])
         await("REQUEST 1") // a section header is drawn in capitals
         reach("Offer 1")
         compose.onNodeWithText("Offer 1").assertExists()
-        compose.onNodeWithText("Withdraw").assertDoesNotExist()
-        compose.onNodeWithText("Withdraw sign-up").assertDoesNotExist()
+        reach("Withdraw sign-up")
+        compose.onNodeWithText("WITHDRAW").assertExists()
+        compose.onNodeWithText("Withdraw sign-up").assertExists()
         assertEquals(1, client.gets.size)
         assertEquals(0, client.posts)
     }

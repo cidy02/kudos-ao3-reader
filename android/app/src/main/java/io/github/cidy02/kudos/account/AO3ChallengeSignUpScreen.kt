@@ -6,6 +6,10 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Cancel
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -32,7 +36,8 @@ import kotlinx.coroutines.launch
 
 @Composable
 fun AO3ChallengeSignUpScreen(slug: String, title: String, existingID: Int? = null,
-    repository: AO3CollectionDetailRepository, writes: AO3WriteRepository) {
+    repository: AO3CollectionDetailRepository, writes: AO3WriteRepository,
+    onWithdrawn: (String) -> Unit = {}) {
     val auth = repository.authRepository
     val generation by auth.generation.collectAsState()
     val authState by auth.state.collectAsState()
@@ -44,6 +49,8 @@ fun AO3ChallengeSignUpScreen(slug: String, title: String, existingID: Int? = nul
     val tokens = LocalKudosTokens.current
     val palette = tokens.scopePalette
     val form = state.form
+    var confirmingWithdraw by remember(model) { mutableStateOf(false) }
+    LaunchedEffect(model, state.withdrawn) { if (state.withdrawn) onWithdrawn("Sign-up withdrawn.") }
     var editing by remember(model) { mutableStateOf<Pair<SignUpPromptKind, Int>?>(null) }
     LaunchedEffect(model) { model.load() }
     DisposableEffect(model) { onDispose { model.close() } }
@@ -56,7 +63,7 @@ fun AO3ChallengeSignUpScreen(slug: String, title: String, existingID: Int? = nul
         return
     }
     ProvidePushedShellChrome(hasSubjectHeader = true)
-    val busy = state.loading || state.saving || state.terminal
+    val busy = state.loading || state.saving || state.withdrawing || state.withdrawn || state.terminal
     val takesOffers = form?.takesOffers ?: true
     val requests = form?.live(SignUpPromptKind.Request).orEmpty()
     val offers = form?.live(SignUpPromptKind.Offer).orEmpty()
@@ -64,6 +71,20 @@ fun AO3ChallengeSignUpScreen(slug: String, title: String, existingID: Int? = nul
         else "$size ${noun.lowercase()}${if (size == 1) "" else "s"}"
     val subtitle = count("Request", requests.size, form?.limits?.requests?.last) + if (takesOffers)
         " · " + count("Offer", offers.size, form?.limits?.offers?.last) else ""
+    val destructive = SubjectPalette.fromHue(0.0, tokens.theme).accent
+    if (confirmingWithdraw) AlertDialog(
+        onDismissRequest = { confirmingWithdraw = false },
+        containerColor = tokens.cardFill, titleContentColor = tokens.primaryInk, textContentColor = tokens.secondaryInk,
+        title = { Text("Withdraw this sign-up?", lineHeight = 28.sp) },
+        text = { Text("Withdrawing removes your requests and offers from ${title.ifEmpty { slug }}.", lineHeight = 22.sp) },
+        confirmButton = { TextButton(onClick = {
+            confirmingWithdraw = false
+            scope.launch { model.withdraw() }
+        }, enabled = !busy) { Text("Withdraw Sign-up", color = destructive, lineHeight = 20.sp) } },
+        dismissButton = { TextButton(onClick = { confirmingWithdraw = false }) {
+            Text("Cancel", color = palette.accent, lineHeight = 20.sp)
+        } }
+    )
     Column(Modifier.fillMaxSize().subjectScreenWash(palette).imePadding()) {
         KudosRefreshBox(onRefresh = { model.load(refresh = true) }, modifier = Modifier.weight(1f)) {
             val list = androidx.compose.foundation.lazy.rememberLazyListState()
@@ -169,6 +190,19 @@ fun AO3ChallengeSignUpScreen(slug: String, title: String, existingID: Int? = nul
                                         enabled = !busy && offers.size < (form.limits?.offers?.last ?: Int.MAX_VALUE))
                                 }
                                 ChallengeFootnote("You can edit your sign-up until sign-ups close. After they close, you can only withdraw it.")
+                            }
+                        }
+                        if (form.signUpID != null) item {
+                            ChallengeSection("Withdraw")
+                            MaterialTheme(colorScheme = MaterialTheme.colorScheme.copy(error = destructive)) {
+                                SettingsPanel(Modifier.padding(top = 8.dp)) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        SettingsActionRow("Withdraw sign-up", { if (!busy) confirmingWithdraw = true },
+                                            modifier = Modifier.weight(1f), icon = Icons.Filled.Cancel, enabled = !busy, destructive = true)
+                                        if (state.withdrawing) CircularProgressIndicator(color = destructive, trackColor = tokens.separator,
+                                            modifier = Modifier.padding(end = 14.dp).size(18.dp), strokeWidth = 2.dp)
+                                    }
+                                }
                             }
                         }
                     }
