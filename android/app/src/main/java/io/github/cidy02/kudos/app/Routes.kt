@@ -170,6 +170,7 @@ object Routes {
     const val AO3CollectionDetail = "ao3-collection-detail/{$ARG_AO3_COLLECTION_SLUG}?title={$ARG_AO3_COLLECTION_TITLE}"
     const val AO3CollectionItems = "ao3-collection-items/{$ARG_AO3_COLLECTION_SLUG}?title={$ARG_AO3_COLLECTION_TITLE}&tab={tab}"
     const val AO3ChallengeSettings = "ao3-challenge-settings/{$ARG_AO3_COLLECTION_SLUG}?title={$ARG_AO3_COLLECTION_TITLE}&owner={owner}"
+    const val AO3ChallengeSignUps = "ao3-challenge-sign-ups/{$ARG_AO3_COLLECTION_SLUG}?title={$ARG_AO3_COLLECTION_TITLE}&owner={owner}&maintainer={maintainer}"
     const val AO3ChallengeSignUp = "ao3-challenge-sign-up/{$ARG_AO3_COLLECTION_SLUG}?title={$ARG_AO3_COLLECTION_TITLE}&id={signUpId}"
     const val AO3PromptMeme = "ao3-prompt-meme/{$ARG_AO3_COLLECTION_SLUG}?title={$ARG_AO3_COLLECTION_TITLE}&owner={owner}"
     const val AO3TagSet = "ao3-tag-set/{tagSetId}?title={tagSetTitle}&moderator={moderator}"
@@ -185,6 +186,8 @@ object Routes {
         "ao3-collection-moderation/${encode(slug)}?title=${encode(title)}&owner=$viewerIsOwner"
     fun ao3ChallengeSettings(slug: String, title: String, viewerIsOwner: Boolean) =
         "ao3-challenge-settings/${encode(slug)}?title=${encode(title)}&owner=$viewerIsOwner"
+    fun ao3ChallengeSignUps(slug: String, title: String = "", viewerIsOwner: Boolean = false, viewerIsMaintainer: Boolean = false) =
+        "ao3-challenge-sign-ups/${encode(slug)}?title=${encode(title)}&owner=$viewerIsOwner&maintainer=$viewerIsMaintainer"
     fun ao3ChallengeSignUp(slug: String, title: String = "", id: Int? = null) =
         "ao3-challenge-sign-up/${encode(slug)}?title=${encode(title)}" + if (id == null) "" else "&id=$id"
     fun ao3PromptMeme(slug: String, title: String = "", viewerIsOwner: Boolean = false) =
@@ -271,6 +274,7 @@ object Routes {
             WritingEditorDemo, WritingEditorFixture -> "Chapter text"
             AO3CollectionItems -> "Collection items"
             AO3ChallengeSettings -> "Challenge"
+            AO3ChallengeSignUps -> "Sign-ups"
             AO3ChallengeSignUp -> "Your sign-up"
             AO3PromptMeme -> "Prompts"
             AO3TagSet -> "Tag set"
@@ -344,6 +348,7 @@ object Routes {
             base == CollectionDetail.substringBefore("?").substringBefore("/") ||
             base == AO3CollectionItems.substringBefore("?").substringBefore("/") ||
             base == AO3ChallengeSettings.substringBefore("?").substringBefore("/") ||
+            base == AO3ChallengeSignUps.substringBefore("?").substringBefore("/") ||
             base == AO3ChallengeSignUp.substringBefore("?").substringBefore("/") ||
             base == AO3PromptMeme.substringBefore("?").substringBefore("/") ||
             base == AO3TagSet.substringBefore("?").substringBefore("/") ||
@@ -372,7 +377,7 @@ object Routes {
         WorkDetail, // WorkDetailView
         BrowseFandoms, BrowseWorks, TagWorks, // FandomListView, NativeBrowseView
         Settings, Backup, QueueStorage, AvailabilitySweep, About, BugReport, // SettingsPageForm
-        AO3Preferences, AO3Dashboard, AccountList, AccountMoreOnAO3, AccountInbox, AO3CollectionDetail, AO3CollectionItems, AO3ChallengeSettings, AO3ChallengeSignUp, AO3PromptMeme, AO3TagSet, AO3CollectionMaintainers, AO3UserCollectionItems, AO3CollectionModeration, AO3CollectionForm, // Account screens and AO3 lists
+        AO3Preferences, AO3Dashboard, AccountList, AccountMoreOnAO3, AccountInbox, AO3CollectionDetail, AO3CollectionItems, AO3ChallengeSettings, AO3ChallengeSignUps, AO3ChallengeSignUp, AO3PromptMeme, AO3TagSet, AO3CollectionMaintainers, AO3UserCollectionItems, AO3CollectionModeration, AO3CollectionForm, // Account screens and AO3 lists
         Collections, // LibraryEntityGridView
         QueueDetail, // ReadingQueueSettingsView
         ReadingStatistics // ReadingInsightsView

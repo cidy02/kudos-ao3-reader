@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Challenge Settings</title><meta name="csrf-token" content="csrf-challenge"></head>
+<body>
+<form action="/collections/winter_exchange/gift_exchange" method="post">
+  <input type="hidden" name="_method" value="put">
+  <input type="hidden" name="authenticity_token" value="csrf-challenge">
+  <input type="checkbox" name="gift_exchange[signup_open]" value="1">
+  <select name="gift_exchange[time_zone]"><option value="UTC" selected>UTC</option></select>
+  <input name="gift_exchange[signups_open_at_string]" value="2026-01-01 00:00:00">
+  <input name="gift_exchange[signups_close_at_string]" value="2026-02-01 00:00:00">
+  <input name="gift_exchange[assignments_due_at_string]" value="2026-03-01 00:00:00">
+  <input name="gift_exchange[works_reveal_at_string]" value="2026-04-01 00:00:00">
+  <input name="gift_exchange[authors_reveal_at_string]" value="2026-05-01 00:00:00">
+  <input name="gift_exchange[requests_num_required]" value="1">
+  <input name="gift_exchange[requests_num_allowed]" value="3">
+  <input name="gift_exchange[offers_num_required]" value="1">
+  <input name="gift_exchange[offers_num_allowed]" value="2">
+  <input name="gift_exchange[request_restriction_attributes][fandom_num_required]" value="1">
+  <input name="gift_exchange[request_restriction_attributes][fandom_num_allowed]" value="3">
+  <input name="gift_exchange[request_restriction_attributes][relationship_num_required]" value="0">
+  <input name="gift_exchange[request_restriction_attributes][relationship_num_allowed]" value="2">
+  <input name="gift_exchange[request_restriction_attributes][character_num_required]" value="0">
+  <input name="gift_exchange[request_restriction_attributes][character_num_allowed]" value="4">
+  <input type="checkbox" name="gift_exchange[request_restriction_attributes][optional_tags_allowed]" checked>
+  <input type="checkbox" name="gift_exchange[request_restriction_attributes][allow_any_character]" checked>
+</form>
+</body>
+</html>
