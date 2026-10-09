@@ -28,7 +28,12 @@ class AO3CommentRepository(
     suspend fun loadThread(
         target: AO3CommentTarget,
         page: Int = 1,
-        focusedCommentId: Long? = null
+        focusedCommentId: Long? = null,
+        /**
+         * False for a read the reader did not open as a comments page (the Inbox looking up a
+         * work's authors): its answer is used once and not kept for offline reading.
+         */
+        useCache: Boolean = true
     ): AO3Result<AO3CommentThread> {
         val safePage = page.coerceAtLeast(1)
         val pageUrl = if (focusedCommentId != null) {
@@ -50,7 +55,7 @@ class AO3CommentRepository(
                         // Only when AO3 could not be reached, and only this viewer's own copy:
                         // a refusal ("log in", "not found") is AO3's answer, not a reason to
                         // show what someone else was allowed to see (audit A17-4).
-                        if (public.error is AO3Error.Network) {
+                        if (useCache && public.error is AO3Error.Network && focusedCommentId == null) {
                             cache?.load(target, safePage, viewer)?.let { return AO3Result.Success(it) }
                         }
                         return public
@@ -62,7 +67,10 @@ class AO3CommentRepository(
             }
         }
         val thread = parseThread(response.body, response.url, target, response.statusCode, safePage)
-        if (thread is AO3Result.Success) {
+        // Only a work's or chapter's own page is kept. One comment's thread (an Inbox row) is
+        // a different page: stored under the work's page 1 it became that page offline
+        // (audit A22-2).
+        if (useCache && thread is AO3Result.Success && focusedCommentId == null) {
             cache?.save(thread.value, safePage, viewer)
         }
         return thread

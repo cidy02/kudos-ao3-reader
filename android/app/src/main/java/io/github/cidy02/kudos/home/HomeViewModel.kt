@@ -198,7 +198,14 @@ class HomeViewModel(
         val generation = authRepository.generation.value
         try {
             val result = accountListRepository.load(AccountListType.Subscriptions, page = 1)
-            if (authRepository.generation.value != generation) return
+            if (authRepository.generation.value != generation) {
+                // Not this session's answer. Still signed in (Verify Session moved the session
+                // on, and the same name publishes no new state): nothing else would ask again,
+                // and Home said there were no subscriptions (audit A22-4; iOS A20-6).
+                val now = authRepository.state.value
+                if (now.isSignedIn) loadSubscriptions(now)
+                return
+            }
             when (result) {
                 is AO3Result.Success -> {
                     subscriptions.value = result.value.works

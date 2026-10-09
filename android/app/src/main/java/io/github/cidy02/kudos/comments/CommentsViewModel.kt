@@ -1,5 +1,7 @@
 package io.github.cidy02.kudos.comments
 
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.Job
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -55,6 +57,8 @@ class CommentsViewModel(
     private val repository: AO3CommentRepository,
     val initialTarget: AO3CommentTarget?,
     private val draftStore: CommentDraftStore? = null,
+    /** The comment an Inbox row asked for: the first load is that thread, not the work's page 1. */
+    initialFocusedCommentId: Long? = null,
     /**
      * Read at each save and load, never kept: the screen's first frame did not yet know who
      * was signed in, the name was captured then, and every signed-in reader's drafts were
@@ -124,8 +128,11 @@ class CommentsViewModel(
     /** Tracks the hash of the last successfully or ambiguously submitted content to prevent double-posts. */
     private var lastSubmittedContentHash: Int? = null
 
+    /** The load that owns the screen. A newer one cancels it, and its answer is not applied. */
+    private var loadJob: Job? = null
+
     init {
-        load(1)
+        load(1, initialFocusedCommentId)
     }
 
     data class ReplyTarget(val commentId: Long, val authorName: String)
@@ -133,12 +140,21 @@ class CommentsViewModel(
     fun load(page: Int = 1, focusedId: Long? = null, forceRefresh: Boolean = false) {
         val target = _currentTarget.value ?: return
         _focusedCommentId.value = focusedId
-        _replyTarget.value = null
-        _editTarget.value = null
-        _composerParent.value = null
-        viewModelScope.launch {
+        // Reading a page again is not closing the composer. While the sheet is open its reply
+        // or edit target stays: a reload after a post AO3 did not confirm used to clear it,
+        // and the same text then went out as a new comment on the work (audit A22-1).
+        if (!_composerPresented.value) {
+            _replyTarget.value = null
+            _editTarget.value = null
+            _composerParent.value = null
+        }
+        // One load at a time. The Inbox's thread and the work's first page used to race, and
+        // whichever answered last was shown (audit A22-3).
+        loadJob?.cancel()
+        loadJob = viewModelScope.launch {
             _state.value = CommentsUiState.Loading
             val result = repository.loadThread(target, page, focusedId)
+            ensureActive()
             when (result) {
                 is AO3Result.Success -> {
                     val thread = result.value.withSort(_order.value)
@@ -416,12 +432,14 @@ class CommentsViewModel(
                 is AO3Result.Failure -> {
                     val unconfirmed = (result.error as? AO3Error.Validation)?.message ==
                         io.github.cidy02.kudos.network.ao3.account.AO3CollectionFields.UNCONFIRMED
-                    if (unconfirmed || (result.error is AO3Error.Network && !result.error.isOffline())) {
+                    // An edit AO3 did not confirm is a failure to read and decide on, as on iOS:
+                    // no reload, and the edit stays an edit.
+                    if (edit == null && (unconfirmed || (result.error is AO3Error.Network && !result.error.isOffline()))) {
                         // The text stays in the composer. The thread is read again so the reader
                         // can see whether it arrived; the same text is not sent twice by a tap.
                         lastSubmittedContentHash = contentHash
                         _message.value = "Couldn't confirm this posted — reloading to check."
-                        if (reply != null || edit != null) reloadPageOnScreen() else load()
+                        if (reply != null) reloadPageOnScreen() else load()
                     } else {
                         _message.value = result.error.displayMessage()
                     }
@@ -462,10 +480,11 @@ class CommentsViewModel(
             repository: AO3CommentRepository,
             initialTarget: AO3CommentTarget?,
             draftStore: CommentDraftStore? = null,
+            initialFocusedCommentId: Long? = null,
             currentUsername: () -> String? = { null }
         ): ViewModelProvider.Factory = viewModelFactory {
             initializer {
-                CommentsViewModel(repository, initialTarget, draftStore, currentUsername)
+                CommentsViewModel(repository, initialTarget, draftStore, initialFocusedCommentId, currentUsername)
             }
         }
     }

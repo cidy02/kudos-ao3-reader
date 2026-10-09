@@ -163,6 +163,39 @@ class CommentsViewModelDraftTest {
         // Actually, updateDraft is called by the user. If the user types fast, it should win.
     }
 
+    /**
+     * Audit A22-1: reading the page again is not closing the composer. The check after a post
+     * AO3 did not confirm cleared the reply target while the sheet stayed open, so the same
+     * text was saved, and could be sent, as a new comment on the work.
+     */
+    @Test
+    fun aReloadWhileTheComposerIsOpenKeepsTheReplyAndItsDraftSlot() = runTest(testDispatcher) {
+        draftStore.saveDraft("hello", workId, parentId = null)
+        testDispatcher.scheduler.advanceUntilIdle()
+        val authRequired: AO3Result<AO3HttpResponse> =
+            AO3Result.Failure(io.github.cidy02.kudos.network.ao3.AO3Error.AuthenticationRequired)
+        val repo = AO3CommentRepository(
+            publicClient = FakePublicClient(success(writeResource("ao3/comments/comments_basic.html"))),
+            authenticatedClient = FakeAuthenticatedClient(
+                getResults = listOf(authRequired, authRequired), postResults = emptyList()
+            )
+        )
+        val viewModel = CommentsViewModel(repo, target, draftStore) { null }
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        viewModel.openComposer(replyingTo = commentStub(55, "writer"))
+        testDispatcher.scheduler.advanceUntilIdle()
+        viewModel.updateDraft("thanks")
+        viewModel.load() // what the "couldn't confirm" check does
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(55L, viewModel.replyTarget.value?.commentId)
+
+        viewModel.closeComposer()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals("hello", draftStore.getDraft(workId, parentId = null))
+        assertEquals("thanks", draftStore.getDraft(workId, parentId = 55L))
+    }
+
     /** Audit A18-1 (iOS `saveDraft`): an edit never writes the draft store. */
     @Test
     fun anEditNeverReplacesTheNewCommentWaitingInTheDraftStore() = runTest(testDispatcher) {

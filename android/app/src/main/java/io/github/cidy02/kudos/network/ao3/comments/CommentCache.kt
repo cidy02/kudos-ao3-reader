@@ -53,9 +53,12 @@ class CommentCache(private val context: Context) {
 
     companion object {
         /** What is safe to keep: the words, and nothing that posts, edits, deletes or replies. */
-        internal fun readOnly(thread: AO3CommentThread): AO3CommentThread = thread.copy(
-            form = null,
-            comments = thread.comments.map { it.copy(editPath = null, deletePath = null, canReply = false) }
+        internal fun readOnly(thread: AO3CommentThread): AO3CommentThread =
+            thread.copy(form = null, comments = thread.comments.map(::readOnly))
+
+        /** Replies too, all the way down: they kept their edit and delete addresses (audit A22-5). */
+        private fun readOnly(comment: AO3Comment): AO3Comment = comment.copy(
+            editPath = null, deletePath = null, canReply = false, replies = comment.replies.map(::readOnly)
         )
 
         internal fun viewerKey(viewer: String?): String {

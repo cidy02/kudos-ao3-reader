@@ -120,7 +120,7 @@ fun CommentsScreen(
     val latestUsername by androidx.compose.runtime.rememberUpdatedState(currentUsername)
     val viewModel: CommentsViewModel = viewModel(
         key = target?.workId?.toString(),
-        factory = CommentsViewModel.factory(repository, target, draftStore) { latestUsername }
+        factory = CommentsViewModel.factory(repository, target, draftStore, focusedCommentId) { latestUsername }
     )
 
     LaunchedEffect(viewModel, initialComposes) {
@@ -129,7 +129,8 @@ fun CommentsScreen(
 
     // Deep link focus (e.g. Inbox notification)
     LaunchedEffect(focusedCommentId) {
-        if (focusedCommentId != null) {
+        // A new view model has already asked for this thread; only a different one is new.
+        if (focusedCommentId != null && viewModel.focusedCommentId.value != focusedCommentId) {
             viewModel.load(focusedId = focusedCommentId)
         }
     }
