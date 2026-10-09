@@ -12,6 +12,15 @@ You are hunting for **bugs**, not style. iOS is the reference for behaviour: rea
 Read `audits/A26-result.md` with its triage first, and `audits/A24-result.md` with its
 triage; do not re-file what is there.
 
+0. **Commit `5c01ce2b`** (`git show 5c01ce2b -- android/app/src/main`): the work form's Post,
+   Preview on AO3 and Delete (brief `briefs/3bx-work-form-post-preview-delete.md`, result and
+   landing note `briefs/3bx-result.md`), merged by hand over the fixes below. Read each request
+   against iOS line by line (`Features/Writing/WorkEditView.swift`, `WritingPreviewView.swift`,
+   `Services/AO3WorkActions.swift`, `Models/AO3WritingModels.swift`). Then: a new work
+   previewed, then saved, then posted (one draft on AO3, or two?); Post with a field missing;
+   Delete cancelled, refused, unconfirmed; what each action reads afterwards; what a second
+   tap can send; what `parseWritingPreview` returns for each answer when the session has and
+   has not moved on; whether the merge lost anything either side had.
 1. **Commit `8ca34595`** (`git show 8ca34595 -- android/app/src/main`), Claude's fixes for A26,
    which nobody has reviewed. For each, say whether it closes the case its comment names, on
    every path, and what it breaks:

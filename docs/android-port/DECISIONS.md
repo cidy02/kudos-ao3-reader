@@ -1176,3 +1176,15 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
 - A preview that names its work is kept even if the session has moved on since; AO3's login
   page in answer to a POST is "session expired".
   Reverse: the commit "The work form posts, previews on AO3 and deletes".
+
+## 2026-10-09: the Privacy screen as iOS has it (brief 3bz)
+
+- Settings' Privacy page has iOS's opening card and four sections: what is stored on this
+  device (measured on opening and after each Clear, off the main thread), Clear, the AO3
+  session with Remove AO3 session, and the Read Aloud downloads note, in iOS's words.
+- Sizes are allocated bytes where the file system gives them, as iOS; a reading copy is
+  counted by its length and subtracted from the works folder, as iOS.
+- Removing the session is the existing local logout: no request to AO3.
+- Kept from Android: the "confirm before delete" preference still governs the four Clear
+  confirmations (iOS always asks); Clear reading history leaves a queued work alone.
+  Reverse: the commit "The Privacy screen as iOS has it".

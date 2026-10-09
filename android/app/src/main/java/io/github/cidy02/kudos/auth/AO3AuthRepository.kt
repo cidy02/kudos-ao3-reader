@@ -18,6 +18,9 @@ class AO3AuthRepository(
     private val mutableState = MutableStateFlow<AO3AuthState>(AO3AuthState.Restoring)
     val state: StateFlow<AO3AuthState> = mutableState.asStateFlow()
 
+    private val mutableNoticeMessage = MutableStateFlow<String?>(null)
+    val noticeMessage: StateFlow<String?> = mutableNoticeMessage.asStateFlow()
+
     private val mutableSessionHealth = MutableStateFlow<AO3SessionHealth>(AO3SessionHealth.Unknown)
     /**
      * Orthogonal to [state]: confidence that an already-held session is still live.
@@ -142,6 +145,7 @@ class AO3AuthRepository(
                         if (sessionGeneration != expectedGeneration) return
                         clearSessionLocked()
                         mutableState.value = AO3AuthState.Expired()
+                        mutableNoticeMessage.value = "Your AO3 session expired. Please log in again."
                         mutableSessionHealth.value = AO3SessionHealth.Expired
                     }
                 }
@@ -208,6 +212,7 @@ class AO3AuthRepository(
                         if (sessionGeneration != expectedGeneration) return
                         clearSessionLocked()
                         mutableState.value = AO3AuthState.Expired()
+                        mutableNoticeMessage.value = "Your AO3 session expired. Please log in again."
                         mutableSessionHealth.value = AO3SessionHealth.Expired
                     }
                 }
@@ -280,15 +285,22 @@ class AO3AuthRepository(
             if (expectedGeneration != null && expectedGeneration != sessionGeneration) return
             clearSessionLocked()
             mutableState.value = AO3AuthState.Expired()
+            mutableNoticeMessage.value = "Your AO3 session expired. Please log in again."
             mutableSessionHealth.value = AO3SessionHealth.Expired
         }
     }
 
     suspend fun logout() {
         sessionMutex.withLock {
-            clearSessionLocked()
+            val deleted = clearSessionLocked()
             mutableState.value = AO3AuthState.SignedOut
             mutableSessionHealth.value = AO3SessionHealth.Unknown
+            mutableNoticeMessage.value = if (!deleted) {
+                "Signed out here, but this device couldn't fully remove the saved AO3 session. " +
+                    "It won't be restored automatically — we'll keep retrying."
+            } else {
+                "Logged out of AO3."
+            }
         }
     }
 
@@ -304,6 +316,7 @@ class AO3AuthRepository(
         cookieStore.install(session)
         currentSession = session
         mutableState.value = AO3AuthState.SignedIn(session.username)
+        mutableNoticeMessage.value = null
         mutableSessionHealth.value = if (markHealthy) {
             AO3SessionHealth.Healthy(System.currentTimeMillis())
         } else {
@@ -316,7 +329,7 @@ class AO3AuthRepository(
      * in-flight continuation becomes stale, then clears memory + durable store
      * + cookies. Honours delete failure by marking removal pending.
      */
-    private suspend fun clearSessionLocked() {
+    private suspend fun clearSessionLocked(): Boolean {
         advanceSessionGenerationLocked()
         currentSession = null
         val deleted = sessionStore.delete()
@@ -326,6 +339,7 @@ class AO3AuthRepository(
             sessionStore.markRemovalPending()
         }
         cookieStore.clear()
+        return deleted
     }
 
     private fun advanceSessionGenerationLocked(): Int {
@@ -339,6 +353,10 @@ class AO3AuthRepository(
         val deleted = sessionStore.delete()
         if (deleted) {
             sessionStore.clearRemovalPending()
+        }
+        if (!deleted) {
+            mutableNoticeMessage.value = "Couldn't finish removing a previous AO3 session from this device. " +
+                "We'll keep retrying; you are not signed in."
         }
         // If still failing, leave the marker set so the next launch also refuses.
     }

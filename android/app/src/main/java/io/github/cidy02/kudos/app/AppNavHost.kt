@@ -1085,6 +1085,7 @@ fun AppNavHost(
                 workImporter = container.workImporter,
                 fandomCatalogCache = container.fandomCatalogCache,
                 workRepository = container.workRepository,
+                footprintScanner = container.localDataFootprintScanner,
                 onOpenAvailabilitySweep = { navController.navigate(Routes.AvailabilitySweep) }
             )
         }
