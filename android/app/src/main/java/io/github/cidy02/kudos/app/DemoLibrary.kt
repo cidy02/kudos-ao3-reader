@@ -29,6 +29,17 @@ import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import java.nio.file.Files
+import java.nio.file.Path
+import io.github.cidy02.kudos.files.FontFileStore
+import io.github.cidy02.kudos.data.local.entity.CustomFontEntity
+import io.github.cidy02.kudos.network.ao3.browse.AO3Fandom
+import io.github.cidy02.kudos.network.ao3.browse.FandomCatalogCache
+import io.github.cidy02.kudos.network.ao3.writing.recovery.WritingTextRecovery
+import io.github.cidy02.kudos.search.SavedSearchRepository
+import io.github.cidy02.kudos.network.ao3.search.AO3SearchFilters
 
 /**
  * Demo library seeder for screenshot testing and visual review.
@@ -250,6 +261,52 @@ object DemoLibrary {
             database.withTransaction {
                 seedContents(database, workRepository, readingQueueRepository, fileStore, clock)
             }
+            if (context != null) seedPrivacyData(database, context.filesDir.toPath(), context.cacheDir.toPath(), clock = clock)
+        }
+    }
+
+    /** Actual local assets, additive on installed demos; never replace recovery or cached data. */
+    internal suspend fun seedPrivacyData(
+        database: KudosDatabase,
+        filesRoot: Path,
+        cacheRoot: Path,
+        fontSource: Path? = null,
+        clock: () -> Instant = { Instant.now() }
+    ): Unit = withContext(Dispatchers.IO) {
+        val paper = database.workDao().getAll().firstOrNull { it.title == "Paper Cranes" }
+        val files = WorkFileStore(filesRoot)
+        if (paper != null && !files.originalExists(paper.id)) {
+            files.writeOriginal(paper.id, "txt", ("Paper Cranes\nby origamist\n\n" +
+                "The city was quiet, but never dark. Streetlamps hummed along the pavement, casting sharp amber shadows across the rain-slicked stones.\n" +
+                "Footsteps echoed in the narrow alleyway between old brick buildings. A solitary breeze carried the faint scent of ozone and diesel fuel.\n" +
+                "There was a rhythm to this place that refused to sleep, keeping vigil against the stillness of the night.\n").toByteArray())
+        }
+        val fonts = FontFileStore(filesRoot)
+        val fontName = "Privacy-demo.ttf"
+        val systemFont = fontSource ?: runCatching {
+            Files.newDirectoryStream(java.io.File("/system/fonts").toPath(), "*.ttf").use { fontsOnDevice ->
+                fontsOnDevice.filter { Files.isRegularFile(it) }.sortedBy { it.fileName.toString() }.firstOrNull()
+            }
+        }.getOrNull()
+        if (systemFont != null && !fonts.fontExists(fontName)) {
+            val result = fonts.writeFont(fontName, Files.readAllBytes(systemFont))
+            if (result is io.github.cidy02.kudos.files.FileWriteResult.Success) {
+                database.customFontDao().upsert(CustomFontEntity(
+                    id = UUID.nameUUIDFromBytes("privacy-demo-font".toByteArray()).toString(),
+                    name = "Demo font", fileName = fontName, dateAdded = clock()))
+            }
+        }
+        val recovery = WritingTextRecovery.inFilesDir(filesRoot)
+        val key = recovery.fileURL("AO3_Reader", "work:privacy-demo", "summary")
+        if (!Files.exists(key)) recovery.save("A city that never turns off its lights.", "", key)
+        val cache = FandomCatalogCache(cacheRoot)
+        if (!Files.exists(cacheRoot.resolve("fandom-catalog.json"))) {
+            cache.save(mapOf("TV Shows" to FandomCatalogCache.Entry(
+                listOf(AO3Fandom("Doctor Who", 42)), clock().toEpochMilli())))
+        }
+        val searches = SavedSearchRepository(database.savedSearchDao())
+        if (searches.getAll().none { it.name == "Demo: Doctor Who" }) {
+            searches.save("Demo: Doctor Who", AO3SearchFilters(fandom = "Doctor Who"))
         }
     }
 

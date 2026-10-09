@@ -87,6 +87,12 @@ class KudosAppContainer(
         WorkFileStore(appContext.filesDir.toPath())
     }
 
+    val localDataFootprintScanner by lazy {
+        io.github.cidy02.kudos.settings.LocalDataFootprintScanner(
+            database, workRepository, appContext.filesDir.toPath(), appContext.cacheDir.toPath()
+        )
+    }
+
     val fontFileStore: FontFileStore by lazy {
         FontFileStore(appContext.filesDir.toPath())
     }

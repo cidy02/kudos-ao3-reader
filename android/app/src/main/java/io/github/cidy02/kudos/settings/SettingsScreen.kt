@@ -32,7 +32,8 @@ fun SettingsScreen(
     workImporter: WorkImporter? = null,
     fandomCatalogCache: FandomCatalogCache? = null,
     workRepository: WorkRepository? = null,
-    onOpenAvailabilitySweep: () -> Unit = {}
+    onOpenAvailabilitySweep: () -> Unit = {},
+    footprintScanner: LocalDataFootprintScanner? = null
 ) {
     val navController = rememberNavController()
     val settings by repository.settings.collectAsState(initial = KudosSettings.Defaults)
@@ -83,7 +84,7 @@ fun SettingsScreen(
             SettingsPrivacySettingsPage(repository, settings, navController)
         }
         composable("privacy") {
-            PrivacyDataScreen(workRepository, fandomCatalogCache, settings)
+            PrivacyDataScreen(workRepository, fandomCatalogCache, settings, authRepository, footprintScanner)
         }
         composable("about") {
             SettingsAboutPage(onOpenAbout, onReportBug, navController, appUpdateRepository)
