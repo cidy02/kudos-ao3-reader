@@ -1076,6 +1076,7 @@ private struct CommentPostRow: View {
     @Environment(AO3AuthService.self) private var auth
     @Environment(ThemeManager.self) private var theme
     @Environment(\.commentThreadHandlers) private var handlers
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @ScaledMetric(relativeTo: .subheadline) private var rootNameSize: CGFloat = 14
 
     /// 1f's byline steps down with depth (14 / 13.5 / 13), scaled with Dynamic
@@ -1232,28 +1233,59 @@ private struct CommentPostRow: View {
     ///
     /// Baseline-aligned, not `.top`: `.top` pinned the chapter badge to the top of
     /// the name's hit box, which sits above the name's own cap height.
+    @ViewBuilder
     private func byline(timestamp: String) -> some View {
-        HStack(alignment: .center, spacing: 7) {
-            authorIdentity
-                .layoutPriority(1)
-                // The name gives up its own 28pt hit box (see `authorIdentity`); the
-                // whole name-and-pill block opens the profile instead, as does the
-                // avatar beside it. `including:` keeps a guest's block inert instead
-                // of swallowing taps for a route that doesn't exist.
-                .contentShape(Rectangle())
-                .highPriorityGesture(
-                    TapGesture().onEnded {
-                        if let authorRoute { handlers.onOpenAuthor?(authorRoute) }
-                    },
-                    including: authorRoute == nil ? .subviews : .all
-                )
-            Spacer(minLength: 4)
-            if !timestamp.isEmpty {
-                timestampText(timestamp)
+        if dynamicTypeSize.isAccessibilitySize {
+            // T-373. At the accessibility sizes the time, the chapter and Hide, none of
+            // which may shrink, are wider than the screen by themselves: on one line they
+            // pushed the whole row off both edges, the avatar and the start of the comment
+            // with it. The name takes its own line and the rest goes under it, on as many
+            // lines as it needs.
+            VStack(alignment: .leading, spacing: 4) {
+                bylineIdentity
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 7) {
+                        if !timestamp.isEmpty { timestampText(timestamp) }
+                        chapterBadge
+                        collapseControl
+                    }
+                    VStack(alignment: .leading, spacing: 4) {
+                        if !timestamp.isEmpty { timestampText(timestamp) }
+                        ViewThatFits(in: .horizontal) {
+                            HStack(spacing: 7) { chapterBadge; collapseControl }
+                            VStack(alignment: .leading, spacing: 4) { chapterBadge; collapseControl }
+                        }
+                    }
+                }
             }
-            chapterBadge
-            collapseControl
+            .frame(maxWidth: .infinity, alignment: .leading)
+        } else {
+            HStack(alignment: .center, spacing: 7) {
+                bylineIdentity
+                    .layoutPriority(1)
+                Spacer(minLength: 4)
+                if !timestamp.isEmpty {
+                    timestampText(timestamp)
+                }
+                chapterBadge
+                collapseControl
+            }
         }
+    }
+
+    private var bylineIdentity: some View {
+        authorIdentity
+            // The name gives up its own 28pt hit box (see `authorIdentity`); the
+            // whole name-and-pill block opens the profile instead, as does the
+            // avatar beside it. `including:` keeps a guest's block inert instead
+            // of swallowing taps for a route that doesn't exist.
+            .contentShape(Rectangle())
+            .highPriorityGesture(
+                TapGesture().onEnded {
+                    if let authorRoute { handlers.onOpenAuthor?(authorRoute) }
+                },
+                including: authorRoute == nil ? .subviews : .all
+            )
     }
 
     /// Folds a whole conversation shut from its root's byline.
