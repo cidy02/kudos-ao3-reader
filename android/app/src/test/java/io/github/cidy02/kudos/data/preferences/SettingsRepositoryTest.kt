@@ -65,8 +65,13 @@ class SettingsRepositoryTest {
             repository.updateAccountShortcuts(listOf(shortcut))
             assertEquals(listOf(shortcut), repository.accountShortcuts.first())
         }
+        // An explicit empty choice stays empty (stored as "none", as iOS since T-371); a value
+        // never written, or an empty one, is still the defaults.
         repository.updateAccountShortcuts(emptyList())
-        assertEquals(store.defaults, repository.accountShortcuts.first()) // Swift's unreachable empty choice.
+        assertEquals(emptyList<io.github.cidy02.kudos.account.AccountShortcut>(), repository.accountShortcuts.first())
+        assertEquals("none", dataStore.data.first()[stringPreferencesKey(store.key)])
+        dataStore.edit { it[stringPreferencesKey(store.key)] = "" }
+        assertEquals(store.defaults, repository.accountShortcuts.first())
     }
 
     @After
