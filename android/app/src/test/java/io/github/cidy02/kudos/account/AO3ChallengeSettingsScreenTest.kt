@@ -58,7 +58,8 @@ class AO3ChallengeSettingsScreenTest {
                     else AO3ChallengeSettingsScreen("winter_exchange", "Winter Exchange 2026", owner, repository,
                         onOpenWeb = { browser += it }, onOpenExternal = { external += it },
                         onOpenTagSet = { id, title -> native += Routes.ao3TagSet(id, title, isModerator = true) },
-                        onOpenPrompts = { slug, title -> native += Routes.ao3PromptMeme(slug, title) })
+                        onOpenPrompts = { slug, title -> native += Routes.ao3PromptMeme(slug, title) },
+                        onOpenSignUps = { slug, title -> native += Routes.ao3ChallengeSignUps(slug, title, owner, owner) })
                 }
             }
         }
@@ -90,8 +91,9 @@ class AO3ChallengeSettingsScreenTest {
         compose.onNodeWithText("Defaults and pinch hits").performClick()
         click("Run matching")
         assertEquals(listOf(Routes.ao3ChallengeSettings("winter_exchange", "Winter Exchange 2026", true),
-            Routes.ao3TagSet(42, "Winter Exchange Tags", true), Routes.ao3TagSet(43, "Snowbound Characters", true)), native)
-        assertEquals(listOf(giftUrl, signupUrl,
+            Routes.ao3TagSet(42, "Winter Exchange Tags", true), Routes.ao3TagSet(43, "Snowbound Characters", true),
+            Routes.ao3ChallengeSignUps("winter_exchange", "Winter Exchange 2026", true, true)), native)
+        assertEquals(listOf(giftUrl,
             ChallengeSettingsDestinations.challengeAssignmentsView("winter_exchange"), ChallengeSettingsDestinations.challengeAssignmentsView("winter_exchange")), browser)
         assertEquals(listOf(ChallengeSettingsDestinations.runMatching("winter_exchange")), external)
         compose.onNodeWithText("Prompts").assertDoesNotExist()

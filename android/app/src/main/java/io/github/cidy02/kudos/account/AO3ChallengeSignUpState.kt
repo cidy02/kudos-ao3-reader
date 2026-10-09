@@ -15,7 +15,8 @@ import kotlinx.coroutines.flow.asStateFlow
 internal data class SignUpUiState(
     val form: AO3ChallengeSignUpForm? = null, val loading: Boolean = false,
     val failure: String? = null, val terminal: Boolean = false,
-    val saving: Boolean = false, val notice: String? = null
+    val saving: Boolean = false, val notice: String? = null,
+    val withdrawing: Boolean = false, val withdrawn: Boolean = false
 )
 
 internal class AO3ChallengeSignUpState(private val slug: String, private val id: Int?,
@@ -28,11 +29,12 @@ internal class AO3ChallengeSignUpState(private val slug: String, private val id:
     private var attempted = false
     private var loadJob: Job? = null
     private var saveJob: Job? = null
+    private var withdrawJob: Job? = null
     private fun ownsSession() = active && generation == auth.generation.value
-    fun close() { active = false; loadJob?.cancel(); saveJob?.cancel() }
+    fun close() { active = false; loadJob?.cancel(); saveJob?.cancel(); withdrawJob?.cancel() }
 
     suspend fun load(refresh: Boolean = false) {
-        if (!ownsSession() || state.value.loading || state.value.saving || state.value.terminal || attempted && !refresh) return
+        if (!ownsSession() || state.value.loading || state.value.saving || state.value.withdrawing || state.value.withdrawn || state.value.terminal || attempted && !refresh) return
         attempted = true // a failed/refused attempt still counts
         if (!auth.state.value.isSignedIn) {
             mutable.value = SignUpUiState(failure = "Log in to AO3 before using this feature.", terminal = true)
@@ -45,7 +47,7 @@ internal class AO3ChallengeSignUpState(private val slug: String, private val id:
             currentCoroutineContext().ensureActive()
             if (!ownsSession()) return
             mutable.value = when (result) {
-                is AO3Result.Success -> state.value.copy(form = result.value.withMinimumPrompts(), loading = false)
+                is AO3Result.Success -> state.value.copy(form = state.value.form ?: result.value.withMinimumPrompts(), loading = false)
                 is AO3Result.Failure -> state.value.copy(loading = false, failure = result.error.moderationMessage(),
                     terminal = result.error == AO3Error.Forbidden || result.error == AO3Error.AuthenticationRequired ||
                         result.error is AO3Error.Parse || result.error is AO3Error.Validation)
@@ -57,14 +59,14 @@ internal class AO3ChallengeSignUpState(private val slug: String, private val id:
     }
 
     fun update(prompt: SignUpPrompt) {
-        if (ownsSession() && !state.value.saving && !state.value.loading)
+        if (ownsSession() && !state.value.saving && !state.value.withdrawing && !state.value.withdrawn && !state.value.loading)
             mutable.value = state.value.copy(form = state.value.form?.update(prompt), notice = null)
     }
 
     fun add(kind: SignUpPromptKind) {
         val form = state.value.form ?: return
         val max = if (kind == SignUpPromptKind.Request) form.limits?.requests?.last else form.limits?.offers?.last
-        if (!ownsSession() || state.value.saving || state.value.loading || form.live(kind).size >= (max ?: Int.MAX_VALUE)) return
+        if (!ownsSession() || state.value.saving || state.value.withdrawing || state.value.withdrawn || state.value.loading || form.live(kind).size >= (max ?: Int.MAX_VALUE)) return
         val draft = SignUpPrompt(form.nextDraftID, kind)
         mutable.value = state.value.copy(form = if (kind == SignUpPromptKind.Request) form.copy(requests = form.requests + draft)
             else form.copy(offers = form.offers + draft), notice = null)
@@ -72,7 +74,7 @@ internal class AO3ChallengeSignUpState(private val slug: String, private val id:
 
     suspend fun save() {
         val form = state.value.form ?: return
-        if (!ownsSession() || state.value.saving || state.value.loading || state.value.terminal) return
+        if (!ownsSession() || state.value.saving || state.value.withdrawing || state.value.withdrawn || state.value.loading || state.value.terminal) return
         val checked = form.validated()
         if (!checked.isValid) { mutable.value = state.value.copy(form = checked, notice = null); return }
         saveJob = currentCoroutineContext()[Job]
@@ -94,5 +96,31 @@ internal class AO3ChallengeSignUpState(private val slug: String, private val id:
         } catch (_: CancellationException) {
             if (ownsSession()) mutable.value = state.value.copy(saving = false)
         } finally { saveJob = null }
+    }
+
+    suspend fun withdraw() {
+        val form = state.value.form ?: return
+        val signUpID = form.signUpID ?: return
+        if (!ownsSession() || state.value.loading || state.value.saving || state.value.withdrawing ||
+            state.value.withdrawn || state.value.terminal) return
+        withdrawJob = currentCoroutineContext()[Job]
+        mutable.value = state.value.copy(withdrawing = true, notice = null)
+        try {
+            // Once sent, show the repository's verdict even if the preparing session moved on.
+            // The screen keys its private model on generation, so no old form crosses accounts.
+            val result = writes.withdrawSignUp(slug, signUpID, generation)
+            if (!active) return
+            mutable.value = when (result) {
+                is AO3Result.Success -> state.value.copy(withdrawn = true, notice = "Sign-up withdrawn.")
+                is AO3Result.Failure -> state.value.copy(
+                    terminal = result.error == AO3Error.Forbidden || result.error == AO3Error.AuthenticationRequired,
+                    form = form.copy(generalErrors = listOf(result.error.moderationMessage())))
+            }
+        } catch (_: CancellationException) {
+            // This cancellation is only before dispatch; an in-flight POST is NonCancellable.
+        } finally {
+            if (active) mutable.value = state.value.copy(withdrawing = false)
+            withdrawJob = null
+        }
     }
 }

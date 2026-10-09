@@ -32,7 +32,7 @@ class DemoChallengeSettingsTest {
         assertEquals(profile.second, DemoNetwork.webFixture(profileUrl.toHttpUrl(), source)!!.decodeToString())
         val first = parser.parseSignUpCount(read(ChallengeSettingsDestinations.signUpPage("winter_exchange")).second)
         val last = parser.parseSignUpCount(read(ChallengeSettingsDestinations.signUpPage("winter_exchange", first.totalPages)).second, first.totalPages)
-        assertEquals(4, first.count * (first.totalPages - 1) + last.count)
+        assertEquals(6, first.count * (first.totalPages - 1) + last.count)
         val probe = ChallengeSettingsDestinations.challengeSettingsEditView("summer_meme", AO3ChallengeKind.GiftExchange)
         assertEquals(404, read(probe).first)
         assertNull(DemoNetwork.webFixture(probe.toHttpUrl(), source))
