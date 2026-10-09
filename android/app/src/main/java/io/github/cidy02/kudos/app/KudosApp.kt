@@ -60,7 +60,7 @@ private suspend fun importExternalFiles(
     container: KudosAppContainer,
     selections: List<io.github.cidy02.kudos.works.SelectedDocumentImport>,
     preparationFailures: List<String>
-): String? {
+): ExternalImportNotice? {
     val imported = mutableListOf<String>()
     val failed = preparationFailures.toMutableList()
     kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
@@ -90,8 +90,11 @@ private suspend fun importExternalFiles(
             if (isNotEmpty()) append("\n\n")
             append(failed.joinToString("\n"))
         }
-    }.ifBlank { null }
+    }.ifBlank { null }?.let { ExternalImportNotice(it, addedToLibrary = imported.isNotEmpty()) }
 }
+
+/** What the import said, and whether there is now something in the Library to go and see. */
+internal data class ExternalImportNotice(val message: String, val addedToLibrary: Boolean)
 
 @Composable
 fun KudosApp(
@@ -168,7 +171,8 @@ fun KudosApp(
     var importPreparationFailures by remember {
         androidx.compose.runtime.mutableStateOf<List<String>>(emptyList())
     }
-    var importStatus by remember { androidx.compose.runtime.mutableStateOf<String?>(null) }
+    var importStatus by remember { androidx.compose.runtime.mutableStateOf<ExternalImportNotice?>(null) }
+    var showLibraryRequest by remember { androidx.compose.runtime.mutableIntStateOf(0) }
     androidx.compose.runtime.LaunchedEffect(offeredImports, effectiveCompletedOnboarding) {
         if (offeredImports.isEmpty() || effectiveCompletedOnboarding != true) return@LaunchedEffect
         val uris = io.github.cidy02.kudos.works.ExternalFileImport.consume()
@@ -180,6 +184,7 @@ fun KudosApp(
             importPreparationFailures = importPreparationFailures + preparation.failures
             if (preparation.imports.isEmpty()) {
                 importStatus = preparation.failures.joinToString("\n").ifBlank { null }
+                    ?.let { ExternalImportNotice(it, addedToLibrary = false) }
             }
         }
     }
@@ -210,14 +215,24 @@ fun KudosApp(
             )
         }
 
-        if (importStatus != null) {
+        importStatus?.let { notice ->
             androidx.compose.material3.AlertDialog(
                 onDismissRequest = { importStatus = null },
                 title = { androidx.compose.material3.Text("Import") },
-                text = { androidx.compose.material3.Text(importStatus.orEmpty()) },
+                text = { androidx.compose.material3.Text(notice.message) },
                 confirmButton = {
                     androidx.compose.material3.TextButton(onClick = { importStatus = null }) {
                         androidx.compose.material3.Text("OK")
+                    }
+                },
+                // iOS's import notice: "Show in Library" when a work came in. It switches to
+                // the Library tab rather than to the work, as iOS does.
+                dismissButton = if (!notice.addedToLibrary) null else {
+                    {
+                        androidx.compose.material3.TextButton(onClick = {
+                            importStatus = null
+                            showLibraryRequest += 1
+                        }) { androidx.compose.material3.Text("Show in Library") }
                     }
                 }
             )
@@ -296,6 +311,7 @@ fun KudosApp(
                         MainScaffold(
                             container = container,
                             themeMode = themeMode,
+                            showLibraryRequest = showLibraryRequest,
                             startRoute = debugRoute?.takeIf { BuildConfig.DEBUG && preview == null && it.startsWith(DebugRoutes.NAV_PREFIX) }
                                 ?.removePrefix(DebugRoutes.NAV_PREFIX),
                             onCycleTheme = {
