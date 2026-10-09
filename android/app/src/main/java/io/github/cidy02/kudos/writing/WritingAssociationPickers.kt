@@ -46,7 +46,8 @@ internal enum class WorkAssociation(val title: String) {
 @Composable
 internal fun WritingAssociationPicker(
     kind: WorkAssociation, form: AO3WorkForm, model: WritingWorkFormState,
-    repository: AO3TagAutocompleteRepository?, onBack: () -> Unit
+    repository: AO3TagAutocompleteRepository?, onReorderSeries: ((Long, String) -> Unit)? = null,
+    onBack: () -> Unit
 ) {
     val tokens = LocalKudosTokens.current
     val palette = tokens.scopePalette
@@ -101,12 +102,16 @@ internal fun WritingAssociationPicker(
                     }
                     item { WorkFormFootnote("Each save adds this work to one series. Saving doesn't remove it from another " +
                         "series. To do that, use Remove works on the series' Edit screen.") }
-                    val ordered = form.series.firstOrNull { it.isSelected }?.title ?: form.currentSeries.firstOrNull()?.title
+                    val selected = form.series.firstOrNull { it.isSelected }
+                    val current = form.currentSeries.firstOrNull()
+                    val orderedID = selected?.seriesID ?: current?.seriesID
+                    val ordered = selected?.title ?: current?.title
                     if (ordered != null) item {
                         WorkFormSection("Position in $ordered")
                         SettingsPanel(Modifier.padding(top = 8.dp)) {
-                            // Separate AO3 write not available yet. Show the iOS value with no disclosure/action.
-                            SubjectFormRow("Reorder the series", value = "")
+                            SubjectFormRow("Reorder the series", showsDisclosure = onReorderSeries != null,
+                                onClick = if (onReorderSeries == null || orderedID == null) null else
+                                    ({ onReorderSeries(orderedID, ordered) }))
                         }
                         WorkFormFootnote("Changing the reading order updates every work in the series. Save the new " +
                             "order on its own screen.")

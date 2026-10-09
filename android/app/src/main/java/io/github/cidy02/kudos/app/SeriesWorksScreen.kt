@@ -28,6 +28,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -39,6 +40,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import io.github.cidy02.kudos.home.HomeFacts
 import io.github.cidy02.kudos.library.ReadingQueueRepository
 import io.github.cidy02.kudos.network.ao3.AO3Result
@@ -72,8 +74,13 @@ fun SeriesWorksScreen(
     onOpenWork: (AO3WorkSummary) -> Unit,
     workImporter: WorkImporter? = null,
     readingQueueRepository: ReadingQueueRepository? = null,
-    onOpenAo3: (String) -> Unit = {}
+    onOpenAo3: (String) -> Unit = {},
+    formRepository: io.github.cidy02.kudos.network.ao3.writing.AO3SeriesFormRepository? = null,
+    writes: io.github.cidy02.kudos.network.ao3.writes.AO3WriteRepository? = null
 ) {
+    var editing by remember(seriesUrl) { mutableStateOf<Boolean?>(null) }
+    val accountState by (formRepository?.auth?.state?.collectAsState() ?: remember {
+        mutableStateOf<io.github.cidy02.kudos.auth.AO3AuthState>(io.github.cidy02.kudos.auth.AO3AuthState.SignedOut) })
     var state by remember(seriesUrl) { mutableStateOf<SeriesWorksState>(SeriesWorksState.Loading) }
     var loadGeneration by remember(seriesUrl) { mutableIntStateOf(0) }
     var expandAll by remember(seriesUrl) { mutableStateOf(false) }
@@ -88,7 +95,7 @@ fun SeriesWorksScreen(
         state = SeriesWorksState.Loading
         val generation = ++loadGeneration
         scope.launch {
-            val next = when (val result = seriesRepository.seriesPage(seriesUrl, page)) {
+            val next = when (val result = seriesRepository.detailPage(seriesUrl, page)) {
                 is AO3Result.Success -> SeriesWorksState.Loaded(result.value)
                 is AO3Result.Failure -> SeriesWorksState.Error(result.error.displayMessage(), page)
             }
@@ -99,7 +106,19 @@ fun SeriesWorksScreen(
     LaunchedEffect(seriesUrl) { load() }
 
     val page = (state as? SeriesWorksState.Loaded)?.page
-    val title = page?.works?.firstOrNull()?.seriesTitle?.takeIf { it.isNotBlank() } ?: "Series"
+    val detail = (state as? SeriesWorksState.Loaded)?.detail
+    val title = detail?.title ?: "Series"
+    val username = (accountState as? io.github.cidy02.kudos.auth.AO3AuthState.SignedIn)?.username
+    val canEdit = username != null && detail?.creatorUsernames?.any { it.equals(username, true) } == true
+    val seriesID = Regex("/series/([0-9]+)").find(seriesUrl)?.groupValues?.get(1)?.toLongOrNull()
+    val editMode = editing
+    if (editMode != null && seriesID != null && formRepository != null && writes != null) {
+        io.github.cidy02.kudos.writing.WritingSeriesScreen(seriesID, title, formRepository, writes,
+            onBack = { editing = null }, onOpenAo3 = onOpenAo3, reorderOnly = editMode, works = page?.works.orEmpty(),
+            subtitle = listOfNotNull(title, detail?.workCount?.let { "$it ${if (it == 1) "work" else "works"}" },
+                detail?.words?.takeIf { it > 0 }?.let { "%,d words".format(it) }).joinToString(" · "))
+        return
+    }
     val tokens = LocalKudosTokens.current
     val palette = remember(title, tokens.theme) {
         SubjectPalette.fromHue(HomeFacts.workHue(page?.works?.firstOrNull()?.fandoms.orEmpty(), title), tokens.theme)
@@ -141,6 +160,10 @@ fun SeriesWorksScreen(
                                 expandAll = !expandAll
                             }
                         )
+                    }
+                    if (canEdit && formRepository != null && writes != null) {
+                        DropdownMenuItem(text = { Text("Edit series", color = tokens.primaryInk, lineHeight = 21.sp) }, onClick = { showMenu = false; editing = false })
+                        DropdownMenuItem(text = { Text("Reorder", color = tokens.primaryInk, lineHeight = 21.sp) }, onClick = { showMenu = false; editing = true })
                     }
                     DropdownMenuItem(
                         text = { Text("Open on AO3") },
@@ -281,6 +304,8 @@ fun SeriesWorksScreen(
 
 private sealed interface SeriesWorksState {
     data object Loading : SeriesWorksState
-    data class Loaded(val page: AO3SearchPage) : SeriesWorksState
+    data class Loaded(val detail: io.github.cidy02.kudos.network.ao3.series.AO3SeriesDetailPage) : SeriesWorksState {
+        val page get() = detail.page
+    }
     data class Error(val message: String, val page: Int) : SeriesWorksState
 }

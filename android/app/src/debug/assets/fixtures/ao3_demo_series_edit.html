@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="csrf-token" content="demo-series-token"><title>Edit Series</title></head>
+<body><main id="main"><h2 class="heading">Edit Series</h2>
+<form id="edit_series_321" class="series" action="/series/321" method="post">
+<input type="hidden" name="utf8" value="✓"><input type="hidden" name="authenticity_token" value="demo-series-token">
+<input type="hidden" name="_method" value="put">
+<label for="series_title">Title</label><input id="series_title" name="series[title]" value="The Dawn Cycle">
+<label for="series_pseuds">Pseuds</label><select multiple id="series_pseuds" name="series[author_attributes][ids][]">
+<option value="123" selected>Avery Writes</option><option value="124">Dawn Keeper</option></select>
+<label for="series_byline">Creators</label><input id="series_byline" name="series[author_attributes][byline]" value="">
+<label for="series_summary">Summary</label><textarea id="series_summary" name="series[summary]">Three stories about a difficult sunrise.</textarea>
+<label for="series_notes">Notes</label><textarea id="series_notes" name="series[series_notes]">&lt;p&gt;Leave a lamp in the window for the next traveller.&lt;/p&gt;</textarea>
+<input type="checkbox" id="series_complete" name="series[complete]" value="1" checked><label for="series_complete">Complete</label>
+<input type="hidden" name="series[private_note]" value="Keep this served value">
+<input type="hidden" name="series[unknown][]" value="first"><input type="hidden" name="series[unknown][]" value="second">
+<input name="not_sent" value="disabled" disabled><input type="checkbox" name="not_checked" value="1">
+<input type="submit" name="commit" value="Update Series">
+</form></main></body></html>

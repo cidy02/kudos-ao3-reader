@@ -243,7 +243,8 @@ internal fun AO3SeriesRow(
     series: AO3AuthorSeriesSummary,
     displayMode: AuthorDisplayMode,
     onOpenSeries: (String) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    trailingContent: (@Composable () -> Unit)? = null
 ) {
     val tokens = LocalKudosTokens.current
     val palette = remember(series.fandoms, series.title, tokens.theme) {
@@ -271,9 +272,11 @@ internal fun AO3SeriesRow(
                     color = tokens.primaryInk,
                     fontSize = if (displayMode == AuthorDisplayMode.Ledger) 19.sp else 17.sp,
                     fontWeight = FontWeight.SemiBold,
-                    maxLines = 2
+                    maxLines = if (io.github.cidy02.kudos.ui.subject.isAccessibilityFontScale()) Int.MAX_VALUE else 2,
+                    lineHeight = 25.sp
                 )
             }
+            trailingContent?.invoke()
         }
         if (series.summary.isNotBlank()) {
             Text(series.summary, color = tokens.secondaryInk, fontSize = 13.5.sp, maxLines = 3)
