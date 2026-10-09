@@ -29,7 +29,7 @@ class DemoChallengeSignUpsTest {
         val http = client()
         val parser = AO3ChallengeSignUpsParser()
         val addresses = listOf(AO3ChallengeSignUpsUrls.page("winter_exchange"), AO3ChallengeSignUpsUrls.page("winter_exchange", 2)) +
-            SignUpAssignmentList.entries.map { AO3ChallengeSignUpsUrls.assignments("winter_exchange", it) } +
+            listOf(SignUpAssignmentList.Complete, SignUpAssignmentList.Open, SignUpAssignmentList.Defaults).map { AO3ChallengeSignUpsUrls.assignments("winter_exchange", it) } +
             listOf(ChallengeSettingsDestinations.challengeSettingsEditView("winter_exchange", AO3ChallengeKind.GiftExchange),
                 AO3ChallengeSignUpUrls.confirmDelete("winter_exchange", 4), AO3ChallengeSignUpUrls.confirmDelete("winter_exchange", 5),
                 AO3ChallengeSignUpUrls.form("winter_exchange", 5))
@@ -39,7 +39,7 @@ class DemoChallengeSignUpsTest {
         assertEquals(6, first.rows.size * (first.totalPages - 1) + last.rows.size)
         val settings = AO3ChallengeSettingsParser().parseSettings(get(http, addresses[5]), AO3ChallengeKind.GiftExchange)
         assertFalse(settings.signupOpen)
-        val joined = SignUpAssignmentList.entries.flatMap { parser.parseAssignments(get(http, AO3ChallengeSignUpsUrls.assignments("winter_exchange", it))) }
+        val joined = listOf(SignUpAssignmentList.Complete, SignUpAssignmentList.Open, SignUpAssignmentList.Defaults).flatMap { parser.parseAssignments(get(http, AO3ChallengeSignUpsUrls.assignments("winter_exchange", it))) }
         assertEquals(3, (first.rows + last.rows).count { signUpMatch(it, joined) == SignUpMatch.Matched })
         assertEquals(3, (first.rows + last.rows).count { signUpMatch(it, joined) == SignUpMatch.Unmatched })
         assertEquals(5, AO3ChallengeSignUpParser().parse(get(http, AO3ChallengeSignUpUrls.form("winter_exchange", 5)), "winter_exchange").signUpID)

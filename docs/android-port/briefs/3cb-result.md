@@ -1,5 +1,8 @@
 # Brief 3cb — sign-ups list and withdrawal
 
+**3cc follow-up (unbuilt Codex handoff, 2026-10-09).** Assignments and Defaults/pinch hits now request the native assignments screen; see [3cc-result.md](3cc-result.md) for request admission/counts, the two owner writes and pending verification. Settings still reads no assignment list for its own tally rows. The Sign-ups join still reads only Complete/Open/Defaults; its parser and shared Winter fixtures are extended, not duplicated. Historical browser-destination statements below describe the earlier landing.
+
+
 ## iOS first: requests, counted before implementation
 
 Read the actual Swift in `/Users/cidy02/kudos-ios-polish/` (unchanged): `Features/Challenges/ChallengeSignUpsView.swift`, `ChallengeSignUpView.swift`, `Features/Account/AO3CollectionDetailView.swift`, `Services/AO3Client+Challenges.swift`, `AO3ChallengeActions.swift`, `AO3CollectionActions.swift`, `AO3WriteActions.swift`, and `Models/AO3ChallengeModels.swift`.

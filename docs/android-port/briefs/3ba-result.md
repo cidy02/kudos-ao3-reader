@@ -1,5 +1,8 @@
 # Brief 3ba — Challenge Settings (read only)
 
+**3cc follow-up (unbuilt Codex handoff, 2026-10-09).** Assignments and Defaults/pinch hits now request the native assignments screen; see [3cc-result.md](3cc-result.md) for request admission/counts, the two owner writes and pending verification. Settings still reads no assignment list for its own tally rows. The Sign-ups join still reads only Complete/Open/Defaults; its parser and shared Winter fixtures are extended, not duplicated. Historical browser-destination statements below describe the earlier landing.
+
+
 **3be follow-up (Codex, 2026-10-05; unbuilt handoff).** Tag-set rows now request the
 native numeric-ID Tag set screen, passing the served title and `isModerator = true`
 as iOS does. Their earlier browser detour in the historical notes below is superseded.

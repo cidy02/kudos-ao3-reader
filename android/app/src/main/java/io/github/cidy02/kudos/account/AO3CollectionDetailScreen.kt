@@ -95,7 +95,8 @@ fun AO3CollectionDetailScreen(
     onOpenChallengeSettings: (Boolean) -> Unit,
     onOpenPrompts: (Boolean) -> Unit,
     onOpenSignUp: () -> Unit = {},
-    onOpenSignUps: (Boolean) -> Unit = {}
+    onOpenSignUps: (Boolean) -> Unit = {},
+    onOpenAssignments: (Boolean) -> Unit = {}
 ) {
     var show by remember(slug) { mutableStateOf<AO3CollectionShow?>(null) }
     var segment by remember(slug) { mutableStateOf(AO3CollectionSegment.Works) }
@@ -305,7 +306,8 @@ fun AO3CollectionDetailScreen(
                                     { onOpenChallengeSettings(collectionShow.collection.viewerIsOwner) },
                                     // Any participant opens Prompts; only an owner's opening asks AO3 for the close date.
                                     { onOpenPrompts(collectionShow.collection.viewerIsOwner) }, onOpenSignUp,
-                                    { onOpenSignUps(collectionShow.collection.viewerIsOwner) })
+                                    { onOpenSignUps(collectionShow.collection.viewerIsOwner) },
+                                    { onOpenAssignments(collectionShow.collection.viewerIsOwner) })
                             }
                         }
                     }
@@ -387,7 +389,7 @@ internal fun CollectionManageRow(label: String, url: String, onOpenModeration: (
     onOpenSettings: () -> Unit, onOpenMaintainers: () -> Unit, onOpenWebFallback: (String) -> Unit,
     onOpenChallengeSettings: () -> Unit = { onOpenWebFallback(url) },
     onOpenPrompts: () -> Unit = { onOpenWebFallback(url) },
-    onOpenSignUp: () -> Unit = {}, onOpenSignUps: () -> Unit = {}) {
+    onOpenSignUp: () -> Unit = {}, onOpenSignUps: () -> Unit = {}, onOpenAssignments: () -> Unit = {}) {
     SubjectFormRow(label = label, showsDisclosure = true, onClick = {
         when (label) {
             "Moderation" -> onOpenModeration()
@@ -397,6 +399,7 @@ internal fun CollectionManageRow(label: String, url: String, onOpenModeration: (
             "Prompts" -> onOpenPrompts()
             "Your Sign-up" -> onOpenSignUp()
             "Sign-ups" -> onOpenSignUps()
+            "Assignments" -> onOpenAssignments()
             else -> onOpenWebFallback(url)
         }
     })

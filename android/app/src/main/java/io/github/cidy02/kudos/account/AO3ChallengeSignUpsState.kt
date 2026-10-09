@@ -75,7 +75,7 @@ internal class AO3ChallengeSignUpsState(private val slug: String, private val vi
                 var matchError: String? = null
                 if (closed) {
                     val joined = mutableListOf<AO3SignUpAssignment>()
-                    for (list in SignUpAssignmentList.entries) {
+                    for (list in listOf(SignUpAssignmentList.Complete, SignUpAssignmentList.Open, SignUpAssignmentList.Defaults)) {
                         val result = repository.getSignUpAssignments(slug, list)
                         checkSession()
                         if (result is AO3Result.Failure) { matchError = result.error.moderationMessage(); break }

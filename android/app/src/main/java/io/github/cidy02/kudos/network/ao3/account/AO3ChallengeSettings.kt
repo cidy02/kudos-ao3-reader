@@ -21,7 +21,8 @@ data class AO3ChallengeSettings(
     val allowAnyPrompt: Boolean,
     val requireFandomMatch: Boolean,
     val anonymous: Boolean,
-    val signupOpen: Boolean = false
+    val signupOpen: Boolean = false,
+    val timeZoneName: String = ""
 )
 
 data class AO3ChallengeTagSet(val id: Int, val title: String)
@@ -69,7 +70,9 @@ class AO3ChallengeSettingsParser {
             range("requests", 1), range(restriction("fandom"), 0), range(restriction("relationship"), 0),
             range(restriction("character"), 0), checked(restriction("optional_tags_allowed")),
             listOf("fandom", "relationship", "character", "freeform").any { checked(restriction("allow_any_$it")) },
-            !checked(restriction("allow_any_fandom")), checked("anonymous"), checked("signup_open"))
+            !checked(restriction("allow_any_fandom")), checked("anonymous"), checked("signup_open"),
+            form.selectFirst("select[name=\"$prefix[time_zone]\"] option[selected]")?.attr("value")
+                ?: form.selectFirst("select[name=\"$prefix[time_zone]\"] option")?.attr("value") ?: "")
     }
 
     fun parseTagSets(html: String): List<AO3ChallengeTagSet> {
