@@ -132,6 +132,21 @@ class WritingChapterFormScreenTest {
         assertEquals(AO3ChapterUrls.chapter(995006, 12303), setup.client.recordedPosts.last().url)
     }
 
+    /**
+     * The half the test below names and never ran (audit A28-5): it only ever opened a new chapter, so a
+     * posted chapter offering Post and Save as draft would have passed.
+     */
+    @Test fun aPostedChapterOffersOnlySaveChapterChangesAndSendsUpdate() {
+        show("posted", count = 2)
+        reach("Save chapter changes")
+        compose.onNodeWithText("Post chapter now").assertDoesNotExist()
+        compose.onNodeWithText("Save as draft").assertDoesNotExist()
+        compose.onNodeWithContentDescription("Post without preview").assertDoesNotExist()
+        compose.onNodeWithText("Save chapter changes").performClick()
+        compose.waitForIdle(); compose.waitUntil(15_000) { closes == 1 }
+        assertEquals(listOf("update_button" to "1"), setup.client.recordedPosts.single().fields.filter { it.first.endsWith("_button") })
+    }
+
     @Test fun directPostSwitchSendsOnlyOnePostAndPostedChapterOffersOnlyUpdate() {
         show()
         reach("Post without preview"); compose.onNodeWithContentDescription("Post without preview").performClick()

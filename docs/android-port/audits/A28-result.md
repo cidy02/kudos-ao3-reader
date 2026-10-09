@@ -301,3 +301,10 @@ now carries the comment that was asked for, as AO3's does, so the feature can be
 
 **A28-4, the part left open, is closed too** (the same afternoon): the chapter index is read
 in the reader's session and cached per session (`AO3ChapterIndexRepositoryTest`).
+
+**A28-5, three of its six closed** (the same evening): a second tap while the chapter delete
+POST is out (`secondTapWhileTheDeletePostIsHeldSendsExactlyOneDelete`); a posted chapter's
+actions and its `update_button` (`aPostedChapterOffersOnlySaveChapterChangesAndSendsUpdate`);
+the tautology in `AO3ChapterFormTest` replaced by real multiplicities. Still open: the date
+picker's wiring on the chapter screen, the failure paragraph's layout in each theme, the demo
+author works' page two.
