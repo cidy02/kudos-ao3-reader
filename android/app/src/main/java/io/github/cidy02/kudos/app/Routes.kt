@@ -30,6 +30,7 @@ object Routes {
     const val Search = "search"
     const val AccountLogin = "account-login"
     const val AO3Collections = "ao3-collections"
+    const val AccountShortcuts = "account-shortcuts"
     const val WritingDrafts = "writing-drafts"
     const val WritingWork = "writing-work?workId={workId}"
     fun writingWork(workId: Long? = null): String = workId?.let { "writing-work?workId=$it" } ?: "writing-work"
@@ -255,6 +256,7 @@ object Routes {
             AccountLogin -> "Log In to AO3"
             AccountList -> "Account List"
             AO3Collections -> "My Collections"
+            AccountShortcuts -> "Shortcuts"
             WritingDrafts -> "Drafts"
             WritingWork -> "Edit work"
             WritingWorkNewDemo -> "New work"
@@ -328,7 +330,7 @@ object Routes {
         if (route == null) return false
         val base = route.substringBefore("?").substringBefore("/")
         return base == ReadingQueues.substringBefore("?").substringBefore("/") ||
-            base == WritingDrafts || base == WritingWork.substringBefore("?") || base == WritingWorkNewDemo || base == WritingWorkDraftDemo ||
+            base == AccountShortcuts || base == WritingDrafts || base == WritingWork.substringBefore("?") || base == WritingWorkNewDemo || base == WritingWorkDraftDemo ||
             base == WritingWorkPostedDemo || base == WritingEditorDemo || base == WritingEditorFixture ||
             base == QueueDetail.substringBefore("?").substringBefore("/") ||
             base == Collections.substringBefore("?").substringBefore("/") ||
@@ -357,7 +359,7 @@ object Routes {
      * collection, Home and Library section lists), so those keep it.
      */
     private val tabBarHiddenBases: Set<String> = listOf(
-        AO3Collections, WritingDrafts, WritingWork, WritingWorkNewDemo, WritingWorkDraftDemo, WritingWorkPostedDemo,
+        AccountShortcuts, AO3Collections, WritingDrafts, WritingWork, WritingWorkNewDemo, WritingWorkDraftDemo, WritingWorkPostedDemo,
         WritingEditorDemo, WritingEditorFixture, SeriesWorks, AuthorProfile, AuthorWorks, Comments, Reader,
         WorkDetail, // WorkDetailView
         BrowseFandoms, BrowseWorks, TagWorks, // FandomListView, NativeBrowseView

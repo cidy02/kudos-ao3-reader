@@ -483,6 +483,8 @@ fun AppNavHost(
                 },
                 onOpenAO3Collections = { navController.navigate(Routes.AO3Collections) },
                 onOpenDrafts = { navController.navigate(Routes.WritingDrafts) },
+                settingsRepository = container.settingsRepository,
+                onEditShortcuts = { navController.navigate(Routes.AccountShortcuts) },
                 onOpenDashboard = { navController.navigate(Routes.AO3Dashboard) },
                 onOpenWeb = { url ->
                     when (url) {
@@ -637,6 +639,11 @@ fun AppNavHost(
                     }
                     navController.popBackStack()
                 })
+        }
+        sharedComposable(Routes.AccountShortcuts) {
+            io.github.cidy02.kudos.account.AccountShortcutsEditor(container.settingsRepository) {
+                navController.popBackStack()
+            }
         }
         sharedComposable(Routes.WritingDrafts) { entry ->
             val savedRevision by entry.savedStateHandle.getStateFlow("writingWorkSaved", 0).collectAsState()
@@ -1106,6 +1113,7 @@ fun AppNavHost(
                 AuthorProfileScreen(
                     username = authorUsername,
                     authorRepository = container.authorRepository,
+                    authRepository = container.authRepository,
                     onOpenWork = { work ->
                         navigateToWorkDetail(WorkDetailSource.RemoteSummary(work))
                     },
