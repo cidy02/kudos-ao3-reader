@@ -443,6 +443,36 @@ struct AO3WriteDispatchFenceTests {
         #expect(hits.last?.body?.contains("authenticity_token=probe-csrf") == true)
     }
 
+    /// T-372. A work delete reads AO3's confirmation page and sends one POST. It used
+    /// to read the work's own page as well, twice per delete, for counts nothing shows,
+    /// and failed when that page could not be read.
+    @Test func workDeleteReadsTheConfirmationPageAndNothingElse() async throws {
+        AO3WriteDispatchProbe.reset(
+            postBody: #"<div id="main"><div class="flash notice">Your work A Lamp was deleted.</div></div>"#,
+            getBody: """
+            <meta name="csrf-token" content="probe-csrf">
+            <div id="main"><h2 class="heading">Delete Work</h2>
+            <p class="caution">Are you sure you want to delete "A Lamp"? This cannot be undone.</p>
+            <form class="destroy" action="/works/4242" method="post">
+              <input name="_method" value="delete"><input type="submit" value="Yes, Delete Work">
+            </form></div>
+            """
+        )
+        let auth = makeAuth()
+        await auth.login(username: "alice", password: "pw")
+        let client = AO3Client(session: probeSession(), paceSleep: { _ in })
+
+        let shown = try await auth.loadDeleteImplications(workID: 4242, using: client)
+        #expect(shown.cautionText.contains("A Lamp"))
+        #expect(AO3WriteDispatchProbe.recorded().map(\.url?.path) == ["/works/4242/confirm_delete"])
+
+        _ = try await auth.deleteWork(workID: 4242, using: client)
+        let hits = AO3WriteDispatchProbe.recorded()
+        #expect(hits.map(\.method) == ["GET", "GET", "POST"])
+        #expect(hits.map(\.url?.path) == ["/works/4242/confirm_delete", "/works/4242/confirm_delete", "/works/4242"])
+        #expect(hits.last?.body?.contains("_method=delete") == true)
+    }
+
     @Test func collectionDeleteRefusesAConfirmResponseWithoutTheDestroyForm() async throws {
         AO3WriteDispatchProbe.reset(
             getBody: #"<meta name="csrf-token" content="probe-csrf"><h2>Collections</h2>"#
