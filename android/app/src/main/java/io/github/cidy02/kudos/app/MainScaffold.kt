@@ -118,9 +118,14 @@ fun MainScaffold(
     container: KudosAppContainer,
     themeMode: KudosThemeMode,
     onCycleTheme: () -> Unit,
-    startRoute: String? = null
+    startRoute: String? = null,
+    /** Raised by one each time something above the shell asks for the Library tab. */
+    showLibraryRequest: Int = 0
 ) {
     val navController = rememberNavController()
+    androidx.compose.runtime.LaunchedEffect(showLibraryRequest) {
+        if (showLibraryRequest > 0) navController.navigateShellRoot(Routes.Library)
+    }
     // Debug launch extra `kudosDebugRoute nav:<route>` opens a screen directly (like iOS -KudosDebugRoute).
     androidx.compose.runtime.LaunchedEffect(startRoute) {
         startRoute?.let { navController.navigate(it) }

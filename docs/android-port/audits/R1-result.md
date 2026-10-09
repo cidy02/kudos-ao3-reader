@@ -110,7 +110,9 @@ A reading, not an audit: eleven features, each checked against the code as it wa
   when one is chosen, as iOS's `dashboardURL`). Not seen on the emulator.
 - **Bookmark the in-app browser page: not ported.** Audit A20 found that nothing on iOS
   ever reads those bookmarks back: a button that saves to nowhere.
+- **"Show in Library" after an import: done** (2026-10-09). The notice's second button
+  switches to the Library tab, as iOS does. Not seen on the emulator.
 - Small, still to do by hand: "Open Chapter Comments" in the inbox menu, the "Showing cached
-  AO3 data" banner, "Nearby" pages in the page jump, "Show in Library" after an import.
+  AO3 data" banner, "Nearby" pages in the page jump.
 - Medium, to brief for Codex: the Account shortcut editor, Read Aloud downloads on Privacy,
   popular tags in the tag picker, works sort and completion on an author.
