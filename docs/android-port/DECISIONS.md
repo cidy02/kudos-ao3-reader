@@ -1245,3 +1245,14 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
 - Its cache is per work and per session: what one account was shown is not served to the
   next account or to a signed-out reader.
   Reverse: the commit "The chapter index is read in the reader's session".
+
+## 2026-10-09: a comment's first line at large text, and a name's room
+
+- At large text (font scale above 1.3) a comment's name has its own line and the date, the
+  chapter and Hide wrap under it. In one line as tall as the avatar the name was squeezed to
+  a letter or out, and the rest was cut in half. iOS had the same line run off the screen
+  (T-373).
+- At every size the name takes the room that is left on its line; it used to share that room
+  half and half with an empty gap, so "Calytrix" was drawn "Calyt…" beside empty space.
+- The line is never shorter than its text (a minimum height, where it was a fixed one).
+  Reverse: the commit "A comment's name is shown whole, and its first line fits at large text".
