@@ -83,7 +83,9 @@ struct AuthorProfileView: View {
                 AuthorProfileView(route: model.route, navigationTitle: tab.rawValue, initialTab: tab)
             }
             .navigationDestination(isPresented: $isBulkEditing) { bulkEditDestination }
-            .navigationDestination(isPresented: $isCreatingWork) { WritingWorkDestination(workID: nil) }
+            .navigationDestination(isPresented: $isCreatingWork) {
+                WritingWorkDestination(workID: nil) { Task { await model.refresh(auth: auth) } }
+            }
             .navigationDestination(item: ownWorkPushBinding) { action in
                 ownWorkDestination(action)
                     .environment(\.writingOtherWorks, WritingOtherWorkTags.sources(from: model.works))
@@ -572,9 +574,11 @@ private extension AuthorProfileView {
     private func ownWorkDestination(_ action: AO3OwnWorkAction) -> some View {
         switch action {
         case let .edit(workID):
-            WritingWorkDestination(workID: workID)
+            WritingWorkDestination(workID: workID) { Task { await model.refresh(auth: auth) } }
         case let .tags(workID, title):
-            WritingTagsDestination(workID: workID, workTitle: title)
+            WritingTagsDestination(workID: workID, workTitle: title) {
+                Task { await model.refresh(auth: auth) }
+            }
         case let .chapter(workID, title):
             WritingChapterDestination(workID: workID, workTitle: title) {
                 Task { await model.refresh(auth: auth) }

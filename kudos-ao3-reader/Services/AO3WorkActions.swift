@@ -579,6 +579,8 @@ extension AO3AuthService {
             ajax: false
         )
         let (status, body) = try await submitWrite(request, using: client)
+        // Sent: whatever AO3 answered, the writer's own lists kept from before it are in doubt.
+        if let username { await AO3AuthorPageCache.shared.removeAuthorPages(username: username) }
         if let error = AO3Client.workWriteError(in: body) {
             throw AO3WorkWriteError.rejected(error)
         }
