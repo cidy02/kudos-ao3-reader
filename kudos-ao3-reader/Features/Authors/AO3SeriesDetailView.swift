@@ -36,6 +36,8 @@ struct AO3SeriesDetailView: View {
     /// Reorder lives in "…" like every other ordered list (pass2-14); AO3's
     /// save step keeps it a pushed screen rather than an in-place mode.
     @State private var isReorderingSeries = false
+    /// The title this series was last saved with from here, until the list behind is read again.
+    @State private var savedTitle: String?
 
     /// Whether the signed-in account is one of this series' creators — the gate on
     /// 1br's Edit series.
@@ -51,7 +53,7 @@ struct AO3SeriesDetailView: View {
     var body: some View {
         List {
             Section {
-                AO3SeriesRow(series: series)
+                AO3SeriesRow(series: shownSeries)
                     .cardRow()
             }
 
@@ -148,6 +150,23 @@ struct AO3SeriesDetailView: View {
                 await load(page: 1, replace: true)
             }
             .onDisappear { loadTask?.cancel() }
+            // A save, a new order or a removal in the edit screens: the works are read again past
+            // the cache, and the header takes the saved title. It showed the old ones until pulled.
+            .onChange(of: auth.lastSeriesWrite) { _, write in
+                guard let write, write.seriesID == series.id else { return }
+                if let title = write.title { savedTitle = title }
+                Task {
+                    // As a pull to refresh does: the HTTP cache under the page cache too.
+                    await AO3Client.shared.invalidateCachedResponses()
+                    startLoad(page: 1, replace: true, bypassCache: true)
+                }
+            }
+    }
+
+    private var shownSeries: AO3SeriesSummary {
+        var shown = series
+        if let savedTitle { shown.title = savedTitle }
+        return shown
     }
 
     @ViewBuilder

@@ -231,8 +231,28 @@ extension AO3AuthService {
         if form.openOnAO3ForCreate && form.seriesID == nil {
             throw AO3WorkWriteError.seriesCreateUnavailable
         }
-        return try await submitWorkForm(
-            form.actionURL, form.parameters(), referer: form.actionURL
+        do {
+            let message = try await submitWorkForm(
+                form.actionURL, form.parameters(), referer: form.actionURL
+            )
+            await seriesWasWritten(form.seriesID, title: form.title)
+            return message
+        } catch AO3WorkWriteError.unconfirmed {
+            // AO3 may have saved it: what is kept of the series is in doubt too.
+            await seriesWasWritten(form.seriesID, title: nil)
+            throw AO3WorkWriteError.unconfirmed
+        }
+    }
+
+    /// Once AO3 has been sent a series write, the pages kept of that series from before it are not
+    /// what AO3 has, whatever it answered, and the screens showing the series read it again. The
+    /// series page went on showing the old title, order and works after a save, and the cache
+    /// answered with them for five minutes (T-378; Android `WritingSeriesState.seriesChanged`).
+    private func seriesWasWritten(_ seriesID: Int?, title: String?) async {
+        guard let seriesID else { return }
+        await AO3AuthorPageCache.shared.removeSeries(id: seriesID, creator: username)
+        lastSeriesWrite = AO3SeriesWrite(
+            seriesID: seriesID, count: (lastSeriesWrite?.count ?? 0) + 1, title: title
         )
     }
 
@@ -292,6 +312,7 @@ extension AO3AuthService {
             ajax: false
         )
         let (_, body) = try await submitWrite(request, using: client)
+        await seriesWasWritten(seriesID, title: nil)
         if let error = AO3Client.workWriteError(in: body) {
             throw AO3WorkWriteError.rejected(error)
         }
@@ -340,6 +361,7 @@ extension AO3AuthService {
             ajax: false
         )
         let (_, body) = try await submitWrite(request, using: client)
+        await seriesWasWritten(seriesID, title: nil)
         if let error = AO3Client.workWriteError(in: body) {
             throw AO3WorkWriteError.rejected(error)
         }
