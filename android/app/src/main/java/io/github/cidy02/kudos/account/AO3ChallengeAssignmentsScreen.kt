@@ -35,6 +35,9 @@ import io.github.cidy02.kudos.settings.SettingsActionRow
 import io.github.cidy02.kudos.settings.SettingsPanel
 import io.github.cidy02.kudos.ui.components.KudosRefreshBox
 import io.github.cidy02.kudos.ui.subject.*
+import io.github.cidy02.kudos.ui.subject.dialogGround
+import io.github.cidy02.kudos.ui.subject.subjectPanel
+import androidx.compose.foundation.layout.Column
 import io.github.cidy02.kudos.writing.writingSuggestionPanel
 import kotlinx.coroutines.launch
 
@@ -66,7 +69,7 @@ fun AO3ChallengeAssignmentsScreen(slug: String, title: String, viewerIsOwner: Bo
     } })
     state.picking?.let { kind ->
         Dialog(onDismissRequest = { model.cancel() }) {
-            SettingsPanel(Modifier.fillMaxWidth()) {
+            Column(Modifier.fillMaxWidth().dialogGround().subjectPanel()) {
                 LazyColumn(Modifier.heightIn(max = 560.dp).testTag("Assignment candidates")) {
                     item { AssignmentText(kind.title, true, Modifier.padding(16.dp)) }
                     itemsIndexed(state.candidates(kind), key = { _, row -> row.id }) { _, row ->
