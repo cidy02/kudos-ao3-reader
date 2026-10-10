@@ -344,7 +344,16 @@ final class CommentSubmissionGuard {
 /// offline): by the session, so that it is never mistaken for another account's.
 enum CommentDraftIdentity {
     static let unnamedSessionPrefix = "unknown-session:"
-    static func unnamedSession(_ generation: Int) -> String { "\(unnamedSessionPrefix)\(generation)" }
+    /// New at every launch. The session count starts again each time the app does, so
+    /// "session 1" of an earlier launch may have been another account's, and the drafts
+    /// left under it were handed to whoever was named as session 1 this time (audit A30-2).
+    /// ponytail: a draft typed in a launch that never learns the account's name stays on
+    /// disk and is not shown again. To carry it to the next launch, keep an owner token
+    /// with the stored session and change it at every sign-in and sign-out.
+    private static let launch = UUID().uuidString
+    static func unnamedSession(_ generation: Int) -> String {
+        "\(unnamedSessionPrefix)\(launch):\(generation)"
+    }
 }
 
 /// Per-context comment drafts, persisted so nothing typed is lost to a dismissal,
