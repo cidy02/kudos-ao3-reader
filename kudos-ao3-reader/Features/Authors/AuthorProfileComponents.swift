@@ -166,6 +166,7 @@ struct AO3AuthorAvatar: View {
 
 struct AO3SeriesRow: View {
     @Environment(ThemeManager.self) private var themeManager
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let series: AO3SeriesSummary
     var presentation: WorkRow.Presentation = .standard
 
@@ -223,7 +224,7 @@ struct AO3SeriesRow: View {
                         .font(.system(size: titleSize, weight: .semibold))
                         .foregroundStyle(.primary)
                         .padding(.top, 1)
-                        .lineLimit(2)
+                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? 4 : 2)
                 }
             }
 
@@ -235,34 +236,54 @@ struct AO3SeriesRow: View {
                     .lineLimit(3)
             }
 
-            HStack(spacing: 8) {
-                if let workCount = series.workCount {
-                    Text(workCount == 1 ? "1 work" : "\(workCount) works")
-                }
-                if series.words != nil, series.workCount != nil {
-                    Text("·").foregroundStyle(.tertiary)
-                }
-                if let words = series.words {
-                    Text("\(words.formatted()) words")
-                }
-                if series.bookmarkCount != nil, series.workCount != nil || series.words != nil {
-                    Text("·").foregroundStyle(.tertiary)
-                }
-                if let bookmarks = series.bookmarkCount {
-                    Text(bookmarks == 1 ? "1 bookmark" : "\(bookmarks.formatted()) bookmarks")
-                }
-                Spacer(minLength: 8)
-                if !series.dateUpdated.isEmpty {
-                    Text(series.dateUpdated)
+            Group {
+                if dynamicTypeSize.isAccessibilitySize {
+                    // Side by side, each figure had a column a few letters wide at the
+                    // accessibility sizes ("9,00 / 1 / word / s"): one line that wraps
+                    // between figures, and the date under it.
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(figures.joined(separator: "  ·  "))
+                        if !series.dateUpdated.isEmpty {
+                            Text(series.dateUpdated)
+                        }
+                    }
+                } else {
+                    HStack(spacing: 8) {
+                        ForEach(Array(figures.enumerated()), id: \.offset) { index, figure in
+                            if index > 0 {
+                                Text("·").foregroundStyle(.tertiary)
+                            }
+                            Text(figure)
+                        }
+                        Spacer(minLength: 8)
+                        if !series.dateUpdated.isEmpty {
+                            Text(series.dateUpdated)
+                        }
+                    }
                 }
             }
             .font(.system(size: metaSize))
             .foregroundStyle(.secondary)
 
-            AO3AuthorBylineView(names: series.creatorNames, identities: series.creatorIdentities, compact: true)
+            AO3AuthorBylineView(
+                names: series.creatorNames, identities: series.creatorIdentities,
+                compact: !dynamicTypeSize.isAccessibilitySize
+            )
         }
+        // Its own height at the accessibility sizes: the list gave the taller card less than
+        // it needed, and the title and the figures were cut to fit ("The Daw…").
+        .fixedSize(horizontal: false, vertical: dynamicTypeSize.isAccessibilitySize)
         .padding(.vertical, 16)
         .padding(.horizontal, 18)
+    }
+
+    /// The counts AO3 printed for the series, in its order, each with its noun.
+    private var figures: [String] {
+        [
+            series.workCount.map { $0 == 1 ? "1 work" : "\($0) works" },
+            series.words.map { "\($0.formatted()) words" },
+            series.bookmarkCount.map { $0 == 1 ? "1 bookmark" : "\($0.formatted()) bookmarks" }
+        ].compactMap { $0 }
     }
 
     private var primaryFandom: String {
