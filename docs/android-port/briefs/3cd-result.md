@@ -348,3 +348,20 @@ emulator.**
 - Not read line by line: the two screens' layout code, `AO3BulkEdit.kt`'s parser and the
   demo's bulk answers. A Codex review of the landed code is owed.
 
+### Seen on the emulator (Claude, 2026-10-10, Light, airplane mode, the demo's local answers)
+
+The writer's own Works with its three rows and their action buttons; Select Works, Select All,
+"3 selected" and the bar (Edit 3, Collections, Visibility, Delete); Delete naming all three
+titles, refused ("The Keeper’s Copy could not be deleted."), the selection kept; Edit 3,
+Rating, Explicit, Save, back on the list with the selection kept.
+
+**Found and fixed:** after the Save the rows still showed the old rating until the list was
+pulled, and the kept page (brief 3ce) would have gone on showing it for five minutes. The list
+is now read again from AO3 after a saved bulk edit, as it already was after a row's edit and
+after a delete (`author/AuthorProfileScreen.kt`; new test
+`OwnWorksScreenTest.aSavedBulkEditReadsTheListAgainFromAO3`, which fails without the fix).
+iOS has the same fault (`EditMultipleWorksView.save` dismisses and nothing reads the list
+again): an iOS item in the Living Prompt §5c.
+
+Not seen: a row's Edit, Tags, Chapter and Delete; the Collections and Visibility entrances; a
+bulk delete that succeeds; Dark, Sepia, OLED and twice the text size.
