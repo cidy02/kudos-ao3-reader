@@ -39,6 +39,18 @@
     </select>
     <input type="checkbox" name="work[archive_warning_strings][]" value="Choose Not To Use Archive Warnings">
     <input type="checkbox" name="work[archive_warning_strings][]" value="No Archive Warnings Apply">
+    <input type="checkbox" name="work[category_strings][]" value="Gen" id="bulk_gen"><label for="bulk_gen">Gen</label>
+    <input type="checkbox" name="work[category_strings][]" value="F/F" id="bulk_ff"><label for="bulk_ff">F/F</label>
+    <fieldset><legend>Only show to registered users</legend>
+      <label><input type="radio" name="work[restricted]" value="">Leave as is</label>
+      <label><input type="radio" name="work[restricted]" value="1">On</label>
+      <label><input type="radio" name="work[restricted]" value="0">Off</label>
+    </fieldset>
+    <fieldset><legend>Enable comment moderation</legend>
+      <label><input type="radio" name="work[moderated_commenting_enabled]" value="">Leave as is</label>
+      <label><input type="radio" name="work[moderated_commenting_enabled]" value="1">On</label>
+      <label><input type="radio" name="work[moderated_commenting_enabled]" value="0">Off</label>
+    </fieldset>
     <input type="text" name="work[fandom_string]" value="">
     <input type="text" name="work[relationship_string]" value="">
     <input type="text" name="work[character_string]" value="">

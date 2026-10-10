@@ -7,6 +7,11 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.outlined.Checklist
+import io.github.cidy02.kudos.ui.components.rememberRemoteWorkSelection
+import io.github.cidy02.kudos.network.ao3.writing.AO3WorkFormRepository
+import io.github.cidy02.kudos.writing.*
 import androidx.compose.material.icons.outlined.FilterList
 import io.github.cidy02.kudos.auth.AO3AuthRepository
 import io.github.cidy02.kudos.search.SearchFilterSheet
@@ -65,12 +70,17 @@ fun AuthorProfileScreen(
     seriesFormRepository: io.github.cidy02.kudos.network.ao3.writing.AO3SeriesFormRepository? = null,
     seriesWrites: io.github.cidy02.kudos.network.ao3.writes.AO3WriteRepository? = null,
     modifier: Modifier = Modifier,
-    authRepository: AO3AuthRepository? = null
+    authRepository: AO3AuthRepository? = null,
+    workFormRepository: AO3WorkFormRepository? = null,
+    autocompleteRepository: io.github.cidy02.kudos.network.ao3.search.AO3TagAutocompleteRepository? = null,
+    settingsRepository: io.github.cidy02.kudos.data.preferences.SettingsRepository? = null,
+    workImporter: io.github.cidy02.kudos.works.WorkImporter? = null,
+    readingQueueRepository: io.github.cidy02.kudos.library.ReadingQueueRepository? = null
 ) {
-    val account by (seriesFormRepository?.auth?.state?.collectAsState() ?: remember {
+    val account by ((authRepository ?: seriesFormRepository?.auth)?.state?.collectAsState() ?: remember {
         mutableStateOf<io.github.cidy02.kudos.auth.AO3AuthState>(io.github.cidy02.kudos.auth.AO3AuthState.SignedOut) })
     val signedInUsername = (account as? io.github.cidy02.kudos.auth.AO3AuthState.SignedIn)?.username
-    val ownSeriesList = signedInUsername?.equals(username, true) == true
+    val ownSeriesList = isOwnWorks(signedInUsername, username)
     var editingSeries by remember(username) { mutableStateOf<Pair<AO3AuthorSeriesSummary, Boolean>?>(null) }
     var route by remember(username, initialPseud) {
         mutableStateOf(AO3AuthorRoute(username.trim(), initialPseud?.trim()?.takeIf { it.isNotBlank() }))
@@ -93,7 +103,7 @@ fun AuthorProfileScreen(
     var scopeState by remember { mutableStateOf(AO3AuthorWorksScope.Works) }
     var displayMode by remember { mutableStateOf(AuthorDisplayMode.Detailed) }
     
-    val sessionGeneration by (authRepository?.generation ?: kotlinx.coroutines.flow.flowOf(0)).collectAsState(initial = 0)
+    val sessionGeneration by (authRepository?.generation?.collectAsState() ?: remember { mutableStateOf(0) })
     var worksSort by remember(route.id, sessionGeneration) { mutableStateOf(AO3AuthorWorksSort()) }
     var worksFilters by remember(route.id, sessionGeneration) { mutableStateOf(AO3SearchFilters()) }
     var showingWorksFilters by remember(route.id, sessionGeneration) { mutableStateOf(false) }
@@ -105,7 +115,20 @@ fun AuthorProfileScreen(
     val scope = rememberCoroutineScope()
     val tokens = LocalKudosTokens.current
 
-    fun loadHeader() {
+    val selection = rememberRemoteWorkSelection()
+    val ownWorks = isOwnWorks(signedInUsername, route.username) && tab == AuthorTab.Works && !isDashboard &&
+        scopeState != AO3AuthorWorksScope.Gifts
+    var rowAction by remember(username) { mutableStateOf<Pair<AO3WorkSummary, String>?>(null) }
+    var bulkModel by remember(username) { mutableStateOf<WritingBulkEditState?>(null) }
+    var bulkFocus by remember(username) { mutableStateOf<String?>(null) }
+    var heldDelete by remember(username) { mutableStateOf<OwnWorksDeleteState?>(null) }
+    val currentDelete = remember(seriesWrites, username, sessionGeneration) { seriesWrites?.let { OwnWorksDeleteState(it, sessionGeneration) } }
+    val deletes = heldDelete ?: currentDelete
+    val deleteState by (deletes?.state ?: kotlinx.coroutines.flow.flowOf(OwnWorksDeleteUi())).collectAsState(initial = OwnWorksDeleteUi())
+    var readingBusy by remember { mutableStateOf(false) }
+    var readingStatus by remember { mutableStateOf<String?>(null) }
+
+    fun loadHeader(afterLoad: (() -> Unit)? = null) {
         val expectedRoute = route
         val expectedSession = sessionGeneration
         val generation = ++headerGeneration
@@ -121,6 +144,7 @@ fun AuthorProfileScreen(
                 is AO3Result.Failure -> headerError = result.error
             }
             headerLoading = false
+            if (result is AO3Result.Success) afterLoad?.invoke()
         }
     }
 
@@ -191,7 +215,7 @@ fun AuthorProfileScreen(
     // iOS activation waits for a usable header before reading the selected index.
     // A missing/refused author must not trigger another read known to be unusable.
     LaunchedEffect(header, route.id, sessionGeneration) {
-        if (header != null && !isDashboard && works == null && tab == AuthorTab.Works) {
+        if (header != null && !isDashboard && works == null && !tabLoading && tabError == null && tab == AuthorTab.Works) {
             loadTab(AuthorTab.Works, 1)
         }
     }
@@ -200,7 +224,26 @@ fun AuthorProfileScreen(
     var showMenu by remember { mutableStateOf(false) }
 
     val workHue = remember(route.displayName) { HomeFacts.workHue(emptyList(), route.displayName) }
-    val palette = remember(workHue, tokens.theme) { SubjectPalette.fromHue(workHue, tokens.theme) }
+    val palette = if (ownSeriesList) tokens.scopePalette else remember(workHue, tokens.theme) { SubjectPalette.fromHue(workHue, tokens.theme) }
+
+    LaunchedEffect(route.id, sessionGeneration, tab, scopeState) { selection.exit() }
+    LaunchedEffect(deleteState.confirmed) {
+        if (deleteState.confirmed > 0) { selection.exit(); heldDelete = null; loadHeader { loadTab(tab, 1) } }
+    }
+    DisposableEffect(deletes) { onDispose { deletes?.close() } }
+    val bulk = bulkModel
+    if (bulk != null) {
+        WritingBulkEditScreen(bulk, bulkFocus, onBack = { bulkModel = null }, onSaved = { bulkModel = null },
+            autocomplete = autocompleteRepository, settings = settingsRepository)
+        return
+    }
+    val row = rowAction
+    if (row != null && workFormRepository != null && authRepository != null && seriesWrites != null) {
+        WritingOwnWorkScreen(row.first, row.second, workFormRepository, authRepository, seriesWrites,
+            autocompleteRepository, settingsRepository, onBack = { rowAction = null },
+            onChanged = { loadHeader { loadTab(tab, 1) } }, seriesRepository = seriesFormRepository)
+        return
+    }
 
     val edit = editingSeries
     if (edit != null && seriesFormRepository != null && seriesWrites != null) {
@@ -212,10 +255,32 @@ fun AuthorProfileScreen(
         return
     }
 
+    deleteState.pending?.let { pending ->
+        AlertDialog(onDismissRequest = { deletes?.cancel(); heldDelete = null }, containerColor = tokens.cardFill,
+            title = { Text(ownWorksDeleteTitle(pending), color = tokens.primaryInk, lineHeight = 28.sp) },
+            text = { Text(ownWorksDeleteMessage(pending), color = tokens.secondaryInk, lineHeight = 22.sp) },
+            confirmButton = { TextButton(onClick = { scope.launch { deletes?.confirm() } }) {
+                Text("Delete on AO3", color = SubjectPalette.fromHue(0.0, tokens.theme).accent, lineHeight = 20.sp) } },
+            dismissButton = { TextButton(onClick = { deletes?.cancel(); heldDelete = null }) { Text("Cancel", color = tokens.scopePalette.accent, lineHeight = 20.sp) } })
+    }
+    deleteState.error?.let { message ->
+        AlertDialog(onDismissRequest = { deletes?.dismissError(); heldDelete = null }, containerColor = tokens.cardFill,
+            title = { Text("Couldn’t delete", color = tokens.primaryInk, lineHeight = 28.sp) },
+            text = { Text(message, color = tokens.secondaryInk, lineHeight = 22.sp) },
+            confirmButton = { TextButton(onClick = { deletes?.dismissError(); heldDelete = null }) { Text("OK", color = tokens.scopePalette.accent, lineHeight = 20.sp) } })
+    }
     ProvidePushedShellChrome(
         hasSubjectHeader = true,
+        customTitle = if (selection.isSelecting) "${selection.selectedIn(works?.works.orEmpty()).size} selected" else null,
         trailingContent = {
-            if (!isDashboard && tab == AuthorTab.Works) {
+            if (selection.isSelecting) {
+                val loaded = works?.works.orEmpty()
+                TextButton(onClick = { selection.toggleSelectAll(loaded.map { it.id }) }, enabled = loaded.isNotEmpty()) {
+                    Text(if (loaded.isNotEmpty() && loaded.all { selection.isSelected(it.id) }) "Deselect All" else "Select All",
+                        color = tokens.scopePalette.accent, lineHeight = 20.sp)
+                }
+                IconButton(onClick = selection::exit) { Icon(Icons.Default.Check, "Done", tint = tokens.scopePalette.accent) }
+            } else if (!isDashboard && tab == AuthorTab.Works) {
                 val activeCount = worksSort.activeCount + worksFilters.activeCountForRefine
                 ToolbarCircleButton(onClick = { showingWorksFilters = true }, accessibilityName = "Sort and filter",
                     palette = tokens.scopePalette, isAccented = activeCount > 0,
@@ -223,7 +288,12 @@ fun AuthorProfileScreen(
                     Icon(Icons.Outlined.FilterList, null)
                 }
             }
-            Box {
+            if (!selection.isSelecting && ownWorks && !works?.works.isNullOrEmpty()) {
+                ToolbarCircleButton(onClick = { selection.enter() }, accessibilityName = "Select Works", palette = tokens.scopePalette) {
+                    Icon(Icons.Outlined.Checklist, null)
+                }
+            }
+            if (!selection.isSelecting) Box {
                 ToolbarCircleButton(
                     onClick = { showMenu = true },
                     accessibilityName = "Menu",
@@ -232,6 +302,10 @@ fun AuthorProfileScreen(
                     Icon(Icons.Default.MoreVert, contentDescription = null)
                 }
                 DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+                    if (!isDashboard && !ownWorks && tab == AuthorTab.Works && !works?.works.isNullOrEmpty()) {
+                        DropdownMenuItem(text = { Text("Select Works", color = tokens.primaryInk, lineHeight = 22.sp) },
+                            onClick = { showMenu = false; selection.enter() })
+                    }
                     if (isDashboard) {
                         DropdownMenuItem(
                             text = { Text("My Works") },
@@ -308,11 +382,12 @@ fun AuthorProfileScreen(
             })
     }
 
+    Column(modifier.fillMaxSize()) {
     LazyColumn(
-        modifier = modifier
+        modifier = Modifier.weight(1f)
             .testTag("Author profile")
             .fillMaxSize()
-            .subjectScreenWash(palette = SubjectPalette.fromHue(HomeFacts.workHue(emptyList(), route.displayName), tokens.theme))
+            .subjectScreenWash(palette)
             .padding(horizontal = 16.dp),
         contentPadding = PaddingValues(top = 24.dp, bottom = 48.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
@@ -355,14 +430,14 @@ fun AuthorProfileScreen(
             if (h != null) {
                 item {
                     Column(modifier = Modifier.padding(top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 56.dp)) {
-                        if (isDashboard) {
+                        if (isDashboard || ownSeriesList) {
                             SubjectHeaderBlock(
                                 kicker = "AO3 Account",
-                                title = route.displayName,
-                                subtitle = null,
-                                palette = SubjectPalette.fromHue(HomeFacts.workHue(emptyList(), route.displayName), tokens.theme)
+                                title = if (isDashboard) route.displayName else tab.label,
+                                subtitle = if (isDashboard) null else route.displayName,
+                                palette = palette
                             )
-                            if (h.pseuds.size > 1) {
+                            if (isDashboard && h.pseuds.size > 1) {
                                 Spacer(Modifier.size(8.dp))
                                 LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                     item {
@@ -521,17 +596,29 @@ fun AuthorProfileScreen(
                             
                             val pageData = works
                             val visibleWorks = pageData?.works.orEmpty().filter { worksFilters.matchesSummary(it) }
+                            if (selection.isSelecting) item {
+                                SectionRuleHeader(if (ownWorks) "Your works" else "Works", countText = "${selection.selectedIn(pageData?.works.orEmpty()).size} / ${pageData?.works.orEmpty().size}")
+                            }
                             if (pageData == null || visibleWorks.isEmpty()) {
                                 item { EmptyStateCard("No works", "No works by this author are visible to you on AO3.") }
                             } else {
                                 items(visibleWorks, key = { it.id }) { work ->
-                                    AO3AuthorWorkCard(
-                                        work = work,
-                                        displayMode = displayMode,
-                                        expandAll = false,
-                                        showsPerformance = false, // on own profile it could be true
-                                        onOpenWork = onOpenWork
-                                    )
+                                    if (selection.isSelecting) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            IconButton(onClick = { selection.toggle(work.id) }) {
+                                                Icon(if (selection.isSelected(work.id)) Icons.Default.Check else Icons.Outlined.Checklist,
+                                                    if (selection.isSelected(work.id)) "Deselect ${work.title}" else "Select ${work.title}",
+                                                    tint = tokens.scopePalette.accent)
+                                            }
+                                            AO3AuthorWorkCard(work, displayMode, false, ownWorks,
+                                                onOpenWork = { selection.toggle(work.id) }, modifier = Modifier.weight(1f))
+                                        }
+                                    } else if (ownWorks && workFormRepository != null && seriesWrites != null) {
+                                        OwnWorkRow(work, onAction = { action ->
+                                            if (action == "delete") { heldDelete = deletes; deletes?.ask(listOf(work), multiple = false) }
+                                            else rowAction = work to action
+                                        }) { AO3AuthorWorkCard(work, displayMode, false, true, onOpenWork) }
+                                    } else AO3AuthorWorkCard(work, displayMode, false, false, onOpenWork)
                                 }
                                 item {
                                     PagerRow(
@@ -676,6 +763,27 @@ fun AuthorProfileScreen(
             }
         }
     }
+    if (selection.isSelecting) {
+        val picked = selection.selectedIn(works?.works.orEmpty())
+        if (ownWorks && seriesWrites != null) OwnWorksBulkBar(picked.size, deleteState.busy,
+            onEdit = { focus ->
+                bulkFocus = focus
+                bulkModel = WritingBulkEditState(picked.map { it.id }, seriesWrites, sessionGeneration)
+            }, onDelete = { heldDelete = deletes; deletes?.ask(picked) }, modifier = Modifier.padding(16.dp).navigationBarsPadding())
+        else if (workImporter != null && readingQueueRepository != null) {
+            io.github.cidy02.kudos.ui.components.RemoteWorkSelectionBar(selection, readingBusy,
+                onSaveToLibrary = { scope.launch { readingBusy = true
+                    try { readingStatus = io.github.cidy02.kudos.ui.components.RemoteWorkBulkActions.saveToLibrary(picked, workImporter); selection.exit() }
+                    finally { readingBusy = false }
+                } }, onSaveForLater = { scope.launch { readingBusy = true
+                    try { readingStatus = io.github.cidy02.kudos.ui.components.RemoteWorkBulkActions.saveForLater(picked, workImporter, readingQueueRepository); selection.exit() }
+                    finally { readingBusy = false }
+                } })
+        }
+    }
+    readingStatus?.let { Text(it, color = tokens.secondaryInk, lineHeight = 20.sp, modifier = Modifier.padding(16.dp)) }
+    }
+
 }
 
 @Composable
