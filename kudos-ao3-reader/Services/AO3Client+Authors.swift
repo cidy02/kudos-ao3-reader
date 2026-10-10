@@ -664,6 +664,20 @@ actor AO3AuthorPageCache {
         }
     }
 
+    /// A series was written to: every kept page of it, and of its creator's series list, is no
+    /// longer what AO3 has, for any viewer. Kept, they answered for five minutes with the old
+    /// title, order and works (T-378).
+    func removeSeries(id: Int, creator: String?) {
+        let seriesPath = "/series/\(id)"
+        let listPrefix = creator.map { "/users/\($0.lowercased())/" }
+        entries = entries.filter { key, _ in
+            let path = key.url.path.lowercased()
+            if path == seriesPath { return false }
+            if let listPrefix, path.hasPrefix(listPrefix), path.hasSuffix("/series") { return false }
+            return true
+        }
+    }
+
     func removeAuthorDashboards(username: String, authenticationScope: String) {
         entries = entries.filter { key, _ in
             guard key.authenticationScope == authenticationScope,

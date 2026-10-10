@@ -290,6 +290,14 @@ nonisolated enum AO3RequestDefaults {
 /// The sole authentication API exposed to the rest of the app. UI and future AO3
 /// feature clients interact with this service; only the service knows that login
 /// is implemented through WebKit.
+/// A series write that was sent: which series, how many so far (so two writes to one series are
+/// two changes), and the title it was saved with, when the write was the form's own save.
+nonisolated struct AO3SeriesWrite: Equatable, Sendable {
+    let seriesID: Int
+    let count: Int
+    let title: String?
+}
+
 @MainActor
 @Observable
 final class AO3AuthService {
@@ -309,6 +317,9 @@ final class AO3AuthService {
     /// async results from an earlier credential set. Queued writes re-read this
     /// value after `pace()` and will not send a Cookie built for an older value.
     private(set) var sessionGeneration = 0
+    /// The last series write AO3 was sent, for the screens that show that series: they read it
+    /// again. Set by `AO3WorkActions`; nothing else writes it.
+    var lastSeriesWrite: AO3SeriesWrite?
 
     /// Distinguishes two auth services that happen to be at the same generation.
     private let writeSessionID = UUID()
