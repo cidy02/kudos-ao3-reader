@@ -104,7 +104,7 @@ fun spokenFormLabel(label: String): String =
     if (label.endsWith(REQUIRED_MARK)) label.removeSuffix(REQUIRED_MARK) + ", required" else label
 
 /** [byControl]: the row's own control (a text field) says "…, required"; the label beside it says the name. */
-private fun Modifier.spokenAs(label: String, byControl: Boolean = false): Modifier = when {
+internal fun Modifier.spokenAs(label: String, byControl: Boolean = false): Modifier = when {
     !label.endsWith(REQUIRED_MARK) -> this
     byControl -> semantics { contentDescription = label.removeSuffix(REQUIRED_MARK) }
     else -> semantics { contentDescription = spokenFormLabel(label) }
@@ -113,6 +113,8 @@ private fun Modifier.spokenAs(label: String, byControl: Boolean = false): Modifi
 /**
  * A labelled form row. [trailing] replaces the value, as a switch or a swatch does.
  * [valueMaxLines] above one lets a value the reader has to see whole wrap instead of being cut.
+ * [labelSpokenByControl]: [trailing] is a field that itself says "…, required", so the label does not
+ * say it a second time. Any other trailing content (a count, a switch) leaves the label to say it.
  */
 @Composable
 fun SubjectFormRow(
@@ -122,6 +124,7 @@ fun SubjectFormRow(
     showsDisclosure: Boolean = false,
     onClick: (() -> Unit)? = null,
     valueMaxLines: Int = 1,
+    labelSpokenByControl: Boolean = false,
     trailing: (@Composable () -> Unit)? = null
 ) {
     val tokens = LocalKudosTokens.current
@@ -156,7 +159,7 @@ fun SubjectFormRow(
             val hasValue = trailing == null && value != null
             Text(
                 text = label,
-                modifier = (if (hasValue) Modifier else Modifier.weight(1f)).spokenAs(label, byControl = trailing != null),
+                modifier = (if (hasValue) Modifier else Modifier.weight(1f)).spokenAs(label, byControl = labelSpokenByControl),
                 color = tokens.primaryInk,
                 fontSize = 14.5.sp,
                 lineHeight = 20.sp

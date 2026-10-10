@@ -121,6 +121,13 @@ class CommentsViewModel(
     private val _composerPresented = MutableStateFlow(false)
     val composerPresented: StateFlow<Boolean> = _composerPresented.asStateFlow()
 
+    /**
+     * Counts every opening and closing of the composer and every change of what it is for. Reading the
+     * draft store suspends: a draft that comes back after the count moved belongs to a composer that is
+     * gone, and putting it in the field sent a new comment's text as a reply (audits A28-1, A30-1).
+     */
+    private var composerGeneration = 0
+
     private val _expandedRootIds = MutableStateFlow<Set<Long>>(emptySet())
     val expandedRootIds: StateFlow<Set<Long>> = _expandedRootIds.asStateFlow()
 
@@ -220,7 +227,11 @@ class CommentsViewModel(
             ensureActive()
             val root = (thread as? AO3Result.Success)?.value?.comments
                 ?.firstOrNull { findCommentRecursive(listOf(it), commentId) != null }
-            val chapterId = root?.let { findCommentRecursive(listOf(it), commentId)?.chapterId ?: it.chapterId }
+            // iOS `chapterRef(in:)`: the first comment of the thread, root first, that names a chapter
+            // gives the chapter and its number. The Inbox's own number was shown instead, and a reply's
+            // chapter was taken before its root's (audits A30-6, A30-7).
+            val named = root?.let(::firstNamingChapter)
+            val chapterId = named?.chapterId
             if (root == null || chapterId == null) {
                 // A failure is shown as one and Try Again asks again; a thread that names no chapter is the screen.
                 if (thread is AO3Result.Success) pendingChapterComments = null
@@ -240,7 +251,8 @@ class CommentsViewModel(
                 _scope.value = CommentScope.ByChapter
                 if (_selectedChapter.value?.chapterId != chapterId) {
                     _selectedChapter.value = _chapters.value.firstOrNull { it.chapterId == chapterId }
-                        ?: AO3ChapterRef(chapterId, position, "")
+                        ?: AO3ChapterRef(chapterId,
+                            named.chapterLabel?.let { Regex("\\d+").find(it)?.value?.toIntOrNull() } ?: position, "")
                 }
             }
             present(chapter, page, first = root.takeIf {
@@ -248,6 +260,9 @@ class CommentsViewModel(
             })
         }
     }
+
+    private fun firstNamingChapter(comment: AO3Comment): AO3Comment? =
+        if (comment.chapterId != null) comment else comment.replies.firstNotNullOfOrNull(::firstNamingChapter)
 
     private fun collectIds(comments: List<AO3Comment>, into: MutableSet<String>) {
         for (comment in comments) { comment.id?.let(into::add); collectIds(comment.replies, into) }
@@ -262,10 +277,14 @@ class CommentsViewModel(
                 // The thread put first must not repeat a comment the page already shows: the list keys
                 // its rows by comment id, and a second row with the same key crashes it (seen in the
                 // demo, whose one comments page serves as both).
-                val onPage = mutableSetOf<String>().also { collectIds(sorted.comments, it) }
-                val thread = if (first == null) sorted else sorted.copy(comments = listOf(first.without(onPage)) + sorted.comments)
+                // The page's own copy of that thread gives way to the one read for the reader: the page
+                // can hold the root without the reply that was asked for (audit A30-10).
+                val rest = if (first == null) sorted.comments else sorted.comments.filter { it.id != first.id }
+                val onPage = mutableSetOf<String>().also { collectIds(rest, it) }
+                val thread = if (first == null) sorted else sorted.copy(comments = listOf(first.without(onPage)) + rest)
                 _state.value = CommentsUiState.Loaded(thread)
                 // Restore a top-level draft on initial load.
+                val untouched = composerGeneration
                 val draftContent = draftStore?.getDraft(
                     workId = target.workId,
                     chapterId = (target as? AO3CommentTarget.Chapter)?.chapterId,
@@ -276,7 +295,8 @@ class CommentsViewModel(
                 // just after Reply was tapped put the work's own draft into the reply, where it was
                 // saved, and sent, as that reply (audit A28-1). Each composer reads its own draft when
                 // it opens.
-                if (draftContent != null && _draft.value.isEmpty() && _editTarget.value == null &&
+                if (draftContent != null && _draft.value.isEmpty() && composerGeneration == untouched &&
+                    _editTarget.value == null &&
                     _replyTarget.value == null && !_composerPresented.value && _currentTarget.value == target) {
                     _draft.value = draftContent
                 }
@@ -292,14 +312,27 @@ class CommentsViewModel(
         }
     }
 
+    /** Who [_chapters] was read for. AO3 serves a signed-in reader chapters a guest is not shown. */
+    private var chaptersViewer: String? = null
+
     fun loadChaptersIfNeeded(chapterIndexRepository: AO3ChapterIndexRepository?) {
         val target = _currentTarget.value ?: return
-        if (chapterIndexRepository == null || _chapters.value.isNotEmpty()) return
+        val viewer = currentUsername()
+        // A list read before the session was restored is the guest's: it is read again for the reader
+        // who is now signed in, where it used to be kept because it was not empty (audit A30-11).
+        if (chapterIndexRepository == null || (_chapters.value.isNotEmpty() && chaptersViewer == viewer)) return
         viewModelScope.launch {
-            when (val res = chapterIndexRepository.chapters(target.workId)) {
+            val res = chapterIndexRepository.chapters(target.workId)
+            if (currentUsername() != viewer) return@launch
+            when (res) {
                 is AO3Result.Success -> {
                     _chapters.value = res.value
+                    chaptersViewer = viewer
                     _chaptersFailed.value = false
+                    // The chapter Chapter Comments named from a byline gets its title and true number.
+                    _selectedChapter.value?.let { chosen ->
+                        res.value.firstOrNull { it.chapterId == chosen.chapterId }?.let { _selectedChapter.value = it }
+                    }
                     if (_selectedChapter.value == null && res.value.isNotEmpty()) {
                         val initialChapterId = (initialTarget as? AO3CommentTarget.Chapter)?.chapterId
                         val matched = if (initialChapterId != null) {
@@ -318,7 +351,9 @@ class CommentsViewModel(
     }
 
     fun setScope(next: CommentScope) {
-        if (_scope.value == next) return
+        // While Chapter Comments is still loading the scope shown is not yet theirs: choosing "All
+        // comments" then did nothing, and the chapter replaced the choice a moment later (audit A30-5).
+        if (_scope.value == next && pendingChapterComments == null) return
         _scope.value = next
         val target = _currentTarget.value ?: return
         if (next == CommentScope.All) {
@@ -379,16 +414,21 @@ class CommentsViewModel(
                 _editTarget.value = null
                 _composerParent.value = null
                 val target = _currentTarget.value
+                val opening = ++composerGeneration
                 // The stored draft, or nothing, before the sheet can be typed in: the field
                 // used to keep whatever an edit had left in it, and a draft that arrived
                 // late replaced what had been typed meanwhile (audit A18-1).
                 viewModelScope.launch {
-                    _draft.value = if (target == null) "" else draftStore?.getDraft(
+                    val stored = if (target == null) "" else draftStore?.getDraft(
                         workId = target.workId,
                         chapterId = (target as? AO3CommentTarget.Chapter)?.chapterId,
                         parentId = null,
                         username = currentUsername()
                     ).orEmpty()
+                    // Reply or Edit was tapped, or the sheet closed, while the store was read: this
+                    // opening is over, and its draft must not land in what replaced it.
+                    if (composerGeneration != opening) return@launch
+                    _draft.value = stored
                     _composerPresented.value = true
                 }
             }
@@ -397,6 +437,7 @@ class CommentsViewModel(
 
     fun closeComposer() {
         saveDraft()
+        composerGeneration++
         _composerPresented.value = false
         _replyTarget.value = null
         _editTarget.value = null
@@ -429,6 +470,7 @@ class CommentsViewModel(
     fun startReply(comment: AO3Comment) {
         val id = comment.numericId ?: return
         val target = _currentTarget.value
+        val opening = ++composerGeneration
         _replyTarget.value = ReplyTarget(commentId = id, authorName = comment.author.name)
         _composerParent.value = comment
         _editTarget.value = null
@@ -443,7 +485,8 @@ class CommentsViewModel(
                     parentId = id,
                     username = currentUsername()
                 )
-                if (draftContent != null && _draft.value.isEmpty() && _replyTarget.value?.commentId == id) {
+                if (draftContent != null && _draft.value.isEmpty() && composerGeneration == opening &&
+                    _replyTarget.value?.commentId == id) {
                     _draft.value = draftContent
                 }
             }
@@ -451,12 +494,14 @@ class CommentsViewModel(
     }
 
     fun cancelReply() {
+        composerGeneration++
         _replyTarget.value = null
         _composerParent.value = null
         _composerPresented.value = false
     }
 
     fun startEdit(comment: AO3Comment) {
+        composerGeneration++
         _editTarget.value = comment
         _replyTarget.value = null
         _composerParent.value = null
@@ -466,6 +511,7 @@ class CommentsViewModel(
     }
 
     fun cancelEdit() {
+        composerGeneration++
         _editTarget.value = null
         _draft.value = ""
         _composerPresented.value = false
@@ -524,6 +570,7 @@ class CommentsViewModel(
             when (result) {
                 is AO3Result.Success -> {
                     lastSubmittedContentHash = contentHash
+                    composerGeneration++
                     _draft.value = ""
                     _replyTarget.value = null
                     _editTarget.value = null
@@ -579,7 +626,7 @@ class CommentsViewModel(
     }
 
     fun setTarget(target: AO3CommentTarget) {
-        if (_currentTarget.value == target) return
+        if (_currentTarget.value == target && pendingChapterComments == null) return
         _currentTarget.value = target
         load(1)
     }

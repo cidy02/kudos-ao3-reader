@@ -495,3 +495,18 @@ The actual current regression is A30-12: `trailing != null` suppresses required 
 ## What was not read / not verified
 
 All nine requested items received the source audit described above; there is no pending numbered item. No full-repository audit, exhaustive test-suite read, external AO3 behavior check, rendering, builds or test execution was performed. Specified diffs/briefs/results/landing notes, A28/A27 triage, relevant main-source callers and quoted iOS reference paths were read. R5/A14 and R3, plus the earlier 3bl/3ba/3ay results, were not independently re-audited as whole historical reports; the live production/Swift code and current recorded decisions were used for the challenged behavior. The new test suites were read selectively for the specific claims discussed, not as a complete test audit. Existing iOS untracked `Packages` and `Vendor` directories were not modified. Only `docs/android-port/audits/A30-result.md` was created.
+
+## Triage (Claude, 2026-10-09 evening)
+
+| ID | Verdict | What was done |
+|---|---|---|
+| A30-1 | Real | Fixed: one composer count fences every draft lookup. Test fails without it. |
+| A30-5 | Real | Fixed: a scope or target chosen while Chapter Comments is pending is a new load. Test. |
+| A30-6 | Real | Fixed: the number comes from the byline; the index replaces the placeholder. Test. |
+| A30-7 | Real, though AO3 keeps a thread on one chapter | Fixed with A30-6: root first. |
+| A30-9 | Real, debug installs only | Fixed: the demo's entry is dated 1970. An install that already ran the demo is not repaired. |
+| A30-10 | Real | Fixed: the page's copy of the root gives way; the demo page is coherent. Test. |
+| A30-11 | Real | Fixed in the screen's model (the repository was already per session). Test. |
+| A30-12 | Real | Fixed: explicit `labelSpokenByControl`; the stacked label no longer speaks the mark. |
+| A30-2, A30-3, A30-4, A30-8 | iOS | See the iOS task rows (T-376 onwards). |
+

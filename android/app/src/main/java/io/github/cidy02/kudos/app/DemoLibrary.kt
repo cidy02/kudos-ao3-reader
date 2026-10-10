@@ -301,8 +301,9 @@ object DemoLibrary {
         if (!Files.exists(key)) recovery.save("A city that never turns off its lights.", "", key)
         val cache = FandomCatalogCache(cacheRoot)
         if (!Files.exists(cacheRoot.resolve("fandom-catalog.json"))) {
-            cache.save(mapOf("TV Shows" to FandomCatalogCache.Entry(
-                listOf(AO3Fandom("Doctor Who", 42)), clock().toEpochMilli())))
+            // Dated 1970: it is there to be measured, and a fresh date made Browse serve this one fandom
+            // as the whole of TV Shows for a week on a launch without the demo (audit A30-9).
+            cache.save(mapOf("TV Shows" to FandomCatalogCache.Entry(listOf(AO3Fandom("Doctor Who", 42)), 0L)))
         }
         val searches = SavedSearchRepository(database.savedSearchDao())
         if (searches.getAll().none { it.name == "Demo: Doctor Who" }) {

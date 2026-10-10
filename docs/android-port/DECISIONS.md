@@ -1256,3 +1256,38 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   half and half with an empty gap, so "Calytrix" was drawn "Calyt…" beside empty space.
 - The line is never shorter than its text (a minimum height, where it was a fixed one).
   Reverse: the commit "A comment's name is shown whole, and its first line fits at large text".
+
+## 2026-10-09: the composer's header at large text
+
+- At large text the composer's title gives way (one line, cut short if it must be) and
+  Cancel and Post never wrap. "Post" was drawn "Pos" over "t". Seen broken on the emulator;
+  the fix was not seen (the emulator had stopped responding).
+  Reverse: the commit "The comment composer's action is not broken across lines at large text".
+
+## 2026-10-09: audit A30's Android findings (Codex's review of what landed that day)
+
+- **A draft read late never lands in another composer (A30-1).** Every opening, closing and
+  change of what the composer is for moves one count, and a draft lookup that returns after
+  the count moved is dropped. "Write a comment" read the work's draft before its sheet
+  appeared; Reply or Edit tapped meanwhile got that text, and it would have been sent as the
+  reply. The test fails without the guard.
+- **A choice made while Chapter Comments loads replaces it (A30-5)**, also when it equals what
+  is shown: "All comments" did nothing and the chapter then took the screen.
+- **The chapter and its number come from the thread, root first (A30-6, A30-7)**, as iOS's
+  `chapterRef(in:)`; the Inbox's own number is only the fallback, and the chapter index, when
+  it is read, replaces the placeholder for the same chapter with its title and number.
+- **One row per comment, the root included (A30-10).** When the chapter's page holds the
+  thread's root without the reply that was asked for, the page's copy gives way to the thread.
+  The demo's single-comment page no longer renames its first comment to an id the page
+  already holds.
+- **The comments screen's chapter list belongs to whoever it was read for (A30-11)**: read as
+  a guest while the session was restoring, it is read again once the reader is signed in.
+- **A required label says so unless its own field does (A30-12).** `SubjectFormRow` takes
+  `labelSpokenByControl`; only the settings text field row sets it. Edit tags' "Fandoms" row
+  (a count beside the label) had lost its "required".
+- **The Privacy demo's fandom list is dated 1970 (A30-9)**, so it is measured and never
+  served: dated today, Browse showed one fandom as all of TV Shows for a week on a launch
+  without the demo. A debug install that already ran that demo keeps the bad entry until it
+  is a week old or Privacy's "Clear fandom catalog" is used.
+  Reverse: the commit "Audit A30's Android findings".
+
