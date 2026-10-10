@@ -373,6 +373,19 @@ class AO3CollectionsViewModel(
         cancelLoad()
     }
 
+    private var seenChange = 0
+
+    /**
+     * A collection was created, saved, deleted or left on another screen. This list lives in a view
+     * model, so coming back showed it as it was read before: a deleted collection stayed listed
+     * until pulled (audit A42). Read again, once for each change; [revision] comes from the route.
+     */
+    fun collectionsChanged(revision: Int) {
+        if (revision == seenChange) return
+        seenChange = revision
+        if (mutableState.value is AO3CollectionsUiState.Loaded) viewModelScope.launch { refresh() }
+    }
+
     fun setFilters(filter: AO3CollectionsFilter) {
         val previous = mutableFilters.value
         if (filter == previous) return
