@@ -78,10 +78,11 @@ fun SeriesWorksScreen(
     formRepository: io.github.cidy02.kudos.network.ao3.writing.AO3SeriesFormRepository? = null,
     writes: io.github.cidy02.kudos.network.ao3.writes.AO3WriteRepository? = null
 ) {
+    val sessionGeneration by seriesRepository.sessionChanges.collectAsState()
     var editing by remember(seriesUrl) { mutableStateOf<Boolean?>(null) }
     val accountState by (formRepository?.auth?.state?.collectAsState() ?: remember {
         mutableStateOf<io.github.cidy02.kudos.auth.AO3AuthState>(io.github.cidy02.kudos.auth.AO3AuthState.SignedOut) })
-    var state by remember(seriesUrl) { mutableStateOf<SeriesWorksState>(SeriesWorksState.Loading) }
+    var state by remember(seriesUrl, sessionGeneration) { mutableStateOf<SeriesWorksState>(SeriesWorksState.Loading) }
     var loadGeneration by remember(seriesUrl) { mutableIntStateOf(0) }
     var expandAll by remember(seriesUrl) { mutableStateOf(false) }
     var showMenu by remember(seriesUrl) { mutableStateOf(false) }
@@ -91,19 +92,19 @@ fun SeriesWorksScreen(
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
 
-    fun load(page: Int = 1) {
+    fun load(page: Int = 1, bypassCache: Boolean = false): kotlinx.coroutines.Job {
         state = SeriesWorksState.Loading
         val generation = ++loadGeneration
-        scope.launch {
-            val next = when (val result = seriesRepository.detailPage(seriesUrl, page)) {
-                is AO3Result.Success -> SeriesWorksState.Loaded(result.value)
+        return scope.launch {
+            val next = when (val result = seriesRepository.detailPage(seriesUrl, page, bypassCache)) {
+                is AO3Result.Success -> SeriesWorksState.Loaded(result.value, result.isStale)
                 is AO3Result.Failure -> SeriesWorksState.Error(result.error.displayMessage(), page)
             }
             if (generation == loadGeneration) state = next
         }
     }
 
-    LaunchedEffect(seriesUrl) { load() }
+    LaunchedEffect(seriesUrl, sessionGeneration) { editing = null; selection.exit(); load() }
 
     val page = (state as? SeriesWorksState.Loaded)?.page
     val detail = (state as? SeriesWorksState.Loaded)?.detail
@@ -190,6 +191,10 @@ fun SeriesWorksScreen(
         }
     )
 
+    io.github.cidy02.kudos.ui.components.KudosRefreshBox(onRefresh = {
+        val job = load(1, bypassCache = true)
+        try { job.join() } finally { if (job.isActive) job.cancel() }
+    }) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -208,10 +213,12 @@ fun SeriesWorksScreen(
                 title = "Couldn't load series",
                 message = current.message,
                 primaryActionLabel = "Try Again",
-                onPrimaryAction = { load(current.page) },
+                onPrimaryAction = { load(current.page, bypassCache = true) },
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
             )
             is SeriesWorksState.Loaded -> {
+                if (current.isStale) io.github.cidy02.kudos.ui.components.CachedAO3DataRow(
+                    Modifier.padding(horizontal = 16.dp, vertical = 12.dp))
                 if (current.page.works.isEmpty()) {
                     EmptyStateCard(
                         title = "No visible works",
@@ -291,6 +298,8 @@ fun SeriesWorksScreen(
         }
     }
 
+    }
+
     bulkStatus?.let { message ->
         AlertDialog(
             onDismissRequest = { bulkStatus = null },
@@ -305,7 +314,7 @@ fun SeriesWorksScreen(
 
 private sealed interface SeriesWorksState {
     data object Loading : SeriesWorksState
-    data class Loaded(val detail: io.github.cidy02.kudos.network.ao3.series.AO3SeriesDetailPage) : SeriesWorksState {
+    data class Loaded(val detail: io.github.cidy02.kudos.network.ao3.series.AO3SeriesDetailPage, val isStale: Boolean = false) : SeriesWorksState {
         val page get() = detail.page
     }
     data class Error(val message: String, val page: Int) : SeriesWorksState

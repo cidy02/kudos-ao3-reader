@@ -157,3 +157,28 @@ Performed here: read real Kotlin constructors/interfaces/parser exceptions/palet
 - Full Account/own-profile ancillary `/stats` and selected-index parity is a separate port decision; no additional requests sent here. The cache's per-page counts match the reference, while the pre-existing whole-screen differences above remain explicit.
 - Native author subscribe/block/mute has not landed on Android. Existing web handoff remains; no new native write or background invalidation probe.
 - iOS's author banner is sticky across fresh tab-only loads and resets via dashboard refresh; Android follows that model. Series's existing Android pagination replaces a page rather than appending iOS's accumulated pages; banner follows the displayed replacement. No paging redesign in this brief.
+
+## Landing note (Claude, 2026-10-09)
+
+Landed after a hand merge with brief 3cd in `author/AuthorProfileScreen.kt` (six regions:
+3cd's own-works state and bar, this brief's pull to refresh and cache). Gate: 2,510 tests.
+**Not yet seen on the emulator.**
+
+- **After the writer's own delete or edit the page is read again from AO3**, not from the
+  cache: 3cd's reloads now pass `bypassCache = true`. This brief did not know those writes
+  and removes nothing for them, so the reload would have shown the list as it was.
+- `loadHeader` takes both changes' parameters (`bypassCache`, then 3cd's callback, which
+  runs where it did: after a successful load of the route still on screen).
+- The list sits in the refresh box, the box takes the column's free height, and 3cd's
+  selection bar stays under it.
+- One test repaired: `AO3SeriesRepositoryTest` built two repositories for one address and
+  the second was answered from the first's fresh copy in the shared cache. Each now has its
+  own cache. **Any test that builds a repository with the default cache shares it with every
+  other test in the run**: pass `pageCache = AO3PageCache()` in new tests.
+- Read line by line: `network/ao3/AO3PageCache.kt` (keyed by address, viewer name and
+  session; an old copy only after no connection, a timeout, "AO3 is busy" or a 5xx, never
+  after a refusal; nothing kept when the session moved on meanwhile) and the clearing in
+  `auth/AO3AuthRepository.kt` (every step of the session clears everything).
+- Not read line by line: the four screens' banner wiring and the Inbox's removals. Gemini's
+  index is `audits/A34-result.md` (unread). A Codex review of the landed code is owed.
+

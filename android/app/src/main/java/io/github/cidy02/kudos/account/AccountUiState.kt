@@ -12,6 +12,7 @@ data class AccountUiState(
     val authState: AO3AuthState = AO3AuthState.Restoring,
     val sessionHealth: AO3SessionHealth = AO3SessionHealth.Unknown,
     val header: AO3AuthorHeader? = null,
+    val isShowingStaleCache: Boolean = false,
     val counts: Map<String, AO3AccountListCountsCache.Count> = emptyMap()
 )
 

@@ -66,6 +66,18 @@ internal object DemoNetwork {
     const val EXTRA = "kudosDemoLibrary"
     /** `--ez kudosDemoSignedIn true` with the demo: a local session as iOS `-KudosDemoSignedIn YES`. */
     const val SIGNED_IN_EXTRA = "kudosDemoSignedIn"
+    const val CACHED_PAGES_OFFLINE_EXTRA = "kudosDemoCachedPagesOffline"
+    @Volatile private var cachedPagesOffline = false
+
+    fun applyCachedPagesExtra(intent: Intent?) {
+        if (io.github.cidy02.kudos.BuildConfig.DEBUG && isActive &&
+            intent?.hasExtra(CACHED_PAGES_OFFLINE_EXTRA) == true
+        ) cachedPagesOffline = intent.getBooleanExtra(CACHED_PAGES_OFFLINE_EXTRA, false)
+    }
+
+    internal fun refusesCachedPageRead(path: String): Boolean = cachedPagesOffline && (
+        Regex("^/users/[^/]+(?:/pseuds/[^/]+)?(?:/(?:inbox|profile|works(?:/collected)?|gifts|series|bookmarks))?/?$").matches(path) ||
+            Regex("^/series/[0-9]+/?$").matches(path))
 
     /** Design review only: a demo session answered by the fixtures. AO3 is never contacted. */
     @Volatile
@@ -384,6 +396,9 @@ internal class DemoNetworkInterceptor(
         val url = chain.request().url
         if (!DemoNetworkRoutes.isAo3Host(url.host)) return chain.proceed(chain.request())
         val path = DemoNetworkRoutes.decodedPath(url)
+        if (chain.request().method == "GET" && DemoNetwork.refusesCachedPageRead(path)) {
+            throw java.net.UnknownHostException("Local cached-page demo is offline")
+        }
         seriesForms.answer(chain.request(), fixtures())?.let { answer ->
             return Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1)
                 .code(answer.first).message("Local series answer").header("Content-Type", HTML)

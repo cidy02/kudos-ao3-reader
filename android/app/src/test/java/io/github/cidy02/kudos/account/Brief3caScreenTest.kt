@@ -55,6 +55,7 @@ import org.robolectric.annotation.GraphicsMode
 @Config(sdk = [34], application = Application::class, qualifiers = "w411dp-h2400dp")
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class Brief3caScreenTest {
+    @org.junit.Before fun clearPageCache() { io.github.cidy02.kudos.network.ao3.AO3PageCache.shared.clear() }
     @get:Rule val compose = createComposeRule()
     private val client = Brief3caClient()
     private val chrome = PushedShellChrome()

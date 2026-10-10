@@ -210,6 +210,7 @@ fun AccountScreen(
     val tokens = LocalKudosTokens.current
     
     // The signed-in wash is drawn by the shell (MainScaffold), so it reaches the top edge.
+    io.github.cidy02.kudos.ui.components.KudosRefreshBox(onRefresh = { viewModel.refreshProfile() }) {
     LazyColumn(
         modifier = modifier.fillMaxSize(),
         contentPadding = PaddingValues(bottom = 32.dp)
@@ -229,6 +230,10 @@ fun AccountScreen(
         }
 
         if (signedIn) {
+            if (state.isShowingStaleCache) item {
+                io.github.cidy02.kudos.ui.components.CachedAO3DataRow(
+                    Modifier.padding(horizontal = SubjectMetrics.accountGutter, vertical = 12.dp))
+            }
             if (profileUnavailable) item {
                 EmptyStateCard(
                     "Profile unavailable",
@@ -384,6 +389,7 @@ fun AccountScreen(
                 SignedOutPreviewSection()
             }
         }
+    }
     }
 }
 

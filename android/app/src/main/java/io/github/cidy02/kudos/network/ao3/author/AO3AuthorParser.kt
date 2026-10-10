@@ -149,7 +149,15 @@ class AO3AuthorParser(
         )
     }
 
-    fun parseWorksPage(html: String, page: Int) = searchParser.parseSearchPage(html, page)
+    fun parseWorksPage(html: String, page: Int): io.github.cidy02.kudos.network.ao3.search.AO3SearchPage {
+        val result = searchParser.parseSearchPage(html, page)
+        val doc = Jsoup.parse(html, AO3Constants.BASE_URL)
+        val blurbs = doc.select("li.work.blurb")
+        if ((blurbs.isEmpty() && doc.selectFirst("ol.work.index, h2.heading, p.message, .flash") == null) ||
+            (blurbs.isNotEmpty() && result.works.isEmpty())
+        ) throw AO3AuthorParseException("AO3 author works markup was not recognized.")
+        return result
+    }
 
     private fun parseSeriesBlurb(element: Element): AO3AuthorSeriesSummary? {
         val titleLink = element.selectFirst("h4.heading a[href*=/series/]") ?: return null

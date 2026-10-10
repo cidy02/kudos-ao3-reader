@@ -63,6 +63,7 @@ class AO3AuthRepository(
             io.github.cidy02.kudos.network.ao3.DemoNetwork.signedIn
         ) {
             sessionMutex.withLock {
+                advanceSessionGenerationLocked()
                 val demoCookie = AO3StoredCookie(
                     name = AO3StoredCookie.SessionCookieName,
                     value = "demo",
@@ -343,6 +344,7 @@ class AO3AuthRepository(
     }
 
     private fun advanceSessionGenerationLocked(): Int {
+        io.github.cidy02.kudos.network.ao3.AO3PageCache.shared.clear()
         sessionGeneration += 1
         mutableGeneration.value = sessionGeneration
         return sessionGeneration
