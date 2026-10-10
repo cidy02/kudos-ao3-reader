@@ -1215,7 +1215,8 @@ private struct CommentPostRow: View {
                 .font(.caption2.weight(.semibold))
                 .tracking(0.7)
                 .foregroundStyle(theme.effectiveTint)
-                .lineLimit(1)
+                // Two: at the accessibility sizes one line cut it to "REPLYING TO…".
+                .lineLimit(2)
                 .accessibilityHidden(true)
         } else if showsParentAttribution, let replyToAuthor, !replyToAuthor.isEmpty {
             Label("in reply to \(replyToAuthor)", systemImage: "arrow.turn.down.right")
@@ -1346,8 +1347,7 @@ private struct CommentPostRow: View {
         // the chip against that taller box therefore parks it below the name
         // instead of beside it; matching baselines puts the chip's own label on
         // the same line as the name, which is what it's meant to read as.
-        HStack(alignment: .firstTextBaseline, spacing: 6) {
-            AO3AuthorBylineView(
+        let name = AO3AuthorBylineView(
                 names: [comment.author],
                 identities: commentIdentity.map { [$0] } ?? [],
                 includesBy: false,
@@ -1371,7 +1371,18 @@ private struct CommentPostRow: View {
                 expandsHitTarget: false,
                 onOpenRoute: handlers.onOpenAuthor
             )
-            CommentParticipantBadge(role: participantRole)
+        let badge = CommentParticipantBadge(role: participantRole)
+        return Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                // Beside the name when both fit. At the largest sizes the Author pill took the
+                // room and the name was cut to "Caly…": then the pill goes under the name.
+                ViewThatFits(in: .horizontal) {
+                    HStack(alignment: .firstTextBaseline, spacing: 6) { name; badge }
+                    VStack(alignment: .leading, spacing: 4) { name; badge }
+                }
+            } else {
+                HStack(alignment: .firstTextBaseline, spacing: 6) { name; badge }
+            }
         }
         // The rail conveys "this is a reply, and to whom" only visually and is
         // `accessibilityHidden`, so it has to be said here. This used to ride on
