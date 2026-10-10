@@ -1124,10 +1124,12 @@ fun AppNavHost(
             // The current value on the first frame, not a placeholder: a "Restoring" first frame
             // made every signed-in reader's comment drafts the guest's (audit A18-2).
             val commentsAuthState by container.authRepository.state.collectAsState()
+            val commentsSession by container.authRepository.generation.collectAsState()
             CommentsScreen(
                 target = workId?.let { AO3CommentTarget.Work(it) },
                 repository = container.commentRepository,
                 currentUsername = commentsAuthState.usernameOrNull,
+                sessionGeneration = commentsSession,
                 onLogin = { navController.navigate(Routes.AccountLogin) },
                 onOpenAuthor = { username ->
                     navController.navigate(Routes.authorProfile(username))

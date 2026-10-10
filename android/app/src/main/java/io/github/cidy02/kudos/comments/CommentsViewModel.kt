@@ -58,12 +58,17 @@ class CommentsViewModel(
     val initialTarget: AO3CommentTarget?,
     private val draftStore: CommentDraftStore? = null,
     /** The comment an Inbox row asked for: the first load is that thread, not the work's page 1. */
-    initialFocusedCommentId: Long? = null,
+    private val initialFocusedCommentId: Long? = null,
     /**
      * With [initialFocusedCommentId], the Inbox's "Chapter Comments": that comment's chapter, with its
      * thread on the chapter's first page. The number is only the chapter's label until the index is read.
      */
-    initialChapterPosition: Int? = null,
+    private val initialChapterPosition: Int? = null,
+    /**
+     * The session's count, read beside the name. A name is not a reader: signing out and back in under
+     * the same name is another session, and what AO3 served the first is not the second's (audit A32-5).
+     */
+    private val sessionGeneration: () -> Int = { 0 },
     /**
      * Read at each save and load, never kept: the screen's first frame did not yet know who
      * was signed in, the name was captured then, and every signed-in reader's drafts were
@@ -121,11 +126,41 @@ class CommentsViewModel(
     private val _composerPresented = MutableStateFlow(false)
     val composerPresented: StateFlow<Boolean> = _composerPresented.asStateFlow()
 
+    private val _composerTarget = MutableStateFlow<AO3CommentTarget?>(null)
+    /** What the open composer posts to. The sheet's note is about this, not about the scope now shown. */
+    val composerTarget: StateFlow<AO3CommentTarget?> = _composerTarget.asStateFlow()
+
+    /** Who the model reads and writes for: the published name and that session's count. */
+    private data class Viewer(val username: String?, val generation: Int)
+    private fun currentViewer() = Viewer(currentUsername(), sessionGeneration())
+
+    /** The reader everything now on screen was read for. [syncViewer] moves it. */
+    private var viewer = currentViewer()
+
     /**
-     * Counts every opening and closing of the composer and every change of what it is for. Reading the
-     * draft store suspends: a draft that comes back after the count moved belongs to a composer that is
-     * gone, and putting it in the field sent a new comment's text as a reply (audits A28-1, A30-1).
+     * What a composer was opened for, and for whom. Captured when it opens: its draft slot and its send
+     * are these, whatever the screen has moved to by then (iOS `composerContext`). The model used to ask
+     * "what is on screen now" at each save and each send, so a draft read for the work could open in,
+     * be saved as, and be sent as the chapter's the reader had since chosen (audits A28-1, A30-1, A32-1).
      */
+    private class Composer(
+        val target: AO3CommentTarget, val viewer: Viewer, val replyTo: Long? = null, val edit: AO3Comment? = null
+    ) {
+        /**
+         * Until its own stored draft has been read the field holds what the last composer or the page
+         * left there, and nothing is saved from it.
+         */
+        var draftRead = false
+    }
+
+    /**
+     * The composer that is open, or still reading its draft before it opens. A draft lookup or a send
+     * that comes back and finds another one here (or none) belongs to a composer that is gone.
+     */
+    private var composer: Composer? = null
+        set(value) { field = value; composerGeneration++; _composerTarget.value = value?.target }
+
+    /** Every opening and closing, for the one reader of drafts that owns no composer: [present]. */
     private var composerGeneration = 0
 
     private val _expandedRootIds = MutableStateFlow<Set<Long>>(emptySet())
@@ -147,12 +182,46 @@ class CommentsViewModel(
     private var pendingChapterComments: Pair<Long, Int>? = null
     private var lastPage = 1
 
-    init {
+    init { open() }
+
+    /** What the route asked for: the Inbox's chapter comments, its one thread, or the first page. */
+    private fun open() {
         if (initialFocusedCommentId != null && initialChapterPosition != null) {
             loadChapterComments(initialFocusedCommentId, initialChapterPosition)
         } else {
             load(1, initialFocusedCommentId)
         }
+    }
+
+    /**
+     * iOS `syncAuthenticationContext`: the reader changed (signed in, signed out, or signed in again
+     * under the same name). What was typed is saved as the reader who typed it; everything read for
+     * that reader goes; and the screen is read again for this one. True when there was a change.
+     *
+     * iOS then shows the work's first page. Android asks again for what the route named (the Inbox's
+     * thread, its chapter), which a session restored a moment after the screen opened would lose.
+     */
+    fun syncViewer(): Boolean {
+        val now = currentViewer()
+        if (now == viewer) return false
+        saveDraft()
+        viewer = now
+        composer = null
+        _composerPresented.value = false
+        _replyTarget.value = null
+        _editTarget.value = null
+        _composerParent.value = null
+        _draft.value = ""
+        lastSubmittedContentHash = null
+        _chapters.value = emptyList()
+        chaptersViewer = null
+        _chaptersFailed.value = false
+        _selectedChapter.value = null
+        openedOnChapter = false
+        _scope.value = if (initialTarget is AO3CommentTarget.Chapter) CommentScope.ByChapter else CommentScope.All
+        _currentTarget.value = initialTarget
+        open()
+        return true
     }
 
     /** Try Again: the request that failed, not always the work's first page (audit A28-3). */
@@ -256,13 +325,17 @@ class CommentsViewModel(
                 }
             }
             val onPage = (page as? AO3Result.Success)?.value?.comments
+            val pageIds = mutableSetOf<String>().also { collectIds(onPage.orEmpty(), it) }
+            val threadIds = mutableSetOf<String>().also { collectIds(listOf(root), it) }
             present(chapter, page, first = when {
                 onPage == null || findCommentRecursive(onPage, commentId) != null -> null
-                // The page holds this thread's root without the comment that was asked for: that comment
-                // goes first by itself and the page's root keeps every reply it has. Putting the whole
-                // thread first drew the root twice (audit A30-10); replacing the page's root with it
-                // could drop replies only the page held (audit A32).
-                onPage.any { it.id == root.id } -> findCommentRecursive(listOf(root), commentId)
+                // The page draws some of this thread (its root, or any comment inside it) without the
+                // comment that was asked for: that comment goes first by itself, and the page keeps all
+                // it has. Putting the whole thread first drew a comment twice whenever the page held a
+                // part of it below the top level, and pruning the repeated part could take the comment
+                // asked for with it; replacing the page's root dropped replies only the page held
+                // (audits A30-10, A32-4).
+                threadIds.any { it in pageIds } -> findCommentRecursive(listOf(root), commentId)
                 else -> root
             })
         }
@@ -285,22 +358,25 @@ class CommentsViewModel(
                 // its rows by comment id, and a second row with the same key crashes it (seen in the
                 // demo, whose one comments page serves as both).
                 val onPage = mutableSetOf<String>().also { collectIds(sorted.comments, it) }
-                val thread = if (first == null) sorted else sorted.copy(comments = listOf(first.without(onPage)) + sorted.comments)
+                // Nothing goes first that the page draws itself, whoever chose it.
+                val thread = if (first == null || first.id in onPage) sorted
+                    else sorted.copy(comments = listOf(first.without(onPage)) + sorted.comments)
                 _state.value = CommentsUiState.Loaded(thread)
                 // Restore a top-level draft on initial load.
                 val untouched = composerGeneration
+                val reader = currentViewer()
                 val draftContent = draftStore?.getDraft(
                     workId = target.workId,
                     chapterId = (target as? AO3CommentTarget.Chapter)?.chapterId,
                     parentId = null,
-                    username = currentUsername()
+                    username = reader.username
                 )
                 // Only into a field nobody has opened. Reading the store suspends: a load that finished
                 // just after Reply was tapped put the work's own draft into the reply, where it was
                 // saved, and sent, as that reply (audit A28-1). Each composer reads its own draft when
                 // it opens.
                 if (draftContent != null && _draft.value.isEmpty() && composerGeneration == untouched &&
-                    _editTarget.value == null &&
+                    currentViewer() == reader && _editTarget.value == null &&
                     _replyTarget.value == null && !_composerPresented.value && _currentTarget.value == target) {
                     _draft.value = draftContent
                 }
@@ -316,18 +392,22 @@ class CommentsViewModel(
         }
     }
 
-    /** Who [_chapters] was read for. AO3 serves a signed-in reader chapters a guest is not shown. */
-    private var chaptersViewer: String? = null
+    /**
+     * Who [_chapters] was read for. AO3 serves a signed-in reader chapters a guest is not shown, and one
+     * session of a name what it may not serve the next: the session, not only the name (audit A32-5).
+     */
+    private var chaptersViewer: Viewer? = null
 
     fun loadChaptersIfNeeded(chapterIndexRepository: AO3ChapterIndexRepository?) {
+        syncViewer()
         val target = _currentTarget.value ?: return
-        val viewer = currentUsername()
+        val viewer = currentViewer()
         // A list read before the session was restored is the guest's: it is read again for the reader
         // who is now signed in, where it used to be kept because it was not empty (audit A30-11).
         if (chapterIndexRepository == null || (_chapters.value.isNotEmpty() && chaptersViewer == viewer)) return
         viewModelScope.launch {
             val res = chapterIndexRepository.chapters(target.workId)
-            if (currentUsername() != viewer) return@launch
+            if (currentViewer() != viewer) return@launch
             when (res) {
                 is AO3Result.Success -> {
                     _chapters.value = res.value
@@ -358,6 +438,9 @@ class CommentsViewModel(
         // While Chapter Comments is still loading the scope shown is not yet theirs: choosing "All
         // comments" then did nothing, and the chapter replaced the choice a moment later (audit A30-5).
         if (_scope.value == next && pendingChapterComments == null) return
+        // A choice the reader made: the chapter the reader's button asked for must not replace it when
+        // its index answers late.
+        openedOnChapter = true
         _scope.value = next
         val target = _currentTarget.value ?: return
         if (next == CommentScope.All) {
@@ -371,6 +454,7 @@ class CommentsViewModel(
     }
 
     fun selectChapter(chapter: AO3ChapterRef) {
+        openedOnChapter = true
         _selectedChapter.value = chapter
         _scope.value = CommentScope.ByChapter
         val target = _currentTarget.value ?: return
@@ -414,24 +498,28 @@ class CommentsViewModel(
             editing != null -> startEdit(editing)
             replyingTo != null -> startReply(replyingTo)
             else -> {
+                syncViewer()
                 _replyTarget.value = null
                 _editTarget.value = null
                 _composerParent.value = null
-                val target = _currentTarget.value
-                val opening = ++composerGeneration
+                val target = _currentTarget.value ?: return
+                val mine = Composer(target, currentViewer())
+                composer = mine
                 // The stored draft, or nothing, before the sheet can be typed in: the field
                 // used to keep whatever an edit had left in it, and a draft that arrived
                 // late replaced what had been typed meanwhile (audit A18-1).
                 viewModelScope.launch {
-                    val stored = if (target == null) "" else draftStore?.getDraft(
+                    val stored = draftStore?.getDraft(
                         workId = target.workId,
                         chapterId = (target as? AO3CommentTarget.Chapter)?.chapterId,
                         parentId = null,
-                        username = currentUsername()
+                        username = mine.viewer.username
                     ).orEmpty()
-                    // Reply or Edit was tapped, or the sheet closed, while the store was read: this
-                    // opening is over, and its draft must not land in what replaced it.
-                    if (composerGeneration != opening) return@launch
+                    // Reply or Edit was tapped, the sheet closed, the reader moved to another chapter
+                    // or is no longer the same reader, while the store was read: this opening is over,
+                    // and its draft must not land in what replaced it.
+                    if (composer !== mine || currentViewer() != mine.viewer) return@launch
+                    mine.draftRead = true
                     _draft.value = stored
                     _composerPresented.value = true
                 }
@@ -441,7 +529,7 @@ class CommentsViewModel(
 
     fun closeComposer() {
         saveDraft()
-        composerGeneration++
+        composer = null
         _composerPresented.value = false
         _replyTarget.value = null
         _editTarget.value = null
@@ -451,17 +539,18 @@ class CommentsViewModel(
     fun saveDraft() {
         // iOS `saveDraft`: an edit never uses the draft store. It has no slot of its own, so
         // its text went into the new-comment slot and replaced the comment waiting there.
-        if (_editTarget.value != null) return
-        val target = _currentTarget.value ?: return
-        val reply = _replyTarget.value
+        // The slot and the reader are the composer's own, not whatever the screen shows now.
+        val open = composer ?: return
+        if (open.edit != null) return
+        if (!open.draftRead) return
         val content = _draft.value
         viewModelScope.launch {
             draftStore?.saveDraft(
                 content = content,
-                workId = target.workId,
-                chapterId = (target as? AO3CommentTarget.Chapter)?.chapterId,
-                parentId = reply?.commentId,
-                username = currentUsername()
+                workId = open.target.workId,
+                chapterId = (open.target as? AO3CommentTarget.Chapter)?.chapterId,
+                parentId = open.replyTo,
+                username = open.viewer.username
             )
         }
     }
@@ -473,39 +562,42 @@ class CommentsViewModel(
 
     fun startReply(comment: AO3Comment) {
         val id = comment.numericId ?: return
-        val target = _currentTarget.value
-        val opening = ++composerGeneration
+        // The comment was on the last reader's page: nothing opens on the page read for this one.
+        if (syncViewer()) return
+        val target = _currentTarget.value ?: return
+        val mine = Composer(target, currentViewer(), replyTo = id)
+        composer = mine
         _replyTarget.value = ReplyTarget(commentId = id, authorName = comment.author.name)
         _composerParent.value = comment
         _editTarget.value = null
         _draft.value = ""
         _message.value = null
         _composerPresented.value = true
-        if (target != null) {
-            viewModelScope.launch {
-                val draftContent = draftStore?.getDraft(
-                    workId = target.workId,
-                    chapterId = (target as? AO3CommentTarget.Chapter)?.chapterId,
-                    parentId = id,
-                    username = currentUsername()
-                )
-                if (draftContent != null && _draft.value.isEmpty() && composerGeneration == opening &&
-                    _replyTarget.value?.commentId == id) {
-                    _draft.value = draftContent
-                }
-            }
+        viewModelScope.launch {
+            val draftContent = draftStore?.getDraft(
+                workId = target.workId,
+                chapterId = (target as? AO3CommentTarget.Chapter)?.chapterId,
+                parentId = id,
+                username = mine.viewer.username
+            )
+            if (composer !== mine || currentViewer() != mine.viewer) return@launch
+            mine.draftRead = true
+            // What the reader typed while the store was read stands, and is now saved.
+            if (_draft.value.isNotEmpty()) saveDraft() else if (draftContent != null) _draft.value = draftContent
         }
     }
 
     fun cancelReply() {
-        composerGeneration++
+        composer = null
         _replyTarget.value = null
         _composerParent.value = null
         _composerPresented.value = false
     }
 
     fun startEdit(comment: AO3Comment) {
-        composerGeneration++
+        if (syncViewer()) return
+        val target = _currentTarget.value ?: return
+        composer = Composer(target, currentViewer(), edit = comment)
         _editTarget.value = comment
         _replyTarget.value = null
         _composerParent.value = null
@@ -515,7 +607,7 @@ class CommentsViewModel(
     }
 
     fun cancelEdit() {
-        composerGeneration++
+        composer = null
         _editTarget.value = null
         _draft.value = ""
         _composerPresented.value = false
@@ -532,9 +624,13 @@ class CommentsViewModel(
 
     fun deleteComment(comment: AO3Comment) {
         val path = comment.deletePath ?: return
+        if (syncViewer()) return
+        val asked = currentViewer()
         viewModelScope.launch {
             _submitting.value = true
-            when (val result = repository.deleteComment(path)) {
+            val result = repository.deleteComment(path)
+            // The reader changed while AO3 answered: the screen is the new reader's, and stays as it is.
+            if (currentViewer() == asked) when (result) {
                 is AO3Result.Success -> {
                     _message.value = "Comment deleted."
                     reloadPageOnScreen()
@@ -548,12 +644,15 @@ class CommentsViewModel(
     }
 
     fun submitComment() {
-        val target = _currentTarget.value ?: return
+        if (syncViewer()) return
+        // Sent to what this composer was opened for, as the reader who opened it.
+        val sent = composer ?: return
+        val target = sent.target
         val content = _draft.value
         if (content.isBlank()) return
 
-        val edit = _editTarget.value
-        val reply = _replyTarget.value
+        val edit = sent.edit
+        val replyTo = sent.replyTo
         val contentHash = content.hashCode()
 
         if (contentHash == lastSubmittedContentHash) {
@@ -568,28 +667,40 @@ class CommentsViewModel(
             val result = if (edit != null && edit.editPath != null) {
                 repository.editComment(edit.editPath, content)
             } else {
-                repository.submitComment(target, content, reply?.commentId)
+                repository.submitComment(target, content, replyTo)
             }
+            // The reader changed while AO3 answered: the screen is the new reader's and is left as it
+            // is, except that a comment AO3 confirmed is no longer a draft (iOS returns before that
+            // too, and leaves the posted text waiting as one).
+            val sameReader = currentViewer() == sent.viewer
 
             when (result) {
                 is AO3Result.Success -> {
-                    lastSubmittedContentHash = contentHash
-                    composerGeneration++
-                    _draft.value = ""
-                    _replyTarget.value = null
-                    _editTarget.value = null
-                    _composerParent.value = null
-                    _composerPresented.value = false
-                    _message.value = result.value.message
-                    draftStore?.clearDraft(
+                    // Its own slot. An edit has none: this used to clear the new comment waiting in
+                    // the work's slot (iOS clears only `if editTarget == nil`).
+                    if (edit == null) draftStore?.clearDraft(
                         workId = target.workId,
                         chapterId = (target as? AO3CommentTarget.Chapter)?.chapterId,
-                        parentId = reply?.commentId,
-                        username = currentUsername()
+                        parentId = replyTo,
+                        username = sent.viewer.username
                     )
-                    if (reply != null || edit != null) reloadPageOnScreen() else load()
+                    if (sameReader) {
+                        lastSubmittedContentHash = contentHash
+                        // Its own sheet, if that is still the one open. A composer opened since the
+                        // send keeps its target and its text.
+                        if (composer === sent) {
+                            composer = null
+                            _draft.value = ""
+                            _replyTarget.value = null
+                            _editTarget.value = null
+                            _composerParent.value = null
+                            _composerPresented.value = false
+                        }
+                        _message.value = result.value.message
+                        if (replyTo != null || edit != null) reloadPageOnScreen() else load()
+                    }
                 }
-                is AO3Result.Failure -> {
+                is AO3Result.Failure -> if (sameReader) {
                     val unconfirmed = (result.error as? AO3Error.Validation)?.message ==
                         io.github.cidy02.kudos.network.ao3.account.AO3CollectionFields.UNCONFIRMED
                     // An edit AO3 did not confirm is a failure to read and decide on, as on iOS:
@@ -599,7 +710,7 @@ class CommentsViewModel(
                         // can see whether it arrived; the same text is not sent twice by a tap.
                         lastSubmittedContentHash = contentHash
                         _message.value = "Couldn't confirm this posted — reloading to check."
-                        if (reply != null) reloadPageOnScreen() else load()
+                        if (replyTo != null) reloadPageOnScreen() else load()
                     } else {
                         _message.value = result.error.displayMessage()
                     }
@@ -631,6 +742,9 @@ class CommentsViewModel(
 
     fun setTarget(target: AO3CommentTarget) {
         if (_currentTarget.value == target && pendingChapterComments == null) return
+        // A composer still reading its draft was asked for on the page the reader has now left, and
+        // does not open. One already open keeps what it was opened for (iOS `composerContext`).
+        if (!_composerPresented.value) composer = null
         _currentTarget.value = target
         load(1)
     }
@@ -642,11 +756,12 @@ class CommentsViewModel(
             draftStore: CommentDraftStore? = null,
             initialFocusedCommentId: Long? = null,
             initialChapterPosition: Int? = null,
+            sessionGeneration: () -> Int = { 0 },
             currentUsername: () -> String? = { null }
         ): ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 CommentsViewModel(repository, initialTarget, draftStore, initialFocusedCommentId,
-                    initialChapterPosition, currentUsername)
+                    initialChapterPosition, sessionGeneration, currentUsername)
             }
         }
     }

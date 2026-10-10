@@ -1380,4 +1380,14 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   Finished and History "most recently read first"; Saved for Later "most recently read or
   added first"; Downloaded and Favorites "newest first" (`library/LibraryScreen.kt`). No test:
   it is a table of words.
+- **2026-10-10 · A comment composer belongs to what it was opened for, and to the reader who
+  opened it (brief 3cg; audit A32 items 1, 4, 5).** Its draft slot and its send are fixed when it
+  opens, as iOS's `composerContext`; the reader is the published name **and** the session's
+  count, as iOS's `AuthContext`. Three differences from iOS, each the more sparing: a composer
+  still reading its draft does not open once the reader has chosen another chapter; after a
+  change of reader the screen asks again for what the route named, not the work's first page;
+  and a comment AO3 confirmed is cleared from its draft slot even if the reader changed while
+  AO3 answered. A saved edit no longer clears the new comment waiting as a draft. Reverse:
+  `Composer`, `Viewer` and `syncViewer` in `comments/CommentsViewModel.kt`. Details and the
+  mutation table: `briefs/3cg-result.md`.
 

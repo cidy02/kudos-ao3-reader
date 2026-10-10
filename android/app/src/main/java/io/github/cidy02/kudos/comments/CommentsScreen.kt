@@ -105,6 +105,8 @@ fun CommentsScreen(
     repository: AO3CommentRepository,
     onLogin: () -> Unit,
     currentUsername: String? = null,
+    /** The session's count beside the name: the same name signed in again is another reader. */
+    sessionGeneration: Int = 0,
     onOpenAuthor: (String) -> Unit = {},
     draftStore: CommentDraftStore? = null,
     settingsRepository: SettingsRepository? = null,
@@ -118,11 +120,15 @@ fun CommentsScreen(
 ) {
     // The view model outlives this frame; it asks for the name each time it needs it.
     val latestUsername by androidx.compose.runtime.rememberUpdatedState(currentUsername)
+    val latestGeneration by androidx.compose.runtime.rememberUpdatedState(sessionGeneration)
     val viewModel: CommentsViewModel = viewModel(
         key = target?.workId?.toString(),
         factory = CommentsViewModel.factory(repository, target, draftStore, focusedCommentId,
-            initialChapterPosition.takeIf { focusedCommentId != null }) { latestUsername }
+            initialChapterPosition.takeIf { focusedCommentId != null }, { latestGeneration }) { latestUsername }
     )
+
+    // Before the effects below: a new reader gets the screen read again, and nothing of the last one's.
+    LaunchedEffect(viewModel, currentUsername, sessionGeneration) { viewModel.syncViewer() }
 
     LaunchedEffect(viewModel, initialComposes) {
         if (initialComposes) viewModel.openComposer()
@@ -138,7 +144,9 @@ fun CommentsScreen(
     }
 
     // Reader's chapter-aware comments button
-    LaunchedEffect(initialChapterPosition, target?.workId) {
+    // Keyed by the reader too: an index asked for as a guest that answers after sign-in is the
+    // guest's, and this starts again for the reader who is here now.
+    LaunchedEffect(initialChapterPosition, target?.workId, currentUsername, sessionGeneration) {
         val workId = target?.workId ?: return@LaunchedEffect
         val position = initialChapterPosition ?: return@LaunchedEffect
         // The Inbox's "Chapter Comments" names its comment too: the view model takes the chapter from
@@ -158,6 +166,7 @@ fun CommentsScreen(
     val composerPresented by viewModel.composerPresented.collectAsState()
     val composerParent by viewModel.composerParent.collectAsState()
     val editTarget by viewModel.editTarget.collectAsState()
+    val composerTarget by viewModel.composerTarget.collectAsState()
     val expandedRootIds by viewModel.expandedRootIds.collectAsState()
     val visibleReplyCounts by viewModel.visibleReplyCounts.collectAsState()
     val collapsedRootIds by viewModel.collapsedRootIds.collectAsState()
@@ -315,7 +324,7 @@ fun CommentsScreen(
             onDraftChange = viewModel::updateDraft,
             submitting = submitting,
             currentUsername = currentUsername,
-            isScopeByChapter = scopeMode == CommentScope.ByChapter,
+            isScopeByChapter = composerTarget is AO3CommentTarget.Chapter,
             palette = palette,
             onDismiss = viewModel::closeComposer,
             onSubmit = viewModel::submitComment,
