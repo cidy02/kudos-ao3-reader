@@ -379,8 +379,9 @@ class CommentsViewModelDraftTest {
         val chapters = io.github.cidy02.kudos.network.ao3.chapters.AO3ChapterIndexRepository(FakePublicClient(index(1)), session)
         val urls = mutableListOf<String>()
         val basic = success(writeResource("ao3/comments/comments_basic.html"))
+        // Two pages: the reader signing in is a new reader, and the thread is read again for them.
         val repo = AO3CommentRepository(publicClient = FakePublicClient(basic),
-            authenticatedClient = FakeAuthenticatedClient(listOf(basic), emptyList(), null, urls))
+            authenticatedClient = FakeAuthenticatedClient(listOf(basic, basic), emptyList(), null, urls))
         val viewModel = CommentsViewModel(repo, target, draftStore) { name }
         fun waitFor(count: Int) {
             for (attempt in 1..300) {
