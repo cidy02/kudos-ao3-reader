@@ -521,6 +521,28 @@ struct AO3AuthorProfileStateTests {
         #expect(answered.map(\.allowsStalePage) == [false, false, false, false, false, false])
     }
 
+    /// T-378. A series write makes every kept page of that series, and of its creator's series
+    /// list, untrue for whoever kept it; another series and the creator's works stay.
+    @Test func aSeriesWriteDropsEveryKeptPageOfTheSeriesAndOfItsCreatorsList() async throws {
+        let cache = AO3AuthorPageCache()
+        func key(_ path: String, _ scope: String = "alice") throws -> AO3AuthorPageCache.Key {
+            AO3AuthorPageCache.Key(
+                url: try #require(URL(string: "https://archiveofourown.org" + path)), authenticationScope: scope
+            )
+        }
+        let gone = try [
+            key("/series/321"), key("/series/321?page=2"), key("/series/321", "anonymous"),
+            key("/users/Alice/series"), key("/users/alice/pseuds/Other/series?page=2"),
+        ]
+        let kept = try [key("/series/3210"), key("/users/alice/works"), key("/users/bob/series")]
+        for entry in gone + kept { await cache.insert("page", for: entry) }
+
+        await cache.removeSeries(id: 321, creator: "alice")
+
+        for entry in gone { #expect(await cache.staleValue(for: entry) == nil) }
+        for entry in kept { #expect(await cache.staleValue(for: entry) == "page") }
+    }
+
     @Test func cacheSeparatesRoutesPagesAndAuthenticationScopes() async throws {
         let cache = AO3AuthorPageCache(ttl: 1)
         let user = try #require(AO3AuthorRoute(username: "Avery_Archive"))
