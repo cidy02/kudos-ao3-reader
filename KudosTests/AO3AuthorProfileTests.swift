@@ -510,6 +510,17 @@ struct AO3AuthorProfileStateTests {
         #expect(model.loadMoreError != nil)
     }
 
+    /// A kept page stands in only when AO3 could not be reached or was overloaded. Its own
+    /// answer about the page used to be hidden behind the old copy too (audit A34-2).
+    @Test func aKeptPageIsShownOnlyWhenAO3CouldNotAnswer() {
+        let unreachable: [AO3Error] = [.network("offline"), .rateLimited(retryAfter: nil), .server(status: 503)]
+        let answered: [AO3Error] = [
+            .notFound, .forbidden, .http(status: 410), .parse, .authenticationRequired, .untrustedHost,
+        ]
+        #expect(unreachable.map(\.allowsStalePage) == [true, true, true])
+        #expect(answered.map(\.allowsStalePage) == [false, false, false, false, false, false])
+    }
+
     @Test func cacheSeparatesRoutesPagesAndAuthenticationScopes() async throws {
         let cache = AO3AuthorPageCache(ttl: 1)
         let user = try #require(AO3AuthorRoute(username: "Avery_Archive"))

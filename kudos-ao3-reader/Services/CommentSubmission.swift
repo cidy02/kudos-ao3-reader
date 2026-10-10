@@ -358,6 +358,9 @@ enum CommentDraftIdentity {
 
 /// Per-context comment drafts, persisted so nothing typed is lost to a dismissal,
 /// an app exit, or an offline gap. Cleared only on *verified* success.
+/// One exception, chosen over handing a draft to the wrong account: a draft typed while
+/// the session had no account name, in a launch that ended before it got one, is kept
+/// on disk but not shown again (`CommentDraftIdentity`).
 @MainActor
 final class CommentDraftStore {
     private let defaults: UserDefaults
