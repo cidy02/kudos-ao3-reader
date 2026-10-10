@@ -4,7 +4,8 @@
 contact archiveofourown.org. Write exactly one file, in this worktree:
 `docs/android-port/audits/A41-result.md`. **Leave no other file behind.**
 
-iOS only: `kudos-ao3-reader/` in this worktree.
+iOS only, and **not the copy in this worktree**: read `/Users/cidy02/kudos-ios-polish/kudos-ao3-reader/`
+(read-only; it is the current iOS code, and has uncommitted work on fault 2 below in it).
 
 Background. Two faults of one kind were found by hand. (1) After a saved Edit multiple works,
 the writer's works list showed the old rating until pulled (fixed: `EditMultipleWorksView`
