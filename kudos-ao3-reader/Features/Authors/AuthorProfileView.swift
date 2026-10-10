@@ -623,7 +623,9 @@ private extension AuthorProfileView {
                 description: Text("Choose the works to edit, then try again.")
             )
         } else {
-            WritingBulkEditDestination(workIDs: ids, focus: bulkEditFocus)
+            WritingBulkEditDestination(workIDs: ids, focus: bulkEditFocus) {
+                Task { await model.refresh(auth: auth) }
+            }
         }
     }
 

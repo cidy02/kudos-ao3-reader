@@ -15,6 +15,9 @@ struct EditMultipleWorksView: View {
     @State private var errorMessage: String?
     /// The group 1bn's Collections / Visibility buttons open on.
     let focus: Focus?
+    /// Called once AO3 has confirmed the save, before the form closes. The list the works
+    /// were chosen from reads itself again: it showed the old rating and tags until pulled.
+    let onSaved: () -> Void
 
     /// Groups the bulk bar can open on, named as their headers are.
     enum Focus: String {
@@ -22,8 +25,9 @@ struct EditMultipleWorksView: View {
         case visibility = "Comments and visibility"
     }
 
-    init(form: AO3BulkEditForm, focus: Focus? = nil) {
+    init(form: AO3BulkEditForm, focus: Focus? = nil, onSaved: @escaping () -> Void = {}) {
         self.focus = focus
+        self.onSaved = onSaved
         self._form = State(initialValue: form)
         var initialChanges = AO3BulkEditChanges()
         initialChanges.workIDs = form.workIDs
@@ -365,6 +369,7 @@ struct EditMultipleWorksView: View {
         Task {
             do {
                 try await auth.bulkEditWorks(changes)
+                onSaved()
                 dismiss()
             } catch {
                 errorMessage = UserFacingError.message(for: error)

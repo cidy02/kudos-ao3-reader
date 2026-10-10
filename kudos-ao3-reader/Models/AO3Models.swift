@@ -1236,6 +1236,17 @@ nonisolated enum AO3Error: LocalizedError, Sendable, Equatable {
     /// (M6). Never retried; the request must not leave the process.
     case untrustedHost
 
+    /// Whether a kept copy of a page may be shown in place of this failure: only when AO3
+    /// could not be reached or was overloaded. Its own answer (403, 404, another 4xx, a page
+    /// the app cannot read) is news about the page, and an old copy would hide it for up to
+    /// a day (audit A34-2). Android: `AO3Error.allowsPageFallback`.
+    var allowsStalePage: Bool {
+        switch self {
+        case .network, .rateLimited, .server: true
+        case .notFound, .forbidden, .http, .parse, .authenticationRequired, .untrustedHost: false
+        }
+    }
+
     var errorDescription: String? {
         switch self {
         case .rateLimited: "AO3 is rate-limiting requests. Wait a moment and try again."
