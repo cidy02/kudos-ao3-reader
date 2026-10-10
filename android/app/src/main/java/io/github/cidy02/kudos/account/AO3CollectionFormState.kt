@@ -27,7 +27,9 @@ internal data class AO3CollectionFormUiState(
     val loadError: String? = null,
     val notice: String? = null,
     val availability: AO3CollectionNameAvailability? = null,
-    val deleted: Boolean = false
+    val deleted: Boolean = false,
+    /** Counts the saves and the delete AO3 has confirmed: the list of collections reads again. */
+    val changes: Int = 0
 ) {
     val canSave: Boolean get() = form != null && !saving &&
         form[AO3CollectionFields.TITLE].trim().isNotEmpty() && form[AO3CollectionFields.NAME].trim().isNotEmpty() &&
@@ -123,7 +125,8 @@ internal class AO3CollectionFormState(
             mutable.value = when (result) {
                 is AO3Result.Failure -> failed(result.error.displayMessage())
                 is AO3Result.Success -> when (val outcome = result.value) {
-                    is AO3CollectionSaveOutcome.Saved -> state.value.copy(form = outcome.form, notice = outcome.message, saving = false)
+                    is AO3CollectionSaveOutcome.Saved -> state.value.copy(form = outcome.form, notice = outcome.message, saving = false,
+                        changes = state.value.changes + 1)
                     is AO3CollectionSaveOutcome.Invalid -> state.value.copy(saving = false,
                         // Keep the exact typed buffer while taking AO3's errors and fresh form evidence.
                         form = outcome.form.copy(values = form.values),
@@ -149,7 +152,7 @@ internal class AO3CollectionFormState(
             currentCoroutineContext().ensureActive()
             if (!owns(generation)) { sentUnderAnEarlierSession(); return }
             mutable.value = when (result) {
-                is AO3Result.Success -> state.value.copy(saving = false, deleted = true)
+                is AO3Result.Success -> state.value.copy(saving = false, deleted = true, changes = state.value.changes + 1)
                 is AO3Result.Failure -> failed(result.error.displayMessage())
             }
         } catch (_: CancellationException) {

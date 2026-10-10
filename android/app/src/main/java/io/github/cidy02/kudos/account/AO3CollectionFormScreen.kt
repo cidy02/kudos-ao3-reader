@@ -52,7 +52,9 @@ fun AO3CollectionFormScreen(
     writes: AO3WriteRepository,
     onClose: () -> Unit,
     onDeleted: () -> Unit,
-    onOpenWeb: (String) -> Unit
+    onOpenWeb: (String) -> Unit,
+    /** A save or the delete was confirmed: the list of collections behind this form is stale. */
+    onChanged: () -> Unit = {}
 ) {
     val scope = rememberCoroutineScope()
     val model = remember(slug, repository, writes) { AO3CollectionFormState(slug, repository, writes, scope) }
@@ -65,6 +67,8 @@ fun AO3CollectionFormScreen(
     var challengeMenu by remember(model) { mutableStateOf(false) }
     val close = { model.close(); onClose() }
     LaunchedEffect(model) { model.load() }
+    // Before `onDeleted` leaves: the list must hear of the delete that sends the reader back to it.
+    LaunchedEffect(state.changes) { if (state.changes > 0) onChanged() }
     LaunchedEffect(state.deleted) { if (state.deleted) onDeleted() }
     DisposableEffect(model) { onDispose { model.close() } }
     val save = { scope.launch { model.confirmSave() }; Unit }

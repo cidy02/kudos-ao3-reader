@@ -674,8 +674,10 @@ fun AppNavHost(
                 onOpenWork = { navController.navigate(it) }, savedRevision = savedRevision
             )
         }
-        sharedComposable(Routes.AO3Collections) {
+        sharedComposable(Routes.AO3Collections) { entry ->
+            val collectionsChanged by entry.savedStateHandle.getStateFlow(COLLECTIONS_CHANGED, 0).collectAsState()
             AO3CollectionsScreen(
+                changedRevision = collectionsChanged,
                 repository = container.accountListRepository,
                 onLogin = { navController.navigate(Routes.AccountLogin) },
                 onNewCollection = { navController.navigate(Routes.ao3CollectionForm()) },
@@ -696,7 +698,8 @@ fun AppNavHost(
                 writes = container.writeRepository,
                 onClose = { navController.popBackStack() },
                 onDeleted = { navController.popBackStack(Routes.AO3Collections, inclusive = false) },
-                onOpenWeb = { navController.navigate(Routes.webFallback(it)) }
+                onOpenWeb = { navController.navigate(Routes.webFallback(it)) },
+                onChanged = { navController.collectionsChanged() }
             )
         }
         sharedComposable(
@@ -888,7 +891,7 @@ fun AppNavHost(
                 title = Routes.routeArg(entry, "collectionTitle") ?: slug,
                 repository = container.collectionDetailRepository,
                 writes = container.writeRepository,
-                onLeft = { navController.popBackStack() }
+                onLeft = { navController.collectionsChanged(); navController.popBackStack() }
             )
         }
         sharedComposable(Routes.AO3UserCollectionItems) {
@@ -1335,4 +1338,15 @@ private fun epubByteCount(container: KudosAppContainer, workId: String): Long {
         val path = container.workFileStore.workEpubPath(workId)
         if (java.nio.file.Files.isRegularFile(path)) java.nio.file.Files.size(path) else 0L
     }.getOrDefault(0L)
+}
+
+private const val COLLECTIONS_CHANGED = "collectionsChanged"
+
+/**
+ * Tells the list of collections, if it is under this screen, that what it shows is stale. It keeps
+ * its rows in a view model, so nothing else would make it read again.
+ */
+private fun androidx.navigation.NavController.collectionsChanged() {
+    val list = runCatching { getBackStackEntry(Routes.AO3Collections) }.getOrNull() ?: return
+    list.savedStateHandle[COLLECTIONS_CHANGED] = (list.savedStateHandle.get<Int>(COLLECTIONS_CHANGED) ?: 0) + 1
 }

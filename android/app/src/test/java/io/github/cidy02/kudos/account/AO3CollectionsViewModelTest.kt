@@ -77,6 +77,21 @@ class AO3CollectionsViewModelTest {
         model.onDisappear()
     }
 
+    /**
+     * A42. Told that a collection was deleted or saved elsewhere, the list reads again. That it does
+     * so only once for each change is not tested: a read that should not happen cannot be waited
+     * for here (the request is asked for off the test's clock, and loads replace one another).
+     */
+    @Test fun aCollectionChangedElsewhereMakesTheListReadAgain() = runTest(dispatcher) {
+        val client = CollectionsClient(totalPages = 1)
+        val (model, _) = model(client)
+        assertEquals(listOf(1), client.pages)
+        model.collectionsChanged(1)
+        model.uiState.first { it is AO3CollectionsUiState.Loaded && client.pages.size == 2 }
+        assertEquals(listOf(1, 1), client.pages)
+        model.onDisappear()
+    }
+
     @Test fun filteringFromALaterPageStartsAtPageOneAndFilteredRefreshReusesFreshPageOne() = runTest(dispatcher) {
         val client = CollectionsClient(totalPages = 3)
         val (model, _) = model(client)

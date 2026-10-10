@@ -1415,4 +1415,9 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   two to a row and a label may take a second line; a figure's value may take a second line
   too. At the normal size nothing changes except that the profile's tabs take the first copy's
   track and border. Seen on the emulator at both sizes.
+- **2026-10-10 · The list of collections reads again after a collection is created, saved,
+  deleted or left.** It keeps its rows in a view model, so coming back to it showed a deleted
+  collection until pulled. The form and the maintainers screen raise a count on the list's
+  back-stack entry (`collectionsChanged` in `app/AppNavHost.kt`), as the work form already
+  does for the drafts list; the list reads once for each change.
 

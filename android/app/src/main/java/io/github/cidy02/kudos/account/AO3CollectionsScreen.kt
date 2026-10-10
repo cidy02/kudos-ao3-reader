@@ -81,6 +81,8 @@ fun AO3CollectionsScreen(
     onYourItems: () -> Unit,
     onOpenRowAction: (String) -> Unit,
     modifier: Modifier = Modifier,
+    /** Raised by the routes that create, save, delete or leave a collection. */
+    changedRevision: Int = 0,
     viewModel: AO3CollectionsViewModel = viewModel(
         factory = AO3CollectionsViewModel.factory(repository)
     )
@@ -96,6 +98,7 @@ fun AO3CollectionsScreen(
         viewModel.onAppear()
         onDispose { viewModel.onDisappear() }
     }
+    androidx.compose.runtime.LaunchedEffect(viewModel, changedRevision) { viewModel.collectionsChanged(changedRevision) }
     if (showingFilters) {
         AO3CollectionsFilterPanel(initial = filters, onFinish = {
             viewModel.setFilters(it)
