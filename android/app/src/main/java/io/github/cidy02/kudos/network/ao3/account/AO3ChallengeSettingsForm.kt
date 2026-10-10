@@ -36,6 +36,10 @@ data class AO3ChallengeSettingsForm(
         if (!editable(name)) return this
         val control = control(name) ?: return this
         if (control.tag == "select" && control.options.none { !it.disabled && it.value == value }) return this
+        // A radio is one of several controls with its name. `parameters` changes only the last of
+        // them and leaves the checked one checked, so a change here would send the old choice, or
+        // two. No row edits a radio; one that tried is refused rather than sent wrong.
+        if (control.type == "radio") return this
         return copy(changes = changes + (name to value), generalErrors = emptyList(), fieldErrors = emptyMap())
     }
 
