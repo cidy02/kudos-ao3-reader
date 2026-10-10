@@ -17,12 +17,15 @@ internal fun WritingOwnWorkScreen(work: AO3WorkSummary, action: String, reposito
     seriesRepository: io.github.cidy02.kudos.network.ao3.writing.AO3SeriesFormRepository? = null) {
     val scope = rememberCoroutineScope()
     when (action) {
+        // A save, a post or a delete AO3 confirmed: the list this was opened from is read again. It
+        // went back to the list as it stood, with the old title or a work that no longer exists (the
+        // fault found on iOS as T-379; only the chapter form told the list).
         "edit" -> WritingWorkFormScreen(work.id, repository, auth, onBack, autocomplete, settings, writes,
-            onSaved = onBack, seriesRepository = seriesRepository)
+            onSaved = { onChanged(); onBack() }, seriesRepository = seriesRepository)
         "tags" -> {
             val model = remember(work.id, action) { WritingWorkFormState(work.id, repository, auth, writes, editTagsOnly = true) }
             WritingEditTagsScreen(model, work.title, autocomplete, settings, onBack, onSave = {
-                scope.launch { model.save(); if (model.state.value.saved) onBack() }
+                scope.launch { model.save(); if (model.state.value.saved) { onChanged(); onBack() } }
             })
         }
         "chapter" -> {

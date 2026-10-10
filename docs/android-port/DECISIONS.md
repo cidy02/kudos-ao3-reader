@@ -1402,4 +1402,11 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   for any field whose text also lives in a flow: the field's own state is the truth while it
   is open; a value from the flow is applied only if the field did not send it
   (`DraftEchoes`, `comments/CommentComposerSheet.kt`).
+- **2026-10-10 · A list behind a form reads again after the form wrote to AO3 (both apps).**
+  After the work form or the tags editor, opened from a row of the writer's own list, saved,
+  posted or deleted, the list came back as it stood: the old title, or a work that no longer
+  exists. Android: `writing/WritingOwnWorkScreen.kt` now calls `onChanged` for Edit and Tags as
+  it did for the chapter form. iOS: T-379, with the collection page and the kept pages too. The
+  rule for every new form: **a confirmed write tells the screen that opened the form**, and a
+  kept page that shows what was written is dropped.
 
