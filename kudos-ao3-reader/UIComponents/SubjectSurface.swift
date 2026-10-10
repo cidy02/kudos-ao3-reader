@@ -596,7 +596,10 @@ struct SectionRuleHeader: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
-        HStack(spacing: 8) {
+        // Twice its ordinary size and no more: above that a header's one long word no longer
+        // fits beside its count and broke in the middle ("SUBSCRIPTI / ONS" at AX5).
+        let labelSize = min(labelSize, 22)
+        return HStack(spacing: 8) {
             Text(title.uppercased())
                 .font(.system(size: labelSize, weight: .bold))
                 .tracking(labelSize * 0.127)
@@ -1062,6 +1065,7 @@ struct SubjectChip: View {
     var verticalPadding: CGFloat?
 
     @Environment(ThemeManager.self) private var themeManager
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @ScaledMetric(relativeTo: .caption) private var leadingImageSize: CGFloat = 11
     @ScaledMetric(relativeTo: .footnote) private var textSize: CGFloat = 13
     @ScaledMetric(relativeTo: .caption2) private var trailingImageSize: CGFloat = 10
@@ -1077,7 +1081,9 @@ struct SubjectChip: View {
             Text(text)
                 .font(.system(size: textSize, weight: fontWeight ?? (style == .tinted ? .medium : .regular)))
                 .monospacedDigit()
-                .lineLimit(1)
+                // A tag is read whole or not at all: at the accessibility sizes one line cut
+                // "No Archive Warnings Apply" to "No Archive Warnin…".
+                .lineLimit(dynamicTypeSize.isAccessibilitySize ? 3 : 1)
             if let trailingImage {
                 Image(systemName: trailingImage)
                     .font(.system(size: trailingImageSize, weight: .semibold))
