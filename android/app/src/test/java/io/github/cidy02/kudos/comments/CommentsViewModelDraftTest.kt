@@ -312,8 +312,9 @@ class CommentsViewModelDraftTest {
 
     /**
      * A30-6, A30-7, A30-10. The reply the Inbox named sits in a thread whose root the chapter's page also
-     * holds, without that reply: the root is drawn once, with the reply; and the chapter and its number
-     * are the ones the thread's root names, not the Inbox's own number.
+     * holds, without that reply: the reply goes first by itself, the root is drawn once and keeps the
+     * replies only the page holds; and the chapter and its number are the ones the thread's root names,
+     * not the Inbox's own number.
      */
     @Test
     fun aRootTheChapterPageHoldsWithoutTheReplyIsDrawnOnceAndTheBylineNamesTheChapter() = runTest(testDispatcher) {
@@ -331,8 +332,9 @@ class CommentsViewModelDraftTest {
         val all = mutableListOf<String>()
         fun walk(comments: List<AO3Comment>) { for (c in comments) { c.id?.let(all::add); walk(c.replies) } }
         walk((viewModel.state.value as CommentsUiState.Loaded).thread.comments)
-        assertEquals("comment_1", all.first())
-        assertEquals(true, "comment_2" in all)
+        assertEquals("comment_2", all.first())
+        assertEquals(true, "comment_1" in all)
+        assertEquals(true, "comment_9" in all)
         assertEquals(all.size, all.toSet().size)
         assertEquals(true, "/chapters/77" in urls[1])
         assertEquals("Chapter 3", viewModel.selectedChapter.value?.displayName)
