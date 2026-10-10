@@ -49,6 +49,7 @@ struct CommentsView: View {
     @Environment(ThemeManager.self) private var theme
     @Environment(\.dismiss) private var dismiss
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @ScaledMetric(relativeTo: .caption) private var noteSize: CGFloat = 11.5
     @ScaledMetric(relativeTo: .footnote) private var writeCommentButtonSize: CGFloat = 14
 
@@ -567,8 +568,25 @@ struct CommentsView: View {
     /// the chapter control answers, and the sheet this pill opens already lists
     /// "All Comments" above the chapters. One control, both behaviours, and the
     /// pill itself states which one is in force.
-    private var filterRail: some View {
-        HStack(spacing: 7) {
+    @ViewBuilder private var filterRail: some View {
+        if dynamicTypeSize.isAccessibilitySize {
+            // Side by side the two were cut to "All…" and "…" at the accessibility sizes (seen
+            // on the simulator at AX5): one under the other, each with the row to itself.
+            VStack(alignment: .leading, spacing: 7) {
+                chapterPill
+                sortPill
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        } else {
+            HStack(spacing: 7) {
+                chapterPill
+                sortPill
+                Spacer(minLength: 0)
+            }
+        }
+    }
+
+    private var chapterPill: some View {
             Button {
                 showingChapterPicker = true
             } label: {
@@ -584,11 +602,6 @@ struct CommentsView: View {
             .minimumHitTarget()
             .accessibilityLabel("Browse comments by chapter")
             .accessibilityValue(chapterPillTitle)
-
-            sortPill
-
-            Spacer(minLength: 0)
-        }
     }
 
     /// Local-only order menu — AO3 has no server sort, so this reorders what the
@@ -768,33 +781,47 @@ struct CommentsView: View {
     }
 
     private func paginationSection(_ page: AO3CommentsPage) -> some View {
-        Section {
-            HStack {
-                Button {
-                    loadPage(model.currentPageNumber - 1)
-                } label: {
-                    Label("Previous", systemImage: "chevron.left")
+        let previous = Button {
+            loadPage(model.currentPageNumber - 1)
+        } label: {
+            Label("Previous", systemImage: "chevron.left")
+        }
+        .disabled(model.currentPageNumber <= 1)
+        // Matches the 44pt min-frame this file's other controls
+        // reserve (HIG audit UI-3).
+        .minimumHitTarget()
+        let position = Text("Page \(model.currentPageNumber) of \(page.totalPages)")
+            .font(.footnote)
+            .foregroundStyle(.secondary)
+            .monospacedDigit()
+        let next = Button {
+            loadPage(model.currentPageNumber + 1)
+        } label: {
+            Label("Next", systemImage: "chevron.right")
+                .labelStyle(.trailingIcon)
+        }
+        .disabled(model.currentPageNumber >= page.totalPages)
+        .minimumHitTarget()
+        return Section {
+            Group {
+                if dynamicTypeSize.isAccessibilitySize {
+                    // In one row the buttons broke mid-word ("P / revi- / ous", "Ne / xt") at the
+                    // accessibility sizes, and side by side "Previous" still did at the largest:
+                    // the page, then each button on a line of its own, at its own edge.
+                    VStack(spacing: 8) {
+                        position
+                        previous.frame(maxWidth: .infinity, alignment: .leading)
+                        next.frame(maxWidth: .infinity, alignment: .trailing)
+                    }
+                } else {
+                    HStack {
+                        previous
+                        Spacer()
+                        position
+                        Spacer()
+                        next
+                    }
                 }
-                .disabled(model.currentPageNumber <= 1)
-                // Matches the 44pt min-frame this file's other controls
-                // reserve (HIG audit UI-3).
-                .minimumHitTarget()
-
-                Spacer()
-                Text("Page \(model.currentPageNumber) of \(page.totalPages)")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .monospacedDigit()
-                Spacer()
-
-                Button {
-                    loadPage(model.currentPageNumber + 1)
-                } label: {
-                    Label("Next", systemImage: "chevron.right")
-                        .labelStyle(.trailingIcon)
-                }
-                .disabled(model.currentPageNumber >= page.totalPages)
-                .minimumHitTarget()
             }
             .buttonStyle(.borderless)
             .font(.subheadline)
