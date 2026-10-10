@@ -36,6 +36,8 @@ import io.github.cidy02.kudos.network.ao3.account.AO3ChallengeSignUpParser
 import io.github.cidy02.kudos.network.ao3.account.AO3PromptMemePage
 import io.github.cidy02.kudos.network.ao3.account.AO3PromptMemeParser
 import io.github.cidy02.kudos.network.ao3.account.AO3PromptMemeUrls
+import io.github.cidy02.kudos.network.ao3.account.AO3ChallengeSettingsFormParser
+import io.github.cidy02.kudos.network.ao3.account.AO3ChallengeSettingsEditPage
 import io.github.cidy02.kudos.network.ao3.account.AO3ChallengeSettings
 import io.github.cidy02.kudos.network.ao3.account.AO3ChallengeKind
 import io.github.cidy02.kudos.network.ao3.account.AO3ChallengeSettingsPage
@@ -137,6 +139,41 @@ class AO3CollectionDetailRepository(
                 }
             }
         }
+    }
+
+    /** Edit opening: settings, first sign-ups page, profile, collection edit. No assignment reads. */
+    suspend fun getChallengeSettingsEdit(slug: String): AO3Result<AO3ChallengeSettingsEditPage> {
+        val generation = authRepository.generation.value
+        if (!authRepository.state.value.isSignedIn) return AO3Result.Failure(AO3Error.Validation("Log in to AO3 before using this feature."))
+        fun checkSession() { if (generation != authRepository.generation.value) throw CancellationException() }
+        val parser = AO3ChallengeSettingsFormParser()
+        val gift = fetch(ChallengeSettingsDestinations.challengeSettingsEditView(slug, AO3ChallengeKind.GiftExchange)) {
+            parser.parse(it, slug, AO3ChallengeKind.GiftExchange)
+        }
+        checkSession()
+        val form = when (gift) {
+            is AO3Result.Success -> gift.value
+            is AO3Result.Failure -> {
+                if (gift.error != AO3Error.NotFound && gift.error !is AO3Error.Parse) return gift
+                when (val meme = fetch(ChallengeSettingsDestinations.challengeSettingsEditView(slug, AO3ChallengeKind.PromptMeme)) {
+                    parser.parse(it, slug, AO3ChallengeKind.PromptMeme)
+                }) {
+                    is AO3Result.Success -> meme.value
+                    is AO3Result.Failure -> return meme
+                }
+            }
+        }
+        checkSession()
+        val signups = fetch(ChallengeSettingsDestinations.signUpPage(slug)) { AO3ChallengeSettingsParser().parseSignUpCount(it) }
+        checkSession()
+        // Owner question 16: don't fetch another page and don't call a partial count a total.
+        val count = (signups as? AO3Result.Success)?.value?.takeIf { it.totalPages == 1 }?.count
+        val profile = fetch(ChallengeSettingsDestinations.profile(slug)) { AO3ChallengeSettingsParser().parseTagSets(it) }
+        checkSession()
+        val collection = fetch(AO3CollectionFormUrls.form(slug)) { parser.parse(it, slug, form.kind, collection = true) }
+        checkSession()
+        return AO3Result.Success(AO3ChallengeSettingsEditPage(form,
+            (collection as? AO3Result.Success)?.value, (profile as? AO3Result.Success)?.value.orEmpty(), count))
     }
 
     /** Exactly one selected prompts page; anonymous only for an already signed-out viewer. */
