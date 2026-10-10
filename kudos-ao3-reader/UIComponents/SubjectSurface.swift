@@ -529,7 +529,9 @@ struct SubjectHeaderBlock<Trailing: View>: View {
                         trailing()
                     }
                     VStack(alignment: .leading, spacing: 6) {
-                        subtitleText(subtitle)
+                        // Its full height: without this the one that did not fit was cut
+                        // to a line ("Star Wars - All M…") instead of wrapping.
+                        subtitleText(subtitle).fixedSize(horizontal: false, vertical: true)
                         trailing()
                     }
                 }
