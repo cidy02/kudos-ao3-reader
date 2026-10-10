@@ -82,6 +82,9 @@ struct AccountProfileCard: View {
                 // The floating gear sits over this line's trailing end; at
                 // accessibility sizes the kicker reached under it.
                 .padding(.trailing, dynamicTypeSize.isAccessibilitySize ? 44 : 0)
+                // Between the avatar and the gear it has room up to the third accessibility
+                // size; above that it was cut to "AO3 ACCOU…".
+                .dynamicTypeSize(...DynamicTypeSize.accessibility3)
 
                 // 1m: name, session line, then the posting pill with the
                 // account's "…" beside it.
@@ -134,11 +137,17 @@ struct AccountProfileCard: View {
         } label: {
             Text("Posting as \(postingPseudName ?? "Account Default")")
                 .font(.system(size: postingAsSize, weight: .medium))
-                .lineLimit(1)
+                // The name is the point of the pill: one line cut it to "Posting as A…" at
+                // the accessibility sizes.
+                .lineLimit(dynamicTypeSize.isAccessibilitySize ? 3 : 1)
                 .foregroundStyle(.primary)
                 .padding(.horizontal, 13)
                 .padding(.vertical, 7)
-                .background(theme.appTheme.glassFill(0.12), in: Capsule())
+                .background(
+                    theme.appTheme.glassFill(0.12),
+                    in: dynamicTypeSize.isAccessibilitySize
+                        ? AnyShape(RoundedRectangle(cornerRadius: 18, style: .continuous)) : AnyShape(Capsule())
+                )
                 // 30pt drawn, 44pt to the finger, no taller row.
                 .contentShape(Capsule().inset(by: -7))
         }

@@ -812,10 +812,36 @@ private struct SubjectStatStripContent: View {
     let palette: SubjectPalette
 
     @Environment(ThemeManager.self) private var themeManager
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @ScaledMetric(relativeTo: .footnote) private var valueSize: CGFloat = 13
     @ScaledMetric(relativeTo: .caption2) private var labelSize: CGFloat = 9
 
     var body: some View {
+        Group {
+            if dynamicTypeSize.isAccessibilitySize, cells.count > 2 {
+                // Four across cut the labels at the accessibility sizes ("WARNIN…", "CATEGO…",
+                // "COMME…"): two to a row.
+                VStack(spacing: 0) {
+                    ForEach(Array(stride(from: 0, to: cells.count, by: 2)), id: \.self) { start in
+                        if start > 0 {
+                            Rectangle()
+                                .fill(themeManager.appTheme.glassStroke(0.13))
+                                .frame(height: 0.5)
+                        }
+                        row(Array(cells[start ..< min(start + 2, cells.count)]))
+                    }
+                }
+            } else {
+                row(cells)
+            }
+        }
+        // The same ground the form panels use — shape #13 in the inventory, 35
+        // artboards. One definition so a figure strip and a form card on the
+        // same screen cannot end up half a point apart.
+        .subjectPanel()
+    }
+
+    private func row(_ cells: [SubjectStatStrip.Cell]) -> some View {
         HStack(spacing: 0) {
             ForEach(Array(cells.enumerated()), id: \.element.id) { index, cell in
                 if index > 0 {
@@ -826,10 +852,6 @@ private struct SubjectStatStripContent: View {
                 cellBody(cell)
             }
         }
-        // The same ground the form panels use — shape #13 in the inventory, 35
-        // artboards. One definition so a figure strip and a form card on the
-        // same screen cannot end up half a point apart.
-        .subjectPanel()
     }
 
     /// A cell with an action becomes a real button; the rest stay inert text, so
