@@ -84,8 +84,15 @@ the reader's chapter button; Dark, OLED, Sepia; twice the text size.
 "for the chapter"` left "fohe chapterr" in the field; typed a word at a time it was right. The
 field's text comes from the model's `StateFlow` and goes back through it on every key, which is
 the known way for a Compose text field to drop input. It was like this before this change. A
-comment is sent to AO3 as typed, so this matters: next task, with the other fields fed the same
-way.
+comment is sent to AO3 as typed, so this matters.
+
+**Fixed the same night, in its own commit.** The sheet already kept its own text; the fault was
+its `LaunchedEffect(draft)`, which took each late echo of the field's own text for a change from
+outside and put it back over what had been typed since. `DraftEchoes` in
+`comments/CommentComposerSheet.kt` now tells the two apart. Seen on the emulator: two fast
+bursts ("… and the quick brown fox jumps over the lazy dog") arrived whole, in a new comment
+and in a reply, and each was there when its composer was reopened. Gemini's index A40 is
+listing every other field whose text comes from a flow.
 
 ## Left alone
 
