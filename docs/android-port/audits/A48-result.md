@@ -147,3 +147,23 @@ Gemini found 26 collection and challenge writes and traced 16. Checked in the Sw
 `AO3ChallengeActions.swift`). Gemini's quota ran out at about 06:50 on 2026-10-10 and comes back
 at about 00:05 on 2026-10-15, so this is Claude's to do by hand or to send then.
 
+### The ten Gemini did not reach, traced by hand (Claude, 07:06)
+
+In `Services/AO3ChallengeActions.swift`: `claimPinchHit` and `markAssignmentDefaulted`
+(`ChallengeAssignmentsView.swift:659`, `:664`) are followed by `await load()`; `claimPrompt` and
+`releasePrompt` (`PromptMemeView.swift:574`, `:587`) by `await loadPrompts(page: currentPage)`;
+`saveTagSetFields` and `reportRejectedTag` (`TagSetView.swift:720`, `:732`) change the tag set's
+own screen by hand. None leaves a screen behind showing what the write changed.
+`withdrawSignUpAfterClose` and `reportAssignmentDefault` have no caller. `updateChallengeSettings`
+is T-381.
+
+The reader's own actions in `Services/AO3WriteActions.swift` (kudos, subscribe, mark for later,
+a bookmark, and the removals from the account's lists) each change the screen that made them:
+`AO3WorkActionsModel.swift` for the first four, `AO3AccountWorksList.swift` and
+`AO3NamedSubscriptionsList.swift` for the removals. Not checked: whether a bookmark saved from
+a work opened out of the Bookmarks list is shown in that list's row on the way back (P3 if not;
+the same question on Android).
+
+**So every iOS write has now been traced, by Gemini or by hand; the faults of this kind were
+the ones fixed as T-377 to T-381.**
+
