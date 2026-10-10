@@ -26,6 +26,7 @@ import org.robolectric.annotation.GraphicsMode
 class AO3ChallengeSettingsScreenTest {
     @get:Rule val compose = createComposeRule()
     private lateinit var client: ChallengeReadClient
+    private var edits = 0
     private val browser = mutableListOf<String>()
     private val external = mutableListOf<String>()
     private val native = mutableListOf<String>()
@@ -56,6 +57,7 @@ class AO3ChallengeSettingsScreenTest {
                             opened = true
                         })
                     else AO3ChallengeSettingsScreen("winter_exchange", "Winter Exchange 2026", owner, repository,
+                        onOpenEditSettings = { edits++ },
                         onOpenWeb = { browser += it }, onOpenExternal = { external += it },
                         onOpenTagSet = { id, title -> native += Routes.ao3TagSet(id, title, isModerator = true) },
                         onOpenPrompts = { slug, title -> native += Routes.ao3PromptMeme(slug, title) },
@@ -96,7 +98,8 @@ class AO3ChallengeSettingsScreenTest {
             Routes.ao3ChallengeSignUps("winter_exchange", "Winter Exchange 2026", true, true),
             Routes.ao3ChallengeAssignments("winter_exchange", "Winter Exchange 2026", true, true, false),
             Routes.ao3ChallengeAssignments("winter_exchange", "Winter Exchange 2026", true, true, false)), native)
-        assertEquals(listOf(giftUrl), browser)
+        assertEquals(1, edits)
+        assertTrue(browser.isEmpty())
         assertEquals(listOf(ChallengeSettingsDestinations.runMatching("winter_exchange")), external)
         compose.onNodeWithText("Prompts").assertDoesNotExist()
         assertEquals(4, client.gets.size) // row taps navigate; no native follow-up/read/write here
@@ -123,7 +126,8 @@ class AO3ChallengeSettingsScreenTest {
         compose.onNodeWithText("Assignments").assertDoesNotExist()
         compose.onNodeWithText("ASSIGNMENTS").assertDoesNotExist()
         compose.onNodeWithText("AT AO3").assertDoesNotExist()
-        assertEquals(listOf(memeUrl), browser)
+        assertEquals(1, edits)
+        assertTrue(browser.isEmpty())
         assertEquals(listOf(Routes.ao3TagSet(44, "Summer Prompt Tags", true),
             Routes.ao3PromptMeme("winter_exchange", "Winter Exchange 2026")), native)
         assertTrue(external.isEmpty())

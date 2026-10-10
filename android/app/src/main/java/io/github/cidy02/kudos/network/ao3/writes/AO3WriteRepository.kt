@@ -6,6 +6,10 @@ import io.github.cidy02.kudos.network.ao3.AO3HttpResponse
 import io.github.cidy02.kudos.network.ao3.AO3OverloadDetector
 import io.github.cidy02.kudos.network.ao3.AO3RedirectCookieRelay
 import io.github.cidy02.kudos.network.ao3.AO3Result
+import io.github.cidy02.kudos.network.ao3.account.AO3ChallengeSettingsFormParser
+import io.github.cidy02.kudos.network.ao3.account.AO3ChallengeSettingsForm
+import io.github.cidy02.kudos.network.ao3.account.AO3ChallengeSettingsSaveOutcome
+import io.github.cidy02.kudos.network.ao3.account.ChallengeSettingsDestinations
 import io.github.cidy02.kudos.network.ao3.account.AO3ChallengeSignUpForm
 import io.github.cidy02.kudos.network.ao3.account.AO3ChallengeSignUpUrls
 import io.github.cidy02.kudos.network.ao3.account.AO3ChallengeSignUpParser
@@ -479,6 +483,55 @@ class AO3WriteRepository(
         }
         movedOnAfterWrite(expectedGeneration, response)?.let { return it }
         return collectionWriteVerdict(response, "AO3 couldn't withdraw that sign-up.")
+    }
+
+    /** iOS updateChallengeSettings: fresh edit-page meta token, captured form, single-shot POST. */
+    suspend fun saveChallengeSettings(form: AO3ChallengeSettingsForm,
+        expectedGeneration: Int, collectionSwitches: Boolean = false):
+        AO3Result<AO3ChallengeSettingsSaveOutcome> {
+        requireCollectionSession(expectedGeneration)
+        if (client.username() == null) return AO3Result.Failure(AO3Error.Validation("Log in to AO3 first."))
+        val checked = if (collectionSwitches) form.copy(generalErrors = emptyList(), fieldErrors = emptyMap()) else form.validated()
+        if (!checked.isValid) return AO3Result.Success(AO3ChallengeSettingsSaveOutcome.Invalid(checked))
+        val referer = if (collectionSwitches) AO3CollectionFormUrls.form(form.slug) else
+            ChallengeSettingsDestinations.challengeSettingsEditView(form.slug, form.kind)
+        val html = when (val result = client.getAuthenticated(referer)) {
+            is AO3Result.Failure -> return result
+            is AO3Result.Success -> result.value.body
+        }
+        requireCollectionSession(expectedGeneration)
+        val token = parser.parseAuthenticityToken(html, metaOnly = true)
+            ?: return AO3Result.Failure(AO3Error.Validation("Couldn't prepare the request. Try again, or open the collection on AO3."))
+        val posted = checked.copy(token = token)
+        if (!AO3RedirectCookieRelay.isTrustedUrl(posted.actionUrl)) return AO3Result.Failure(AO3Error.Parse("Couldn't read AO3's challenge form."))
+        currentCoroutineContext().ensureActive()
+        val response = withContext(NonCancellable) {
+            client.postAuthenticatedInSession(posted.actionUrl, posted.parameters(), writeHeaders(token, referer), expectedGeneration)
+        }
+        movedOnAfterWrite(expectedGeneration, response)?.let { return it }
+        return when (response) {
+            is AO3Result.Failure -> response
+            is AO3Result.Success -> {
+                val body = response.value.body
+                val parsed = try { AO3ChallengeSettingsFormParser()
+                    .parse(body, form.slug, form.kind, collectionSwitches) } catch (_: Exception) { null }
+                val error = parser.writeErrorMessage(body)
+                val notice = parser.writeSuccessMessage(body) ?: (if (collectionSwitches) "Collection was successfully updated."
+                    else "Challenge was successfully updated.").takeIf { body.contains(if (collectionSwitches) "successfully updated" else "successfully", true) }
+                when {
+                    error != null -> AO3Result.Success(AO3ChallengeSettingsSaveOutcome.Invalid(
+                        checked.copy(generalErrors = (listOf(error) + parsed?.generalErrors.orEmpty()).distinct(),
+                            fieldErrors = parsed?.fieldErrors.orEmpty())))
+                    notice != null || response.value.statusCode in 300..399 -> AO3Result.Success(
+                        AO3ChallengeSettingsSaveOutcome.Saved(parsed ?: posted.accepted(),
+                            notice ?: if (collectionSwitches) "Collection updated." else "Challenge updated."))
+                    response.value.statusCode in 200..299 && parsed != null && !parsed.isValid -> AO3Result.Success(
+                        AO3ChallengeSettingsSaveOutcome.Invalid(checked.copy(
+                            generalErrors = parsed.generalErrors, fieldErrors = parsed.fieldErrors)))
+                    else -> AO3Result.Failure(AO3Error.Validation(AO3CollectionFields.UNCONFIRMED))
+                }
+            }
+        }
     }
 
     /** iOS saveChallengeSignUp: validate, one fresh meta token, one POST, no follow-up GET. */

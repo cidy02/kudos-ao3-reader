@@ -38,7 +38,8 @@ fun AO3ChallengeSettingsScreen(
     onOpenTagSet: (Int, String) -> Unit,
     onOpenPrompts: (String, String) -> Unit,
     onOpenSignUps: (String, String) -> Unit = { _, _ -> },
-    onOpenAssignments: (String, String, Boolean) -> Unit = { _, _, _ -> }
+    onOpenAssignments: (String, String, Boolean) -> Unit = { _, _, _ -> },
+    onOpenEditSettings: () -> Unit = {}
 ) {
     val auth = repository.authRepository
     val generation by auth.generation.collectAsState()
@@ -107,7 +108,7 @@ fun AO3ChallengeSettingsScreen(
                             if (viewerIsOwner) item {
                                 SettingsPanel(Modifier.padding(top = 14.dp)) {
                                     SubjectFormRow("Edit settings", showsDisclosure = true,
-                                        onClick = { onOpenWeb(ChallengeSettingsDestinations.challengeSettingsEditView(slug, kind)) })
+                                        onClick = onOpenEditSettings)
                                 }
                             }
                             item {
