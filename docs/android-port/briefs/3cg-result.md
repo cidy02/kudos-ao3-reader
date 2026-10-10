@@ -37,7 +37,7 @@ does not open a chapter after sign-in; the sheet's note is about the composer's 
 | Target changes while a new comment's draft is still being read | Cannot happen: `startComposer` is not suspended. | **The composer does not open.** The reader tapped Write and then chose another chapter; opening a sheet bound to the page they left would post there. They tap Write again. |
 | The reader changes | `syncAuthenticationContext` (`:232`): saves the draft under the old identity, closes the composer, clears everything, scope `.all`, drops the pending focus. | The same, except that **Android asks again for what the route named** (the Inbox's thread or chapter) instead of the work's first page: a session restored a moment after the screen opened would otherwise lose it. |
 | A send answers after the reader changed | `guard isCurrent(expected, auth)` (`:1092`) returns before the draft is cleared: the posted text stays as a draft. | The screen is left alone, but **the draft of a comment AO3 confirmed is cleared** from its own slot. |
-| A send answers after its sheet was dismissed and another opened | `finishIfSucceeded` (`:1179`) closes whatever composer is open. | Clears its own slot; the composer opened since keeps its target and text. **Worth a look on iOS.** |
+| A send answers after its sheet was dismissed and another opened | `finishIfSucceeded` (`:1179`) closes whatever composer is open. | Clears its own slot; the composer opened since keeps its target and text. Looked at on iOS (2026-10-10): not reachable there, because the sheet cannot be closed while a send is out (Cancel is `.disabled(model.submissionGuard.phase.isBusy)`, `CommentsView.swift:1302`, and `.interactiveDismissDisabled` at `:1353`). Android's sheet can be, so Android needs the rule. |
 | A saved edit | Clears no draft (`:1094`). | The same (was a fault). |
 
 ## Tests
@@ -91,8 +91,11 @@ its `LaunchedEffect(draft)`, which took each late echo of the field's own text f
 outside and put it back over what had been typed since. `DraftEchoes` in
 `comments/CommentComposerSheet.kt` now tells the two apart. Seen on the emulator: two fast
 bursts ("… and the quick brown fox jumps over the lazy dog") arrived whole, in a new comment
-and in a reply, and each was there when its composer was reopened. Gemini's index A40 is
-listing every other field whose text comes from a flow.
+and in a reply, and each was there when its composer was reopened. Gemini's index A40 listed
+seventeen other fields whose text comes from a flow; two were given the same fast input on the
+emulator and kept every character (`audits/A40-result.md`). iOS binds its editor straight to the
+model (`TextEditor(text: $model.composerText)`, `CommentsView.swift:1362`), so it has no echo to
+mistake.
 
 ## Left alone
 
