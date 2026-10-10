@@ -678,6 +678,18 @@ actor AO3AuthorPageCache {
         }
     }
 
+    /// One of this account's own works, chapters or drafts was written to: every kept page under
+    /// the account's own address (works, series, bookmarks, dashboard, drafts, any pseud, any
+    /// viewer) may list what is no longer so. Kept, they answered for five minutes (T-379).
+    func removeAuthorPages(username: String) {
+        let prefix = "/users/\(username.lowercased())/"
+        let dashboard = "/users/\(username.lowercased())"
+        entries = entries.filter { key, _ in
+            let path = key.url.path.lowercased()
+            return !(path.hasPrefix(prefix) || path == dashboard)
+        }
+    }
+
     func removeAuthorDashboards(username: String, authenticationScope: String) {
         entries = entries.filter { key, _ in
             guard key.authenticationScope == authenticationScope,

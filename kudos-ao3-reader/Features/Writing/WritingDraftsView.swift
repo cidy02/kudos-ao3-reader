@@ -88,7 +88,7 @@ struct WritingDraftsView: View {
                     ForEach(result.works) { work in
                         DraftCard(work: work, deletion: deletionDates[work.id], now: now)
                             .subjectRowNavigation(accessibilityLabel: work.title.isEmpty ? "Untitled" : work.title) {
-                                WritingWorkDestination(workID: work.id)
+                                WritingWorkDestination(workID: work.id) { reload += 1 }
                             }
                             .cardRow(tintHue: CoverArt.workHue(fandoms: work.fandoms, title: work.title))
                     }
@@ -324,6 +324,8 @@ private struct DraftCard: View {
 struct WritingWorkDestination: View {
     @Environment(AO3AuthService.self) private var auth
     let workID: Int?
+    /// Forwarded to `WorkEditView.onChanged`.
+    var onChanged: () -> Void = {}
     @State private var form: AO3WorkForm?
     @State private var loadedGeneration: Int?
     @State private var errorMessage: String?
@@ -331,7 +333,9 @@ struct WritingWorkDestination: View {
 
     var body: some View {
         Group {
-            if let form, loadedGeneration == auth.sessionGeneration { WorkEditView(form: form).id(auth.sessionGeneration) }
+            if let form, loadedGeneration == auth.sessionGeneration {
+                WorkEditView(form: form, onChanged: onChanged).id(auth.sessionGeneration)
+            }
             else {
                 WritingLoaderPage(title: workID == nil ? "New work" : "Edit work", message: errorMessage) {
                     retry += 1

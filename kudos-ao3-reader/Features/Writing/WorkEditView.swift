@@ -33,7 +33,12 @@ struct WorkEditView: View {
     /// tells an unsaved backdate apart from a date nobody touched here by.
     @State private var loadedChapter: AO3WorkChapterDraft?
 
-    init(form: AO3WorkForm) {
+    /// Called once AO3 has confirmed a save, a post or a delete, before the form closes: the list
+    /// it was opened from showed the old title, or a work that no longer exists, until pulled.
+    let onChanged: () -> Void
+
+    init(form: AO3WorkForm, onChanged: @escaping () -> Void = {}) {
+        self.onChanged = onChanged
         self._form = State(initialValue: form)
         self._loadedChapter = State(initialValue: form.chapter)
     }
@@ -545,6 +550,7 @@ struct WorkEditView: View {
                 } else {
                     try await auth.deleteWork(workID: workID)
                 }
+                onChanged()
                 dismiss()
             } catch {
                 errorMessage = UserFacingError.message(for: error)
@@ -570,6 +576,7 @@ extension WorkEditView {
         do {
             try await auth.saveWork(form, submit: submit)
             preview = nil
+            onChanged()
             dismiss()
         } catch {
             if isPost { isPosting = false } else { isSaving = false }
