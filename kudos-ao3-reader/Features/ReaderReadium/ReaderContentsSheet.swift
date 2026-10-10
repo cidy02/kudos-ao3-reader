@@ -41,6 +41,7 @@ enum ReaderContentsSegment: String, CaseIterable, Identifiable {
 /// row; annotations additionally swipe to delete.
 struct ReaderContentsSheet: View {
     @Environment(ThemeManager.self) private var theme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Binding var segment: ReaderContentsSegment
     let sections: [ReaderSection]
     let bookmarks: [ReadingAnnotation]
@@ -107,7 +108,9 @@ struct ReaderContentsSheet: View {
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
                         Text(section.title)
                             .foregroundStyle(.primary)
-                            .lineLimit(2)
+                            // Two lines hold about two words at the accessibility sizes
+                            // ("Chapter 2: Nine Min…").
+                            .lineLimit(dynamicTypeSize.isAccessibilitySize ? 5 : 2)
                         Spacer(minLength: 8)
                         if let percent = chapterStartPercent(section) {
                             Text("\(percent)%")

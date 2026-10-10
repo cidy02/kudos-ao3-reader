@@ -14,6 +14,7 @@ import SwiftUI
 /// nearby; the page digit and chapter duration ("8 min") use `tint` when the
 /// preview page differs from the scrub origin.
 struct ReaderPositionCard<MiniPlayer: View>: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     /// Current page (1-based) shown in "Page **N** of M".
     let page: Int
     /// Total pages in the chapter.
@@ -106,12 +107,23 @@ struct ReaderPositionCard<MiniPlayer: View>: View {
             }
 
             VStack(spacing: 8) {
-                HStack(alignment: .firstTextBaseline) {
-                    // Page digit + duration tint when scrubbing away from origin;
-                    // "Page" / "of M" / "left in chapter" stay unemphasized.
-                    pageTitleLabel
-                    Spacer(minLength: 8)
-                    chapterTimeLabel
+                if dynamicTypeSize.isAccessibilitySize {
+                    // At the accessibility sizes the row broke every piece apart ("Pa / ge",
+                    // "98 / 0", "chap- / ter", seen at AX5): the page, then the time, each one
+                    // string that wraps between words.
+                    VStack(alignment: .leading, spacing: 2) {
+                        pageTitleLabel
+                        chapterTimeLabel
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                } else {
+                    HStack(alignment: .firstTextBaseline) {
+                        // Page digit + duration tint when scrubbing away from origin;
+                        // "Page" / "of M" / "left in chapter" stay unemphasized.
+                        pageTitleLabel
+                        Spacer(minLength: 8)
+                        chapterTimeLabel
+                    }
                 }
 
                 scrubSlider
@@ -123,7 +135,8 @@ struct ReaderPositionCard<MiniPlayer: View>: View {
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .center)
-                    .lineLimit(1)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? 3 : 1)
                     // Shrink a little before truncating, so the longest reading stays
                     // legible at large Dynamic Type sizes. Carried over from the
                     // progress pill this card replaced (HIG wave, A-F: position
@@ -145,6 +158,15 @@ struct ReaderPositionCard<MiniPlayer: View>: View {
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(.secondary)
                 .monospacedDigit()
+        } else if dynamicTypeSize.isAccessibilitySize {
+            // One string, so it wraps between words. The digit keeps its tint; it gives up
+            // the rolling-number transition a separate `Text` has at the ordinary sizes.
+            (Text("Page ").foregroundStyle(.primary)
+                + Text("\(page)").foregroundStyle(scrubValuesEmphasized ? tint : Color.primary)
+                + Text(" of \(pageCount)").foregroundStyle(.primary))
+                .font(.subheadline.weight(.semibold))
+                .monospacedDigit()
+                .fixedSize(horizontal: false, vertical: true)
         } else {
             HStack(alignment: .firstTextBaseline, spacing: 0) {
                 Text("Page ")
@@ -165,7 +187,14 @@ struct ReaderPositionCard<MiniPlayer: View>: View {
     /// "8 min left in chapter" — only the duration ("8 min") takes theme tint.
     @ViewBuilder
     private var chapterTimeLabel: some View {
-        if let minutes = chapterRemainingMinutes {
+        if let minutes = chapterRemainingMinutes, dynamicTypeSize.isAccessibilitySize {
+            (Text(ReaderTimeEstimate.durationLabel(minutes: minutes))
+                .foregroundStyle(scrubValuesEmphasized ? tint : Color.secondary)
+                + Text(" left in chapter").foregroundStyle(.secondary))
+                .font(.footnote)
+                .monospacedDigit()
+                .fixedSize(horizontal: false, vertical: true)
+        } else if let minutes = chapterRemainingMinutes {
             HStack(alignment: .firstTextBaseline, spacing: 0) {
                 Text(ReaderTimeEstimate.durationLabel(minutes: minutes))
                     .foregroundStyle(scrubValuesEmphasized ? tint : Color.secondary)
