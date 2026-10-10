@@ -81,6 +81,7 @@ struct AO3AuthorBylineView: View {
 
     @Environment(AppRouter.self) private var router
     @Environment(\.ao3AuthorNavigationEnabled) private var navigationEnabled
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     /// Which co-author token currently holds hardware-keyboard focus (macOS/iPadOS).
     /// Keyed by `AO3AuthorBylineToken.id`, not a Bool, since a byline can hold several
     /// independently-focusable names.
@@ -144,60 +145,13 @@ struct AO3AuthorBylineView: View {
                 Text("by ")
                     .foregroundStyle(.secondary)
             }
-            ForEach(tokens) { token in
-                let text = token.name + (token.id == tokens.count - 1 ? "" : ", ")
-                if let route = token.route, navigationEnabled {
-                    // highPriorityGesture (not a nested Button): List rows that use
-                    // background `cardNavigation` NavigationLinks still activate on
-                    // borderless Button taps, stacking the work/reader on top of the
-                    // author profile — profile only appeared after Back. Priority
-                    // gesture claims the touch so the row link does not fire. A real
-                    // Button was tried here before and reverted for the same reason —
-                    // don't reintroduce one; hardware-keyboard support below is added
-                    // via .focusable/.onKeyPress instead, not by becoming a Button.
-                    //
-                    // frame + contentShape are established BEFORE highPriorityGesture
-                    // is attached (not after) so the gesture is unambiguously scoped to
-                    // the full enlarged region from the moment it exists — relying on a
-                    // later outer contentShape to retroactively extend an
-                    // already-attached gesture is exactly the kind of ordering risk that
-                    // needs a runtime check, not just a plausible reading of the docs;
-                    // this ordering sidesteps the question instead of resting on it.
-                    // NOT .minimumHitTarget() here: that modifier's plain
-                    // .frame(minHeight:) centers its content vertically, which shifts
-                    // this Text's baseline and reproduces the exact "dropped it below
-                    // 'by'" regression noted above (1) — the frame must stay top-aligned
-                    // so the enlarged hit box only grows downward, off the baseline.
-                    Text(text)
-                        .fontWeight(emphasized ? .semibold : .regular)
-                        .foregroundStyle(tinted ? AnyShapeStyle(.tint) : AnyShapeStyle(.primary))
-                        .frame(
-                            minWidth: expandsHitTarget ? 28 : 0,
-                            minHeight: expandsHitTarget ? 28 : 0,
-                            alignment: .top
-                        )
-                        .contentShape(Rectangle())
-                        .highPriorityGesture(TapGesture().onEnded { activate(route) })
-                        .accessibilityLabel(token.name)
-                        .accessibilityHint("Open AO3 author profile")
-                        .accessibilityAddTraits(.isButton)
-                        .focusable(true)
-                        .focused($focusedTokenID, equals: token.id)
-                        .onKeyPress(keys: [.return, .space]) { _ in
-                            activate(route)
-                            return .handled
-                        }
-                        .overlay {
-                            if focusedTokenID == token.id {
-                                RoundedRectangle(cornerRadius: 4)
-                                    .stroke(.tint, lineWidth: 2)
-                            }
-                        }
-                } else {
-                    Text(text)
-                        .fontWeight(emphasized ? .semibold : .regular)
-                        .foregroundStyle(.secondary)
-                }
+            if dynamicTypeSize.isAccessibilitySize, tokens.count > 1 {
+                // At the accessibility sizes they do not: side by side, each in its own
+                // column, two names were cut to "Writ…" and "ond P…". One name to a line.
+                // A built-in stack, not a custom layout (see 3 above).
+                VStack(alignment: .leading, spacing: 2) { nameTokens }
+            } else {
+                nameTokens
             }
         }
         .font(font)
@@ -209,6 +163,65 @@ struct AO3AuthorBylineView: View {
             alignment: .leading
         )
         .accessibilityElement(children: .contain)
+    }
+
+    @ViewBuilder
+    private var nameTokens: some View {
+        ForEach(tokens) { token in
+            let text = token.name + (token.id == tokens.count - 1 ? "" : ", ")
+            if let route = token.route, navigationEnabled {
+                // highPriorityGesture (not a nested Button): List rows that use
+                // background `cardNavigation` NavigationLinks still activate on
+                // borderless Button taps, stacking the work/reader on top of the
+                // author profile — profile only appeared after Back. Priority
+                // gesture claims the touch so the row link does not fire. A real
+                // Button was tried here before and reverted for the same reason —
+                // don't reintroduce one; hardware-keyboard support below is added
+                // via .focusable/.onKeyPress instead, not by becoming a Button.
+                //
+                // frame + contentShape are established BEFORE highPriorityGesture
+                // is attached (not after) so the gesture is unambiguously scoped to
+                // the full enlarged region from the moment it exists — relying on a
+                // later outer contentShape to retroactively extend an
+                // already-attached gesture is exactly the kind of ordering risk that
+                // needs a runtime check, not just a plausible reading of the docs;
+                // this ordering sidesteps the question instead of resting on it.
+                // NOT .minimumHitTarget() here: that modifier's plain
+                // .frame(minHeight:) centers its content vertically, which shifts
+                // this Text's baseline and reproduces the exact "dropped it below
+                // 'by'" regression noted above (1) — the frame must stay top-aligned
+                // so the enlarged hit box only grows downward, off the baseline.
+                Text(text)
+                    .fontWeight(emphasized ? .semibold : .regular)
+                    .foregroundStyle(tinted ? AnyShapeStyle(.tint) : AnyShapeStyle(.primary))
+                    .frame(
+                        minWidth: expandsHitTarget ? 28 : 0,
+                        minHeight: expandsHitTarget ? 28 : 0,
+                        alignment: .top
+                    )
+                    .contentShape(Rectangle())
+                    .highPriorityGesture(TapGesture().onEnded { activate(route) })
+                    .accessibilityLabel(token.name)
+                    .accessibilityHint("Open AO3 author profile")
+                    .accessibilityAddTraits(.isButton)
+                    .focusable(true)
+                    .focused($focusedTokenID, equals: token.id)
+                    .onKeyPress(keys: [.return, .space]) { _ in
+                        activate(route)
+                        return .handled
+                    }
+                    .overlay {
+                        if focusedTokenID == token.id {
+                            RoundedRectangle(cornerRadius: 4)
+                                .stroke(.tint, lineWidth: 2)
+                        }
+                    }
+            } else {
+                Text(text)
+                    .fontWeight(emphasized ? .semibold : .regular)
+                    .foregroundStyle(.secondary)
+            }
+        }
     }
 
     private var tokens: [AO3AuthorBylineToken] {

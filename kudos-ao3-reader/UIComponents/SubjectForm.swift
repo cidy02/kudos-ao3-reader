@@ -261,12 +261,27 @@ struct SubjectFormRow<Trailing: View>: View {
                 // one group, with the gap the outer stack gave it. The label takes
                 // its natural width first and wraps only when the control leaves
                 // no room — pinned to one line it ran off the panel at AX sizes.
-                labelText
-                    .layoutPriority(1)
-                HStack(spacing: arrangement.horizontalGap) {
-                    trailing()
+                if dynamicTypeSize.isAccessibilitySize, !label.isEmpty {
+                    // The control under its label, as a value is (below): beside it a picker
+                    // was cut to "Defa…", a title field to "The Wei…", and the chapter
+                    // counts ran off the panel. A switch goes under its label too, as
+                    // AO3 Preferences already draws it.
+                    VStack(alignment: .leading, spacing: 6) {
+                        labelText
+                        HStack(spacing: arrangement.horizontalGap) {
+                            trailing()
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                } else {
+                    labelText
+                        .layoutPriority(1)
+                    HStack(spacing: arrangement.horizontalGap) {
+                        trailing()
+                    }
+                    .frame(maxWidth: .infinity, alignment: .trailing)
                 }
-                .frame(maxWidth: .infinity, alignment: .trailing)
             } else if dynamicTypeSize.isAccessibilitySize {
                 // The value under its label, as iOS Settings does at these sizes:
                 // side by side, "Appearance" left "Dark" as "D…", and a picker or

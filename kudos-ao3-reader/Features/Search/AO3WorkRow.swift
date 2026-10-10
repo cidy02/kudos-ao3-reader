@@ -373,7 +373,7 @@ struct AO3WorkRow: View {
         let metadata = searchLedgerMetadata
         let updated = WorkStat.displayDate(work.dateUpdated)
         if !metadata.isEmpty || !updated.isEmpty {
-            HStack(alignment: .lastTextBaseline, spacing: 8) {
+            metadataLayout {
                 if !metadata.isEmpty {
                     Text(metadata.joined(separator: "  ·  "))
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -394,6 +394,15 @@ struct AO3WorkRow: View {
         }
     }
 
+    /// The figures and, beside them, the date. At the accessibility sizes the date, which may
+    /// not shrink, left the figures a column a few letters wide ("Eng- / lish · / 12,34 / 5"):
+    /// there the date goes under them.
+    private var metadataLayout: AnyLayout {
+        dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 2))
+            : AnyLayout(HStackLayout(alignment: .lastTextBaseline, spacing: 8))
+    }
+
     private var searchLedgerMetadata: [String] {
         Self.ledgerMetadata(for: work, showsZeroStats: showsZeroStats, includesPerformance: !showsPerformance)
     }
@@ -407,7 +416,7 @@ struct AO3WorkRow: View {
                 includesPerformance: false
             )
             if !metadata.isEmpty || !bookmark.date.isEmpty {
-                HStack(alignment: .lastTextBaseline, spacing: 8) {
+                metadataLayout {
                     if !metadata.isEmpty {
                         Text(metadata.joined(separator: "  ·  "))
                             .frame(maxWidth: .infinity, alignment: .leading)
