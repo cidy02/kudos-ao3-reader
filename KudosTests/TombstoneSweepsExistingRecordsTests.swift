@@ -301,6 +301,108 @@ struct TombstoneSweepsExistingRecordsTests {
         #expect(live.map(\.note) == ["made since"])
     }
 
+    private func work(_ id: UUID, in context: ModelContext) -> SavedWork {
+        let work = SavedWork(id: id, title: "A work", author: "Someone")
+        work.isSaved = true
+        work.hasEPUB = false
+        context.insert(work)
+        return work
+    }
+
+    private func mark(
+        _ id: UUID = UUID(), on work: SavedWork, note: String, modifiedAt: TimeInterval, in context: ModelContext
+    ) -> ReadingAnnotation {
+        let mark = ReadingAnnotation(
+            id: id, work: work, kind: .highlight, locatorString: "passage", note: note,
+            createdAt: Date(timeIntervalSince1970: 100)
+        )
+        mark.lastModifiedAt = Date(timeIntervalSince1970: modifiedAt)
+        context.insert(mark)
+        return mark
+    }
+
+    private func liveNotes(_ context: ModelContext) throws -> [String] {
+        try context.fetch(FetchDescriptor<ReadingAnnotation>())
+            .filter { !$0.isPendingDeletion && $0.deletedAt == nil }
+            .map(\.note)
+    }
+
+    /// Audit A30-3. Replace keeps the snapshot's mark. A newer mark here on the same
+    /// passage, which the snapshot does not list and Replace is about to hide, used to
+    /// win the passage first: the snapshot's mark was deleted as its duplicate and then
+    /// the winner was hidden, so no mark was left.
+    @Test func replaceKeepsTheSnapshotsMarkAgainstANewerLocalOneOnTheSamePassage() throws {
+        let defaults = try testDefaults()
+        let context = try context()
+        let workID = UUID()
+        _ = mark(on: work(workID, in: context), note: "only here", modifiedAt: 300, in: context)
+        try context.save()
+
+        let donor = try self.context()
+        let donorWork = work(workID, in: donor)
+        let remote = mark(on: donorWork, note: "in the snapshot", modifiedAt: 100, in: donor)
+        try donor.save()
+
+        let snapshot = try KudosBackupService.makeContents(
+            works: [donorWork], bookmarks: [], fonts: [], readingQueues: [],
+            annotations: [remote], defaults: defaults
+        )
+        _ = try KudosBackupService.restore(snapshot, into: context, defaults: defaults, mode: .replaceLibrary)
+
+        #expect(try liveNotes(context) == ["in the snapshot"])
+    }
+
+    /// Audit A30-4. The mark was deleted on the other device and then brought back
+    /// there, newer than the deletion. Merge skipped it because this device still had
+    /// the old copy, then swept the old copy as deleted: neither was left.
+    @Test func mergeTakesAMarkBroughtBackAfterItsDeletionWhenTheCopyHereIsTheDeletedOne() throws {
+        let defaults = try testDefaults()
+        let peer = try trustedPeer(defaults)
+        let context = try context()
+        let workID = UUID()
+        let markID = UUID()
+        _ = mark(markID, on: work(workID, in: context), note: "before the deletion", modifiedAt: 300, in: context)
+        try context.save()
+
+        let donor = try self.context()
+        let donorWork = work(workID, in: donor)
+        let revived = mark(markID, on: donorWork, note: "brought back", modifiedAt: 500, in: donor)
+        try donor.save()
+
+        let snapshot = try KudosBackupService.makeContents(
+            works: [donorWork], bookmarks: [], fonts: [], readingQueues: [],
+            annotations: [revived],
+            tombstones: [signedTombstone(.readingAnnotation, id: markID, at: 400, key: peer)],
+            defaults: defaults
+        )
+        _ = try KudosBackupService.restore(snapshot, into: context, defaults: defaults, mode: .merge)
+
+        #expect(try liveNotes(context) == ["brought back"])
+    }
+
+    /// Merge stays add-only for a mark nobody deleted: the copy here is not overwritten.
+    @Test func mergeStillLeavesALiveMarkHereAlone() throws {
+        let defaults = try testDefaults()
+        let context = try context()
+        let workID = UUID()
+        let markID = UUID()
+        _ = mark(markID, on: work(workID, in: context), note: "mine", modifiedAt: 300, in: context)
+        try context.save()
+
+        let donor = try self.context()
+        let donorWork = work(workID, in: donor)
+        let other = mark(markID, on: donorWork, note: "theirs, newer", modifiedAt: 500, in: donor)
+        try donor.save()
+
+        let snapshot = try KudosBackupService.makeContents(
+            works: [donorWork], bookmarks: [], fonts: [], readingQueues: [],
+            annotations: [other], defaults: defaults
+        )
+        _ = try KudosBackupService.restore(snapshot, into: context, defaults: defaults, mode: .merge)
+
+        #expect(try liveNotes(context) == ["mine"])
+    }
+
     /// Audit A27-11. Removing every Account shortcut is a choice and stays one; only a
     /// value never written means the defaults. (Here because it needs no file of its own.)
     @Test func choosingNoAccountShortcutsStaysEmpty() {
