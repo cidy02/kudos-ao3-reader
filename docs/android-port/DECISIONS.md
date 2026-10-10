@@ -1374,4 +1374,10 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   form's date picker and number chooser, the assignments screen's two pickers) drew a 9% glass
   panel with nothing under it but the dimmed screen. `Modifier.dialogGround` puts the page's
   own colour under such a panel. Use it for any panel shown in a `Dialog`.
+- **2026-10-10 · A Library section's order is described in iOS's words.** The order was
+  already the same on both apps; Android's sentence under the header said otherwise for four
+  sections ("most recently finished first" over a list sorted by last read). Now: Reading Now,
+  Finished and History "most recently read first"; Saved for Later "most recently read or
+  added first"; Downloaded and Favorites "newest first" (`library/LibraryScreen.kt`). No test:
+  it is a table of words.
 

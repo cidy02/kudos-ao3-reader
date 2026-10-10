@@ -70,3 +70,16 @@ This document lists the differences between the iOS and Android implementations 
 | Filter Panel | `LibraryFilterPanel.swift:15` | `LibraryFilterPanel.kt:53` | Android adds Status, Download, Collections, and Search controls |
 | Work Context Menu | `WorkCardActions.swift:23` | `LibraryScreen.kt:1270` | Android adds Select, Favorite, Comments, Read, Rebuild from Original |
 | Section Sort Order Text | `LibrarySectionKind.swift:51` | `LibraryScreen.kt:614` | 4 string differences in order descriptions |
+
+## Triage (Claude, 2026-10-10)
+
+Checked against the code; Gemini's rows are leads.
+
+| Row | Verdict | What was done |
+| --- | --- | --- |
+| Section sort order text | **Real, P3, fixed.** The order is the same on both (`LibraryQuery` beside `LibrarySectionKind.works(from:visible:)`: Finished by last read, Saved for Later by last read else added, Downloaded and Favorites by date added); only Android's words said otherwise ("most recently finished first" for a list sorted by last read). | Android now uses iOS's four sentences (`library/LibraryScreen.kt`). |
+| Favorite authors: "With new work" | **Real, a missing feature.** Android stores `newestWorkIDSeen` and carries it in a backup, but has no filter and no read of each author's newest work (searched `android/app/src/main` for "With new work", "NewestWork"). On iOS this is `AuthorNewestWorkStore.prefetch`, the one owner-approved read of one page per registered author (networking policy, "Favorites Authors newest work"). | A brief is owed: port the prefetch exactly as the policy words it (sequential, cancellable, session-scoped, stops at the first unanswered author; the filter stays unavailable until every answer is in). |
+| Add Library Works sheet | Not a gap: Android adds works from inside the collection and queue screens. Not checked further. | None. |
+| Dashboard menu, filter panel, context menu: Android has more | Android-only additions, known and deliberate (the search field and the extra filters are recorded as Android-only in the screen's own comments). Not checked row by row. | None. |
+| Quick filters on Reading Now | Android shows All and WIP on Reading Now; iOS only on Favorites. Not checked against the iOS screen. | Open: look at iOS's Reading Now on the simulator before changing either. |
+
