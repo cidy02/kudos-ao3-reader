@@ -116,6 +116,7 @@ fun SeriesWorksScreen(
     if (editMode != null && seriesID != null && formRepository != null && writes != null) {
         io.github.cidy02.kudos.writing.WritingSeriesScreen(seriesID, title, formRepository, writes,
             onBack = { editing = null }, onOpenAo3 = onOpenAo3, reorderOnly = editMode, works = page?.works.orEmpty(),
+            onChanged = { load(1, bypassCache = true) },
             subtitle = listOfNotNull(title, detail?.workCount?.let { "$it ${if (it == 1) "work" else "works"}" },
                 detail?.words?.takeIf { it > 0 }?.let { "%,d words".format(it) }).joinToString(" · "))
         return

@@ -1390,4 +1390,10 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   AO3 answered. A saved edit no longer clears the new comment waiting as a draft. Reverse:
   `Composer`, `Viewer` and `syncViewer` in `comments/CommentsViewModel.kt`. Details and the
   mutation table: `briefs/3cg-result.md`.
+- **2026-10-10 · A confirmed series save drops the kept series page.** The page cache (3ce)
+  answered the series page from before the save for five minutes, and the screen that opened
+  the form showed its old state. The form's state now removes `/series/<id>` from the cache
+  when AO3 confirms a save, an order or a removal, and its opener reads again past the cache.
+  The rule for every new write: **if a screen can show a page the cache keeps, the write drops
+  that page.** Reverse: `seriesChanged` in `writing/WritingSeriesState.kt`.
 

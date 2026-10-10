@@ -24,6 +24,20 @@ internal class WritingSeriesState(val id: Long, private val repository: AO3Serie
     val account = auth.username().orEmpty()
     private val generation = auth.generation.value
     private var active = true
+    /** True once AO3 has confirmed a save: the screen that opened this form reads its page again. */
+    var changed = false
+        private set
+
+    /**
+     * The series page kept from before the save is no longer what AO3 has. The form's opener reads
+     * its own page again; any other screen would have been answered from the cache for five
+     * minutes with the old title, order or works (audit A39, the fault 3cd's bulk edit had).
+     */
+    private fun seriesChanged() {
+        changed = true
+        io.github.cidy02.kudos.network.ao3.AO3PageCache.shared.removePages(
+            "/series/$id", io.github.cidy02.kudos.network.ao3.AO3PageCache.Scope(auth.username(), generation))
+    }
     private var attempted = false
     private var manageAttempted = false
     private var loadJob: Job? = null
@@ -103,13 +117,14 @@ internal class WritingSeriesState(val id: Long, private val repository: AO3Serie
             if (order) {
                 when (val result = writes.reorderSeries(id, rows!!.map { it.serialWorkID }, generation)) {
                     is AO3Result.Success -> if (current()) {
+                        seriesChanged()
                         val fresh = keepingMetadata(rows, result.value)
                         mutable.value = state.value.copy(rows = fresh, form = state.value.form?.copy(works = fresh), orderSaved = true)
                     }
                     is AO3Result.Failure -> if (active) mutable.value = state.value.copy(error = workFormFailure(result.error))
                 }
             } else when (val result = writes.saveSeries(form!!, generation)) {
-                is AO3Result.Success -> if (current()) mutable.value = state.value.copy(notice = result.value)
+                is AO3Result.Success -> if (current()) { seriesChanged(); mutable.value = state.value.copy(notice = result.value) }
                 is AO3Result.Failure -> if (active) mutable.value = state.value.copy(error = workFormFailure(result.error))
             }
             currentCoroutineContext().ensureActive()
@@ -128,8 +143,8 @@ internal class WritingSeriesState(val id: Long, private val repository: AO3Serie
         writeJob = currentCoroutineContext()[Job]
         try {
             when (val result = writes.removeWorkFromSeries(id, row.serialWorkID, generation)) {
-                is AO3Result.Success -> if (current()) mutable.value = state.value.copy(form = state.value.form?.let {
-                    it.copy(works = keepingMetadata(it.works, result.value)) })
+                is AO3Result.Success -> if (current()) { seriesChanged(); mutable.value = state.value.copy(form = state.value.form?.let {
+                    it.copy(works = keepingMetadata(it.works, result.value)) }) }
                 // "Was not removed" is untrue of a removal AO3 may have carried out; iOS says both sentences.
                 is AO3Result.Failure -> if (active) mutable.value = state.value.copy(error = workFormFailure(result.error).let {
                     if (it == io.github.cidy02.kudos.network.ao3.account.AO3CollectionFields.UNCONFIRMED) it

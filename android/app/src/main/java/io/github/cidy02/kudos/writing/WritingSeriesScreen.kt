@@ -34,12 +34,14 @@ import kotlinx.coroutines.withContext
 @Composable
 fun WritingSeriesScreen(id: Long, title: String, repository: AO3SeriesFormRepository, writes: AO3WriteRepository,
     onBack: () -> Unit, onOpenAo3: (String) -> Unit = {}, reorderOnly: Boolean = false,
-    works: List<AO3WorkSummary> = emptyList(), subtitle: String = title) {
+    works: List<AO3WorkSummary> = emptyList(), subtitle: String = title,
+    /** Called on the way back when AO3 confirmed a save: the opener's page is no longer what AO3 has. */
+    onChanged: () -> Unit = {}) {
     // Keep the exact draft across session failure; this model can never post under a new session.
     val model = remember(id, repository, writes, reorderOnly) { WritingSeriesState(id, repository, writes, reorderOnly, works) }
     LaunchedEffect(model) { model.load() }
     DisposableEffect(model) { onDispose { model.close() } }
-    WritingSeriesContent(model, title, subtitle, onBack, onOpenAo3, reorderOnly)
+    WritingSeriesContent(model, title, subtitle, { if (model.changed) onChanged(); onBack() }, onOpenAo3, reorderOnly)
 }
 
 @Composable

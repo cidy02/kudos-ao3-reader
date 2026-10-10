@@ -267,7 +267,8 @@ fun AuthorProfileScreen(
         val subtitle = listOfNotNull(series.title, series.workCount?.let { "$it ${if (it == 1) "work" else "works"}" },
             series.words?.takeIf { it > 0 }?.let { "%,d words".format(it) }).joinToString(" · ")
         io.github.cidy02.kudos.writing.WritingSeriesScreen(series.id, series.title, seriesFormRepository, seriesWrites,
-            onBack = { editingSeries = null }, onOpenAo3 = onOpenWeb, reorderOnly = edit.second, subtitle = subtitle)
+            onBack = { editingSeries = null }, onOpenAo3 = onOpenWeb, reorderOnly = edit.second, subtitle = subtitle,
+            onChanged = { loadHeader(bypassCache = true) { loadTab(tab, 1, bypassCache = true) } })
         return
     }
 
