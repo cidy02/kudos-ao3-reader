@@ -86,6 +86,10 @@ struct ChallengeSettingsView: View {
         .subjectScreenWash(palette: palette)
         .task { await loadSettingsIfNeeded() }
         .refreshable { await loadSettings() }
+        .onReceive(NotificationCenter.default.publisher(for: .ao3CollectionChanged)) { notification in
+            guard notification.object as? String == collectionSlug else { return }
+            Task { await loadSettings() }
+        }
             .screenTint(palette)
     }
 
