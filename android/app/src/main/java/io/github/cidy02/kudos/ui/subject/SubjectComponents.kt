@@ -191,6 +191,15 @@ fun Modifier.subjectPanel(
         .border(0.5.dp, tokens.glassStroke(0.13), shape)
 }
 
+/**
+ * The ground for a panel shown in a `Dialog`. A panel's own fill is 9% glass, made to sit on a
+ * page; in a dialog nothing is under it but the dimmed screen, which showed through (the
+ * challenge form's date picker could not be read over the rows behind it).
+ */
+@Composable
+fun Modifier.dialogGround(cornerRadius: Dp = SubjectMetrics.panelRadius): Modifier =
+    background(LocalKudosTokens.current.background, RoundedCornerShape(cornerRadius))
+
 /** Hairline under a panel row. [inset] is 14dp so the line starts under the label. */
 @Composable
 fun SubjectRowSeparator(

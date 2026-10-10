@@ -1359,4 +1359,19 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   list again from AO3 after the Save, as it does after a row's edit and after a delete. iOS
   does not (its form closes and nothing reads the list): to be fixed there the same way.
   Reverse: `onSaved` in `author/AuthorProfileScreen.kt`.
+- **2026-10-10 · A challenge's settings can be edited (brief 3cf).** The owner's Edit settings
+  opens iOS's form: Basics, Schedule, Sign-up limits, Tag sets, Matching, Anonymity and
+  moderation, with one Save changes at the bottom. Save is one request for the challenge and,
+  only if one of the four collection switches changed, a second for the collection; turning
+  off Unrevealed or Anonymous asks "Reveal now?" first. As with the work form, Android sends
+  back every control AO3 served, changed only where the reader changed it; iOS re-encodes
+  what it models (the difference is listed in `briefs/3cf-result.md`, question 1). The
+  sign-up total is shown only when the first page is the whole list (owner question 16).
+  Never run against AO3. Reverse: `account/AO3ChallengeSettingsEdit*.kt`,
+  `network/ao3/account/AO3ChallengeSettingsForm.kt`, `saveChallengeSettings` in
+  `network/ao3/writes/AO3WriteRepository.kt`.
+- **2026-10-10 · A panel in a dialog gets a solid ground.** Three pickers (the challenge
+  form's date picker and number chooser, the assignments screen's two pickers) drew a 9% glass
+  panel with nothing under it but the dimmed screen. `Modifier.dialogGround` puts the page's
+  own colour under such a panel. Use it for any panel shown in a `Dialog`.
 

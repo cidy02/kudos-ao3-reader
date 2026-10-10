@@ -45,6 +45,8 @@ internal object DemoNetwork {
     fun webFixture(url: HttpUrl, source: FixtureSource = fixtures, clock: Clock? = null): ByteArray? {
         if (!DemoNetworkRoutes.isAo3Host(url.host)) return null
         val path = DemoNetworkRoutes.decodedPath(url).trimEnd('/')
+        val challengeAnswer = challengeSettings.answer(Request.Builder().url(url).build(), source)
+        if (challengeAnswer != null) return if (challengeAnswer.first == 200) challengeAnswer.second.encodeToByteArray() else null
         val workAnswer = workForms.answer(Request.Builder().url(url).build(), source, clock)
         if (workAnswer != null) return if (workAnswer.first == 200) workAnswer.second.encodeToByteArray() else null
         val name = when (path) {
@@ -92,6 +94,7 @@ internal object DemoNetwork {
     var fixtures: FixtureSource = FixtureSource { null }
         private set
 
+    internal var challengeSettings = DemoChallengeSettingsSaves()
     internal var workForms = DemoWorkSaves()
     private val launchDecision = CountDownLatch(1)
 
@@ -100,6 +103,7 @@ internal object DemoNetwork {
         this.signedIn = signedIn
         fixtures = AssetFixtureSource(assets)
         workForms = DemoWorkSaves()
+        challengeSettings = DemoChallengeSettingsSaves()
         isActive = true
         launchDecision.countDown()
     }
@@ -270,6 +274,8 @@ internal object DemoNetworkRoutes {
             "2" -> "ao3_demo_meme_requests_2"
             else -> null
         }
+        if (path.trimEnd('/') == "/collections/summer_meme/edit") return "ao3_demo_meme_collection_edit"
+        if (path.trimEnd('/') == "/collections/summer_meme/signups") return "ao3_demo_meme_signups"
         if (path.trimEnd('/') == "/collections/summer_meme/gift_exchange/edit") return null // local 404 probes the meme
         if (path.trimEnd('/') in setOf("/collections/summer_meme/prompt_meme", "/collections/summer_meme/prompt_meme/edit"))
             return "ao3_demo_meme_settings"
@@ -386,6 +392,7 @@ internal class DemoNetworkInterceptor(
     private val collectionParticipants = DemoCollectionParticipants()
     private val tagSets = DemoTagSetWrites()
     private val promptMeme = DemoPromptMemeWrites()
+    private val challengeSettings = DemoChallengeSettingsSaves()
     private val signUps = DemoChallengeSignUps()
     private val assignments = DemoChallengeAssignments()
     private val workForms = DemoWorkSaves()
@@ -457,6 +464,11 @@ internal class DemoNetworkInterceptor(
             return Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1)
                 .code(if (term == "fail") 403 else 200).message("Local autocomplete answer")
                 .header("Content-Type", type).body(json.toString().toResponseBody(type.toMediaType())).build()
+        }
+        (if (DemoNetwork.isActive) DemoNetwork.challengeSettings else challengeSettings).answer(chain.request(), fixtures())?.let { answer ->
+            return Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1)
+                .code(answer.first).message("Local challenge settings answer").header("Content-Type", HTML)
+                .body(answer.second.toResponseBody(HTML_TYPE)).build()
         }
         assignments.answer(chain.request(), fixtures())?.let { answer ->
             return Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1)
@@ -909,7 +921,7 @@ internal class DemoWorkSaves {
 
 /** Original fixture-only new/edit/delete answers. Missing assets and unknown writes never dispatch a socket. */
 private class DemoCollectionForms {
-    private var edited: String? = null
+    private val edits = mutableMapOf<String, String>()
     private var deleted = false
     private val created = mutableSetOf<String>()
 
@@ -923,7 +935,7 @@ private class DemoCollectionForms {
                 val source = fixtures.read("ao3_demo_moderation_show") ?: return 404 to ""
                 if (deleted) return 404 to ""
                 val doc = Jsoup.parse(source.decodeToString())
-                val form = edited?.let { Jsoup.parse(it) }
+                val form = edits["winter_exchange"]?.let { Jsoup.parse(it) }
                 fun flag(name: String) = form?.select("input[type=checkbox]")?.firstOrNull {
                     it.attr("name") == "collection[collection_preference_attributes][$name]"
                 }?.hasAttr("checked") ?: true
@@ -939,11 +951,12 @@ private class DemoCollectionForms {
             val fixture = when (path) {
                 "/collections/new" -> "ao3_demo_collection_new"
                 "/collections/winter_exchange/edit" -> if (deleted) return 404 to "" else "ao3_demo_collection_edit"
+                "/collections/summer_meme/edit" -> "ao3_demo_meme_collection_edit"
                 "/collections/winter_exchange/confirm_delete" -> if (deleted) return 404 to "" else "ao3_demo_collection_destroy"
                 else -> return null
             }
             return fixtures.read(fixture)?.let { bytes ->
-                val body = if (fixture.endsWith("_edit")) edited ?: Jsoup.parse(bytes.decodeToString()).apply {
+                val body = if (fixture.endsWith("_edit")) edits[path.split('/').getOrNull(2)] ?: Jsoup.parse(bytes.decodeToString()).apply {
                     select("input[type=checkbox]").firstOrNull {
                         it.attr("name") == "collection[collection_preference_attributes][unrevealed]"
                     }?.attr("checked", "checked")
@@ -952,7 +965,7 @@ private class DemoCollectionForms {
             }
                 ?: (404 to "")
         }
-        if (request.method != "POST" || path !in setOf("/collections", "/collections/winter_exchange")) return null
+        if (request.method != "POST" || path !in setOf("/collections", "/collections/winter_exchange", "/collections/summer_meme")) return null
         val buffer = Buffer()
         request.body?.writeTo(buffer)
         val pairs = buffer.readUtf8().split('&').map { part ->
@@ -966,12 +979,13 @@ private class DemoCollectionForms {
             deleted = true
             return 200 to "<div class='flash notice'>Collection deleted.</div>"
         }
-        val isEdit = path == "/collections/winter_exchange"
+        val isEdit = path != "/collections"
+        val slug = path.substringAfterLast('/')
         val expected = if (isEdit) "demo-collection-edit-token" else "demo-collection-new-token"
         if (fields["authenticity_token"] != expected || (isEdit && (deleted || fields["_method"] != "patch"))) return refusal()
         val name = fields["collection[name]"].orEmpty()
         val invalid = !isEdit && (name == "refused_name" || name == "taken_name" || name in created)
-        val source = fixtures.read(if (invalid) "ao3_demo_collection_invalid" else if (isEdit) "ao3_demo_collection_edit" else "ao3_demo_collection_new")
+        val source = fixtures.read(if (invalid) "ao3_demo_collection_invalid" else if (slug == "summer_meme") "ao3_demo_meme_collection_edit" else if (isEdit) "ao3_demo_collection_edit" else "ao3_demo_collection_new")
             ?: return 404 to ""
         val doc = Jsoup.parse(source.decodeToString())
         fields.forEach { (name, value) ->
@@ -991,7 +1005,7 @@ private class DemoCollectionForms {
             }
         }
         if (invalid) return 422 to doc.outerHtml()
-        if (isEdit) edited = doc.outerHtml() else created.add(name)
+        if (isEdit) edits[slug] = doc.outerHtml() else created.add(name)
         doc.selectFirst("#main")!!.prepend("<div class='flash notice'>Collection was successfully ${if (isEdit) "updated" else "created"}.</div>")
         return 200 to doc.outerHtml()
     }
@@ -1566,5 +1580,48 @@ private class DemoChallengeAssignments {
         }
         details.remove(); heading.remove(); pages[sourceName] = sourceDoc.outerHtml()
         return 200 to "<div class='flash notice'>Assignments updated.</div>"
+    }
+}
+
+/** One local edit-page answer per challenge address, shared with the read-only screen. */
+internal class DemoChallengeSettingsSaves {
+    private val pages = mutableMapOf<String, String>()
+    @Synchronized fun answer(request: Request, source: FixtureSource): Pair<Int, String>? {
+        val path = DemoNetworkRoutes.decodedPath(request.url).trimEnd('/')
+        val slug = path.split('/').getOrNull(2) ?: return null
+        val kind = when (slug) { "winter_exchange" -> "gift_exchange"; "summer_meme" -> "prompt_meme"; else -> return null }
+        val action = "/collections/$slug/$kind"
+        if (path !in setOf(action, "$action/edit")) return null
+        val fixture = if (kind == "gift_exchange") "ao3_demo_winter_settings" else "ao3_demo_meme_settings"
+        val original = source.read(fixture)?.decodeToString() ?: return 404 to ""
+        if (request.method == "GET") return 200 to (pages[slug] ?: original)
+        if (request.method != "POST" || path != action) return 404 to ""
+        val buffer = Buffer(); request.body?.writeTo(buffer)
+        val pairs = buffer.readUtf8().split('&').map { part ->
+            val bits = part.split('=', limit = 2)
+            URLDecoder.decode(bits[0], "UTF-8") to URLDecoder.decode(bits.getOrElse(1) { "" }, "UTF-8")
+        }
+        val fields = pairs.toMap()
+        if (fields["authenticity_token"] != "csrf-challenge" || fields["_method"] != "put")
+            return 422 to "<div class='flash error'>AO3 couldn't save the challenge.</div>"
+        if (fields["$kind[signup_instructions_general]"]?.contains("refuse settings", true) == true)
+            return 422 to "<div class='flash error'>Sign-up instructions contain a refused demo phrase.</div>"
+        val doc = Jsoup.parse(pages[slug] ?: original)
+        doc.select("input, textarea, select").filterNot { it.hasAttr("disabled") }.forEach { control ->
+            val name = control.attr("name")
+            when {
+                control.attr("type") == "checkbox" -> {
+                    control.removeAttr("checked")
+                    if (pairs.any { it.first == name && it.second == control.attr("value").ifEmpty { "on" } }) control.attr("checked", "checked")
+                }
+                control.tagName() == "textarea" && name in fields -> control.text(fields.getValue(name))
+                control.tagName() == "select" && name in fields -> control.select("option").forEach { option ->
+                    option.removeAttr("selected"); if (option.attr("value") == fields[name]) option.attr("selected", "selected")
+                }
+                control.attr("type") !in setOf("hidden", "submit") && name in fields -> control.attr("value", fields.getValue(name))
+            }
+        }
+        pages[slug] = doc.outerHtml()
+        return 200 to "<div class='flash notice'>Challenge was successfully updated.</div>"
     }
 }

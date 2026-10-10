@@ -746,11 +746,23 @@ fun AppNavHost(
         ) { entry ->
             val slug = Routes.routeArg(entry, "collectionSlug")
             val context = androidx.compose.ui.platform.LocalContext.current
+            var editingSettings by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
+            var settingsOpening by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(0) }
             if (slug == null) navController.popBackStack()
+            else if (editingSettings) io.github.cidy02.kudos.account.AO3ChallengeSettingsEditScreen(
+                slug = slug, title = Routes.routeArg(entry, "collectionTitle") ?: slug,
+                viewerIsOwner = entry.arguments?.getBoolean("owner") == true,
+                repository = container.collectionDetailRepository, writes = container.writeRepository,
+                onOpenWeb = { navController.navigate(Routes.webFallback(it)) },
+                onOpenTagSet = { id, title -> navController.navigate(Routes.ao3TagSet(id, title, isModerator = true)) },
+                onOpenCollection = { navController.navigate(Routes.ao3CollectionForm(slug)) },
+                onBack = { editingSettings = false }, openingKey = settingsOpening
+            )
             else io.github.cidy02.kudos.account.AO3ChallengeSettingsScreen(
                 slug = slug, title = Routes.routeArg(entry, "collectionTitle") ?: slug,
                 viewerIsOwner = entry.arguments?.getBoolean("owner") == true,
                 repository = container.collectionDetailRepository,
+                onOpenEditSettings = { settingsOpening += 1; editingSettings = true },
                 onOpenWeb = { navController.navigate(Routes.webFallback(it)) },
                 onOpenTagSet = { id, title -> navController.navigate(Routes.ao3TagSet(id, title, isModerator = true)) },
                 onOpenAssignments = { listSlug, listTitle, closed -> navController.navigate(Routes.ao3ChallengeAssignments(listSlug, listTitle,
