@@ -237,7 +237,8 @@ fun SensitiveWorkRow(
                                     text = "by ${author.ifBlank { "Anonymous" }}",
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    maxLines = 1,
+                                    // Two co-authors read "Avery Writes, Second Ps…" at twice the text size.
+                                    maxLines = if (io.github.cidy02.kudos.ui.subject.isAccessibilityFontScale()) 2 else 1,
                                     overflow = TextOverflow.Ellipsis
                                 )
                             }

@@ -296,3 +296,25 @@ sheet is sound, and shows the shared segmented control two to a row.
 Search's results and filter sheet, the Library's section pages, the note editor and Find in
 Work in the reader, the login screens, and rows 4 and 7 to 13 of the top twenty.
 
+### Sixth look (07:11): search results, the filter sheet, work detail
+
+Sound at twice the size: the filter sheet.
+
+**Four more, fixed:**
+
+- A figure broke a number across two lines ("260,11 / 4"), which the second-line rule of the
+  first look had made possible. Only a value with a space in it may take a second line now; a
+  number shrinks to fit.
+- The filter button's count grew with the text and covered the icon it belongs to. The button
+  does not grow, so the count does not either; the button's spoken label says the count.
+- A work card's byline cut a second co-author ("Avery Writes, Second Ps…"). Two lines at an
+  accessibility text size.
+- **Work detail's author names were one row at every text size**, so a later co-author was cut
+  and could not be tapped (a second one at twice the size; a third or fourth at any). They wrap.
+
+Seen at twice the size and unchanged at the normal one.
+
+**Not yet looked at at twice the size:** the series, collection and tag-set forms, the
+Library's section pages, the reader's note editor and Find in Work, the login screens, and rows
+4 and 7 to 13 of the top twenty.
+
