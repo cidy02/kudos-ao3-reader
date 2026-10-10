@@ -227,3 +227,14 @@ and deck, Jump Back In, the comment action row and "Continue thread", avatar ini
 cards, the three pagination rows, the hours card, the chapter picker), and the rest of the
 147. They are the list for the next large-text sitting.
 
+### Second look (06:05): Home and Browse, four screens down each, at twice the text size
+
+**Two more real cuts, rows 1, 2 and 3 of the top twenty, fixed:** Browse's Jump Back In cards
+read "ANIME … / Doct…" with the count gone, and Home's reading-queue cards cut their count line
+in half and their deck's title to "Sodium …". Both kept a fixed size while the cover cards
+beside them grew with the text (iOS `ScaledCarouselCardSize`). They now grow by the same rule
+(`carouselCardScale`, `ui/subject/SubjectWorkCoverCard.kt`). Seen whole at twice the size and
+unchanged at the normal size.
+
+Still not looked at: rows 4 to 13, 15 to 18 and 20.
+

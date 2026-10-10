@@ -9,6 +9,8 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -48,12 +50,16 @@ fun HomeQueueCard(
     val tokens = LocalKudosTokens.current
     val tint = HomeFacts.carouselQueueTint(tokens.theme, queue.hue, queue.colorHex)
     val upNext = HomeFacts.upNext(works)
+    // With the text, as the cover cards beside it: at twice the size the count line was cut in half
+    // by the fixed height, and the deck's title to "Sodium …".
+    val grow = io.github.cidy02.kudos.ui.subject.carouselCardScale()
     Column(
         modifier
             .padding(top = 2.dp, bottom = 8.dp)
-            .size(width = HomeCardMetrics.width, height = 168.dp)
+            .width(HomeCardMetrics.width * grow)
+            .heightIn(min = 168.dp * grow)
     ) {
-        Deck(tint = tint, upNext = upNext, works = works)
+        Deck(tint = tint, upNext = upNext, works = works, grow = grow)
         Spacer(Modifier.height(9.dp))
         Text(
             text = queue.displayName,
@@ -74,29 +80,29 @@ fun HomeQueueCard(
 }
 
 @Composable
-private fun Deck(tint: Color?, upNext: SavedWork?, works: List<SavedWork>) {
+private fun Deck(tint: Color?, upNext: SavedWork?, works: List<SavedWork>, grow: Float = 1f) {
     val tokens = LocalKudosTokens.current
     val shape = RoundedCornerShape(12.dp)
     val back = tint ?: tokens.glassFill(0.06)
     val mid = tint?.withOpacity(0.85) ?: tokens.glassFill(0.09)
-    Box(Modifier.size(width = HomeCardMetrics.width, height = 96.dp)) {
+    Box(Modifier.size(width = HomeCardMetrics.width * grow, height = 96.dp * grow)) {
         GlassCard(
             fill = back,
             shape = shape,
             modifier = Modifier
-                .size(148.dp, 88.dp)
+                .size(148.dp * grow, 88.dp * grow)
                 .offset(x = 16.dp)
         )
         GlassCard(
             fill = mid,
             shape = shape,
             modifier = Modifier
-                .size(148.dp, 88.dp)
+                .size(148.dp * grow, 88.dp * grow)
                 .offset(x = 8.dp, y = 4.dp)
         )
         Box(
             Modifier
-                .size(148.dp, 88.dp)
+                .size(148.dp * grow, 88.dp * grow)
                 .offset(y = 8.dp)
         ) {
             if (upNext == null) {

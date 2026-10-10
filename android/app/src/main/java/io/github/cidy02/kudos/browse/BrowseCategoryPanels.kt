@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -91,10 +92,12 @@ private fun JumpBackInCard(
     val palette = SubjectPalette.fromHue(HomeFacts.coverHue(category.name), tokens.theme)
     val shape = RoundedCornerShape(14.dp)
     val title = FandomDisplayName.bareTitle(pick.fandom, among)
+    // With the text, as Home's cards: at twice the size "Doctor Who" read "Doct…" and the count was gone.
+    val grow = io.github.cidy02.kudos.ui.subject.carouselCardScale(JumpBackInCardWidth)
     Column(
         modifier = Modifier
-            .width(JumpBackInCardWidth)
-            .height(132.dp)
+            .width(JumpBackInCardWidth * grow)
+            .heightIn(min = 132.dp * grow)
             .clip(shape)
             .background(tokens.cardFill)
             .background(palette.cardWash)
