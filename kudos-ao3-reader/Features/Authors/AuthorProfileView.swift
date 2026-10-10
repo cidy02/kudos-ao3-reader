@@ -281,6 +281,11 @@ private extension AuthorProfileView {
         .cardList()
         .subjectScreenWash(palette: theme.scopePalette)
         .refreshable { await model.refresh(auth: auth) }
+        // The writer's own series list after a series was saved, reordered or lost a work.
+        .onChange(of: auth.lastSeriesWrite) { _, write in
+            guard write != nil, isOwnProfile else { return }
+            Task { await model.refresh(auth: auth) }
+        }
         .filterPanelPresentation(isPresented: $showingWorksFilters) {
             AO3AuthorWorksFilterPanel(model: model, onWillChange: bulkSelection.exitSelectMode) {
                 showingWorksFilters = false
