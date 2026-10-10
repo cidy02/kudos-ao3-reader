@@ -146,6 +146,7 @@ struct AccountInboxItemRow: View {
     var onDeleteFromInbox: () -> Void = {}
 
     @Environment(AO3AuthService.self) private var auth
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var confirmDelete = false
     @State private var actionNotice: String?
 
@@ -342,31 +343,52 @@ struct AccountInboxItemRow: View {
         return parts.joined(separator: ". ")
     }
 
+    @ViewBuilder
     private var byline: some View {
-        HStack(alignment: .center, spacing: 6) {
-            if item.isUnread {
-                Circle()
-                    .fill(.tint)
-                    .frame(width: 8, height: 8)
-                    .accessibilityLabel("Unread")
+        if dynamicTypeSize.isAccessibilitySize {
+            // On one line the name and the time were both cut ("Rea…", "3 day…") at the
+            // accessibility sizes: the name's line, then the time's.
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(alignment: .center, spacing: 6) { bylineWho }
+                HStack(alignment: .center, spacing: 6) { bylineWhen }
             }
-            Text(item.commenterName)
-                .font(.subheadline.weight(.semibold))
+            .frame(maxWidth: .infinity, alignment: .leading)
+        } else {
+            HStack(alignment: .center, spacing: 6) {
+                bylineWho
+                Spacer(minLength: 4)
+                bylineWhen
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var bylineWho: some View {
+        if item.isUnread {
+            Circle()
+                .fill(.tint)
+                .frame(width: 8, height: 8)
+                .accessibilityLabel("Unread")
+        }
+        Text(item.commenterName)
+            .font(.subheadline.weight(.semibold))
+            .lineLimit(1)
+        CommentParticipantBadge(role: item.participantRole(
+            workAuthors: workAuthors,
+            workAuthorIdentities: workAuthorIdentities,
+            currentUsername: auth.username
+        ))
+    }
+
+    @ViewBuilder
+    private var bylineWhen: some View {
+        // 1l: "Replied" rides the byline, beside the time.
+        if item.isReplied { InboxRepliedBadge() }
+        if !item.postedAgo.isEmpty {
+            Text(item.postedAgo)
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
                 .lineLimit(1)
-            CommentParticipantBadge(role: item.participantRole(
-                workAuthors: workAuthors,
-                workAuthorIdentities: workAuthorIdentities,
-                currentUsername: auth.username
-            ))
-            Spacer(minLength: 4)
-            // 1l: "Replied" rides the byline, beside the time.
-            if item.isReplied { InboxRepliedBadge() }
-            if !item.postedAgo.isEmpty {
-                Text(item.postedAgo)
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
-                    .lineLimit(1)
-            }
         }
     }
 
@@ -378,25 +400,41 @@ struct AccountInboxItemRow: View {
     private var subjectControl: some View {
         if !item.subjectTitle.isEmpty {
             if let chapter = item.chapterIndicatorTitle {
-                HStack(spacing: 4) {
-                    Text("on")
-                    Button(action: onOpenChapter) {
-                        // A chip never wraps ("Chapt / er 3" at AX sizes); the
-                        // work title beside it does.
-                        Text(chapter)
-                            .font(.caption2)
-                            .lineLimit(1)
-                            .fixedSize()
-                            .padding(.horizontal, 7)
-                            .padding(.vertical, 2)
-                            .background(.quaternary, in: Capsule())
-                            .foregroundStyle(.secondary)
-                            .frame(minHeight: 44)
-                            .contentShape(Rectangle())
+                let chip = Button(action: onOpenChapter) {
+                    // A chip never wraps ("Chapt / er 3" at AX sizes); the
+                    // work title beside it does.
+                    Text(chapter)
+                        .font(.caption2)
+                        .lineLimit(1)
+                        .fixedSize()
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 2)
+                        .background(.quaternary, in: Capsule())
+                        .foregroundStyle(.secondary)
+                        .frame(minHeight: 44)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.borderless)
+                Group {
+                    if dynamicTypeSize.isAccessibilitySize {
+                        // Beside the chip the title had room for "of …" and no more at the
+                        // accessibility sizes: it goes under it.
+                        VStack(alignment: .leading, spacing: 0) {
+                            HStack(spacing: 4) {
+                                Text("on")
+                                chip
+                            }
+                            Text("of \(item.workTitle)")
+                                .lineLimit(3)
+                        }
+                    } else {
+                        HStack(spacing: 4) {
+                            Text("on")
+                            chip
+                            Text("of \(item.workTitle)")
+                                .lineLimit(2)
+                        }
                     }
-                    .buttonStyle(.borderless)
-                    Text("of \(item.workTitle)")
-                        .lineLimit(2)
                 }
                 .font(.caption)
                 .foregroundStyle(.secondary)
