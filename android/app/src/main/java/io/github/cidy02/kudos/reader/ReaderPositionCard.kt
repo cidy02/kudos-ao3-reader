@@ -177,11 +177,14 @@ fun ReaderPositionCard(
                     ),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                // Top row: Page number & chapter time remaining
-                Row(
+                // Top row: Page number & chapter time remaining. A row that wraps: at twice the text
+                // size the two ran together ("Page 1 of 1" then "0 min" read "of 10 min"). When they
+                // fit, as at ordinary sizes, it is the same one row with the time at the far end.
+                @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+                androidx.compose.foundation.layout.FlowRow(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
                     // Page Title Label
                     if (page < 1 || pageCount < 1) {
@@ -295,7 +298,8 @@ fun ReaderPositionCard(
                         fontSize = 13.sp,
                         color = tokens.secondaryInk,
                         textAlign = TextAlign.Center,
-                        maxLines = 1,
+                        // "… · 0 min left" was cut off at twice the text size.
+                        maxLines = if (io.github.cidy02.kudos.ui.subject.isAccessibilityFontScale()) 2 else 1,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.fillMaxWidth()
                     )
