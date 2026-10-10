@@ -6,6 +6,7 @@ struct AuthorProfileView: View {
     @Environment(AO3AuthService.self) private var auth
     @Environment(AppRouter.self) private var router
     @Environment(ThemeManager.self) private var theme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     @State private var model: AO3AuthorProfileModel
     @State private var expandAll = false
@@ -386,7 +387,11 @@ private extension AuthorProfileView {
     }
 
     private func pseudSelector(_ pseuds: [AO3AuthorPseud]) -> some View {
-        HStack(spacing: 12) {
+        // The chosen pseud under the label at the accessibility sizes: beside it the label
+        // broke in the middle ("Sc / ope") and the pseud was cut to "Ave…".
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 0)) : AnyLayout(HStackLayout(spacing: 12))
+        return layout {
             Label("Scope", systemImage: "person.2")
                 .foregroundStyle(.secondary)
             Spacer(minLength: 8)
@@ -416,7 +421,8 @@ private extension AuthorProfileView {
             } label: {
                 HStack(spacing: 6) {
                     Text(model.route.pseud ?? "All Pseuds")
-                        .lineLimit(1)
+                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? 2 : 1)
+                        .multilineTextAlignment(.leading)
                     Image(systemName: "chevron.up.chevron.down")
                         .font(.caption2)
                 }
@@ -426,6 +432,7 @@ private extension AuthorProfileView {
             .accessibilityLabel("Author scope")
             .accessibilityValue(model.route.pseud ?? "All Pseuds")
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     @ViewBuilder
