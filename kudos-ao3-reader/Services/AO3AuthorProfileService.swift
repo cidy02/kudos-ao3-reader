@@ -66,7 +66,10 @@ enum AO3AuthorProfileFetcher {
             throw AO3Error.authenticationRequired
         } catch {
             guard isCurrent() else { throw CancellationError() }
-            if let stale = await AO3AuthorPageCache.shared.staleValue(for: key) {
+            // An error that is not an `AO3Error` is the connection's, so it counts as
+            // "could not reach AO3".
+            if (error as? AO3Error)?.allowsStalePage ?? true,
+               let stale = await AO3AuthorPageCache.shared.staleValue(for: key) {
                 guard isCurrent() else { throw CancellationError() }
                 return Page(html: stale, isStale: true)
             }
