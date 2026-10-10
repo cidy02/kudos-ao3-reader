@@ -5,6 +5,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -20,6 +21,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -27,6 +29,10 @@ import androidx.compose.ui.unit.sp
 /**
  * iOS `Picker` `.segmented` / `SubjectSegmentedControl`: a glass track with a
  * filled segment for the selection. Labels scale down instead of wrapping.
+ *
+ * At an accessibility text size four segments in one row cut their labels even at the
+ * smallest step ("Bookma…" on the writer's profile, seen at twice the text size): more than
+ * three then sit two to a row, and a label may take a second line.
  */
 @Composable
 fun <T> SubjectSegmentedControl(
@@ -40,7 +46,8 @@ fun <T> SubjectSegmentedControl(
     val tokens = LocalKudosTokens.current
     val track = RoundedCornerShape(9.dp)
     val segment = RoundedCornerShape(7.dp)
-    Row(
+    val large = isAccessibilityFontScale()
+    Column(
         modifier
             .fillMaxWidth()
             .semantics {
@@ -50,10 +57,11 @@ fun <T> SubjectSegmentedControl(
             .background(tokens.glassFill(0.09))
             .border(0.5.dp, tokens.glassStroke(0.13), track)
             .padding(2.dp),
-        horizontalArrangement = Arrangement.spacedBy(2.dp),
-        verticalAlignment = Alignment.CenterVertically
+        verticalArrangement = Arrangement.spacedBy(2.dp)
     ) {
-        options.forEach { option ->
+      options.chunked(if (large && options.size > 3) 2 else options.size.coerceAtLeast(1)).forEach { row ->
+      Row(horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
+        row.forEach { option ->
             val isSelected = option == selected
             Box(
                 Modifier
@@ -70,11 +78,14 @@ fun <T> SubjectSegmentedControl(
                     color = if (isSelected) tokens.primaryInk else tokens.secondaryInk,
                     fontSize = 13.sp,
                     fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
-                    maxLines = 1,
+                    maxLines = if (large) 2 else 1,
+                    textAlign = TextAlign.Center,
                     overflow = TextOverflow.Ellipsis,
                     autoSize = TextAutoSize.StepBased(minFontSize = 9.sp, maxFontSize = 13.sp)
                 )
             }
         }
+      }
+      }
     }
 }
