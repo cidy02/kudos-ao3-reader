@@ -1401,10 +1401,14 @@ private fun LibrarySectionContent(
                         } else {
                             val sortLabel = if (state.hasActiveQueryOrFilters) null else {
                                 if (state.sort != LibrarySort.Natural) state.sort.label else when (kind) {
-                                    LibrarySectionKind.ReadingNow, LibrarySectionKind.History -> "most recently read first"
-                                    LibrarySectionKind.Finished -> "most recently finished first"
-                                    LibrarySectionKind.SavedForLater, LibrarySectionKind.Favorites -> "most recently added first"
-                                    LibrarySectionKind.Downloaded -> "most recently downloaded first"
+                                    // iOS `LibrarySectionKind.orderDescription`: each says what
+                                    // `LibraryQuery` sorts that section by. Finished is by last
+                                    // read, not by when it was finished; Saved for Later by last
+                                    // read, else added; the other two by date added.
+                                    LibrarySectionKind.ReadingNow, LibrarySectionKind.Finished,
+                                    LibrarySectionKind.History -> "most recently read first"
+                                    LibrarySectionKind.SavedForLater -> "most recently read or added first"
+                                    LibrarySectionKind.Downloaded, LibrarySectionKind.Favorites -> "newest first"
                                     else -> "default order"
                                 }
                             }
