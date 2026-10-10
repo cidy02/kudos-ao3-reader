@@ -255,8 +255,15 @@ class CommentsViewModel(
                             named.chapterLabel?.let { Regex("\\d+").find(it)?.value?.toIntOrNull() } ?: position, "")
                 }
             }
-            present(chapter, page, first = root.takeIf {
-                page is AO3Result.Success && findCommentRecursive(page.value.comments, commentId) == null
+            val onPage = (page as? AO3Result.Success)?.value?.comments
+            present(chapter, page, first = when {
+                onPage == null || findCommentRecursive(onPage, commentId) != null -> null
+                // The page holds this thread's root without the comment that was asked for: that comment
+                // goes first by itself and the page's root keeps every reply it has. Putting the whole
+                // thread first drew the root twice (audit A30-10); replacing the page's root with it
+                // could drop replies only the page held (audit A32).
+                onPage.any { it.id == root.id } -> findCommentRecursive(listOf(root), commentId)
+                else -> root
             })
         }
     }
@@ -277,11 +284,8 @@ class CommentsViewModel(
                 // The thread put first must not repeat a comment the page already shows: the list keys
                 // its rows by comment id, and a second row with the same key crashes it (seen in the
                 // demo, whose one comments page serves as both).
-                // The page's own copy of that thread gives way to the one read for the reader: the page
-                // can hold the root without the reply that was asked for (audit A30-10).
-                val rest = if (first == null) sorted.comments else sorted.comments.filter { it.id != first.id }
-                val onPage = mutableSetOf<String>().also { collectIds(rest, it) }
-                val thread = if (first == null) sorted else sorted.copy(comments = listOf(first.without(onPage)) + rest)
+                val onPage = mutableSetOf<String>().also { collectIds(sorted.comments, it) }
+                val thread = if (first == null) sorted else sorted.copy(comments = listOf(first.without(onPage)) + sorted.comments)
                 _state.value = CommentsUiState.Loaded(thread)
                 // Restore a top-level draft on initial load.
                 val untouched = composerGeneration
