@@ -3860,7 +3860,16 @@ enum KudosBackupService {
             if let local = byID[archived.id] {
                 // File Merge is add-only by annotation id: never overwrite a
                 // highlight/note this device already has. New ids still insert.
-                if mode == .merge { continue }
+                // Except a copy here that the sweep below is about to remove (it is
+                // older than the deletion) when the archive's is the one made after
+                // that deletion: skipped, the old copy was swept and the newer one
+                // never installed, so neither was left (audit A30-4). Reconcile and
+                // Replace already take it.
+                if mode == .merge {
+                    guard case .suppressStaleData = tombstones.annotationResolution(
+                        id: local.id, incomingModifiedAt: local.lastModifiedAt
+                    ) else { continue }
+                }
                 // Replace is a snapshot; a note edited here since the backup is
                 // one of the things the reader is asking to roll back.
                 if mode != .replaceLibrary {
@@ -3927,7 +3936,15 @@ enum KudosBackupService {
         // other device had deleted could first win the passage over that device's
         // newer mark (which the dedupe then deleted and tombstoned), and be removed
         // itself: both marks gone, on both devices. Android has always swept first.
-        let removed = removeDeletedElsewhere()
+        var removed = removeDeletedElsewhere()
+        if mode == .replaceLibrary {
+            // Replace hides every mark the snapshot does not list (`restore`, after this).
+            // One of those must not first win its passage over the snapshot's own mark:
+            // the dedupe deleted and tombstoned that one, Replace then hid the winner, and
+            // no mark was left, here or (by the tombstone) anywhere else (audit A30-3).
+            let inSnapshot = Set(contents.manifest.annotations.map(\.id))
+            removed.formUnion(existing.map(\.id).filter { !inSnapshot.contains($0) })
+        }
         dedupeSamePassageAnnotations(context: context, preexistingIDs: preexistingIDs, excluding: removed)
     }
 

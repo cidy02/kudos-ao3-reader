@@ -38,6 +38,10 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
     /// search has none yet. The panel edits the live `filters` before Apply, so
     /// they can differ from what is showing.
     @State private var loadedFilters: AO3SearchFilters?
+    /// The filters of the last request sent, set before its answer. `loadedFilters` is only
+    /// set by an answer, so during the very first search there was nothing to put back when
+    /// the filter panel was closed without Apply (audit A30-8).
+    @State private var requestedFilters: AO3SearchFilters?
     @State private var totalPages = 1
     /// AO3's own result-count heading for the current results, when it sent one.
     @State private var resultSummary: AO3ResultSummary?
@@ -261,8 +265,10 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                     // dropped (the typed search text is not the panel's, and stays). The next
                     // page tap used to run them as a new search (audit A20-3). Whatever the
                     // phase: during a page load or after a failed one the edits were kept
-                    // (A27-10). Apply clears `loadedFilters` first, so it is not undone here.
-                    guard !showing, var restored = loadedFilters else { return }
+                    // (A27-10), and during the first search there was nothing to restore
+                    // (A30-8). Apply clears `loadedFilters` and sends its own request first,
+                    // so it is not undone here.
+                    guard !showing, var restored = loadedFilters ?? requestedFilters else { return }
                     restored.query = filters.query
                     if filters != restored { filters = restored }
                 }
@@ -876,6 +882,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
         loadToken += 1
         let token = loadToken
         let current = filters
+        requestedFilters = current
         loadTask?.cancel()
         loadTask = Task {
             do {
