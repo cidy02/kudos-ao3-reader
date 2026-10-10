@@ -143,11 +143,8 @@ struct AccountProfileCard: View {
                 .foregroundStyle(.primary)
                 .padding(.horizontal, 13)
                 .padding(.vertical, 7)
-                .background(
-                    theme.appTheme.glassFill(0.12),
-                    in: dynamicTypeSize.isAccessibilitySize
-                        ? AnyShape(RoundedRectangle(cornerRadius: 18, style: .continuous)) : AnyShape(Capsule())
-                )
+                .background(theme.appTheme.glassFill(0.12), in: dynamicTypeSize.isAccessibilitySize
+                    ? AnyShape(RoundedRectangle(cornerRadius: 18, style: .continuous)) : AnyShape(Capsule()))
                 // 30pt drawn, 44pt to the finger, no taller row.
                 .contentShape(Capsule().inset(by: -7))
         }
@@ -387,10 +384,29 @@ struct AccountNavCardLabel: View {
     /// title's size; in a column fixed at 22pt it spilled out of both sides at the
     /// accessibility sizes, over the panel's edge and into the title.
     @ScaledMetric(relativeTo: .body) private var iconWidth: CGFloat = 22
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
+        Group {
+            if dynamicTypeSize.isAccessibilitySize, systemImage != nil {
+                // Beside its symbol a one-word title broke in the middle at the largest
+                // sizes ("Preference / s"). The symbol is decoration: when the title does
+                // not fit on its line beside it, the title gets the room.
+                ViewThatFits(in: .horizontal) { row(symbol: true, oneLine: true); row(symbol: false, oneLine: false) }
+            } else {
+                row(symbol: true, oneLine: false)
+            }
+        }
+        // A title on two lines is taller than 44pt: without this its lines touched
+        // the separators. No effect on a one-line row, which the minimum still sets.
+        .padding(.vertical, 6)
+        .frame(minHeight: 44)
+        .contentShape(Rectangle())
+    }
+
+    private func row(symbol: Bool, oneLine: Bool) -> some View {
         HStack(spacing: 12) {
-            if let systemImage {
+            if symbol, let systemImage {
                 Image(systemName: systemImage)
                     .font(.system(size: titleSize, weight: .medium))
                     .foregroundStyle(.tint)
@@ -399,6 +415,7 @@ struct AccountNavCardLabel: View {
             Text(title)
                 .font(.system(size: titleSize, weight: .medium))
                 .foregroundStyle(.primary)
+                .fixedSize(horizontal: oneLine, vertical: false)
             Spacer(minLength: 8)
             if let count {
                 Text(count)
@@ -410,11 +427,6 @@ struct AccountNavCardLabel: View {
                 .font(opensExternally ? .body : .caption.weight(.semibold))
                 .foregroundStyle(.tertiary)
         }
-        // A title on two lines is taller than 44pt: without this its lines touched
-        // the separators. No effect on a one-line row, which the minimum still sets.
-        .padding(.vertical, 6)
-        .frame(minHeight: 44)
-        .contentShape(Rectangle())
     }
 }
 

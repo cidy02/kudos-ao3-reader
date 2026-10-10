@@ -256,6 +256,7 @@ struct WorkDetailMyCopyRow: View {
 
     @ScaledMetric(relativeTo: .subheadline) private var titleSize: CGFloat = 15
     @ScaledMetric(relativeTo: .caption) private var summarySize: CGFloat = 12
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
         Button(action: action) {
@@ -272,7 +273,8 @@ struct WorkDetailMyCopyRow: View {
                         .font(.system(size: summarySize))
                         .foregroundStyle(.secondary)
                 }
-                .lineLimit(1)
+                // One line cut the summary to "Downloaded · 1 que…" at the accessibility sizes.
+                .lineLimit(dynamicTypeSize.isAccessibilitySize ? 3 : 1)
                 .minimumScaleFactor(0.75)
                 .frame(maxWidth: .infinity, alignment: .leading)
 

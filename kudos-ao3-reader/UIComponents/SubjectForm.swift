@@ -342,12 +342,15 @@ struct SubjectFormValue: View {
 
     @ScaledMetric(relativeTo: .body) private var valueSize: CGFloat = 15
     @ScaledMetric(relativeTo: .caption) private var monospacedSize: CGFloat = 11
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
         Text(text)
             .font(valueFont)
             .foregroundStyle(.secondary)
-            .lineLimit(1)
+            // At the accessibility sizes the value has the row to itself, under its label
+            // (see `SubjectFormRow`), and one line still cut it: "Blur mature wo…".
+            .lineLimit(dynamicTypeSize.isAccessibilitySize ? 3 : 1)
             .truncationMode(.tail)
     }
 
