@@ -738,6 +738,7 @@ struct CollectionModerationView: View {
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
             }
+            .accessibilityLabel("Dismiss error")
             .buttonStyle(.plain)
         }
         .padding(12)
