@@ -2,9 +2,10 @@ import SwiftUI
 
 extension Notification.Name {
     static let ao3CollectionDeleted = Notification.Name("AO3CollectionDeleted")
-    /// The reader's own standing in a collection changed (signed up, withdrew, left as a
-    /// maintainer). `object` is the slug. The collection's page reads itself again: it went on
-    /// saying "signed up", or offering Manage, until pulled (T-379).
+    /// A collection changed on AO3 by something done here: the reader signed up, withdrew or
+    /// left as a maintainer (T-379), or the collection or its challenge settings were saved or
+    /// the collection created (T-381). `object` is the slug, nil for one just created. The
+    /// screens that show the collection read it again: they went on showing what it was.
     static let ao3CollectionChanged = Notification.Name("AO3CollectionChanged")
 }
 
@@ -508,6 +509,7 @@ struct AO3CollectionFormView: View {
                 form = savedForm
                 saveMessage = message
                 phase = .ready
+                NotificationCenter.default.post(name: .ao3CollectionChanged, object: slug)
             case let .invalid(returned):
                 // AO3 hands the whole form back on failure with its errors attached,
                 // which is why the edit is never discarded here.
