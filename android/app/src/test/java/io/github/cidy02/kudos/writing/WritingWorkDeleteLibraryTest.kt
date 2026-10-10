@@ -16,6 +16,30 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class WritingWorkDeleteLibraryTest {
+    @Test fun confirmedBulkDeleteLeavesEveryLibraryRecordAndEpubByteForByte() = runBlocking<Unit> {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val database = Room.inMemoryDatabaseBuilder(context, KudosDatabase::class.java).allowMainThreadQueries().build()
+        val files = mutableListOf<java.io.File>()
+        try {
+            val ids = listOf(11L, 22L, 33L)
+            val bytes = io.github.cidy02.kudos.works.converters.EpubBuilder.buildEpub("Saved copies", "<p>Stay in Library.</p>")
+            for (id in ids) {
+                val epub = java.io.File(context.cacheDir, "bulk-copy-$id.epub"); epub.writeBytes(bytes); files += epub
+                database.workDao().upsert(SavedWork(id = "local-$id", title = "Saved $id", author = "AO3_Reader",
+                    sourceUrl = "https://archiveofourown.org/works/$id", isSaved = true, hasEpub = true).toEntity())
+            }
+            val before = ids.map { database.workDao().getById("local-$it") }
+            val client = BulkRecordingClient(ids)
+            val delete = io.github.cidy02.kudos.author.OwnWorksDeleteState(
+                io.github.cidy02.kudos.network.ao3.writes.AO3WriteRepository(client), 7)
+            delete.ask(ids.map(::bulkSummary)); delete.confirm()
+            assertEquals(1, delete.state.value.confirmed)
+            assertEquals(before, ids.map { database.workDao().getById("local-$it") })
+            assertEquals(3, database.workDao().count())
+            files.forEach { assertArrayEquals(bytes, it.readBytes()) }
+        } finally { database.close(); files.forEach { it.delete() } }
+    }
+
     @Test fun confirmedRemoteDeleteLeavesTheSavedLibraryRowAndEpubByteForByte() = runBlocking<Unit> {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val database = Room.inMemoryDatabaseBuilder(context, KudosDatabase::class.java).allowMainThreadQueries().build()
