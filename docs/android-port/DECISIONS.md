@@ -1313,3 +1313,16 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   replies only the page held.
   Reverse: the commit of the same name.
 
+## 2026-10-09: Merge takes a highlight brought back after its deletion (audit A30-4)
+
+- File Merge is add-only for a highlight this device already has, with one exception: when
+  the copy here is older than a trusted deletion (so the sweep is about to remove it) and
+  the archive holds the same highlight made again after that deletion, the archive's copy is
+  taken. Skipped, the old copy was swept and the newer one never installed: neither was left.
+  Reconcile and Replace already took it. A note the old copy held is parked, as elsewhere.
+  Found on iOS by Codex's review A30 and fixed there the same day (T-376); Android had the
+  same path. A30's other restore finding (Replace and a newer local mark on the same
+  passage) does not apply here: Android removes the marks the snapshot does not list before
+  it compares passages.
+  Reverse: the commit "Merge takes a highlight brought back after its deletion".
+

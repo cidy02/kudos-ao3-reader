@@ -510,3 +510,10 @@ All nine requested items received the source audit described above; there is no 
 | A30-12 | Real | Fixed: explicit `labelSpokenByControl`; the stacked label no longer speaks the mark. |
 | A30-2, A30-3, A30-4, A30-8 | iOS | See the iOS task rows (T-376 onwards). |
 
+**Later the same evening.** A30-10's fix was changed after Codex's unfinished review A32 (the
+comment asked for goes first by itself; the page's root is left whole). The iOS findings
+landed as T-376 (`e1bbb8c5`; each new test fails with its fix taken out). A30-4 applied to
+Android too and is fixed there (`BackupMergeService.mergeAnnotations`); A30-3 does not apply
+to Android. A30-2 was not checked on Android: its drafts are keyed by account name, with no
+session count.
+

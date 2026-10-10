@@ -352,6 +352,25 @@ class BackupMergeParityTest {
         }
     }
 
+    /**
+     * Audit A30-4, as iOS T-376. The mark was deleted on the other device and then brought back there,
+     * newer than the deletion. Merge skipped it because this device still had the old copy, then swept
+     * the old copy as deleted: neither was left.
+     */
+    @Test
+    fun aMarkBroughtBackAfterItsDeletionSurvivesWhenTheCopyHereIsTheDeletedOne() {
+        fun library(note: String, clock: Instant, deleted: Boolean = false) = BackupLibrarySnapshot(works = listOf(work()),
+            annotations = listOf(annotation().copy(note = note, lastModifiedAt = clock)),
+            tombstones = if (deleted) listOf(TombstoneSigning.sign(tombstone(ANN, SyncTombstoneRecordType.READING_ANNOTATION))) else emptyList())
+        for (mode in listOf(BackupImportMode.MERGE, BackupImportMode.RECONCILE)) {
+            val result = merge(library("before the deletion", at(100)), library("brought back", at(300), deleted = true), mode)
+            assertEquals(listOf("brought back"), result.annotations.filter { !it.isPendingDeletion }.map { it.note })
+        }
+        // Merge still never overwrites a live mark nobody deleted.
+        val kept = merge(library("mine", at(100)), library("theirs, newer", at(300)), BackupImportMode.MERGE)
+        assertEquals(listOf("mine"), kept.annotations.map { it.note })
+    }
+
     @Test
     fun tombstoneSecondPassUsesCreatedAndQueuedFallbacksAndNeverSnapshotExportTime() {
         val local = BackupLibrarySnapshot(works = listOf(work()), readingQueues = listOf(queue()),

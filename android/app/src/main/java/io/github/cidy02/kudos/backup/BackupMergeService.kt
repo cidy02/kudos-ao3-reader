@@ -2179,8 +2179,13 @@ object BackupMergeService {
             if (existing == null) {
                 byId[id] = restored
                 created += 1
-            } else if (mode == BackupImportMode.MERGE) {
+            } else if (mode == BackupImportMode.MERGE &&
+                tombstoneIndex.annotationResolution(id, existing.effectiveLastModifiedAt) != TombstoneResolution.SUPPRESS_STALE
+            ) {
                 // Keep local note / locator / color. New ids still insert above.
+                // Not when the copy here is one the sweep below removes (it is older than the deletion)
+                // and the archive's is the one made after that deletion: skipped, the old copy was swept
+                // and the newer one never installed, so neither was left (audit A30-4, iOS T-376).
             } else if (mode == BackupImportMode.REPLACE_LIBRARY ||
                 SyncMerge.shouldApplyIncoming(existing.effectiveLastModifiedAt, incomingModified)
             ) {
