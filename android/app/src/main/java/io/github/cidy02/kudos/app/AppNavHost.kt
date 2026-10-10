@@ -720,6 +720,7 @@ fun AppNavHost(
                     onOpenChallengeSettings = { owner -> navController.navigate(Routes.ao3ChallengeSettings(slug, title ?: slug, owner)) },
                     onOpenPrompts = { owner -> navController.navigate(Routes.ao3PromptMeme(slug, title ?: slug, owner)) },
                     onOpenSignUp = { navController.navigate(Routes.ao3ChallengeSignUp(slug, title ?: slug)) },
+                    onOpenAssignments = { owner -> navController.navigate(Routes.ao3ChallengeAssignments(slug, title ?: slug, owner, true)) },
                     onOpenSignUps = { owner -> navController.navigate(Routes.ao3ChallengeSignUps(slug, title ?: slug, owner, true)) },
                     settingsRepository = container.settingsRepository,
                     privacyGate = container.privacyGate,
@@ -749,6 +750,9 @@ fun AppNavHost(
                 repository = container.collectionDetailRepository,
                 onOpenWeb = { navController.navigate(Routes.webFallback(it)) },
                 onOpenTagSet = { id, title -> navController.navigate(Routes.ao3TagSet(id, title, isModerator = true)) },
+                onOpenAssignments = { listSlug, listTitle, closed -> navController.navigate(Routes.ao3ChallengeAssignments(listSlug, listTitle,
+                    viewerIsOwner = entry.arguments?.getBoolean("owner") == true,
+                    viewerIsMaintainer = entry.arguments?.getBoolean("owner") == true, knownClosed = closed)) },
                 onOpenSignUps = { listSlug, listTitle -> navController.navigate(Routes.ao3ChallengeSignUps(listSlug, listTitle,
                     viewerIsOwner = entry.arguments?.getBoolean("owner") == true,
                     viewerIsMaintainer = entry.arguments?.getBoolean("owner") == true)) },
@@ -762,6 +766,25 @@ fun AppNavHost(
                         android.net.Uri.parse(url))) }
                 }
             )
+        }
+        sharedComposable(
+            Routes.AO3ChallengeAssignments,
+            arguments = listOf(
+                Routes.navArgOf("collectionSlug"),
+                navArgument("collectionTitle") { type = NavType.StringType; defaultValue = "" },
+                navArgument("owner") { type = NavType.BoolType; defaultValue = false },
+                navArgument("maintainer") { type = NavType.BoolType; defaultValue = false },
+                navArgument("closed") { type = NavType.StringType; defaultValue = "unknown" }
+            )
+        ) { entry ->
+            val slug = Routes.routeArg(entry, "collectionSlug")
+            if (slug == null) navController.popBackStack()
+            else io.github.cidy02.kudos.account.AO3ChallengeAssignmentsScreen(slug, Routes.routeArg(entry, "collectionTitle").orEmpty(),
+                viewerIsOwner = entry.arguments?.getBoolean("owner") == true,
+                viewerIsMaintainer = entry.arguments?.getBoolean("maintainer") == true,
+                knownClosed = entry.arguments?.getString("closed")?.toBooleanStrictOrNull(),
+                repository = container.collectionDetailRepository, writes = container.writeRepository,
+                onOpenWeb = { navController.navigate(Routes.webFallback(it)) })
         }
         sharedComposable(
             Routes.AO3ChallengeSignUps,
