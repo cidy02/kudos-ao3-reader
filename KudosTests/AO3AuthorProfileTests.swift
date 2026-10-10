@@ -543,6 +543,28 @@ struct AO3AuthorProfileStateTests {
         for entry in kept { #expect(await cache.staleValue(for: entry) == "page") }
     }
 
+    /// T-379. An own-content write puts every kept page under the writer's own address in doubt,
+    /// for whoever kept it; another author's pages and a series page stay.
+    @Test func anOwnContentWriteDropsEveryKeptPageUnderTheWritersAddress() async throws {
+        let cache = AO3AuthorPageCache()
+        func key(_ path: String, _ scope: String = "alice") throws -> AO3AuthorPageCache.Key {
+            AO3AuthorPageCache.Key(
+                url: try #require(URL(string: "https://archiveofourown.org" + path)), authenticationScope: scope
+            )
+        }
+        let gone = try [
+            key("/users/Alice"), key("/users/alice/works?page=2"), key("/users/alice/works", "anonymous"),
+            key("/users/alice/pseuds/Other/works"), key("/users/alice/series"), key("/users/alice/bookmarks"),
+        ]
+        let kept = try [key("/users/alicette/works"), key("/users/bob/works"), key("/series/321")]
+        for entry in gone + kept { await cache.insert("page", for: entry) }
+
+        await cache.removeAuthorPages(username: "Alice")
+
+        for entry in gone { #expect(await cache.staleValue(for: entry) == nil) }
+        for entry in kept { #expect(await cache.staleValue(for: entry) == "page") }
+    }
+
     @Test func cacheSeparatesRoutesPagesAndAuthenticationScopes() async throws {
         let cache = AO3AuthorPageCache(ttl: 1)
         let user = try #require(AO3AuthorRoute(username: "Avery_Archive"))

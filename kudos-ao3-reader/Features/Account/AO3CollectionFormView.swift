@@ -2,6 +2,10 @@ import SwiftUI
 
 extension Notification.Name {
     static let ao3CollectionDeleted = Notification.Name("AO3CollectionDeleted")
+    /// The reader's own standing in a collection changed (signed up, withdrew, left as a
+    /// maintainer). `object` is the slug. The collection's page reads itself again: it went on
+    /// saying "signed up", or offering Manage, until pulled (T-379).
+    static let ao3CollectionChanged = Notification.Name("AO3CollectionChanged")
 }
 
 extension Notification {
