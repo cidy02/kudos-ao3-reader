@@ -75,12 +75,21 @@ private data class ScaledHomeCardSize(val width: Dp, val height: Dp)
 /** iOS `ScaledCarouselCardSize`: scale proportionally, then clamp to the window. */
 @Composable
 private fun scaledHomeCardSize(): ScaledHomeCardSize {
+    val scale = carouselCardScale()
+    return ScaledHomeCardSize(HomeCardMetrics.width * scale, HomeCardMetrics.height * scale)
+}
+
+/**
+ * How much a carousel card [width] wide grows with the reader's text size: with the text, then
+ * clamped so the card still fits the window. The cover cards have always done this; the queue deck
+ * and Browse's Jump Back In cards kept their size and cut their titles to "Doct…" at twice the
+ * text size.
+ */
+@Composable
+fun carouselCardScale(width: Dp = HomeCardMetrics.width): Float {
     val fontScale = LocalDensity.current.fontScale
-    val scaledWidth = HomeCardMetrics.width * fontScale
-    val scaledHeight = HomeCardMetrics.height * fontScale
     val maxWidth = (LocalConfiguration.current.screenWidthDp.dp - 32.dp).coerceAtLeast(1.dp)
-    val clampRatio = minOf(1f, maxWidth.value / scaledWidth.value)
-    return ScaledHomeCardSize(scaledWidth * clampRatio, scaledHeight * clampRatio)
+    return fontScale * minOf(1f, maxWidth.value / (width.value * fontScale))
 }
 
 enum class HomeStatusArrangement { Grid, Strip }
