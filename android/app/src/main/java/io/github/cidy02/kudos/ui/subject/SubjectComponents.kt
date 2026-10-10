@@ -613,7 +613,9 @@ private fun StatCell(
                 fontWeight = FontWeight.SemiBold,
                 style = TextStyle(fontFeatureSettings = "tnum"),
                 // A date is the long one ("Jul 8, 2026"): cut to "Jul 8, 20…" at twice the text size.
-                maxLines = if (isAccessibilityFontScale()) 2 else 1,
+                // Only a value with a space in it: a number broken across two lines ("260,11 / 4")
+                // is worse than one shrunk to fit.
+                maxLines = if (isAccessibilityFontScale() && ' ' in cell.value) 2 else 1,
                 textAlign = TextAlign.Center,
                 overflow = TextOverflow.Ellipsis,
                 autoSize = TextAutoSize.StepBased(minFontSize = 9.sp, maxFontSize = 13.sp)
@@ -830,8 +832,12 @@ const val AccentContainerOpacity = 0.24
 
 @Composable
 private fun ToolbarBadge(text: String, accent: Color) {
+    // The count sits on a button that does not grow with the reader's text, so it does not either:
+    // at twice the text size it covered the icon it belongs to. The button's spoken label says it.
+    val density = LocalDensity.current
     Badge(containerColor = accent, contentColor = SubjectPalette.label(accent)) {
-        Text(text, style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum"), maxLines = 1)
+        Text(text, style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum",
+            fontSize = with(density) { 11.dp.toSp() }, lineHeight = with(density) { 16.dp.toSp() }), maxLines = 1)
     }
 }
 

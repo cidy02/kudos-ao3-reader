@@ -177,29 +177,35 @@ private fun AuthorBylineRow(
         return
     }
 
-    Row(
+    // A row that wraps: in one line a second co-author was cut to "Second Pse…" at twice the text
+    // size, and a third or fourth would be at any size, cut and out of reach of a tap.
+    @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+    androidx.compose.foundation.layout.FlowRow(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(4.dp),
-        verticalAlignment = Alignment.CenterVertically
+        itemVerticalAlignment = Alignment.CenterVertically
     ) {
         authorNames.forEachIndexed { index, name ->
-            Text(
-                text = name,
-                color = tokens.secondaryInk,
-                fontSize = 15.5.sp,
-                fontWeight = FontWeight.Medium,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier
-                    .semantics { contentDescription = "Author: $name" }
-                    .clickable { onOpenAuthor(name) }
-            )
-            if (index < authorNames.lastIndex) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    text = ",",
+                    text = name,
                     color = tokens.secondaryInk,
-                    fontSize = 15.5.sp
+                    fontSize = 15.5.sp,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier
+                        .weight(1f, fill = false)
+                        .semantics { contentDescription = "Author: $name" }
+                        .clickable { onOpenAuthor(name) }
                 )
+                if (index < authorNames.lastIndex) {
+                    Text(
+                        text = ",",
+                        color = tokens.secondaryInk,
+                        fontSize = 15.5.sp
+                    )
+                }
             }
         }
     }
