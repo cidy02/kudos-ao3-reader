@@ -838,6 +838,10 @@ private fun PagerRow(
         return
     }
     if (total <= 1) return
+    if (io.github.cidy02.kudos.ui.subject.isAccessibilityFontScale()) {
+        io.github.cidy02.kudos.ui.components.LargeTextPager(page, total, { if (it < page) onPrev() else onNext() }, Modifier.padding(vertical = 8.dp))
+        return
+    }
     Row(
         modifier = Modifier
             .fillMaxWidth()

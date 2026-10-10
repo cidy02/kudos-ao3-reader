@@ -326,6 +326,7 @@ private fun LocalIndicatorRow(indicator: BrowseLocalIndicator) {
 
 @Composable
 private fun TagPaginationRow(page: AO3SearchPage, onPage: (Int) -> Unit) {
+    if (io.github.cidy02.kudos.ui.subject.isAccessibilityFontScale()) { io.github.cidy02.kudos.ui.components.LargeTextPager(page.currentPage, page.totalPages, onPage); return }
     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         OutlinedButton(enabled = page.currentPage > 1, onClick = { onPage(page.currentPage - 1) }) {
             Text("Previous")

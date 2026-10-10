@@ -1052,6 +1052,10 @@ private fun InboxPaginationControls(
     onLoadPage: (Int) -> Unit
 ) {
     val tokens = LocalKudosTokens.current
+    if (io.github.cidy02.kudos.ui.subject.isAccessibilityFontScale()) {
+        io.github.cidy02.kudos.ui.components.LargeTextPager(page, totalPages, onLoadPage, Modifier.subjectPanel().padding(horizontal = 8.dp, vertical = 8.dp), enabled)
+        return
+    }
     Row(
         modifier = Modifier
             .fillMaxWidth()

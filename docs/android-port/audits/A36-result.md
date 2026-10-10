@@ -253,3 +253,22 @@ Looked at and sound at twice the size: the comment rows and their Reply and "…
 and 6), and the chapter picker (row 20). Not reached: "Continue thread" (row 4: the demo's
 thread is too short), rows 7 to 13 and 15 to 17.
 
+### Fourth look (06:30): the work form, the drafts list, a series page, the Inbox
+
+Sound at twice the size: the work form (a long title scrolls in its one-line field, as a field
+does), the drafts list and its page bar, a series page.
+
+**One more real cut, and four of its kind:** the Inbox pager broke "Previous" mid-word. Six
+screens draw "Previous · Page n of m · Next" in a row of their own (comments, the Inbox, the
+author profile, author works, tag works, and Account's lists: rows 15 to 17 of the top twenty
+are three of them). All six now hand over to one shared layout at an accessibility text size
+(`ui/components/LargeTextPager.kt`): the page above, the two buttons side by side. Seen on the
+Inbox and on comments at twice the size and unchanged at the normal one; **the other four use
+the same call and were not looked at one by one.**
+
+Noted, not changed: on iOS only the comments screen has worded Previous and Next buttons; its
+other paged screens use the shared page bar or "Load More". Android's five worded pagers are a
+parity question for another day.
+
+Still not looked at from the top twenty: rows 4, 7 to 13.
+
