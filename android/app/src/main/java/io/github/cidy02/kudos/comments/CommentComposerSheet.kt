@@ -75,9 +75,18 @@ fun CommentComposerSheet(
     }
     var showFormattingTray by remember { mutableStateOf(false) }
 
+    // The draft comes back through the model's flow a frame after the field sent it. Each late echo
+    // was taken for a change from outside and put over what had been typed since: typed fast,
+    // "for the chapter" became "fohe chapterr", and a comment is sent to AO3 as it stands.
+    val echoes = remember { DraftEchoes() }
+    val send: (TextFieldValue) -> Unit = {
+        if (it.text != textFieldValue.text) echoes.sending(it.text)
+        textFieldValue = it
+        onDraftChange(it.text)
+    }
     LaunchedEffect(draft) {
-        if (draft != textFieldValue.text) {
-            textFieldValue = textFieldValue.copy(text = draft)
+        if (!echoes.isEcho(draft) && draft != textFieldValue.text) {
+            textFieldValue = TextFieldValue(draft, TextRange(draft.length))
         }
     }
 
@@ -235,10 +244,7 @@ fun CommentComposerSheet(
 
                 BasicTextField(
                     value = textFieldValue,
-                    onValueChange = {
-                        textFieldValue = it
-                        onDraftChange(it.text)
-                    },
+                    onValueChange = send,
                     textStyle = TextStyle(
                         fontSize = 15.sp,
                         lineHeight = 22.sp,
@@ -292,10 +298,7 @@ fun CommentComposerSheet(
             // Format bar directly above the bottom inset
             CommentFormatBar(
                 value = textFieldValue,
-                onValueChange = {
-                    textFieldValue = it
-                    onDraftChange(it.text)
-                },
+                onValueChange = send,
                 onOpenTray = { showFormattingTray = true }
             )
         }
@@ -303,12 +306,24 @@ fun CommentComposerSheet(
         if (showFormattingTray) {
             CommentFormattingTray(
                 value = textFieldValue,
-                onValueChange = {
-                    textFieldValue = it
-                    onDraftChange(it.text)
-                },
+                onValueChange = send,
                 onDismiss = { showFormattingTray = false }
             )
         }
+    }
+}
+
+/**
+ * Tells a late echo of the field's own text from a draft set elsewhere (a stored draft read after the
+ * sheet opened). The flow may skip values, so an echo settles everything sent before it too.
+ */
+internal class DraftEchoes {
+    private val sent = ArrayDeque<String>()
+    fun sending(text: String) { sent.addLast(text) }
+    fun isEcho(draft: String): Boolean {
+        val at = sent.indexOf(draft)
+        if (at < 0) { sent.clear(); return false }
+        repeat(at + 1) { sent.removeFirst() }
+        return true
     }
 }

@@ -1396,4 +1396,10 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   when AO3 confirms a save, an order or a removal, and its opener reads again past the cache.
   The rule for every new write: **if a screen can show a page the cache keeps, the write drops
   that page.** Reverse: `seriesChanged` in `writing/WritingSeriesState.kt`.
+- **2026-10-10 · A text field never takes a late echo of its own text for a change from
+  outside.** The comment composer lost and reordered characters typed fast, because the draft
+  comes back through a flow a frame late and was put over what had been typed since. The rule
+  for any field whose text also lives in a flow: the field's own state is the truth while it
+  is open; a value from the flow is applied only if the field did not send it
+  (`DraftEchoes`, `comments/CommentComposerSheet.kt`).
 

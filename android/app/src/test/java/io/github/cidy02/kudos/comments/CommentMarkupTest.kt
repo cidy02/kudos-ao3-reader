@@ -52,4 +52,20 @@ class CommentMarkupTest {
         assertEquals("Above\n<hr />\n", result.text)
         assertEquals(TextRange(6 + "<hr />\n".length), result.selection)
     }
+
+    /**
+     * The composer's text comes back through a flow, late and with values skipped. What the field
+     * sent is never a change from outside; anything else is, and ends the wait for older echoes.
+     */
+    @Test
+    fun aLateEchoOfTypedTextIsNotTakenForADraftSetElsewhere() {
+        val echoes = DraftEchoes()
+        listOf("f", "fo", "for").forEach(echoes::sending)
+        assertEquals(true, echoes.isEcho("f"))       // late, while the field already says "for"
+        assertEquals(true, echoes.isEcho("for"))     // "fo" was skipped by the flow
+        assertEquals(false, echoes.isEcho("fo"))     // settled with "for": now it would be news
+        echoes.sending("for t")
+        assertEquals(false, echoes.isEcho("a stored draft"))
+        assertEquals(false, echoes.isEcho("for t"))  // the outside change ended the wait
+    }
 }
