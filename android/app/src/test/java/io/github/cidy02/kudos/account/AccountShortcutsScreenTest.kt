@@ -65,6 +65,8 @@ class AccountShortcutsScreenTest {
         assertTrue(compose.onNodeWithText("Inbox").fetchSemanticsNode().boundsInRoot.left <
             compose.onNodeWithText("Drafts").fetchSemanticsNode().boundsInRoot.left)
         compose.onNodeWithContentDescription("See all Shortcuts").performClick()
+        // The editor reads the store before it draws its rows: asserting at once failed on a loaded machine.
+        compose.waitUntil(15_000) { compose.onAllNodesWithContentDescription("Remove Inbox").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithContentDescription("Remove Inbox").assertExists().performClick()
         compose.waitUntil(15_000) {
             compose.onAllNodesWithContentDescription("Add Inbox").fetchSemanticsNodes().isNotEmpty()

@@ -292,8 +292,12 @@ internal object DemoNetworkRoutes {
  * comment up there, and the one comments fixture has ids of its own.
  */
 internal fun isDemoCommentThread(path: String) = Regex("^/comments/\\d+$").matches(path)
-internal fun demoCommentThreadPage(bytes: ByteArray, path: String): ByteArray =
-    bytes.decodeToString().replace("comment_1001", "comment_${path.substringAfterLast('/')}").encodeToByteArray()
+internal fun demoCommentThreadPage(bytes: ByteArray, path: String): ByteArray {
+    val page = bytes.decodeToString(); val asked = "comment_${path.substringAfterLast('/')}"
+    // A comment the page already holds is served in its own thread: renaming the first comment to it
+    // gave the page two comments with one id (audit A30-10).
+    return if ("id=\"$asked\"" in page) bytes else page.replace("comment_1001", asked).encodeToByteArray()
+}
 
 /** Only the drafts fixtures are rebased to today. Tests pin the same clock used by the chips. */
 internal fun demoDraftsPage(bytes: ByteArray, clock: Clock? = null): ByteArray {

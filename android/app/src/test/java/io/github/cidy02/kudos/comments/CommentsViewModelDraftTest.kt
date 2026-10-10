@@ -269,7 +269,7 @@ class CommentsViewModelDraftTest {
                 publicClient = FakePublicClient(chapterPage),
                 authenticatedClient = FakeAuthenticatedClient(listOf(success(threadPage()), chapterPage), emptyList(), "alice", urls)
             )
-            val viewModel = CommentsViewModel(repo, target, draftStore, inboxComment, 3) { "alice" }
+            val viewModel = CommentsViewModel(repo, target, draftStore, inboxComment, 8) { "alice" } // the Inbox says 8; the byline says 3
             settle(viewModel, urls, 2)
 
             val shown = (viewModel.state.value as CommentsUiState.Loaded).thread.comments.map { it.numericId }
@@ -308,6 +308,90 @@ class CommentsViewModelDraftTest {
         walk((viewModel.state.value as CommentsUiState.Loaded).thread.comments)
         assertEquals("comment_$inboxComment", all.first())
         assertEquals(all.size, all.toSet().size)
+    }
+
+    /**
+     * A30-6, A30-7, A30-10. The reply the Inbox named sits in a thread whose root the chapter's page also
+     * holds, without that reply: the root is drawn once, with the reply; and the chapter and its number
+     * are the ones the thread's root names, not the Inbox's own number.
+     */
+    @Test
+    fun aRootTheChapterPageHoldsWithoutTheReplyIsDrawnOnceAndTheBylineNamesTheChapter() = runTest(testDispatcher) {
+        val urls = mutableListOf<String>()
+        val basic = writeResource("ao3/comments/comments_basic.html")
+        val thread = basic.replaceFirst("</h4>", " <span class=\"parent\">on <a href=\"/works/123/chapters/77\">Chapter 3</a></span></h4>")
+        val page = basic.replace("id=\"comment_2\"", "id=\"comment_9\"")
+        val repo = AO3CommentRepository(
+            publicClient = FakePublicClient(success(page)),
+            authenticatedClient = FakeAuthenticatedClient(listOf(success(thread), success(page)), emptyList(), "alice", urls)
+        )
+        val viewModel = CommentsViewModel(repo, target, draftStore, 2L, 8) { "alice" }
+        settle(viewModel, urls, 2)
+
+        val all = mutableListOf<String>()
+        fun walk(comments: List<AO3Comment>) { for (c in comments) { c.id?.let(all::add); walk(c.replies) } }
+        walk((viewModel.state.value as CommentsUiState.Loaded).thread.comments)
+        assertEquals("comment_1", all.first())
+        assertEquals(true, "comment_2" in all)
+        assertEquals(all.size, all.toSet().size)
+        assertEquals(true, "/chapters/77" in urls[1])
+        assertEquals("Chapter 3", viewModel.selectedChapter.value?.displayName)
+    }
+
+    /** A30-5: "All comments" chosen while Chapter Comments is still loading is a choice, and it stands. */
+    @Test
+    fun allCommentsChosenWhileChapterCommentsLoadIsNotReplacedByTheChapter() = runTest(testDispatcher) {
+        val urls = mutableListOf<String>()
+        val basic = success(writeResource("ao3/comments/comments_basic.html"))
+        val repo = AO3CommentRepository(
+            publicClient = FakePublicClient(basic),
+            authenticatedClient = FakeAuthenticatedClient(listOf(success(threadPage()), basic, basic), emptyList(), "alice", urls)
+        )
+        val viewModel = CommentsViewModel(repo, target, draftStore, inboxComment, 3) { "alice" }
+        testDispatcher.scheduler.runCurrent() // the thread has been asked for and is being read
+        assertEquals(1, urls.size)
+        viewModel.setScope(CommentScope.All)
+        settle(viewModel, urls, 2)
+        Thread.sleep(150); testDispatcher.scheduler.advanceUntilIdle()
+
+        assertEquals(2, urls.size)
+        assertEquals(true, urls.none { "/chapters/" in it })
+        assertEquals(CommentScope.All, viewModel.scope.value)
+        assertEquals(target, viewModel.currentTarget.value)
+        assertEquals(null, viewModel.focusedCommentId.value)
+    }
+
+    /** A30-11: a chapter list read while the session was still restoring is the guest's; it is read again. */
+    @Test
+    fun aChapterListReadAsAGuestIsReadAgainOnceTheReaderIsSignedIn() = runTest(testDispatcher) {
+        fun index(vararg numbers: Int) = success("<ol class='chapter index group'>" +
+            numbers.joinToString("") { "<li><a href='/works/123/chapters/${1000 + it}'>$it. Chapter</a></li>" } + "</ol>")
+        var name: String? = null
+        val session = object : AO3AuthenticatedClient {
+            override fun username() = name
+            override fun sessionGeneration(): Int? = 1
+            override suspend fun getAuthenticated(url: String) = index(1, 2)
+            override suspend fun postAuthenticated(url: String, formFields: List<Pair<String, String>>,
+                headers: Map<String, String>): AO3Result<AO3HttpResponse> = TODO()
+        }
+        val chapters = io.github.cidy02.kudos.network.ao3.chapters.AO3ChapterIndexRepository(FakePublicClient(index(1)), session)
+        val urls = mutableListOf<String>()
+        val basic = success(writeResource("ao3/comments/comments_basic.html"))
+        val repo = AO3CommentRepository(publicClient = FakePublicClient(basic),
+            authenticatedClient = FakeAuthenticatedClient(listOf(basic), emptyList(), null, urls))
+        val viewModel = CommentsViewModel(repo, target, draftStore) { name }
+        fun waitFor(count: Int) {
+            for (attempt in 1..300) {
+                testDispatcher.scheduler.advanceUntilIdle()
+                if (viewModel.chapters.value.size == count) break
+                Thread.sleep(10)
+            }
+        }
+        viewModel.loadChaptersIfNeeded(chapters); waitFor(1)
+        assertEquals(1, viewModel.chapters.value.size)
+        name = "alice"
+        viewModel.loadChaptersIfNeeded(chapters); waitFor(2)
+        assertEquals(2, viewModel.chapters.value.size)
     }
 
     /** A28-3: a thread that cannot be read is a failure, not "nothing to add"; Try Again asks for it again. */
@@ -373,6 +457,45 @@ class CommentsViewModelDraftTest {
         testDispatcher.scheduler.advanceUntilIdle()
         assertEquals("", viewModel.draft.value)
         assertEquals("for the work, not for a reply", draftStore.getDraft(workId, parentId = null, username = null))
+    }
+
+    /**
+     * A30-1: the same mistake from the other lookup. "Write a comment" reads the work's draft before its
+     * sheet appears; Reply or Edit tapped meanwhile owns the composer, and the draft that came back late
+     * replaced what was in it and would have been sent as that reply or saved as that edit.
+     */
+    @Test
+    fun aNewCommentsLateDraftNeverLandsInTheReplyOrEditOpenedAfterIt() = runTest(testDispatcher) {
+        draftStore.saveDraft("for the work, not for a reply", workId, parentId = null)
+        testDispatcher.scheduler.advanceUntilIdle()
+        val viewModel = createViewModel(target)
+        while (!viewModel.isDraftRestored.value) {
+            testDispatcher.scheduler.advanceTimeBy(100)
+            testDispatcher.scheduler.runCurrent()
+        }
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        viewModel.openComposer() // its draft lookup has not answered yet
+        viewModel.startReply(commentStub(101L, "Author A"))
+        viewModel.updateDraft("typed as a reply")
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals("typed as a reply", viewModel.draft.value)
+        assertEquals(101L, viewModel.replyTarget.value?.commentId)
+        assertEquals("typed as a reply", draftStore.getDraft(workId, parentId = 101L, username = null))
+        assertEquals("for the work, not for a reply", draftStore.getDraft(workId, parentId = null, username = null))
+
+        viewModel.cancelReply()
+        viewModel.openComposer()
+        viewModel.startEdit(commentStub(102L, "Author B"))
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals("Stub body", viewModel.draft.value)
+
+        // And the lookups do answer here: the same opening, left alone, shows the work's draft.
+        viewModel.cancelEdit()
+        viewModel.openComposer()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals("for the work, not for a reply", viewModel.draft.value)
+        assertEquals(true, viewModel.composerPresented.value)
     }
 
     private fun createViewModel(
