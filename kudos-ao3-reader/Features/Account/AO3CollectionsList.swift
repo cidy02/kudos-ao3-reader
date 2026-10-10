@@ -153,6 +153,8 @@ struct AO3CollectionsList: View {
                   notification.deletesCollection(slug: slug) else { return }
             refreshAfterDelete(slug: slug)
         }
+        // A collection created or saved in the form: its row here was the old one, or missing.
+        .onReceive(NotificationCenter.default.publisher(for: .ao3CollectionChanged)) { _ in reloadAfterChange() }
         // A failed page change (page 2+, say) while `collections` still holds
         // the prior page falls through to the ordinary list below — nothing
         // else in `signedInContent` ever surfaces it, so a tap that silently
@@ -424,6 +426,9 @@ struct AO3CollectionsList: View {
     private func refreshAfterDelete(slug: String) {
         collections.removeAll { $0.name == slug }
         wholeIndex.removeAll { $0.name == slug }
+        reloadAfterChange()
+    }
+    private func reloadAfterChange() {
         guard auth.isLoggedIn else { return }
         if filters.needsWholeIndex {
             wholeIndexLoadGeneration = AO3CollectionSessionReload.nextLoadGeneration(

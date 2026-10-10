@@ -786,6 +786,9 @@ struct ChallengeSettingsEditView: View {
                 form = updatedForm
                 saveNotice = message
                 await saveCollectionSwitches()
+                // After both requests: the settings page behind, and the collection's own, showed
+                // the dates and switches from before the save.
+                NotificationCenter.default.post(name: .ao3CollectionChanged, object: collectionSlug)
             case let .invalid(invalidForm):
                 form = invalidForm
             }
