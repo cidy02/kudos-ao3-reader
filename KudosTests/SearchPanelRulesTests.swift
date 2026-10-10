@@ -13,6 +13,26 @@ struct SearchPanelRulesTests {
         #expect(SearchRetry.page(requested: 5, current: 1, hasResults: false) == nil)
     }
 
+    /// Closing the filter panel without Apply drops its edits for the search on screen, or
+    /// on its way; in Browse, after Back, there is no search and the edits stand. A search
+    /// abandoned during its first load used to come back there (review A32-12).
+    @Test func aClosedPanelPutsBackTheSearchOnScreenAndNothingInBrowse() {
+        var abandoned = AO3SearchFilters()
+        abandoned.fandom = "Fandom A"
+        abandoned.completion = .complete
+        var edited = AO3SearchFilters(query: "typed since")
+        edited.rating = .teen
+
+        var back = abandoned
+        back.query = "typed since"
+        // Results on screen, and a first search still loading: the edits go, the query stays.
+        #expect(SearchPanelClose.restored(live: edited, loaded: abandoned, requested: nil, isIdle: false) == back)
+        #expect(SearchPanelClose.restored(live: edited, loaded: nil, requested: abandoned, isIdle: false) == back)
+        // Browse: whatever an abandoned search left behind, the edits stand.
+        #expect(SearchPanelClose.restored(live: edited, loaded: nil, requested: abandoned, isIdle: true) == nil)
+        #expect(SearchPanelClose.restored(live: edited, loaded: nil, requested: nil, isIdle: false) == nil)
+    }
+
     /// The toolbar badge counts what the hero's Filters cell counts: every label
     /// but the subject (the heading names it) and the sort.
     @Test func filterBadgeMatchesTheHeroFiltersCell() {

@@ -268,8 +268,10 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                     // (A27-10), and during the first search there was nothing to restore
                     // (A30-8). Apply clears `loadedFilters` and sends its own request first,
                     // so it is not undone here.
-                    guard !showing, var restored = loadedFilters ?? requestedFilters else { return }
-                    restored.query = filters.query
+                    guard !showing, let restored = SearchPanelClose.restored(
+                        live: filters, loaded: loadedFilters, requested: requestedFilters,
+                        isIdle: phase == .idle
+                    ) else { return }
                     if filters != restored { filters = restored }
                 }
                 .filterPanelPresentation(
@@ -616,7 +618,16 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
             filterHistory.removeAll()
             results = []
             phase = .idle
+            forgetSearch()
         }
+    }
+
+    /// A search thrown away takes its filter snapshots with it. Back to Browse left both, so
+    /// closing the filter panel there put the abandoned search's filters back for the next
+    /// search, and a tag tap saved them as a level to go Back to (review A32-12).
+    private func forgetSearch() {
+        loadedFilters = nil
+        requestedFilters = nil
     }
 
     /// Resets every filter (keeping the query) and refreshes — shared by the
@@ -629,6 +640,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
         } else {
             results = []
             phase = .idle
+            forgetSearch()
             router.panel = .none
         }
     }
@@ -670,6 +682,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                 if !filters.isSearchable {
                     results = []
                     phase = .idle
+                    forgetSearch()
                     router.panel = .none
                 }
             }
@@ -715,6 +728,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
         resultSummary = nil
         expandAllCards = false
         phase = .idle
+        forgetSearch()
     }
 
     // MARK: Searching
@@ -977,6 +991,21 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
 /// failing that, the one showing) is retried; `runSearch` would drop the reader
 /// back on page 1. With nothing on screen the first load failed, and nil tells
 /// the caller to run the search again from the top.
+/// What closing the filter panel without Apply puts back: the filters of the results on
+/// screen or, during a search's first load, of the request on its way. The typed query is
+/// not the panel's, and stays. In Browse there is no search to go back to, so the panel's
+/// edits stand: nil.
+enum SearchPanelClose {
+    static func restored(
+        live: AO3SearchFilters, loaded: AO3SearchFilters?, requested: AO3SearchFilters?,
+        isIdle: Bool
+    ) -> AO3SearchFilters? {
+        guard !isIdle, var restored = loaded ?? requested else { return nil }
+        restored.query = live.query
+        return restored
+    }
+}
+
 enum SearchRetry {
     static func page(requested: Int?, current: Int, hasResults: Bool) -> Int? {
         guard hasResults else { return nil }

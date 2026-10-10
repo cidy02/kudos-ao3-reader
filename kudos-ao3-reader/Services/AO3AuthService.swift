@@ -982,9 +982,11 @@ final class AO3AuthService {
                     refreshed, expectedGeneration: restoringGeneration
                 ) else { return }
                 // The same hand-over as Verify Session's (audit A20-1), on the other path
-                // that names a session: a launch with no network signs in as "AO3 Account"
-                // and files comment drafts under the session; the next launch names it
-                // here, and Verify Session then sees a name and skips the move (A27-8).
+                // that names a session: one stored without a name (a sign-in with no
+                // network is "AO3 Account") is named here, and Verify Session then sees a
+                // name and skips the move (A27-8). Only drafts typed in this launch move.
+                // An earlier launch's are filed under that launch's own owner and stay on
+                // disk, unshown (`CommentDraftIdentity`; review A32-11).
                 let restoredName = refreshed.username.trimmingCharacters(in: .whitespacesAndNewlines)
                 if saved.username.isEmpty, !restoredName.isEmpty {
                     CommentDraftStore().move(

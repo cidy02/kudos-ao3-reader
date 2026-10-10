@@ -350,6 +350,11 @@ struct TombstoneSweepsExistingRecordsTests {
         _ = try KudosBackupService.restore(snapshot, into: context, defaults: defaults, mode: .replaceLibrary)
 
         #expect(try liveNotes(context) == ["in the snapshot"])
+        // The mark Replace hid is still stored, and nothing says the snapshot's was deleted.
+        let stored = try context.fetch(FetchDescriptor<ReadingAnnotation>()).map(\.note)
+        let deletions = try context.fetch(FetchDescriptor<SyncTombstone>()).map(\.recordID)
+        #expect(stored.contains("only here"))
+        #expect(!deletions.contains(remote.id))
     }
 
     /// Audit A30-4. The mark was deleted on the other device and then brought back
@@ -378,9 +383,15 @@ struct TombstoneSweepsExistingRecordsTests {
         _ = try KudosBackupService.restore(snapshot, into: context, defaults: defaults, mode: .merge)
 
         #expect(try liveNotes(context) == ["brought back"])
+        // The text it replaced is parked on a hidden row, not destroyed.
+        let hidden = try context.fetch(FetchDescriptor<ReadingAnnotation>())
+            .filter { $0.isPendingDeletion || $0.deletedAt != nil }
+        #expect(hidden.map(\.note) == ["before the deletion"])
     }
 
     /// Merge stays add-only for a mark nobody deleted: the copy here is not overwritten.
+    /// A guardrail on the exception above, not a test of a fault: it passed before A30-4's
+    /// fix too (review A32-13).
     @Test func mergeStillLeavesALiveMarkHereAlone() throws {
         let defaults = try testDefaults()
         let context = try context()
