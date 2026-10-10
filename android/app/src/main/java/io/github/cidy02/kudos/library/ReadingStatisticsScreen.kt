@@ -633,10 +633,11 @@ private fun MetricGrid(metrics: List<Pair<String, String>>) {
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
+                // A figure alone in its row has the row: held to half of it, "14 hours ago" was cut
+                // to "14 hours …" at twice the text size even on two lines.
                 rowMetrics.forEach { (figure, caption) ->
                     MetricCell(figure, caption, Modifier.weight(1f))
                 }
-                if (rowMetrics.size == 1) Spacer(Modifier.weight(1f))
             }
         }
     }
@@ -656,7 +657,8 @@ private fun MetricCell(
             fontSize = 22.sp,
             fontWeight = FontWeight.Bold,
             fontFamily = FontFamily.Monospace,
-            maxLines = 1,
+            // "14 hours ago" read "14 hou…" at twice the text size.
+            maxLines = if (io.github.cidy02.kudos.ui.subject.isAccessibilityFontScale()) 2 else 1,
             overflow = TextOverflow.Ellipsis
         )
         Text(

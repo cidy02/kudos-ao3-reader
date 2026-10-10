@@ -238,3 +238,18 @@ unchanged at the normal size.
 
 Still not looked at: rows 4 to 13, 15 to 18 and 20.
 
+### Third look (06:18): the comments thread further down, the chapter picker, Reading Insights
+
+**Two more real cuts, fixed:**
+
+- The comments pager ("Previous · Page 1 of 3 · Next" in one row) squeezed **Next into a column
+  of single letters**. At an accessibility text size the page now sits above and the two
+  buttons side by side under it; at ordinary sizes the row is as it was, and as iOS has it.
+  (iOS uses the same one row: **to look at on the simulator at the largest size.**)
+- Reading Insights' "last read" figure read "14 hou…" (row 18's neighbour). A figure alone in
+  its row now has the whole row, and a figure may take a second line at an accessibility size.
+
+Looked at and sound at twice the size: the comment rows and their Reply and "…" actions (rows 5
+and 6), and the chapter picker (row 20). Not reached: "Continue thread" (row 4: the demo's
+thread is too short), rows 7 to 13 and 15 to 17.
+

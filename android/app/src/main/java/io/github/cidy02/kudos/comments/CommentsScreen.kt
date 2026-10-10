@@ -617,13 +617,7 @@ fun CommentsScreen(
                         // Pagination controls if multiple pages
                         if (thread.totalPages > 1) {
                             item {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 16.dp, vertical = 16.dp),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
+                                val previous: @Composable () -> Unit = {
                                     OutlinedButton(
                                         enabled = thread.currentPage > 1,
                                         onClick = { viewModel.load(page = thread.currentPage - 1) },
@@ -631,14 +625,16 @@ fun CommentsScreen(
                                     ) {
                                         Text("Previous")
                                     }
-
+                                }
+                                val position: @Composable () -> Unit = {
                                     Text(
                                         text = "Page ${thread.currentPage} of ${thread.totalPages}",
                                         fontSize = 13.sp,
                                         fontFamily = FontFamily.Monospace,
                                         color = tokens.secondaryInk
                                     )
-
+                                }
+                                val next: @Composable () -> Unit = {
                                     OutlinedButton(
                                         enabled = thread.currentPage < thread.totalPages,
                                         onClick = { viewModel.load(page = thread.currentPage + 1) },
@@ -646,6 +642,25 @@ fun CommentsScreen(
                                     ) {
                                         Text("Next")
                                     }
+                                }
+                                // One row holds the three at ordinary sizes, as on iOS. At an accessibility
+                                // size it squeezed Next into a column of single letters (seen at twice the
+                                // text size): the page goes above, the two buttons side by side under it.
+                                if (io.github.cidy02.kudos.ui.subject.isAccessibilityFontScale()) Column(
+                                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 16.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    position()
+                                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { previous(); next() }
+                                } else Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 16.dp, vertical = 16.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    previous(); position(); next()
                                 }
                             }
                         }
