@@ -644,16 +644,11 @@ fun CommentsScreen(
                                     }
                                 }
                                 // One row holds the three at ordinary sizes, as on iOS. At an accessibility
-                                // size it squeezed Next into a column of single letters (seen at twice the
-                                // text size): the page goes above, the two buttons side by side under it.
-                                if (io.github.cidy02.kudos.ui.subject.isAccessibilityFontScale()) Column(
-                                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 16.dp),
-                                    horizontalAlignment = Alignment.CenterHorizontally,
-                                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    position()
-                                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { previous(); next() }
-                                } else Row(
+                                // size it squeezed Next into a column of single letters.
+                                if (io.github.cidy02.kudos.ui.subject.isAccessibilityFontScale()) io.github.cidy02.kudos.ui.components.LargeTextPager(
+                                    thread.currentPage, thread.totalPages, { viewModel.load(page = it) },
+                                    Modifier.padding(horizontal = 16.dp, vertical = 16.dp)
+                                ) else Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .padding(horizontal = 16.dp, vertical = 16.dp),

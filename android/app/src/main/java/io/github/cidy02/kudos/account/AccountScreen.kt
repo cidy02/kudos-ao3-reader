@@ -1484,6 +1484,7 @@ private fun AccountListContent(
 
 @Composable
 private fun PaginationControls(page: Int, totalPages: Int, onLoadPage: (Int) -> Unit) {
+    if (io.github.cidy02.kudos.ui.subject.isAccessibilityFontScale()) { io.github.cidy02.kudos.ui.components.LargeTextPager(page, totalPages, onLoadPage); return }
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
         OutlinedButton(
             enabled = page > 1,
