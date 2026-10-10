@@ -405,3 +405,20 @@ other device), or Replace keeps every later deletion. **Recommended: the first**
 Replace is the reader saying "make it like this backup".
 
 Until answered: no change to the deletion records or to Replace on either app.
+
+## 22. iPhone, largest text sizes: a section header stops growing at twice its size (2026-10-10)
+
+Found by looking at the iPhone at its largest text size (AX5). A section header
+("SUBSCRIPTIONS", "CONTINUE READING") grew with the text up to 3.6 times its ordinary size.
+At that size its one long word no longer fits on a line beside its count and its arrows, and
+it broke in the middle: "SUBSCRIPTI / ONS". Android has no such size (its text stops at
+twice), so this is an iPhone question only.
+
+- **A (what stands since T-385).** The header stops growing at twice its ordinary size
+  (22pt). Its words stay whole and it stays on one line. Nothing else on the screen is
+  capped: titles, rows and body text keep growing.
+- **B.** Let the header grow all the way and move its count and arrows to a line under it,
+  so the word has the whole width. Bigger headers, taller screens; a 13-letter word still
+  only just fits on the narrowest phone.
+
+Until answered: A. The ordinary sizes are untouched either way.
