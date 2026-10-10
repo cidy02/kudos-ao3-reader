@@ -709,7 +709,10 @@ class CommentsViewModel(
                         // The text stays in the composer. The thread is read again so the reader
                         // can see whether it arrived; the same text is not sent twice by a tap.
                         lastSubmittedContentHash = contentHash
-                        _message.value = "Couldn't confirm this posted — reloading to check."
+                        // iOS `ambiguousSubmitMessage`: which of the two happened, in its words.
+                        _message.value = if (unconfirmed) {
+                            "AO3 answered but didn't confirm the comment posted. Checking whether it went through…"
+                        } else "The connection dropped while posting. Checking whether the comment went through…"
                         if (replyTo != null) reloadPageOnScreen() else load()
                     } else {
                         _message.value = result.error.displayMessage()
