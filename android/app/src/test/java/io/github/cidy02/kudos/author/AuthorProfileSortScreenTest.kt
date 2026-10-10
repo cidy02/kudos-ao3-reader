@@ -32,6 +32,7 @@ import org.robolectric.annotation.GraphicsMode
 @Config(sdk = [34], application = Application::class, qualifiers = "w411dp-h2000dp")
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class AuthorProfileSortScreenTest {
+    @org.junit.Before fun clearPageCache() { io.github.cidy02.kudos.network.ao3.AO3PageCache.shared.clear() }
     @get:Rule val compose = createComposeRule()
     private val source = FixtureSource { name ->
         listOf("src/debug/assets", "app/src/debug/assets", "android/app/src/debug/assets")

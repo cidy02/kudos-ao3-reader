@@ -85,17 +85,20 @@ fun AuthorProfileScreen(
     var route by remember(username, initialPseud) {
         mutableStateOf(AO3AuthorRoute(username.trim(), initialPseud?.trim()?.takeIf { it.isNotBlank() }))
     }
-    var header by remember { mutableStateOf<AO3AuthorHeader?>(null) }
-    var headerError by remember { mutableStateOf<AO3Error?>(null) }
+    val sessionGeneration by (authRepository?.generation ?: authorRepository.sessionChanges).collectAsState()
+    var header by remember(sessionGeneration) { mutableStateOf<AO3AuthorHeader?>(null) }
+    var headerError by remember(sessionGeneration) { mutableStateOf<AO3Error?>(null) }
+    var headerStale by remember(sessionGeneration) { mutableStateOf(false) }
+    var tabStale by remember(sessionGeneration) { mutableStateOf(false) }
     var headerLoading by remember { mutableStateOf(true) }
     
     var tab by remember { mutableStateOf(initialTab) }
     var page by remember { mutableIntStateOf(1) }
     
-    var works by remember { mutableStateOf<AO3SearchPage?>(null) }
-    var series by remember { mutableStateOf<AO3AuthorSeriesPage?>(null) }
-    var bookmarks by remember { mutableStateOf<AO3AuthorBookmarksPage?>(null) }
-    var about by remember { mutableStateOf<AO3AuthorAbout?>(null) }
+    var works by remember(sessionGeneration) { mutableStateOf<AO3SearchPage?>(null) }
+    var series by remember(sessionGeneration) { mutableStateOf<AO3AuthorSeriesPage?>(null) }
+    var bookmarks by remember(sessionGeneration) { mutableStateOf<AO3AuthorBookmarksPage?>(null) }
+    var about by remember(sessionGeneration) { mutableStateOf<AO3AuthorAbout?>(null) }
     
     var tabLoading by remember { mutableStateOf(false) }
     var tabError by remember { mutableStateOf<String?>(null) }
@@ -103,13 +106,13 @@ fun AuthorProfileScreen(
     var scopeState by remember { mutableStateOf(AO3AuthorWorksScope.Works) }
     var displayMode by remember { mutableStateOf(AuthorDisplayMode.Detailed) }
     
-    val sessionGeneration by (authRepository?.generation?.collectAsState() ?: remember { mutableStateOf(0) })
     var worksSort by remember(route.id, sessionGeneration) { mutableStateOf(AO3AuthorWorksSort()) }
     var worksFilters by remember(route.id, sessionGeneration) { mutableStateOf(AO3SearchFilters()) }
     var showingWorksFilters by remember(route.id, sessionGeneration) { mutableStateOf(false) }
     // Same generation fence as AuthorWorksScreen, shared by tab/page/scope/sort changes.
     var loadGeneration by remember { mutableIntStateOf(0) }
     var headerGeneration by remember { mutableIntStateOf(0) }
+    var refreshingProfile by remember { mutableStateOf(false) }
     var tabTask by remember { mutableStateOf<Job?>(null) }
     var headerTask by remember { mutableStateOf<Job?>(null) }
     val scope = rememberCoroutineScope()
@@ -128,7 +131,7 @@ fun AuthorProfileScreen(
     var readingBusy by remember { mutableStateOf(false) }
     var readingStatus by remember { mutableStateOf<String?>(null) }
 
-    fun loadHeader(afterLoad: (() -> Unit)? = null) {
+    fun loadHeader(bypassCache: Boolean = false, afterLoad: (() -> Unit)? = null) {
         val expectedRoute = route
         val expectedSession = sessionGeneration
         val generation = ++headerGeneration
@@ -136,19 +139,26 @@ fun AuthorProfileScreen(
         headerLoading = true
         headerError = null
         headerTask = scope.launch {
-            val result = authorRepository.loadDashboard(expectedRoute)
-            currentCoroutineContext().ensureActive()
-            if (generation != headerGeneration || route != expectedRoute || sessionGeneration != expectedSession) return@launch
-            when (result) {
-                is AO3Result.Success -> { header = result.value; headerError = null }
-                is AO3Result.Failure -> headerError = result.error
+            try {
+                val result = authorRepository.loadDashboard(expectedRoute, bypassCache)
+                currentCoroutineContext().ensureActive()
+                if (generation != headerGeneration || route != expectedRoute || sessionGeneration != expectedSession) return@launch
+                when (result) {
+                    is AO3Result.Success -> {
+                        header = result.value; headerError = null; headerStale = result.isStale; tabStale = false
+                        afterLoad?.invoke()
+                    }
+                    is AO3Result.Failure -> { header = null; headerError = result.error; headerStale = false }
+                }
+            } finally {
+                if (generation == headerGeneration && route == expectedRoute && sessionGeneration == expectedSession) {
+                    headerLoading = false
+                }
             }
-            headerLoading = false
-            if (result is AO3Result.Success) afterLoad?.invoke()
         }
     }
 
-    fun loadTab(target: AuthorTab, pageNum: Int = 1) {
+    fun loadTab(target: AuthorTab, pageNum: Int = 1, bypassCache: Boolean = false) {
         val expectedRoute = route
         val expectedScope = scopeState
         val expectedSort = worksSort
@@ -163,51 +173,53 @@ fun AuthorProfileScreen(
             fun current(): Boolean = generation == loadGeneration && route == expectedRoute &&
                 sessionGeneration == expectedSession && tab == target && page == pageNum &&
                 (target != AuthorTab.Works || (scopeState == expectedScope && worksSort == expectedSort))
-            when (target) {
-                AuthorTab.Works -> {
-                    val r = authorRepository.loadWorks(expectedRoute, pageNum, expectedScope, expectedSort)
-                    currentCoroutineContext().ensureActive()
-                    if (!current()) return@launch
-                    when (r) {
-                        is AO3Result.Success -> works = r.value
-                        is AO3Result.Failure -> tabError = r.error.displayMessage()
+            try {
+                when (target) {
+                    AuthorTab.Works -> {
+                        val r = authorRepository.loadWorks(expectedRoute, pageNum, expectedScope, expectedSort, bypassCache)
+                        currentCoroutineContext().ensureActive()
+                        if (!current()) return@launch
+                        when (r) {
+                            is AO3Result.Success -> { works = r.value; tabStale = tabStale || r.isStale }
+                            is AO3Result.Failure -> tabError = r.error.displayMessage()
+                        }
+                    }
+                    AuthorTab.Series -> {
+                        val r = authorRepository.loadSeries(expectedRoute, pageNum, bypassCache)
+                        currentCoroutineContext().ensureActive()
+                        if (!current()) return@launch
+                        when (r) {
+                            is AO3Result.Success -> { series = r.value; tabStale = tabStale || r.isStale }
+                            is AO3Result.Failure -> tabError = r.error.displayMessage()
+                        }
+                    }
+                    AuthorTab.Bookmarks -> {
+                        val r = authorRepository.loadBookmarks(expectedRoute, pageNum, bypassCache)
+                        currentCoroutineContext().ensureActive()
+                        if (!current()) return@launch
+                        when (r) {
+                            is AO3Result.Success -> { bookmarks = r.value; tabStale = tabStale || r.isStale }
+                            is AO3Result.Failure -> tabError = r.error.displayMessage()
+                        }
+                    }
+                    AuthorTab.About -> {
+                        val r = authorRepository.loadAbout(expectedRoute, bypassCache)
+                        currentCoroutineContext().ensureActive()
+                        if (!current()) return@launch
+                        when (r) {
+                            is AO3Result.Success -> { about = r.value; tabStale = tabStale || r.isStale }
+                            is AO3Result.Failure -> tabError = r.error.displayMessage()
+                        }
                     }
                 }
-                AuthorTab.Series -> {
-                    val r = authorRepository.loadSeries(expectedRoute, pageNum)
-                    currentCoroutineContext().ensureActive()
-                    if (!current()) return@launch
-                    when (r) {
-                        is AO3Result.Success -> series = r.value
-                        is AO3Result.Failure -> tabError = r.error.displayMessage()
-                    }
-                }
-                AuthorTab.Bookmarks -> {
-                    val r = authorRepository.loadBookmarks(expectedRoute, pageNum)
-                    currentCoroutineContext().ensureActive()
-                    if (!current()) return@launch
-                    when (r) {
-                        is AO3Result.Success -> bookmarks = r.value
-                        is AO3Result.Failure -> tabError = r.error.displayMessage()
-                    }
-                }
-                AuthorTab.About -> {
-                    val r = authorRepository.loadAbout(expectedRoute)
-                    currentCoroutineContext().ensureActive()
-                    if (!current()) return@launch
-                    when (r) {
-                        is AO3Result.Success -> about = r.value
-                        is AO3Result.Failure -> tabError = r.error.displayMessage()
-                    }
-                }
-            }
-            tabLoading = false
+            } finally { if (current()) tabLoading = false }
         }
     }
 
     LaunchedEffect(route.id, sessionGeneration) {
         scopeState = AO3AuthorWorksScope.Works
         tab = AuthorTab.Works
+        headerStale = false; tabStale = false
         header = null; works = null; series = null; bookmarks = null; about = null
         loadHeader()
     }
@@ -215,7 +227,7 @@ fun AuthorProfileScreen(
     // iOS activation waits for a usable header before reading the selected index.
     // A missing/refused author must not trigger another read known to be unusable.
     LaunchedEffect(header, route.id, sessionGeneration) {
-        if (header != null && !isDashboard && works == null && !tabLoading && tabError == null && tab == AuthorTab.Works) {
+        if (!refreshingProfile && header != null && !isDashboard && works == null && !tabLoading && tabError == null && tab == AuthorTab.Works) {
             loadTab(AuthorTab.Works, 1)
         }
     }
@@ -228,7 +240,7 @@ fun AuthorProfileScreen(
 
     LaunchedEffect(route.id, sessionGeneration, tab, scopeState) { selection.exit() }
     LaunchedEffect(deleteState.confirmed) {
-        if (deleteState.confirmed > 0) { selection.exit(); heldDelete = null; loadHeader { loadTab(tab, 1) } }
+        if (deleteState.confirmed > 0) { selection.exit(); heldDelete = null; loadHeader(bypassCache = true) { loadTab(tab, 1, bypassCache = true) } }
     }
     DisposableEffect(deletes) { onDispose { deletes?.close() } }
     val bulk = bulkModel
@@ -241,7 +253,7 @@ fun AuthorProfileScreen(
     if (row != null && workFormRepository != null && authRepository != null && seriesWrites != null) {
         WritingOwnWorkScreen(row.first, row.second, workFormRepository, authRepository, seriesWrites,
             autocompleteRepository, settingsRepository, onBack = { rowAction = null },
-            onChanged = { loadHeader { loadTab(tab, 1) } }, seriesRepository = seriesFormRepository)
+            onChanged = { loadHeader(bypassCache = true) { loadTab(tab, 1, bypassCache = true) } }, seriesRepository = seriesFormRepository)
         return
     }
 
@@ -383,8 +395,23 @@ fun AuthorProfileScreen(
     }
 
     Column(modifier.fillMaxSize()) {
+    io.github.cidy02.kudos.ui.components.KudosRefreshBox(onRefresh = {
+        refreshingProfile = true
+        try {
+            loadHeader(bypassCache = true)
+            headerTask?.join()
+            if (headerError == null && header != null && !isDashboard) {
+                loadTab(tab, 1, bypassCache = true)
+                tabTask?.join()
+            }
+        } finally {
+            if (headerTask?.isActive == true) headerTask?.cancel()
+            if (tabTask?.isActive == true) tabTask?.cancel()
+            refreshingProfile = false
+        }
+    }, modifier = Modifier.weight(1f)) {
     LazyColumn(
-        modifier = Modifier.weight(1f)
+        modifier = Modifier
             .testTag("Author profile")
             .fillMaxSize()
             .subjectScreenWash(palette)
@@ -421,7 +448,7 @@ fun AuthorProfileScreen(
                         title = "Couldn't load author",
                         message = headerError!!.displayMessage(),
                         primaryActionLabel = "Try Again",
-                        onPrimaryAction = { loadHeader() }
+                        onPrimaryAction = { loadHeader(bypassCache = true) }
                     )
                 }
             }
@@ -496,6 +523,10 @@ fun AuthorProfileScreen(
                 }
             }
             
+            if (h != null && (headerStale || tabStale)) item {
+                io.github.cidy02.kudos.ui.components.CachedAO3DataRow()
+            }
+
             if (isDashboard && h != null) {
                 // Dashboard view
                 item {
@@ -762,6 +793,7 @@ fun AuthorProfileScreen(
                 }
             }
         }
+    }
     }
     if (selection.isSelecting) {
         val picked = selection.selectedIn(works?.works.orEmpty())

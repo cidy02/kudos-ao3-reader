@@ -89,7 +89,8 @@ class AccountViewModel(
     private val countsCache: AO3AccountListCountsCache? = null,
     private val listRepository: AccountListRepository? = null
 ) : ViewModel() {
-    private val headerFlow = MutableStateFlow<io.github.cidy02.kudos.network.ao3.author.AO3AuthorHeader?>(null)
+    private val headerFlow = MutableStateFlow<Pair<Int, io.github.cidy02.kudos.network.ao3.author.AO3AuthorHeader>?>(null)
+    private val staleFlow = MutableStateFlow(false)
     private val unavailableFlow = MutableStateFlow(false)
     val profileUnavailable: StateFlow<Boolean> = unavailableFlow
     private val countsFlow = MutableStateFlow<Map<String, AO3AccountListCountsCache.Count>>(emptyMap())
@@ -97,13 +98,16 @@ class AccountViewModel(
     val uiState: StateFlow<AccountUiState> = combine(
         authRepository.state,
         authRepository.sessionHealth,
-        headerFlow,
+        combine(headerFlow, staleFlow, authRepository.generation) { header, stale, generation ->
+            header?.takeIf { it.first == generation }?.second to (header?.first == generation && stale)
+        },
         countsFlow
-    ) { authState, sessionHealth, header, counts ->
+    ) { authState, sessionHealth, profile, counts ->
         AccountUiState(
             authState = authState,
             sessionHealth = sessionHealth,
-            header = header,
+            header = profile.first,
+            isShowingStaleCache = profile.second,
             counts = counts
         )
     }.stateIn(
@@ -115,11 +119,13 @@ class AccountViewModel(
     init {
         viewModelScope.launch {
             authRepository.restoreSession()
-            authRepository.state.collect { auth ->
+            combine(authRepository.state, authRepository.generation) { auth, generation -> auth to generation }
+                .collect { (auth, _) ->
                 val username = auth.usernameOrNull
                 unavailableFlow.value = false
                 headerFlow.value = null
-                if (username != null) {
+                staleFlow.value = false
+                if (username != null && authRepository.username() == username) {
                     refreshHeader(username)
                     refreshCounts(username)
                     if (countsCache?.get(AccountListType.Subscriptions, username) == null && listRepository != null) {
@@ -131,18 +137,29 @@ class AccountViewModel(
         }
     }
 
-    private fun refreshHeader(username: String) {
-        val repo = authorRepository ?: return
+    private fun refreshHeader(username: String, bypassCache: Boolean = false): Job? {
+        val repo = authorRepository ?: return null
+        if (authRepository.username() != username) return null
         val generation = authRepository.generation.value
-        viewModelScope.launch {
-            val result = repo.loadDashboard(AO3AuthorRoute(username))
+        return viewModelScope.launch {
+            if (generation != authRepository.generation.value || authRepository.username() != username) return@launch
+            val result = repo.loadDashboard(AO3AuthorRoute(username), bypassCache)
             currentCoroutineContext().ensureActive()
             if (generation != authRepository.generation.value) return@launch
             when (result) {
-                is AO3Result.Success -> { headerFlow.value = result.value; unavailableFlow.value = false }
-                is AO3Result.Failure -> unavailableFlow.value = result.error == AO3Error.NotFound && headerFlow.value == null
+                is AO3Result.Success -> { headerFlow.value = generation to result.value; unavailableFlow.value = false; staleFlow.value = result.isStale }
+                is AO3Result.Failure -> {
+                    headerFlow.value = null; staleFlow.value = false
+                    unavailableFlow.value = result.error == AO3Error.NotFound
+                }
             }
         }
+    }
+
+    suspend fun refreshProfile() {
+        val username = authRepository.username() ?: return
+        val job = refreshHeader(username, bypassCache = true) ?: return
+        try { job.join() } finally { if (job.isActive) job.cancel() }
     }
 
     private fun refreshCounts(username: String) {

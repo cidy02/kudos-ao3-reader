@@ -1338,3 +1338,19 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   Fixtures only.
   Reverse: the commit "The writer's own works, and Edit multiple works".
 
+## 2026-10-09: a page AO3 could not serve again is shown from memory, and says so (brief 3ce)
+
+- The Inbox, the Account tab's own profile, an author's profile and a series page keep the
+  pages they read, **in memory only** (never on disk, never in a backup, gone on relaunch),
+  128 pages at most. For five minutes an opening makes no request, as on iOS; for a day the
+  copy can stand in when AO3 cannot be reached, with the line "Showing cached AO3 data".
+- **Only when AO3 could not be reached** (no connection, a timeout, "AO3 is busy", a 5xx).
+  Never after AO3's own refusal: what someone was allowed to see before is not shown in its
+  place.
+- **A copy belongs to the session that read it.** It is keyed by the account's name and the
+  session, and every step of the session (sign-in, sign-out, a restore, an expiry) clears
+  the whole cache.
+- A write removes the pages it changes; the writer's own bulk edit and delete (brief 3cd)
+  read the list again from AO3.
+  Reverse: the commit "A page AO3 could not serve again is shown from memory".
+

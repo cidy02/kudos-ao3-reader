@@ -9,6 +9,7 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class AuthorWorksSortTest {
+    @org.junit.Before fun clearPageCache() { io.github.cidy02.kudos.network.ao3.AO3PageCache.shared.clear() }
     @Test fun everySortDirectionAndCompletionMatchesSwiftQueryAndMakesOnePageRead() = runBlocking<Unit> {
         val expected = listOf("authors_to_sort_on", "title_to_sort_on", "created_at", "revised_at", "word_count",
             "hits", "kudos_count", "comments_count", "bookmarks_count")

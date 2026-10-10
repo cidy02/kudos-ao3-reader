@@ -10,6 +10,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class AO3SeriesRepositoryParseTest {
+    @org.junit.Before fun clearPageCache() { io.github.cidy02.kudos.network.ao3.AO3PageCache.shared.clear() }
     @Test
     fun parsesSeriesPageBlurbsWithFixture() = runTest {
         val client = FakeSeriesClient(
@@ -84,14 +85,17 @@ class AO3SeriesRepositoryParseTest {
         val url = "https://archiveofourown.org/series/321"
         val html = io.github.cidy02.kudos.writing.seriesFixture("ao3_demo_dawn_series")
         val client = FakeSeriesClient(mapOf(url to html))
-        val detail = (AO3SeriesRepository(client).detailPage(url) as AO3Result.Success).value
+        // Each reader its own page cache: with the shared one, the second client's page for the same
+        // address was never asked for (the first one's copy was still fresh).
+        fun repository(client: AO3Client) = AO3SeriesRepository(client, pageCache = io.github.cidy02.kudos.network.ao3.AO3PageCache())
+        val detail = (repository(client).detailPage(url) as AO3Result.Success).value
         assertEquals("The Dawn Cycle", detail.title)
         assertEquals(listOf("AO3_Reader"), detail.creatorUsernames)
         assertEquals(3, detail.workCount); assertEquals(45678, detail.words)
         assertEquals(listOf(url), client.requestedUrls)
         val other = FakeSeriesClient(mapOf(url to html.replace("/users/AO3_Reader/pseuds/Avery%20Writes",
             "/users/stranger/pseuds/AO3_Reader")))
-        assertEquals(listOf("stranger"), (AO3SeriesRepository(other).detailPage(url) as AO3Result.Success).value.creatorUsernames)
+        assertEquals(listOf("stranger"), (repository(other).detailPage(url) as AO3Result.Success).value.creatorUsernames)
         val summaries = io.github.cidy02.kudos.network.ao3.author.AO3AuthorParser().parseSeriesPage(
             io.github.cidy02.kudos.writing.seriesFixture("ao3_author_series"), 1).series
         assertEquals(listOf("Avery Writes"), summaries.first().creators)

@@ -11,6 +11,7 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 
 interface AO3AuthenticatedClient {
+    val sessionChanges: kotlinx.coroutines.flow.StateFlow<Int>? get() = null
     fun username(): String?
     fun sessionGeneration(): Int? = null
 
@@ -39,6 +40,7 @@ class DefaultAO3AuthenticatedClient(
     private val postClient: AO3FormPostClient,
     private val authRepository: AO3AuthRepository
 ) : AO3AuthenticatedClient {
+    override val sessionChanges: kotlinx.coroutines.flow.StateFlow<Int> get() = authRepository.generation
     override fun username(): String? = authRepository.username()
     override fun sessionGeneration(): Int = authRepository.generation.value
 
