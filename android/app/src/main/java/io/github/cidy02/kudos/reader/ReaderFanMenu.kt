@@ -16,6 +16,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
@@ -318,10 +320,16 @@ private fun FanMenuPillItem(
 ) {
     val tokens = LocalKudosTokens.current
     val pillShape = RoundedCornerShape(23.dp)
+    // At an accessibility text size a pill is as wide as the screen lets it be and as tall as its
+    // words: at twice the size "Bookmarks & Highlights" was cut to "Bookmarks &" and "Themes &
+    // Settings" ran under its icon.
+    val large = io.github.cidy02.kudos.ui.subject.isAccessibilityFontScale()
+    val roomy = (androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp.dp - 24.dp).coerceAtLeast(width)
 
     Box(
         modifier = Modifier
-            .size(width = width, height = height)
+            .width(if (large) roomy else width)
+            .heightIn(min = height)
             .clip(pillShape)
             .background(tokens.cardFill.copy(alpha = 0.90f), pillShape)
             .background(tokens.glassFill(), pillShape)
@@ -331,7 +339,7 @@ private fun FanMenuPillItem(
                     Modifier.clickable(onClick = onClick)
                 } else Modifier
             )
-            .padding(horizontal = 18.dp)
+            .padding(horizontal = 18.dp, vertical = if (large) 6.dp else 0.dp)
             .semantics {
                 contentDescription = pill.title
                 role = Role.Button
@@ -339,15 +347,16 @@ private fun FanMenuPillItem(
         contentAlignment = Alignment.CenterStart
     ) {
         Row(
-            modifier = Modifier.fillMaxSize(),
-            horizontalArrangement = Arrangement.SpaceBetween,
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
                 text = pill.title,
                 fontSize = 15.5.sp,
                 fontWeight = FontWeight.Normal,
-                color = if (pill.isEnabled) tokens.primaryInk else tokens.secondaryInk
+                color = if (pill.isEnabled) tokens.primaryInk else tokens.secondaryInk,
+                modifier = Modifier.weight(1f)
             )
             Icon(
                 imageVector = pill.icon,

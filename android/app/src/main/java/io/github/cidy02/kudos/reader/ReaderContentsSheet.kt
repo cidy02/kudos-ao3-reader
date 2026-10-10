@@ -89,10 +89,15 @@ fun ReaderContentsSheet(
                     selected = selectedTab == index,
                     onClick = { selectedTab = index },
                     text = {
+                        // One line that shrinks to its third of the sheet: at twice the text size the
+                        // three tabs broke mid-word ("Content / s", "Highlig / hts").
                         Text(
                             text = title,
                             fontWeight = if (selectedTab == index) FontWeight.SemiBold else FontWeight.Normal,
-                            color = if (selectedTab == index) tokens.accent else tokens.secondaryInk
+                            color = if (selectedTab == index) tokens.accent else tokens.secondaryInk,
+                            maxLines = 1,
+                            softWrap = false,
+                            autoSize = androidx.compose.foundation.text.TextAutoSize.StepBased(minFontSize = 7.sp, maxFontSize = 14.sp)
                         )
                     }
                 )

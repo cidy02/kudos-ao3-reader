@@ -272,3 +272,27 @@ parity question for another day.
 
 Still not looked at from the top twenty: rows 4, 7 to 13.
 
+### Fifth look (06:55): the Library, Search, Settings, Account, the chapter form, the reader
+
+Sound at twice the size: the Library's dashboard, Search before a search, Settings, the chapter
+form. (Two Settings rows with no value keep an empty second line: cosmetic, left.)
+
+**Six more real cuts, fixed** (none is in the index: it did not cover `reader/`):
+
+- Account: the pill read "Posting as Accou…", hiding the name it exists to show. Two lines at
+  an accessibility text size, in a rounded box.
+- The reader's menu: "Bookmarks & Highlights" was cut to "Bookmarks &" and "Themes & Settings"
+  ran under its icon. A pill is now as wide as the screen allows and as tall as its words.
+- The reader's bottom bar: "Page 1 of 1" ran straight into "0 min left in chapter" (it read
+  "of 10 min"), and the chapter line lost its end. The first is a row that wraps; the second
+  may take two lines.
+- The reader's title pill hid the author under a fixed 44dp height. It grows.
+- The Contents sheet's three tabs broke mid-word ("Content / s"). One line each, shrinking.
+
+Seen whole at twice the size and unchanged at the normal one. The reader's Display & Themes
+sheet is sound, and shows the shared segmented control two to a row.
+
+**Not yet looked at at twice the size:** work detail, the series, collection and tag-set forms,
+Search's results and filter sheet, the Library's section pages, the note editor and Find in
+Work in the reader, the login screens, and rows 4 and 7 to 13 of the top twenty.
+

@@ -534,9 +534,12 @@ private fun AccountSignedInHeader(
                 // The pill gives way, not the menu beside it: at large text it filled the row and
                 // pushed the "…" button off it.
                 Box(Modifier.weight(1f, fill = false)) {
+                    // The name is the point of this pill: at twice the text size it read "Posting as
+                    // Accou…". Two lines then, in a rounded box (a capsule's ends would cut them).
+                    val large = io.github.cidy02.kudos.ui.subject.isAccessibilityFontScale()
                     Box(
                         modifier = Modifier
-                            .clip(CircleShape)
+                            .clip(if (large) RoundedCornerShape(16.dp) else CircleShape)
                             .background(tokens.glassFill(0.12))
                             .clickable { pseudMenuOpen = true }
                             .padding(horizontal = 13.dp, vertical = 7.dp)
@@ -546,7 +549,7 @@ private fun AccountSignedInHeader(
                             fontSize = 13.sp,
                             fontWeight = FontWeight.Medium,
                             color = tokens.primaryInk,
-                            maxLines = 1,
+                            maxLines = if (large) 2 else 1,
                             overflow = TextOverflow.Ellipsis
                         )
                     }

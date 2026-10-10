@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -88,9 +89,10 @@ fun ReaderChromeTopBar(
 
         if (!titleHidden) {
             // Centered title pill
+            // As tall as its two lines need: at twice the text size the 44dp pill hid the author.
             Box(
                 modifier = Modifier
-                    .height(44.dp)
+                    .heightIn(min = 44.dp)
                     .widthIn(max = 260.dp)
                     .clip(RoundedCornerShape(22.dp))
                     .background(tokens.cardFill.copy(alpha = 0.90f), RoundedCornerShape(22.dp))
