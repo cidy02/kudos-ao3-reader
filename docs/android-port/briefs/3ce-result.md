@@ -182,3 +182,22 @@ Landed after a hand merge with brief 3cd in `author/AuthorProfileScreen.kt` (six
 - Not read line by line: the four screens' banner wiring and the Inbox's removals. Gemini's
   index is `audits/A34-result.md` (unread). A Codex review of the landed code is owed.
 
+### Seen on the emulator (Claude, 2026-10-10, airplane mode, the demo's local answers)
+
+**The command under "Local demo" does not work as written.** Without
+`--activity-single-top` the running activity never receives the extra, and the reads go on
+succeeding. Use:
+`adb shell am start -n io.github.cidy02.kudos/.MainActivity --activity-single-top --ez kudosDemoCachedPagesOffline true`
+(and `false` to turn it back).
+
+- Own profile, Light: with reads failing, a pull shows "Showing cached AO3 data" above the kept
+  rows; a tab never read says "Couldn't load series", "You're offline. Try again when you're
+  back online." with Retry; with reads working again a pull removes the banner and the failed
+  tab loads.
+- A series, Dark: the banner above the kept works.
+- The Inbox, Dark: **the first pull after opening shows "Couldn't load your inbox", not the
+  kept page.** The opening reads the plain Inbox address and a refresh reads the address the
+  filter form gives, so no copy is kept under the second until one refresh has succeeded;
+  after that a failing pull shows the banner and the kept rows. iOS builds the address the
+  same way (`AO3InboxModel.inboxURL`), so both apps do this. P3, not changed.
+- Not seen: another author's profile; Sepia, OLED and twice the text size.

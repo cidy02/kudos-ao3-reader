@@ -146,3 +146,8 @@ reads (iOS asks and is refused four times; Android does not ask). Both writes go
 Not reviewed line by line: the screen's layout code and the parser's new list. A Codex
 review of the landed code is owed (after A32).
 
+### Seen on the emulator (Claude, 2026-10-10)
+
+As the owner, in Light, OLED and in Sepia at twice the text size (the two actions stack, the
+text wraps, nothing is cut): nothing wrong found. Still not seen: the screen as a moderator,
+and "Load more".

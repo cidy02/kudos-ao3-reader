@@ -245,7 +245,11 @@ fun AuthorProfileScreen(
     DisposableEffect(deletes) { onDispose { deletes?.close() } }
     val bulk = bulkModel
     if (bulk != null) {
-        WritingBulkEditScreen(bulk, bulkFocus, onBack = { bulkModel = null }, onSaved = { bulkModel = null },
+        // After a saved bulk edit the list is read again from AO3, as after a row's edit and a
+        // delete: the rows still showed the rating and tags from before the Save, and the kept
+        // page would have gone on saying so for five minutes.
+        WritingBulkEditScreen(bulk, bulkFocus, onBack = { bulkModel = null },
+            onSaved = { bulkModel = null; loadHeader(bypassCache = true) { loadTab(tab, 1, bypassCache = true) } },
             autocomplete = autocompleteRepository, settings = settingsRepository)
         return
     }

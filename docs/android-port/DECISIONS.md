@@ -1353,4 +1353,10 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
 - A write removes the pages it changes; the writer's own bulk edit and delete (brief 3cd)
   read the list again from AO3.
   Reverse: the commit "A page AO3 could not serve again is shown from memory".
+- **2026-10-10 · After a saved Edit multiple works, the writer's list is read again.** The
+  rows kept the rating and tags from before the Save until the reader pulled the list, and the
+  kept page would have shown them for five minutes more. Android now reads the header and the
+  list again from AO3 after the Save, as it does after a row's edit and after a delete. iOS
+  does not (its form closes and nothing reads the list): to be fixed there the same way.
+  Reverse: `onSaved` in `author/AuthorProfileScreen.kt`.
 

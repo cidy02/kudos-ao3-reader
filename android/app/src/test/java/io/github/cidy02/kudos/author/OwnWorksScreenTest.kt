@@ -129,6 +129,22 @@ class OwnWorksScreenTest {
         idleRequests(opening + 4) // two preparation reads and the confirmed dashboard + works refresh
         assertEquals(opening + 4, requests.size); assertEquals(2, recorder.posts.size)
     }
+    /** A saved bulk edit left the list as it was read before the Save: the rows kept the old rating. */
+    @Test fun aSavedBulkEditReadsTheListAgainFromAO3() {
+        show(); idleRequests(2)
+        val dashboard = requests[0]; val works = requests[1]
+        compose.onNodeWithContentDescription("Select Works").performClick()
+        compose.onNodeWithContentDescription("Select $title").performClick()
+        compose.onNodeWithText("Edit 1").performClick()
+        compose.waitUntil(15_000) { compose.onAllNodesWithContentDescription("Save").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNode(hasScrollAction()).performScrollToNode(hasText("Add co-creators"))
+        compose.onNodeWithText("Pseud").performTextInput("Writer")
+        val formOpen = requests.size
+        compose.onNodeWithContentDescription("Save").performClick()
+        compose.waitUntil(15_000) { requests.drop(formOpen).let { dashboard in it && works in it } }
+        compose.waitForIdle()
+        compose.onNodeWithText("Edit 1").assertExists() // the selection stays, as on iOS
+    }
     @Test fun rowEditAndTagsUseKnownIdWithNoDetailProbeAndBackRestoresChrome() {
         show(); idleRequests(2)
         compose.onNodeWithContentDescription("Actions for $title").performClick()
