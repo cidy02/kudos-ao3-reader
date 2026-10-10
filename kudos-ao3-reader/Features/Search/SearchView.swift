@@ -605,6 +605,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                 Button(action: clearQuery) {
                     Image(systemName: "xmark.circle.fill").font(.caption)
                 }
+                .accessibilityLabel("Clear search")
                 .buttonStyle(.plain)
                 .foregroundStyle(.secondary)
             }
