@@ -558,20 +558,28 @@ struct CommentSubmissionTests {
         let reply = AO3CommentContext(workID: 42, chapterID: 7, parentCommentID: 5)
 
         let unnamed = CommentDraftIdentity.unnamedSession(3)
-        #expect(unnamed == "unknown-session:3")
+        #expect(unnamed.hasPrefix(CommentDraftIdentity.unnamedSessionPrefix))
+        #expect(unnamed == CommentDraftIdentity.unnamedSession(3))
+        #expect(unnamed != CommentDraftIdentity.unnamedSession(4))
         store.save("typed offline", for: chapter, identity: unnamed)
         store.save("a reply typed offline", for: reply, identity: unnamed)
         store.save("alice's own reply", for: reply, identity: "alice")
         store.save("someone else", for: chapter, identity: "bob")
+        // Audit A30-2. What an earlier launch left under its own "session 3" (the count
+        // starts again at each launch) may be another account's: it is not handed over.
+        let earlierLaunch = AO3CommentContext(workID: 43, chapterID: 1)
+        store.save("another launch's session 3", for: earlierLaunch, identity: "unknown-session:3")
 
-        store.move(from: "unknown-session:3", to: "alice")
+        store.move(from: unnamed, to: "alice")
 
         #expect(store.draft(for: chapter, identity: "alice") == "typed offline")
         // Both kept where the account already had a draft there, the one just typed first.
         #expect(store.draft(for: reply, identity: "alice") == "a reply typed offline\n\nalice's own reply")
-        #expect(store.draft(for: chapter, identity: "unknown-session:3").isEmpty)
-        #expect(store.draft(for: reply, identity: "unknown-session:3").isEmpty)
+        #expect(store.draft(for: chapter, identity: unnamed).isEmpty)
+        #expect(store.draft(for: reply, identity: unnamed).isEmpty)
         #expect(store.draft(for: chapter, identity: "bob") == "someone else")
+        #expect(store.draft(for: earlierLaunch, identity: "alice").isEmpty)
+        #expect(store.draft(for: earlierLaunch, identity: "unknown-session:3") == "another launch's session 3")
     }
 
     @Test func draftsAreAccountScopedAndVerifiedSuccessClearsChapterVariants() {
