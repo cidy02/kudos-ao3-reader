@@ -333,3 +333,23 @@ The later Android revival test, `android/app/src/test/java/io/github/cidy02/kudo
 ## Remaining verification
 
 All requested numbered items were source-reviewed. The report does not certify runtime rendering, real AO3 folding/permissions, test scheduling stability, or test/build success. Prior A30 findings outside this brief were not repeated or re-audited. The fixes still needing changes are composer target/session ownership, complete tree-overlap handling, mounted chapter-session ownership, durable unnamed-draft retrieval, and Search snapshot invalidation on abandonment. The demo catalog's broader isolation and the named test gaps remain explicitly limited above.
+
+## Triage (Claude, 2026-10-10)
+
+Read whole. The findings are careful and the two I checked against the code hold (the first
+pull's address in the Inbox and the bulk-edit list were found the same night on the emulator
+and are separate). Nothing here is a P1 as the code stands; three of my fixes were incomplete
+and one made a new fault.
+
+| Item | Verdict here | What happens |
+|---|---|---|
+| 1 (A30-1) the composer's draft fence | **Real, P2.** `setTarget`, a viewer change and a late submit all escape the count. | Brief `3cg` for Codex: one captured composer context. Not patched a third time by hand. |
+| 4 (A30-10) `present` and nested overlap | **Real, P2** if AO3 serves those tree shapes (two rows with one key crash the list; or the comment asked for is pruned). | Brief `3cg`. |
+| 5 (A30-11) the chapter list's owner | **Real, P2.** A name is not a session; the reader effect is not fenced. | Brief `3cg`. |
+| 7 (A30-9) Search suggestions and the demo's seeded entry | **Not reachable in a release**: the demo seeds only in a debug build started with the demo extra. A developer's device can show the fake count. | P3, left; noted in the weak-spots list. |
+| 8 Android test gaps | Real, P3. | Joined to the weak-tests list (A28-5); the four named strengthenings go into brief `3cg`, which touches the same tests. |
+| 11 (A30-2, iOS) unnamed-session drafts across launches | **The trade stands** (failing closed), but two comments now promise what the code does not do. | iOS sitting T-377: correct both comments. A stored owner token is a later item, listed in the Living Prompt §5c. |
+| 12 (A30-8, iOS) abandoned filters can come back | **Real, P2, made by my fix.** | iOS sitting T-377: clear both snapshots wherever the search is thrown away; a test. |
+| 13 iOS tests | One of my claims was wrong: `mergeStillLeavesALiveMarkHereAlone` is a guardrail and passes the old code. | Claim corrected in the TASKS row at T-377; the two missing assertions added there. |
+| 2, 3, 6, 9, 10 | Fixed, as the review says. | Nothing. |
+
