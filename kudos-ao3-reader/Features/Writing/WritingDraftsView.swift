@@ -219,6 +219,15 @@ private struct DraftCard: View {
     @ScaledMetric(relativeTo: .caption) private var metaSize: CGFloat = 11.5
 
     @Environment(ThemeManager.self) private var themeManager
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    /// The title beside the icons, or over them at the accessibility sizes, as a search
+    /// result does: beside them the title had half the card and was cut to "Two / Voice…".
+    private var headingLayout: AnyLayout {
+        dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 10))
+            : AnyLayout(HStackLayout(alignment: .top, spacing: 13))
+    }
 
     private var fandoms: [String] {
         work.fandoms.filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
@@ -259,7 +268,7 @@ private struct DraftCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 11) {
-            HStack(alignment: .top, spacing: 13) {
+            headingLayout {
                 VStack(alignment: .leading, spacing: 5) {
                     if fandoms.first != nil || daysLeft != nil {
                         HStack(alignment: .top, spacing: 6) {
@@ -281,7 +290,7 @@ private struct DraftCard: View {
                     Text(work.title.isEmpty ? "Untitled" : work.title)
                         .font(.system(size: titleSize, weight: .semibold))
                         .foregroundStyle(.primary)
-                        .lineLimit(2)
+                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? 3 : 2)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
