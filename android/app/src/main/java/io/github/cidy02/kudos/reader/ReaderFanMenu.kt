@@ -301,6 +301,8 @@ fun ReaderFanMenuDismissBackdrop(
                 .clickable(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null,
+                    // The page behind the open menu: TalkBack read an unnamed button (audit A43).
+                    onClickLabel = "Close menu",
                     onClick = onDismiss
                 )
         )

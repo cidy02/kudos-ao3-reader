@@ -4,6 +4,9 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -430,7 +433,10 @@ private fun OrganizerRow(
                     }
                 }
                 if (selecting) {
-                    SelectionBubble(selected, Modifier.clickable(onClick = onToggle))
+                    // A checkbox with the queue's name: TalkBack read an unnamed button here (audit A43).
+                    SelectionBubble(selected, Modifier.toggleable(
+                        value = selected, role = androidx.compose.ui.semantics.Role.Checkbox, onValueChange = { onToggle() }
+                    ).semantics { contentDescription = "Select ${row.queue.displayName}" })
                 }
                 if (reordering) {
                     DragGrip(Modifier.queueDragHandle(true, onStep))
