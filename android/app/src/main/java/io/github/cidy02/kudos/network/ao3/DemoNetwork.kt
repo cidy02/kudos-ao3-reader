@@ -13,6 +13,7 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Protocol
 import okhttp3.Response
+import okhttp3.Request
 import okhttp3.ResponseBody.Companion.toResponseBody
 import okio.Buffer
 import org.jsoup.Jsoup
@@ -44,6 +45,8 @@ internal object DemoNetwork {
     fun webFixture(url: HttpUrl, source: FixtureSource = fixtures, clock: Clock? = null): ByteArray? {
         if (!DemoNetworkRoutes.isAo3Host(url.host)) return null
         val path = DemoNetworkRoutes.decodedPath(url).trimEnd('/')
+        val workAnswer = workForms.answer(Request.Builder().url(url).build(), source, clock)
+        if (workAnswer != null) return if (workAnswer.first == 200) workAnswer.second.encodeToByteArray() else null
         val name = when (path) {
             "/collections/winter_exchange/participants" -> "ao3_demo_moderation_participants"
             "/collections/winter_exchange" -> "ao3_demo_moderation_show"
@@ -77,12 +80,14 @@ internal object DemoNetwork {
     var fixtures: FixtureSource = FixtureSource { null }
         private set
 
+    internal var workForms = DemoWorkSaves()
     private val launchDecision = CountDownLatch(1)
 
     /** Fixtures are published before [isActive], so a reader that sees active also sees them. */
     fun activate(assets: AssetManager, signedIn: Boolean = false) {
         this.signedIn = signedIn
         fixtures = AssetFixtureSource(assets)
+        workForms = DemoWorkSaves()
         isActive = true
         launchDecision.countDown()
     }
@@ -359,7 +364,8 @@ internal fun demoAuthorWorksPage(bytes: ByteArray, url: HttpUrl): ByteArray {
 internal class DemoNetworkInterceptor(
     private val isActive: () -> Boolean = { DemoNetwork.isActive },
     private val fixtures: () -> FixtureSource = { DemoNetwork.fixtures },
-    private val clock: Clock? = null
+    private val clock: Clock? = null,
+    private val workAnswers: DemoWorkSaves? = null
 ) : Interceptor {
     private val removedSubscriptions = ConcurrentHashMap.newKeySet<String>()
     private val collectionItems = DemoCollectionItems()
@@ -383,7 +389,7 @@ internal class DemoNetworkInterceptor(
                 .code(answer.first).message("Local series answer").header("Content-Type", HTML)
                 .body(answer.second.toResponseBody(HTML_TYPE)).build()
         }
-        workForms.answer(chain.request(), fixtures(), clock)?.let { answer ->
+        (workAnswers ?: if (fixtures() === DemoNetwork.fixtures) DemoNetwork.workForms else workForms).answer(chain.request(), fixtures(), clock)?.let { answer ->
             return Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1)
                 .code(answer.first).message("Local work Save answer").header("Content-Type", HTML)
                 .body(answer.second.toResponseBody(HTML_TYPE)).build()
@@ -563,24 +569,130 @@ internal class DemoNetworkInterceptor(
 }
 
 /** Process-local AO3 answers. Every supported write terminates here, never at a socket. */
-private class DemoWorkSaves {
+internal class DemoWorkSaves {
     private val edited = ConcurrentHashMap<Long, String>()
     private val values = ConcurrentHashMap<Long, Map<String, List<String>>>()
-    private var editedTags: String? = null
+    private val editedTags = ConcurrentHashMap<Long, String>()
     private val chapters = DemoWritingChapters()
-    private val posted = mutableSetOf(995006L)
+    private val posted = mutableSetOf(995006L, 995008L, 995009L)
     private val deleted = mutableSetOf<Long>()
+
+    private val ownTitles = linkedMapOf(995006L to "The Cartographer’s \"Second\" Tide & 星", 995008L to "The Locked Lantern", 995009L to "The Keeper’s Copy")
+    private fun workHtml(id: Long, source: FixtureSource): String = edited[id] ?: Jsoup.parse(
+        source.read("ao3_demo_work_posted_edit")?.decodeToString().orEmpty().replace("995006", id.toString())).apply {
+        select("input[name]").firstOrNull { it.attr("name") == "work[title]" }?.attr("value", ownTitles[id].orEmpty())
+        if (id != 995006L) select("input[name]").firstOrNull { it.attr("name") == "work[wip_length]" }?.attr("value", "2")
+    }.outerHtml()
+    private fun tagsHtml(id: Long, source: FixtureSource): String = editedTags[id] ?: source.read("ao3_demo_work_edit_tags")
+        ?.decodeToString().orEmpty().replace("995006", id.toString())
+    private fun fields(request: Request): Map<String, List<String>> {
+        val buffer = Buffer(); request.body?.writeTo(buffer)
+        return buffer.readUtf8().split('&').filter(String::isNotEmpty).map {
+            val pair = it.split('=', limit = 2)
+            URLDecoder.decode(pair[0], "UTF-8") to URLDecoder.decode(pair.getOrElse(1) { "" }, "UTF-8")
+        }.groupBy({ it.first }, { it.second })
+    }
+    private fun bulkAnswer(request: Request, source: FixtureSource): Pair<Int, String>? {
+        val path = DemoNetworkRoutes.decodedPath(request.url).trimEnd('/')
+        if (Regex("^/users/AO3_Reader(?:/pseuds/[^/]+)?/works(?:/collected)?$").matches(path) && request.method == "GET") {
+            val doc = Jsoup.parse(source.read("ao3_author_works")?.decodeToString() ?: return 404 to "")
+            val index = doc.selectFirst("ol.work.index") ?: return 404 to ""
+            val templates = index.select("li.work.blurb").map { it.clone() }
+            doc.select("ol.pagination").remove()
+            index.empty()
+            for ((n, pair) in ownTitles.entries.withIndex()) {
+                val (id, originalTitle) = pair
+                if (id in deleted) continue
+                val row = templates[n].clone().attr("id", "work_$id")
+                row.selectFirst("h4.heading a")?.attr("href", "/works/$id")?.text(
+                    values[id]?.get("work[title]")?.firstOrNull() ?: originalTitle)
+                val creators = row.select("a[rel=author]")
+                creators.drop(1).forEach { it.remove() }
+                creators.firstOrNull()?.attr("href", "/users/AO3_Reader/pseuds/Writer")?.text("Writer")
+                val form = Jsoup.parse(workHtml(id, source))
+                val rating = form.select("[name]").firstOrNull { it.attr("name") == "work[rating_string]" }
+                    ?.selectFirst("option[selected]")?.attr("value")
+                rating?.let { row.selectFirst(".rating .text")?.text(it) }
+                val total = form.select("input[name]").firstOrNull { it.attr("name") == "work[wip_length]" }?.attr("value")
+                row.selectFirst(".iswip .text")?.text(if (total == "2") "Complete Work" else "Work in Progress")
+                row.selectFirst("dd.chapters")?.text("2/${total?.ifEmpty { "?" } ?: "?"}")
+                index.appendChild(row)
+            }
+            return 200 to demoAuthorWorksPage(doc.outerHtml().encodeToByteArray(), request.url).decodeToString()
+        }
+        if (!Regex("^/users/AO3_Reader/works/(show_multiple|edit_multiple|update_multiple|delete_multiple)$").matches(path)) return null
+        if (path.endsWith("/show_multiple") && request.method == "GET")
+            return 200 to "<html><head><meta name='csrf-token' content='demo-bulk-delete=='></head><body><main id='main'></main></body></html>"
+        if (request.method != "POST") return 405 to ""
+        val sent = fields(request)
+        val ids = sent["work_ids[]"].orEmpty().mapNotNull(String::toLongOrNull)
+        fun refusal(reason: String) = 422 to Jsoup.parse("<main id='main'><div class='flash error'></div></main>").apply {
+            selectFirst(".flash")?.text(reason)
+        }.outerHtml()
+        if (ids.isEmpty() || ids.any { it !in ownTitles || it in deleted }) return refusal("Select at least one work.")
+        val expected = if (path.endsWith("/delete_multiple")) "demo-bulk-delete==" else
+            Jsoup.parse(workHtml(ids.first(), source)).selectFirst("meta[name=csrf-token]")?.attr("content")
+        if (sent["authenticity_token"] != listOf(expected) || request.header("X-CSRF-Token") != expected)
+            return refusal("AO3 didn't accept the change.")
+        if (path.endsWith("/edit_multiple")) {
+            val doc = Jsoup.parse(source.read("ao3_edit_multiple")?.decodeToString() ?: return 404 to "")
+            doc.selectFirst("form")?.attr("action", "/users/AO3_Reader/works/update_multiple")
+            doc.select("input[name]").filter { it.attr("name") == "work_ids[]" }.forEach { it.remove() }
+            val list = doc.selectFirst("dl.work.index") ?: return 404 to ""; list.empty()
+            for (id in ids) {
+                list.appendElement("dt").appendElement("a").attr("href", "/works/$id").text(ownTitles.getValue(id))
+                doc.selectFirst("form")?.appendElement("input")?.attr("type", "hidden")?.attr("name", "work_ids[]")?.attr("value", id.toString())
+            }
+            return 200 to doc.outerHtml()
+        }
+        if (path.endsWith("/delete_multiple")) {
+            if (sent["commit"] != listOf("Yes, Delete Works")) return refusal("AO3 didn't accept the change.")
+            if (995009L in ids) return refusal("The Keeper’s Copy could not be deleted.")
+            deleted.addAll(ids)
+            return 200 to "<main id='main'><div class='flash notice'>Your works were deleted.</div></main>"
+        }
+        if (sent["_method"] != listOf("patch")) return refusal("AO3 didn't accept the change.")
+        if (995008L in ids && sent["work[pseuds_to_add]"] == listOf("Refuse this edit"))
+            return refusal("The Locked Lantern could not be updated.")
+        for (id in ids) {
+            val doc = Jsoup.parse(workHtml(id, source))
+            for (control in doc.select("[name]")) {
+                val chosen = sent[control.attr("name")] ?: continue
+                if (control.tagName() == "select") control.select("option").forEach {
+                    if (it.attr("value") in chosen) it.attr("selected", "selected") else it.removeAttr("selected")
+                } else if (control.attr("type") in setOf("checkbox", "radio")) {
+                    if (control.attr("value") in chosen) control.attr("checked", "checked") else control.removeAttr("checked")
+                } else control.attr("value", chosen.firstOrNull().orEmpty())
+            }
+            edited[id] = doc.outerHtml()
+            val tags = Jsoup.parse(tagsHtml(id, source))
+            for (control in tags.select("select[name]")) {
+                val chosen = sent[control.attr("name")] ?: continue
+                control.select("option").forEach {
+                    if (it.attr("value") in chosen) it.attr("selected", "selected") else it.removeAttr("selected")
+                }
+            }
+            editedTags[id] = tags.outerHtml()
+        }
+        return 200 to "<main id='main'><div class='flash notice'>Your works were successfully updated.</div></main>"
+    }
 
     @Synchronized
     fun answer(request: okhttp3.Request, source: FixtureSource, clock: Clock?): Pair<Int, String>? {
         val path = DemoNetworkRoutes.decodedPath(request.url).trimEnd('/')
-        val ownerID = Regex("^/works/(995001|995006|995007)(?:/.*)?$").matchEntire(path)?.groupValues?.get(1)?.toLong()
+        val ownPath = Regex("^/users/AO3_Reader(?:/pseuds/[^/]+)?/works(?:/collected|/show_multiple|/edit_multiple|/update_multiple|/delete_multiple)?$").matches(path)
+        val ownFormPath = Regex("^/works/(995006|995008|995009)(?:/edit|/edit_tags|/update_tags|/confirm_delete)?$").matches(path)
+        if ((ownPath || ownFormPath) && source.read("ao3_demo_work_posted_edit") == null) return 404 to ""
+        if (ownFormPath && (path.endsWith("edit_tags") || path.endsWith("update_tags")) && source.read("ao3_demo_work_edit_tags") == null) return 404 to ""
+        bulkAnswer(request, source)?.let { return it }
+        val tagID = Regex("^/works/(995006|995008|995009)/(?:edit_tags|update_tags)$").matchEntire(path)?.groupValues?.get(1)?.toLong()
+        val ownerID = Regex("^/works/(995001|995006|995007|995008|995009)(?:/.*)?$").matchEntire(path)?.groupValues?.get(1)?.toLong()
         if (ownerID != null && ownerID in deleted) return 404 to ""
         chapters.answer(request, source)?.let { return it }
-        if (path == "/works/995006/edit_tags" && request.method == "GET")
-            return editedTags?.let { 200 to it }
-        if (path == "/works/995006/update_tags" && request.method == "POST") {
-            val html = editedTags ?: source.read("ao3_demo_work_edit_tags")?.decodeToString() ?: return 404 to ""
+        if (tagID != null && path.endsWith("/edit_tags") && request.method == "GET")
+            return 200 to tagsHtml(tagID, source)
+        if (tagID != null && path.endsWith("/update_tags") && request.method == "POST") {
+            val html = tagsHtml(tagID, source)
             val doc = Jsoup.parse(html)
             val buffer = okio.Buffer()
             request.body?.writeTo(buffer)
@@ -613,17 +725,17 @@ private class DemoWorkSaves {
                 }
             }
             applyTags(doc)
-            editedTags = doc.outerHtml()
-            val work = edited[995006L] ?: source.read("ao3_demo_work_posted_edit")?.decodeToString() ?: return 404 to ""
+            editedTags[tagID] = doc.outerHtml()
+            val work = workHtml(tagID, source)
             val workDoc = Jsoup.parse(work)
             applyTags(workDoc)
-            edited[995006L] = workDoc.outerHtml()
+            edited[tagID] = workDoc.outerHtml()
             return 200 to "<main id='main'><div class='flash notice'>Tags were successfully updated.</div></main>"
         }
-        val id = Regex("^/works/(995001|995006|995007)(?:/edit|/confirm_delete)?$").matchEntire(path)?.groupValues?.get(1)?.toLong()
+        val id = Regex("^/works/(995001|995006|995007|995008|995009)(?:/edit|/confirm_delete)?$").matchEntire(path)?.groupValues?.get(1)?.toLong()
         if (request.method == "GET") {
             if (id != null && path.endsWith("/confirm_delete")) {
-                val base = edited[id] ?: source.read(if (id == 995006L) "ao3_demo_work_posted_edit" else "ao3_demo_work_draft_edit")?.decodeToString()
+                val base = if (id in ownTitles) workHtml(id, source) else edited[id] ?: source.read("ao3_demo_work_draft_edit")?.decodeToString()
                     ?: return 404 to ""
                 val title = Jsoup.parse(base).selectFirst("[name='work[title]']")?.attr("value").orEmpty()
                 val draft = id !in posted
@@ -638,6 +750,7 @@ private class DemoWorkSaves {
                 val fixture = DemoNetworkRoutes.fixtureName(request.url) ?: return 404 to ""
                 return source.read(fixture)?.decodeToString()?.let { 200 to it } ?: (404 to "")
             }
+            if (id in setOf(995008L, 995009L) && path.endsWith("/edit")) return 200 to workHtml(id!!, source)
             if (id != null && path.endsWith("/edit")) {
                 val held = edited[id]
                 if (chapters.hasChanges(id)) {
@@ -649,7 +762,7 @@ private class DemoWorkSaves {
                 }
                 held?.let { return 200 to it }
             }
-            if (!DemoNetworkRoutes.isDraftsPath(path) || (values.isEmpty() && deleted.isEmpty() && posted == setOf(995006L))) return null
+            if (!DemoNetworkRoutes.isDraftsPath(path) || (values.isEmpty() && deleted.isEmpty() && posted == setOf(995006L, 995008L, 995009L))) return null
             val name = DemoNetworkRoutes.fixtureName(request.url) ?: return 404 to ""
             val bytes = source.read(name) ?: return 404 to ""
             val doc = Jsoup.parse(demoDraftsPage(bytes, clock).decodeToString())
@@ -684,10 +797,11 @@ private class DemoWorkSaves {
         val workId = id ?: 995007L
         val fixture = when (workId) {
             995001L -> "ao3_demo_work_draft_edit"
-            995006L -> "ao3_demo_work_posted_edit"
+            995006L, 995008L, 995009L -> "ao3_demo_work_posted_edit"
             else -> "ao3_work_new_draft"
         }
-        val html = edited[workId] ?: source.read(fixture)?.decodeToString() ?: return 404 to ""
+        val html = if (workId in setOf(995008L, 995009L)) workHtml(workId, source)
+            else edited[workId] ?: source.read(fixture)?.decodeToString() ?: return 404 to ""
         val doc = Jsoup.parse(html)
         chapters.applyToWork(doc, workId)
         val buffer = okio.Buffer()

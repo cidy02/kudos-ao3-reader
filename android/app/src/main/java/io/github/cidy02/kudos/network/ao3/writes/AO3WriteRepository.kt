@@ -132,6 +132,86 @@ class AO3WriteRepository(
         return AO3Result.Success(fresh)
     }
 
+    /** iOS's nonmutating rendering POST is still single-shot, never coalesced/retried. */
+    suspend fun loadBulkEditForm(ids: List<Long>, expectedGeneration: Int): AO3Result<AO3BulkEditForm> {
+        requireCollectionSession(expectedGeneration)
+        val username = client.username() ?: return AO3Result.Failure(AO3Error.Validation("Log in to AO3 first."))
+        if (ids.isEmpty()) return AO3Result.Failure(AO3Error.Validation("Select at least one work."))
+        val token = when (val read = bulkToken(AO3WorkFormUrls.editWork(ids.first()), expectedGeneration)) {
+            is AO3Result.Failure -> return read
+            is AO3Result.Success -> read.value
+        }
+        val url = AO3BulkWorkUrls.page(username, "edit_multiple")
+        val response = postWriting(url, listOf("authenticity_token" to token) + ids.map { "work_ids[]" to it.toString() },
+            token, url, expectedGeneration)
+        return when (response) {
+            is AO3Result.Failure -> response
+            is AO3Result.Success -> {
+                parser.workWriteError(response.value.body)?.let { return AO3Result.Failure(AO3Error.Validation(it)) }
+                try { AO3Result.Success(AO3BulkEditParser.parse(response.value.body, response.value.url, ids)) }
+                catch (_: Exception) { AO3Result.Failure(AO3Error.Parse("Couldn't read AO3's work form.")) }
+            }
+        }
+    }
+
+    /** Swift merges per work, then editTags itself reads its fresh token/action again. */
+    suspend fun bulkEditWorks(changes: AO3BulkEditChanges, expectedGeneration: Int): AO3Result<Unit> {
+        requireCollectionSession(expectedGeneration)
+        val username = client.username() ?: return AO3Result.Failure(AO3Error.Validation("Log in to AO3 first."))
+        if (changes.workIDs.isEmpty()) return AO3Result.Failure(AO3Error.Validation("Select at least one work."))
+        if (changes.hasTags) for (id in changes.workIDs) {
+            requireCollectionSession(expectedGeneration)
+            val page = when (val read = client.getAuthenticated(AO3WorkFormUrls.editTags(id))) {
+                is AO3Result.Failure -> return read
+                is AO3Result.Success -> read.value
+            }
+            requireCollectionSession(expectedGeneration)
+            val form = try { AO3WorkFormParser().parse(page.body, page.url) }
+                catch (_: Exception) { return AO3Result.Failure(AO3Error.Parse("Couldn't read AO3's work form.")) }
+            if (form.kind != AO3WorkFormKind.EditTags || form.workID != id)
+                return AO3Result.Failure(AO3Error.Parse("Couldn't read AO3's work form."))
+            when (val answer = editWorkTags(changes.applying(form), expectedGeneration)) {
+                is AO3Result.Failure -> return answer
+                is AO3Result.Success -> Unit
+            }
+            // Nothing throwing after a sent write: don't start another write under a new session.
+            movedOnAfterWrite(expectedGeneration)?.let { return it }
+        }
+        if (!changes.hasUniform) return AO3Result.Success(Unit)
+        val token = when (val read = bulkToken(AO3WorkFormUrls.editWork(changes.workIDs.first()), expectedGeneration)) {
+            is AO3Result.Failure -> return read
+            is AO3Result.Success -> read.value
+        }
+        val url = AO3BulkWorkUrls.page(username, "update_multiple")
+        return workVerdict(postWriting(url, changes.parameters(token), token, url, expectedGeneration))
+    }
+
+    suspend fun deleteWorks(ids: List<Long>, expectedGeneration: Int): AO3Result<Unit> {
+        requireCollectionSession(expectedGeneration)
+        val username = client.username() ?: return AO3Result.Failure(AO3Error.Validation("Log in to AO3 first."))
+        if (ids.isEmpty()) return AO3Result.Failure(AO3Error.Validation("Select at least one work."))
+        val referer = AO3BulkWorkUrls.page(username, "show_multiple")
+        val token = when (val read = bulkToken(referer, expectedGeneration)) {
+            is AO3Result.Failure -> return read
+            is AO3Result.Success -> read.value
+        }
+        return workVerdict(postWriting(AO3BulkWorkUrls.page(username, "delete_multiple"),
+            listOf("authenticity_token" to token) + ids.map { "work_ids[]" to it.toString() } + ("commit" to "Yes, Delete Works"),
+            token, referer, expectedGeneration))
+    }
+
+    private suspend fun bulkToken(url: String, generation: Int): AO3Result<String> {
+        requireCollectionSession(generation)
+        val page = when (val read = client.getAuthenticated(url)) {
+            is AO3Result.Failure -> return read
+            is AO3Result.Success -> read.value
+        }
+        requireCollectionSession(generation)
+        val token = parser.parseAuthenticityToken(page.body, metaOnly = true)
+            ?: return AO3Result.Failure(AO3Error.Validation("Couldn't prepare the request. Try again, or open the form on AO3."))
+        return AO3Result.Success(token)
+    }
+
     /** iOS saveWork: the loaded token/body/action, zero preparation reads, one single-shot POST. */
     suspend fun saveWork(form: AO3WorkForm, expectedGeneration: Int): AO3Result<Unit> =
         submitWork(form, expectedGeneration, form.actionUrl)

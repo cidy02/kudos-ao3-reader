@@ -325,3 +325,26 @@ Own Select Works is the separate toolbar control; other-profile/Gifts reading
 selection remains in Menu, following Swift's placement. The real auth generation
 is collected as a StateFlow immediately, avoiding a fabricated initial zero that
 could cause an unnecessary first header read before the actual generation arrives.
+
+## Landing note (Claude, 2026-10-09)
+
+Landed as written, with one test repaired. Gate: 2,481 tests. **Not yet seen on the
+emulator.**
+
+- `DemoBulkWorksTest` failed on its first run (Codex cannot run Gradle): it asked the demo's
+  saved state for a posted work's untouched edit page, which that state leaves to the route's
+  own fixture, as the interceptor does. The test's helper now falls back the same way.
+- Read line by line: the three new writes in `AO3WriteRepository.kt` (the rendering POST,
+  the per-work tag run followed by the one uniform POST, the bulk delete), `WritingBulkEditState.kt`
+  and the delete state in `author/OwnWorksControls.kt`. Each write checks the session before
+  it is sent and takes its verdict from `movedOnAfterWrite` after; busy flags clear in
+  `finally`; a bulk delete asks first, naming the count and the titles.
+- Gemini's index `audits/A33-result.md` found one difference, and it is not one: it says
+  Android's per-work tag run is not paced where iOS uses `AO3RequestCoordinator.withSlot`.
+  On Android every request through the shared client is spaced by the client's own
+  coordinator (`network/ao3/AO3Client.kt`), so the run is paced without asking.
+- As on iOS, a tag run that stops part-way says why and does not say how many works were
+  already changed. Worth a sentence on both platforms; not done here.
+- Not read line by line: the two screens' layout code, `AO3BulkEdit.kt`'s parser and the
+  demo's bulk answers. A Codex review of the landed code is owed.
+

@@ -23,6 +23,9 @@ import kotlinx.coroutines.launch
 import androidx.navigation.NavDeepLink
 import androidx.navigation.NavGraphBuilder
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.SideEffect
 import io.github.cidy02.kudos.account.AO3CollectionsScreen
 import io.github.cidy02.kudos.account.AO3DashboardScreen
 import io.github.cidy02.kudos.account.AO3PreferencesScreen
@@ -933,10 +936,32 @@ fun AppNavHost(
         ) { backStackEntry ->
             val type = Routes.routeArg(backStackEntry, "listType")
                 ?.let(NavArgCodecs::decodeAccountListType)
+            val ownAccount by container.authRepository.state.collectAsState()
+            var heldWorksUsername by remember(backStackEntry) { mutableStateOf<String?>(null) }
+            val worksUsername = heldWorksUsername ?: (ownAccount as? io.github.cidy02.kudos.auth.AO3AuthState.SignedIn)?.username
+            SideEffect { if (heldWorksUsername == null) heldWorksUsername = worksUsername }
             if (type == null) {
                 navController.popBackStack()
             } else {
-                AccountWorksListScreen(
+                if (type == AccountListType.MyWorks && worksUsername != null) {
+                    AuthorProfileScreen(
+                        username = worksUsername,
+                        authorRepository = container.authorRepository,
+                        authRepository = container.authRepository,
+                        seriesFormRepository = remember(container) { io.github.cidy02.kudos.network.ao3.writing.AO3SeriesFormRepository(
+                            container.authenticatedClient, container.authRepository) },
+                        seriesWrites = container.writeRepository,
+                        workFormRepository = remember(container) { io.github.cidy02.kudos.network.ao3.writing.AO3WorkFormRepository(
+                            container.authenticatedClient, container.authRepository) },
+                        autocompleteRepository = container.tagAutocompleteRepository,
+                        settingsRepository = container.settingsRepository,
+                        workImporter = container.workImporter,
+                        readingQueueRepository = container.readingQueueRepository,
+                        onOpenWork = { navigateToWorkDetail(WorkDetailSource.RemoteSummary(it)) },
+                        onOpenSeries = { navController.navigate(Routes.seriesWorks(it)) },
+                        onOpenWeb = { navController.navigate(Routes.webFallback(it)) }
+                    )
+                } else AccountWorksListScreen(
                     type = type,
                     repository = container.accountListRepository,
                     writeRepository = container.writeRepository,
@@ -1189,6 +1214,12 @@ fun AppNavHost(
                         container.authenticatedClient, container.authRepository) },
                     seriesWrites = container.writeRepository,
                     authRepository = container.authRepository,
+                    workFormRepository = remember(container) { io.github.cidy02.kudos.network.ao3.writing.AO3WorkFormRepository(
+                        container.authenticatedClient, container.authRepository) },
+                    autocompleteRepository = container.tagAutocompleteRepository,
+                    settingsRepository = container.settingsRepository,
+                    workImporter = container.workImporter,
+                    readingQueueRepository = container.readingQueueRepository,
                     onOpenWork = { work ->
                         navigateToWorkDetail(WorkDetailSource.RemoteSummary(work))
                     },

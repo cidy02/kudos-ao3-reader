@@ -1326,3 +1326,15 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   it compares passages.
   Reverse: the commit "Merge takes a highlight brought back after its deletion".
 
+## 2026-10-09: the writer's own works, and Edit multiple works (brief 3cd)
+
+- On the signed-in writer's own Works list: Select Works with a bar (Edit, Collections,
+  Visibility, Delete) and, on a row, Edit, Tags, Chapter and Delete. Ownership is the
+  account's own name against the page's, never a displayed pseud.
+- Edit multiple works is AO3's own form: opening it sends AO3's rendering POST (it changes
+  nothing), as iOS; tags are changed work by work, then everything else in one POST. A tag
+  run that fails stops there and is not rolled back, as iOS.
+- Delete asks first, naming the count and the titles; one POST, never retried.
+  Fixtures only.
+  Reverse: the commit "The writer's own works, and Edit multiple works".
+
