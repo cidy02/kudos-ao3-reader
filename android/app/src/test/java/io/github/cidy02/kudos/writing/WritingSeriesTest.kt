@@ -199,6 +199,32 @@ class WritingSeriesTest {
         assertEquals("Series was successfully updated.", model.state.value.notice)
     }
 
+    /**
+     * Audit A39. A confirmed save makes the series page kept in the cache untrue: it is dropped, and
+     * the form says it changed so its opener reads again. A refused save leaves both alone.
+     */
+    @Test fun aConfirmedSaveDropsTheKeptSeriesPageAndARefusedOneDoesNot() = runTest {
+        val cache = io.github.cidy02.kudos.network.ao3.AO3PageCache.shared
+        for ((response, confirmed) in listOf(
+            seriesResponse(422, "<div id='error'><ul><li>Title is too long</li></ul></div>") to false,
+            seriesResponse(200, "<main id='main'><div class='flash notice'>Series was successfully updated.</div></main>") to true)) {
+            val setup = seriesSetup(); val model = setup.model(); model.load()
+            var fetched = 0
+            suspend fun readSeriesPage() = cache.read("https://archiveofourown.org/series/321?page=2",
+                io.github.cidy02.kudos.network.ao3.AO3PageCache.Kind.SeriesDetail, setup.client,
+                fetch = { fetched++; AO3Result.Success(AO3HttpResponse("https://archiveofourown.org/series/321?page=2", 200, emptyMap(), "kept")) },
+                parse = { AO3Result.Success(it.body) })
+            readSeriesPage(); readSeriesPage()
+            assertEquals(1, fetched) // kept: the second read was answered from the cache
+            model.edit { it.copy(title = "A new title") }
+            setup.client.postResponse = response
+            model.save()
+            assertEquals(confirmed, model.changed)
+            readSeriesPage()
+            assertEquals(if (confirmed) 2 else 1, fetched)
+        }
+    }
+
     @Test fun reorderUsesFreshManageTokenWholeSerialOrderOnePostAndReadBack() = runTest {
         val setup = seriesSetup(); val model = setup.model(); model.load(); model.beginReorder(); model.move(0, 2)
         model.save(order = true)
