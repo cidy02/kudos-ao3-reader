@@ -1,5 +1,7 @@
 package io.github.cidy02.kudos.network.ao3.series
 
+import io.github.cidy02.kudos.network.ao3.AO3PageCache
+import io.github.cidy02.kudos.network.ao3.AO3HttpResponse
 import io.github.cidy02.kudos.network.ao3.AO3Client
 import io.github.cidy02.kudos.network.ao3.AO3Error
 import io.github.cidy02.kudos.network.ao3.AO3Result
@@ -19,8 +21,11 @@ import kotlinx.coroutines.withContext
 class AO3SeriesRepository(
     private val client: AO3Client = OkHttpAO3Client(),
     private val parser: AO3SearchParser = AO3SearchParser(),
-    private val authenticatedClient: io.github.cidy02.kudos.network.ao3.writes.AO3AuthenticatedClient? = null
+    private val authenticatedClient: io.github.cidy02.kudos.network.ao3.writes.AO3AuthenticatedClient? = null,
+    private val pageCache: AO3PageCache = AO3PageCache.shared
 ) {
+    val sessionChanges: kotlinx.coroutines.flow.StateFlow<Int> = authenticatedClient?.sessionChanges ?: kotlinx.coroutines.flow.MutableStateFlow(0)
+
     /**
      * Every work in a series across all of the series page's pages.
      * Empty pages or reaching [AO3SearchPage.totalPages] ends pagination.
@@ -56,24 +61,31 @@ class AO3SeriesRepository(
     }
 
     /** The show page's header and creator identities from the SAME listing read, never from a work byline. */
-    suspend fun detailPage(seriesUrl: String, page: Int = 1): AO3Result<AO3SeriesDetailPage> {
+    suspend fun detailPage(seriesUrl: String, page: Int = 1, bypassCache: Boolean = false): AO3Result<AO3SeriesDetailPage> {
         val url = AO3SeriesUrls.seriesPageUrl(seriesUrl, page)
             ?: return AO3Result.Failure(AO3Error.Validation("Not a valid AO3 series URL."))
-        val result = if (authenticatedClient?.username() != null) authenticatedClient.getAuthenticated(url) else client.get(url)
-        return when (result) {
-            is AO3Result.Failure -> result
-            is AO3Result.Success -> when (val works = parse(result.value.body, result.value.statusCode, page)) {
-                is AO3Result.Failure -> works
-                is AO3Result.Success -> withContext(Dispatchers.Default) {
-                    val doc = org.jsoup.Jsoup.parse(result.value.body, url)
-                    val meta = doc.selectFirst("dl.series.meta")
-                    val usernames = io.github.cidy02.kudos.network.ao3.author.ao3CreatorUsernames(
-                        meta?.select("a[rel=author][href]").orEmpty().map { it.attr("abs:href") })
-                    val title = doc.selectFirst(".primary h2.heading, #main > h2.heading")?.text().orEmpty()
-                        .ifEmpty { works.value.works.firstOrNull()?.seriesTitle ?: "Series" }
-                    fun stat(name: String) = meta?.selectFirst("dd.$name")?.text()?.replace(",", "")?.trim()?.toIntOrNull()
-                    AO3Result.Success(AO3SeriesDetailPage(works.value, title, usernames, stat("works"), stat("words")))
-                }
+        return pageCache.read(url, AO3PageCache.Kind.SeriesDetail, authenticatedClient, bypassCache,
+            fetch = {
+                if (authenticatedClient?.username() != null) authenticatedClient.getAuthenticated(url) else client.get(url)
+            }, parse = { parseDetail(it, url, page) })
+    }
+
+    private suspend fun parseDetail(response: AO3HttpResponse, url: String, page: Int): AO3Result<AO3SeriesDetailPage> {
+        return when (val works = parse(response.body, response.statusCode, page)) {
+            is AO3Result.Failure -> works
+            is AO3Result.Success -> withContext(Dispatchers.Default) {
+                val doc = org.jsoup.Jsoup.parse(response.body, url)
+                val blurbs = doc.select("li.work.blurb")
+                if ((blurbs.isEmpty() && doc.selectFirst("ol.work.index, h2.heading, p.message, .flash") == null) ||
+                    (blurbs.isNotEmpty() && works.value.works.isEmpty())
+                ) return@withContext AO3Result.Failure(AO3Error.Parse("AO3 series markup was not recognized."))
+                val meta = doc.selectFirst("dl.series.meta")
+                val usernames = io.github.cidy02.kudos.network.ao3.author.ao3CreatorUsernames(
+                    meta?.select("a[rel=author][href]").orEmpty().map { it.attr("abs:href") })
+                val title = doc.selectFirst(".primary h2.heading, #main > h2.heading")?.text().orEmpty()
+                    .ifEmpty { works.value.works.firstOrNull()?.seriesTitle ?: "Series" }
+                fun stat(name: String) = meta?.selectFirst("dd.$name")?.text()?.replace(",", "")?.trim()?.toIntOrNull()
+                AO3Result.Success(AO3SeriesDetailPage(works.value, title, usernames, stat("works"), stat("words")))
             }
         }
     }

@@ -10,6 +10,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class AO3SeriesRepositoryParseTest {
+    @org.junit.Before fun clearPageCache() { io.github.cidy02.kudos.network.ao3.AO3PageCache.shared.clear() }
     @Test
     fun parsesSeriesPageBlurbsWithFixture() = runTest {
         val client = FakeSeriesClient(

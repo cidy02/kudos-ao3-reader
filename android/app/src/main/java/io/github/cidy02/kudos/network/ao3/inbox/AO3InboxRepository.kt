@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.network.ao3.inbox
 
+import io.github.cidy02.kudos.network.ao3.AO3PageCache
 import io.github.cidy02.kudos.network.ao3.AO3Error
 import io.github.cidy02.kudos.network.ao3.AO3Result
 import io.github.cidy02.kudos.network.ao3.writes.AO3AuthenticatedClient
@@ -17,8 +18,12 @@ import kotlinx.coroutines.withContext
 class AO3InboxRepository(
     private val client: AO3AuthenticatedClient,
     private val parser: AO3InboxParser = AO3InboxParser(),
-    private val formParser: AO3WriteFormParser = AO3WriteFormParser()
+    private val formParser: AO3WriteFormParser = AO3WriteFormParser(),
+    private val pageCache: AO3PageCache = AO3PageCache.shared
 ) {
+    val sessionChanges: kotlinx.coroutines.flow.StateFlow<Int> = client.sessionChanges ?: kotlinx.coroutines.flow.MutableStateFlow(0)
+    fun viewerScope() = AO3PageCache.scope(client)
+
     /**
      * Loads one Inbox page. When [filterForm] + [filterValues] are provided,
      * uses AO3's own filter GET URL; otherwise the plain paginated inbox URL.
@@ -26,7 +31,8 @@ class AO3InboxRepository(
     suspend fun load(
         page: Int = 1,
         filterForm: AO3InboxFilterForm? = null,
-        filterValues: Map<String, String> = emptyMap()
+        filterValues: Map<String, String> = emptyMap(),
+        bypassCache: Boolean = false
     ): AO3Result<AO3InboxPage> {
         val username = client.username()
             ?: return AO3Result.Failure(AO3Error.AuthenticationRequired)
@@ -37,15 +43,9 @@ class AO3InboxRepository(
             else -> AO3InboxParser.inboxUrl(username, page)
         } ?: return AO3Result.Failure(AO3Error.Validation("Couldn't build the AO3 Inbox URL."))
 
-        return when (val result = client.getAuthenticated(url)) {
-            is AO3Result.Failure -> result
-            is AO3Result.Success -> parsePage(
-                html = result.value.body,
-                page = page,
-                finalUrl = result.value.url,
-                statusCode = result.value.statusCode
-            )
-        }
+        return pageCache.read(url, AO3PageCache.Kind.Inbox, client, bypassCache,
+            fetch = { client.getAuthenticated(url) },
+            parse = { parsePage(it.body, page, it.url, it.statusCode) })
     }
 
     /**
@@ -71,6 +71,7 @@ class AO3InboxRepository(
                 AO3Error.Validation("Couldn't prepare AO3's Inbox action. Reload and try again.")
             )
 
+        val viewer = AO3PageCache.scope(client)
         return when (
             val response = client.postAuthenticated(
                 url = form.actionUrl,
@@ -87,6 +88,14 @@ class AO3InboxRepository(
                     response.value.statusCode, response.value.body, "AO3 couldn't update your Inbox."
                 )
                 if (error == null) {
+                    if (AO3PageCache.scope(client) == viewer) {
+                        AO3InboxParser.inboxUrl(viewer.viewer ?: "", 1)?.let {
+                            pageCache.removePages(java.net.URI(it).path, viewer)
+                            if (form.actionUrl != referer) {
+                                pageCache.remove(AO3PageCache.Key(form.actionUrl, viewer, AO3PageCache.Kind.Inbox))
+                            }
+                        }
+                    }
                     AO3Result.Success(action.successMessage)
                 } else {
                     AO3Result.Failure(AO3Error.Validation(error))
@@ -115,6 +124,8 @@ class AO3InboxRepository(
             AO3Result.Failure(
                 AO3Error.Parse(error.message ?: "AO3 Inbox page could not be parsed.")
             )
+        } catch (error: kotlinx.coroutines.CancellationException) {
+            throw error
         } catch (error: Exception) {
             AO3Result.Failure(
                 AO3Error.Parse(error.message ?: "AO3 Inbox page could not be parsed.")

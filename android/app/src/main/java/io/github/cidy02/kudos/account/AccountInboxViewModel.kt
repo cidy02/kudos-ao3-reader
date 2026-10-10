@@ -20,6 +20,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import io.github.cidy02.kudos.network.ao3.displayMessage
 
@@ -48,7 +49,8 @@ data class AccountInboxUiState(
     val actionNotice: String? = null,
     /** Work id → authors from progressive enrichment (unbounded per VM instance). */
     val workAuthorsById: Map<Long, List<AO3CommentWorkAuthor>> = emptyMap(),
-    val pageUrl: String? = null
+    val pageUrl: String? = null,
+    val isShowingStaleCache: Boolean = false
 ) {
     enum class Phase {
         Idle,
@@ -71,6 +73,9 @@ data class AccountInboxUiState(
     val canSelectItems: Boolean
         get() = bulkForm != null && selectableItemIds.isNotEmpty()
 
+    fun canPerformItemAction(action: AO3InboxBulkAction, item: AO3InboxItem): Boolean =
+        item.id in selectableItemIds && bulkForm?.parameters(listOf(item), action) != null
+
     val canFilter: Boolean
         get() = filterForm != null
 }
@@ -86,13 +91,24 @@ class AccountInboxViewModel(
     private var loadJob: Job? = null
     private var enrichmentJob: Job? = null
     private var bulkJob: Job? = null
+    private val attemptedWorkIds = mutableSetOf<Long>()
 
     init {
-        load(page = 1)
+        load(page = 1, bypassCache = true)
+        viewModelScope.launch {
+            var first = true
+            repository.sessionChanges.collect {
+                if (first) { first = false; return@collect }
+                loadJob?.cancel(); enrichmentJob?.cancel(); bulkJob?.cancel()
+                mutableState.value = AccountInboxUiState()
+                attemptedWorkIds.clear()
+                load(page = 1, bypassCache = true)
+            }
+        }
     }
 
-    fun load(page: Int) {
-        if (mutableState.value.isPerformingBulkAction) return
+    fun load(page: Int, bypassCache: Boolean = false): Job? {
+        if (mutableState.value.isPerformingBulkAction) return null
         loadJob?.cancel()
         enrichmentJob?.cancel()
         val previous = mutableState.value
@@ -113,7 +129,8 @@ class AccountInboxViewModel(
                 val result = repository.load(
                     page = page,
                     filterForm = filterForm,
-                    filterValues = filterValues
+                    filterValues = filterValues,
+                    bypassCache = bypassCache
                 )
             ) {
                 is AO3Result.Success -> {
@@ -133,43 +150,34 @@ class AccountInboxViewModel(
                             isSelecting = false,
                             selectedItemIds = emptySet(),
                             pageUrl = pageData.pageUrl,
+                            isShowingStaleCache = result.isStale,
                             actionError = null
                         )
                     }
-                    startWorkContextEnrichment(pageData.items)
+                    if (!result.isStale) {
+                        if (bypassCache) attemptedWorkIds.clear()
+                        startWorkContextEnrichment(pageData.items)
+                    }
                 }
                 is AO3Result.Failure -> {
-                    if (result.error == AO3Error.AuthenticationRequired) {
-                        mutableState.update {
-                            it.copy(
-                                phase = AccountInboxUiState.Phase.Failed,
-                                items = emptyList(),
-                                actionError = result.error.displayMessage()
-                            )
-                        }
-                    } else {
-                        mutableState.update {
-                            it.copy(
-                                phase = if (it.items.isEmpty()) {
-                                    AccountInboxUiState.Phase.Failed
-                                } else {
-                                    AccountInboxUiState.Phase.Loaded
-                                },
-                                actionError = result.error.displayMessage()
-                            )
-                        }
+                    mutableState.update {
+                        it.copy(phase = AccountInboxUiState.Phase.Failed,
+                            items = emptyList(), bulkForm = null, filterForm = null,
+                            isShowingStaleCache = false, actionError = result.error.displayMessage())
                     }
                 }
             }
         }
+        return loadJob
     }
 
     fun retry() {
-        load(mutableState.value.currentPage)
+        load(mutableState.value.currentPage, bypassCache = true)
     }
 
-    fun refresh() {
-        load(mutableState.value.currentPage)
+    suspend fun refresh() {
+        val job = load(mutableState.value.currentPage, bypassCache = true) ?: return
+        try { job.join() } finally { if (job.isActive) job.cancel() }
     }
 
     fun goToPage(page: Int) {
@@ -237,7 +245,7 @@ class AccountInboxViewModel(
                 selectedItemIds = emptySet()
             )
         }
-        load(page = 1)
+        load(page = 1, bypassCache = true)
     }
 
     fun clearActionError() {
@@ -248,11 +256,8 @@ class AccountInboxViewModel(
         mutableState.update { it.copy(actionNotice = null) }
     }
 
-    fun canPerformItemAction(action: AO3InboxBulkAction, item: AO3InboxItem): Boolean {
-        val form = mutableState.value.bulkForm ?: return false
-        if (item.id !in mutableState.value.selectableItemIds) return false
-        return form.parameters(listOf(item), action) != null
-    }
+    fun canPerformItemAction(action: AO3InboxBulkAction, item: AO3InboxItem): Boolean =
+        mutableState.value.canPerformItemAction(action, item)
 
     fun startItemAction(action: AO3InboxBulkAction, item: AO3InboxItem) {
         startAction(action, listOf(item))
@@ -271,6 +276,7 @@ class AccountInboxViewModel(
         if (!items.all { it.id in state.selectableItemIds }) return
         if (form.parameters(items, action) == null) return
 
+        val expectedViewer = repository.viewerScope()
         bulkJob?.cancel()
         bulkJob = viewModelScope.launch {
             mutableState.update {
@@ -286,6 +292,7 @@ class AccountInboxViewModel(
                     )
                 ) {
                     is AO3Result.Success -> {
+                        if (repository.viewerScope() != expectedViewer) return@launch
                         mutableState.update {
                             it.copy(
                                 isSelecting = false,
@@ -298,6 +305,7 @@ class AccountInboxViewModel(
                         reloadAfterWrite(state.currentPage)
                     }
                     is AO3Result.Failure -> {
+                        if (repository.viewerScope() != expectedViewer) return@launch
                         mutableState.update {
                             it.copy(
                                 isPerformingBulkAction = false,
@@ -307,6 +315,7 @@ class AccountInboxViewModel(
                     }
                 }
             } catch (error: CancellationException) {
+                if (repository.viewerScope() != expectedViewer) throw error
                 // POST may have landed — do not silently retry.
                 mutableState.update {
                     it.copy(
@@ -317,12 +326,17 @@ class AccountInboxViewModel(
                 }
                 throw error
             } catch (error: Exception) {
+                if (repository.viewerScope() != expectedViewer) return@launch
                 mutableState.update {
                     it.copy(
                         isPerformingBulkAction = false,
                         actionError = error.message
                             ?: "Couldn't confirm this posted — reload to check AO3's current state."
                     )
+                }
+            } finally {
+                if (repository.viewerScope() == expectedViewer) {
+                    mutableState.update { it.copy(isPerformingBulkAction = false) }
                 }
             }
         }
@@ -334,7 +348,8 @@ class AccountInboxViewModel(
             val result = repository.load(
                 page = page,
                 filterForm = state.filterForm,
-                filterValues = state.filterValues
+                filterValues = state.filterValues,
+                bypassCache = true
             )
         ) {
             is AO3Result.Success -> {
@@ -350,14 +365,17 @@ class AccountInboxViewModel(
                         bulkForm = pageData.bulkForm,
                         filterForm = pageData.filterForm,
                         filterValues = pageData.filterForm?.selectedValues ?: it.filterValues,
-                        pageUrl = pageData.pageUrl
+                        pageUrl = pageData.pageUrl,
+                        isShowingStaleCache = result.isStale
                     )
                 }
                 startWorkContextEnrichment(pageData.items)
             }
             is AO3Result.Failure -> {
                 mutableState.update {
-                    it.copy(actionError = result.error.displayMessage())
+                    it.copy(phase = AccountInboxUiState.Phase.Failed, items = emptyList(),
+                        bulkForm = null, filterForm = null, isShowingStaleCache = false,
+                        actionError = result.error.displayMessage())
                 }
             }
         }
@@ -375,9 +393,11 @@ class AccountInboxViewModel(
         if (workIds.isEmpty()) return
         enrichmentJob = viewModelScope.launch {
             for (workId in workIds) {
-                if (mutableState.value.workAuthorsById.containsKey(workId)) continue
+                if (mutableState.value.workAuthorsById.containsKey(workId) || workId in attemptedWorkIds) continue
+                // Remember the attempt before the read, including a failed or cancelled one.
+                attemptedWorkIds.add(workId)
                 try {
-                    coordinator.coordinate {
+                    val canContinue = coordinator.coordinate {
                         when (
                             val result = commentRepository.loadThread(
                                 AO3CommentTarget.Work(workId), useCache = false
@@ -391,19 +411,21 @@ class AccountInboxViewModel(
                                             (workId to authors)
                                     )
                                 }
+                                true
                             }
                             is AO3Result.Failure -> {
-                                // Leave row without a badge; don't block the page.
-                                if (result.error == AO3Error.AuthenticationRequired) {
-                                    return@coordinate
-                                }
+                                // One unavailable work does not block the rest; a systemic
+                                // failure stops the batch rather than spending more reads.
+                                result.error == AO3Error.NotFound || result.error == AO3Error.Forbidden
                             }
                         }
                     }
+                    if (!canContinue) return@launch
                 } catch (_: CancellationException) {
                     return@launch
                 } catch (_: Exception) {
-                    // Offline / rate-limit / parse — skip this work, continue.
+                    // A systemic failure stops the batch.
+                    return@launch
                 }
             }
         }

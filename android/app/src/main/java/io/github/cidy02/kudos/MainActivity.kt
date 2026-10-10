@@ -35,6 +35,7 @@ class MainActivity : FragmentActivity() {
         // "Open with Kudos" / "Share to Kudos" — the manifest advertises these
         // mime types, so something has to actually read the incoming Intent.
         ExternalFileImport.offer(intent)
+        DemoNetwork.applyCachedPagesExtra(intent)
         publishDebugRoute(intent)
         val container = (application as KudosApplication).container
 
@@ -96,6 +97,7 @@ class MainActivity : FragmentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         ExternalFileImport.offer(intent)
+        DemoNetwork.applyCachedPagesExtra(intent)
         publishDebugRoute(intent)
         if (BuildConfig.DEBUG) {
             val isDemoRequested = DemoNetwork.isRequested(intent)

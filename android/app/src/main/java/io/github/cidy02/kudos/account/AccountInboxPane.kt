@@ -178,6 +178,7 @@ fun AccountInboxPane(
         )
     }
 
+    io.github.cidy02.kudos.ui.components.KudosRefreshBox(onRefresh = { viewModel.refresh() }) {
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -256,6 +257,10 @@ fun AccountInboxPane(
                 }
             }
 
+            if (state.isShowingStaleCache && state.items.isEmpty()) item {
+                io.github.cidy02.kudos.ui.components.CachedAO3DataRow(Modifier.padding(top = 12.dp))
+            }
+
             when {
                 state.phase == AccountInboxUiState.Phase.Loading && state.items.isEmpty() -> {
                     item {
@@ -289,6 +294,13 @@ fun AccountInboxPane(
                 }
                 else -> {
                     item { Spacer(Modifier.height(12.dp)) }
+                    if (state.isShowingStaleCache) item {
+                        val tokens = LocalKudosTokens.current
+                        val shape = RoundedCornerShape(topStart = SubjectMetrics.panelRadius,
+                            topEnd = SubjectMetrics.panelRadius)
+                        io.github.cidy02.kudos.ui.components.CachedAO3DataRow(
+                            Modifier.background(tokens.glassFill(0.09), shape), inPanel = false)
+                    }
                     itemsIndexed(state.items, key = { _, item -> item.id }) { index, item ->
                         val authors = state.workAuthorsById[item.workId].orEmpty()
                         InboxItemCard(
@@ -298,18 +310,18 @@ fun AccountInboxPane(
                             isSelecting = state.isSelecting,
                             isSelected = item.id in state.selectedItemIds,
                             isSelectable = item.id in state.selectableItemIds,
-                            isFirst = index == 0,
+                            isFirst = index == 0 && !state.isShowingStaleCache,
                             isLast = index == state.items.lastIndex,
                             isPerformingAction = state.isPerformingBulkAction,
-                            canMarkRead = viewModel.canPerformItemAction(
+                            canMarkRead = state.canPerformItemAction(
                                 AO3InboxBulkAction.MarkRead,
                                 item
                             ),
-                            canMarkUnread = viewModel.canPerformItemAction(
+                            canMarkUnread = state.canPerformItemAction(
                                 AO3InboxBulkAction.MarkUnread,
                                 item
                             ),
-                            canDelete = viewModel.canPerformItemAction(
+                            canDelete = state.canPerformItemAction(
                                 AO3InboxBulkAction.Delete,
                                 item
                             ),
@@ -365,6 +377,7 @@ fun AccountInboxPane(
                 modifier = Modifier.align(Alignment.BottomCenter)
             )
         }
+    }
     }
 }
 
