@@ -56,3 +56,23 @@ None were introduced in the patch; the brief states Android author writes were h
 |---|---|---|---|---|
 | 1 | P2 | `io.github.cidy02.kudos.author.AuthorProfileScreen.kt:198` | `kudos-ao3-reader/Services/AO3AuthorProfileService.swift:337` | iOS fetches userStatsURL for own profile/dashboard; Android does not make this request. |
 | 2 | P2 | `io.github.cidy02.kudos.network.ao3.AO3PageCache.kt:81` | `kudos-ao3-reader/Services/AO3AuthorProfileService.swift:70` | iOS falls back to stale cache on 404/403 errors; Android drops the cache and fails. |
+
+## Triage (Claude, 2026-10-10)
+
+Both rows checked against the code on both sides. Neither is a fault in the 3ce patch.
+
+1. **Real, but older than 3ce and not a fault: a missing feature, P3.** iOS's own profile
+   reads `/users/<name>/stats` once when the reader opens their own profile
+   (`AO3AuthorProfileService.loadOwnStats`, own account only, silent on failure) and shows
+   the career figures in the hero (`AuthorProfileView.swift:348`). Android has no such read
+   and shows no such figures. One read of the reader's own page on an explicit opening, so
+   within the networking policy's rule for signed-in reads; the policy's sentence "Account
+   Dashboard loads only its dashboard page" does not mention it and should. **To a small
+   Codex brief** (the own profile's stats in the hero), not fixed here.
+2. **Rejected: deliberate.** Android shows a kept page only after a failure that is not AO3's
+   own answer (no connection, a timeout, 5xx, "AO3 is busy"), and never after a 403, a 404
+   or a sign-in page: brief 3ce line 108, `AO3Error.allowsPageFallback`. iOS's `catch`
+   takes every error, so iOS shows a day-old copy of a page AO3 now says is gone or
+   forbidden. That is the difference to close, **on iOS**: listed under §5c item 6 in the
+   Living Prompt as a small iOS fix with a test.
+
