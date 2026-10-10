@@ -156,6 +156,12 @@ struct AO3CollectionDetailView: View {
             pageLoadTask?.cancel()
             dismiss()
         }
+        .onReceive(NotificationCenter.default.publisher(for: .ao3CollectionChanged)) { notification in
+            guard notification.object as? String == slug else { return }
+            // Every segment: what the reader may do here changed, not only the one showing.
+            loaded.removeAll()
+            Task { await loadIfNeeded() }
+        }
             .screenTint(palette)
     }
 

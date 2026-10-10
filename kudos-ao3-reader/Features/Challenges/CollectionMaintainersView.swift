@@ -502,6 +502,7 @@ struct CollectionMaintainersView: View {
         leaveErrorMessage = nil
         do {
             try await auth.leaveCollection(slug: collectionSlug, participantID: participant.id)
+            NotificationCenter.default.post(name: .ao3CollectionChanged, object: collectionSlug)
             dismiss()
         } catch {
             leaveErrorMessage = UserFacingError.message(for: error)

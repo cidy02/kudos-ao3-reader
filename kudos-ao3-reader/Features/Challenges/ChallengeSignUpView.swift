@@ -672,6 +672,7 @@ extension ChallengeSignUpView {
             form = result
             if result.isValid {
                 statusNotice = "Sign-up submitted successfully!"
+                NotificationCenter.default.post(name: .ao3CollectionChanged, object: collectionSlug)
             }
         } catch {
             currentForm.generalErrors = [UserFacingError.message(for: error)]
@@ -687,6 +688,7 @@ extension ChallengeSignUpView {
         do {
             try await auth.withdrawSignUp(slug: collectionSlug, signUpID: signUpID)
             statusNotice = "Sign-up withdrawn."
+            NotificationCenter.default.post(name: .ao3CollectionChanged, object: collectionSlug)
             dismiss()
         } catch {
             var updated = currentForm
