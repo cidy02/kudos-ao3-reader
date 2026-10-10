@@ -483,6 +483,10 @@ final class DemoNetworkBlock: URLProtocol {
     ]
 
     static func fixture(for url: URL) -> String? {
+        // A work's comments are its own page with `show_comments=true`, so the path alone gave the
+        // work page and the real Comments screen could never be opened in the demo: it said
+        // "Couldn't Load Comments".
+        if url.query?.contains("show_comments=true") == true { return "ao3_comments_page" }
         let path = url.path
         return routes.first { path.range(of: $0.pattern, options: .regularExpression) != nil }?.fixture
     }
