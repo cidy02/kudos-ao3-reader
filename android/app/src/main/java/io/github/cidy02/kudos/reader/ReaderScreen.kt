@@ -1150,7 +1150,7 @@ private fun AnnotateDialog(
                     )
                 }
 
-                Text("Color", style = MaterialTheme.typography.labelLarge)
+                Text("Colour", style = MaterialTheme.typography.labelLarge)
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically

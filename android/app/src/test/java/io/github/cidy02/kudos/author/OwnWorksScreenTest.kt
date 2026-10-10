@@ -145,6 +145,22 @@ class OwnWorksScreenTest {
         compose.waitForIdle()
         compose.onNodeWithText("Edit 1").assertExists() // the selection stays, as on iOS
     }
+    /** A work saved from its row's Edit went back to the list as it was read before the Save. */
+    @Test fun aWorkSavedFromItsRowReadsTheListAgainFromAO3() {
+        show(); idleRequests(2)
+        val dashboard = requests[0]; val works = requests[1]
+        compose.onNodeWithContentDescription("Actions for $title").performClick()
+        compose.onNodeWithText("Edit").performClick()
+        compose.waitUntil(15_000) { compose.onAllNodesWithContentDescription("Save").fetchSemanticsNodes().isNotEmpty() || compose.onAllNodesWithText("Save").fetchSemanticsNodes().isNotEmpty() }
+        val formOpen = requests.size
+        (compose.onAllNodesWithContentDescription("Save").fetchSemanticsNodes().isNotEmpty()).let { described ->
+            if (described) compose.onNodeWithContentDescription("Save").performClick() else compose.onNodeWithText("Save").performClick()
+        }
+        compose.waitUntil(15_000) { requests.drop(formOpen).let { dashboard in it && works in it } }
+        compose.waitForIdle()
+        compose.onNodeWithContentDescription("Select Works").assertExists() // back on the list
+        assertEquals(1, recorder.posts.size)
+    }
     @Test fun rowEditAndTagsUseKnownIdWithNoDetailProbeAndBackRestoresChrome() {
         show(); idleRequests(2)
         compose.onNodeWithContentDescription("Actions for $title").performClick()
