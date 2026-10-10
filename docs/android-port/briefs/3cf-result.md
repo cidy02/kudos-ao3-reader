@@ -194,3 +194,33 @@ in Sepia at twice the text size, with its locked rows and their note. Not seen: 
 actually changed and saved; returning from Basics or a tag set with unsaved changes; Dark and
 OLED for the form itself; a moderator who is not the owner.
 
+## Read line by line (Claude, 2026-10-10, 02:40)
+
+`network/ao3/account/AO3ChallengeSettingsForm.kt` and `account/AO3ChallengeSettingsEditState.kt`,
+beside iOS's `Models/AO3ChallengeModels.swift` (`validated`, `AO3ChallengeInstant`) and
+`Services/AO3Client+Challenges.swift` (the parser and the posted fields). The screen file is
+still read only where it draws the pickers.
+
+Nothing wrong was found in what is sent:
+
+- An untouched control goes back exactly as served, hidden twins and all; a change is applied
+  only to the last visible control of its name; a select accepts only one of its enabled
+  options; one submit button is sent; the token is the fresh one.
+- **Dates.** Both apps read the same formats (ISO 8601, `yyyy-MM-dd HH:mm[:ss]`, `yyyy-MM-dd`,
+  with an optional ` UTC` or `Z`). A date neither can read cannot be edited on Android and goes
+  back as served; iOS posts its original text too. An edited date keeps the served precision
+  on Android; iOS always posts `yyyy-MM-dd HH:mm:ss`. Neither has been tried against AO3's own
+  form, which may serve another format (a release-gate item, as the networking policy says).
+- **Validation** is iOS's, sentence for sentence (`AO3ChallengeModels.swift:297`).
+- **The two-step save**: the collection's switches go in a second request only after AO3
+  confirmed the first, never when the first failed, and never twice (`saving` is set before
+  the first suspension).
+
+One guard added: **a radio button cannot be changed.** A radio is one of several controls of
+one name, and `parameters()` would have changed the last and left the checked one checked. No
+row edits a radio today; one that tried is now refused, and the body stays the browser's (a
+case added to `absentDisabledUnreadableZone…`).
+
+Seen and left: when the session moves on between the two requests of a save, the second is
+skipped without a word (the screen is dead for that session by then).
+

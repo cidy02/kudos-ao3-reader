@@ -114,6 +114,12 @@ class AO3ChallengeSettingsEditTest {
         assertTrue(gift.changed(gift.dateField("works_reveal_at")!!, "2026-03-20 00:00:00").validated().isValid)
         val wrongChoice = gift.field("potential_match_settings_attributes][num_required_fandoms")
         assertEquals(gift, gift.changed(wrongChoice, "999"))
+        // A radio group is several controls of one name: a change is refused, and the body stays the browser's.
+        val radios = html.replace("</form>", "<input type=\"radio\" name=\"gift_exchange[mode]\" value=\"a\" checked>" +
+            "<input type=\"radio\" name=\"gift_exchange[mode]\" value=\"b\"></form>")
+        val withRadios = AO3ChallengeSettingsFormParser().parse(radios, gift.slug, gift.kind)
+        assertEquals(withRadios, withRadios.changed(withRadios.field("mode"), "b"))
+        assertEquals(browserSubmission(radios, gift.token), withRadios.parameters())
     }
 
     @Test fun pickerDatesKeepServedPrecisionAndMissingAndUnknownControlsStayAbsent() {
