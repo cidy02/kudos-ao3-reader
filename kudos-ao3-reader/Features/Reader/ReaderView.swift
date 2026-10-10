@@ -307,20 +307,23 @@ struct ReaderView: View {
     private var chapterControls: some View {
         GlassEffectContainer(spacing: 16) {
             HStack(spacing: 12) {
-                navButton(systemName: "chevron.left", action: goPrevious, disabled: prevDisabled)
+                navButton(systemName: "chevron.left", label: "Previous", action: goPrevious, disabled: prevDisabled)
                 positionPill
-                navButton(systemName: "chevron.right", action: goNext, disabled: nextDisabled)
+                navButton(systemName: "chevron.right", label: "Next", action: goNext, disabled: nextDisabled)
             }
         }
         .padding(.bottom, 12)
     }
 
-    private func navButton(systemName: String, action: @escaping () -> Void, disabled: Bool) -> some View {
+    private func navButton(
+        systemName: String, label: String, action: @escaping () -> Void, disabled: Bool
+    ) -> some View {
         Button(action: action) {
             Image(systemName: systemName)
                 .font(.body.weight(.medium))
                 .frame(width: 44, height: 44)
         }
+        .accessibilityLabel(label)
         .buttonStyle(.glass)
         .buttonBorderShape(.circle)
         .disabled(disabled)

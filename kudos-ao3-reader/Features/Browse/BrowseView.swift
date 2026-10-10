@@ -104,6 +104,7 @@ struct AO3WebBrowserView: View {
             } label: {
                 Image(systemName: "arrow.clockwise").font(.caption)
             }
+            .accessibilityLabel("Reload")
             .buttonStyle(.plain)
             .foregroundStyle(.secondary)
         }
