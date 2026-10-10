@@ -66,8 +66,12 @@ struct ReaderChromeTopBar: View {
             }
         }
         .padding(.horizontal, 16)
-        .frame(height: 44)
+        // As tall as its two lines, and no larger than the first accessibility size: at AX5 a
+        // 44pt pill cut the title to "Sodium…" and pushed the author out underneath it. The
+        // whole title is one tap away, in the work's details.
+        .frame(minHeight: 44)
         .frame(maxWidth: 260)
+        .dynamicTypeSize(...DynamicTypeSize.accessibility1)
         .glassEffect(.regular, in: .capsule)
         .contentShape(.capsule)
         .accessibilityElement(children: .combine)

@@ -135,6 +135,10 @@ struct ReaderFanMenu: View {
                                 .foregroundStyle(pill.isEnabled ? .primary : .secondary)
                             Spacer(minLength: 8)
                             Image(systemName: pill.systemImage)
+                                // A size of its own, as the label and the round actions have:
+                                // left to the text size, the glyph grew out of its 46pt pill at
+                                // the accessibility sizes and pushed the label onto two lines.
+                                .font(.system(size: 17))
                                 .foregroundStyle(pill.isEnabled ? Color.primary : Color.secondary)
                         }
                         .padding(.horizontal, 18)

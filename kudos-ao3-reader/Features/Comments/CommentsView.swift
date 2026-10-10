@@ -1197,6 +1197,7 @@ struct CommentComposerSheet: View {
     @Environment(AppRouter.self) private var router
     @Environment(ThemeManager.self) private var theme
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @ScaledMetric(relativeTo: .subheadline) private var editorTextSize: CGFloat = 15
     @ScaledMetric(relativeTo: .caption) private var identitySize: CGFloat = 11.5
     @ScaledMetric(relativeTo: .footnote) private var quoteBodySize: CGFloat = 12.5
@@ -1412,15 +1413,27 @@ struct CommentComposerSheet: View {
 
     /// Who this posts as, and how much of AO3's field is left (spec 1ba).
     private var identityRow: some View {
-        HStack(spacing: 10) {
-            Text(auth.username.map { "as \($0)" } ?? "Not signed in")
-                .lineLimit(1)
-                .truncationMode(.middle)
-
-            Spacer(minLength: 0)
-
-            Text("\(remainingCharacters.formatted()) left")
-                .foregroundStyle(remainingCharacters < 0 ? Color.red : Color.secondary)
+        let identity = Text(auth.username.map { "as \($0)" } ?? "Not signed in")
+            .lineLimit(1)
+            .truncationMode(.middle)
+        let remaining = Text("\(remainingCharacters.formatted()) left")
+            .foregroundStyle(remainingCharacters < 0 ? Color.red : Color.secondary)
+        return Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                // Side by side the name was cut from the middle ("as AO…eader") at the
+                // accessibility sizes: each on a line of its own.
+                VStack(alignment: .leading, spacing: 2) {
+                    identity
+                    remaining
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                HStack(spacing: 10) {
+                    identity
+                    Spacer(minLength: 0)
+                    remaining
+                }
+            }
         }
         .font(.system(size: identitySize))
         .monospacedDigit()
