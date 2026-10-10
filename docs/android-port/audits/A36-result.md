@@ -202,3 +202,28 @@ The twenty locations most susceptible to severe clipping, truncation, or layout 
 - **Total rows indexed:** 147
 
 Audit complete across all 186 Kotlin files in the 10 audited packages.
+
+## Triage (Claude, 2026-10-10)
+
+This is an index for the largest-text pass, not a list of faults: 147 places, and a top twenty.
+Six screens were looked at on the emulator at twice the text size (Sepia): Home, Browse, a
+work's comments, Reading Insights, the writer's own Works, and Account.
+
+**Two real cuts, both fixed, and neither in the top twenty:**
+
+- The comments figures' **Latest date** read "Jul 8, 20…": a figure's value may now take a
+  second line at an accessibility text size (`SubjectFigureCell`, `ui/subject/SubjectComponents.kt`).
+- The writer's profile tabs read "Works · Series · Bookma… · About": more than three segments
+  now sit two to a row at an accessibility text size, and a label may take a second line. The
+  app had **two copies** of the segmented control; they are one now
+  (`ui/subject/SubjectSegmentedControl.kt`), so every screen that uses either gets this.
+
+Seen again after the fix at twice the size and at the normal size (Light, Dark): whole at the
+large size, unchanged at the normal one.
+
+Of the top twenty, looked at and sound on those six screens: rows 14 (Account's session line)
+and 19 (section kickers). **Not looked at:** rows 1 to 13, 15 to 18 and 20 (Home's queue cards
+and deck, Jump Back In, the comment action row and "Continue thread", avatar initials, cover
+cards, the three pagination rows, the hours card, the chapter picker), and the rest of the
+147. They are the list for the next large-text sitting.
+

@@ -71,6 +71,7 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
@@ -611,7 +612,9 @@ private fun StatCell(
                 fontSize = 13.sp,
                 fontWeight = FontWeight.SemiBold,
                 style = TextStyle(fontFeatureSettings = "tnum"),
-                maxLines = 1,
+                // A date is the long one ("Jul 8, 2026"): cut to "Jul 8, 20…" at twice the text size.
+                maxLines = if (isAccessibilityFontScale()) 2 else 1,
+                textAlign = TextAlign.Center,
                 overflow = TextOverflow.Ellipsis,
                 autoSize = TextAutoSize.StepBased(minFontSize = 9.sp, maxFontSize = 13.sp)
             )
@@ -966,7 +969,9 @@ fun FilterButton(
 }
 
 /**
- * Horizontal segmented tab switcher.
+ * Horizontal segmented tab switcher: the one control in `SubjectSegmentedControl.kt`, under the
+ * names its first callers used. It was a second copy, and only one of the two could be taught
+ * to keep its labels whole at an accessibility text size.
  */
 @Composable
 fun <T> SubjectSegmentedControl(
@@ -975,37 +980,5 @@ fun <T> SubjectSegmentedControl(
     onItemSelected: (T) -> Unit,
     labelProvider: (T) -> String,
     modifier: Modifier = Modifier
-) {
-    val tokens = LocalKudosTokens.current
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .background(tokens.glassFill(0.09), RoundedCornerShape(8.dp))
-            .padding(2.dp),
-        horizontalArrangement = Arrangement.spacedBy(2.dp)
-    ) {
-        items.forEach { item ->
-            val isSelected = item == selectedItem
-            val background = if (isSelected) tokens.secondaryInk.copy(alpha = 0.15f) else Color.Transparent
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .clip(RoundedCornerShape(6.dp))
-                    .background(background)
-                    .clickable { onItemSelected(item) }
-                    .padding(vertical = 6.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = labelProvider(item),
-                    color = if (isSelected) tokens.primaryInk else tokens.secondaryInk,
-                    fontSize = 13.sp,
-                    fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    autoSize = TextAutoSize.StepBased(minFontSize = 9.sp, maxFontSize = 13.sp)
-                )
-            }
-        }
-    }
-}
+) = SubjectSegmentedControl(options = items, selected = selectedItem, onSelect = onItemSelected,
+    title = labelProvider, modifier = modifier)

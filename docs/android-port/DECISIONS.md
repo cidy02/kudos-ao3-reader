@@ -1409,4 +1409,10 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   it did for the chapter form. iOS: T-379, with the collection page and the kept pages too. The
   rule for every new form: **a confirmed write tells the screen that opened the form**, and a
   kept page that shows what was written is dropped.
+- **2026-10-10 · One segmented control, and it keeps its labels whole at large text.** There
+  were two copies (`SubjectSegmentedControl` in its own file and in `SubjectComponents.kt`);
+  the second now calls the first. At an accessibility text size more than three segments sit
+  two to a row and a label may take a second line; a figure's value may take a second line
+  too. At the normal size nothing changes except that the profile's tabs take the first copy's
+  track and border. Seen on the emulator at both sizes.
 
