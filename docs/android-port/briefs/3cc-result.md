@@ -118,3 +118,31 @@ Claude must build Android debug, run these four suites plus amended Challenge Se
 Remaining sparing decisions: Manage's unknown-closure moderator entry cannot display lists without an authoritative closed signal; this is locally refused before a request. First-page counts are loaded-page counts, not global totals. A failed best-effort due read stays attempted; only a successful due read repeats on explicit refresh or confirmed write. iOS's actual code, not R3's mistaken query/referer descriptions, governs the two writes.
 
 No Gradle, Xcode, compiler, test suite, emulator, sign-in or live AO3 request was run. Work stays uncommitted on `android/agent-codex-3cc` in this worktree for Claude's builds/tests/commit. No commit/push/branch switch/TASKS.md edit, iOS edit, schema/backup change, helper script, stub file or .orig file was made/left behind.
+
+## Landing note (Claude, 2026-10-09)
+
+Landed with four changes. Gate: 2,454 tests. **Not yet seen on the emulator** (the Mac was
+out of memory that evening): the matrix row stays in progress until it is.
+
+- **A moderator is no longer turned away.** Only the owner is served the settings form, so
+  for a moderator arriving from Manage the screen could never learn that sign-ups were
+  closed, and said "Kudos can't confirm that sign-ups are closed" for good. The lists are
+  now asked for, as on iOS; AO3 decides.
+- **AO3's first refusal stops the other lists.** They are served to the same people, so a
+  403 or a sign-in page on one is the answer for all four: one refused read, where the patch
+  made up to three (iOS makes four). A failure that is not a refusal (no connection, AO3
+  busy) still leaves the other lists to be read. New test.
+- **The owner's failed settings read can be tried again** when it was not a refusal. It was
+  terminal: one lost connection and the screen said "can't confirm" until reopened.
+- **"Load more (PinchHits)" became words** ("Load more pinch hits", and so on). These four
+  labels exist only on Android: iOS walks every page at once, Android reads a list a page
+  at a time on a tap (owner question 16).
+
+Read against iOS with Gemini's index `audits/A31-result.md` (requests, both writes field for
+field, the verdict rule): no difference found beyond the page walk and the participant's
+reads (iOS asks and is refused four times; Android does not ask). Both writes go through
+`movedOnAfterWrite` after the POST and clear their busy flag in `finally`.
+
+Not reviewed line by line: the screen's layout code and the parser's new list. A Codex
+review of the landed code is owed (after A32).
+

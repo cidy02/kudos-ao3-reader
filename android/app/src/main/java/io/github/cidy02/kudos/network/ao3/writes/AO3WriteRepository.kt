@@ -345,6 +345,40 @@ class AO3WriteRepository(
         }
     }
 
+    suspend fun claimPinchHit(slug: String, assignmentID: Int, byline: String, expectedGeneration: Int): AO3Result<Unit> {
+        val name = byline.trim()
+        if (name.isEmpty()) return AO3Result.Failure(AO3Error.Validation("Name a pinch hitter."))
+        return updateAssignments(slug, "cover_$assignmentID" to name, expectedGeneration, "AO3 couldn't claim that pinch hit.")
+    }
+
+    suspend fun markAssignmentDefaulted(slug: String, assignmentID: Int, expectedGeneration: Int): AO3Result<Unit> =
+        updateAssignments(slug, "default_$assignmentID" to "1", expectedGeneration, "AO3 couldn't record the default.")
+
+    /** iOS update_multiple: only the chosen field, fresh list-page meta token, single-shot POST. */
+    private suspend fun updateAssignments(slug: String, field: Pair<String, String>, expectedGeneration: Int,
+        fallback: String): AO3Result<Unit> {
+        requireCollectionSession(expectedGeneration)
+        if (client.username() == null) return AO3Result.Failure(AO3Error.Validation("Log in to AO3 first."))
+        val list = if (field.first.startsWith("cover_")) io.github.cidy02.kudos.network.ao3.account.SignUpAssignmentList.Defaults
+            else io.github.cidy02.kudos.network.ao3.account.SignUpAssignmentList.Open
+        val referer = io.github.cidy02.kudos.network.ao3.account.AO3ChallengeSignUpsUrls.assignments(slug, list)
+        val html = when (val answer = client.getAuthenticated(referer)) {
+            is AO3Result.Failure -> return answer
+            is AO3Result.Success -> answer.value.body
+        }
+        requireCollectionSession(expectedGeneration)
+        val token = parser.parseAuthenticityToken(html, metaOnly = true) ?: return AO3Result.Failure(
+            AO3Error.Validation("Couldn't prepare the request. Try again, or open the work on AO3."))
+        currentCoroutineContext().ensureActive()
+        val response = withContext(NonCancellable) {
+            client.postAuthenticatedInSession(
+                "${io.github.cidy02.kudos.network.ao3.account.ChallengeSettingsDestinations.challengeAssignmentsView(slug)}/update_multiple",
+                listOf("_method" to "put", "authenticity_token" to token, field), writeHeaders(token, referer), expectedGeneration)
+        }
+        movedOnAfterWrite(expectedGeneration, response)?.let { return it }
+        return collectionWriteVerdict(response, fallback)
+    }
+
     /** One fresh confirm-delete meta token and one POST; nothing is replayed from the form. */
     suspend fun withdrawSignUp(slug: String, signUpID: Int, expectedGeneration: Int): AO3Result<Unit> {
         requireCollectionSession(expectedGeneration)

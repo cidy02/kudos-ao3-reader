@@ -1291,3 +1291,25 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   is a week old or Privacy's "Clear fandom catalog" is used.
   Reverse: the commit "Audit A30's Android findings".
 
+## 2026-10-09: a challenge's assignments, claim a pinch hit, report a default (brief 3cc)
+
+- The assignments screen for a gift exchange's owner and moderators: Matched, Unmatched and
+  Pinch hits, from the first page of each of AO3's four lists (iOS reads every page; Android
+  reads more of one list on a tap: owner question 16). The owner can report a default and
+  claim a pinch hit: one fresh token, one POST, never retried, fixtures only.
+- **Nobody is asked for what AO3 will refuse.** A participant and a signed-out reader make no
+  request (iOS makes four that fail). Known-open sign-ups: none. A refusal of one list stops
+  the others.
+- **A moderator's lists are asked for without knowing that sign-ups are closed**, because
+  only the owner is served the page that says so. AO3 answers.
+- A due date in a time zone the app cannot name never shows a "Late" badge.
+  Reverse: the commit "A challenge's assignments, with claim a pinch hit and report a default".
+
+## 2026-10-09: the comment the Inbox named goes first by itself (audits A30-10, A32)
+
+- When the chapter's page holds the thread's root without the comment that was asked for,
+  that comment is put first by itself and the page's root keeps every reply it has. The
+  first fix (the same day) replaced the page's root with the thread's, which could drop
+  replies only the page held.
+  Reverse: the commit of the same name.
+

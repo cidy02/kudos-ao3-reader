@@ -75,6 +75,11 @@ class AO3CollectionDetailRepository(
             AO3ChallengeSignUpsParser().parseAssignments(it)
         }
 
+    suspend fun getChallengeAssignments(slug: String, list: SignUpAssignmentList, page: Int = 1) =
+        fetch(AO3ChallengeSignUpsUrls.assignments(slug, list, page)) {
+            AO3ChallengeSignUpsParser().parseAssignmentPage(it, list, page)
+        }
+
     /** One explicitly opened own sign-up form; no settings, tag-set or pseud enrichment. */
     suspend fun getChallengeSignUp(slug: String, id: Int? = null): AO3Result<AO3ChallengeSignUpForm> {
         if (!authRepository.state.value.isSignedIn) return AO3Result.Failure(

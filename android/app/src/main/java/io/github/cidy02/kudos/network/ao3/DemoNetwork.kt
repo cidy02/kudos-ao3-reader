@@ -233,12 +233,15 @@ internal object DemoNetworkRoutes {
             else -> null
         }
         if (path.trimEnd('/') == "/collections/winter_exchange/assignments") {
-            if (url.queryParameter("page") !in listOf(null, "1")) return null
-            return when {
-                url.queryParameter("fulfilled") == "true" -> "ao3_demo_winter_assignments_complete"
-                url.queryParameter("unfulfilled") == "true" -> "ao3_demo_winter_assignments_open"
-                else -> "ao3_demo_winter_assignments_defaults"
+            val page = url.queryParameter("page")
+            if (page !in listOf(null, "1", "2")) return null
+            val kind = when {
+                url.queryParameter("fulfilled") == "true" -> "complete"
+                url.queryParameter("unfulfilled") == "true" -> "open"
+                url.queryParameter("pinch_hit") == "true" -> "pinch_hits"
+                else -> "defaults"
             }
+            return "ao3_demo_winter_assignments_$kind" + if (page == "2") "_2" else ""
         }
         if (path.trimEnd('/') in setOf("/collections/winter_exchange/gift_exchange", "/collections/winter_exchange/gift_exchange/edit"))
             return "ao3_demo_winter_settings"
@@ -366,6 +369,7 @@ internal class DemoNetworkInterceptor(
     private val tagSets = DemoTagSetWrites()
     private val promptMeme = DemoPromptMemeWrites()
     private val signUps = DemoChallengeSignUps()
+    private val assignments = DemoChallengeAssignments()
     private val workForms = DemoWorkSaves()
     private val seriesForms = DemoSeriesWrites()
 
@@ -432,6 +436,11 @@ internal class DemoNetworkInterceptor(
             return Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1)
                 .code(if (term == "fail") 403 else 200).message("Local autocomplete answer")
                 .header("Content-Type", type).body(json.toString().toResponseBody(type.toMediaType())).build()
+        }
+        assignments.answer(chain.request(), fixtures())?.let { answer ->
+            return Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1)
+                .code(answer.first).message("Local assignments answer").header("Content-Type", HTML)
+                .body(answer.second.toResponseBody(HTML_TYPE)).build()
         }
         signUps.answer(chain.request(), fixtures())?.let { answer ->
             return Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1)
@@ -1361,5 +1370,72 @@ private class DemoSeriesWrites {
         list.select("li").forEachIndexed { index, li -> li.selectFirst("[id^=position-for-]")?.text((index + 1).toString()) }
         managed = doc.outerHtml()
         return 302 to ""
+    }
+}
+
+/** One mutable answer per Winter assignment address, shared by every native reader. */
+private class DemoChallengeAssignments {
+    private val pages = mutableMapOf<String, String>()
+    @Synchronized
+    fun answer(request: okhttp3.Request, source: FixtureSource): Pair<Int, String>? {
+        val base = "/collections/winter_exchange/assignments"
+        val path = DemoNetworkRoutes.decodedPath(request.url).trimEnd('/')
+        if (path != base && path != "$base/update_multiple") return null
+        fun raw(name: String) = pages[name] ?: source.read(name)?.decodeToString()
+        fun refused(reason: String) = 422 to "<div class='flash error'>$reason</div>"
+        if (request.method == "GET" && path == base) {
+            val name = DemoNetworkRoutes.fixtureName(request.url) ?: return 404 to ""
+            return 200 to (raw(name) ?: return 404 to "")
+        }
+        if (request.method != "POST" || path != "$base/update_multiple") return 405 to ""
+        val buffer = Buffer(); request.body?.writeTo(buffer)
+        val fields = buffer.readUtf8().split('&').filter(String::isNotEmpty).map {
+            val pair = it.split('=', limit = 2)
+            URLDecoder.decode(pair[0], "UTF-8") to URLDecoder.decode(pair.getOrElse(1) { "" }, "UTF-8")
+        }
+        val change = fields.getOrNull(2) ?: return refused("Invalid assignment fields.")
+        val claim = change.first.startsWith("cover_")
+        val kind = if (claim) "defaults" else "open"
+        val sourceName = "ao3_demo_winter_assignments_$kind"
+        val sourceDoc = Jsoup.parse(raw(sourceName) ?: return 404 to "")
+        val token = sourceDoc.selectFirst("meta[name=csrf-token]")?.attr("content") ?: return 404 to ""
+        val referer = "https://archiveofourown.org$base" + if (claim) "" else "?unfulfilled=true"
+        if (fields != listOf("_method" to "put", "authenticity_token" to token, change) ||
+            request.header("X-CSRF-Token") != token || request.header("Referer") != referer ||
+            request.header("X-Requested-With") != null || request.header("Accept") != null)
+            return refused("Invalid assignment fields.")
+        val id = change.first.substringAfter('_').toIntOrNull() ?: return refused("Invalid assignment fields.")
+        if (claim && change.second != "AO3_Reader" || !claim && (change.first != "default_$id" || change.second != "1"))
+            return refused("Invalid assignment fields.")
+        if (claim && id == 85) return refused("This pinch hit is no longer available.")
+        if (!claim && id == 86) return refused("This assignment cannot be defaulted.")
+        val allowed = if (claim) setOf(82, 88, 84) else setOf(84)
+        if (id !in allowed) return refused("This assignment cannot be changed.")
+        val details = sourceDoc.selectFirst("input[name=${if (claim) "undefault" else "default"}_$id]")
+            ?.parents()?.firstOrNull { it.tagName() == "dd" } ?: return refused("This assignment cannot be changed.")
+        val heading = details.previousElementSibling() ?: return refused("This assignment cannot be changed.")
+        val signup = heading.selectFirst("a[href*='/signups/']") ?: return refused("This assignment cannot be changed.")
+        val recipient = signup.text(); val href = signup.attr("href")
+        if (claim) {
+            for (target in listOf("open", "pinch_hits")) {
+                val name = "ao3_demo_winter_assignments_$target"
+                val doc = Jsoup.parse(raw(name) ?: return 404 to "")
+                val dt = doc.selectFirst("dl.index")!!.appendElement("dt").text("AO3_Reader* (pinch hitter)")
+                dt.appendElement("span").text(" for ").appendElement("a").attr("href", href).text(recipient)
+                doc.selectFirst("dl.index")!!.appendElement("dd").appendElement("input").attr("name", "default_$id").attr("type", "checkbox")
+                pages[name] = doc.outerHtml()
+            }
+        } else {
+            val name = "ao3_demo_winter_assignments_defaults"
+            val doc = Jsoup.parse(raw(name) ?: return 404 to "")
+            doc.selectFirst("dl.index")!!.appendElement("dt").appendElement("a").attr("href", href).text(recipient)
+            val dd = doc.selectFirst("dl.index")!!.appendElement("dd")
+            val label = dd.appendElement("label").attr("for", "undefault_$id").text("Undefault ${heading.ownText()}")
+            label.appendElement("input").attr("name", "undefault_$id").attr("type", "checkbox")
+            dd.appendElement("input").attr("name", "cover_$id")
+            pages[name] = doc.outerHtml()
+        }
+        details.remove(); heading.remove(); pages[sourceName] = sourceDoc.outerHtml()
+        return 200 to "<div class='flash notice'>Assignments updated.</div>"
     }
 }

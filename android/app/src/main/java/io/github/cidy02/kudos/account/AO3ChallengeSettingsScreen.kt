@@ -37,7 +37,8 @@ fun AO3ChallengeSettingsScreen(
     onOpenExternal: (String) -> Unit,
     onOpenTagSet: (Int, String) -> Unit,
     onOpenPrompts: (String, String) -> Unit,
-    onOpenSignUps: (String, String) -> Unit = { _, _ -> }
+    onOpenSignUps: (String, String) -> Unit = { _, _ -> },
+    onOpenAssignments: (String, String, Boolean) -> Unit = { _, _, _ -> }
 ) {
     val auth = repository.authRepository
     val generation by auth.generation.collectAsState()
@@ -184,10 +185,10 @@ fun AO3ChallengeSettingsScreen(
                                         SubjectRowSeparator()
                                         // Corrected brief: no assignment read, count, failed-count label or invented placeholder.
                                         SubjectFormRow("Assignments", showsDisclosure = true,
-                                            onClick = { onOpenWeb(ChallengeSettingsDestinations.challengeAssignmentsView(slug)) })
+                                            onClick = { onOpenAssignments(slug, effectiveTitle, !data.settings.signupOpen) })
                                         SubjectRowSeparator()
                                         SubjectFormRow("Defaults and pinch hits", showsDisclosure = true,
-                                            onClick = { onOpenWeb(ChallengeSettingsDestinations.challengeAssignmentsView(slug)) })
+                                            onClick = { onOpenAssignments(slug, effectiveTitle, !data.settings.signupOpen) })
                                     }
                                     ChallengeFootnote("AO3 matches participants.")
                                     ChallengeSection("At AO3")

@@ -59,7 +59,8 @@ class AO3ChallengeSettingsScreenTest {
                         onOpenWeb = { browser += it }, onOpenExternal = { external += it },
                         onOpenTagSet = { id, title -> native += Routes.ao3TagSet(id, title, isModerator = true) },
                         onOpenPrompts = { slug, title -> native += Routes.ao3PromptMeme(slug, title) },
-                        onOpenSignUps = { slug, title -> native += Routes.ao3ChallengeSignUps(slug, title, owner, owner) })
+                        onOpenSignUps = { slug, title -> native += Routes.ao3ChallengeSignUps(slug, title, owner, owner) },
+                        onOpenAssignments = { slug, title, closed -> native += Routes.ao3ChallengeAssignments(slug, title, owner, owner, closed) })
                 }
             }
         }
@@ -92,9 +93,10 @@ class AO3ChallengeSettingsScreenTest {
         click("Run matching")
         assertEquals(listOf(Routes.ao3ChallengeSettings("winter_exchange", "Winter Exchange 2026", true),
             Routes.ao3TagSet(42, "Winter Exchange Tags", true), Routes.ao3TagSet(43, "Snowbound Characters", true),
-            Routes.ao3ChallengeSignUps("winter_exchange", "Winter Exchange 2026", true, true)), native)
-        assertEquals(listOf(giftUrl,
-            ChallengeSettingsDestinations.challengeAssignmentsView("winter_exchange"), ChallengeSettingsDestinations.challengeAssignmentsView("winter_exchange")), browser)
+            Routes.ao3ChallengeSignUps("winter_exchange", "Winter Exchange 2026", true, true),
+            Routes.ao3ChallengeAssignments("winter_exchange", "Winter Exchange 2026", true, true, false),
+            Routes.ao3ChallengeAssignments("winter_exchange", "Winter Exchange 2026", true, true, false)), native)
+        assertEquals(listOf(giftUrl), browser)
         assertEquals(listOf(ChallengeSettingsDestinations.runMatching("winter_exchange")), external)
         compose.onNodeWithText("Prompts").assertDoesNotExist()
         assertEquals(4, client.gets.size) // row taps navigate; no native follow-up/read/write here

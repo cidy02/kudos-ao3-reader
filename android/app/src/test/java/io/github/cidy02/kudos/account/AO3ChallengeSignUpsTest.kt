@@ -160,7 +160,7 @@ internal val signUpAssignmentFixtures = listOf("ao3_demo_winter_assignments_comp
 internal val signUpsSettings = ChallengeSettingsDestinations.challengeSettingsEditView("winter_exchange", AO3ChallengeKind.GiftExchange)
 internal val signUpsFirst = AO3ChallengeSignUpsUrls.page("winter_exchange")
 internal val signUpsLast = AO3ChallengeSignUpsUrls.page("winter_exchange", 2)
-internal val signUpsAssignmentReads = SignUpAssignmentList.entries.map { AO3ChallengeSignUpsUrls.assignments("winter_exchange", it) }
+internal val signUpsAssignmentReads = listOf(SignUpAssignmentList.Complete, SignUpAssignmentList.Open, SignUpAssignmentList.Defaults).map { AO3ChallengeSignUpsUrls.assignments("winter_exchange", it) }
 internal val signUpsOpeningReads = listOf(signUpsSettings) + signUpsAssignmentReads + listOf(signUpsFirst, signUpsLast)
 internal suspend fun signUpsSetup(signedIn: Boolean = true) = promptMemeSetup(signedIn).also { (_, client, _) ->
     client.replies[signUpsSettings] = challengeResponse(signUpsSettings, challengeFixture("ao3_demo_winter_settings"))
