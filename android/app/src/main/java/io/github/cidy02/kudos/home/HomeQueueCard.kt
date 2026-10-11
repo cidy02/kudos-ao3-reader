@@ -45,11 +45,12 @@ import io.github.cidy02.kudos.ui.subject.withOpacity
 fun HomeQueueCard(
     queue: ReadingQueue,
     works: List<SavedWork>,
+    /** `HomeFacts.queueFace`: required, so no caller names a work the privacy setting keeps back. */
+    face: HomeFacts.QueueFace,
     modifier: Modifier = Modifier
 ) {
     val tokens = LocalKudosTokens.current
     val tint = HomeFacts.carouselQueueTint(tokens.theme, queue.hue, queue.colorHex)
-    val upNext = HomeFacts.upNext(works)
     // With the text, as the cover cards beside it: at twice the size the count line was cut in half
     // by the fixed height, and the deck's title to "Sodium …".
     val grow = io.github.cidy02.kudos.ui.subject.carouselCardScale()
@@ -59,7 +60,7 @@ fun HomeQueueCard(
             .width(HomeCardMetrics.width * grow)
             .heightIn(min = 168.dp * grow)
     ) {
-        Deck(tint = tint, upNext = upNext, works = works, grow = grow)
+        Deck(tint = tint, face = face, works = works, grow = grow)
         Spacer(Modifier.height(9.dp))
         Text(
             text = queue.displayName,
@@ -80,7 +81,8 @@ fun HomeQueueCard(
 }
 
 @Composable
-private fun Deck(tint: Color?, upNext: SavedWork?, works: List<SavedWork>, grow: Float = 1f) {
+private fun Deck(tint: Color?, face: HomeFacts.QueueFace, works: List<SavedWork>, grow: Float = 1f) {
+    val upNext = face.upNext
     val tokens = LocalKudosTokens.current
     val shape = RoundedCornerShape(12.dp)
     val back = tint ?: tokens.glassFill(0.06)
@@ -107,7 +109,8 @@ private fun Deck(tint: Color?, upNext: SavedWork?, works: List<SavedWork>, grow:
         ) {
             if (upNext == null) {
                 GlassCard(fill = tokens.glassFill(0.12), shape = shape, modifier = Modifier.fillMaxSize()) {
-                    Text(
+                    // A queue whose every work is hidden is not empty, and says nothing.
+                    if (works.isEmpty()) Text(
                         text = "No works yet",
                         color = tokens.secondaryInk,
                         fontSize = 12.sp,
@@ -115,8 +118,10 @@ private fun Deck(tint: Color?, upNext: SavedWork?, works: List<SavedWork>, grow:
                     )
                 }
             } else {
+                // An obscured work gives the face neither its colour, its fandom nor its title.
                 val palette = SubjectPalette.fromHue(
-                    HomeFacts.workHue(upNext.workFandoms, upNext.title),
+                    if (face.obscured) HomeFacts.workHue(emptyList(), HIDDEN_WORK)
+                    else HomeFacts.workHue(upNext.workFandoms, upNext.title),
                     tokens.theme
                 )
                 Column(
@@ -127,7 +132,7 @@ private fun Deck(tint: Color?, upNext: SavedWork?, works: List<SavedWork>, grow:
                         .border(0.5.dp, tokens.glassStroke(0.12), shape)
                         .padding(10.dp)
                 ) {
-                    val fandom = HomeFacts.primaryFandom(upNext.workFandoms)
+                    val fandom = HomeFacts.primaryFandom(upNext.workFandoms).takeUnless { face.obscured }
                     if (fandom != null) {
                         SubjectKicker(
                             text = fandom,
@@ -138,7 +143,7 @@ private fun Deck(tint: Color?, upNext: SavedWork?, works: List<SavedWork>, grow:
                         )
                     }
                     Text(
-                        text = upNext.title,
+                        text = if (face.obscured) HIDDEN_WORK else upNext.title,
                         color = tokens.primaryInk,
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Bold,
@@ -210,3 +215,6 @@ private fun QueueProgressStrip(progress: HomeQueueProgress, palette: SubjectPale
         }
     }
 }
+
+/** The words every obscured card uses. */
+private const val HIDDEN_WORK = "Hidden mature work"

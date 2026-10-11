@@ -45,6 +45,7 @@ data class HomeUiState(
     val recentlyOpened get() = dashboard.recentlyOpened
     val visibleItems get() = dashboard.visibleItems
     val hideMatureContent get() = dashboard.hideMatureContent
+    val privacy get() = dashboard.privacy
     val confirmBeforeDelete get() = dashboard.confirmBeforeDelete
     val homeCollections get() = dashboard.homeCollections
     val hasSavedWorks: Boolean get() = dashboard.hasSavedWorks

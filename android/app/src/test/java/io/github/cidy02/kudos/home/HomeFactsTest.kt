@@ -3,6 +3,7 @@ package io.github.cidy02.kudos.home
 import io.github.cidy02.kudos.core.model.SavedWork
 import io.github.cidy02.kudos.core.model.WorkCollection
 import io.github.cidy02.kudos.library.LibraryDisplayItem
+import io.github.cidy02.kudos.library.LibraryPrivacyVisibility
 import io.github.cidy02.kudos.library.LibraryWorkListItem
 import io.github.cidy02.kudos.ui.subject.ReaderTheme
 import java.time.Instant
@@ -58,6 +59,23 @@ class HomeFactsTest {
         assertEquals("62K words", HomeFacts.compactWordCount(62_000))
         assertEquals("1.2M words", HomeFacts.compactWordCount(1_200_000))
         assertEquals(emptyList<String>(), HomeFacts.localWorkMetadata("   ", 0, "  "))
+    }
+
+    /** Audit A38: Home's queue card named a queue's next work whatever the privacy setting said. */
+    @Test
+    fun aQueueCardsFaceDoesNotNameAWorkThePrivacySettingKeepsBack() {
+        val first = work("first")
+        val second = work("second")
+        fun face(firstIs: LibraryPrivacyVisibility) =
+            HomeFacts.queueFace(listOf(first, second)) { if (it.id == "first") firstIs else LibraryPrivacyVisibility.Visible }
+
+        assertEquals(HomeFacts.QueueFace(first, obscured = false), face(LibraryPrivacyVisibility.Visible))
+        // Obscured: still the next work (the queue's page shows its card there), but not by name.
+        assertEquals(HomeFacts.QueueFace(first, obscured = true), face(LibraryPrivacyVisibility.Obscured))
+        // Hidden: passed over, as the queue's page passes over it.
+        assertEquals(HomeFacts.QueueFace(second, obscured = false), face(LibraryPrivacyVisibility.Hidden))
+        // Every work hidden: no face, and nothing to say.
+        assertEquals(HomeFacts.QueueFace(null), HomeFacts.queueFace(listOf(first)) { LibraryPrivacyVisibility.Hidden })
     }
 
     @Test

@@ -1,6 +1,7 @@
 package io.github.cidy02.kudos.home
 
 import io.github.cidy02.kudos.app.PrivacyRevealState
+import io.github.cidy02.kudos.core.model.PrivacySettings
 import io.github.cidy02.kudos.library.LibraryDisplayItem
 import io.github.cidy02.kudos.library.LibraryFilterState
 import io.github.cidy02.kudos.library.LibraryQuery
@@ -19,6 +20,11 @@ data class HomeDashboardState(
     /** Privacy-visible works, including obscured cards. Hidden works are already gone. */
     val visibleItems: List<LibraryDisplayItem> = emptyList(),
     val hideMatureContent: Boolean = false,
+    /**
+     * The whole setting, for works the lists above do not carry (a queue's). Until the
+     * Library has loaded this is the setting's default, which keeps a mature work back.
+     */
+    val privacy: PrivacySettings = PrivacySettings(),
     val confirmBeforeDelete: Boolean = true,
     /** `showsOnHome` collections, in the reader's order. Favorites stay on this state for tests; Home no longer shelves them. */
     val homeCollections: List<HomeCollectionShelf> = emptyList()
@@ -50,6 +56,7 @@ object HomeDashboard {
             recentlyOpened = library.readingHistory,
             visibleItems = library.items,
             hideMatureContent = snapshot.privacy.hideMatureContent,
+            privacy = snapshot.privacy,
             confirmBeforeDelete = snapshot.confirmBeforeDelete,
             homeCollections = HomeCollections.shelves(snapshot.collections, library.collectionMembers)
         )
