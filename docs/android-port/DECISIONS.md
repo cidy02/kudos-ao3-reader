@@ -1625,3 +1625,20 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   already there simply leaves; iOS, whose picker cannot report a choice, compares counts).
   The bar is an opaque surface: over glass its labels sat on the rows behind. Reverse: the
   two `ScopedSelectionBar` calls out of `QueuePageScreen.kt` and `CollectionDetailScreen.kt`.
+- **2026-10-11 · Settings compared (iOS `Settings/` and `App/`: 133 labels with a fixed
+  title; 26 not on Android by their words): nothing to change.** The earlier comparisons
+  had read only `Features/` and `UIComponents/`; re-run over the other folders they add one
+  item, below. What the 26 are: backup, import, font and sync-folder failures that Android
+  reports in its own words on the page instead of in an alert (ten); the "Sync Details"
+  screen, which iOS's own comment calls development diagnostics (Android shows the last
+  sync, the last error and merged conflicts on the page) (eleven); "Scan a QR Code" (Android
+  is QR-generate-only by an earlier decision); the segmented control's "When locked" name
+  and "Require Face ID" for "Require biometric"; and **"Add Saved Works to Saved for
+  Later"**, an iOS tool for works saved before that queue existed, which fetches a copy of
+  each. Not ported: Android has no such legacy, and a bulk fetch should be asked for. If the
+  owner wants it, it is a brief of its own.
+- **2026-10-11 · Three spoken hints from audit W3 (rows 17 to 19) are click labels on
+  Android.** The page button says "double-tap to open the page picker", "Show n more
+  replies" says "expand nested replies", and the deep-thread row says "open the rest of this
+  thread" (not "on the AO3 website": Android opens it in the app). Rows 20 and 21 need
+  nothing. W3 is closed. Reverse: the three `onClick(label = …)` / `onClickLabel`.

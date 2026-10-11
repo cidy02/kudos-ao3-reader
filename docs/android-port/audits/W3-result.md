@@ -568,3 +568,19 @@ all three states.
 **Still not checked:** the hints (rows 17 to 21). **A small lead:** on a kept copy the figure
 strip says "0 YOURS", because the copy carries nothing that says which comments are the
 reader's (it is stripped of everything that can act).
+
+## Rows 17 to 21, the spoken hints (2026-10-11)
+
+Android's idiom for a hint is a click label: TalkBack says "double-tap to …".
+
+| Row | iOS hint | Android now |
+|---|---|---|
+| 17. The page button | "Opens the page picker." | "open the page picker" (`KudosPaginationBar.kt`), with a test that the label is there and the action still opens the picker |
+| 18. "Show n more replies" | "Expands nested replies for this comment" | "expand nested replies" |
+| 19. The deep-thread row | "Opens the rest of this thread on the AO3 website" | "open the rest of this thread": on Android it opens in the app, so the hint does not say the website |
+| 20. "in reply to …" | "Reply to your comment" / "Reply to <author>" | left: the line is read as written and does nothing when tapped |
+| 21. A commenter's avatar | "Opens author profile" | left: it is already named "View <name>'s profile" and is a button |
+
+Not heard with TalkBack on a device or the emulator: by the test for row 17, and the same
+construction for rows 18 and 19.
+
