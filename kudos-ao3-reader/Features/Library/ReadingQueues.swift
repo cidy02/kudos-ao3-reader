@@ -15,7 +15,10 @@ struct AllReadingQueuesDestination: Hashable {
 // MARK: - Cards
 
 struct ReadingQueueCard: View {
+    @AppStorage("hideMatureContent") private var hideMature = true
+    @AppStorage("matureContentMode") private var matureMode: MaturePrivacyMode = .obscure
     @Environment(ThemeManager.self) private var themeManager
+    @Environment(PrivacyGate.self) private var gate
     let queue: ReadingQueue
 
     /// Scales width and height together so the card grows proportionally at
@@ -93,17 +96,27 @@ struct ReadingQueueCard: View {
     @ViewBuilder
     private func face(shape: RoundedRectangle) -> some View {
         let queued = works
-        if let work = ReadingQueueFacts.upNext(in: queued).upNext {
+        let face = ReadingQueueFacts.cardFace(
+            in: queued,
+            isHidden: { gate.isHidden($0, enabled: hideMature, mode: matureMode) },
+            isBlurred: { gate.isBlurred($0, enabled: hideMature, mode: matureMode) }
+        )
+        if let work = face.work {
+            // A blurred work gives the face neither its colour, its fandom nor its title.
+            let hiddenTitle = "Hidden mature work"
             let palette = themeManager.appTheme.subjectPalette(
-                hue: CoverArt.workHue(fandoms: work.workFandoms, title: work.title)
+                hue: face.blurred
+                    ? CoverArt.workHue(fandoms: [], title: hiddenTitle)
+                    : CoverArt.workHue(fandoms: work.workFandoms, title: work.title)
             )
-            let fandom = work.workFandoms.first { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+            let fandom = face.blurred ? nil : work.workFandoms
+                .first { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
                 .map(FandomDisplayName.bareTitle)
             VStack(alignment: .leading, spacing: 6 * scale) {
                 if let fandom {
                     SubjectKicker(text: fandom, palette: palette, size: 8.5, ruleWidth: 18 * scale, ruleSpacing: 5)
                 }
-                Text(work.title)
+                Text(face.blurred ? hiddenTitle : work.title)
                     .font(.system(size: 13 * scale, weight: .bold))
                     .lineLimit(2)
                     .foregroundStyle(.primary)
@@ -120,7 +133,8 @@ struct ReadingQueueCard: View {
             .background(shape.fill(palette.cardWash))
             .overlay(shape.strokeBorder(themeManager.appTheme.glassStroke(0.12), lineWidth: 0.5))
         } else {
-            Text("No works yet")
+            // A queue whose every work is hidden is not empty, and says nothing.
+            Text(queued.isEmpty ? "No works yet" : "")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .padding(10 * scale)
