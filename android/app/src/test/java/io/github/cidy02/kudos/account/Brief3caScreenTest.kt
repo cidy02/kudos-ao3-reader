@@ -56,6 +56,19 @@ import org.robolectric.annotation.GraphicsMode
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class Brief3caScreenTest {
     @org.junit.Before fun clearPageCache() { io.github.cidy02.kudos.network.ao3.AO3PageCache.shared.clear() }
+    /**
+     * Closes the database after the Compose rule has disposed the screen (a lower order is the
+     * outer rule, so this ends last). Closed in `@After`, a screen still observing the library
+     * asked a closed pool, and whichever test ran next was failed for it: "connection pool has
+     * been closed", once in six runs of the whole suite.
+     */
+    @get:Rule(order = -2) val closesLast = object : org.junit.rules.ExternalResource() {
+        override fun after() {
+            ioScope.cancel()
+            if (::database.isInitialized) database.close()
+            dir.toFile().deleteRecursively()
+        }
+    }
     @get:Rule val compose = createComposeRule()
     private val client = Brief3caClient()
     private val chrome = PushedShellChrome()
@@ -80,9 +93,6 @@ class Brief3caScreenTest {
     }
     @After fun close() {
         compose.runOnIdle { models.clear() }
-        ioScope.cancel()
-        database.close()
-        dir.toFile().deleteRecursively()
     }
     private fun setAccount(signedIn: Boolean) {
         auth = AO3AuthRepository(MemorySessionStore(if (signedIn) testSession("Avery_Archive") else null), MemoryCookieStore())
