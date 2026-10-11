@@ -29,8 +29,11 @@ import SwiftUI
 ///   rail that filters by them; a third editor would be one more way to write
 ///   one list.
 struct AllReadingQueuesGridView: View {
+    @AppStorage("hideMatureContent") private var hideMature = true
+    @AppStorage("matureContentMode") private var matureMode: MaturePrivacyMode = .obscure
     @Environment(\.modelContext) private var context
     @Environment(ThemeManager.self) private var themeManager
+    @Environment(PrivacyGate.self) private var gate
     @Query(filter: #Predicate<ReadingQueue> { !$0.isPendingDeletion }, sort: \ReadingQueue.sortOrder)
     private var readingQueues: [ReadingQueue]
 
@@ -127,16 +130,8 @@ struct AllReadingQueuesGridView: View {
     /// local SwiftData relationships, not a paged remote list, so there is no
     /// "rest of the results" being silently skipped.
     private func matchesSearch(_ queue: ReadingQueue) -> Bool {
-        let term = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !term.isEmpty else { return true }
-        if queue.name.localizedCaseInsensitiveContains(term) { return true }
-        if queue.tags.contains(where: { $0.name.localizedCaseInsensitiveContains(term) }) {
-            return true
-        }
-        return queue.memberships.contains { membership in
-            guard !membership.isPendingDeletion, let work = membership.work else { return false }
-            return work.title.localizedCaseInsensitiveContains(term)
-                || work.author.localizedCaseInsensitiveContains(term)
+        QueueOrganizerSelection.matchesSearch(queue, term: searchText) {
+            !gate.isHidden($0, enabled: hideMature, mode: matureMode)
         }
     }
 
@@ -641,6 +636,25 @@ private func reorderCustomQueues(_ orderedIDs: [UUID], context: ModelContext) {
 /// fixtures.
 @MainActor
 enum QueueOrganizerSelection {
+    /// A queue answers a search by its name, a tag, or a member work's title or
+    /// author. A work Hide mode hides does not answer, here as in Search: typing
+    /// its title used to find the queue it is in.
+    static func matchesSearch(
+        _ queue: ReadingQueue, term rawTerm: String, mayAnswer: (SavedWork) -> Bool
+    ) -> Bool {
+        let term = rawTerm.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !term.isEmpty else { return true }
+        if queue.name.localizedCaseInsensitiveContains(term) { return true }
+        if queue.tags.contains(where: { $0.name.localizedCaseInsensitiveContains(term) }) {
+            return true
+        }
+        return queue.memberships.contains { membership in
+            guard !membership.isPendingDeletion, let work = membership.work, mayAnswer(work) else { return false }
+            return work.title.localizedCaseInsensitiveContains(term)
+                || work.author.localizedCaseInsensitiveContains(term)
+        }
+    }
+
     /// Saved for Later can't be deleted — no row offers it — so a bulk Delete
     /// takes the custom queues in the selection and nothing else.
     static func deletable(_ queues: [ReadingQueue]) -> [ReadingQueue] {
