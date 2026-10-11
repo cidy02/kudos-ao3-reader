@@ -2,6 +2,8 @@ package io.github.cidy02.kudos.library
 
 import io.github.cidy02.kudos.core.model.SavedWork
 import io.github.cidy02.kudos.data.local.entity.ReadingSessionEntity
+import io.github.cidy02.kudos.network.ao3.author.AO3AuthorRoute
+import io.github.cidy02.kudos.works.WorkTags
 import java.time.Instant
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -66,7 +68,8 @@ object ReadingAffinities {
         for (work in works) {
             val byline = work.author.trim()
             if (byline.isEmpty() || byline in usernames) continue
-            singleRegisteredUsername(work.authorIdentitiesJSON)?.let { usernames[byline] = it }
+            (singleRegisteredUsername(work.authorIdentitiesJSON) ?: accountFromAO3Byline(work))
+                ?.let { usernames[byline] = it }
         }
         return rows(works, summaries, order, savedForLaterIds) { listOf(it.author) }
             .map { it.copy(username = usernames[it.name]) }
@@ -124,6 +127,22 @@ object ReadingAffinities {
         }
         return byName.values.filter { it.worksRead > 0 }
             .sortedWith(ranking.thenBy(String.CASE_INSENSITIVE_ORDER) { it.name })
+    }
+
+    private val accountName = Regex("[A-Za-z0-9_]+")
+
+    /**
+     * A work saved before accounts were kept has none recorded. For a work from AO3 with one
+     * author the byline says it, "account" or "pseud (account)", and nothing is asked of AO3.
+     * Left unknown: a file from elsewhere, several authors, Anonymous, an orphaned work, and a
+     * work whose accounts are recorded (those were read from AO3's links, and stand).
+     */
+    private fun accountFromAO3Byline(work: SavedWork): String? {
+        if (work.authorIdentitiesJSON.isNotBlank() || ',' in work.author ||
+            WorkTags.canonicalAO3WorkURL(work.sourceUrl) == null) return null
+        return AO3AuthorRoute.fromByline(work.author).username.takeIf {
+            accountName.matches(it) && !it.equals("Anonymous", true) && !it.equals("orphan_account", true)
+        }
     }
 
     /** Stored iOS identity JSON is an array with kind/username, not the displayed pseud. */

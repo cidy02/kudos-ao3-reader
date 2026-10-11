@@ -1454,3 +1454,14 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   pseud chosen. **Unlike iOS, Android still lets a name with no recorded account be tapped**
   (iOS opens only a link AO3 gave it); for a file imported from elsewhere that is still a
   guess, as it was before. Reverse: the two lines in the author route.
+- **2026-10-11 · Favorites › Authors reads a saved AO3 work's one author from its byline when
+  no account was recorded.** Accounts are kept only from today (the entry above), so in a
+  library that already exists no author had one: the Authors list would have had no one to
+  check, and "With new work" would have answered "No new work" about authors it never asked
+  about. For a work from AO3 with one author the byline is "account" or "pseud (account)",
+  so it is read from there, with no request (`accountFromAO3Byline`, `ReadingAffinities.kt`).
+  Left unknown: a file from elsewhere, several authors, Anonymous, an orphaned work, and any
+  work whose accounts are recorded. **This differs from iOS**, which never reads an account
+  from words (it fetches each work's page to learn it), and **it widens who Android's
+  newest-work round asks about** to the authors iOS's round already covers. Reverse: the
+  `?: accountFromAO3Byline(work)` in `ReadingAffinities.authors`.
