@@ -644,7 +644,8 @@ fun SensitiveWorkRow(
     onTagSearch: ((SearchSubjectField, String) -> Unit)? = null,
     onLongClick: (() -> Unit)? = null,
     showsZeroStats: Boolean = LocalShowsZeroStats.current,
-    mutedHistory: Boolean = false
+    mutedHistory: Boolean = false,
+    ledger: Boolean = false
 ) {
     SensitiveWorkRow(
         id = work.id,
@@ -680,6 +681,7 @@ fun SensitiveWorkRow(
         onLongClick = onLongClick,
         showsZeroStats = showsZeroStats,
         mutedHistory = mutedHistory,
+        ledger = ledger,
         modifier = modifier
     )
 }

@@ -113,3 +113,31 @@ in the full run (a 15-second wait) and passed twice alone in half a second and i
 full runs after. It does not draw this card. Nothing was committed on the red run. Its
 wait is on real time and wants the same cure `AO3CollectionsViewModelTest` had.
 
+## Step 2, landed 2026-10-11 (Claude alone; gate 2,608)
+
+**Marked for Later, Subscriptions and an AO3 collection's works draw the ledger**, as iOS
+always does there. `PairedWorkRow` and `EnrichingWorkRow` pass `ledger` on; the library
+copy of a marked or subscribed work draws the same ledger body.
+
+**Looked at** beside the iPhone's (Marked for Later, Subscriptions), and on Android alone: a
+card unfolded in Subscriptions ("Archive Warnings · No Archive Warnings Apply", the glyph
+turned), an AO3 collection's works, Marked for Later in Dark, Subscriptions at twice the
+text size.
+
+**Found by that look and fixed:** at twice the text size the button under a subscribed
+work read "Unsubscri…" beside "2 chapters new". The row wraps now and the button goes under
+the words.
+
+**Not the same as iOS, and left:**
+- A work that is also in the Library: iOS draws its library ledger row there (with the
+  reading ring); Android draws the AO3 ledger body for both.
+- iOS puts Unmark inside the card's foot; Android keeps it under the card.
+- **A lead, not this brief: the account lists have no display mode on Android.** iOS's
+  History, Bookmarks and the account's works lists switch between Detailed, Ledger and
+  Compact (a two-up grid of covers), kept in `account.displayMode`, **Compact by default**.
+  Android draws the detailed card and says so in a comment
+  (`account/AccountWorksListScreen.kt:248`). That is a missing feature: the next brief.
+- The bookmark's own card (its note and pills, T-313) and an own work's kudos and hits
+  inside the card are not built.
+- In Sepia the tray's rating yellow is paler than iOS's mustard; legible, but weaker.
+
