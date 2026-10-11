@@ -344,7 +344,7 @@ class Brief3caScreenTest {
         }
         awaitText("New comment")
         compose.onNodeWithContentDescription("More formatting options").performClick()
-        awaitText("Format Comment")
+        awaitText("Formatting")
         assertEquals(1, client.gets.size)
         return model
     }

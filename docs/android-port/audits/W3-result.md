@@ -511,3 +511,31 @@ the formatting tray's title ("Format Comment" against "Formatting") and group na
 more" against "Show n more replies", the role badge's and the collapse toggle's spoken
 labels, "Delete this notification…" against "Delete 1 notification…", and the collection
 form's two messages. Rows 5, 12, 13 and 14 (the pager) are Android's own bar.
+
+### The two batches, landed 2026-10-11 (Android)
+
+**Words:** the formatting tray is "Formatting" with the groups "Text" and "Blocks & links"
+(iOS's names); a further stack of replies is "Show 20 more replies" (it was "Show 20 more");
+the collection form says the whole "Not saved: your AO3 session changed…" sentence whichever
+way the change is met.
+
+**Spoken:** a comment's Reply says to whom ("Reply to StarrySky"); the role pill says "Work
+author" or "Your comment"; the fold pill says "Hide replies" or "Show 3 replies"; the
+composer's field is "Comment text" or "Edit comment text"; the Inbox's unread dot is
+"Unread"; an Inbox card in select mode carries its selected state.
+
+Read back from the emulator's accessibility dump: every label above except "Your comment"
+(no comment of the reader's own on the demo page) and the Inbox card's selected state (the
+bar counted the selection; the dump's `selected` flag stayed false, which is how Compose
+reports the state for anything but a tab, as "checked"; that flag was not printed).
+
+**Left as they are, on purpose:** "Delete this notification from your AO3 Inbox?" (iOS says
+the same for one row; "Delete 1 notification" is its bulk form), "Log in to AO3 first."
+(Android's own sentence, used in 24 places), the heading tile's "h3" (Android inserts one
+level; iOS's tile offers six), and the pager's own words.
+
+**Found on iOS while reading:** the row that unfolds replies says "Show 1 replies" for one
+reply (`CommentThreadRow.swift`, `expandRepliesButton`). Android says "Show 1 reply".
+
+**Still not checked:** an offline banner on comments, the chapter picker's failure state, the
+Inbox's failed page turn, and the hints (rows 17 to 21).

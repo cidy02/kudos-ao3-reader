@@ -249,8 +249,12 @@ class AO3CollectionFormTest {
             if (duringPost) client.postRelease.complete(Unit) else client.getRelease.complete(Unit)
             save.await()
             assertTrue(before.saving); assertFalse(model.state.value.saving)
-            assertEquals(listOf(if (duringPost) AO3CollectionFields.UNCONFIRMED
-                else "Not saved: your AO3 session changed since this form opened."), model.state.value.form!!.generalErrors)
+            val said = model.state.value.form!!.generalErrors.single()
+            if (duringPost) assertEquals(AO3CollectionFields.UNCONFIRMED, said)
+            // The whole sentence, as for a change met before the request: what happened, and what to do.
+            else assertTrue(said, said.startsWith("Not saved: your AO3 session changed since this form opened. " +
+                "Your edits are still here, and Save works again once ") &&
+                said.endsWith(" is signed in. To edit as another account, reopen the form."))
             assertEquals(before.form!!.values, model.state.value.form!!.values)
             assertEquals(if (duringPost) 1 else 0, client.posts.size)
         }

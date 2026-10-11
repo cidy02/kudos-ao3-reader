@@ -334,7 +334,8 @@ fun CommentConversationRow(
             }
             is CommentConversationItem.Expander -> {
                 val text = if (item.showsVerb) {
-                    "Show ${item.hiddenCount} more"
+                    // Of what: "Show 20 more" left the reader to guess (iOS: "Show 20 more replies").
+                    "Show ${item.hiddenCount} more ${if (item.hiddenCount == 1) "reply" else "replies"}"
                 } else if (item.hiddenCount == 1) {
                     "Show 1 reply"
                 } else {
@@ -509,7 +510,9 @@ fun CommentPostRow(
                     Surface(
                         shape = RoundedCornerShape(percent = 50),
                         color = tokens.glassFill(0.12),
+                        // Spoken whole: the pill only has room for "Show 3" and "Hide".
                         modifier = Modifier.clickable(onClick = onToggleCollapse)
+                            .semantics { contentDescription = collapse.accessibilityLabel }
                     ) {
                         Text(
                             text = collapse.label,
@@ -646,7 +649,10 @@ fun CommentParticipantBadge(
     Surface(
         shape = RoundedCornerShape(percent = 50),
         color = palette.accent,
-        modifier = modifier
+        // "Me" and "Author" are the pill's words; spoken, they say whose comment it is (iOS).
+        modifier = modifier.semantics(mergeDescendants = true) {
+            contentDescription = if (isMe) "Your comment" else "Work author"
+        }
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp),
@@ -738,7 +744,9 @@ fun CommentActionRowLayout(
             Row(
                 modifier = Modifier
                     .height(44.dp)
-                    .clickable { handlers.onReply(comment) }
+                    .clickable(role = Role.Button) { handlers.onReply(comment) }
+                    // In a list of comments, to whom (iOS: "Reply to <name>").
+                    .semantics { contentDescription = "Reply to ${comment.author.name}" }
                     .padding(end = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(4.dp)

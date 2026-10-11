@@ -138,7 +138,8 @@ internal class AO3CollectionFormState(
                 }
             }
         } catch (_: CancellationException) {
-            if (active) mutable.value = failed("Not saved: your AO3 session changed since this form opened.")
+            // The whole sentence, as the check before the request gives it (iOS says it for both).
+            if (active) mutable.value = failed(sessionChangedMessage())
         }
     }
 
@@ -165,8 +166,7 @@ internal class AO3CollectionFormState(
         val current = auth.generation.value
         if (!auth.state.value.isSignedIn || (loaded != current &&
                 !formUsername.equals(auth.username(), ignoreCase = true))) {
-            mutable.value = failed("Not saved: your AO3 session changed since this form opened. Your edits are still " +
-                "here, and Save works again once ${formUsername ?: "that account"} is signed in. To edit as another account, reopen the form.")
+            mutable.value = failed(sessionChangedMessage())
             return null
         }
         formGeneration = current
@@ -179,6 +179,10 @@ internal class AO3CollectionFormState(
      * (audit A26-3). Nothing from the answer is applied to the form.
      */
     private fun sentUnderAnEarlierSession() { if (active) mutable.value = failed(AO3CollectionFields.UNCONFIRMED) }
+
+    private fun sessionChangedMessage() = "Not saved: your AO3 session changed since this form opened. Your edits are " +
+        "still here, and Save works again once ${formUsername ?: "that account"} is signed in. To edit as another " +
+        "account, reopen the form."
 
     private fun failed(message: String) = state.value.copy(saving = false,
         form = state.value.form?.copy(generalErrors = listOf(message)))

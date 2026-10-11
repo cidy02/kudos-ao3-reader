@@ -91,8 +91,9 @@ enum class CommentMarkupTag(
     Spoiler("Spoiler", "details", Icons.Outlined.VisibilityOff, TagGroup.Blocks, "<details><summary>Spoiler</summary>", "</details>");
 
     enum class TagGroup(val title: String) {
-        Text("Text formatting"),
-        Blocks("Blocks & elements")
+        // iOS's names for the two groups (`AO3Markup.Group`), as its design draws them.
+        Text("Text"),
+        Blocks("Blocks & links")
     }
 
     companion object {
@@ -247,7 +248,7 @@ fun CommentFormattingTray(
             verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
             Text(
-                text = "Format Comment",
+                text = "Formatting",
                 fontSize = 18.sp,
                 lineHeight = 24.sp,
                 fontWeight = FontWeight.Bold,

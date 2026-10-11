@@ -52,6 +52,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -706,7 +707,9 @@ internal fun InboxItemCard(
         bottomStart = if (isLast) SubjectMetrics.panelRadius else 0.dp
     )
     val clickModifier = when {
-        isSelecting -> Modifier.clickable(
+        // Selected or not is said, not only drawn.
+        isSelecting -> Modifier.selectable(
+            selected = isSelected,
             enabled = isSelectable && !isPerformingAction,
             onClick = onToggleSelection
         )
@@ -789,8 +792,8 @@ internal fun InboxItemCard(
                             // iOS's Reply on the card, as a comment's own row draws it.
                             if (item.canReply) Row(
                                 modifier = Modifier.height(44.dp)
-                                    .clickable(enabled = !isPerformingAction, role = Role.Button,
-                                        onClickLabel = "Reply to ${item.commenterName}", onClick = onReply)
+                                    .clickable(enabled = !isPerformingAction, role = Role.Button, onClick = onReply)
+                                    .semantics { contentDescription = "Reply to ${item.commenterName}" }
                                     .padding(end = 12.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(4.dp)
@@ -847,6 +850,7 @@ private fun InboxByline(
                     Box(
                         Modifier.size(8.dp).clip(CircleShape)
                             .background(LocalSubjectPalette.current.accent)
+                            .semantics { contentDescription = "Unread" }
                     )
                 }
                 Text(
@@ -900,6 +904,7 @@ private fun InboxByline(
                     .size(8.dp)
                     .clip(CircleShape)
                     .background(LocalSubjectPalette.current.accent)
+                    .semantics { contentDescription = "Unread" }
             )
         }
         Text(
