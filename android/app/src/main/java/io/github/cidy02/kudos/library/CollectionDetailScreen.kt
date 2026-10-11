@@ -712,7 +712,19 @@ fun CollectionDetailScreen(
                                 modifier = Modifier.padding(top = 4.dp, bottom = 2.dp)
                             )
                         }
-                        if (visibleWorks.isEmpty() && filterText.isNotBlank()) {
+                        if (visibleWorks.isEmpty() && filterText.isBlank() && works.isNotEmpty()) {
+                            // Hide Mature has emptied the page on its own; that is not an empty
+                            // collection, and the page said nothing (iOS says this since T-394).
+                            item {
+                                EmptyStateCard(
+                                    title = "Mature works are hidden",
+                                    message = "Hide Mature is hiding every work in this collection.",
+                                    primaryActionLabel = "Show mature",
+                                    onPrimaryAction = { privacyGate.toggleRevealAll(activity) },
+                                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                                )
+                            }
+                        } else if (visibleWorks.isEmpty() && filterText.isNotBlank()) {
                             item {
                                 EmptyStateCard(
                                     title = "No matching works",
