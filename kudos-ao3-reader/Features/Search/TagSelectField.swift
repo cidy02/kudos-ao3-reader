@@ -12,6 +12,7 @@ struct TagSelectField: View {
     var fandomContext: [String] = []
 
     @State private var showPicker = false
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     private var includedTags: [String] {
         Self.tags(in: included)
@@ -37,11 +38,23 @@ struct TagSelectField: View {
                 showPicker = true
             } label: {
                 HStack {
-                    Text(title)
-                        .foregroundStyle(.primary)
-                    Spacer()
-                    Text(selectionSummary)
-                        .foregroundStyle(.secondary)
+                    if dynamicTypeSize.isAccessibilitySize {
+                        // What is chosen under the field's name: beside it the name broke by
+                        // syllable at the accessibility sizes ("Rela- / tion- / ships").
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(title)
+                                .foregroundStyle(.primary)
+                            Text(selectionSummary)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer(minLength: 8)
+                    } else {
+                        Text(title)
+                            .foregroundStyle(.primary)
+                        Spacer()
+                        Text(selectionSummary)
+                            .foregroundStyle(.secondary)
+                    }
                     Image(systemName: "chevron.right")
                         .font(.footnote.weight(.semibold))
                         .foregroundStyle(.tertiary)
