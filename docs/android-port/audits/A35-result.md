@@ -229,3 +229,30 @@ The twenty rows most susceptible to clipping or truncation at the largest access
 - **Total rows indexed:** 165 (135 in Main Index + 30 Guarded)
 
 Audit complete across all 268 Swift files in `kudos-ao3-reader/Features/` and `kudos-ao3-reader/UIComponents/`.
+
+---
+
+## Triage (Claude, 2026-10-11): used as an index for the iPhone's largest-text pass
+
+This file lists where a text cannot grow; whether that cuts anything has to be seen. Most of
+its files were already looked at on the simulator at AX5 and fixed where cut (iOS T-382 to
+T-388: comments, the reader, the figure strip, the Inbox, Account, section headers, tag
+chips, search results, the forms, drafts, series, the filter sheet).
+
+**A first look at the files not yet seen** (the challenge and collection management screens:
+Assignments, Maintainers, Moderation, Sign-ups) found four cuts and one fault that is not
+about text size at all, all fixed as **iOS T-389**:
+
+- the end of five lists was under their floating bottom bar at every text size (the row
+  that was meant to reserve room for the bar had no height);
+- a membership request's name one letter wide beside its two buttons;
+- a maintainer's name broken in the middle beside the role;
+- "Open on AO3" cut in its capsule;
+- the page's kicker cut.
+
+**Not yet looked at, from this index:** Prompt Meme, the tag set page, a collection's items,
+the availability sweep, reading queues and their organizer, a collection's ledger rows,
+Customize Theme, the save-search sheet, the fandom list and the media browser.
+
+**A lead it points at and nobody has decided:** state badges ("UNMATCHED", "OWNER",
+"COMPLETE", "ANON") are a fixed 9.5 to 10.5pt at every text size, on both apps' designs.
