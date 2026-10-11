@@ -1501,3 +1501,9 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   a pull; left, the figures are measured on opening). The page on screen is read again with
   the filters it was asked for, and stays until the answer is in. The tag-works and
   author-works screens have none either, and nothing opens them.
+- **2026-10-11 · Subscribe and Unsubscribe on an author's page are native writes (brief 3ci).**
+  The button opened the form's submit address in the web view, which does nothing there. It
+  is now one write of AO3's own form with a fresh token, in the session the form was read in;
+  an unsubscribe is confirmed first, in iOS's words; the result is shown and the header read
+  again. Mute and Block are unchanged (AO3's confirm page in the web view) until their own
+  step. Reverse: `onSubscription` in `author/AuthorProfileScreen.kt` back to `onOpenWeb`.
