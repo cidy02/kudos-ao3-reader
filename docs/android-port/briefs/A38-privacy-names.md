@@ -84,6 +84,23 @@ Recently Deleted). Android's `LocalWorkRow` is the unreachable screen noted abov
 **Not done:** the same pass for views that show an author, a fandom or a summary without a
 title; the iPhone's 13 Hide-only call sites looked at one by one in Blur mode.
 
+## Round five, 2026-10-11: views that use a work's author, fandoms or tags without its title
+
+iPhone: five such views with no privacy word. Three are rules or aggregates whose caller
+filters (`LibraryFilters`, `ReadingStatistics` through `statisticsWorks`, `ReadingAffinities`
+through `passesPrivacy`: Hide only, so Favorites › Authors, Fandoms and Tags name a blurred
+work's author on iOS where Android leaves it out; owner question 23, item 3).
+
+| Where | Platform | Result |
+|---|---|---|
+| **Browse marked a fandom because of a hidden work** (favourite star and download count on a fandom's row, "read before" and "N downloaded" on a category, Jump Back In) | iOS | seen on the simulator in Hide mode (the star); fixed, T-397 |
+| The same | Android | `BrowseScreen` and `FandomListScreen` read every Library work; fixed with `LibraryPrivacy.withoutHidden`. **Not seen on screen**: the Android demo has no hidden work in a fandom its Browse lists. By the test and by reading |
+| `account/LocalLibraryListsScreen.kt` | Android | removed (`cdb66289`) |
+
+Android's `TagWorksScreen` and `FandomWorksScreen` mark an AO3 result you already have from
+`observeSavedWorks()` with no privacy check: **not looked at** (iOS leaves a hidden work out
+of that matching in its account lists, `AO3AccountWorksList.swift:264`).
+
 ## Leads, not confirmed (read only)
 
 Android:
