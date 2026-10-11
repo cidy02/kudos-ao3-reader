@@ -131,7 +131,9 @@ fun CommentsScreen(
     LaunchedEffect(viewModel, currentUsername, sessionGeneration) { viewModel.syncViewer() }
 
     LaunchedEffect(viewModel, initialComposes) {
-        if (initialComposes) viewModel.openComposer()
+        // With a comment named too it is the Inbox's Reply: an answer to that comment, once its
+        // thread is on screen. Without one, a new comment on the work.
+        if (initialComposes) focusedCommentId?.let(viewModel::replyWhenLoaded) ?: viewModel.openComposer()
     }
 
     // Deep link focus (e.g. Inbox notification)

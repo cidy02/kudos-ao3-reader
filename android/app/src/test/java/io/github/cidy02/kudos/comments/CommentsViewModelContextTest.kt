@@ -99,6 +99,50 @@ class CommentsViewModelContextTest {
     private fun reply(id: Long) = AO3Comment(
         id = "comment_$id", author = AO3CommentAuthor(name = "Someone"), date = "2026-08-03", body = "Stub", canReply = true)
 
+    /** The Inbox's Reply: the thread first, then the reply composer for that very comment. */
+    @Test
+    fun theInboxsReplyOpensTheComposerForItsCommentOnceTheThreadIsOnScreen() = runTest(testDispatcher) {
+        val viewModel = model(Session(basic), focused = 2L)
+        viewModel.replyWhenLoaded(2L)
+        assertEquals("nothing opens before there is a page", false, viewModel.composerPresented.value)
+        until("the reply composer") { viewModel.composerPresented.value }
+        assertEquals(2L, viewModel.replyTarget.value?.commentId)
+        assertEquals("comment_2", viewModel.composerParent.value?.id)
+
+        // Asked once: closing it and reading the page again does not open it a second time.
+        viewModel.closeComposer(); idle()
+        viewModel.load(1, 2L)
+        until("the page again") { loaded(viewModel) }
+        idle()
+        assertEquals(false, viewModel.composerPresented.value)
+    }
+
+    @Test
+    fun aReplyToACommentThePageDoesNotHoldOpensNothing() = runTest(testDispatcher) {
+        val viewModel = model(Session(basic), focused = 999L)
+        viewModel.replyWhenLoaded(999L)
+        until("the page") { loaded(viewModel) }
+        idle()
+        assertEquals("not a new comment on the work in its place", false, viewModel.composerPresented.value)
+        assertEquals(null, viewModel.replyTarget.value)
+    }
+
+    @Test
+    fun aChangeOfReaderForgetsTheReplyThatWasAskedFor() = runTest(testDispatcher) {
+        val session = Session(basic)
+        val held = CompletableDeferred<Unit>()
+        session.getGate = { held }
+        val viewModel = model(session, focused = 2L)
+        viewModel.replyWhenLoaded(2L)
+        testDispatcher.scheduler.runCurrent()
+        session.name = "bob"; session.generation = 2
+        viewModel.syncViewer()
+        session.getGate = { null }; held.complete(Unit)
+        until("the page for the new reader") { loaded(viewModel) }
+        idle()
+        assertEquals(false, viewModel.composerPresented.value)
+    }
+
     /** A1-1. "Write a comment", then a chapter chosen before the work's draft has been read. */
     @Test
     fun aComposerStillReadingItsDraftDoesNotOpenOnTheChapterTheReaderMovedTo() = runTest(testDispatcher) {

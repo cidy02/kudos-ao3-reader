@@ -484,3 +484,30 @@ Excluded from "differs":
 22. **Comments stat strip cell TalkBack / VoiceOver labels**:
     - iOS: `"\(total.formatted()) comments on AO3"`, `"\(figures.threads.formatted()) conversations loaded"`, `"\(figures.mine.formatted()) of the loaded comments are yours"`, `"Newest loaded comment \(latest)"` (`CommentsView.swift:521, 528, 540, 549`)
     - Android: `"${cell.value} Comments"`, `"${cell.value} Threads"`, `"${cell.value} Yours"`, `"${cell.value} Latest"` (`SubjectComponents.kt:591`)
+
+---
+
+## Triage (Claude, 2026-10-11): each row checked against the code as it stands now
+
+The audit is of 10-09; the comments model, the kept-page banner and the pagers have changed
+since. Verdicts for "Missing on Android":
+
+| Row | Verdict | What was done |
+| --- | --- | --- |
+| 1. Reply on an Inbox card | **Real.** | **Landed 2026-10-11**: a Reply on the card; it opens the comment's thread with the reply composer open for that comment (iOS `opensReplyComposer`). |
+| 2. "Copy Link" in the card's menu | **Real.** | **Landed** with row 1. Android 13 and later say what was copied, so no "Link copied." alert. |
+| 3. "Open Comment" when the Inbox names no work | **Real.** The menu had no way to open such a comment at all. | **Landed** with row 1: "Open Comment" opens the comment's page on AO3. |
+| 5. The kept-page row in the Inbox | Done since (brief 3ce). | None. |
+| 4. An offline banner on comments | Not checked: Android may not keep comment pages to show offline at all. | Open. |
+| 6. The chapter picker's failure state | Not checked beyond a search (`_chaptersFailed` exists in the view model). | Open. |
+| 10. The Inbox's failed page turn | Not checked. | Open. |
+| 11. The composer's "checking whether this posted" banner | Android says the same in a dialog and keeps the text (seen on the emulator 10-11). Same information, another shape. | None. |
+| 7, 8. The page sheet's number field and title | Android's page sheet is a slider, its own design. | None. |
+| 9. "Done" in the formatting tray | Platform: the sheet is dismissed by Back or a swipe. | None. |
+| 12 to 21. Spoken hints and labels | **Mostly still true** by a search on 10-11: no "Comment text" name on the composer's field, no "Unread" on the dot, no selected state on an Inbox card in select mode, no hints on "Show n more", the deep-thread row or an avatar. | **Open, one batch**: Android's own idiom is `onClickLabel` and `stateDescription`, not a hint for everything. |
+
+"Differs", checked by a search on 10-11 and **not changed yet** (one batch, words only):
+the formatting tray's title ("Format Comment" against "Formatting") and group names, "Show n
+more" against "Show n more replies", the role badge's and the collapse toggle's spoken
+labels, "Delete this notification…" against "Delete 1 notification…", and the collection
+form's two messages. Rows 5, 12, 13 and 14 (the pager) are Android's own bar.

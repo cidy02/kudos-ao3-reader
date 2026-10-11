@@ -207,6 +207,7 @@ class CommentsViewModel(
         saveDraft()
         viewer = now
         composer = null
+        pendingReplyId = null
         _composerPresented.value = false
         _replyTarget.value = null
         _editTarget.value = null
@@ -362,6 +363,7 @@ class CommentsViewModel(
                 val thread = if (first == null || first.id in onPage) sorted
                     else sorted.copy(comments = listOf(first.without(onPage)) + sorted.comments)
                 _state.value = CommentsUiState.Loaded(thread)
+                openPendingReply()
                 // Restore a top-level draft on initial load.
                 val untouched = composerGeneration
                 val reader = currentViewer()
@@ -482,6 +484,27 @@ class CommentsViewModel(
     fun findComment(id: Long): AO3Comment? {
         val current = _state.value as? CommentsUiState.Loaded ?: return null
         return findCommentRecursive(current.thread.comments, id)
+    }
+
+    /** iOS `pendingInitialReplyCommentID`: the Inbox's Reply, waiting for its comment's thread. */
+    private var pendingReplyId: Long? = null
+
+    /**
+     * The Inbox's Reply opens the comment's thread and then its reply composer. The composer opens
+     * once that comment is on the page, and only for the reader who asked: a change of reader
+     * forgets it ([syncViewer]), as iOS does.
+     */
+    fun replyWhenLoaded(commentId: Long) {
+        pendingReplyId = commentId
+        openPendingReply()
+    }
+
+    private fun openPendingReply() {
+        val id = pendingReplyId ?: return
+        val loaded = (_state.value as? CommentsUiState.Loaded)?.thread?.comments ?: return
+        // A page that loaded without the comment has nothing to answer: no composer, not a wrong one.
+        pendingReplyId = null
+        findCommentRecursive(loaded, id)?.let(::startReply)
     }
 
     private fun findCommentRecursive(comments: List<AO3Comment>, id: Long): AO3Comment? {
