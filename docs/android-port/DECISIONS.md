@@ -1642,3 +1642,9 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   replies" says "expand nested replies", and the deep-thread row says "open the rest of this
   thread" (not "on the AO3 website": Android opens it in the app). Rows 20 and 21 need
   nothing. W3 is closed. Reverse: the three `onClick(label = …)` / `onClickLabel`.
+- **2026-10-11 · Largest text on the screens audit A35 had left: one iOS fix (T-398), one
+  Android brief (3cl).** On iOS a category's fandom list was unreadable at the
+  accessibility sizes and Browse's fandom chips did not grow: fixed in T-398. Android at
+  2.0× was looked at for the same screens and reads well. Putting the two fandom lists side
+  by side showed Android's is not the redesign's (a titled bar, plain rows, a switch for a
+  chip, and a fandom's "(TV)" qualifier not drawn): `briefs/3cl-fandom-list.md`.
