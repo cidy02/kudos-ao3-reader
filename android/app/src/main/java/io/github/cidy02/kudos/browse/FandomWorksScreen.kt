@@ -74,7 +74,9 @@ fun FandomWorksScreen(
     onOpenWork: (AO3WorkSummary) -> Unit,
     workImporter: WorkImporter? = null,
     readingQueueRepository: ReadingQueueRepository? = null,
-    repository: AO3BrowseRepository = remember { AO3BrowseRepository() }
+    repository: AO3BrowseRepository = remember { AO3BrowseRepository() },
+    settingsRepository: io.github.cidy02.kudos.data.preferences.SettingsRepository? = null,
+    privacyGate: io.github.cidy02.kudos.app.PrivacyGate? = null
 ) {
     var state by remember(fandomName) { mutableStateOf<FandomWorksState>(FandomWorksState.Loading) }
     // The *browse* baseline, not a bare AO3SearchFilters(): AO3's tag listing has no
@@ -96,7 +98,10 @@ fun FandomWorksScreen(
     // response land after the second (newer) one and overwrite it.
     var loadGeneration by remember(fandomName) { mutableIntStateOf(0) }
     val scope = rememberCoroutineScope()
-    val savedWorks by workRepository.observeSavedWorks().collectAsState(initial = emptyList())
+    // The badge on a result you already have, and the filter's tag suggestions, are drawn from
+    // the Library: not from a work Hide Mature hides (audit A38; iOS leaves it out of the pairing).
+    val allSavedWorks by workRepository.observeSavedWorks().collectAsState(initial = emptyList())
+    val savedWorks = io.github.cidy02.kudos.library.rememberShownWorks(allSavedWorks, settingsRepository, privacyGate)
     var userTagNames by remember { mutableStateOf<List<String>>(emptyList()) }
     LaunchedEffect(workRepository) {
         userTagNames = workRepository.allUserTags().map { it.normalizedName }

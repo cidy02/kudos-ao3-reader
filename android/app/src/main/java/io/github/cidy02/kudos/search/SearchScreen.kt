@@ -197,8 +197,9 @@ fun SearchScreen(
     LaunchedEffect(workRepository) {
         userTagNames = workRepository?.allUserTags()?.map { it.normalizedName }.orEmpty()
     }
-    val localTagSuggestions = remember(savedWorks, userTagNames) {
-        collectLocalTagSuggestions(savedWorks, userTagNames)
+    // Not from a work Hide Mature hides: its tags were offered in the filter (audit A38).
+    val localTagSuggestions = remember(savedWorks, userTagNames, privacy, reveal) {
+        collectLocalTagSuggestions(LibraryPrivacy.withoutHidden(savedWorks, privacy, reveal), userTagNames)
     }
 
     fun leaveSelection() {

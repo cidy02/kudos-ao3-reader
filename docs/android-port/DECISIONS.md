@@ -1576,3 +1576,10 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   back the same emits nothing, so one full run in about a dozen today sat for its whole
   minute and failed the gate. It polls the fake's own record now. The gate that failed was
   not committed on; two clean full runs followed.
+- **2026-10-11 · A result you already have is not marked, and no tag is suggested, because of
+  a work Hide mode hides (A38).** The tag, fandom and author works screens badge an AO3
+  result you have a copy of and suggest your Library's tags in their filter. They read every
+  saved work. They now read `rememberShownWorks` (one helper, which Browse's two screens use
+  as well); Search's and the Account lists' tag suggestions follow the same rule. iOS leaves
+  a hidden work out of the pairing on its account lists. Obscure mode is unchanged (owner
+  question 23). Reverse: `savedWorks` back to the unfiltered flow in the three screens.

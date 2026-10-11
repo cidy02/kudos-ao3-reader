@@ -432,6 +432,8 @@ fun AppNavHost(
                 FandomWorksScreen(
                     fandomName = fandomName,
                     workRepository = container.workRepository,
+                    settingsRepository = container.settingsRepository,
+                    privacyGate = container.privacyGate,
                     workImporter = container.workImporter,
                     readingQueueRepository = container.readingQueueRepository,
                     repository = container.browseRepository,
@@ -453,6 +455,8 @@ fun AppNavHost(
                     tagName = tagName,
                     repository = container.searchRepository,
                     workRepository = container.workRepository,
+                    settingsRepository = container.settingsRepository,
+                    privacyGate = container.privacyGate,
                     workImporter = container.workImporter,
                     readingQueueRepository = container.readingQueueRepository,
                     onOpenWork = { work ->
@@ -1045,6 +1049,8 @@ fun AppNavHost(
                 AuthorWorksScreen(
                     authorName = authorName,
                     workRepository = container.workRepository,
+                    settingsRepository = container.settingsRepository,
+                    privacyGate = container.privacyGate,
                     workImporter = container.workImporter,
                     readingQueueRepository = container.readingQueueRepository,
                     onOpenWork = { work ->

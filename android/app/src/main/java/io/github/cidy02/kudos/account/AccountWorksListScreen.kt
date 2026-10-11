@@ -436,7 +436,10 @@ fun AccountWorksListScreen(
             onApply = { showingFilters = false },
             onClear = { filters = AO3SearchFilters() },
             onDismiss = { showingFilters = false },
-            localTagSuggestions = collectLocalTagSuggestions(loaded?.canonicalWorks.orEmpty().mapNotNull { it.local }),
+            // `visibleEntries` drops the pairing with a work Hide Mature hides: its tags too.
+            localTagSuggestions = collectLocalTagSuggestions(
+                visibleEntries(loaded?.canonicalWorks.orEmpty(), settings.privacy, reveal).mapNotNull { it.local }
+            ),
             refine = true,
             refineMatchText = if (pageWorks.isEmpty()) null else refineMatchText(pageWorks.size, works.size - pending, pending)
         )
