@@ -31,6 +31,8 @@ struct ChallengeAssignmentsView: View {
     @ScaledMetric(relativeTo: .caption) private var captionSize: CGFloat = 11.5
     @ScaledMetric(relativeTo: .caption) private var pillLabelSize: CGFloat = 12
 
+    /// The floating bottom bar's height, so the list can end clear of it at any text size.
+    @State private var bottomBarHeight: CGFloat = 0
     @State private var matched: [AO3ChallengeAssignment] = []
     @State private var unmatched: [AO3ChallengeAssignment] = []
     @State private var pinchHits: [AO3ChallengeAssignment] = []
@@ -101,9 +103,13 @@ struct ChallengeAssignmentsView: View {
 
                 // Room for the floating bottom bar.
                 Section {
-                    Spacer(minLength: 70)
+                    // A real height. This was a `Spacer`, which has none in a list row: the gap was
+                    // never there, and the list ended under the bar at every text size.
+                    Color.clear
+                        .frame(height: max(70, bottomBarHeight - 12))
                         .listRowInsets(EdgeInsets())
                         .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
                 }
             }
             .cardList()
@@ -117,6 +123,8 @@ struct ChallengeAssignmentsView: View {
             if auth.isLoggedIn, phase == .loaded,
                AO3CollectionOwnerControls.areVisible(viewerIsOwner: viewerIsOwner) {
                 bottomActionBar
+                    // The list ends clear of the bar at any text size (see `bottomBarHeight`).
+                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { bottomBarHeight = $0 }
             }
         }
         .task(id: auth.sessionGeneration) { await load() }
@@ -424,10 +432,20 @@ struct ChallengeAssignmentsView: View {
         Button {
             router.open(AO3ChallengeURL.assignments(slug: collectionSlug, list: .pinchHits))
         } label: {
-            Label(title, systemImage: "safari")
-                .font(.system(size: pillLabelSize, weight: .semibold))
+            if dynamicTypeSize.isAccessibilitySize {
+                // On two lines in a capsule the label lost the end of its first ("Oper / on
+                // AO3"): the words alone, in a shape with room for them.
+                Text(title)
+                    .font(.system(size: pillLabelSize, weight: .semibold))
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                Label(title, systemImage: "safari")
+                    .font(.system(size: pillLabelSize, weight: .semibold))
+            }
         }
         .buttonStyle(.bordered)
+        .buttonBorderShape(dynamicTypeSize.isAccessibilitySize ? .roundedRectangle(radius: 14) : .automatic)
         .tint(tint)
     }
 
