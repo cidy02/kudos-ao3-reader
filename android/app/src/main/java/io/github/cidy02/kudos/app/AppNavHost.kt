@@ -405,6 +405,8 @@ fun AppNavHost(
                     onOpenCollection = { collectionId -> navController.navigate(Routes.collectionDetail(collectionId)) },
                     onOpenComments = { workId -> navController.navigate(Routes.comments(workId)) },
                     onOpenAuthor = { username -> navController.navigate(Routes.authorProfile(username)) },
+                    authorNewestWorks = container.authorNewestWorkStore,
+                    onOpenRemoteWork = { work -> navigateToWorkDetail(WorkDetailSource.RemoteSummary(work)) },
                     onFilterLibraryFandom = { name ->
                         LibraryFilterRequest.requestFandom(name)
                         navController.navigateShellRoot(Routes.Library)

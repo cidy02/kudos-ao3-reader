@@ -378,6 +378,8 @@ object DemoLibrary {
             val work = SavedWork(
                 title = sample.title,
                 author = sample.author,
+                // As an import records it, so Favorites › Authors has an account to open and check.
+                authorIdentitiesJSON = """[{"username":"${sample.author}","displayName":"${sample.author}","kind":"registered"}]""",
                 summary = sample.summary,
                 sourceUrl = "",
                 dateAdded = now.minusSeconds(index.toLong() * 86_400L * 3L),

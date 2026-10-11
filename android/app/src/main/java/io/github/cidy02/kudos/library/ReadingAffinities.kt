@@ -21,7 +21,8 @@ enum class FavoriteScope(val id: String, val title: String, val singularNoun: St
 data class FavoritePreferences(
     val scope: FavoriteScope = FavoriteScope.Works,
     val order: ReadingAffinities.Order = ReadingAffinities.Order.Recent,
-    val tagsUnreadOnly: Boolean = false
+    val tagsUnreadOnly: Boolean = false,
+    val authorFilter: FavoriteAuthorQuickFilter = FavoriteAuthorQuickFilter.All
 )
 
 data class WorkReadingSummary(

@@ -146,6 +146,10 @@ class LibraryViewModel(
         viewModelScope.launch { settingsRepository?.updateTagsUnreadOnly(unread) }
     }
 
+    fun updateFavoriteAuthorFilter(filter: FavoriteAuthorQuickFilter) {
+        viewModelScope.launch { settingsRepository?.updateFavoriteAuthorFilter(filter) }
+    }
+
     fun keepInProgress(workId: String) {
         viewModelScope.launch { workRepository.keepInProgress(workId) }
     }
