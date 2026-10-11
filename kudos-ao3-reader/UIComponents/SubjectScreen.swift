@@ -563,13 +563,20 @@ struct FandomClusterChip: View {
     let palette: SubjectPalette
 
     @Environment(ThemeManager.self) private var themeManager
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    /// The chip is a name to tap: at the largest sizes it stayed at 12.5pt beside a
+    /// category title three times its ordinary size. The cluster's layout hands a
+    /// chip wider than its row the row's width, so a long name wraps or truncates.
+    @ScaledMetric(relativeTo: .footnote) private var titleSize: CGFloat = 12.5
+    @ScaledMetric(relativeTo: .caption) private var detailSize: CGFloat = 11
+    @ScaledMetric(relativeTo: .footnote) private var barHeight: CGFloat = 14
 
     var body: some View {
         HStack(spacing: 7) {
             if isFamiliar {
                 Capsule()
                     .fill(palette.accent)
-                    .frame(width: 2.5, height: 14)
+                    .frame(width: 2.5, height: barHeight)
             }
             // Stated as the card's own accent rather than `.primary`/`.secondary`.
             //
@@ -581,12 +588,12 @@ struct FandomClusterChip: View {
             // one drew identically tinted chips. Naming the colour fixes both the
             // inheritance and the mismatch.
             Text(title)
-                .font(.system(size: 12.5, weight: .medium))
+                .font(.system(size: titleSize, weight: .medium))
                 .foregroundStyle(palette.accent)
-                .lineLimit(1)
+                .lineLimit(dynamicTypeSize.isAccessibilitySize ? 2 : 1)
             if !qualifier.isEmpty {
                 Text(qualifier)
-                    .font(.system(size: 11))
+                    .font(.system(size: detailSize))
                     .foregroundStyle(palette.accent.opacity(0.62))
                     .lineLimit(1)
                     .layoutPriority(-1)
@@ -594,7 +601,7 @@ struct FandomClusterChip: View {
             if let workCount {
                 // 1.2K rather than 1,204: the chip is for scanning, not counting.
                 Text((isApproximateCount ? "~" : "") + workCount.formatted(.number.notation(.compactName)))
-                    .font(.system(size: 11))
+                    .font(.system(size: detailSize))
                     .monospacedDigit()
                     .foregroundStyle(palette.accent.opacity(0.62))
             }
