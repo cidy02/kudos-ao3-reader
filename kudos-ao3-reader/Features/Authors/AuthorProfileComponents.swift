@@ -423,6 +423,9 @@ struct AO3BookmarkFootnote: View {
 
     @Environment(ThemeManager.self) private var theme
     @ScaledMetric(relativeTo: .caption) private var dateSize: CGFloat = 11.5
+    /// The note grows with the text, as the tags under it do: at a fixed 14pt it was the one
+    /// line on the card that stayed small at the accessibility sizes.
+    @ScaledMetric(relativeTo: .footnote) private var noteSize: CGFloat = 14
 
     private var palette: SubjectPalette {
         theme.appTheme.subjectPalette(
@@ -452,7 +455,7 @@ struct AO3BookmarkFootnote: View {
                         .frame(width: 2)
                     AO3RichTextView(
                         document: bookmark.notes,
-                        font: .system(size: 14),
+                        font: .system(size: noteSize),
                         lineSpacing: 7
                     )
                     .foregroundStyle(.secondary)
