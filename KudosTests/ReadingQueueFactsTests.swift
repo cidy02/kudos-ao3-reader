@@ -55,6 +55,34 @@ struct ReadingQueueFactsTests {
         #expect(ReadingQueueFacts.upNext(in: []).upNext == nil)
     }
 
+    /// The card's face never names a work the privacy setting keeps back: a hidden
+    /// one is passed over (as on the queue's page), a blurred one is unnamed.
+    @Test func cardFacePassesOverAHiddenWorkAndDoesNotNameABlurredOne() throws {
+        let context = try makeContext()
+        let first = work(in: context, title: "First")
+        first.rating = "Explicit"
+        let second = work(in: context, title: "Second")
+        let gate = PrivacyGate()
+        func face(hideMature: Bool, mode: MaturePrivacyMode) -> (work: SavedWork?, blurred: Bool) {
+            ReadingQueueFacts.cardFace(
+                in: [first, second],
+                isHidden: { gate.isHidden($0, enabled: hideMature, mode: mode) },
+                isBlurred: { gate.isBlurred($0, enabled: hideMature, mode: mode) }
+            )
+        }
+
+        #expect(face(hideMature: false, mode: .obscure).work?.title == "First")
+        #expect(face(hideMature: false, mode: .obscure).blurred == false)
+        #expect(face(hideMature: true, mode: .obscure).work?.title == "First")
+        #expect(face(hideMature: true, mode: .obscure).blurred)
+        #expect(face(hideMature: true, mode: .hide).work?.title == "Second")
+        #expect(face(hideMature: true, mode: .hide).blurred == false)
+
+        gate.reveal(first)
+        #expect(face(hideMature: true, mode: .obscure).blurred == false)
+        #expect(face(hideMature: true, mode: .hide).work?.title == "First")
+    }
+
     @Test func kickerNamesTheOriginTab() {
         #expect(ReadingQueueFacts.kicker(origin: "Home") == "Home › Queues")
         #expect(ReadingQueueFacts.kicker(origin: "Library") == "Library › Queues")
