@@ -184,7 +184,7 @@ class LargeTextScreensTest {
         LazyColumn(Modifier.fillMaxSize()) {
             item {
                 AO3CollectionCard(
-                    collection = collection, onClick = {}, palette = LocalSubjectPalette.current,
+                    collection = collection, onClick = {},
                     modifier = Modifier.padding(horizontal = SubjectMetrics.headerGutter)
                 )
             }
@@ -293,7 +293,8 @@ class LargeTextScreensTest {
         summary = if (large) "A collection summary with enough words to span several lines at the largest text size. " +
             "Every sentence should remain visible, including this final sentence at the end." else "A few stories.",
         byline = if (large) "Several maintainers with long display names collaborating on these stories" else "Ada",
-        maintainerNames = if (large) listOf(maintainer) else emptyList(),
+        // Two names: with one, the kicker already says it and the "by" line is not drawn (iOS).
+        maintainerNames = if (large) listOf(maintainer, "A second maintainer") else emptyList(),
         viewerIsOwner = !large, isUnrevealed = true, isAnonymous = true, isModerated = true,
         isClosed = true, worksCount = 12345, bookmarksCount = 6789,
         challengeKind = AO3ChallengeKind.GiftExchange,

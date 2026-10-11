@@ -1,5 +1,10 @@
 package io.github.cidy02.kudos.account
 
+import androidx.compose.foundation.border
+import androidx.compose.ui.draw.clip
+import androidx.compose.material.icons.outlined.Inventory2
+import io.github.cidy02.kudos.home.HomeFacts
+import io.github.cidy02.kudos.network.ao3.author.AO3AuthorRoute
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
@@ -297,7 +302,8 @@ internal fun AO3CollectionRow(collection: AO3Collection, onClick: () -> Unit, on
     var menuOpen by remember(collection.name) { mutableStateOf(false) }
     val tokens = LocalKudosTokens.current
     Box(modifier) {
-        AO3CollectionCard(collection, onClick, palette, onLongClick = { menuOpen = true })
+        AO3CollectionCard(collection, onClick, onLongClick = { menuOpen = true },
+            onOpenMaintainer = { onAction(Routes.authorProfile(AO3AuthorRoute.fromByline(it).username)) })
         DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }, containerColor = tokens.cardFill) {
             ao3CollectionRowActions(collection).forEachIndexed { index, action ->
                 DropdownMenuItem(text = { Text(action.label, color = tokens.primaryInk, fontSize = 14.5.sp, lineHeight = 20.sp) },
@@ -314,12 +320,15 @@ internal fun AO3CollectionRow(collection: AO3Collection, onClick: () -> Unit, on
 fun AO3CollectionCard(
     collection: AO3Collection,
     onClick: () -> Unit,
-    palette: SubjectPalette,
     modifier: Modifier = Modifier,
-    onLongClick: (() -> Unit)? = null
+    onLongClick: (() -> Unit)? = null,
+    onOpenMaintainer: ((String) -> Unit)? = null
 ) {
     val tokens = LocalKudosTokens.current
     val accessibility = isAccessibilityFontScale()
+    // iOS: the hue is the collection's own, from its title, the way a queue carries a colour.
+    val palette = SubjectPalette.fromHue(HomeFacts.workHue(emptyList(), collection.title), tokens.theme)
+    val shape = RoundedCornerShape(SubjectMetrics.rowRadius)
     val eyebrow = if (collection.viewerIsOwner) {
         "You own"
     } else if (collection.maintainerNames.firstOrNull { it.isNotBlank() } != null) {
@@ -337,12 +346,17 @@ fun AO3CollectionCard(
 
     val statusLabels = AO3CollectionCardCopy.statusLabels(collection.isUnrevealed, collection.isAnonymous)
 
-    val showsByline = collection.byline.isNotBlank() || collection.maintainerNames.isNotEmpty()
+    val showsByline = AO3CollectionCardCopy.showsByline(
+        collection.viewerIsOwner, collection.maintainerNames, collection.byline
+    )
 
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .subjectPanel()
+            .clip(shape)
+            .background(tokens.theme.cardSurface)
+            .background(palette.rowWash)
+            .border(0.5.dp, palette.rowBorder, shape)
             .combinedClickable(onClick = onClick, onLongClick = onLongClick, onLongClickLabel = "Collection actions")
             .padding(horizontal = 14.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
@@ -358,7 +372,7 @@ fun AO3CollectionCard(
                 contentAlignment = androidx.compose.ui.Alignment.Center
             ) {
                 Icon(
-                    imageVector = androidx.compose.material.icons.Icons.Default.Folder,
+                    imageVector = androidx.compose.material.icons.Icons.Outlined.Inventory2,
                     contentDescription = null,
                     tint = palette.accent,
                     modifier = Modifier.size(16.dp)
@@ -403,11 +417,28 @@ fun AO3CollectionCard(
                 imageVector = androidx.compose.material.icons.Icons.Default.KeyboardArrowRight,
                 contentDescription = null,
                 tint = palette.accent,
-                modifier = Modifier.size(12.dp).padding(top = 4.dp)
+                // Padding first: inside the size it squeezed the chevron. 18dp is a form row's
+                // disclosure; at 12 the arrow itself was half the size of the iPhone's.
+                modifier = Modifier.padding(top = 2.dp).size(18.dp)
             )
         }
 
-        if (showsByline) {
+        val names = collection.maintainerNames.filter { it.isNotBlank() }
+        if (showsByline && onOpenMaintainer != null && names.isNotEmpty()) {
+            // iOS `AO3AuthorBylineView`: each maintainer's name opens their profile.
+            @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+            androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text("by", fontSize = 12.5.sp, color = tokens.secondaryInk)
+                names.forEachIndexed { index, name ->
+                    Text(
+                        text = if (index < names.lastIndex) "$name," else name,
+                        fontSize = 12.5.sp,
+                        color = palette.accent,
+                        modifier = Modifier.clickable(onClickLabel = "open $name's profile") { onOpenMaintainer(name) }
+                    )
+                }
+            }
+        } else if (showsByline) {
             Text(
                 text = "by ${collection.byline.ifEmpty { collection.maintainerNames.joinToString(", ") }}",
                 fontSize = 12.5.sp,
