@@ -2391,6 +2391,10 @@ private fun SelectableWorkRow(
     modifier: Modifier = Modifier
 ) {
     val work = display.item.work
+    // Still obscured, so still unnamed: it can be selected, as on iOS (audit A19-8), but
+    // Select mode used to list it by title and author.
+    val obscured = display.privacyVisibility == LibraryPrivacyVisibility.Obscured
+    val title = LibraryPrivacy.shownTitle(display)
     Surface(
         onClick = onToggle,
         tonalElevation = if (selected) 2.dp else 0.dp,
@@ -2404,9 +2408,9 @@ private fun SelectableWorkRow(
             .fillMaxWidth()
             .semantics {
                 contentDescription = if (selected) {
-                    "Selected ${work.title}"
+                    "Selected $title"
                 } else {
-                    "Not selected ${work.title}"
+                    "Not selected $title"
                 }
             }
     ) {
@@ -2420,12 +2424,12 @@ private fun SelectableWorkRow(
             Checkbox(checked = selected, onCheckedChange = { onToggle() })
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    work.title,
+                    title,
                     style = MaterialTheme.typography.titleSmall,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
-                Text(
+                if (!obscured) Text(
                     work.author.ifBlank { "Anonymous" },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,

@@ -66,6 +66,24 @@ The same listing for Android (composable files that name a `SavedWork` title wit
 the gate" because of the card fixed in T-393, and hid `ReadingQueueStorageView` in the same
 file. A pass per view (struct or composable function) would be surer.
 
+## Round four, 2026-10-11: the pass view by view (both)
+
+A script splits each file into its views (Swift top-level types; Kotlin composable
+functions) and lists those that use a saved work's title with no privacy word in the view
+itself. iPhone 16, Android 11. Two more faults, both seen on screen before fixing:
+
+| Where | Platform | Result |
+|---|---|---|
+| A collection's row in the Library's **Ledger** layout drew a blurred work's miniature cover, title and author | iOS | fixed, T-396 (the tile's rule) |
+| **The Library's Select mode listed an obscured work by title and author** | Android | fixed: the row says "Hidden mature work" and can still be selected (`LibraryPrivacy.shownTitle`) |
+
+The rest of both lists: components whose caller checks (the cover cards, the resume hero's
+body, the miniature and mosaic covers), an open work (the reader, Work Details), the
+remote-work rows, and what owner question 23 holds (the Reorder screen, Queue Storage,
+Recently Deleted). Android's `LocalWorkRow` is the unreachable screen noted above.
+**Not done:** the same pass for views that show an author, a fandom or a summary without a
+title; the iPhone's 13 Hide-only call sites looked at one by one in Blur mode.
+
 ## Leads, not confirmed (read only)
 
 Android:

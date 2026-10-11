@@ -59,6 +59,13 @@ class AddLibraryWorksTest {
         assertEquals(listOf("tame"), LibraryPrivacy.nameableWorks(items).map { it.id })
     }
 
+    @Test fun aRowOfItsOwnCallsAnObscuredWorkHiddenAndNothingElse() {
+        // The Library's Select mode listed an obscured work by title and author.
+        assertEquals("Title tame", LibraryPrivacy.shownTitle(LibraryDisplayItem(LibraryWorkListItem(tame))))
+        assertEquals("Hidden mature work", LibraryPrivacy.shownTitle(
+            LibraryDisplayItem(LibraryWorkListItem(explicit), LibraryPrivacyVisibility.Obscured)))
+    }
+
     @Test fun theButtonCountsWhatItWillAdd() {
         assertEquals("Add", AddLibraryWorks.confirmationTitle(0))
         assertEquals("Add 3", AddLibraryWorks.confirmationTitle(3))
