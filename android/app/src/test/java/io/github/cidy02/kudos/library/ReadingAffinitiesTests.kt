@@ -38,6 +38,25 @@ class ReadingAffinitiesTests {
         assertNull(rows.getValue("orphan_account").username)
     }
 
+    @Test fun anAO3WorkSavedBeforeAccountsWereKeptReadsItsOneAuthorFromTheByline() {
+        var id = 100
+        fun ao3(author: String) = work(author, author = author, started = true)
+            .copy(sourceUrl = "https://archiveofourown.org/works/${id++}")
+        val rows = ReadingAffinities.authors(listOf(
+            ao3("kestrelmoon"), ao3("Second Pseud (SecondAccount)"), ao3("alpha, Bee (beta)"),
+            ao3("Anonymous"), ao3("orphan_account"), work("File", author = "elsewhere", started = true),
+            ao3("two").copy(authorIdentitiesJSON =
+                """[{"kind":"registered","username":"a"},{"kind":"registered","username":"b"}]""")
+        ), emptyMap()).associateBy { it.name }
+        assertEquals("kestrelmoon", rows.getValue("kestrelmoon").username)
+        assertEquals("SecondAccount", rows.getValue("Second Pseud (SecondAccount)").username)
+        assertNull("which of several authors is not said", rows.getValue("alpha, Bee (beta)").username)
+        assertNull(rows.getValue("Anonymous").username)
+        assertNull(rows.getValue("orphan_account").username)
+        assertNull("a file from elsewhere names no AO3 account", rows.getValue("elsewhere").username)
+        assertNull("recorded accounts stand; nothing is read over them", rows.getValue("two").username)
+    }
+
     @Test fun aWorkWithTwoTagsIsCountedByBothRatherThanSplit() {
         val both = work("Both", freeforms = listOf("Slow Burn", "Fix-It"), started = true)
         val rows = ReadingAffinities.tags(listOf(both), mapOf(both.id to summary(120.0)))
