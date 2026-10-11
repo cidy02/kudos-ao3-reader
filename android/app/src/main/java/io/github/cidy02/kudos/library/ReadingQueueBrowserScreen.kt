@@ -34,7 +34,9 @@ fun ReadingQueueBrowserScreen(
         QueueOrganizerScreen(
             repository = repository,
             epubBytes = epubBytes,
-            onOpenQueue = { selectedQueueId = it }
+            onOpenQueue = { selectedQueueId = it },
+            settingsRepository = settingsRepository,
+            privacyGate = privacyGate
         )
     } else {
         QueuePageScreen(

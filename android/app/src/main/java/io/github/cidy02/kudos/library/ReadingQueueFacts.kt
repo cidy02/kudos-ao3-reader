@@ -173,18 +173,24 @@ object ReadingQueueFacts {
         return "$text ${units[unit]}"
     }
 
+    /**
+     * [mayAnswer]: a work Hide Mature hides does not answer a search, here as in Search
+     * (typing its title used to find the queue it is in). Required, so no caller forgets it.
+     */
     fun matchesSearch(
         queue: ReadingQueue,
         tags: List<String>,
         works: List<SavedWork>,
-        term: String
+        term: String,
+        mayAnswer: (SavedWork) -> Boolean
     ): Boolean {
         val query = term.trim()
         if (query.isEmpty()) return true
         if (queue.displayName.contains(query, ignoreCase = true)) return true
         if (tags.any { it.contains(query, ignoreCase = true) }) return true
         return works.any { work ->
-            work.title.contains(query, ignoreCase = true) || work.author.contains(query, ignoreCase = true)
+            mayAnswer(work) &&
+                (work.title.contains(query, ignoreCase = true) || work.author.contains(query, ignoreCase = true))
         }
     }
 

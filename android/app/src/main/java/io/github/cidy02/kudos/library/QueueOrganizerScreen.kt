@@ -39,6 +39,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -69,6 +70,9 @@ import io.github.cidy02.kudos.ui.subject.SubjectStatStrip
 import io.github.cidy02.kudos.ui.subject.ToolbarCircleButton
 import io.github.cidy02.kudos.ui.subject.subjectScreenWash
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -86,9 +90,19 @@ fun QueueOrganizerScreen(
     repository: ReadingQueueRepository,
     epubBytes: (String) -> Long,
     onOpenQueue: (String) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    settingsRepository: io.github.cidy02.kudos.data.preferences.SettingsRepository? = null,
+    privacyGate: io.github.cidy02.kudos.app.PrivacyGate? = null
 ) {
     val tokens = LocalKudosTokens.current
+    // Without a settings store (a test host) the setting's own default stands: mature works kept back.
+    val privacy by remember(settingsRepository) {
+        settingsRepository?.settings?.map { it.privacy }
+            ?: flowOf(io.github.cidy02.kudos.core.model.PrivacySettings())
+    }.collectAsState(initial = io.github.cidy02.kudos.core.model.PrivacySettings())
+    val reveal by remember(privacyGate) {
+        privacyGate?.state ?: MutableStateFlow(io.github.cidy02.kudos.app.PrivacyRevealState())
+    }.collectAsState()
     val scope = rememberCoroutineScope()
     var rows by remember { mutableStateOf<List<QueueRowModel>>(emptyList()) }
     var loaded by remember { mutableStateOf(false) }
@@ -111,7 +125,9 @@ fun QueueOrganizerScreen(
 
     val narrowed = search.isNotBlank() || tagFilter.isNotEmpty()
     val visible = rows.filter { row ->
-        ReadingQueueFacts.matchesSearch(row.queue, row.tags, row.works, search) &&
+        ReadingQueueFacts.matchesSearch(row.queue, row.tags, row.works, search) {
+            LibraryPrivacy.visibility(it, privacy, reveal) != LibraryPrivacyVisibility.Hidden
+        } &&
             ReadingQueueFacts.matchesTagFilter(row.tags, tagFilter)
     }
     val ordered = orderRows(visible)
