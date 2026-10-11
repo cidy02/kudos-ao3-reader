@@ -75,6 +75,7 @@ internal fun AO3AuthorHero(
     onSubscription: (io.github.cidy02.kudos.network.ao3.author.AO3AuthorSubscriptionForm) -> Unit,
     onModeration: (AO3AuthorWebAction) -> Unit,
     subscriptionBusy: Boolean = false,
+    moderationBusy: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val tokens = LocalKudosTokens.current
@@ -139,10 +140,10 @@ internal fun AO3AuthorHero(
                         }
                     }
                     mute?.let { action ->
-                        AuthorModerationButton(action, Icons.Outlined.VolumeOff) { onModeration(action) }
+                        AuthorModerationButton(action, Icons.Outlined.VolumeOff, !moderationBusy) { onModeration(action) }
                     }
                     block?.let { action ->
-                        AuthorModerationButton(action, Icons.Outlined.Block) { onModeration(action) }
+                        AuthorModerationButton(action, Icons.Outlined.Block, !moderationBusy) { onModeration(action) }
                     }
                 }
             }
@@ -154,10 +155,12 @@ internal fun AO3AuthorHero(
 private fun AuthorModerationButton(
     action: AO3AuthorWebAction,
     icon: androidx.compose.ui.graphics.vector.ImageVector,
+    enabled: Boolean = true,
     onClick: () -> Unit
 ) {
     OutlinedButton(
         onClick = onClick,
+        enabled = enabled,
         contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp),
         modifier = Modifier.size(40.dp).semantics { contentDescription = action.label }
     ) {

@@ -212,6 +212,9 @@ internal object DemoNetworkRoutes {
         "^/users/[^/]+/(pseuds/[^/]+/)?bookmarks" to "ao3_author_bookmarks",
         "^/users/[^/]+/readings" to "ao3_readings",
         "^/users/[^/]+/subscriptions" to "ao3_subscriptions",
+        // AO3's confirm pages for a block and a mute, from an author's page.
+        "^/users/[^/]+/blocked/confirm" to "ao3_author_confirm_block",
+        "^/users/[^/]+/muted/confirm" to "ao3_author_confirm_mute",
         "^/users/[^/]+/inbox" to "ao3_inbox_manage",
         "^/users/[^/]+/preferences" to "ao3_preferences",
         "^/users/[^/]+/stats" to "ao3_user_stats",
@@ -525,6 +528,26 @@ internal class DemoNetworkInterceptor(
             return Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1)
                 .code(answer.first).message(if (answer.first == 200) "OK" else "Local refusal")
                 .header("Content-Type", HTML).body(answer.second.toResponseBody(HTML_TYPE)).build()
+        }
+        // A block or a mute confirmed from an author's page. Local only; nothing is remembered.
+        if (chain.request().method == "POST" && Regex("^/users/[^/]+/(blocked|muted)/users(?:/\\d+)?/?$").matches(path)) {
+            val buffer = Buffer()
+            chain.request().body?.writeTo(buffer)
+            val fields = buffer.readUtf8().split('&').associate { field ->
+                val parts = field.split('=', limit = 2)
+                URLDecoder.decode(parts[0], "UTF-8") to URLDecoder.decode(parts.getOrElse(1) { "" }, "UTF-8")
+            }
+            val blocks = "/blocked/" in path
+            val who = fields[if (blocks) "blocked_id" else "muted_id"].orEmpty()
+            val accepted = fields["authenticity_token"] == "moderation-csrf-token" &&
+                (who.isNotEmpty() || fields["_method"] == "delete")
+            return Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1)
+                .code(if (accepted) 200 else 422).message(if (accepted) "OK" else "Unprocessable Entity")
+                .header("Content-Type", HTML)
+                .body((if (!accepted) "<div class='flash error'>Sorry, that didn't work.</div>"
+                    else "<div class='flash notice'>You have ${if (blocks) "blocked" else "muted"} the user $who.</div>")
+                    .toResponseBody(HTML_TYPE))
+                .build()
         }
         // An author's page: Subscribe, and the Unsubscribe its page offers afterwards. Local only.
         if (chain.request().method == "POST" && Regex("^/users/[^/]+/subscriptions(?:/$DEMO_AUTHOR_SUBSCRIPTION)?/?$").matches(path)) {

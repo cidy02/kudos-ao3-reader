@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="csrf-token" content="moderation-csrf-token">
+  <title>Mute Avery_Archive</title>
+</head>
+<body class="logged-in">
+  <div id="main" role="main">
+    <h2 class="heading">Mute Avery_Archive</h2>
+    <form action="/users/me/muted/users?muted_id=Avery_Archive" method="post">
+      <input type="hidden" name="authenticity_token" value="moderation-csrf-token" autocomplete="off">
+      <input type="hidden" name="muted_id" value="Avery_Archive">
+      <div class="caution notice">
+        <p>
+          Are you sure you want to <strong>mute</strong> Avery_Archive?
+          Muting a user:
+        </p>
+        <ul>
+          <li>completely hides their works, series, bookmarks, and comments from you; there will be no empty space, placeholder text, or other indication something has been removed</li>
+        </ul>
+        <p>Muting a user will not:</p>
+        <ul>
+          <li>prevent you from receiving comment or subscription emails from this user</li>
+          <li>hide their works, series, bookmarks, and comments from anyone else</li>
+        </ul>
+        <p>
+          To prevent a user from commenting on your works or replying to your comments elsewhere on the site, visit
+          <a href="/users/me/blocked/users">your Blocked Users page</a>.
+        </p>
+      </div>
+      <p class="actions">
+        <a href="/users/me/muted/users">Cancel</a>
+        <input type="submit" name="commit" value="Yes, Mute User">
+      </p>
+    </form>
+  </div>
+</body>
+</html>

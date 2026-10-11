@@ -31,9 +31,37 @@ token kept).
 Subscribe → "AO3 Profile / Subscribed." → the button reads Unsubscribe → the confirmation →
 Cancel leaves it → Unsubscribe → "Unsubscribed." → the button reads Subscribe again.
 
+## Second step, landed 2026-10-11: Mute and Block
+
+- `AO3WriteFormParser.parseAuthorModerationForm` (iOS `parseAuthorModerationForm`): the form
+  on AO3's confirm page, its heading, its notice with the lists kept as lists, and the words
+  on its two buttons; an undo (Unblock, Unmute) is known by `_method=delete` or the label.
+- `AO3WriteRepository.loadAuthorModerationForm`: one authenticated read of the confirm page
+  on the tap; AO3's refusal on that page is reported and nothing is sent.
+  `submitAuthorModeration`: that page's own form, once, with the token the page carried (no
+  second read; `postOnce`, the POST half of `indexWrite`). Success says "Blocked.",
+  "Unblocked.", "Muted." or "Unmuted."; the failure "AO3 didn't accept the block action."
+- `author/AuthorProfileScreen.kt`: the two buttons open a dialog in AO3's words (the Yes
+  button in the error colour unless it undoes), are off while a step is out, and after a
+  success the account's kept dashboards are dropped and the header read again.
+- The demo serves both confirm pages (a mute fixture was added) and accepts the post.
+
+Tests: `AuthorModerationTest` (7): the page as AO3 wrote it; an undo; a page without the form;
+one read on the tap and nothing sent; AO3's refusal reported; another session, a signed-out
+reader, another site and another kind of link ask nothing; the confirm sends the page's own
+form once without reading again; an unconfirmed reply is a failure. One mutation caught (the
+refusal). The other (no session check in the submit) is not, because the client refuses a
+post from another session by itself: the check is there twice. Gate 2,588.
+
+Seen on the emulator (demo): Mute opens AO3's notice with "Cancel" and "Yes, Mute User";
+Cancel leaves the page; Block, then "Yes, Block User", then "AO3 Profile / Blocked."
+
 ## Not done, and not checked
 
-- **Mute and Block** still open AO3's confirm page in the web view (the brief's second step).
+- The demo is not stateful for a mute or a block: the buttons read the same afterwards, and
+  the undo pages (Unblock, Unmute) were parsed in tests, not seen on screen.
+- A real AO3 confirm page was not read (no request is made to AO3, by rule): the parser
+  follows iOS's, on the fixtures iOS's own tests use.
 - **Signed out**, AO3 serves no subscription form, so Android shows no button; iOS shows one
   and asks the reader to log in. Left as it is.
 - No screen-level test: the confirmation and the reload are by the emulator only.
