@@ -19,6 +19,7 @@ struct CollectionModerationView: View {
 
     @Environment(AO3AuthService.self) private var auth
     @Environment(ThemeManager.self) private var theme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     @ScaledMetric(relativeTo: .headline) private var reviewTitleSize: CGFloat = 16
     @ScaledMetric(relativeTo: .body) private var rowTitleSize: CGFloat = 14.5
@@ -470,7 +471,12 @@ struct CollectionModerationView: View {
     /// the separate `/people` listing) — so the secondary line states the
     /// request itself rather than inventing either figure.
     private func membershipRequestRow(_ participant: AO3CollectionParticipant) -> some View {
-        HStack(alignment: .center, spacing: 10) {
+        // Beside the two buttons, which do not shrink, the name had a column one letter wide
+        // at the accessibility sizes ("p / a / r / …"): there the buttons go under it.
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8))
+            : AnyLayout(HStackLayout(alignment: .center, spacing: 10))
+        return layout {
             VStack(alignment: .leading, spacing: 4) {
                 Text(participant.pseud)
                     .font(.system(size: rowTitleSize, weight: .semibold))
