@@ -23,6 +23,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Reply
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.MarkEmailRead
@@ -51,6 +52,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -105,6 +107,10 @@ fun AccountInboxPane(
     onOpenWorkComments: (workId: Long, focusedId: Long?) -> Unit,
     /** iOS's "Chapter Comments": the comments of the chapter an inbox comment was left on. */
     onOpenChapterComments: (workId: Long, commentId: Long, chapterPosition: Int) -> Unit = { _, _, _ -> },
+    /** iOS's Reply: the comment's thread with the reply composer open for it. */
+    onReply: (workId: Long, commentId: Long) -> Unit = { _, _ -> },
+    /** A comment whose work the Inbox did not name has no thread here: its page on AO3. */
+    onOpenWeb: (String) -> Unit = {},
     settingsRepository: SettingsRepository? = null,
     modifier: Modifier = Modifier,
     viewModel: AccountInboxViewModel = viewModel(
@@ -327,6 +333,10 @@ fun AccountInboxPane(
                             ),
                             onOpen = {
                                 item.workId?.let { onOpenWorkComments(it, item.id) }
+                                    ?: onOpenWeb(commentThreadUrl(item.id))
+                            },
+                            onReply = {
+                                item.workId?.let { onReply(it, item.id) } ?: onOpenWeb(commentThreadUrl(item.id))
                             },
                             onOpenChapter = item.workId?.let { workId ->
                                 item.chapterPosition?.let { position -> { onOpenChapterComments(workId, item.id, position) } }
@@ -676,6 +686,7 @@ internal fun InboxItemCard(
     canDelete: Boolean,
     onOpen: () -> Unit,
     onOpenChapter: (() -> Unit)? = null,
+    onReply: () -> Unit = {},
     onToggleSelection: () -> Unit,
     onMarkRead: () -> Unit,
     onMarkUnread: () -> Unit,
@@ -773,8 +784,23 @@ internal fun InboxItemCard(
                     if (!isSelecting) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.End
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
+                            // iOS's Reply on the card, as a comment's own row draws it.
+                            if (item.canReply) Row(
+                                modifier = Modifier.height(44.dp)
+                                    .clickable(enabled = !isPerformingAction, role = Role.Button,
+                                        onClickLabel = "Reply to ${item.commenterName}", onClick = onReply)
+                                    .padding(end = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Icon(Icons.AutoMirrored.Filled.Reply, contentDescription = null,
+                                    tint = tokens.scopePalette.accent, modifier = Modifier.size(14.dp))
+                                Text("Reply", fontSize = 12.sp, fontWeight = FontWeight.Medium,
+                                    color = tokens.scopePalette.accent)
+                            }
+                            Spacer(Modifier.weight(1f))
                             InboxItemOverflowMenu(
                                 item = item,
                                 enabled = !isPerformingAction,
@@ -987,6 +1013,7 @@ private fun InboxItemOverflowMenu(
     onDelete: () -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
+    val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
     Box {
         IconButton(onClick = { expanded = true }, enabled = enabled) {
             Icon(
@@ -995,15 +1022,22 @@ private fun InboxItemOverflowMenu(
             )
         }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            if (item.workId != null) {
-                DropdownMenuItem(
-                    text = { Text("Open Thread") },
-                    onClick = {
-                        expanded = false
-                        onOpen()
-                    }
-                )
-            }
+            // iOS: "Open Thread", or "Open Comment" (on AO3) when the Inbox did not name the work.
+            DropdownMenuItem(
+                text = { Text(if (item.workId != null) "Open Thread" else "Open Comment") },
+                onClick = {
+                    expanded = false
+                    onOpen()
+                }
+            )
+            DropdownMenuItem(
+                text = { Text("Copy Link") },
+                onClick = {
+                    expanded = false
+                    // Android 13 and later say what was copied; nothing more is shown here.
+                    clipboard.setText(androidx.compose.ui.text.AnnotatedString(commentThreadUrl(item.id)))
+                }
+            )
             if (onOpenChapter != null) {
                 DropdownMenuItem(
                     text = { Text("Chapter Comments") },
@@ -1109,3 +1143,6 @@ private fun activeFilterCount(state: AccountInboxUiState): Int =
         val selected = state.filterValues[field.name] ?: field.selectedValue
         selected != field.options.firstOrNull()?.value
     }
+
+/** A comment's own page on AO3, which is its thread (iOS `AO3Client.commentThreadURL`). */
+internal fun commentThreadUrl(commentId: Long): String = "https://archiveofourown.org/comments/$commentId"

@@ -541,6 +541,10 @@ fun AppNavHost(
                 onOpenChapterComments = { workId, commentId, position ->
                     navController.navigate(Routes.comments(workId, focusedCommentId = commentId, chapterPosition = position))
                 },
+                onReply = { workId, commentId ->
+                    navController.navigate(Routes.comments(workId, focusedCommentId = commentId, composes = true))
+                },
+                onOpenWeb = { url -> navController.navigate(Routes.webFallback(url)) },
                 settingsRepository = container.accountListRepository.settingsRepository
             )
         }

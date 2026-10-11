@@ -1474,3 +1474,11 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   last one is Android's own; iOS keeps the totals until the page is reopened). The policy's
   "Author profiles" row now says so. Reverse: the `LaunchedEffect` that calls `loadOwnStats`
   in `author/AuthorProfileScreen.kt`.
+- **2026-10-11 · The Inbox's cards have Reply, Copy Link and Open Comment (audit W3, as iOS).**
+  Reply opens the comment's thread and then the reply composer for that comment: the route
+  that already carried "compose" now means "answer this comment" when a comment is named
+  too (`CommentsViewModel.replyWhenLoaded`). The composer opens only once that comment is on
+  the page; a page without it opens nothing (never a new comment on the work in its place),
+  and a change of reader forgets the request. A comment whose work the Inbox does not name
+  opens on AO3. Copy Link shows no alert: Android says what was copied itself. Reverse: the
+  `onReply` argument in `app/AppNavHost.kt`.
