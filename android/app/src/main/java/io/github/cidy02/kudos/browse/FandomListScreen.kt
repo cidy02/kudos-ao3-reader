@@ -1,5 +1,11 @@
 package io.github.cidy02.kudos.browse
 
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.windowInsetsTopHeight
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.Icon
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -136,25 +142,30 @@ fun FandomListScreen(
     }
     val showIndex = sort == FandomFamilySort.Alphabetical && query.trim().isEmpty() && sections.isNotEmpty()
 
+    // iOS 1al: a back button and the filter button over the wash, and no title: the page's
+    // header block is the title. This page had kept a titled bar ("Fandoms") above it.
+    io.github.cidy02.kudos.app.ProvidePushedShellChrome(
+        hasSubjectHeader = true,
+        trailingContent = {
+            FilterButton(
+                filtersActive = options.hasActiveFilters,
+                onClick = { showFilters = true },
+                badgeCount = options.activeFilterCount,
+                onClearFilters = { options = FandomListFilterOptions() }
+            )
+        }
+    )
+
     KudosRefreshBox(onRefresh = { loadNow() }, modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .subjectScreenWash(palette)
         ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(end = 4.dp),
-                horizontalArrangement = Arrangement.End
-            ) {
-                FilterButton(
-                    filtersActive = options.hasActiveFilters,
-                    onClick = { showFilters = true },
-                    badgeCount = options.activeFilterCount,
-                    onClearFilters = { options = FandomListFilterOptions() }
-                )
-            }
+            androidx.compose.foundation.layout.Spacer(
+                Modifier.windowInsetsTopHeight(androidx.compose.foundation.layout.WindowInsets.statusBars)
+            )
+            androidx.compose.foundation.layout.Spacer(Modifier.height(56.dp))
             when (val current = phase) {
                 FandomListPhase.Loading -> LoadingStateCard("Loading fandoms")
                 is FandomListPhase.Error -> Column {
@@ -183,16 +194,21 @@ fun FandomListScreen(
                             )
                         }
                         item(key = "search") {
-                            OutlinedTextField(
-                                value = query,
-                                onValueChange = { query = it },
-                                label = { Text("Search ${category.name}") },
-                                singleLine = true,
+                            // The app's own field. "Open on AO3" stays where iOS has it: on the
+                            // page shown when the list cannot be read.
+                            io.github.cidy02.kudos.ui.components.GlassFieldBar(
+                                text = query,
+                                onTextChange = { query = it },
+                                placeholder = "Search ${category.name}",
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(horizontal = 16.dp, vertical = 8.dp)
+                                    .padding(horizontal = 16.dp, vertical = 10.dp),
+                                leading = {
+                                    Icon(androidx.compose.material.icons.Icons.Filled.Search, contentDescription = null,
+                                        tint = LocalKudosTokens.current.secondaryInk,
+                                        modifier = Modifier.size(18.dp))
+                                }
                             )
-                            OpenCategoryOnAo3(::webFallback)
                         }
                         if (shown.isEmpty() && isFiltered) {
                             item(key = "empty") {
