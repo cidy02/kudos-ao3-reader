@@ -351,9 +351,12 @@ class ReadingQueueRepositoryTest {
         val inside = savedWork("inside", "Inside")
         val outside = savedWork("outside", "Outside")
         val gone = savedWork("gone", "Gone").copy(isDeleted = true)
+        // Not a Library work: it exists only as another queue's entry (iOS `appendCandidates`).
+        val queuedOnly = savedWork("queuedOnly", "Queued only").copy(isSaved = false, isQueuedForLater = true)
         database.workDao().upsert(inside.toEntity())
         database.workDao().upsert(outside.toEntity())
         database.workDao().upsert(gone.toEntity())
+        database.workDao().upsert(queuedOnly.toEntity())
         repository.addWork(queue.id, inside.id)
         assertEquals(listOf("outside"), repository.worksAvailableToAdd(queue.id).map { it.id })
     }
