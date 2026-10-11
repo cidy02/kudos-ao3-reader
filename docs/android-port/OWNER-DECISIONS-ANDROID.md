@@ -442,9 +442,11 @@ collection's tile, Home's queue card). These three were left, because each is a 
    of 2026-10-08 was that such a match is drawn blurred.)
 3. **Filter lists and Search's "in your library" fandoms include a blurred work's fandoms
    and tags** (both apps). In Hide mode they are left out (on the iPhone since T-394).
-4. **Recently Deleted lists a deleted mature work by title, in Blur mode and in Hide mode**
-   (both apps). Leaving it out in Hide mode would mean it is purged after its 30 days
-   without ever being seen there, unless you tap the eye first.
+4. **Two lists you manage things from name a mature work by title, in Blur mode and in Hide
+   mode** (both apps): **Recently Deleted**, and **Settings › Reading Queues › Queue
+   Storage** (the works your queues keep on the device, with their sizes). Leaving a work
+   out of them in Hide mode would mean it is purged, or keeps taking space, without ever
+   being seen there, unless you tap the eye first.
 
 - **A (what stands).** Blur hides a work's face, not that it exists: the three stay as they
   are. Hide mode is the setting for someone who wants nothing shown at all.
@@ -453,7 +455,8 @@ collection's tile, Home's queue card). These three were left, because each is a 
   and its fandoms and tags are left out of the lists, until it is revealed.
 - **C.** B for the Reorder screen only (a title in plain sight), A for search and lists
   (they give away less, and hiding matches makes a work harder to find).
-  For Recently Deleted under C: named as now in Blur mode; in Hide mode shown as a row
-  that says "Hidden mature work" with its days left, so nothing is purged unseen.
+  For Recently Deleted and Queue Storage under C: named as now in Blur mode; in Hide mode
+  a row that says "Hidden mature work" with its days left or its size, and its buttons, so
+  nothing is purged or kept unseen.
 
 Until answered: A. My recommendation is C.

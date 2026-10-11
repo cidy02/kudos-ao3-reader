@@ -50,6 +50,22 @@ confirmations, the remote-work bar, `StackedWorkCover`, `HomeCards`' plain card,
 drawn through the blur wrapper in `MatureContent.swift`). **Not done the same way for
 Android** (grep `\.title` in files with no `LibraryPrivacy` or `privacyVisibility`).
 
+The same listing for Android (composable files that name a `SavedWork` title with no
+`LibraryPrivacy`, `privacyVisibility`, `obscured`): ten of twenty-one. New from it:
+
+- **Queue Storage** (`settings/QueueStorageScreen.kt`; iOS `ReadingQueueStorageView` in
+  `ReadingQueues.swift`) names every work the queues keep, in both modes, on both apps. Not
+  looked at on screen. Owner question 23, item 4, with Recently Deleted.
+- `account/LocalLibraryListsScreen.kt` (local History and Favorites, by title, no privacy
+  check at all) is **unreachable**: nothing navigates to `Routes.LocalHistory` or
+  `Routes.LocalFavorites`. Dead code that would leak if a link to it came back. P3: delete
+  it, or gate it, when the Account tab is next touched.
+- The rest are fed an open work, a selection, or an already-filtered list.
+
+**A limit of both listings:** they are per file. `ReadingQueues.swift` counted as "mentions
+the gate" because of the card fixed in T-393, and hid `ReadingQueueStorageView` in the same
+file. A pass per view (struct or composable function) would be surer.
+
 ## Leads, not confirmed (read only)
 
 Android:
