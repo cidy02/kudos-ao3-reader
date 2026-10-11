@@ -40,7 +40,6 @@ import io.github.cidy02.kudos.works.WorkSearchIndex
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.flowOf
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -69,16 +68,9 @@ fun FandomListScreen(
     val libraryWorks by remember(workRepository) {
         workRepository?.observeLibraryWorks() ?: flowOf(emptyList())
     }.collectAsState(initial = emptyList())
-    // Browse reads the Library to mark fandoms. Not a work Hide Mature hides (audit A38).
-    val privacy by remember(settingsRepository) {
-        settingsRepository?.settings?.map { it.privacy } ?: flowOf(io.github.cidy02.kudos.core.model.PrivacySettings())
-    }.collectAsState(initial = io.github.cidy02.kudos.library.LibraryPrivacy.UNREAD_SETTING)
-    val reveal by remember(privacyGate) {
-        privacyGate?.state ?: kotlinx.coroutines.flow.MutableStateFlow(io.github.cidy02.kudos.app.PrivacyRevealState())
-    }.collectAsState()
-    val library = remember(libraryWorks, privacy, reveal) {
-        FandomLibraryIndex.from(io.github.cidy02.kudos.library.LibraryPrivacy.withoutHidden(libraryWorks, privacy, reveal))
-    }
+    // Not a work Hide Mature hides (audit A38).
+    val shownWorks = io.github.cidy02.kudos.library.rememberShownWorks(libraryWorks, settingsRepository, privacyGate)
+    val library = remember(shownWorks) { FandomLibraryIndex.from(shownWorks) }
     val source = (phase as? FandomListPhase.Loaded)?.fandoms.orEmpty()
 
     fun webFallback() {

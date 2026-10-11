@@ -97,9 +97,13 @@ work's author on iOS where Android leaves it out; owner question 23, item 3).
 | The same | Android | `BrowseScreen` and `FandomListScreen` read every Library work; fixed with `LibraryPrivacy.withoutHidden`. **Not seen on screen**: the Android demo has no hidden work in a fandom its Browse lists. By the test and by reading |
 | `account/LocalLibraryListsScreen.kt` | Android | removed (`cdb66289`) |
 
-Android's `TagWorksScreen` and `FandomWorksScreen` mark an AO3 result you already have from
-`observeSavedWorks()` with no privacy check: **not looked at** (iOS leaves a hidden work out
-of that matching in its account lists, `AO3AccountWorksList.swift:264`).
+Android's tag, fandom and author works screens marked an AO3 result you already have, and
+suggested tags in their filter, from every saved work: **fixed** (`rememberShownWorks`, one
+helper for these and Browse; iOS leaves a hidden work out of that pairing,
+`AO3AccountWorksList.swift:264`). Search's and the Account lists' tag suggestions too. By the
+gate and by reading: no demo fixture pairs an AO3 result with a hidden local work.
+**Not checked on iOS:** whether its tag, fandom and author works pages pair a result with a
+work Hide mode hides (its account lists do not).
 
 ## Leads, not confirmed (read only)
 

@@ -59,14 +59,19 @@ fun AuthorWorksScreen(
     onOpenWork: (AO3WorkSummary) -> Unit,
     workImporter: WorkImporter? = null,
     readingQueueRepository: ReadingQueueRepository? = null,
-    repository: AO3AuthorWorksRepository = remember { AO3AuthorWorksRepository() }
+    repository: AO3AuthorWorksRepository = remember { AO3AuthorWorksRepository() },
+    settingsRepository: io.github.cidy02.kudos.data.preferences.SettingsRepository? = null,
+    privacyGate: io.github.cidy02.kudos.app.PrivacyGate? = null
 ) {
     var state by remember(authorName) { mutableStateOf<AuthorWorksState>(AuthorWorksState.Loading) }
     // Guards a fast Previous/Next double-tap from letting the first (older) page's
     // response land after the second (newer) one and overwrite it.
     var loadGeneration by remember(authorName) { mutableIntStateOf(0) }
     val scope = rememberCoroutineScope()
-    val savedWorks by workRepository.observeSavedWorks().collectAsState(initial = emptyList())
+    // The badge on a result you already have, and the filter's tag suggestions, are drawn from
+    // the Library: not from a work Hide Mature hides (audit A38; iOS leaves it out of the pairing).
+    val allSavedWorks by workRepository.observeSavedWorks().collectAsState(initial = emptyList())
+    val savedWorks = io.github.cidy02.kudos.library.rememberShownWorks(allSavedWorks, settingsRepository, privacyGate)
     val savedByUrl = remember(savedWorks) { BrowseLocalIndicators.index(savedWorks) }
     val selection = rememberRemoteWorkSelection()
     var bulkBusy by remember { mutableStateOf(false) }

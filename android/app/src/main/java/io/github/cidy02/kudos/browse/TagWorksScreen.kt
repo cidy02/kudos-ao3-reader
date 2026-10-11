@@ -68,7 +68,9 @@ fun TagWorksScreen(
     onOpenWork: (AO3WorkSummary) -> Unit,
     workImporter: WorkImporter? = null,
     readingQueueRepository: ReadingQueueRepository? = null,
-    repository: AO3SearchRepository = remember { AO3SearchRepository() }
+    repository: AO3SearchRepository = remember { AO3SearchRepository() },
+    settingsRepository: io.github.cidy02.kudos.data.preferences.SettingsRepository? = null,
+    privacyGate: io.github.cidy02.kudos.app.PrivacyGate? = null
 ) {
     var state by remember(tagName) { mutableStateOf<TagWorksState>(TagWorksState.Loading) }
     val baseline = remember { io.github.cidy02.kudos.network.ao3.browse.AO3BrowseRepository.browseBaseline() }
@@ -86,7 +88,10 @@ fun TagWorksScreen(
     
     var loadGeneration by remember(tagName) { mutableIntStateOf(0) }
     val scope = rememberCoroutineScope()
-    val savedWorks by workRepository.observeSavedWorks().collectAsState(initial = emptyList())
+    // The badge on a result you already have, and the filter's tag suggestions, are drawn from
+    // the Library: not from a work Hide Mature hides (audit A38; iOS leaves it out of the pairing).
+    val allSavedWorks by workRepository.observeSavedWorks().collectAsState(initial = emptyList())
+    val savedWorks = io.github.cidy02.kudos.library.rememberShownWorks(allSavedWorks, settingsRepository, privacyGate)
     var userTagNames by remember { mutableStateOf<List<String>>(emptyList()) }
     LaunchedEffect(workRepository) {
         userTagNames = workRepository.allUserTags().map { it.normalizedName }
