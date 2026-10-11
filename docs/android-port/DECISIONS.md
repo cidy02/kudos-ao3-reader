@@ -1557,3 +1557,9 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   selected (iOS does the same: "still blurred, so still unnamed", its audit A19-8).
   `LibraryPrivacy.shownTitle` holds the rule. Reverse: `work.title` and the author line back
   in `SelectableWorkRow`.
+- **2026-10-11 · The two unreachable local lists are removed (A38).**
+  `account/LocalLibraryListsScreen.kt` and its routes `local-history` and `local-favorites`
+  were left in place on 2026-10-04 when the Account menu stopped linking to them. They list
+  works by title with no privacy check at all, and the Library's own History and Favorites
+  lists have replaced them. Removed rather than gated: nothing opens them. Reverse: revert
+  the commit that names this.

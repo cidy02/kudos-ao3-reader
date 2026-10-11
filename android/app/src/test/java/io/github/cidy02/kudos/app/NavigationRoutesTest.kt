@@ -107,8 +107,6 @@ class NavigationRoutesTest {
         assertFalse(Routes.hidesTabBar(Routes.ReadingQueues))
         assertFalse(Routes.hidesTabBar(Routes.readingQueues("test-queue")))
         assertFalse(Routes.hidesTabBar(Routes.LibrarySection))
-        assertFalse(Routes.hidesTabBar(Routes.LocalHistory))
-        assertFalse(Routes.hidesTabBar(Routes.LocalFavorites))
         assertFalse(Routes.hidesTabBar(Routes.HomeSection))
         assertFalse(Routes.hidesTabBar(Routes.RecentlyDeleted))
         assertFalse(Routes.hidesTabBar(Routes.CollectionDetail))
