@@ -449,6 +449,9 @@ final class DemoNetworkBlock: URLProtocol {
         // Collections and challenges (task 5). Most specific first.
         ("^/series/\\d+/edit", "ao3_series_edit"),
         ("^/collections/[^/]+/signups/\\d+", "ao3_challenge_signup"),
+        // "Your Sign-up" with none yet asks for the blank form; it got the list, and said
+        // "Couldn't load sign-up".
+        ("^/collections/[^/]+/signups/new", "ao3_challenge_signup"),
         ("^/collections/[^/]+/signups", "ao3_challenge_signups"),
         ("^/collections/[^/]+/assignments", "ao3_challenge_assignments"),
         ("^/collections/[^/]+/(gift_exchange|prompt_meme)", "ao3_challenge_settings"),
