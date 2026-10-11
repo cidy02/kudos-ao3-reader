@@ -68,7 +68,8 @@ class AO3SearchParser {
                 ?.takeIf { it.isNotBlank() }
             ?: "Untitled"
 
-        val authors = element.select("h4.heading a[rel=author]").normalizedTexts()
+        val authorLinks = element.select("h4.heading a[rel=author]")
+        val authors = authorLinks.normalizedTexts()
         val fandoms = element.select("h5.fandoms a.tag").normalizedTexts()
         val rating = element.selectFirst("ul.required-tags .rating .text")?.normalizedText().orEmpty()
         // `.category` is a *summary icon*, not a list: one `<span class="text">`
@@ -112,6 +113,7 @@ class AO3SearchParser {
             id = id,
             title = title,
             authors = authors,
+            authorIdentitiesJSON = io.github.cidy02.kudos.network.ao3.author.AO3AuthorIdentities.json(authorLinks),
             fandoms = fandoms,
             rating = rating,
             warnings = warnings,

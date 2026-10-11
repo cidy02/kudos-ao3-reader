@@ -27,7 +27,9 @@ data class AO3WorkSummary(
     val isComplete: Boolean? = null,
     val isRestricted: Boolean = false,
     val updatedDate: String = "",
-    val publishedDate: String? = null
+    val publishedDate: String? = null,
+    /** The byline's accounts (`AO3AuthorIdentities.json`); empty when the blurb named none. */
+    val authorIdentitiesJSON: String = ""
 ) {
     val workUrl: String
         get() = "${AO3Constants.BASE_URL}/works/$id"
