@@ -57,6 +57,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
@@ -344,7 +345,9 @@ fun CommentConversationRow(
                 TextButton(
                     onClick = onExpand,
                     contentPadding = PaddingValues(0.dp),
+                    // iOS's hint: "Expands nested replies for this comment".
                     modifier = Modifier.height(44.dp)
+                        .semantics { onClick(label = "expand nested replies", action = null) }
                 ) {
                     Text(
                         text = text,
@@ -359,7 +362,8 @@ fun CommentConversationRow(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(44.dp)
-                        .clickable(onClick = onContinueThread),
+                        // Here the rest of the thread opens in the app (iOS sends it to the website).
+                        .clickable(onClickLabel = "open the rest of this thread", onClick = onContinueThread),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {

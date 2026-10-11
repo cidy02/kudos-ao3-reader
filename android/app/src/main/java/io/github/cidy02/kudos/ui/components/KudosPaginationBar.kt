@@ -2,6 +2,7 @@ package io.github.cidy02.kudos.ui.components
 
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -87,7 +88,12 @@ fun KudosPaginationBar(
         }
     }
     val position: @Composable () -> Unit = {
-        TextButton(onClick = { showScrubber = true }, enabled = enabled && totalPages > 1) {
+        // iOS's hint, "Opens the page picker.", as TalkBack says it: "double-tap to open the page picker".
+        TextButton(
+            onClick = { showScrubber = true },
+            enabled = enabled && totalPages > 1,
+            modifier = Modifier.semantics { onClick(label = "open the page picker", action = null) }
+        ) {
             Text(
                 text = "Page $currentPage of $totalPages",
                 lineHeight = 20.sp,
