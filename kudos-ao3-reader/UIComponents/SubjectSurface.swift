@@ -436,11 +436,17 @@ struct SubjectKicker: View {
     var ruleWidth: CGFloat = SubjectMetrics.kickerRuleWidth
     /// Space between the label and its rule (spec `6px` on cards).
     var ruleSpacing: CGFloat = 6
+    /// One line on a card, whose height is fixed. A page header has the room, and gives the
+    /// accessibility sizes more (see `SubjectHeaderBlock`).
+    var lineLimit = 1
 
     @ScaledMetric(relativeTo: .caption2) private var scale: CGFloat = 1
 
     var body: some View {
-        VStack(alignment: .leading, spacing: ruleSpacing) {
+        // Where it may wrap, a name of one word shrinks instead: it has nowhere to break but
+        // the middle ("WINTER_EXCHANG / E").
+        let shrinks = lineLimit > 1 && !text.contains(where: \.isWhitespace)
+        return VStack(alignment: .leading, spacing: ruleSpacing) {
             HStack(spacing: 4) {
                 Text(text.uppercased())
                     .foregroundStyle(palette.accent)
@@ -451,7 +457,8 @@ struct SubjectKicker: View {
             }
             .font(.system(size: size * scale, weight: .bold))
             .tracking(size * 0.11)
-            .lineLimit(1)
+            .lineLimit(shrinks ? 1 : lineLimit)
+            .minimumScaleFactor(shrinks ? 0.5 : 1)
 
             Capsule()
                 .fill(palette.accent)
@@ -502,7 +509,9 @@ struct SubjectHeaderBlock<Trailing: View>: View {
                 palette: palette,
                 trailingCount: kickerTrailingCount,
                 ruleWidth: SubjectMetrics.pageRuleWidth,
-                ruleSpacing: 7
+                ruleSpacing: 7,
+                // A collection's name over its page was cut to "WINTER EXCHAN…".
+                lineLimit: dynamicTypeSize.isAccessibilitySize ? 3 : 1
             )
 
             // A one-word title (a username) shrinks rather than splitting
