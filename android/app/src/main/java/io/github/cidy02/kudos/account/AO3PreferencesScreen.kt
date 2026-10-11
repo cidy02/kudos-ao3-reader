@@ -1,6 +1,7 @@
 package io.github.cidy02.kudos.account
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -87,6 +88,20 @@ fun AO3PreferencesScreen(
     val texts = remember { mutableStateMapOf<String, String>() }
     val collapsedSections = remember { mutableStateOf(setOf<String>()) }
     val scope = rememberCoroutineScope()
+    // iOS `openHelp`: a "?" reads AO3's help page and shows it here. It used to open the page
+    // in the web view. `helpResult` is null while the page is being read.
+    var helpRef by remember { mutableStateOf<io.github.cidy02.kudos.network.ao3.preferences.AO3PreferenceHelpRef?>(null) }
+    var helpResult by remember {
+        mutableStateOf<AO3Result<io.github.cidy02.kudos.network.ao3.preferences.AO3PreferenceHelpContent>?>(null) }
+    fun openHelp(ref: io.github.cidy02.kudos.network.ao3.preferences.AO3PreferenceHelpRef) {
+        helpRef = ref
+        helpResult = null
+        scope.launch {
+            val result = repository.loadHelp(ref)
+            // A newer tap, or a closed sheet, owns the sheet now.
+            if (helpRef == ref) helpResult = result
+        }
+    }
 
     fun load() {
         loading = true
@@ -239,6 +254,7 @@ fun AO3PreferencesScreen(
                         ) {
                             SubjectFieldLabel(text = section.title)
                             Spacer(modifier = Modifier.weight(1f))
+                            section.help?.let { PreferenceHelpButton(it, ::openHelp) }
                         }
                         
                         Column(
@@ -253,11 +269,7 @@ fun AO3PreferencesScreen(
                                     label = toggle.label,
                                     trailing = {
                                         Row(verticalAlignment = Alignment.CenterVertically) {
-                                            toggle.helpUrl?.let { helpUrl ->
-                                                IconButton(onClick = { onOpenHelp(helpUrl) }) {
-                                                    Icon(Icons.Outlined.HelpOutline, contentDescription = "Help")
-                                                }
-                                            }
+                                            toggle.help?.let { PreferenceHelpButton(it, ::openHelp) }
                                             SubjectToggle(
                                                 checked = toggles[toggle.name] ?: toggle.checked,
                                                 onCheckedChange = { 
@@ -298,6 +310,7 @@ fun AO3PreferencesScreen(
                                         label = select.label,
                                         trailing = {
                                             Row(verticalAlignment = Alignment.CenterVertically) {
+                                                select.help?.let { PreferenceHelpButton(it, ::openHelp) }
                                                 ExposedDropdownMenuBox(
                                                     expanded = expanded,
                                                     onExpandedChange = { expanded = !expanded }
@@ -337,6 +350,7 @@ fun AO3PreferencesScreen(
                                         label = field.label,
                                         trailing = {
                                             Row(verticalAlignment = Alignment.CenterVertically) {
+                                                field.help?.let { PreferenceHelpButton(it, ::openHelp) }
                                                 OutlinedTextField(
                                                     value = texts[field.name] ?: field.value,
                                                     onValueChange = { 
@@ -364,6 +378,89 @@ fun AO3PreferencesScreen(
                             .padding(horizontal = SubjectMetrics.accountGutter)
                             .padding(top = 18.dp)
                     )
+                }
+            }
+        }
+    }
+    helpRef?.let { ref ->
+        PreferenceHelpSheet(
+            ref = ref,
+            result = helpResult,
+            onRetry = { openHelp(ref) },
+            onOpenOnAO3 = { helpRef = null; onOpenHelp(ref.url) },
+            onDismiss = { helpRef = null }
+        )
+    }
+}
+
+/** The "?" beside a heading or a field. Named for the page it opens, as on iOS. */
+@Composable
+private fun PreferenceHelpButton(
+    help: io.github.cidy02.kudos.network.ao3.preferences.AO3PreferenceHelpRef,
+    onOpen: (io.github.cidy02.kudos.network.ao3.preferences.AO3PreferenceHelpRef) -> Unit
+) {
+    IconButton(onClick = { onOpen(help) }) {
+        Icon(Icons.Outlined.HelpOutline, contentDescription = "Help: ${help.title}",
+            tint = LocalKudosTokens.current.secondaryInk)
+    }
+}
+
+/**
+ * iOS `helpSheetView`: AO3's help page for a preference, one card for each topic, read on the
+ * tap. While it is being read, and when it cannot be, the sheet says so.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun PreferenceHelpSheet(
+    ref: io.github.cidy02.kudos.network.ao3.preferences.AO3PreferenceHelpRef,
+    result: AO3Result<io.github.cidy02.kudos.network.ao3.preferences.AO3PreferenceHelpContent>?,
+    onRetry: () -> Unit,
+    onOpenOnAO3: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    val tokens = LocalKudosTokens.current
+    androidx.compose.material3.ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 28.dp)
+                .verticalScroll(androidx.compose.foundation.rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            when (result) {
+                null -> {
+                    Text(ref.title, style = MaterialTheme.typography.titleLarge, color = tokens.primaryInk)
+                    io.github.cidy02.kudos.ui.components.LoadingStateCard("Loading help…")
+                }
+                is AO3Result.Failure -> {
+                    Text(ref.title, style = MaterialTheme.typography.titleLarge, color = tokens.primaryInk)
+                    io.github.cidy02.kudos.ui.components.ErrorStateCard(
+                        title = "Couldn't load help",
+                        message = result.error.displayMessage(),
+                        primaryActionLabel = "Try Again",
+                        onPrimaryAction = onRetry,
+                        secondaryActionLabel = "Open on AO3",
+                        onSecondaryAction = onOpenOnAO3
+                    )
+                }
+                is AO3Result.Success -> {
+                    val content = result.value
+                    Text(content.title, style = MaterialTheme.typography.titleLarge, color = tokens.primaryInk)
+                    content.entries.forEach { entry ->
+                        Column(
+                            modifier = Modifier.fillMaxWidth().subjectPanel().padding(14.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text(entry.heading, style = MaterialTheme.typography.titleSmall, color = tokens.primaryInk)
+                            if (entry.body.isNotEmpty()) {
+                                Text(entry.body, style = MaterialTheme.typography.bodyMedium, color = tokens.secondaryInk)
+                            }
+                        }
+                    }
+                    content.footer?.let {
+                        Text(it, style = MaterialTheme.typography.bodySmall, color = tokens.secondaryInk)
+                    }
                 }
             }
         }
