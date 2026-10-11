@@ -291,7 +291,8 @@ fun FandomWorksScreen(
                                         SensitiveWorkRow(
                                             work = work,
                                             onOpenWork = onOpenWork,
-                                            expandAll = expandAllCards
+                                            expandAll = expandAllCards,
+                                            ledger = true
                                         )
                                     }
                                 }

@@ -62,3 +62,54 @@ Android's Library and Home cards already have the kicker and the grid
 - A fandom's works and an author's works have still not been paired like for like (the iOS
   routes used were search results and My Works).
 - Chevrons at 12dp are half the size of the iPhone's across the app.
+
+## Step 1, landed 2026-10-11 (Claude alone; gate 2,608)
+
+**A correction to the above, from reading `AO3WorkRow.swift` whole.** iOS has two forms of
+the card, not one. `.standard` is the older order Android's card follows (with the symbols
+grid at its top right, which Android's lacks). `.searchLedger` is the redesign's. Which
+screen draws which:
+
+| iOS screen | Form |
+|---|---|
+| Search results; Browse (a fandom's and a tag's works); Marked for Later; Subscriptions; an AO3 collection's works | always the ledger |
+| History; Bookmarks; the account's works lists; the author's dashboard | the ledger or the standard card, by the screen's display mode |
+| An author's profile works; a series; the Account hub's rows | the standard card |
+
+So the job is not to redraw `SensitiveWorkRow` but to give it the ledger form and use it
+where iOS does.
+
+**Built:** `SensitiveWorkRow(ledger = true, dateText = …)` draws `LedgerBody`: the fandom
+as a kicker (it searches the fandom AO3 names, and counts the others until the card is
+open), the title and byline beside the tray of four symbols Home's cards already use, the
+summary, the tags when unfolded (Fandoms, Archive Warnings, Relationships, Characters,
+Additional Tags), then `ledgerMetadata`'s line of figures in words with AO3's date at its
+end. At the large text sizes the tray goes under the names and the date under the figures.
+Under the blur, or while selecting, the kicker and the unfold glyph are part of the row.
+**Used by** Search results, a fandom's works and a tag's works.
+
+**Tests:** `LedgerMetadataTest` (iOS's rule for a sparse row: with no word count nothing is
+known to be zero), `SensitiveWorkRowLedgerTest` (the kicker, the figures, the tags
+unfolding, the fandom search, and a blurred row that only reveals).
+
+**Looked at:** a fandom's works in Sepia and Dark and at twice the text size, beside the
+iPhone's; Search results in Sepia. **Not seen on the emulator:** a card unfolded (the
+demo's results carry no tags; the test covers it), a tag's works, a blurred or selected
+ledger row.
+
+**Left for step 2:** Marked for Later, Subscriptions and an AO3 collection's works (always
+the ledger); then History, Bookmarks and the account lists by their display mode; the
+bookmark's form (its note and pills) and an own work's kudos and hits inside the card.
+
+**Seen and left, in the shared tray** (Home's cards have the same): no category draws "–"
+where iOS draws two figures; an unknown completion draws the dashed ring of a work in
+progress where iOS draws "?"; an unknown rating draws a grey shield where iOS leaves the
+tile out; in Sepia the rating's yellow is paler than iOS's. The date is AO3's own
+("09 Jul 2026") where iOS prints the device's short form.
+
+**A flaky test met on the way:** `WritingWorkActionsScreenTest
+.newPreviewIsPushedWithItsOwnChromeAndEditThenSaveUpdatesTheCreatedDraft` timed out once
+in the full run (a 15-second wait) and passed twice alone in half a second and in the two
+full runs after. It does not draw this card. Nothing was committed on the red run. Its
+wait is on real time and wants the same cure `AO3CollectionsViewModelTest` had.
+

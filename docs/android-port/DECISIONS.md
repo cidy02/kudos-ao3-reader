@@ -1664,3 +1664,10 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   title (iOS), a box glyph, a maintainer's name opens their profile (a page the reader opens
   by a tap, as a work's byline does), and the "by" line only when it adds someone to the
   kicker. Reverse: the commit that names it.
+- **2026-10-11 · AO3 results are drawn as the iPhone's ledger card (3cn, step 1).** iOS
+  has two forms of its result card; Android had only the older. `SensitiveWorkRow` gains
+  `ledger`: fandom as a kicker, the tray of four symbols, figures in words, the date. Used
+  where iOS always uses it and Android had the screen ready: Search results, a fandom's
+  works, a tag's works. The owner's line (layout, content and order follow iOS; chrome is
+  Android's) covers it: the ripple, the checkbox and the overflow menu stay Material. The
+  date stays as AO3 prints it. Reverse: pass `ledger = false` at the three call sites.

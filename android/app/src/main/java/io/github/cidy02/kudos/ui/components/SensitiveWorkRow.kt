@@ -1,5 +1,12 @@
 package io.github.cidy02.kudos.ui.components
 
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.sp
+import io.github.cidy02.kudos.ui.subject.HomeStatusArrangement
+import io.github.cidy02.kudos.ui.subject.HomeStatusTray
+import io.github.cidy02.kudos.ui.subject.SubjectKicker
+import io.github.cidy02.kudos.ui.subject.isAccessibilityFontScale
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.clickable
@@ -130,6 +137,10 @@ fun SensitiveWorkRow(
     expandAll: Boolean = false,
     showsZeroStats: Boolean = LocalShowsZeroStats.current,
     mutedHistory: Boolean = false,
+    /** iOS `AO3WorkRow.Presentation.searchLedger`: see [LedgerBody]. */
+    ledger: Boolean = false,
+    /** The ledger's closing date, as AO3 printed it. */
+    dateText: String = "",
     onClick: () -> Unit,
     onReveal: (() -> Unit)? = null,
     onSelect: (() -> Unit)? = null,
@@ -205,141 +216,165 @@ fun SensitiveWorkRow(
                             .fillMaxWidth()
                             .run { if (obscured) blur(16.dp) else this }
                             .padding(horizontal = 16.dp, vertical = 12.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                        verticalArrangement = Arrangement.spacedBy(if (ledger) 12.dp else 6.dp)
                     ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(4.dp),
-                            verticalAlignment = Alignment.Top
-                        ) {
-                            if (expandable) {
-                                IconButton(
-                                    onClick = { expanded = !expanded }
+                        if (ledger) {
+                            LedgerBody(
+                                title = title, author = author, fandoms = fandoms, summary = summary,
+                                tagGroups = buildList {
+                                    val named = fandoms.filter { it.isNotBlank() }
+                                    if (named.size > 1) add(Triple("Fandoms", named.drop(1), SearchSubjectField.FANDOM))
+                                    val listed = warnings.filter { it.isNotBlank() }
+                                    if (listed.isNotEmpty()) add(Triple("Archive Warnings", listed, SearchSubjectField.WARNING))
+                                    if (relationships.isNotEmpty()) add(Triple("Relationships", relationships, SearchSubjectField.RELATIONSHIP))
+                                    if (characters.isNotEmpty()) add(Triple("Characters", characters, SearchSubjectField.CHARACTER))
+                                    if (freeforms.isNotEmpty()) add(Triple("Additional Tags", freeforms, SearchSubjectField.FREEFORM))
+                                    if (relationships.isEmpty() && characters.isEmpty() && freeforms.isEmpty() &&
+                                        discoveryTags.isNotEmpty()) add(Triple("Tags", discoveryTags, SearchSubjectField.FREEFORM))
+                                },
+                                rating = rating, categories = categories, warnings = warnings, isComplete = isComplete,
+                                figures = ledgerMetadata(language, wordCount, chapters, comments, kudos, bookmarks, hits, showsZeroStats),
+                                dateText = dateText, isFavorite = isFavorite && !selecting,
+                                expandable = expandable, expanded = expanded,
+                                // Under the blur, or while selecting, the glyph is part of the row.
+                                onToggleExpanded = if (obscured || selecting) cardTap else { { expanded = !expanded } },
+                                palette = palette, tagSearch = tagSearch
+                            )
+                        } else {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                verticalAlignment = Alignment.Top
+                            ) {
+                                if (expandable) {
+                                    IconButton(
+                                        onClick = { expanded = !expanded }
+                                    ) {
+                                        Icon(
+                                            imageVector = if (expanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
+                                            contentDescription = if (expanded) "Show less" else "Show more"
+                                        )
+                                    }
+                                }
+                                Column(
+                                    modifier = Modifier.weight(1f),
+                                    verticalArrangement = Arrangement.spacedBy(2.dp)
                                 ) {
+                                    Text(
+                                        text = title,
+                                        style = MaterialTheme.typography.titleMedium,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    Text(
+                                        text = "by ${author.ifBlank { "Anonymous" }}",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        // Two co-authors read "Avery Writes, Second Ps…" at twice the text size.
+                                        maxLines = if (io.github.cidy02.kudos.ui.subject.isAccessibilityFontScale()) 2 else 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                                if (isFavorite && !selecting) {
                                     Icon(
-                                        imageVector = if (expanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
-                                        contentDescription = if (expanded) "Show less" else "Show more"
+                                        imageVector = Icons.Filled.Star,
+                                        contentDescription = "Favorite",
+                                        tint = Color(0xFFFFCC00),
+                                        modifier = Modifier.padding(8.dp)
                                     )
                                 }
                             }
-                            Column(
-                                modifier = Modifier.weight(1f),
-                                verticalArrangement = Arrangement.spacedBy(2.dp)
-                            ) {
+
+                            if (fandoms.isNotEmpty()) {
+                                val hidden = if (expanded) 0 else fandoms.size - 1
+                                val visibleFandoms = if (expanded) fandoms else fandoms.take(1)
+                                visibleFandoms.forEachIndexed { index, fandom ->
+                                    CardMetaLine(
+                                        text = if (index == 0 && hidden > 0) {
+                                            "$fandom  +$hidden other${if (hidden == 1) "" else "s"}"
+                                        } else {
+                                            fandom
+                                        },
+                                        icon = Icons.AutoMirrored.Outlined.MenuBook,
+                                        accessibilityLabel = "Fandom: $fandom",
+                                        color = if (mutedHistory) tokens.secondaryInk else MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.clickable {
+                                            tagSearch(SearchSubjectField.FANDOM, fandom)
+                                        }
+                                    )
+                                }
+                            }
+
+                            if (summary.isNotBlank()) {
                                 Text(
-                                    text = title,
-                                    style = MaterialTheme.typography.titleMedium,
-                                    color = MaterialTheme.colorScheme.onSurface,
-                                    maxLines = 2,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                                Text(
-                                    text = "by ${author.ifBlank { "Anonymous" }}",
+                                    text = summary,
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    // Two co-authors read "Avery Writes, Second Ps…" at twice the text size.
-                                    maxLines = if (io.github.cidy02.kudos.ui.subject.isAccessibilityFontScale()) 2 else 1,
+                                    maxLines = if (expanded) Int.MAX_VALUE else 3,
                                     overflow = TextOverflow.Ellipsis
                                 )
                             }
-                            if (isFavorite && !selecting) {
-                                Icon(
-                                    imageVector = Icons.Filled.Star,
-                                    contentDescription = "Favorite",
-                                    tint = Color(0xFFFFCC00),
-                                    modifier = Modifier.padding(8.dp)
-                                )
-                            }
-                        }
 
-                        if (fandoms.isNotEmpty()) {
-                            val hidden = if (expanded) 0 else fandoms.size - 1
-                            val visibleFandoms = if (expanded) fandoms else fandoms.take(1)
-                            visibleFandoms.forEachIndexed { index, fandom ->
-                                CardMetaLine(
-                                    text = if (index == 0 && hidden > 0) {
-                                        "$fandom  +$hidden other${if (hidden == 1) "" else "s"}"
-                                    } else {
-                                        fandom
-                                    },
-                                    icon = Icons.AutoMirrored.Outlined.MenuBook,
-                                    accessibilityLabel = "Fandom: $fandom",
-                                    color = if (mutedHistory) tokens.secondaryInk else MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.clickable {
-                                        tagSearch(SearchSubjectField.FANDOM, fandom)
+                            if (expanded) {
+                                val hasCategorizedDiscoveryTags = relationships.isNotEmpty() ||
+                                    characters.isNotEmpty() || freeforms.isNotEmpty()
+                                val groups = buildList {
+                                    if (warnings.isNotEmpty()) {
+                                        add(Triple("Archive Warnings", warnings, SearchSubjectField.WARNING))
                                     }
-                                )
-                            }
-                        }
-
-                        if (summary.isNotBlank()) {
-                            Text(
-                                text = summary,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = if (expanded) Int.MAX_VALUE else 3,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
-
-                        if (expanded) {
-                            val hasCategorizedDiscoveryTags = relationships.isNotEmpty() ||
-                                characters.isNotEmpty() || freeforms.isNotEmpty()
-                            val groups = buildList {
-                                if (warnings.isNotEmpty()) {
-                                    add(Triple("Archive Warnings", warnings, SearchSubjectField.WARNING))
+                                    if (relationships.isNotEmpty()) {
+                                        add(Triple("Relationships", relationships, SearchSubjectField.RELATIONSHIP))
+                                    }
+                                    if (characters.isNotEmpty()) {
+                                        add(Triple("Characters", characters, SearchSubjectField.CHARACTER))
+                                    }
+                                    if (freeforms.isNotEmpty()) {
+                                        add(Triple("Additional Tags", freeforms, SearchSubjectField.FREEFORM))
+                                    }
+                                    if (!hasCategorizedDiscoveryTags && discoveryTags.isNotEmpty()) {
+                                        add(Triple("Tags", discoveryTags, SearchSubjectField.FREEFORM))
+                                    }
                                 }
-                                if (relationships.isNotEmpty()) {
-                                    add(Triple("Relationships", relationships, SearchSubjectField.RELATIONSHIP))
-                                }
-                                if (characters.isNotEmpty()) {
-                                    add(Triple("Characters", characters, SearchSubjectField.CHARACTER))
-                                }
-                                if (freeforms.isNotEmpty()) {
-                                    add(Triple("Additional Tags", freeforms, SearchSubjectField.FREEFORM))
-                                }
-                                if (!hasCategorizedDiscoveryTags && discoveryTags.isNotEmpty()) {
-                                    add(Triple("Tags", discoveryTags, SearchSubjectField.FREEFORM))
+                                groups.forEach { (label, tags, field) ->
+                                    Text(
+                                        text = label,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    MetadataChipRow(
+                                        labels = tags,
+                                        maxItems = 16,
+                                        onLabelClick = { tag -> tagSearch(field, tag) }
+                                    )
                                 }
                             }
-                            groups.forEach { (label, tags, field) ->
-                                Text(
-                                    text = label,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+
+                            WorkStatusChipRow(
+                                stats = statusChips(
+                                    rating = rating,
+                                    categories = categories,
+                                    warnings = warnings,
+                                    isComplete = isComplete,
+                                    expanded = expanded
                                 )
-                                MetadataChipRow(
-                                    labels = tags,
-                                    maxItems = 16,
-                                    onLabelClick = { tag -> tagSearch(field, tag) }
+                            )
+
+                            Spacer(modifier = Modifier.height(2.dp))
+
+                            WorkListStatsRow(
+                                stats = listRowStats(
+                                    language = language,
+                                    wordCount = wordCount,
+                                    chapters = chapters,
+                                    comments = comments,
+                                    kudos = kudos,
+                                    bookmarks = bookmarks,
+                                    hits = hits,
+                                    showsZeroStats = showsZeroStats
                                 )
-                            }
+                            )
                         }
-
-                        WorkStatusChipRow(
-                            stats = statusChips(
-                                rating = rating,
-                                categories = categories,
-                                warnings = warnings,
-                                isComplete = isComplete,
-                                expanded = expanded
-                            )
-                        )
-
-                        Spacer(modifier = Modifier.height(2.dp))
-
-                        WorkListStatsRow(
-                            stats = listRowStats(
-                                language = language,
-                                wordCount = wordCount,
-                                chapters = chapters,
-                                comments = comments,
-                                kudos = kudos,
-                                bookmarks = bookmarks,
-                                hits = hits,
-                                showsZeroStats = showsZeroStats
-                            )
-                        )
                     }
                 }
                 if (obscured) {
@@ -373,6 +408,164 @@ fun SensitiveWorkRow(
 }
 
 
+/**
+ * iOS `AO3WorkRow.searchLedgerCard`, which Search, Browse and the AO3 lists draw: the fandom
+ * as a kicker, the title and byline beside the tray of four symbols, the summary, then one
+ * line of figures in words that ends with the date. It stands in for the fandom line, the row
+ * of four word chips and the row of glyphs and numbers. At the large text sizes the tray goes
+ * under the names and the date under the figures, as there.
+ */
+@Composable
+private fun LedgerBody(
+    title: String,
+    author: String,
+    fandoms: List<String>,
+    summary: String,
+    tagGroups: List<Triple<String, List<String>, SearchSubjectField>>,
+    rating: String,
+    categories: List<String>,
+    warnings: List<String>,
+    isComplete: Boolean?,
+    figures: List<String>,
+    dateText: String,
+    isFavorite: Boolean,
+    expandable: Boolean,
+    expanded: Boolean,
+    onToggleExpanded: () -> Unit,
+    palette: SubjectPalette,
+    tagSearch: (SearchSubjectField, String) -> Unit
+) {
+    val tokens = LocalKudosTokens.current
+    val accessibility = isAccessibilityFontScale()
+    val named = fandoms.filter { it.isNotBlank() }
+    val identity: @Composable (Modifier) -> Unit = { modifier ->
+        Column(modifier, verticalArrangement = Arrangement.spacedBy(5.dp)) {
+            if (named.isNotEmpty() || expandable) {
+                Row(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalAlignment = Alignment.Top) {
+                    named.firstOrNull()?.let { fandom ->
+                        SubjectKicker(
+                            text = HomeFacts.primaryFandom(named) ?: fandom,
+                            palette = palette,
+                            trailingCount = if (expanded) 0 else named.size - 1,
+                            maxLines = if (accessibility) Int.MAX_VALUE else 1,
+                            modifier = Modifier
+                                .weight(1f, fill = false)
+                                .semantics { contentDescription = "Fandom: $fandom" }
+                                .clickable(onClickLabel = "search this fandom") {
+                                    tagSearch(SearchSubjectField.FANDOM, fandom)
+                                }
+                        )
+                    }
+                    if (expandable) {
+                        // A bare glyph beside the kicker, as on iOS. Compose widens a small
+                        // control's touch area to the minimum by itself, without the layout.
+                        Icon(
+                            imageVector = if (expanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
+                            contentDescription = if (expanded) "Show less" else "Show more",
+                            tint = palette.accent,
+                            modifier = Modifier
+                                .size(20.dp)
+                                .clickable(role = Role.Button, onClick = onToggleExpanded)
+                        )
+                    }
+                }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = title,
+                    color = tokens.primaryInk,
+                    fontSize = 19.sp,
+                    lineHeight = 24.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = if (accessibility) 3 else 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false)
+                )
+                if (isFavorite) {
+                    Icon(Icons.Filled.Star, contentDescription = "Favorite", tint = Color(0xFFFFCC00),
+                        modifier = Modifier.size(16.dp))
+                }
+            }
+            Text(
+                text = "by ${author.ifBlank { "Anonymous" }}",
+                style = MaterialTheme.typography.bodyMedium,
+                color = tokens.secondaryInk,
+                maxLines = if (accessibility) 2 else 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+    val signals: @Composable () -> Unit = {
+        HomeStatusTray(
+            rating = rating,
+            categories = categories,
+            warnings = warnings,
+            isComplete = isComplete == true,
+            arrangement = HomeStatusArrangement.Grid,
+            tileSize = 22.dp
+        )
+    }
+    if (accessibility) {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            identity(Modifier.fillMaxWidth())
+            signals()
+        }
+    } else {
+        Row(horizontalArrangement = Arrangement.spacedBy(13.dp), verticalAlignment = Alignment.Top) {
+            identity(Modifier.weight(1f))
+            signals()
+        }
+    }
+
+    if (summary.isNotBlank()) {
+        Text(
+            text = summary,
+            style = MaterialTheme.typography.bodyMedium,
+            color = tokens.secondaryInk,
+            maxLines = if (expanded) Int.MAX_VALUE else 3,
+            overflow = TextOverflow.Ellipsis
+        )
+    }
+
+    if (expanded) {
+        tagGroups.forEach { (label, tags, field) ->
+            Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Text(text = label, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = tokens.tertiaryInk)
+                MetadataChipRow(labels = tags, maxItems = 16, onLabelClick = { tag -> tagSearch(field, tag) })
+            }
+        }
+    }
+
+    val line = figures.joinToString("  ·  ")
+    if (line.isNotEmpty() || dateText.isNotBlank()) {
+        val date: @Composable () -> Unit = {
+            if (dateText.isNotBlank()) {
+                Text(
+                    text = dateText,
+                    fontSize = 11.5.sp,
+                    color = tokens.secondaryInk,
+                    maxLines = 1,
+                    softWrap = false,
+                    modifier = Modifier.semantics { contentDescription = "Updated $dateText" }
+                )
+            }
+        }
+        // The date may not wrap; beside the figures at a large size it left them a column a
+        // few letters wide (iOS T-386), so there it goes under them.
+        if (accessibility) {
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                if (line.isNotEmpty()) Text(line, fontSize = 11.5.sp, lineHeight = 17.sp, color = tokens.secondaryInk)
+                date()
+            }
+        } else {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Bottom) {
+                Text(line, fontSize = 11.5.sp, lineHeight = 16.sp, color = tokens.secondaryInk, modifier = Modifier.weight(1f))
+                date()
+            }
+        }
+    }
+}
+
 @Composable
 fun SensitiveWorkRow(
     work: AO3WorkSummary,
@@ -381,7 +574,8 @@ fun SensitiveWorkRow(
     expandAll: Boolean = false,
     onTagClick: ((String) -> Unit)? = null,
     onTagSearch: ((SearchSubjectField, String) -> Unit)? = null,
-    onLongClick: (() -> Unit)? = null
+    onLongClick: (() -> Unit)? = null,
+    ledger: Boolean = false
 ) {
     var showMenu by remember { mutableStateOf(false) }
     
@@ -408,6 +602,8 @@ fun SensitiveWorkRow(
             hits = work.hits,
             language = work.language,
             expandAll = expandAll,
+            ledger = ledger,
+            dateText = work.updatedDate,
             onClick = { onOpenWork(work) },
             onTagClick = onTagClick,
             onTagSearch = onTagSearch,
