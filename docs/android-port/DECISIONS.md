@@ -1495,3 +1495,9 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   again and stays there until the answer is in (`CommentsViewModel.refresh`); a refresh
   without a connection shows the kept copy and says so. Reverse: the `KudosRefreshBox` in
   `comments/CommentsScreen.kt`.
+- **2026-10-11 · A fandom's works (Browse › a fandom) can be pulled to refresh.** Checked every
+  iOS screen with `.refreshable` against Android: all have a refresh box except comments
+  (added the same day), this list, and Privacy & Data (iOS re-measures the storage figures on
+  a pull; left, the figures are measured on opening). The page on screen is read again with
+  the filters it was asked for, and stays until the answer is in. The tag-works and
+  author-works screens have none either, and nothing opens them.
