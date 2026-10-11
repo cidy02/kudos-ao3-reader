@@ -36,6 +36,31 @@ struct CollectionWorkPickerTests {
         #expect(candidates.map(\.id) == [normal.id])
     }
 
+    // MARK: privacy
+
+    /// The sheet shows titles and authors and searches them, so a work the Library
+    /// hides (Hide) or blurs (Blur, the default) is not offered until it is revealed.
+    @Test func aWorkTheLibraryHidesOrBlursIsNotOfferedByName() throws {
+        let context = try makeContext()
+        let tame = try insertWork(into: context, title: "Tame")
+        let explicit = try insertWork(into: context, title: "Explicit One")
+        explicit.rating = "Explicit"
+        let gate = PrivacyGate()
+
+        // Whichever mode: a blurred work is in neither `isHidden` nor a list of names.
+        for mode in MaturePrivacyMode.allCases {
+            #expect(gate.isHidden(explicit, enabled: true, mode: mode) != gate.isBlurred(explicit, enabled: true, mode: mode))
+        }
+        let offered = AddLibraryWorksSheet.nameable([tame, explicit], gate: gate, hideMature: true)
+        #expect(offered.map(\.id) == [tame.id])
+        let off = AddLibraryWorksSheet.nameable([tame, explicit], gate: gate, hideMature: false)
+        #expect(off.map(\.id) == [tame.id, explicit.id])
+
+        gate.reveal(explicit)
+        let revealed = AddLibraryWorksSheet.nameable([tame, explicit], gate: gate, hideMature: true)
+        #expect(revealed.map(\.id) == [tame.id, explicit.id])
+    }
+
     // MARK: add
 
     @Test func addInsertsMembershipOnBothSides() throws {

@@ -70,6 +70,13 @@ final class PrivacyGate {
         enabled && work.isAdult && mode == .obscure && !isRevealed(work)
     }
 
+    /// Whether a place that shows a work's title or author must leave this one out right
+    /// now: Hide keeps it out of lists, and Blur lets nothing name it until it is revealed.
+    /// For anything that cannot draw the blurred card (a picker row, a tile's small cover).
+    func isConcealed(_ work: SavedWork, enabled: Bool) -> Bool {
+        enabled && work.isAdult && !isRevealed(work)
+    }
+
     private func authenticate(_ onSuccess: @escaping () -> Void) {
         guard UserDefaults.standard.bool(forKey: "requireBiometricToReveal") else {
             onSuccess(); return
