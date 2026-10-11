@@ -1653,11 +1653,13 @@ private extension View {
 private func expandRepliesButton(
     count: Int, verb: String?, reduceMotion: Bool, action: @escaping () -> Void
 ) -> some View {
-    Button {
+    // One reply is "1 reply": it said "Show 1 replies".
+    let noun = count == 1 ? "reply" : "replies"
+    return Button {
         withAnimationUnlessReduced(.easeInOut(duration: 0.2), reduceMotion: reduceMotion, action)
     } label: {
         Label(
-            verb.map { "Show \(count) \($0) replies" } ?? "Show \(count) replies",
+            verb.map { "Show \(count) \($0) \(noun)" } ?? "Show \(count) \(noun)",
             systemImage: "bubble.left.and.bubble.right"
         )
         .font(.caption.weight(.medium))
