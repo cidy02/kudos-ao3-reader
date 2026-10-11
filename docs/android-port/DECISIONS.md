@@ -1421,3 +1421,26 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   back-stack entry (`collectionsChanged` in `app/AppNavHost.kt`), as the work form already
   does for the drafts list; the list reads once for each change.
 
+- **2026-10-11 · Android keeps which AO3 account wrote a work.** The column for it
+  (`authorIdentitiesJSON`) was added long ago and nothing filled it: no import wrote it and no
+  backup carries it (it is device-only on iOS too). So Favorites › Authors never knew an
+  author's account: no way to open their page from a row, and nothing to check for new work.
+  Now a blurb's and a work page's author links are read into it (`AO3AuthorIdentities`, the
+  shape iOS stores), with no new request: only pages the app was reading anyway. A work
+  already in the library learns its author the next time its page or blurb is read. A byline
+  that changes without naming an account (the work went Anonymous) drops the old account
+  rather than keeping it under the new name. Reverse: the three lines in
+  `works/WorkMetadataMerger.kt`.
+- **2026-10-11 · Favorites › Authors: each author's newest work, and "With new work" (as
+  iOS).** `library/AuthorNewestWorkStore.kt` is iOS's store: one page per author with a
+  single registered account, newest posted first, asked for only while the reader has that
+  list open, one author after another through the paced client, stopped when the reader
+  leaves, and kept in memory for half an hour per session. The filter cannot be chosen until
+  every author has answered. **How the policy's sentence was read:** it says the round "stops
+  at the first unresolved response". iOS's code, later than that sentence, goes on past a
+  byline that has no page (a 404 is an answer: nothing to show) and stops at anything that
+  would meet the next author too (offline, overloaded, unreadable). Android does what iOS's
+  code does. The stricter reading would switch the filter off for the whole session whenever
+  one favorite author was renamed or deleted. The choice is kept on the device
+  (`library.favorites.authorQuickFilter`, iOS's key), outside backups. Reverse: the store's
+  line in `app/KudosAppContainer.kt` and the two arguments in `app/AppNavHost.kt`.

@@ -162,6 +162,20 @@ class KudosAppContainer(
         )
     }
 
+    /** Favorites › Authors: each author's newest work, asked for only while that list is open. */
+    val authorNewestWorkStore: io.github.cidy02.kudos.library.AuthorNewestWorkStore by lazy {
+        io.github.cidy02.kudos.library.AuthorNewestWorkStore(
+            sessionScope = { "${authenticatedClient.username().orEmpty()}|${authenticatedClient.sessionGeneration()}" },
+            sessionChanges = authorRepository.sessionChanges
+        ) { username ->
+            authorRepository.loadWorks(
+                io.github.cidy02.kudos.network.ao3.author.AO3AuthorRoute(username),
+                sort = io.github.cidy02.kudos.network.ao3.author.AO3AuthorWorksSort(
+                    io.github.cidy02.kudos.network.ao3.author.AO3AuthorWorksSortColumn.DatePosted)
+            )
+        }
+    }
+
     val preferencesRepository: AO3PreferencesRepository by lazy {
         AO3PreferencesRepository(client = authenticatedClient)
     }

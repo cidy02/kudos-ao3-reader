@@ -177,7 +177,9 @@ fun LibraryScreen(
     libraryChrome: LibraryShellChrome? = null,
     onOpenAuthor: (String) -> Unit = {},
     onFilterLibraryFandom: (String) -> Unit = {},
-    onFilterLibraryTag: (String) -> Unit = {}
+    onFilterLibraryTag: (String) -> Unit = {},
+    authorNewestWorks: AuthorNewestWorkStore? = null,
+    onOpenRemoteWork: (io.github.cidy02.kudos.network.ao3.search.AO3WorkSummary) -> Unit = {}
 ) {
     val viewModel: LibraryViewModel = viewModel(
         factory = LibraryViewModel.factory(
@@ -569,6 +571,9 @@ fun LibraryScreen(
         onFavoriteScopeChange = viewModel::updateFavoriteScope,
         onFavoriteOrderChange = viewModel::updateFavoriteOrder,
         onTagsUnreadChange = viewModel::updateTagsUnreadOnly,
+        favoriteAuthors = authorNewestWorks?.let {
+            FavoriteAuthorsNewestWork(it, viewModel::updateFavoriteAuthorFilter, onOpenRemoteWork)
+        },
         onOpenAffinity = { scope, row ->
             when (scope) {
                 FavoriteScope.Authors -> row.username?.let(onOpenAuthor)
@@ -657,6 +662,7 @@ private fun LibraryContent(
     onFavoriteScopeChange: (FavoriteScope) -> Unit,
     onFavoriteOrderChange: (ReadingAffinities.Order) -> Unit,
     onTagsUnreadChange: (Boolean) -> Unit,
+    favoriteAuthors: FavoriteAuthorsNewestWork? = null,
     onOpenAffinity: (FavoriteScope, ReadingAffinities.Row) -> Unit,
     onHistoryGroupingChange: (LibraryHistoryGrouping) -> Unit,
     onKeepInProgress: (String) -> Unit,
@@ -718,6 +724,7 @@ private fun LibraryContent(
             onFavoriteScopeChange = onFavoriteScopeChange,
             onFavoriteOrderChange = onFavoriteOrderChange,
             onTagsUnreadChange = onTagsUnreadChange,
+            favoriteAuthors = favoriteAuthors,
             onOpenAffinity = onOpenAffinity,
             onHistoryGroupingChange = onHistoryGroupingChange,
             onKeepInProgress = onKeepInProgress,
@@ -1244,6 +1251,7 @@ private fun LibrarySectionContent(
     onFavoriteScopeChange: (FavoriteScope) -> Unit,
     onFavoriteOrderChange: (ReadingAffinities.Order) -> Unit,
     onTagsUnreadChange: (Boolean) -> Unit,
+    favoriteAuthors: FavoriteAuthorsNewestWork? = null,
     onOpenAffinity: (FavoriteScope, ReadingAffinities.Row) -> Unit,
     onHistoryGroupingChange: (LibraryHistoryGrouping) -> Unit = {},
     onKeepInProgress: (String) -> Unit = {}
@@ -1383,7 +1391,8 @@ private fun LibrarySectionContent(
             .subjectScreenWash(tokens.scopePalette)
     ) {
         if (showsAffinityList) {
-            FavoriteAffinityList(state, onFavoriteScopeChange, onFavoriteOrderChange, onTagsUnreadChange, onOpenAffinity)
+            FavoriteAffinityList(state, onFavoriteScopeChange, onFavoriteOrderChange, onTagsUnreadChange, onOpenAffinity,
+                favoriteAuthors)
         } else KudosRefreshBox(onRefresh = onRefresh, modifier = Modifier.fillMaxSize()) {
             val topInset = WindowInsets.systemBars.asPaddingValues().calculateTopPadding()
             LazyColumn(
