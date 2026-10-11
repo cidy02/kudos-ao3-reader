@@ -618,7 +618,7 @@ private fun MarkedForLaterRow(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
-        PairedWorkRow(work = work, expandAll = expandAll, onOpenWork = onOpenWork)
+        PairedWorkRow(work = work, expandAll = expandAll, onOpenWork = onOpenWork, ledger = true)
 
         Row(
             modifier = Modifier
@@ -1348,14 +1348,18 @@ private fun SubscriptionWorkRow(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
-        PairedWorkRow(work = work, expandAll = expandAll, onOpenWork = onOpenWork)
+        PairedWorkRow(work = work, expandAll = expandAll, onOpenWork = onOpenWork, ledger = true)
 
-        Row(
+        // A row that wraps: at twice the text size "2 chapters new" left the button
+        // "Unsubscri…". There the button goes under the words.
+        @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+        androidx.compose.foundation.layout.FlowRow(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 8.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+            itemVerticalAlignment = Alignment.CenterVertically
         ) {
             if (newCount > 0) {
                 Text(
@@ -1493,7 +1497,9 @@ private val LocalPairedRowPrivacy = compositionLocalOf { PairedRowPrivacy() }
 private fun PairedWorkRow(
     work: CanonicalWork,
     expandAll: Boolean,
-    onOpenWork: (AO3WorkSummary) -> Unit
+    onOpenWork: (AO3WorkSummary) -> Unit,
+    /** iOS draws Marked for Later and Subscriptions as the ledger card, always. */
+    ledger: Boolean = false
 ) {
     val local = work.local
     if (local != null) {
@@ -1503,10 +1509,11 @@ private fun PairedWorkRow(
             expandAll = expandAll,
             obscured = privacy.isObscured(local),
             onReveal = { privacy.reveal(local) },
-            onOpenWork = { onOpenWork(work.remote) }
+            onOpenWork = { onOpenWork(work.remote) },
+            ledger = ledger
         )
     } else {
-        EnrichingWorkRow(work = work.remote, expandAll = expandAll, onOpenWork = onOpenWork)
+        EnrichingWorkRow(work = work.remote, expandAll = expandAll, onOpenWork = onOpenWork, ledger = ledger)
     }
 }
 
@@ -1514,7 +1521,8 @@ private fun PairedWorkRow(
 private fun EnrichingWorkRow(
     work: AO3WorkSummary,
     expandAll: Boolean,
-    onOpenWork: (AO3WorkSummary) -> Unit
+    onOpenWork: (AO3WorkSummary) -> Unit,
+    ledger: Boolean = false
 ) {
     val context = LocalContext.current
     val enricher = remember {
@@ -1530,6 +1538,7 @@ private fun EnrichingWorkRow(
     SensitiveWorkRow(
         work = enriched ?: work,
         expandAll = expandAll,
-        onOpenWork = onOpenWork
+        onOpenWork = onOpenWork,
+        ledger = ledger
     )
 }

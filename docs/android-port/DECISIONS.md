@@ -1671,3 +1671,7 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   works, a tag's works. The owner's line (layout, content and order follow iOS; chrome is
   Android's) covers it: the ripple, the checkbox and the overflow menu stay Material. The
   date stays as AO3 prints it. Reverse: pass `ledger = false` at the three call sites.
+- **2026-10-11 · Marked for Later, Subscriptions and an AO3 collection's works draw the
+  ledger card (3cn, step 2)**, as iOS always does there; a work also in the Library draws
+  the same body (iOS draws its library row). The footer under a subscribed work wraps at
+  the large text sizes. Reverse: `ledger = true` at three call sites.

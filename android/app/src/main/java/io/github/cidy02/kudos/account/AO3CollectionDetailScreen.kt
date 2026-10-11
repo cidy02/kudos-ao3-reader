@@ -458,7 +458,7 @@ private fun androidx.compose.foundation.lazy.LazyListScope.workRows(
                 .padding(top = 8.dp)
                 .padding(horizontal = SubjectMetrics.accountGutter)
         ) {
-            SensitiveWorkRow(work = work, onOpenWork = onOpenWork)
+            SensitiveWorkRow(work = work, onOpenWork = onOpenWork, ledger = true)
             if (work.authors.joinToString(", ").trim().equals("Anonymous", ignoreCase = true)) {
                 Text(
                     text = "ANON",
