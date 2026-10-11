@@ -175,7 +175,14 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
                     NewCollectionSheet()
                 }
                 .filterPanelPresentation(isPresented: router.isShowing(.libraryFilters)) {
-                    LibraryFilterPanel(filters: $filters, works: works, userTagNames: userTagNames)
+                    // The lists are drawn from what the Library can show: not a work Hide
+                    // mode hides (its fandoms and tags were offered here). A queue's
+                    // entry stays: the Saved for Later shelf shows it.
+                    LibraryFilterPanel(
+                        filters: $filters,
+                        works: works.filter(passesPrivacy),
+                        userTagNames: userTagNames
+                    )
                         .inspectorColumnWidth(min: 280, ideal: 320, max: 380)
                 }
                 .task {
