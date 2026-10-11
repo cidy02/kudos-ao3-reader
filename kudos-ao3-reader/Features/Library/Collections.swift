@@ -10,7 +10,6 @@ struct AllCollectionsDestination: Hashable {}
 /// collection name, and a work count. Empty collections keep their own hue tile.
 struct CollectionCard: View {
     @AppStorage("hideMatureContent") private var hideMature = true
-    @AppStorage("matureContentMode") private var matureMode: MaturePrivacyMode = .obscure
     @Environment(ThemeManager.self) private var themeManager
     @Environment(PrivacyGate.self) private var gate
     let collection: WorkCollection
@@ -34,8 +33,10 @@ struct CollectionCard: View {
         works.count
     }
 
+    /// The small covers carry a title and an author, so a work Blur mode blurs is left
+    /// off the tile like one Hide mode hides. The count still counts it.
     private var previewWorks: [SavedWork] {
-        works.filter { !gate.isHidden($0, enabled: hideMature, mode: matureMode) }
+        works.filter { !gate.isConcealed($0, enabled: hideMature) }
     }
 
     private var scale: CGFloat { cardSize.width / CarouselCardMetrics.width }

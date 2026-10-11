@@ -24,7 +24,6 @@ struct AddLibraryWorksSheet: View {
     @Environment(AppRouter.self) private var router
     @Environment(PrivacyGate.self) private var gate
     @AppStorage("hideMatureContent") private var hideMature = true
-    @AppStorage("matureContentMode") private var matureMode: MaturePrivacyMode = .obscure
 
     @Query(filter: #Predicate<SavedWork> { !$0.isPendingDeletion }, sort: \SavedWork.dateAdded, order: .reverse)
     private var allWorks: [SavedWork]
@@ -37,7 +36,14 @@ struct AddLibraryWorksSheet: View {
     /// never offers a work twice or leaks a hidden one. The privacy filter stays
     /// here since it needs the live gate.
     private var eligibleWorks: [SavedWork] {
-        candidates(allWorks).filter { !gate.isHidden($0, enabled: hideMature, mode: matureMode) }
+        Self.nameable(candidates(allWorks), gate: gate, hideMature: hideMature)
+    }
+
+    /// The works this sheet may name. This list shows titles and authors and its search
+    /// matches them, so a work Blur mode blurs stays out like one Hide mode hides (a
+    /// blurred work used to be listed here by name).
+    static func nameable(_ works: [SavedWork], gate: PrivacyGate, hideMature: Bool) -> [SavedWork] {
+        works.filter { !gate.isConcealed($0, enabled: hideMature) }
     }
 
     /// Narrows the candidates through the precomputed `WorkSearchIndex` text —
