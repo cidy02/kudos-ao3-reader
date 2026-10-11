@@ -570,12 +570,13 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
         }
     }
 
-    /// Works previewed on artboard 1d's collection ledger row. Respects the
-    /// mature-content gate: adult works in hide mode are excluded so their covers
-    /// are never shown here.
+    /// Works previewed on artboard 1d's collection ledger row. A miniature cover
+    /// carries a title and an author, so a work the privacy setting is keeping back
+    /// is left off it: Hide mode's, and Blur mode's too (it was drawn by name here
+    /// while its own row, lower down, was blurred). As the tile, `CollectionCard`.
     private func collectionPreviewWorks(for collection: WorkCollection) -> [SavedWork] {
         collection.works
-            .filter { !$0.isPendingDeletion && passesPrivacy($0) }
+            .filter { !$0.isPendingDeletion && !gate.isConcealed($0, enabled: hideMature) }
             .sorted { $0.dateAdded > $1.dateAdded }
     }
 

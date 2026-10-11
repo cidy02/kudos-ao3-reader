@@ -3,8 +3,8 @@ import SwiftUI
 /// Artboard 1d's collection ledger row: previews up to four miniature work covers
 /// in a 2×2 grid beside the collection title, work count, and a trailing chevron.
 ///
-/// Miniature covers respect the mature-content gate: works that fail `passesPrivacy`
-/// (e.g. hidden adult content) are excluded so their covers are never shown here.
+/// Miniature covers name a work, so the caller leaves out every work the privacy
+/// setting is keeping back (`PrivacyGate.isConcealed`): hidden, or blurred.
 struct CollectionLedgerRow: View {
     @Environment(ThemeManager.self) private var themeManager
     let collection: WorkCollection
