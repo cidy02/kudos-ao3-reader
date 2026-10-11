@@ -20,15 +20,17 @@ deck's "up next" line, a search answer, a facet list) must leave the work out. i
 | "Add Works" in a collection and in a queue named the work (title, author, search) | Android | `cf33b96a` |
 | The same sheet, in Blur mode only | iOS | T-392 |
 | A collection's tile drew its small cover (title, author) | iOS | T-392 |
-| A collection's tile drew its small cover | Android | this commit |
-| A collection page's "Hidden mature work" card still showed fandom, author, words, chapters | Android | this commit |
+| A collection's tile drew its small cover | Android | `b0b90361` |
+| A collection page's "Hidden mature work" card still showed fandom, author, words, chapters | Android | `b0b90361` |
+| **Home › Reading Queues: a queue's card named its next work (fandom and title), in Hide mode too** | Android | lead 1, confirmed on the emulator, fixed |
+| The same card | iOS | T-393 |
 
 ## Leads, not confirmed (read only)
 
 Android:
-1. **Home › Reading Queues.** The queue card names its "up next" work, title and fandom, from
-   `repo.listWorks(queue.id)` with no privacy check (`home/HomeScreen.kt:132`,
-   `home/HomeQueueCard.kt` `HomeFacts.upNext`). The first screen of the app.
+1. ~~Home › Reading Queues~~ **confirmed and fixed** (`HomeFacts.queueFace`): a hidden work
+   is passed over, an obscured one is "Hidden mature work" with no fandom and no colour of
+   its own. Seen on the emulator before, after, and after "Show mature".
 2. The Library filter panel is given `state.collectionMembers`, obscured works included
    (`library/LibraryScreen.kt:596`): do its fandom and tag lists count them?
 3. A collection page's filter field matches an obscured work by title and author

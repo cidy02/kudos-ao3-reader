@@ -5,6 +5,7 @@ import io.github.cidy02.kudos.browse.FandomDisplayName
 import io.github.cidy02.kudos.core.model.SavedWork
 import io.github.cidy02.kudos.core.model.WorkCollection
 import io.github.cidy02.kudos.library.LibraryDisplayItem
+import io.github.cidy02.kudos.library.LibraryPrivacyVisibility
 import io.github.cidy02.kudos.ui.subject.ReaderTheme
 import io.github.cidy02.kudos.ui.subject.hsb
 import io.github.cidy02.kudos.ui.subject.withOpacity
@@ -243,6 +244,19 @@ object HomeFacts {
     fun upNext(works: List<SavedWork>): SavedWork? {
         if (works.isEmpty()) return null
         return works.firstOrNull { !it.isFinished } ?: works.first()
+    }
+
+    /** What the face of a queue's card may say about the queue's next work. */
+    data class QueueFace(val upNext: SavedWork?, val obscured: Boolean = false)
+
+    /**
+     * The face of a queue's card. A work Hide Mature hides is passed over, as the queue's own
+     * page passes over it; an obscured one is still the next work, but the face may not name
+     * it. The card's count and its strip are for the whole queue: they name nothing.
+     */
+    fun queueFace(works: List<SavedWork>, visibility: (SavedWork) -> LibraryPrivacyVisibility): QueueFace {
+        val next = upNext(works.filter { visibility(it) != LibraryPrivacyVisibility.Hidden })
+        return QueueFace(next, next != null && visibility(next) == LibraryPrivacyVisibility.Obscured)
     }
 
     /** "7 works · next up 3". The position is omitted when nothing is left unfinished. */

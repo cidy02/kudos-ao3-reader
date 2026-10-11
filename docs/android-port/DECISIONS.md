@@ -1530,3 +1530,12 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   `briefs/A38-privacy-names.md`, none confirmed yet. Reverse: the two callers back to
   `collectionMembers.map { it.item.work }`, and the two `obscured` checks out of
   `DetailedCollectionWorkCard`.
+- **2026-10-11 · Home's queue card does not name a work the privacy setting keeps back (A38,
+  lead 1).** The card's face showed the queue's next work, fandom and title, with no privacy
+  check at all: in Hide mode too, on the app's first screen, beside a Continue Reading card
+  that said "Hidden mature work" for the same work. `HomeFacts.queueFace` now decides the
+  face: a hidden work is passed over (as on the queue's page), an obscured one is the next
+  work still but shown as "Hidden mature work" with no fandom and a colour that is not its
+  own. The face is a required argument of `HomeQueueCard`, so a new caller cannot skip it.
+  The count and the progress strip are for the whole queue, as before. Reverse:
+  `queueFace(works)` in `HomeScreen.kt` back to `QueueFace(HomeFacts.upNext(works))`.

@@ -122,6 +122,11 @@ fun HomeScreen(
     val allSelected = selectable.isNotEmpty() && selectable.all { it.id in selection }
     val hideMature = state.hideMatureContent
 
+    // A queue's works are not among the Library's display items: judged here, by the same rule.
+    fun queueFace(works: List<SavedWork>) = HomeFacts.queueFace(works) {
+        io.github.cidy02.kudos.library.LibraryPrivacy.visibility(it, state.privacy, privacyState)
+    }
+
     suspend fun reloadQueues() {
         val repo = queueRepository ?: return
         val loaded = runCatching {
@@ -263,7 +268,7 @@ fun HomeScreen(
                     ) { (queue, works) ->
                         if (queueRepo == null) {
                             HomePress(onClick = { onOpenQueue(queue.id) }) {
-                                HomeQueueCard(queue = queue, works = works)
+                                HomeQueueCard(queue = queue, works = works, face = queueFace(works))
                             }
                         } else {
                             QueueCardPress(
@@ -284,7 +289,7 @@ fun HomeScreen(
                                     }
                                 }
                             ) {
-                                HomeQueueCard(queue = queue, works = works)
+                                HomeQueueCard(queue = queue, works = works, face = queueFace(works))
                             }
                         }
                     }
