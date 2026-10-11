@@ -87,6 +87,9 @@ fun AuthorProfileScreen(
     }
     val sessionGeneration by (authRepository?.generation ?: authorRepository.sessionChanges).collectAsState()
     var header by remember(sessionGeneration) { mutableStateOf<AO3AuthorHeader?>(null) }
+    // The account's own totals, for the line under "Works" (iOS 1u). Asked once per opening.
+    var stats by remember(route, sessionGeneration) { mutableStateOf<io.github.cidy02.kudos.network.ao3.author.AO3UserStats?>(null) }
+    var statsAsked by remember(route, sessionGeneration) { mutableStateOf(false) }
     var headerError by remember(sessionGeneration) { mutableStateOf<AO3Error?>(null) }
     var headerStale by remember(sessionGeneration) { mutableStateOf(false) }
     var tabStale by remember(sessionGeneration) { mutableStateOf(false) }
@@ -224,6 +227,25 @@ fun AuthorProfileScreen(
         loadHeader()
     }
 
+    // iOS `loadOwnStats`: silent when it fails (the line keeps what it had), and nothing is
+    // shown from a reader or a page that has changed since it was asked for.
+    suspend fun loadOwnStats(bypassCache: Boolean = false) {
+        val expectedRoute = route
+        val expectedSession = sessionGeneration
+        val loaded = (authorRepository.loadOwnStats(expectedRoute, bypassCache) as? AO3Result.Success)?.value ?: return
+        if (route == expectedRoute && sessionGeneration == expectedSession && !loaded.isEmpty) stats = loaded
+    }
+    // A confirmed write to the writer's own works: the header and the list are read past the
+    // cache, and then the totals, which a deleted or edited work is no longer in as it was.
+    fun reloadAfterWorksWrite() = loadHeader(bypassCache = true) {
+        loadTab(tab, 1, bypassCache = true)
+        scope.launch { tabTask?.join(); loadOwnStats(bypassCache = true) }
+    }
+    // After the header and the list, as iOS: the figures are no reason to hold either up.
+    LaunchedEffect(route, sessionGeneration, header != null && works != null) {
+        if (header != null && works != null && !statsAsked) { statsAsked = true; loadOwnStats() }
+    }
+
     // iOS activation waits for a usable header before reading the selected index.
     // A missing/refused author must not trigger another read known to be unusable.
     LaunchedEffect(header, route.id, sessionGeneration) {
@@ -240,7 +262,7 @@ fun AuthorProfileScreen(
 
     LaunchedEffect(route.id, sessionGeneration, tab, scopeState) { selection.exit() }
     LaunchedEffect(deleteState.confirmed) {
-        if (deleteState.confirmed > 0) { selection.exit(); heldDelete = null; loadHeader(bypassCache = true) { loadTab(tab, 1, bypassCache = true) } }
+        if (deleteState.confirmed > 0) { selection.exit(); heldDelete = null; reloadAfterWorksWrite() }
     }
     DisposableEffect(deletes) { onDispose { deletes?.close() } }
     val bulk = bulkModel
@@ -249,7 +271,7 @@ fun AuthorProfileScreen(
         // delete: the rows still showed the rating and tags from before the Save, and the kept
         // page would have gone on saying so for five minutes.
         WritingBulkEditScreen(bulk, bulkFocus, onBack = { bulkModel = null },
-            onSaved = { bulkModel = null; loadHeader(bypassCache = true) { loadTab(tab, 1, bypassCache = true) } },
+            onSaved = { bulkModel = null; reloadAfterWorksWrite() },
             autocomplete = autocompleteRepository, settings = settingsRepository)
         return
     }
@@ -257,7 +279,7 @@ fun AuthorProfileScreen(
     if (row != null && workFormRepository != null && authRepository != null && seriesWrites != null) {
         WritingOwnWorkScreen(row.first, row.second, workFormRepository, authRepository, seriesWrites,
             autocompleteRepository, settingsRepository, onBack = { rowAction = null },
-            onChanged = { loadHeader(bypassCache = true) { loadTab(tab, 1, bypassCache = true) } }, seriesRepository = seriesFormRepository)
+            onChanged = { reloadAfterWorksWrite() }, seriesRepository = seriesFormRepository)
         return
     }
 
@@ -408,6 +430,7 @@ fun AuthorProfileScreen(
             if (headerError == null && header != null && !isDashboard) {
                 loadTab(tab, 1, bypassCache = true)
                 tabTask?.join()
+                loadOwnStats(bypassCache = true)
             }
         } finally {
             if (headerTask?.isActive == true) headerTask?.cancel()
@@ -466,7 +489,15 @@ fun AuthorProfileScreen(
                             SubjectHeaderBlock(
                                 kicker = "AO3 Account",
                                 title = if (isDashboard) route.displayName else tab.label,
-                                subtitle = if (isDashboard) null else route.displayName,
+                                subtitle = when {
+                                    isDashboard -> null
+                                    // The plain list only: under "In collections", or narrowed to
+                                    // complete works, AO3's count is of a different list.
+                                    tab == AuthorTab.Works && scopeState == AO3AuthorWorksScope.Works && route.pseud == null &&
+                                        worksSort.completion == io.github.cidy02.kudos.network.ao3.author.AO3AuthorWorksCompletion.Any ->
+                                        ownWorksLine(route.displayName, works?.summary?.total, stats)
+                                    else -> route.displayName
+                                },
                                 palette = palette
                             )
                             if (isDashboard && h.pseuds.size > 1) {
@@ -853,4 +884,17 @@ private fun PagerRow(
         Text("Page $page of $total", color = LocalKudosTokens.current.secondaryInk, fontSize = 13.sp)
         OutlinedButton(onClick = onNext, enabled = page < total) { Text("Next") }
     }
+}
+
+/**
+ * iOS 1u's line under the writer's own Works: "12 works · 248,400 words · 3,812 kudos". The
+ * count is AO3's own heading for the list; without it the line is the name alone, and without
+ * the totals it is the count and the name, as it was before they were read.
+ */
+internal fun ownWorksLine(name: String, count: Int?, stats: io.github.cidy02.kudos.network.ao3.author.AO3UserStats?): String {
+    if (count == null) return name
+    fun figure(value: Int) = java.text.NumberFormat.getIntegerInstance().format(value)
+    val parts = listOfNotNull("${figure(count)} ${if (count == 1) "work" else "works"}",
+        stats?.wordCount?.let { "${figure(it)} words" }, stats?.kudos?.let { "${figure(it)} kudos" })
+    return if (parts.size > 1) parts.joinToString(" · ") else "${parts[0]} · $name"
 }

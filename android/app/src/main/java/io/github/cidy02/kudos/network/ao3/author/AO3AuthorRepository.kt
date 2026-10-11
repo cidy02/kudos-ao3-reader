@@ -67,6 +67,17 @@ class AO3AuthorRepository(
         return cached(url, AO3PageCache.Kind.Bookmarks, bypassCache) { parser.parseBookmarksPage(it, page) }
     }
 
+    /**
+     * The signed-in account's own totals; null, and no request, for anyone else's page or a
+     * pseud's. AO3 has this page for its owner only, and it belongs to the account.
+     */
+    suspend fun loadOwnStats(route: AO3AuthorRoute, bypassCache: Boolean = false): AO3Result<AO3UserStats>? {
+        val own = route.pseud == null &&
+            authenticatedClient?.username()?.equals(route.username.trim(), ignoreCase = true) == true
+        val url = AO3AuthorUrls.userStatsUrl(route.username)?.takeIf { own } ?: return null
+        return cached(url, AO3PageCache.Kind.Stats, bypassCache, parser::parseUserStats)
+    }
+
     private suspend fun <T> cached(
         url: String, kind: AO3PageCache.Kind, bypassCache: Boolean, parse: (String) -> T
     ): AO3Result<T> = pageCache.read(url, kind, authenticatedClient, bypassCache,

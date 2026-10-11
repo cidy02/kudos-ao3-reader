@@ -149,6 +149,24 @@ class AO3AuthorParser(
         )
     }
 
+    /**
+     * The Totals block of the stats page. Only that block: every work listed under it has a
+     * `dd.kudos` of its own. A figure is found by its whole set of class names, because "user
+     * subscriptions" also carries the class "subscriptions". No block is an account with no
+     * works, not a page that could not be read.
+     */
+    fun parseUserStats(html: String): AO3UserStats {
+        val totals = Jsoup.parse(html).selectFirst("dl.statistics.meta") ?: return AO3UserStats()
+        val figures = totals.select("dd").mapNotNull { dd ->
+            dd.text().filter(Char::isDigit).toIntOrNull()?.let { dd.classNames().sorted().joinToString(" ") to it }
+        }.toMap()
+        return AO3UserStats(
+            wordCount = figures["words"], kudos = figures["kudos"], hits = figures["hits"],
+            bookmarks = figures["bookmarks"], commentThreads = figures["comment count thread"],
+            subscriptions = figures["subscriptions"], userSubscriptions = figures["subscriptions user"]
+        )
+    }
+
     fun parseWorksPage(html: String, page: Int): io.github.cidy02.kudos.network.ao3.search.AO3SearchPage {
         val result = searchParser.parseSearchPage(html, page)
         val doc = Jsoup.parse(html, AO3Constants.BASE_URL)

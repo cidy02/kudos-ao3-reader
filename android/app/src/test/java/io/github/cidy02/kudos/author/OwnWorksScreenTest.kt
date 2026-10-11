@@ -107,7 +107,7 @@ class OwnWorksScreenTest {
         assertTrue(recorder.posts.isEmpty())
     }
     @Test fun selectingAndCancellingSendNothingAndDeleteRefusalKeepsSelectionThenConfirmationClears() {
-        show(); idleRequests(2)
+        show(); idleRequests(3) // the dashboard, the works, and the account's totals
         val opening = requests.size
         compose.onNodeWithContentDescription("Select Works").performClick()
         compose.onNodeWithText("Delete").assertIsNotEnabled()
@@ -126,12 +126,13 @@ class OwnWorksScreenTest {
         compose.onNodeWithText("Delete").performClick(); compose.onNodeWithText("Delete on AO3").performClick()
         compose.waitUntil(15_000) { compose.onAllNodesWithContentDescription("Select Works").fetchSemanticsNodes().isNotEmpty() }
         compose.onAllNodesWithText("Edit 1").assertCountEquals(0)
-        idleRequests(opening + 4) // two preparation reads and the confirmed dashboard + works refresh
-        assertEquals(opening + 4, requests.size); assertEquals(2, recorder.posts.size)
+        idleRequests(opening + 5) // two preparation reads, then the dashboard, the works and the totals again
+        assertEquals(opening + 5, requests.size); assertEquals(2, recorder.posts.size)
+        assertTrue(requests.last().endsWith("/users/AO3_Reader/stats"))
     }
     /** A saved bulk edit left the list as it was read before the Save: the rows kept the old rating. */
     @Test fun aSavedBulkEditReadsTheListAgainFromAO3() {
-        show(); idleRequests(2)
+        show(); idleRequests(3)
         val dashboard = requests[0]; val works = requests[1]
         compose.onNodeWithContentDescription("Select Works").performClick()
         compose.onNodeWithContentDescription("Select $title").performClick()
@@ -147,7 +148,7 @@ class OwnWorksScreenTest {
     }
     /** A work saved from its row's Edit went back to the list as it was read before the Save. */
     @Test fun aWorkSavedFromItsRowReadsTheListAgainFromAO3() {
-        show(); idleRequests(2)
+        show(); idleRequests(3)
         val dashboard = requests[0]; val works = requests[1]
         compose.onNodeWithContentDescription("Actions for $title").performClick()
         compose.onNodeWithText("Edit").performClick()
@@ -162,21 +163,22 @@ class OwnWorksScreenTest {
         assertEquals(1, recorder.posts.size)
     }
     @Test fun rowEditAndTagsUseKnownIdWithNoDetailProbeAndBackRestoresChrome() {
-        show(); idleRequests(2)
+        show(); idleRequests(3)
+        assertTrue("the totals are read last, after the list", requests[2].endsWith("/users/AO3_Reader/stats"))
         compose.onNodeWithContentDescription("Actions for $title").performClick()
         compose.onNodeWithText("Edit").performClick()
         compose.waitUntil(15_000) { compose.onAllNodesWithContentDescription("Save").fetchSemanticsNodes().isNotEmpty() || compose.onAllNodesWithText("Save").fetchSemanticsNodes().isNotEmpty() }
-        assertEquals(3, requests.size); assertTrue(requests.last().endsWith("/works/995006/edit"))
+        assertEquals(4, requests.size); assertTrue(requests.last().endsWith("/works/995006/edit"))
         assertTrue(recorder.posts.isEmpty())
         compose.onNodeWithText("Back").performClick()
         compose.onNodeWithContentDescription("Actions for $title").performClick()
         compose.onNodeWithText("Tags").performClick()
         compose.waitUntil(15_000) { compose.onAllNodesWithText("Edit tags").fetchSemanticsNodes().isNotEmpty() }
-        idleRequests(4)
-        assertEquals(4, requests.size); assertTrue(requests.last().endsWith("/works/995006/edit_tags"))
+        idleRequests(5)
+        assertEquals(5, requests.size); assertTrue(requests.last().endsWith("/works/995006/edit_tags"))
         compose.onNodeWithText("Back").performClick()
         compose.onNodeWithContentDescription("Select Works").assertExists()
-        assertEquals(4, requests.size); assertTrue(recorder.posts.isEmpty())
+        assertEquals(5, requests.size); assertTrue(recorder.posts.isEmpty())
     }
     @Test fun singleAndPluralDeleteNameExactlyTheWorksAndNoLibraryAction() {
         val one = listOf(bulkSummary(11).copy(title = "First 星"))
