@@ -43,6 +43,17 @@ enum ReadingQueueFacts {
         return (inLine.remove(at: index), inLine)
     }
 
+    /// The face of a queue's card on Home: the work it shows, and whether it may name it.
+    /// A work Hide mode hides is passed over, as the queue's page passes over it. One
+    /// Blur mode blurs is still the next work, but nothing may name it until it is
+    /// revealed. The card used to name the next work whatever the setting said.
+    static func cardFace(
+        in works: [SavedWork], isHidden: (SavedWork) -> Bool, isBlurred: (SavedWork) -> Bool
+    ) -> (work: SavedWork?, blurred: Bool) {
+        let next = upNext(in: works.filter { !isHidden($0) }).upNext
+        return (next, next.map(isBlurred) ?? false)
+    }
+
     /// The queue card's footer — spec 1b: "7 works · next up 3".
     static func cardFooter(states: [SavedWork.ReadingState]) -> String {
         let count = "\(states.count) work\(states.count == 1 ? "" : "s")"
