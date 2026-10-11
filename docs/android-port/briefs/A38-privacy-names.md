@@ -102,8 +102,23 @@ suggested tags in their filter, from every saved work: **fixed** (`rememberShown
 helper for these and Browse; iOS leaves a hidden work out of that pairing,
 `AO3AccountWorksList.swift:264`). Search's and the Account lists' tag suggestions too. By the
 gate and by reading: no demo fixture pairs an AO3 result with a hidden local work.
-**Not checked on iOS:** whether its tag, fandom and author works pages pair a result with a
-work Hide mode hides (its account lists do not).
+**iOS, read 2026-10-11:** its AO3 result row (`AO3WorkRow`) does not consult the Library at
+all (no badge), its AO3 filter suggests no Library tags, and every place that pairs a result
+with a local copy (`localLibrary:`, eight sites) passes a list without Hide mode's works.
+Nothing to change.
+
+## Closed 2026-10-11 (what is left is owner question 23)
+
+The iPhone's 13 Hide-only call sites were read for Blur mode: each hands a local work to a
+view that blurs it (`SensitiveWorkRow`, `SensitiveCoverCard`, `CanonicalWorkCoverCard`,
+`AO3AuthorWorkCard`), or was one of the faults above. Read, not each looked at on screen.
+A select-mode row on an AO3 page (a series, an author) shows the AO3 result itself, which is
+public there.
+
+Fourteen places fixed in five rounds (iOS T-392 to T-397; Android `cf33b96a` to
+`fd1c58f9`). Open: owner question 23 (Blur mode's Reorder screen, a search or filter
+answering for a blurred work, a blurred work's tags and author in lists, Recently Deleted
+and Queue Storage in both modes).
 
 ## Leads, not confirmed (read only)
 
