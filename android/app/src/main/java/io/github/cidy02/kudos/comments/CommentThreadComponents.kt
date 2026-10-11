@@ -449,7 +449,8 @@ fun CommentPostRow(
             CommentAvatar(
                 avatarUrl = comment.avatarUrl,
                 isGuest = comment.isGuest,
-                size = avatarSize
+                size = avatarSize,
+                name = comment.author.name
             )
         }
 

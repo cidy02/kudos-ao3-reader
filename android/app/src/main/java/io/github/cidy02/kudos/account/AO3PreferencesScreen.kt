@@ -18,6 +18,15 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.HelpOutline
 import androidx.compose.material.icons.outlined.HelpOutline
+import androidx.compose.material.icons.outlined.AlternateEmail
+import androidx.compose.material.icons.outlined.BackHand
+import androidx.compose.material.icons.outlined.Badge
+import androidx.compose.material.icons.outlined.ChevronRight
+import androidx.compose.material.icons.outlined.Email
+import androidx.compose.material.icons.outlined.ExpandMore
+import androidx.compose.material.icons.outlined.Group
+import androidx.compose.material.icons.outlined.Key
+import androidx.compose.material.icons.outlined.VolumeOff
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -229,24 +238,25 @@ fun AO3PreferencesScreen(
                                 .padding(horizontal = SubjectMetrics.accountGutter)
                                 .subjectPanel()
                         ) {
-                            SubjectFormRow("Edit profile", showsDisclosure = true, onClick = { onOpenWeb("profile/edit") })
+                            SubjectFormRow("Edit profile", leadingIcon = Icons.Outlined.Badge, showsDisclosure = true, onClick = { onOpenWeb("profile/edit") })
                             SubjectRowSeparator()
-                            SubjectFormRow("Manage pseuds", showsDisclosure = true, onClick = { onOpenWeb("pseuds") })
+                            SubjectFormRow("Manage pseuds", leadingIcon = Icons.Outlined.Group, showsDisclosure = true, onClick = { onOpenWeb("pseuds") })
                             SubjectRowSeparator()
-                            SubjectFormRow("Change username", showsDisclosure = true, onClick = { onOpenWeb("change_username") })
+                            SubjectFormRow("Change username", leadingIcon = Icons.Outlined.AlternateEmail, showsDisclosure = true, onClick = { onOpenWeb("change_username") })
                             SubjectRowSeparator()
-                            SubjectFormRow("Change password", showsDisclosure = true, onClick = { onOpenWeb("change_password") })
+                            SubjectFormRow("Change password", leadingIcon = Icons.Outlined.Key, showsDisclosure = true, onClick = { onOpenWeb("change_password") })
                             SubjectRowSeparator()
-                            SubjectFormRow("Change email", showsDisclosure = true, onClick = { onOpenWeb("change_email") })
+                            SubjectFormRow("Change email", leadingIcon = Icons.Outlined.Email, showsDisclosure = true, onClick = { onOpenWeb("change_email") })
                             SubjectRowSeparator()
-                            SubjectFormRow("Blocked users", showsDisclosure = true, onClick = { onOpenWeb("blocked/users") })
+                            SubjectFormRow("Blocked users", leadingIcon = Icons.Outlined.BackHand, showsDisclosure = true, onClick = { onOpenWeb("blocked/users") })
                             SubjectRowSeparator()
-                            SubjectFormRow("Muted users", showsDisclosure = true, onClick = { onOpenWeb("muted/users") })
+                            SubjectFormRow("Muted users", leadingIcon = Icons.Outlined.VolumeOff, showsDisclosure = true, onClick = { onOpenWeb("muted/users") })
                         }
                     }
                 }
 
                 itemsIndexed(snap.sections, key = { _, s -> s.title }) { _, section ->
+                    val collapsed = section.title in collapsedSections.value
                     Column(modifier = Modifier.padding(top = 18.dp)) {
                         Row(
                             modifier = Modifier.padding(horizontal = SubjectMetrics.accountGutter),
@@ -255,9 +265,23 @@ fun AO3PreferencesScreen(
                             SubjectFieldLabel(text = section.title)
                             Spacer(modifier = Modifier.weight(1f))
                             section.help?.let { PreferenceHelpButton(it, ::openHelp) }
+                            // iOS 1z: a section folds away. Kept for this visit only, as there.
+                            IconButton(onClick = {
+                                collapsedSections.value = if (collapsed) {
+                                    collapsedSections.value - section.title
+                                } else {
+                                    collapsedSections.value + section.title
+                                }
+                            }) {
+                                Icon(
+                                    if (collapsed) Icons.Outlined.ChevronRight else Icons.Outlined.ExpandMore,
+                                    contentDescription = "${if (collapsed) "Expand" else "Collapse"} ${section.title}",
+                                    tint = LocalKudosTokens.current.tertiaryInk
+                                )
+                            }
                         }
-                        
-                        Column(
+
+                        if (!collapsed) Column(
                             modifier = Modifier
                                 .padding(top = 8.dp)
                                 .padding(horizontal = SubjectMetrics.accountGutter)

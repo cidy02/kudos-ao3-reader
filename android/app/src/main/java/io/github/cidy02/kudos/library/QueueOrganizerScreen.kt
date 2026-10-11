@@ -34,7 +34,6 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -192,13 +191,15 @@ fun QueueOrganizerScreen(
             gutter = SubjectMetrics.accountGutter
         )
         if (!selecting && !reordering) {
-            OutlinedTextField(
-                value = search,
-                onValueChange = { search = it },
+            io.github.cidy02.kudos.ui.components.GlassFieldBar(
+                text = search,
+                onTextChange = { search = it },
+                placeholder = "Search queues, tags and works",
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
-                placeholder = { Text("Search queues, tags and works") },
-                leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
-                singleLine = true
+                leading = {
+                    Icon(Icons.Filled.Search, contentDescription = null,
+                        tint = LocalKudosTokens.current.secondaryInk, modifier = Modifier.size(18.dp))
+                }
             )
         }
         SubjectStatStrip(
