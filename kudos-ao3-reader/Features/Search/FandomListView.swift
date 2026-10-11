@@ -16,7 +16,17 @@ struct FandomListView: View {
     /// The other half of the Browse zoom pair — set by BrowseView on the stack.
     @Environment(\.workCardTransitionNamespace) private var zoomNamespace
     @Environment(ThemeManager.self) private var themeManager
-    @Query(filter: #Predicate<SavedWork> { !$0.isPendingDeletion }) private var library: [SavedWork]
+    @AppStorage("hideMatureContent") private var hideMature = true
+    @AppStorage("matureContentMode") private var matureMode: MaturePrivacyMode = .obscure
+    @Environment(PrivacyGate.self) private var gate
+    @Query(filter: #Predicate<SavedWork> { !$0.isPendingDeletion }) private var allLibrary: [SavedWork]
+    /// What Browse may know of the Library: not a work Hide mode hides. Built from
+    /// every work, it marked such a work's fandom as yours, counted its download and
+    /// offered the fandom in Jump Back In (audit A38). Free in any other mode.
+    private var library: [SavedWork] {
+        guard hideMature, matureMode == .hide else { return allLibrary }
+        return allLibrary.filter { !gate.isHidden($0, enabled: true, mode: .hide) }
+    }
 
     @State private var fandoms: [AO3Fandom] = []
     @State private var families: [FandomFamily] = []
