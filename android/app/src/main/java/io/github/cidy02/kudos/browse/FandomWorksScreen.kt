@@ -128,6 +128,20 @@ fun FandomWorksScreen(
         }
     }
 
+    /**
+     * Pull to refresh: the page on screen again, with the filters it was asked for, and it stays
+     * there until the answer is in. iOS's list of a fandom's works can be pulled; this could not.
+     */
+    suspend fun refresh() {
+        val page = (state as? FandomWorksState.Loaded)?.page?.currentPage ?: return
+        val generation = ++loadGeneration
+        val result = when (val result = repository.worksForFandom(fandomName, page, loadedFilters)) {
+            is AO3Result.Success -> FandomWorksState.Loaded(result.value)
+            is AO3Result.Failure -> FandomWorksState.Error(result.error.displayMessage(), page)
+        }
+        if (generation == loadGeneration) state = result
+    }
+
     LaunchedEffect(fandomName) { load() }
 
     ProvidePushedShellChrome(
@@ -218,67 +232,72 @@ fun FandomWorksScreen(
                         }
                     )
                 } else {
-                    LazyColumn(
-                        verticalArrangement = Arrangement.spacedBy(12.dp),
-                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+                    io.github.cidy02.kudos.ui.components.KudosRefreshBox(
+                        onRefresh = { refresh() },
                         // weight(fill = false) so the selection bar below keeps its
                         // space when selecting, without stretching the list otherwise.
                         modifier = Modifier
                             .fillMaxWidth()
                             .weight(1f, fill = false)
                     ) {
-                        item {
-                            current.page.summary?.let { summary ->
-                                SearchResultsHero(
-                                    summary = summary.completing(
-                                        subject = fandomName,
-                                        page = current.page.currentPage,
-                                        onPageCount = current.page.works.size
-                                    ),
-                                    filterLabels = summaryLabels(filters, excluding = fandomName),
-                                    subjectCategory = summary.subjectCategory(current.page.works),
-                                    onEditFilters = { showFilterSheet = true },
-                                    modifier = Modifier.padding(bottom = 4.dp)
-                                )
-                            }
-                            KudosSectionHeader(
-                                title = "Works",
-                                subtitle = "Page ${current.page.currentPage} of ${current.page.totalPages}"
-                            )
-                            // Above the results as well as below, matching Apple:
-                            // the pager was reachable only after scrolling the
-                            // whole page, so changing page meant reading to the
-                            // bottom of one you had already decided to leave.
-                            KudosPaginationBar(
-                                currentPage = current.page.currentPage,
-                                totalPages = current.page.totalPages,
-                                onPageChange = { load(it) }
-                            )
-                        }
-                        items(current.page.works, key = { it.id }) { work ->
-                            if (selection.isSelecting) {
-                                SelectableRemoteWorkRow(
-                                    work = work,
-                                    selected = selection.isSelected(work.id),
-                                    onToggle = { selection.toggle(work.id) }
-                                )
-                            } else {
-                                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                    LocalIndicatorRow(BrowseLocalIndicators.forWork(work, savedByUrl))
-                                    SensitiveWorkRow(
-                                        work = work,
-                                        onOpenWork = onOpenWork,
-                                        expandAll = expandAllCards
+                        LazyColumn(
+                            verticalArrangement = Arrangement.spacedBy(12.dp),
+                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            item {
+                                current.page.summary?.let { summary ->
+                                    SearchResultsHero(
+                                        summary = summary.completing(
+                                            subject = fandomName,
+                                            page = current.page.currentPage,
+                                            onPageCount = current.page.works.size
+                                        ),
+                                        filterLabels = summaryLabels(filters, excluding = fandomName),
+                                        subjectCategory = summary.subjectCategory(current.page.works),
+                                        onEditFilters = { showFilterSheet = true },
+                                        modifier = Modifier.padding(bottom = 4.dp)
                                     )
                                 }
+                                KudosSectionHeader(
+                                    title = "Works",
+                                    subtitle = "Page ${current.page.currentPage} of ${current.page.totalPages}"
+                                )
+                                // Above the results as well as below, matching Apple:
+                                // the pager was reachable only after scrolling the
+                                // whole page, so changing page meant reading to the
+                                // bottom of one you had already decided to leave.
+                                KudosPaginationBar(
+                                    currentPage = current.page.currentPage,
+                                    totalPages = current.page.totalPages,
+                                    onPageChange = { load(it) }
+                                )
                             }
-                        }
-                        item {
-                            KudosPaginationBar(
-                                currentPage = current.page.currentPage,
-                                totalPages = current.page.totalPages,
-                                onPageChange = { load(it) }
-                            )
+                            items(current.page.works, key = { it.id }) { work ->
+                                if (selection.isSelecting) {
+                                    SelectableRemoteWorkRow(
+                                        work = work,
+                                        selected = selection.isSelected(work.id),
+                                        onToggle = { selection.toggle(work.id) }
+                                    )
+                                } else {
+                                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                        LocalIndicatorRow(BrowseLocalIndicators.forWork(work, savedByUrl))
+                                        SensitiveWorkRow(
+                                            work = work,
+                                            onOpenWork = onOpenWork,
+                                            expandAll = expandAllCards
+                                        )
+                                    }
+                                }
+                            }
+                            item {
+                                KudosPaginationBar(
+                                    currentPage = current.page.currentPage,
+                                    totalPages = current.page.totalPages,
+                                    onPageChange = { load(it) }
+                                )
+                            }
                         }
                     }
                 }
