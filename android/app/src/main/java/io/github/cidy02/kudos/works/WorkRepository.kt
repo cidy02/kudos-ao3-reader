@@ -604,6 +604,29 @@ class WorkRepository(
         return userTagsForWork(workId)
     }
 
+    /** For each of [workIds], in order, the ids of the user tags on it. */
+    suspend fun userTagIdsByWork(workIds: List<String>): List<Set<String>> =
+        workIds.map { id -> tagDao.getTagsForWork(id).mapTo(mutableSetOf()) { it.id } }
+
+    /**
+     * iOS `WorkBulkTagSheet.toggle`: a tag that is on every one of [workIds] comes off them
+     * all; otherwise it goes on the ones without it. "Some" adds, because that is the
+     * direction that cannot lose a tag already put on a work. A name not seen before is made.
+     */
+    suspend fun toggleUserTag(workIds: List<String>, name: String) {
+        val trimmed = name.trim()
+        if (trimmed.isEmpty() || workIds.isEmpty()) return
+        val existing = tagDao.getByNameCaseInsensitive(trimmed)
+        val tagged = if (existing == null) emptySet() else workIds.filterTo(mutableSetOf()) { id ->
+            tagDao.getTagsForWork(id).any { it.id == existing.id }
+        }
+        if (existing != null && tagged.size == workIds.size) {
+            workIds.forEach { removeUserTag(it, existing.id) }
+        } else {
+            workIds.filterNot { it in tagged }.forEach { addUserTag(it, trimmed) }
+        }
+    }
+
     private suspend fun reindexSearchForWork(workId: String) {
         val work = getWork(workId) ?: return
         val tags = userTagsForWork(workId).map { it.name }
