@@ -35,8 +35,6 @@ import io.github.cidy02.kudos.account.AccountListType
 import io.github.cidy02.kudos.account.AccountScreen
 import io.github.cidy02.kudos.account.AccountViewModel
 import io.github.cidy02.kudos.account.BugReportScreen
-import io.github.cidy02.kudos.account.LocalLibraryListKind
-import io.github.cidy02.kudos.account.LocalLibraryListsScreen
 import io.github.cidy02.kudos.auth.AO3AuthState
 import io.github.cidy02.kudos.auth.AO3NativeLoginScreen
 import io.github.cidy02.kudos.auth.usernameOrNull
@@ -563,30 +561,6 @@ fun AppNavHost(
                     navController.navigate(Routes.accountList(NavArgCodecs.encodeAccountListType(type)))
                 },
                 onOpenAO3Collections = { navController.navigate(Routes.AO3Collections) }
-            )
-        }
-        sharedComposable(Routes.LocalHistory) {
-            LocalLibraryListsScreen(
-                kind = LocalLibraryListKind.History,
-                repository = container.libraryRepository,
-                onOpenWork = { workId ->
-                    navigateToWorkDetail(WorkDetailSource.LocalWork(workId))
-                },
-                onOpenReader = { workId ->
-                    navController.navigate(Routes.reader(workId))
-                }
-            )
-        }
-        sharedComposable(Routes.LocalFavorites) {
-            LocalLibraryListsScreen(
-                kind = LocalLibraryListKind.Favorites,
-                repository = container.libraryRepository,
-                onOpenWork = { workId ->
-                    navigateToWorkDetail(WorkDetailSource.LocalWork(workId))
-                },
-                onOpenReader = { workId ->
-                    navController.navigate(Routes.reader(workId))
-                }
             )
         }
         sharedComposable(Routes.About) {
