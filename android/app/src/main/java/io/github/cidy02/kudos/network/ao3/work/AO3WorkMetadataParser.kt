@@ -31,7 +31,11 @@ class AO3WorkMetadataParser {
             hits = statInt(document, "hits"),
             kudosGivenByCurrentUser = currentUsername?.let { username ->
                 document.selectFirst("#kudos a[href=\"/users/$username\"]") != null
-            } ?: false
+            } ?: false,
+            // The first byline is the work's; a chapter can carry one of its own further down.
+            authorIdentitiesJSON = io.github.cidy02.kudos.network.ao3.author.AO3AuthorIdentities.json(
+                document.selectFirst("h3.byline")?.select("a[rel=author]").orEmpty()
+            )
         )
     }
 

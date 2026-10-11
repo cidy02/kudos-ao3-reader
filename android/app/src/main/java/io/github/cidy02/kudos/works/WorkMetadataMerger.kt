@@ -46,9 +46,17 @@ class WorkMetadataMerger(
         val warnings = mergeTagLists(base.workWarnings, canonical?.warnings, summary?.warnings)
         val categories = mergeTagLists(base.workCategories, canonical?.categories, summary?.categories)
 
+        val author = choose(summary?.authorText, base.author)
+
         return base.copy(
             title = choose(summary?.title, base.title, fallback = "Untitled"),
-            author = choose(summary?.authorText, base.author),
+            author = author,
+            // Whose accounts the byline names. A page read now wins. A byline that changed
+            // without saying whose it is (the work is Anonymous now) drops what was known,
+            // rather than keeping the old account under the new name.
+            authorIdentitiesJSON = canonical?.authorIdentitiesJSON?.takeIf { it.isNotEmpty() }
+                ?: summary?.authorIdentitiesJSON?.takeIf { it.isNotEmpty() }
+                ?: base.authorIdentitiesJSON.takeIf { author == base.author }.orEmpty(),
             summary = choose(summary?.summary, base.summary),
             sourceUrl = choose(summary?.workUrl, base.sourceUrl),
             isSaved = base.isSaved || markSaved,

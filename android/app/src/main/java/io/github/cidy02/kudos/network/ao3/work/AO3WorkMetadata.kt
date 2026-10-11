@@ -14,7 +14,9 @@ data class AO3WorkMetadata(
     val kudos: Int? = null,
     val comments: Int? = null,
     val hits: Int? = null,
-    val kudosGivenByCurrentUser: Boolean = false
+    val kudosGivenByCurrentUser: Boolean = false,
+    /** The work's own byline by account (`AO3AuthorIdentities.json`); empty for Anonymous. */
+    val authorIdentitiesJSON: String = ""
 ) {
     val flattenedTags: List<String>
         get() = (fandoms + relationships + characters + freeforms).dedupeFirstSeen()
