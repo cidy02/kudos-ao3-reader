@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.author
 
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -138,6 +139,11 @@ fun AuthorProfileScreen(
     var confirmingUnsubscribe by remember(route.id, sessionGeneration) {
         mutableStateOf<io.github.cidy02.kudos.network.ao3.author.AO3AuthorSubscriptionForm?>(null) }
     var profileMessage by remember(route.id, sessionGeneration) { mutableStateOf<String?>(null) }
+    // Mute and Block (iOS `beginModeration`, `confirmPendingModeration`): AO3's own confirm page,
+    // read on the tap and shown as a dialog. The buttons used to open that page in the web view.
+    var moderationBusy by remember { mutableStateOf(false) }
+    var pendingModeration by remember(route.id, sessionGeneration) {
+        mutableStateOf<io.github.cidy02.kudos.network.ao3.author.AO3AuthorModerationForm?>(null) }
     var readingStatus by remember { mutableStateOf<String?>(null) }
 
     fun loadHeader(bypassCache: Boolean = false, afterLoad: (() -> Unit)? = null) {
@@ -256,6 +262,54 @@ fun AuthorProfileScreen(
                     // Every kept page of this account shows the old button, the pseuds' too.
                     io.github.cidy02.kudos.network.ao3.AO3PageCache.shared.removeAuthorDashboards(expectedRoute.username,
                         io.github.cidy02.kudos.network.ao3.AO3PageCache.Scope(signedInUsername, expectedSession))
+                    loadHeader(bypassCache = true)
+                }
+                is AO3Result.Failure -> profileMessage = result.error.displayMessage()
+            }
+        }
+    }
+
+    // One fence for the two steps of a mute or a block: the session and the page they began on.
+    fun moderation(step: suspend (io.github.cidy02.kudos.network.ao3.writes.AO3WriteRepository, Int) -> Unit) {
+        val writes = seriesWrites ?: return
+        if (moderationBusy) return
+        val expectedSession = sessionGeneration
+        moderationBusy = true
+        scope.launch {
+            try {
+                step(writes, expectedSession)
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                // The session changed before anything was sent, or the screen went: nothing to say.
+                currentCoroutineContext().ensureActive()
+            } finally {
+                moderationBusy = false
+            }
+        }
+    }
+
+    fun beginModeration(action: io.github.cidy02.kudos.network.ao3.author.AO3AuthorWebAction) {
+        val expectedRoute = route
+        moderation { writes, session ->
+            val result = writes.loadAuthorModerationForm(action, expectedRoute.username, session)
+            if (route != expectedRoute || sessionGeneration != session) return@moderation
+            when (result) {
+                is AO3Result.Success -> pendingModeration = result.value
+                is AO3Result.Failure -> profileMessage = result.error.displayMessage()
+            }
+        }
+    }
+
+    fun confirmModeration(form: io.github.cidy02.kudos.network.ao3.author.AO3AuthorModerationForm) {
+        val expectedRoute = route
+        moderation { writes, session ->
+            val result = writes.submitAuthorModeration(form, session)
+            if (route != expectedRoute || sessionGeneration != session) return@moderation
+            when (result) {
+                is AO3Result.Success -> {
+                    profileMessage = result.value.message
+                    // Every kept page of this account shows the old buttons, the pseuds' too.
+                    io.github.cidy02.kudos.network.ao3.AO3PageCache.shared.removeAuthorDashboards(expectedRoute.username,
+                        io.github.cidy02.kudos.network.ao3.AO3PageCache.Scope(signedInUsername, session))
                     loadHeader(bypassCache = true)
                 }
                 is AO3Result.Failure -> profileMessage = result.error.displayMessage()
@@ -472,6 +526,27 @@ fun AuthorProfileScreen(
             }
         )
     }
+    pendingModeration?.let { form ->
+        // AO3's own words: its heading, its notice, and what its two buttons say.
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { pendingModeration = null },
+            title = { Text(form.title) },
+            text = {
+                androidx.compose.foundation.layout.Column(
+                    Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState())
+                ) { Text(form.message) }
+            },
+            confirmButton = {
+                androidx.compose.material3.TextButton(onClick = { pendingModeration = null; confirmModeration(form) }) {
+                    Text(form.submitLabel, color = if (form.kind.isUndo) androidx.compose.ui.graphics.Color.Unspecified
+                        else androidx.compose.material3.MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                androidx.compose.material3.TextButton(onClick = { pendingModeration = null }) { Text(form.cancelLabel) }
+            }
+        )
+    }
     profileMessage?.let { message ->
         androidx.compose.material3.AlertDialog(
             onDismissRequest = { profileMessage = null },
@@ -588,7 +663,10 @@ fun AuthorProfileScreen(
                                     }
                                 },
                                 subscriptionBusy = subscriptionBusy,
-                                onModeration = { onOpenWeb(it.url) }
+                                moderationBusy = moderationBusy,
+                                onModeration = { action ->
+                                    if (seriesWrites == null) onOpenWeb(action.url) else beginModeration(action)
+                                }
                             )
                         }
                     }

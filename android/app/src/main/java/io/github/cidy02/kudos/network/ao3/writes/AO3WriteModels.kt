@@ -10,7 +10,9 @@ enum class AO3WriteActionKind {
     MarkForLater,
     Bookmark,
     Comment,
-    History
+    History,
+    /** A mute, a block, or the undoing of one; the outcome's message says which. */
+    Moderation
 }
 
 data class AO3WriteOutcome(

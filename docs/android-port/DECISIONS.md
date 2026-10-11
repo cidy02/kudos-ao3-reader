@@ -1583,3 +1583,10 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   as well); Search's and the Account lists' tag suggestions follow the same rule. iOS leaves
   a hidden work out of the pairing on its account lists. Obscure mode is unchanged (owner
   question 23). Reverse: `savedWorks` back to the unfiltered flow in the three screens.
+- **2026-10-11 · Mute and Block on an author's page are native (3ci, second step).** The two
+  buttons opened AO3's confirm page in the web view. They now read that page once on the tap
+  and show it as a dialog in AO3's own words (heading, notice, both button labels); Yes sends
+  the page's own form once, with the token it carried. iOS does the same. The read on the
+  tap is one authenticated read of a page the reader asked for; the networking policy's
+  "Author profiles" row says so. Reverse: `onModeration` in `author/AuthorProfileScreen.kt`
+  back to `{ onOpenWeb(it.url) }`.

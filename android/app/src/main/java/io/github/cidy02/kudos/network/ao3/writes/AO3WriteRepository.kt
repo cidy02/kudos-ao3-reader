@@ -1093,6 +1093,52 @@ class AO3WriteRepository(
         ) { token -> form.fields.filterNot { it.first == "authenticity_token" } + ("authenticity_token" to token) }
     }
 
+    /**
+     * iOS `beginModeration`: AO3's own confirm page for a mute or a block, read once on a tap.
+     * Nothing is changed by reading it. A page that carries AO3's refusal reports that.
+     */
+    suspend fun loadAuthorModerationForm(
+        action: io.github.cidy02.kudos.network.ao3.author.AO3AuthorWebAction, targetUsername: String,
+        expectedGeneration: Int
+    ): AO3Result<io.github.cidy02.kudos.network.ao3.author.AO3AuthorModerationForm> {
+        if (client.sessionGeneration() != expectedGeneration) throw CancellationException()
+        if (client.username() == null) return AO3Result.Failure(AO3Error.AuthenticationRequired)
+        val asks = action.kind == io.github.cidy02.kudos.network.ao3.author.AO3AuthorWebAction.Kind.Block ||
+            action.kind == io.github.cidy02.kudos.network.ao3.author.AO3AuthorWebAction.Kind.Mute
+        if (!asks || !AO3RedirectCookieRelay.isTrustedUrl(action.url)) {
+            return AO3Result.Failure(AO3Error.Validation("Couldn't open AO3's page for that."))
+        }
+        val html = when (val page = client.getAuthenticated(action.url)) {
+            is AO3Result.Failure -> return page
+            is AO3Result.Success -> page.value.body
+        }
+        if (client.sessionGeneration() != expectedGeneration) throw CancellationException()
+        return withContext(Dispatchers.Default) {
+            parser.writeErrorMessage(html)?.let { return@withContext AO3Result.Failure(AO3Error.Validation(it)) }
+            parser.parseAuthorModerationForm(html, action.url, action.kind, targetUsername)?.let { AO3Result.Success(it) }
+                ?: AO3Result.Failure(AO3Error.Parse("AO3's page for that could not be read."))
+        }
+    }
+
+    /**
+     * iOS `submitAuthorModeration`: the confirm page's own form, sent once, with the token that
+     * page carried (it was read a moment ago, on the tap that opened the confirmation). Sent in
+     * the session the page was read in, or not at all. Never run against AO3.
+     */
+    suspend fun submitAuthorModeration(
+        form: io.github.cidy02.kudos.network.ao3.author.AO3AuthorModerationForm, expectedGeneration: Int
+    ): AO3Result<AO3WriteOutcome> {
+        if (client.sessionGeneration() != expectedGeneration) throw CancellationException()
+        if (client.username() == null) return AO3Result.Failure(AO3Error.AuthenticationRequired)
+        if (!AO3RedirectCookieRelay.isTrustedUrl(form.actionUrl) || !AO3RedirectCookieRelay.isTrustedUrl(form.referer)) {
+            return AO3Result.Failure(AO3Error.Validation("Couldn't build the address for that."))
+        }
+        val fields = if (form.fields.any { it.first == "authenticity_token" }) form.fields
+            else form.fields + ("authenticity_token" to form.csrfToken)
+        return postOnce(expectedGeneration, form.csrfToken, form.referer, form.actionUrl, AO3WriteActionKind.Moderation,
+            form.kind.successMessage, "AO3 didn't accept the ${form.kind.word} action.", fields)
+    }
+
     /** iOS unsubscribe(path:page:): captured index action, fresh Works-index CSRF, one POST. */
     suspend fun unsubscribe(path: String, page: Int): AO3Result<AO3WriteOutcome> {
         val generation = client.sessionGeneration()
@@ -1146,9 +1192,17 @@ class AO3WriteRepository(
             ?: return AO3Result.Failure(
                 AO3Error.Validation("Couldn't prepare the request. Try again, or open the work on AO3.")
             )
+        return postOnce(generation, token, referer, endpoint, kind, done, fallback, fields(token))
+    }
+
+    /** The one POST of [indexWrite], for a caller that already holds the page's token. */
+    private suspend fun postOnce(
+        generation: Int?, token: String, referer: String, endpoint: String, kind: AO3WriteActionKind,
+        done: String, fallback: String, fields: List<Pair<String, String>>
+    ): AO3Result<AO3WriteOutcome> {
         // A view may disappear after sending. Finish that single write; never retry it.
         val response = withContext(NonCancellable) {
-            client.postAuthenticatedInSession(endpoint, fields(token), writeHeaders(token, referer), generation)
+            client.postAuthenticatedInSession(endpoint, fields, writeHeaders(token, referer), generation)
         }
         if (client.sessionGeneration() != generation)
             return AO3Result.Failure(AO3Error.Validation(AO3CollectionFields.UNCONFIRMED))

@@ -66,6 +66,41 @@ data class AO3AuthorWebAction(
     enum class Kind { Block, Mute, Profile, Pseuds, Works, Preferences, Dashboard, Other }
 }
 
+/** iOS `AO3AuthorModerationKind`: what AO3's confirm page is asking about. */
+enum class AO3AuthorModerationKind(val word: String, val successMessage: String) {
+    Block("block", "Blocked."),
+    Unblock("unblock", "Unblocked."),
+    Mute("mute", "Muted."),
+    Unmute("unmute", "Unmuted.");
+
+    val isUndo: Boolean get() = this == Unblock || this == Unmute
+
+    companion object {
+        fun of(action: AO3AuthorWebAction.Kind, isUndo: Boolean): AO3AuthorModerationKind? = when (action) {
+            AO3AuthorWebAction.Kind.Block -> if (isUndo) Unblock else Block
+            AO3AuthorWebAction.Kind.Mute -> if (isUndo) Unmute else Mute
+            else -> null
+        }
+    }
+}
+
+/**
+ * AO3's own confirm page for a mute or a block, as it was served (iOS `AO3AuthorModerationForm`):
+ * its heading, its notice, the words on its two buttons, and the form its Yes button sends.
+ */
+data class AO3AuthorModerationForm(
+    val kind: AO3AuthorModerationKind,
+    val targetUsername: String,
+    val title: String,
+    val message: String,
+    val submitLabel: String,
+    val cancelLabel: String,
+    val actionUrl: String,
+    val fields: List<Pair<String, String>>,
+    val csrfToken: String,
+    val referer: String
+)
+
 data class AO3AuthorSubscriptionForm(
     val label: String,
     val actionUrl: String,

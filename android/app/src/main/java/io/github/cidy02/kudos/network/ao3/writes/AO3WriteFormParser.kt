@@ -163,6 +163,68 @@ class AO3WriteFormParser {
             ?.takeIf { it.isNotBlank() }
     }
 
+    /**
+     * iOS `parseAuthorModerationForm`: the form on AO3's confirm page for a mute or a block. Null
+     * when the page carries no such form or no token. AO3's refusal (a flash) is the caller's to
+     * report first, with [writeErrorMessage].
+     */
+    fun parseAuthorModerationForm(
+        html: String,
+        referer: String,
+        webKind: io.github.cidy02.kudos.network.ao3.author.AO3AuthorWebAction.Kind,
+        targetUsername: String
+    ): io.github.cidy02.kudos.network.ao3.author.AO3AuthorModerationForm? {
+        val document = Jsoup.parse(html)
+        val csrf = document.selectFirst("meta[name=csrf-token]")?.attr("content")?.trim()?.takeIf { it.isNotEmpty() }
+            ?: document.selectFirst("input[name=authenticity_token]")?.attr("value")?.trim()?.takeIf { it.isNotEmpty() }
+            ?: return null
+        val pageTitle = document.selectFirst("h2.heading, h2")?.normalizedText().orEmpty()
+        for (form in document.select("form")) {
+            val action = AO3WriteUrls.absoluteUrl(form.attr("action")) ?: continue
+            val fields = form.select("input[name]").mapNotNull { input ->
+                input.attr("name").takeIf { it.isNotEmpty() }?.let { it to input.attr("value") }
+            }
+            val path = action.substringBefore('?').lowercase()
+            val isModeration = "/blocked/" in path || "/muted/" in path ||
+                fields.any { it.first == "blocked_id" || it.first == "muted_id" }
+            if (!isModeration) continue
+            val submit = form.selectFirst("input[type=submit], button[type=submit]")
+            val submitLabel = submit?.attr("value")?.trim()?.takeIf { it.isNotEmpty() } ?: submit?.normalizedText().orEmpty()
+            val cancelLabel = form.selectFirst("p.actions a, .actions a")?.normalizedText().orEmpty()
+            val isUndo = fields.any { it.first == "_method" && it.second.equals("delete", ignoreCase = true) } ||
+                submitLabel.contains("unblock", ignoreCase = true) || submitLabel.contains("unmute", ignoreCase = true)
+            val kind = io.github.cidy02.kudos.network.ao3.author.AO3AuthorModerationKind.of(webKind, isUndo) ?: continue
+            val notice = form.selectFirst("div.caution.notice, div.notice.caution, div.caution, div.notice")
+            return io.github.cidy02.kudos.network.ao3.author.AO3AuthorModerationForm(
+                kind = kind,
+                targetUsername = targetUsername,
+                title = pageTitle.ifEmpty { "${kind.word.replaceFirstChar(Char::uppercase)} $targetUsername" },
+                message = plainNotice(notice),
+                submitLabel = submitLabel.ifEmpty { "Confirm" },
+                cancelLabel = cancelLabel.ifEmpty { "Cancel" },
+                actionUrl = action,
+                fields = fields,
+                csrfToken = csrf,
+                referer = referer
+            )
+        }
+        return null
+    }
+
+    /** iOS `plainAlertMessage`: AO3's notice as a dialog can show it, its lists kept as lists. */
+    private fun plainNotice(notice: Element?): String {
+        notice ?: return ""
+        val parts = notice.children().mapNotNull { child ->
+            when (child.tagName().lowercase()) {
+                "ul", "ol" -> child.select("li").map { it.normalizedText() }.filter { it.isNotEmpty() }
+                    .takeIf { it.isNotEmpty() }?.joinToString("\n") { "\u2022 $it" }
+                "p", "div" -> child.normalizedText().takeIf { it.isNotEmpty() }
+                else -> null
+            }
+        }
+        return if (parts.isEmpty()) notice.normalizedText() else parts.joinToString("\n\n")
+    }
+
     fun alreadyKudosed(html: String): Boolean {
         return html.contains("already left kudos", ignoreCase = true)
     }
