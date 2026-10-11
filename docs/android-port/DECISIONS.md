@@ -1660,3 +1660,7 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   threads too. AO3 Preferences: sections fold (for the visit only) and the Account rows have
   icons. Queues: the glass search field. Collections: the header lines up with its tiles.
   Left: AO3 collections' card tint and glyph. Reverse: the commit that names 3cm.
+- **2026-10-11 · An AO3 collection's card is its own (3cm, second commit).** Hue from the
+  title (iOS), a box glyph, a maintainer's name opens their profile (a page the reader opens
+  by a tap, as a work's byline does), and the "by" line only when it adds someone to the
+  kicker. Reverse: the commit that names it.

@@ -153,4 +153,14 @@ object AO3CollectionCardCopy {
         add(if (isUnrevealed) "Unrevealed" else "Revealed")
         if (isAnonymous) add("Anonymous")
     }
+
+    /**
+     * iOS `AO3CollectionCard.showsByline`: the eyebrow already names a single maintainer, so
+     * the "by" line stays only when it adds someone. You own it (the maintainers are a second
+     * fact), or there is more than one name.
+     */
+    fun showsByline(viewerIsOwner: Boolean, maintainerNames: List<String>, byline: String): Boolean {
+        if (byline.isBlank() && maintainerNames.isEmpty()) return false
+        return viewerIsOwner || maintainerNames.size > 1
+    }
 }

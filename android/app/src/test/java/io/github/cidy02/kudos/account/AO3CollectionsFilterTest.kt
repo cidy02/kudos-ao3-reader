@@ -110,6 +110,11 @@ class AO3CollectionsFilterTest {
     }
 
     @Test fun collectionStatusLabelsAlwaysNameVisibilityAndOptionallyAnonymity() {
+        // The eyebrow names a lone maintainer already; the "by" line stays when it adds someone.
+        assertEquals(false, AO3CollectionCardCopy.showsByline(false, listOf("festrunner"), "festrunner"))
+        assertEquals(true, AO3CollectionCardCopy.showsByline(true, listOf("AO3_Reader"), "AO3_Reader"))
+        assertEquals(true, AO3CollectionCardCopy.showsByline(false, listOf("a", "b"), "a, b"))
+        assertEquals(false, AO3CollectionCardCopy.showsByline(true, emptyList(), " "))
         assertEquals(listOf("Revealed"), AO3CollectionCardCopy.statusLabels(false, false))
         assertEquals(listOf("Unrevealed"), AO3CollectionCardCopy.statusLabels(true, false))
         assertEquals(listOf("Revealed", "Anonymous"), AO3CollectionCardCopy.statusLabels(false, true))

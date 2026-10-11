@@ -1,6 +1,6 @@
 # 3cm: six pages put beside the iPhone's (Android)
 
-Done 2026-10-11 by Claude, alone (Codex and Gemini were out). Gate 2,603.
+Done 2026-10-11 by Claude, alone (Codex and Gemini were out). Gate 2,603. Two commits.
 Method: the same page in the demo on both, at the ordinary text size in Sepia, the two
 pictures joined. It found 3cl; this is the next six. Pictures: `shots/3cm/`.
 
@@ -25,10 +25,19 @@ pictures joined. It found 3cl; this is the next six. Pictures: `shots/3cm/`.
 7. **Collections, the header stood 26dp in from its tiles.** The header took its own gutter
    inside a grid that was already padded.
 
+8. **AO3 collections, the card is the collection's own** (second commit). Each card takes
+   its hue from its title, as on iOS and as a queue carries a colour; the glyph is a box; a
+   maintainer's name is in the accent and opens their profile; and the "by" line is drawn
+   only when it adds someone to the kicker (you own it, or there are several), so "by
+   festrunner" no longer repeats "FESTRUNNER" (`AO3CollectionCardCopy.showsByline`, tested).
+   The chevron had its padding inside its size and was squeezed; it is a form row's 18dp.
+   Looked at in Sepia, Dark and at twice the text size, and a name tapped (it opened the
+   maintainer's works in the demo).
+
 ## Seen, and left
 
-- **AO3 collections.** iOS tints each card and uses a box glyph; a maintainer's name is a
-  link in the accent. Android's cards are plain with a folder. Not done: next.
+- **Chevrons at 12dp** (the fandom list's among them) draw an arrow about half the size of
+  the iPhone's. Not changed across the app; a lead.
 - **A fandom's works.** The pair was not like for like (Android's fandom page beside iOS's
   search results), so nothing is concluded. To be paired properly.
 - Page controls: Android's row of four arrows where iOS has a pill. Android's own bar, kept.
