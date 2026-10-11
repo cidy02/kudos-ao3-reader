@@ -36,7 +36,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -120,7 +119,6 @@ fun FavoriteAffinityRow(row: ReadingAffinities.Row, scope: FavoriteScope,
     val tokens = LocalKudosTokens.current
     val palette = tokens.scopePalette
     val large = isAccessibilityFontScale()
-    val tileSize = 38.dp * if (large) LocalDensity.current.fontScale else 1f
     val libraryDestination = scope == FavoriteScope.Fandoms || scope == FavoriteScope.Tags
     val authorDestination = scope == FavoriteScope.Authors && row.username != null
     val log = affinityLogLine(row, scope)
@@ -137,7 +135,9 @@ fun FavoriteAffinityRow(row: ReadingAffinities.Row, scope: FavoriteScope,
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         Row(horizontalArrangement = Arrangement.spacedBy(11.dp), verticalAlignment = Alignment.Top) {
-            Box(Modifier.size(tileSize).clearAndSetSemantics {}.background(palette.chipFill,
+            // The tile is decoration. At an accessibility text size it took the room a one-word
+            // name needs, which then broke in the middle ("nine_of_wand / s"): it stands down.
+            if (!large) Box(Modifier.size(38.dp).clearAndSetSemantics {}.background(palette.chipFill,
                 if (scope == FavoriteScope.Fandoms) RoundedCornerShape(11.dp) else CircleShape), contentAlignment = Alignment.Center) {
                 Text(if (scope == FavoriteScope.Tags) "#" else affinityInitials(row.name),
                     fontSize = 15.sp, lineHeight = 19.sp, fontWeight = FontWeight.Bold, color = palette.accent)

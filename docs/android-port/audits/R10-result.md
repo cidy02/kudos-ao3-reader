@@ -159,3 +159,22 @@
 | Dedicated Speech Settings Sheet | `Features/ReaderReadium/ReaderSpeechSettingsSheet.swift:12` | `reader/ReaderScreen.kt:1054` |
 | Dismiss zoom gesture | `Features/ReaderReadium/ReadiumNavigatorContainer.swift:154` | `reader/ReaderScreen.kt:493` |
 | "Find in Work" Empty State system string | `Features/ReaderReadium/ReaderSearchView.swift:334` | `reader/ReaderSearchSheet.kt:213` |
+
+---
+
+## Triage (Claude, 2026-10-11): every row checked against the code
+
+| Row | Verdict | What was done |
+| --- | --- | --- |
+| "Rebuild from Original" fan pill | **Real, P3, not done.** iOS adds the pill to the reader's menu when the work is a converted file whose conversion is out of date (`ReadiumReaderView.swift:1930`, `WorkReconversion.candidate(for:)?.isStale`). Android's reader has no such pill (searched `reader/` for "Rebuild" and "canRebuildFromOriginal": nothing); the same action is in the Library row's menu (`library/LibraryScreen.kt`, `canRebuildFromOriginal`). | Left as a lead: it needs the reader to reopen the book after the rebuild. |
+| "Delete Highlight" in the note editor | **Wrong.** The audit compared iOS's editor with Android's *create* dialog (`AnnotateDialog`). Android has the editor too: `reader/ReaderNoteEditor.kt` ("Highlighted", "Note", "Colour", "Delete Highlight" at `:145`, Cancel and Done), opened from the Highlights tab and by a tap on a highlight (`ReaderHighlightDecorationListener`). | None. |
+| "Fix Pronunciation" in the selection menu | Belongs to read-aloud's engine, which Android does not have yet (the brief left the engine out). | None; goes with the engine. |
+| A dedicated speech settings sheet | The same: the engine's settings. | None; goes with the engine. |
+| Swipe actions on chapters and on annotations | Platform idiom, not a gap: Android shows the same actions as buttons on the row ("Bookmark", "Add Note", "Delete"), where iOS swipes. The actions and their conditions are the same. | None. |
+| The dismiss gesture | Platform idiom: iOS's system zoom transition against Android's drag from the top edge. | None. |
+| "Find in Work" with no results | The same words on both: iOS's system view prints "No Results for “query”" and "Check the spelling or try a new search.", which Android writes out. | None. |
+
+Icons named in sections 4 and 5 are each platform's own symbol for the same thing.
+
+**Lesson for the next reading:** when one side has two views for one job (a create dialog
+and an editor), a brief must name both, or the reader compares the wrong pair.
