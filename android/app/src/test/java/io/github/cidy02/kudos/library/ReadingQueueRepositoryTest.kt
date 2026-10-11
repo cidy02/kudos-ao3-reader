@@ -345,6 +345,28 @@ class ReadingQueueRepositoryTest {
         assertEquals(listOf(work.id), repository.listWorks(saved.id).map { it.work?.id })
     }
 
+    /** Brief 3ck, iOS 1bg's "Move to": add, then remove, and only what joined leaves. */
+    @Test
+    fun moveToPutsWorksInTheOtherQueueAndTakesThemOutOfThisOne() = runTest {
+        val from = repository.createQueue("From")
+        val to = repository.createQueue("To")
+        val works = listOf("one", "two", "three").map { savedWork(it, it) }
+        works.forEach { database.workDao().upsert(it.toEntity()) }
+        works.forEach { repository.addWork(from.id, it.id) }
+        repository.addWork(to.id, "two")
+
+        assertEquals(listOf("one", "two"), repository.moveWorks(from.id, to.id, listOf("one", "two")))
+        assertEquals(listOf("three"), repository.listWorks(from.id).mapNotNull { it.work?.id })
+        // Already there: it leaves the first queue and is not in the second twice.
+        assertEquals(listOf("two", "one"), repository.listWorks(to.id).mapNotNull { it.work?.id })
+
+        assertEquals("a queue is not moved into itself", emptyList<String>(), repository.moveWorks(from.id, from.id, listOf("three")))
+        repository.deleteQueue(to.id)
+        assertEquals("a work that cannot join stays where it was", emptyList<String>(),
+            repository.moveWorks(from.id, to.id, listOf("three")))
+        assertEquals(listOf("three"), repository.listWorks(from.id).mapNotNull { it.work?.id })
+    }
+
     @Test
     fun worksAvailableToAddSkipsMembersAndDeletedWorks() = runTest {
         val queue = repository.createQueue("Shelf")

@@ -24,9 +24,44 @@ Seen on the emulator (demo): Library › Select › two works › Actions › Ta
 All on a tap and off on the next; a typed "Demo" is added to both; Done returns to the
 selection. (The demo on the emulator now has a tag "Demo" on no work.)
 
-## Still to do
+## Parts 2 and 3, landed 2026-10-11: Select mode on a queue's page and a collection's page
 
-- A queue's page in Select mode: Download, Move to, Tag, Remove from Queue, and More.
-- A collection's page in Select mode: Remove from Collection and an Actions menu.
-- Move to (add, then remove only what joined) and Download missing copies.
-- iOS's words for the removal confirmation on both pages.
+Gate 2,600.
+
+- `library/ScopedSelectionBar.kt` (iOS `ScopedRemovalBulkActionBar`), one bar for both:
+  - **a queue's page** (artboard 1bg): Download · Move to · Tag · Remove, and More with
+    Download or Remove Download, Favorite or Unfavorite, Save for Later, Add to Queue, Add to
+    Collection, Mark Finished or Unfinished. Select All and Done stay in the top bar.
+  - **a collection's page**: Remove from Collection, Actions (the same, with Move to Queue,
+    Tag and Download missing copies), Done.
+- **Move to**: `ReadingQueueRepository.moveWorks(from, to, ids)`: each work joins the other
+  queue (or is there already) and then leaves this one; a work that cannot join stays. The
+  picker lists every other queue; closing it moves nothing. From a collection, the works
+  join the queue and then leave the collection.
+- **Download** (missing copies): the selected works with no copy on the device and an AO3
+  address go to the download queue (`enqueueLocal(force = false)`), which fetches one at a
+  time. A download the reader started, of works already in the Library: the same path as one
+  work's Download button, so nothing new for the networking policy. Off when none is missing.
+- The removal is asked in iOS's words on both pages ("Remove N works?", "Kudos will remove
+  the selected works from this queue. They will stay in your Library."). The collection page
+  keeps its own dialog, which honours "Confirm before delete".
+- `ui/components/WorkBulkActionBar.kt`: its download toggle, its queue picker and its
+  add-to-collection dialog are now functions the new bar uses too, not copies.
+
+Tests: `ReadingQueueRepositoryTest.moveToPutsWorksInTheOtherQueueAndTakesThemOutOfThisOne`;
+`AddLibraryWorksTest.aSelectionsRemovalIsAskedInTheseWordsAndOnlyMissingCopiesAreFetched`.
+
+Seen on the emulator (demo): the queue's bar and its More menu; Move to with the picker
+closed (nothing moved) and then to "Late" (Neon reread 5 to 4, Late 1 to 2); Tag for one
+work; the removal words; the collection's bar, its Actions menu and its removal words.
+The first build drew the bar over glass and the rows showed through its labels: it is an
+opaque surface now, as the Library's selection bar.
+
+## Not done, and not checked
+
+- **Download was not run**: every demo work in a queue has its copy, so the button was only
+  seen switched off. By the test of which works it asks for, and by reading.
+- "Save for Later" in the menus only adds; iOS's item toggles.
+- Move to Queue from a collection, Add to Queue and Add to Collection from the new bar were
+  not tapped through (the dialogs are the Library bar's own, now shared).
+- No screen-level test of the bar.

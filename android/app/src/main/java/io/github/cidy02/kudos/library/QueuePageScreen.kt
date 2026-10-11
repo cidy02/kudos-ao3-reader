@@ -114,6 +114,8 @@ fun QueuePageScreen(
     settingsRepository: SettingsRepository? = null,
     privacyGate: PrivacyGate? = null,
     downloadQueue: DownloadQueue? = null,
+    /** With it, Select mode has iOS's bar (brief 3ck); without it, only Remove, as before. */
+    workRepository: io.github.cidy02.kudos.works.WorkRepository? = null,
     onOpenWork: (String) -> Unit,
     onOpenReader: (String) -> Unit,
     onManageQueue: (String) -> Unit,
@@ -273,7 +275,8 @@ fun QueuePageScreen(
                         }
                     },
                     onRemove = { showRemove = true },
-                    onDone = { selecting = false; reordering = false; selected = emptySet() }
+                    onDone = { selecting = false; reordering = false; selected = emptySet() },
+                    showsRemove = workRepository == null
                 )
             }
         } else null
@@ -290,7 +293,11 @@ fun QueuePageScreen(
         },
         modifier = Modifier.fillMaxSize()
     ) {
-        Column(Modifier.fillMaxSize().subjectScreenWash(palette).verticalScroll(rememberScrollState())) {
+        Column(
+            Modifier.fillMaxSize().subjectScreenWash(palette).verticalScroll(rememberScrollState())
+                // Room for the selection bar under the last row.
+                .padding(bottom = if (selecting && workRepository != null) 88.dp else 0.dp)
+        ) {
             Spacer(Modifier.height(WindowInsets.systemBars.asPaddingValues().calculateTopPadding() + 56.dp))
             if (current != null) {
                 SubjectHeaderBlock(
@@ -412,6 +419,25 @@ fun QueuePageScreen(
         }
     }
 
+    if (selecting && workRepository != null) {
+        // iOS 1bg: "the four things a queue can do to a selection", and the rest under More.
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
+            ScopedSelectionBar(
+                selectedWorks = works.filter { it.id in selected },
+                removeLabel = "Remove from Queue",
+                scopeName = "queue",
+                workRepository = workRepository,
+                queueRepository = repository,
+                downloadQueue = downloadQueue,
+                palette = palette,
+                currentQueueId = queueId,
+                onRemove = { selected.forEach { repository.removeWork(queueId, it) } },
+                onChanged = { reload += 1 },
+                onDone = { selecting = false; selected = emptySet(); reload += 1 }
+            )
+        }
+    }
+
     if (showFilters) {
         FilterDialog(extra, onDismiss = { showFilters = false }, onChange = { extra = it })
     }
@@ -477,8 +503,8 @@ fun QueuePageScreen(
         val count = selected.size
         AlertDialog(
             onDismissRequest = { showRemove = false },
-            title = { Text(if (count == 1) "Remove this work from the queue?" else "Remove $count works from this queue?") },
-            text = { Text("The works stay in Kudos.") },
+            title = { Text(SelectionActions.removeTitle(count)) },
+            text = { Text(SelectionActions.removeMessage("queue")) },
             confirmButton = {
                 TextButton(onClick = {
                     val ids = selected
@@ -489,7 +515,7 @@ fun QueuePageScreen(
                         selecting = false
                         reload += 1
                     }
-                }) { Text("Remove from Queue") }
+                }) { Text("Remove") }
             },
             dismissButton = { TextButton(onClick = { showRemove = false }) { Text("Cancel") } }
         )
@@ -533,13 +559,14 @@ private fun PageToolbarActions(
     onDelete: () -> Unit,
     onSelectAll: () -> Unit,
     onRemove: () -> Unit,
-    onDone: () -> Unit
+    onDone: () -> Unit,
+    showsRemove: Boolean = true
 ) {
     if (selecting) {
         TextButton(onClick = onSelectAll) {
             Text(if (selectedCount == total && total > 0) "Deselect All" else "Select All", color = palette.accent)
         }
-        TextButton(onClick = onRemove, enabled = selectedCount > 0) { Text("Remove") }
+        if (showsRemove) TextButton(onClick = onRemove, enabled = selectedCount > 0) { Text("Remove") }
         TextButton(onClick = onDone) { Text("Done", color = palette.accent) }
     } else {
         // iOS 1h: "an accent-filled + for adding works" (.glassProminent).

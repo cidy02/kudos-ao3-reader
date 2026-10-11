@@ -224,6 +224,7 @@ fun AppNavHost(
                     settingsRepository = container.settingsRepository,
                     privacyGate = container.privacyGate,
                     downloadQueue = container.downloadQueue,
+                    queueRepository = container.readingQueueRepository,
                     onOpenWork = { workId ->
                         navigateToWorkDetail(WorkDetailSource.LocalWork(workId))
                     },
@@ -247,6 +248,7 @@ fun AppNavHost(
             val initialQueueId = Routes.routeArg(backStackEntry, "queueId")
             ReadingQueueBrowserScreen(
                 repository = container.readingQueueRepository,
+                workRepository = container.workRepository,
                 initialQueueId = initialQueueId,
                 onOpenWork = { workId ->
                     navigateToWorkDetail(WorkDetailSource.LocalWork(workId))

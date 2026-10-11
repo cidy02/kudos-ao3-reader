@@ -121,6 +121,7 @@ fun CollectionDetailScreen(
     privacyGate: PrivacyGate = PrivacyGate(),
     downloadQueue: DownloadQueue? = null,
     metadataRefresh: WorkMetadataRefresh? = null,
+    queueRepository: ReadingQueueRepository? = null,
     onOpenWork: (String) -> Unit,
     onOpenReader: (String) -> Unit,
     onCollectionDeleted: () -> Unit
@@ -773,46 +774,26 @@ fun CollectionDetailScreen(
         }
 
         if (isSelecting) {
-            Surface(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .fillMaxWidth()
-                    .navigationBarsPadding(),
-                color = tokens.glassFill(0.85),
-                tonalElevation = 8.dp,
-                shadowElevation = 8.dp
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 10.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    TextButton(
-                        onClick = { confirmBulkRemove = true },
-                        enabled = selectedIds.isNotEmpty()
-                    ) {
-                        Text(
-                            "Remove from Collection",
-                            color = if (selectedIds.isNotEmpty()) MaterialTheme.colorScheme.error else tokens.tertiaryInk,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                    }
-                    IconButton(
-                        onClick = {
-                            isSelecting = false
-                            selectedIds = emptySet()
-                        }
-                    ) {
-                        Icon(
-                            Icons.Filled.Check,
-                            contentDescription = "Done",
-                            tint = palette.accent
-                        )
-                    }
-                }
-            }
+            // iOS `ScopedRemovalBulkActionBar`: Remove, and an Actions menu (brief 3ck).
+            ScopedSelectionBar(
+                selectedWorks = works.filter { it.id in selectedIds },
+                removeLabel = "Remove from Collection",
+                scopeName = "collection",
+                workRepository = workRepository,
+                queueRepository = queueRepository,
+                downloadQueue = downloadQueue,
+                palette = palette,
+                onRemove = { selectedIds.forEach { workRepository.removeFromCollection(it, collectionId) } },
+                // This page asks in its own dialog, which honours "Confirm before delete".
+                onRequestRemove = { confirmBulkRemove = true },
+                onChanged = { scope.launch { refresh() } },
+                onDone = {
+                    isSelecting = false
+                    selectedIds = emptySet()
+                    scope.launch { refresh() }
+                },
+                modifier = Modifier.align(Alignment.BottomCenter)
+            )
         }
     }
 }

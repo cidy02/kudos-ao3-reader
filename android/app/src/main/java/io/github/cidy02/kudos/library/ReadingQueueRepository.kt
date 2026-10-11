@@ -140,6 +140,22 @@ class ReadingQueueRepository(
         return membership
     }
 
+    /**
+     * iOS 1bg's "Move to": two verbs, add and remove. Each work joins [toQueueId] (or is there
+     * already) and then leaves [fromQueueId]; a work that could not join stays where it was.
+     * Returns the ids that moved.
+     */
+    suspend fun moveWorks(fromQueueId: String, toQueueId: String, workIds: List<String>): List<String> {
+        if (fromQueueId == toQueueId) return emptyList()
+        val moved = mutableListOf<String>()
+        for (id in workIds) {
+            if (runCatching { addWork(toQueueId, id) }.isFailure) continue
+            removeWork(fromQueueId, id)
+            moved += id
+        }
+        return moved
+    }
+
     suspend fun removeWork(queueId: String, workId: String) {
         database.withTransaction {
             val existing = queueDao.getMembershipForWork(queueId, workId) ?: return@withTransaction
