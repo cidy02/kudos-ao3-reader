@@ -1,5 +1,9 @@
 package io.github.cidy02.kudos.browse
 
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.material.icons.outlined.Description
+import androidx.compose.ui.draw.clip
+import io.github.cidy02.kudos.ui.subject.subjectPanel
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.foundation.background
@@ -107,42 +111,31 @@ fun FandomListSortRail(
     onSort: (FandomFamilySort) -> Unit,
     onGroupsVariants: (Boolean) -> Unit
 ) {
-    val tokens = LocalKudosTokens.current
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Row(
-            modifier = Modifier
-                .horizontalScroll(rememberScrollState())
-                .padding(horizontal = 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            SortPill("A–Z", sort == FandomFamilySort.Alphabetical, palette) {
-                onSort(FandomFamilySort.Alphabetical)
-            }
-            SortPill("Most works", sort == FandomFamilySort.FamilyTotal, palette) {
-                onSort(FandomFamilySort.FamilyTotal)
-            }
+    // iOS 1al: one rail, the two orders and then "Group variants" as a chip that is on or off.
+    Row(
+        modifier = Modifier
+            .horizontalScroll(rememberScrollState())
+            .padding(horizontal = 16.dp)
+            .padding(top = 10.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        SortPill("A–Z", sort == FandomFamilySort.Alphabetical, palette) {
+            onSort(FandomFamilySort.Alphabetical)
         }
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Text(
-                text = "Group variants",
-                color = tokens.primaryInk,
-                fontSize = 15.sp,
-                modifier = Modifier.weight(1f)
-            )
-            SubjectToggle(
-                checked = groupsVariants,
-                onCheckedChange = onGroupsVariants,
-                accent = palette.accent,
-                contentDescription = "Group variants"
-            )
+        SortPill("Most works", sort == FandomFamilySort.FamilyTotal, palette) {
+            onSort(FandomFamilySort.FamilyTotal)
         }
+        SubjectChip(
+            text = "Group variants",
+            style = SubjectChipStyle.Pill(isSelected = groupsVariants),
+            palette = palette,
+            modifier = Modifier.toggleable(
+                value = groupsVariants,
+                role = androidx.compose.ui.semantics.Role.Switch,
+                onValueChange = onGroupsVariants
+            )
+        )
     }
 }
 
@@ -210,7 +203,7 @@ private fun SingleFandomRow(
     val tokens = LocalKudosTokens.current
     Row(
         modifier = Modifier
-            .fillMaxWidth()
+            .fandomCard()
             .clickable(onClick = onOpen)
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -219,29 +212,55 @@ private fun SingleFandomRow(
         if (library.isFavourited(member.originalName)) {
             Icon(Icons.Filled.Star, contentDescription = "Favorite", tint = FavoriteGold, modifier = Modifier.size(14.dp))
         }
-        Text(
-            text = member.displayName.title,
-            color = tokens.primaryInk,
-            fontSize = 16.sp,
-            modifier = Modifier.weight(1f)
-        )
-        DownloadCount(library.downloadCount(member.originalName))
+        // iOS `FandomListRow`: three tiers, each on its own line and each a step quieter. The
+        // qualifier ("(TV)") is what tells fandoms of one name apart, and was not drawn.
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(7.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = member.displayName.title,
+                    color = tokens.primaryInk,
+                    fontSize = 16.sp,
+                    modifier = Modifier.weight(1f, fill = false)
+                )
+                DownloadCount(library.downloadCount(member.originalName))
+            }
+            if (member.displayName.qualifier.isNotBlank()) {
+                Text(text = member.displayName.qualifier, color = tokens.secondaryInk, fontSize = 13.sp)
+            }
+            member.aliases.forEach { alias ->
+                Text(text = alias, color = tokens.secondaryInk, fontSize = 12.sp)
+            }
+        }
         Text(
             text = groupedCount(member.workCount),
             color = tokens.secondaryInk,
             fontSize = 13.sp,
-            fontFamily = FontFamily.Monospace,
+            style = TabularFigures,
             textAlign = TextAlign.End,
             modifier = Modifier.widthIn(min = 52.dp)
         )
-        Icon(
-            Icons.AutoMirrored.Outlined.KeyboardArrowRight,
-            contentDescription = null,
-            tint = tokens.tertiaryInk,
-            modifier = Modifier.size(12.dp)
-        )
+        WorksGlyph()
     }
 }
+
+/** iOS `.monospacedDigit()`: the app's own face, its figures one width so a column of counts lines up. */
+private val TabularFigures = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum")
+
+/** iOS's `doc.text` after a works count: the same on every row, so quiet. */
+@Composable
+private fun WorksGlyph() {
+    Icon(
+        Icons.Outlined.Description,
+        contentDescription = null,
+        tint = LocalKudosTokens.current.secondaryInk,
+        modifier = Modifier.size(13.dp)
+    )
+}
+
+/** iOS `.cardRow()`: each fandom, and each family with its tags, is a card of its own. */
+@Composable
+private fun Modifier.fandomCard(): Modifier =
+    padding(horizontal = 16.dp, vertical = 5.dp).fillMaxWidth().clip(RoundedCornerShape(16.dp)).subjectPanel(16.dp)
 
 @Composable
 private fun FamilyBlock(
@@ -254,7 +273,7 @@ private fun FamilyBlock(
 ) {
     val tokens = LocalKudosTokens.current
     val first = family.members.first()
-    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+    Column(modifier = Modifier.fandomCard().padding(vertical = 4.dp)) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -280,7 +299,10 @@ private fun FamilyBlock(
                     } else {
                         groupedCount(family.displayedWorkCount)
                     }
-                    Text(text = figure, color = tokens.primaryInk, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                    Row(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text(text = figure, color = tokens.primaryInk, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                        WorksGlyph()
+                    }
                 }
                 Text(
                     text = "All ${family.memberCount} tags",
@@ -332,7 +354,7 @@ private fun FamilyBlock(
                         text = groupedCount(member.workCount),
                         color = tokens.secondaryInk,
                         fontSize = 12.sp,
-                        fontFamily = FontFamily.Monospace,
+                        style = TabularFigures,
                         fontWeight = FontWeight.Medium,
                         textAlign = TextAlign.End,
                         modifier = Modifier.widthIn(min = 52.dp)
@@ -542,13 +564,6 @@ private fun FilterToggle(
 
 private fun tagCountLabel(count: Int): String =
     if (count == 1) "1 tag" else "${groupedCount(count)} tags"
-
-@Composable
-fun OpenCategoryOnAo3(onOpen: () -> Unit) {
-    TextButton(onClick = onOpen, modifier = Modifier.padding(horizontal = 8.dp)) {
-        Text("Open on AO3")
-    }
-}
 
 /** Dim missing index letters without a second text style. */
 @Composable

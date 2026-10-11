@@ -1648,3 +1648,9 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   2.0× was looked at for the same screens and reads well. Putting the two fandom lists side
   by side showed Android's is not the redesign's (a titled bar, plain rows, a switch for a
   chip, and a fandom's "(TV)" qualifier not drawn): `briefs/3cl-fandom-list.md`.
+- **2026-10-11 · A category's fandom list is the redesign's (brief 3cl).** A fandom's
+  qualifier ("(TV)") and its other names are drawn under its title; the titled bar is gone
+  (floating chrome, the header block is the title); rows are cards; "Group variants" is a
+  chip in the rail; the search field is the app's glass field, kept at the top; "Open on
+  AO3" is only on the error page, as on iOS; works counts use the app's face with tabular
+  figures. Reverse: the commit that names 3cl.
