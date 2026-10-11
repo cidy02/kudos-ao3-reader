@@ -12,6 +12,7 @@ struct CollectionMaintainersView: View {
     @Environment(AO3AuthService.self) private var auth
     @Environment(ThemeManager.self) private var theme
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     @ScaledMetric(relativeTo: .body) private var rowTitleSize: CGFloat = 15
     @ScaledMetric(relativeTo: .subheadline) private var buttonLabelSize: CGFloat = 14
@@ -221,7 +222,10 @@ struct CollectionMaintainersView: View {
         roleText: String,
         subtitleText: String?
     ) -> some View {
-        HStack(spacing: 11) {
+        // The role under the name at the accessibility sizes: beside it, a name of one word
+        // broke in the middle ("AO3_Reade / r").
+        let large = dynamicTypeSize.isAccessibilitySize
+        return HStack(spacing: 11) {
             avatarCircle(for: participant.pseud)
 
             VStack(alignment: .leading, spacing: 2) {
@@ -236,28 +240,33 @@ struct CollectionMaintainersView: View {
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
+                if large { roleBadge(roleText).padding(.top, 4) }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
-            Text(roleText.uppercased())
-                .font(.system(size: 10.5, weight: .semibold))
-                .lineLimit(1)
-                .fixedSize()
-                .tracking(10.5 * 0.04)
-                .foregroundStyle(Color.secondary.opacity(0.85))
-                .padding(.horizontal, 10)
-                .padding(.vertical, 5)
-                .background(
-                    RoundedRectangle(cornerRadius: 99, style: .continuous)
-                        .fill(theme.appTheme.glassFill(0.08))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 99, style: .continuous)
-                                .strokeBorder(theme.appTheme.glassStroke(0.12), lineWidth: 0.5)
-                        )
-                )
+            if !large { roleBadge(roleText) }
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 11)
+    }
+
+    private func roleBadge(_ roleText: String) -> some View {
+        Text(roleText.uppercased())
+            .font(.system(size: 10.5, weight: .semibold))
+            .lineLimit(1)
+            .fixedSize()
+            .tracking(10.5 * 0.04)
+            .foregroundStyle(Color.secondary.opacity(0.85))
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(
+                RoundedRectangle(cornerRadius: 99, style: .continuous)
+                    .fill(theme.appTheme.glassFill(0.08))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 99, style: .continuous)
+                            .strokeBorder(theme.appTheme.glassStroke(0.12), lineWidth: 0.5)
+                    )
+            )
     }
 
     private func avatarCircle(for pseud: String) -> some View {

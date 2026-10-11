@@ -23,6 +23,8 @@ struct ChallengeSignUpsView: View {
     @ScaledMetric(relativeTo: .caption) private var captionSize: CGFloat = 11.5
     @ScaledMetric(relativeTo: .caption) private var summarySize: CGFloat = 11
 
+    /// The floating bottom bar's height, so the list can end clear of it at any text size.
+    @State private var bottomBarHeight: CGFloat = 0
     @State private var pages = AO3LoadMorePages<AO3ChallengeSignUp>()
     @State private var filterSelection: SignUpFilter = .all
     @State private var phase: Phase = .idle
@@ -112,9 +114,13 @@ struct ChallengeSignUpsView: View {
 
                 // Space for floating bottom action bar
                 Section {
-                    Spacer(minLength: 70)
+                    // A real height. This was a `Spacer`, which has none in a list row: the gap was
+                    // never there, and the list ended under the bar at every text size.
+                    Color.clear
+                        .frame(height: max(70, bottomBarHeight - 12))
                         .listRowInsets(EdgeInsets())
                         .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
                 }
             }
             .cardList()
@@ -126,6 +132,8 @@ struct ChallengeSignUpsView: View {
             .subjectScreenWash(palette: palette)
 
             bottomActionBar
+                // The list ends clear of the bar at any text size (see `bottomBarHeight`).
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { bottomBarHeight = $0 }
         }
         .task { await loadSignUpsIfNeeded() }
         .refreshable { await loadSignUps(resetPage: true) }
