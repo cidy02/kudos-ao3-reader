@@ -1598,3 +1598,11 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   others are on Android in the same words, belong to Read Aloud, or are the reader's error
   (Android's has more: Back, Retry, Remove offline copy). One real gap is a brief: 3cj, AO3
   Preferences help. Reverse: the first `if` of the works list in `CollectionDetailScreen.kt`.
+- **2026-10-11 · AO3 Preferences help is read and shown in a sheet (brief 3cj), and two
+  faults beside it.** A "?" opened AO3's help page in the web view; it now reads that one
+  page on the tap and shows its topics as cards, as iOS does. Sections and fields carry the
+  "?" AO3 gives them (Android read only a link beside a checkbox, so the section headings
+  had none). Section titles no longer carry the "?" glyph, and a select or a text field is
+  called what AO3 calls it instead of its raw field name. One deviation from iOS: a section
+  takes help only from its own heading or legend, not from a field inside it. Reverse: the
+  `PreferenceHelpButton` calls back to `onOpenHelp(help.url)`.

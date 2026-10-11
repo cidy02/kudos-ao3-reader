@@ -28,6 +28,25 @@ class AO3PreferencesRepository(
         }
     }
 
+    /**
+     * iOS `loadPreferenceHelp`: one read of the AO3 help page a "?" on the preferences page
+     * links to, on the tap. Nothing else is read, and nothing that is not an AO3 help page.
+     */
+    suspend fun loadHelp(ref: AO3PreferenceHelpRef): AO3Result<AO3PreferenceHelpContent> {
+        val path = ref.url.substringBefore('?').substringBefore('#')
+        if (!io.github.cidy02.kudos.network.ao3.AO3RedirectCookieRelay.isTrustedUrl(ref.url) || "/help/" !in path) {
+            return AO3Result.Failure(AO3Error.Validation("That isn't an AO3 help page."))
+        }
+        return when (val page = client.getAuthenticated(ref.url)) {
+            is AO3Result.Failure -> page
+            is AO3Result.Success -> try {
+                AO3Result.Success(withContext(Dispatchers.Default) { parser.parseHelpPage(page.value.body, ref.url) })
+            } catch (e: AO3PreferencesParseException) {
+                AO3Result.Failure(AO3Error.Parse(e.message ?: "AO3's help page could not be read."))
+            }
+        }
+    }
+
     suspend fun save(
         snapshot: AO3PreferencesSnapshot,
         toggles: Map<String, Boolean>,
