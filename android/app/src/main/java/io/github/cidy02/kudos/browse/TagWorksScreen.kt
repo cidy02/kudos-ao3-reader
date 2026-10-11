@@ -249,7 +249,8 @@ fun TagWorksScreen(
                                 SensitiveWorkRow(
                                     work = work,
                                     onOpenWork = onOpenWork,
-                                    expandAll = expandAllCards
+                                    expandAll = expandAllCards,
+                                    ledger = true
                                 )
                             }
                         }

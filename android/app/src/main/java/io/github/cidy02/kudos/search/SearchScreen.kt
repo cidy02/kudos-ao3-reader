@@ -1073,6 +1073,7 @@ private fun SearchResultsList(
                         onOpenWork = onOpenWork,
                         expandAll = expandAll,
                         onTagSearch = onTagClick,
+                        ledger = true,
                         modifier = Modifier.padding(horizontal = 16.dp)
                     )
                 }

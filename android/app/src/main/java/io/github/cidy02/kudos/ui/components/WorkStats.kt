@@ -529,3 +529,35 @@ fun WorkStatusChipRow(
         }
     }
 }
+
+/**
+ * iOS `AO3WorkRow.ledgerMetadata`: the ledger card's one line of figures, in words.
+ *
+ * A blurb always has a word count. Without one this is a sparse list row (subscriptions,
+ * marked for later) whose figures are unknown, not zero, and are left out. On a full blurb a
+ * missing figure is AO3 leaving out a zero, shown or not as the reader's setting says.
+ */
+fun ledgerMetadata(
+    language: String?,
+    wordCount: Int?,
+    chapters: String,
+    comments: Int?,
+    kudos: Int?,
+    bookmarks: Int?,
+    hits: Int?,
+    showsZeroStats: Boolean
+): List<String> = buildList {
+    language?.trim()?.takeIf { it.isNotEmpty() }?.let(::add)
+    val isFullBlurb = wordCount != null
+    fun figure(value: Int?, singular: String, plural: String = "${singular}s") {
+        val count = value ?: return
+        if (count > 0 || showsZeroStats) add("${"%,d".format(java.util.Locale.US, count)} ${if (count == 1) singular else plural}")
+    }
+    fun count(value: Int?) = value ?: if (isFullBlurb) 0 else null
+    figure(wordCount, "word")
+    chapters.trim().takeIf { it.isNotEmpty() }?.let(::add)
+    figure(count(comments), "comment")
+    figure(count(kudos), "kudos", "kudos")
+    figure(count(bookmarks), "bookmark")
+    figure(count(hits), "hit")
+}
