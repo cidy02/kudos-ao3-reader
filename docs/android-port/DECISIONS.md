@@ -1606,3 +1606,9 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   called what AO3 calls it instead of its raw field name. One deviation from iOS: a section
   takes help only from its own heading or legend, not from a field inside it. Reverse: the
   `PreferenceHelpButton` calls back to `onOpenHelp(help.url)`.
+- **2026-10-11 · Menus compared (iOS 61 menu and toolbar labels with a fixed title): one
+  gap, brief 3ck.** Outside Read Aloud's pronunciation screen, the labels Android lacks are
+  "Move to Queue" and "Download missing copies", and behind them: a selection on a queue's
+  or a collection's page can only be removed on Android, and several works cannot be tagged
+  at once anywhere. Written up as `briefs/3ck-selection-actions.md` (P2), not built in the
+  tick that found it.
