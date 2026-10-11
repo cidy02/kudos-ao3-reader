@@ -251,7 +251,9 @@ fun CommentComposerSheet(
                         color = tokens.primaryInk
                     ),
                     cursorBrush = SolidColor(palette.accent),
+                    // The field had no name: a screen reader said only "edit box" (iOS names it).
                     modifier = Modifier.fillMaxWidth()
+                        .semantics { contentDescription = if (isEdit) "Edit comment text" else "Comment text" }
                 )
             }
 
