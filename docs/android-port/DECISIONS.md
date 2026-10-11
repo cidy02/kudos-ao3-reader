@@ -1465,3 +1465,12 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   from words (it fetches each work's page to learn it), and **it widens who Android's
   newest-work round asks about** to the authors iOS's round already covers. Reverse: the
   `?: accountFromAO3Byline(work)` in `ReadingAffinities.authors`.
+- **2026-10-11 · The writer's own Works page shows "12 works · 248,400 words · 3,812 kudos"
+  (brief 3ch, audit A34-1).** One more read on the signed-in account's own page, after the
+  header and the list: `/users/<name>/stats`, which AO3 serves to its owner only. The guard is
+  in the repository (`loadOwnStats` answers null, with no request, for another author, a
+  pseud, or a signed-out reader), so no screen can ask for someone else's. Silent on failure;
+  read again by pull to refresh and after a confirmed write to the writer's own works (that
+  last one is Android's own; iOS keeps the totals until the page is reopened). The policy's
+  "Author profiles" row now says so. Reverse: the `LaunchedEffect` that calls `loadOwnStats`
+  in `author/AuthorProfileScreen.kt`.

@@ -81,6 +81,17 @@ object AO3AuthorUrls {
         return builder.build().toString()
     }
 
+    /**
+     * `/users/<name>/stats`: the account's own totals. AO3 serves it to its owner only, and
+     * with no year it answers "All Years", the whole account.
+     */
+    fun userStatsUrl(username: String): String? {
+        val name = username.trim()
+        if (name.isEmpty()) return null
+        return AO3Constants.baseHttpUrl.newBuilder()
+            .addPathSegment("users").addPathSegment(name).addPathSegment("stats").build().toString()
+    }
+
     fun userSeriesUrl(username: String, page: Int = 1, pseud: String? = null): String? {
         val name = username.trim()
         if (name.isEmpty()) return null

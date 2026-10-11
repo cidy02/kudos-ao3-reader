@@ -376,6 +376,10 @@ internal fun demoAuthorWorksPage(bytes: ByteArray, url: HttpUrl): ByteArray {
     val ordered = matching.sortedBy(::key).let { if (direction == "desc") it.reversed() else it }
     rows.forEach { it.remove() }
     ordered.forEach { index.appendChild(it) }
+    // AO3 heads the list with its count ("12 Works by name"), which the bundled page lacks.
+    if (doc.selectFirst("#main h2.heading") == null) index.before(
+        org.jsoup.nodes.Element("div").attr("id", "main").appendChild(org.jsoup.nodes.Element("h2")
+            .addClass("heading").text("${ordered.size} Works by ${url.pathSegments.getOrNull(1).orEmpty()}")))
     return doc.outerHtml().encodeToByteArray()
 }
 

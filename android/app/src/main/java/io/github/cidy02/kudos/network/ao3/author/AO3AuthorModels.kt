@@ -93,6 +93,23 @@ data class AO3AuthorHeader(
     val recentBookmarks: List<AO3AuthorBookmark>? = null
 )
 
+/**
+ * The account's totals from its stats page (iOS `AO3UserStats`). Each may be missing: an
+ * account with no works gets a page without the block, and a figure that cannot be read is
+ * left out, never shown as zero.
+ */
+data class AO3UserStats(
+    val wordCount: Int? = null,
+    val kudos: Int? = null,
+    val hits: Int? = null,
+    val bookmarks: Int? = null,
+    val commentThreads: Int? = null,
+    val subscriptions: Int? = null,
+    val userSubscriptions: Int? = null
+) {
+    val isEmpty: Boolean get() = this == AO3UserStats()
+}
+
 enum class AO3AuthorWorksScope(val label: String, val pathSegments: List<String>) {
     Works("Works", listOf("works")),
     Collected("In collections", listOf("works", "collected")),

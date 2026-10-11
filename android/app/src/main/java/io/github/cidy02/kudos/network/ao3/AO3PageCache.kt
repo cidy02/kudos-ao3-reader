@@ -13,7 +13,7 @@ class AO3PageCache(
     private val staleMillis: Long = 24 * 60 * 60 * 1000L,
     private val maxEntries: Int = 128
 ) {
-    enum class Kind { Dashboard, About, Works, AuthorSeries, Bookmarks, SeriesDetail, Inbox }
+    enum class Kind { Dashboard, About, Works, AuthorSeries, Bookmarks, SeriesDetail, Inbox, Stats }
     data class Scope(val viewer: String?, val generation: Int?)
     data class Key(val url: String, val scope: Scope, val kind: Kind)
     private data class Entry(val response: AO3HttpResponse, val freshUntil: Long, val staleUntil: Long)
