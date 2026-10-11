@@ -39,6 +39,14 @@ object LibraryPrivacy {
     fun nameableWorks(items: List<LibraryDisplayItem>): List<SavedWork> =
         items.filter { it.privacyVisibility == LibraryPrivacyVisibility.Visible }.map { it.item.work }
 
+    /** What an obscured work is called wherever it has a row of its own. */
+    const val HIDDEN_WORK_TITLE = "Hidden mature work"
+
+    /** The name a row may show for [display]: an obscured work has none of its own. */
+    fun shownTitle(display: LibraryDisplayItem): String =
+        if (display.privacyVisibility == LibraryPrivacyVisibility.Obscured) HIDDEN_WORK_TITLE
+        else display.item.work.title
+
     private fun SavedWork.isAdultRated(): Boolean {
         val normalized = rating.trim().lowercase()
         return normalized == "mature" ||

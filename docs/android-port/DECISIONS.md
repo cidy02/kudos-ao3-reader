@@ -1551,3 +1551,9 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   required `mayAnswer`; the organizer now has the privacy setting and the reveal state (it
   had neither). Blur mode is unchanged (owner question 23, which also gained Recently
   Deleted). Reverse: `{ true }` at the call in `QueueOrganizerScreen.kt`.
+- **2026-10-11 · The Library's Select mode does not name an obscured work (A38).** Its rows
+  listed every work by title and author, obscured ones included, while the shelf behind
+  said "Hidden mature work". The row now says that and nothing else, and can still be
+  selected (iOS does the same: "still blurred, so still unnamed", its audit A19-8).
+  `LibraryPrivacy.shownTitle` holds the rule. Reverse: `work.title` and the author line back
+  in `SelectableWorkRow`.
