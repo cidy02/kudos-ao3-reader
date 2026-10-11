@@ -14,6 +14,7 @@ struct ChallengeSignUpView: View {
     @Environment(AO3AuthService.self) var auth
     @Environment(ThemeManager.self) var theme
     @Environment(\.dismiss) var dismiss
+    @Environment(\.dynamicTypeSize) var dynamicTypeSize
 
     @ScaledMetric(relativeTo: .headline) private var stateTitleSize: CGFloat = 15
     @ScaledMetric(relativeTo: .subheadline) private var rowTitleSize: CGFloat = 15
@@ -337,12 +338,17 @@ extension ChallengeSignUpView {
                     .background(Color.clear)
             }
 
-            HStack {
+            // One under the other at the accessibility sizes: beside the count the sentence was
+            // cut ("Visible to your recipient o…").
+            let footer = dynamicTypeSize.isAccessibilitySize
+                ? AnyLayout(VStackLayout(alignment: .leading, spacing: 2)) : AnyLayout(HStackLayout())
+            footer {
                 Text("Visible to your recipient only")
                     .font(.system(size: promptFootnoteSize))
                     .foregroundStyle(.secondary.opacity(0.8))
+                    .fixedSize(horizontal: false, vertical: true)
 
-                Spacer()
+                if !dynamicTypeSize.isAccessibilitySize { Spacer() }
 
                 Text("\(binding.wrappedValue.count) / 1000")
                     .font(.system(size: promptFootnoteSize, weight: .semibold, design: .monospaced))
@@ -498,7 +504,8 @@ extension ChallengeSignUpView {
                     )
             }
             .buttonStyle(.plain)
-            .disabled(liveRequests.count >= (limits?.requestsAllowed ?? .max) || isSubmitting)
+            // Without a form (still loading, or the load failed) both did nothing and looked live.
+            .disabled(form == nil || liveRequests.count >= (limits?.requestsAllowed ?? .max) || isSubmitting)
 
             Button {
                 Task { await submitSignUp() }
@@ -521,7 +528,7 @@ extension ChallengeSignUpView {
                 )
             }
             .buttonStyle(.plain)
-            .disabled(isSubmitting)
+            .disabled(form == nil || isSubmitting)
         }
         .padding(.horizontal, 16)
         .padding(.top, 12)
