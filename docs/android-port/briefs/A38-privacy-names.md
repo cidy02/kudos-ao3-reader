@@ -40,6 +40,16 @@ blurred work, a blurred work's tags in lists) are **owner question 23**, not fau
 2026-10-08 decision draws a matching blurred work blurred, and the iPhone's code marks the
 Reorder screen as the owner's to decide.
 
+## Round three, 2026-10-11: iPhone files that name a saved work and never mention the gate
+
+Nine of thirty (`work.title` with no `gate`, `isHidden`, `SensitiveWorkRow`, `hideMature`).
+The queue organizer's search was a fault (above). `RecentlyDeletedView` names a deleted
+mature work in both modes, on both apps: owner question 23, item 4. The rest are fed an
+open work or an already-filtered list (the reader, Work Details' parts, swipe actions'
+confirmations, the remote-work bar, `StackedWorkCover`, `HomeCards`' plain card, which is
+drawn through the blur wrapper in `MatureContent.swift`). **Not done the same way for
+Android** (grep `\.title` in files with no `LibraryPrivacy` or `privacyVisibility`).
+
 ## Leads, not confirmed (read only)
 
 Android:
@@ -48,8 +58,9 @@ Android:
    its own. Seen on the emulator before, after, and after "Show mature".
 2. ~~The Library filter panel~~: Hide mode right; Blur mode is owner question 23.
 3. ~~A collection page's filter field~~: owner question 23 (a match is drawn obscured).
-4. The queue organizer's "Search queues, tags and works": **not looked at.** In Hide mode,
-   does it match a hidden work by title, and what does it show?
+4. ~~The queue organizer's search~~ **fixed on both** (iOS T-395; Android
+   `ReadingQueueFacts.matchesSearch(mayAnswer)`): in Hide mode a hidden work's title no
+   longer finds the queue it is in. Seen on both in Hide mode after the fix.
 5. Anything else that maps `collectionMembers` or a queue's works to names.
 
 iOS:

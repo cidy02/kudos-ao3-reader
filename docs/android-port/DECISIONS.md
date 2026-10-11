@@ -1545,3 +1545,9 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   a queue's page (and on the iPhone since T-394). Blur mode is unchanged and is owner
   question 23, with what a search or a filter list may say about a blurred work. Reverse:
   `hidesMature` out of `canReorder` in `CollectionDetailScreen.kt`.
+- **2026-10-11 · The queue organizer's search does not answer for a work Hide mode hides
+  (A38).** "Search queues, tags and works" matched a queue by any member work's title or
+  author, so a hidden work's title found the queue it is in. `matchesSearch` takes a
+  required `mayAnswer`; the organizer now has the privacy setting and the reveal state (it
+  had neither). Blur mode is unchanged (owner question 23, which also gained Recently
+  Deleted). Reverse: `{ true }` at the call in `QueueOrganizerScreen.kt`.

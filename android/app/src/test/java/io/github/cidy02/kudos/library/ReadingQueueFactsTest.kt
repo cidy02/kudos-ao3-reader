@@ -66,9 +66,12 @@ class ReadingQueueFactsTest {
         assertFalse(QueueQuickFilter.Offline.matches(unread, preserved = false))
         assertTrue(QueueQuickFilter.Wip.matches(work("w", complete = false), preserved = true))
         val queue = ReadingQueue(name = "Rereads")
-        assertTrue(
-            ReadingQueueFacts.matchesSearch(queue, listOf("Comfort"), listOf(work("x", title = "Sodium")), "sodium")
-        )
+        val sodium = listOf(work("x", title = "Sodium"))
+        assertTrue(ReadingQueueFacts.matchesSearch(queue, listOf("Comfort"), sodium, "sodium") { true })
+        // Audit A38: a work Hide Mature hides does not answer; the queue's own name and tags still do.
+        assertFalse(ReadingQueueFacts.matchesSearch(queue, listOf("Comfort"), sodium, "sodium") { false })
+        assertTrue(ReadingQueueFacts.matchesSearch(queue, listOf("Comfort"), sodium, "rereads") { false })
+        assertTrue(ReadingQueueFacts.matchesSearch(queue, listOf("Comfort"), sodium, "comfort") { false })
         assertTrue(ReadingQueueFacts.matchesTagFilter(emptyList(), ReadingQueueFacts.UNTAGGED))
         assertFalse(ReadingQueueFacts.matchesTagFilter(listOf("Comfort"), ReadingQueueFacts.UNTAGGED))
     }
