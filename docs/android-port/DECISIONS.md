@@ -1612,3 +1612,9 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   or a collection's page can only be removed on Android, and several works cannot be tagged
   at once anywhere. Written up as `briefs/3ck-selection-actions.md` (P2), not built in the
   tick that found it.
+- **2026-10-11 · Several works can be tagged at once (3ck, part 1).** The Library's Actions
+  has Tag, opening iOS's bulk tag sheet: each of your tags is on every selected work, on
+  some, or on none; a tap puts it on the rest, or takes it off them all when it was on all.
+  The sheet is the queues' tag sheet made common (`SharedTagSheet`), not a second one. The
+  queue's and the collection's Select mode still offer only Remove: parts 2 and 3. Reverse:
+  the "Tag" item out of `LibrarySelectionActionBar`.

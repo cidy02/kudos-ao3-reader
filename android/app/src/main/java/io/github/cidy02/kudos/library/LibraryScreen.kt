@@ -221,6 +221,7 @@ fun LibraryScreen(
     var addToQueueWorkId by remember { mutableStateOf<String?>(null) }
     var addToCollectionWorkId by remember { mutableStateOf<String?>(null) }
     var bulkAddToQueueOpen by remember { mutableStateOf(false) }
+    var bulkTagOpen by remember { mutableStateOf(false) }
     var bulkAddToCollectionOpen by remember { mutableStateOf(false) }
     var showFilters by remember { mutableStateOf(false) }
     var confirmRemoveFromHistory by remember { mutableStateOf<String?>(null) }
@@ -287,6 +288,16 @@ fun LibraryScreen(
         DisposableEffect(libraryChrome) {
             onDispose { libraryChrome.reset() }
         }
+    }
+
+    if (bulkTagOpen) {
+        // iOS `WorkBulkTagSheet`: the Library's Actions had no Tag (brief 3ck).
+        WorkBulkTagSheet(
+            workRepository = workRepository,
+            workIds = state.selectedWorkIds.toList(),
+            palette = LocalKudosTokens.current.scopePalette,
+            onDismiss = { bulkTagOpen = false }
+        )
     }
 
     if (bulkAddToQueueOpen) {
@@ -542,6 +553,7 @@ fun LibraryScreen(
         onBulkUnsave = { viewModel.bulkSetSaved(false) },
         onBulkAddToQueue = { bulkAddToQueueOpen = true },
         onBulkAddToCollection = { bulkAddToCollectionOpen = true },
+        onBulkTag = { bulkTagOpen = true },
         onBulkMarkFinished = { viewModel.bulkSetFinished(true) },
         onBulkMarkUnfinished = { viewModel.bulkSetFinished(false) },
         onBulkRemove = { confirmBulkRemove = true },
@@ -639,6 +651,7 @@ private fun LibraryContent(
     onBulkUnsave: () -> Unit,
     onBulkAddToQueue: () -> Unit,
     onBulkAddToCollection: () -> Unit,
+    onBulkTag: () -> Unit,
     onBulkMarkFinished: () -> Unit,
     onBulkMarkUnfinished: () -> Unit,
     onBulkRemove: () -> Unit,
@@ -714,6 +727,7 @@ private fun LibraryContent(
             onBulkUnsave = onBulkUnsave,
             onBulkAddToQueue = onBulkAddToQueue,
             onBulkAddToCollection = onBulkAddToCollection,
+            onBulkTag = onBulkTag,
             onBulkMarkFinished = onBulkMarkFinished,
             onBulkMarkUnfinished = onBulkMarkUnfinished,
             onBulkRemove = onBulkRemove,
@@ -909,6 +923,7 @@ private fun LibraryContent(
                 onUnsave = onBulkUnsave,
                 onAddToQueue = onBulkAddToQueue,
                 onAddToCollection = onBulkAddToCollection,
+                onTag = onBulkTag,
                 onMarkFinished = onBulkMarkFinished,
                 onMarkUnfinished = onBulkMarkUnfinished,
                 onRemove = onBulkRemove,
@@ -1240,6 +1255,7 @@ private fun LibrarySectionContent(
     onBulkUnsave: () -> Unit,
     onBulkAddToQueue: () -> Unit,
     onBulkAddToCollection: () -> Unit,
+    onBulkTag: () -> Unit,
     onBulkMarkFinished: () -> Unit,
     onBulkMarkUnfinished: () -> Unit,
     onBulkRemove: () -> Unit,
@@ -1540,6 +1556,7 @@ private fun LibrarySectionContent(
                 onUnsave = onBulkUnsave,
                 onAddToQueue = onBulkAddToQueue,
                 onAddToCollection = onBulkAddToCollection,
+                onTag = onBulkTag,
                 onMarkFinished = onBulkMarkFinished,
                 onMarkUnfinished = onBulkMarkUnfinished,
                 onRemove = onBulkRemove,
@@ -2457,6 +2474,7 @@ private fun LibrarySelectionActionBar(
     onUnsave: () -> Unit,
     onAddToQueue: () -> Unit,
     onAddToCollection: () -> Unit,
+    onTag: () -> Unit,
     onMarkFinished: () -> Unit,
     onMarkUnfinished: () -> Unit,
     onRemove: () -> Unit,
@@ -2493,6 +2511,7 @@ private fun LibrarySelectionActionBar(
                     DropdownMenuItem(text = { Text("Save for Later") }, onClick = { overflowExpanded = false; onSaveForLater() })
                     DropdownMenuItem(text = { Text("Add to Queue") }, onClick = { overflowExpanded = false; onAddToQueue() })
                     DropdownMenuItem(text = { Text("Add to Collection") }, onClick = { overflowExpanded = false; onAddToCollection() })
+                    DropdownMenuItem(text = { Text("Tag") }, onClick = { overflowExpanded = false; onTag() })
                     DropdownMenuItem(text = { Text("Mark Finished") }, onClick = { overflowExpanded = false; onMarkFinished() })
                     HorizontalDivider()
                     DropdownMenuItem(text = { Text("Unfavorite") }, onClick = { overflowExpanded = false; onUnfavorite() })

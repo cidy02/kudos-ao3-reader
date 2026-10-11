@@ -1,5 +1,7 @@
 package io.github.cidy02.kudos.library
 
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -54,7 +56,31 @@ import io.github.cidy02.kudos.ui.subject.subjectPanel
 import io.github.cidy02.kudos.ui.subject.subjectScreenWash
 import kotlinx.coroutines.launch
 
-private enum class TagCoverage { All, Some, None }
+/** How much of a selection carries a tag (iOS `WorkBulkTagSheet.Coverage`). */
+enum class TagCoverage { All, Some, None }
+
+/** Every tag there is, and how much of the selection carries each. */
+data class SharedTags(val all: List<Tag>, val coverage: Map<String, TagCoverage>)
+
+object BulkTags {
+    /** [tagIdsByItem]: for each selected thing, the ids of the tags on it. */
+    fun coverage(tags: List<Tag>, tagIdsByItem: List<Set<String>>): SharedTags =
+        SharedTags(tags, tags.associate { tag ->
+            val tagged = tagIdsByItem.count { tag.id in it }
+            tag.id to when {
+                tagged == 0 -> TagCoverage.None
+                tagged == tagIdsByItem.size -> TagCoverage.All
+                else -> TagCoverage.Some
+            }
+        })
+
+    /** What TalkBack says of a row (iOS's accessibility values). */
+    fun spoken(coverage: TagCoverage, noun: String): String = when (coverage) {
+        TagCoverage.All -> "on every selected $noun"
+        TagCoverage.Some -> "on some selected ${noun}s"
+        TagCoverage.None -> "not applied"
+    }
+}
 
 /** Tags apply as they are toggled. Done is the only way out. */
 @Composable
@@ -64,6 +90,63 @@ fun QueueTagSheet(
     palette: SubjectPalette,
     onDismiss: () -> Unit
 ) {
+    SharedTagSheet(
+        title = "Tags",
+        footnote = (if (queues.size > 1) "Your changes apply to all ${queues.size} selected queues. " else "") +
+            "A tag you use here is the same tag on your works.",
+        emptyNote = "You have no tags yet. Add one above.",
+        noun = "queue",
+        palette = palette,
+        key = queues.map { it.id },
+        load = {
+            val tags = runCatching { repository.allTags() }.getOrDefault(emptyList())
+            val byQueue = runCatching { repository.tagsByQueue() }.getOrDefault(emptyMap())
+            BulkTags.coverage(tags, queues.map { queue -> byQueue[queue.id].orEmpty().mapTo(mutableSetOf()) { it.id } })
+        },
+        toggle = { name -> repository.toggleSharedTag(queues.map { it.id }, name) },
+        onDismiss = onDismiss
+    )
+}
+
+/**
+ * iOS `WorkBulkTagSheet` (artboard 1af): your own tags across a selection of works. A tag is
+ * on every work, on some, or on none; a tap puts it on the rest, or takes it off them all.
+ * Local only: nothing here touches AO3.
+ */
+@Composable
+fun WorkBulkTagSheet(
+    workRepository: io.github.cidy02.kudos.works.WorkRepository,
+    workIds: List<String>,
+    palette: SubjectPalette,
+    onDismiss: () -> Unit
+) {
+    SharedTagSheet(
+        title = "Tag",
+        footnote = if (workIds.size == 1) "Your changes apply to the selected work."
+            else "Your changes apply to all ${workIds.size} selected works.",
+        emptyNote = "You have no tags yet. Add one above to organize your Library.",
+        noun = "work",
+        palette = palette,
+        key = workIds,
+        load = { BulkTags.coverage(workRepository.allUserTags(), workRepository.userTagIdsByWork(workIds)) },
+        toggle = { name -> workRepository.toggleUserTag(workIds, name) },
+        onDismiss = onDismiss
+    )
+}
+
+/** One sheet for both: what differs is whose tags are read and what a tap changes. */
+@Composable
+private fun SharedTagSheet(
+    title: String,
+    footnote: String,
+    emptyNote: String,
+    noun: String,
+    palette: SubjectPalette,
+    key: Any,
+    load: suspend () -> SharedTags,
+    toggle: suspend (String) -> Unit,
+    onDismiss: () -> Unit
+) {
     val tokens = LocalKudosTokens.current
     val scope = rememberCoroutineScope()
     var all by remember { mutableStateOf<List<Tag>>(emptyList()) }
@@ -71,20 +154,10 @@ fun QueueTagSheet(
     var draft by remember { mutableStateOf("") }
     var reload by remember { mutableIntStateOf(0) }
 
-    LaunchedEffect(reload, queues.map { it.id }) {
-        val tags = runCatching { repository.allTags() }.getOrDefault(emptyList())
-        val byQueue = runCatching { repository.tagsByQueue() }.getOrDefault(emptyMap())
-        all = tags
-        coverage = tags.associate { tag ->
-            val tagged = queues.count { queue ->
-                byQueue[queue.id].orEmpty().any { it.id == tag.id }
-            }
-            tag.id to when {
-                tagged == 0 -> TagCoverage.None
-                tagged == queues.size -> TagCoverage.All
-                else -> TagCoverage.Some
-            }
-        }
+    LaunchedEffect(reload, key) {
+        val shared = load()
+        all = shared.all
+        coverage = shared.coverage
     }
 
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
@@ -96,7 +169,7 @@ fun QueueTagSheet(
         ) {
             Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    text = "Tags",
+                    text = title,
                     modifier = Modifier.weight(1f).padding(start = 12.dp),
                     color = tokens.primaryInk,
                     fontSize = 17.sp,
@@ -127,9 +200,8 @@ fun QueueTagSheet(
                             if (name.isEmpty()) return@TextButton
                             val existing = all.firstOrNull { it.name.equals(name, ignoreCase = true) }
                             scope.launch {
-                                if (existing == null || coverage[existing.id] != TagCoverage.All) {
-                                    repository.toggleSharedTag(queues.map { it.id }, name)
-                                }
+                                // Typing a tag only ever adds it: one already on everything stays.
+                                if (existing == null || coverage[existing.id] != TagCoverage.All) toggle(name)
                                 draft = ""
                                 reload += 1
                             }
@@ -137,13 +209,10 @@ fun QueueTagSheet(
                         enabled = draft.isNotBlank()
                     ) { Text("Add", color = palette.accent) }
                 }
-                FormFootnote(
-                    (if (queues.size > 1) "Your changes apply to all ${queues.size} selected queues. " else "") +
-                        "A tag you use here is the same tag on your works."
-                )
+                FormFootnote(footnote)
                 SubjectFieldLabel("Your tags", Modifier.padding(top = 12.dp))
                 if (all.isEmpty()) {
-                    FormFootnote("You have no tags yet. Add one above.")
+                    FormFootnote(emptyNote)
                 } else {
                     Column(Modifier.fillMaxWidth().subjectPanel()) {
                         all.forEachIndexed { index, tag ->
@@ -151,9 +220,10 @@ fun QueueTagSheet(
                             val state = coverage[tag.id] ?: TagCoverage.None
                             SubjectFormRow(
                                 label = tag.name,
+                                modifier = Modifier.semantics { stateDescription = BulkTags.spoken(state, noun) },
                                 onClick = {
                                     scope.launch {
-                                        repository.toggleSharedTag(queues.map { it.id }, tag.name)
+                                        toggle(tag.name)
                                         reload += 1
                                     }
                                 },
