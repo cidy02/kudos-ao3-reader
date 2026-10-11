@@ -77,7 +77,9 @@ internal object DemoNetwork {
         ) cachedPagesOffline = intent.getBooleanExtra(CACHED_PAGES_OFFLINE_EXTRA, false)
     }
 
-    internal fun refusesCachedPageRead(path: String): Boolean = cachedPagesOffline && (
+    /** [showsComments]: a work's or chapter's comments page, which is kept for offline reading too. */
+    internal fun refusesCachedPageRead(path: String, showsComments: Boolean = false): Boolean = cachedPagesOffline && (
+        showsComments ||
         Regex("^/users/[^/]+(?:/pseuds/[^/]+)?(?:/(?:inbox|profile|works(?:/collected)?|gifts|series|bookmarks))?/?$").matches(path) ||
             Regex("^/series/[0-9]+/?$").matches(path))
 
@@ -407,7 +409,8 @@ internal class DemoNetworkInterceptor(
         val url = chain.request().url
         if (!DemoNetworkRoutes.isAo3Host(url.host)) return chain.proceed(chain.request())
         val path = DemoNetworkRoutes.decodedPath(url)
-        if (chain.request().method == "GET" && DemoNetwork.refusesCachedPageRead(path)) {
+        if (chain.request().method == "GET" && DemoNetwork.refusesCachedPageRead(path,
+                showsComments = chain.request().url.queryParameter("show_comments") == "true")) {
             throw java.net.UnknownHostException("Local cached-page demo is offline")
         }
         seriesForms.answer(chain.request(), fixtures())?.let { answer ->

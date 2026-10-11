@@ -95,6 +95,9 @@ class CommentsViewModel(
 
     private val _chaptersFailed = MutableStateFlow(false)
     val chaptersFailed: StateFlow<Boolean> = _chaptersFailed.asStateFlow()
+    /** True while the chapter list is being asked for: the picker shows that, not an empty sheet. */
+    private val _chaptersLoading = MutableStateFlow(false)
+    val chaptersLoading: StateFlow<Boolean> = _chaptersLoading.asStateFlow()
 
     private val _draft = MutableStateFlow("")
     val draft: StateFlow<String> = _draft.asStateFlow()
@@ -408,7 +411,10 @@ class CommentsViewModel(
         // who is now signed in, where it used to be kept because it was not empty (audit A30-11).
         if (chapterIndexRepository == null || (_chapters.value.isNotEmpty() && chaptersViewer == viewer)) return
         viewModelScope.launch {
-            val res = chapterIndexRepository.chapters(target.workId)
+            // Asked again: the last failure is no longer what is known.
+            _chaptersFailed.value = false
+            _chaptersLoading.value = true
+            val res = try { chapterIndexRepository.chapters(target.workId) } finally { _chaptersLoading.value = false }
             if (currentViewer() != viewer) return@launch
             when (res) {
                 is AO3Result.Success -> {

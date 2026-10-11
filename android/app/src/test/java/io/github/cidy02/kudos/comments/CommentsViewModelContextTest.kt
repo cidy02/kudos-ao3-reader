@@ -360,6 +360,35 @@ class CommentsViewModelContextTest {
         }
     }
 
+    /** The picker's empty sheet: while the list is asked for it is loading; a failure is said, and asking again clears it. */
+    @Test
+    fun aChapterListThatFailsSaysSoAndAskingAgainClearsIt() = runTest(testDispatcher) {
+        var served: AO3Result<AO3HttpResponse> = AO3Result.Failure(io.github.cidy02.kudos.network.ao3.AO3Error.Network("offline"))
+        var gate: CompletableDeferred<Unit>? = CompletableDeferred()
+        val session = Session(basic) { url -> if ("/navigate" in url) served else basic }
+        session.getGate = { url -> gate.takeIf { "/navigate" in url } }
+        val chapters = AO3ChapterIndexRepository(PublicPage(basic), session)
+        val viewModel = model(session)
+        until("the first page") { loaded(viewModel) }
+
+        viewModel.loadChaptersIfNeeded(chapters)
+        until("asking") { viewModel.chaptersLoading.value }
+        assertEquals(false, viewModel.chaptersFailed.value)
+        gate!!.complete(Unit); gate = null
+        until("the failure") { viewModel.chaptersFailed.value }
+        assertEquals(false, viewModel.chaptersLoading.value)
+
+        served = success("<ol class='chapter index group'><li><a href='/works/123/chapters/1001'>1. Chapter</a></li></ol>")
+        val held = CompletableDeferred<Unit>().also { gate = it }
+        viewModel.loadChaptersIfNeeded(chapters)
+        until("asking again") { viewModel.chaptersLoading.value }
+        assertEquals("asked again: the old failure is not shown beside the spinner", false, viewModel.chaptersFailed.value)
+        gate = null; held.complete(Unit)
+        until("the list") { viewModel.chapters.value.size == 1 }
+        assertEquals(false, viewModel.chaptersLoading.value)
+        assertEquals(false, viewModel.chaptersFailed.value)
+    }
+
     /** A32-5. One session's chapter list is not the next one's, whatever the name. */
     @Test
     fun aChapterListIsReadAgainForANewSessionOfTheSameNameAndALateOneIsNotShown() = runTest(testDispatcher) {

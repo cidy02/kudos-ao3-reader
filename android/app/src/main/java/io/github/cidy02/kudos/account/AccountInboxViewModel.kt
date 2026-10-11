@@ -50,7 +50,10 @@ data class AccountInboxUiState(
     /** Work id → authors from progressive enrichment (unbounded per VM instance). */
     val workAuthorsById: Map<Long, List<AO3CommentWorkAuthor>> = emptyMap(),
     val pageUrl: String? = null,
-    val isShowingStaleCache: Boolean = false
+    val isShowingStaleCache: Boolean = false,
+    /** A page that could not be read while another was on screen, and why (iOS `paginationFailed`). */
+    val failedPage: Int? = null,
+    val failedPageMessage: String? = null
 ) {
     enum class Phase {
         Idle,
@@ -120,7 +123,8 @@ class AccountInboxViewModel(
                     } else {
                         AccountInboxUiState.Phase.Loaded
                     },
-                    actionError = null
+                    actionError = null,
+                    failedPage = null, failedPageMessage = null
                 )
             }
             val filterForm = previous.filterForm
@@ -161,7 +165,13 @@ class AccountInboxViewModel(
                 }
                 is AO3Result.Failure -> {
                     mutableState.update {
-                        it.copy(phase = AccountInboxUiState.Phase.Failed,
+                        // A page that failed while another was on screen does not take that one
+                        // away: the reader lost page 1 because page 2 would not load (iOS T91-RF8).
+                        // A session that ended still clears everything: nothing of it stays.
+                        if (it.items.isNotEmpty() && result.error != AO3Error.AuthenticationRequired) {
+                            it.copy(phase = AccountInboxUiState.Phase.Loaded, failedPage = page,
+                                failedPageMessage = result.error.displayMessage())
+                        } else it.copy(phase = AccountInboxUiState.Phase.Failed,
                             items = emptyList(), bulkForm = null, filterForm = null,
                             isShowingStaleCache = false, actionError = result.error.displayMessage())
                     }
