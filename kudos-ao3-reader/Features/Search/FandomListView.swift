@@ -850,68 +850,87 @@ private struct FandomListRow: View {
     let libraryEntry: FandomLibraryIndex.Entry
 
     @Environment(ThemeManager.self) private var theme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @ScaledMetric(relativeTo: .caption) private var starSize = 14.5
     @ScaledMetric(relativeTo: .caption2) private var downloadFontSize = 11.5
 
-    var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 12) {
-            if libraryEntry.isFavourite {
-                Image(systemName: "star.fill")
-                    .font(.system(size: starSize))
-                    .foregroundStyle(Color.subjectFavoriteGold)
-                    .accessibilityLabel("Favorite")
-            }
+    /// At the accessibility sizes the count beside the name took the row: it does
+    /// not shrink, so the name was left a column one syllable wide ("Su- / per- /
+    /// nat- / ural"). There the count goes under the name, and the download badge
+    /// under the title.
+    private var rowLayout: AnyLayout {
+        dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 4))
+            : AnyLayout(HStackLayout(alignment: .firstTextBaseline, spacing: 12))
+    }
 
-            VStack(alignment: .leading, spacing: 2) {
-                // Three tiers, each on its own line and each a step quieter than
-                // the one above. The title used to carry its qualifier inline to
-                // save a line, but that let a long name wrap mid-qualifier —
-                // "My Hero Academia (Anime" / "& Manga)" — which is the worst
-                // thing a row can do to a name you are trying to read.
-                HStack(alignment: .firstTextBaseline, spacing: 7) {
-                    Text(splitName.title)
-                        .font(.body)
-                        .foregroundStyle(.primary)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .layoutPriority(1)
-                    if libraryEntry.downloadedWorkCount > 0 {
-                        downloadBadge(count: libraryEntry.downloadedWorkCount)
+    private var titleLayout: AnyLayout {
+        dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 2))
+            : AnyLayout(HStackLayout(alignment: .firstTextBaseline, spacing: 7))
+    }
+
+    var body: some View {
+        rowLayout {
+            HStack(alignment: .firstTextBaseline, spacing: 12) {
+                if libraryEntry.isFavourite {
+                    Image(systemName: "star.fill")
+                        .font(.system(size: starSize))
+                        .foregroundStyle(Color.subjectFavoriteGold)
+                        .accessibilityLabel("Favorite")
+                }
+
+                VStack(alignment: .leading, spacing: 2) {
+                    // Three tiers, each on its own line and each a step quieter than
+                    // the one above. The title used to carry its qualifier inline to
+                    // save a line, but that let a long name wrap mid-qualifier —
+                    // "My Hero Academia (Anime" / "& Manga)" — which is the worst
+                    // thing a row can do to a name you are trying to read.
+                    titleLayout {
+                        Text(splitName.title)
+                            .font(.body)
+                            .foregroundStyle(.primary)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .layoutPriority(1)
+                        if libraryEntry.downloadedWorkCount > 0 {
+                            downloadBadge(count: libraryEntry.downloadedWorkCount)
+                        }
+                    }
+
+                    // The disambiguation. Below rather than beside, so the title
+                    // owns its line; also lines the qualifiers up in a column, which
+                    // is how you tell 23 versions of Les Misérables apart.
+                    if !splitName.qualifier.isEmpty {
+                        Text(splitName.qualifier)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    // The other names this fandom is tagged under. A tier below the
+                    // qualifier rather than level with it: 13% of rows show both, and
+                    // in matching styles they read as one blurred block instead of
+                    // "what this is" followed by "what else it is called".
+                    //
+                    // One per line. These were joined with a middot to keep a row
+                    // short, but a stack is what a list of names wants: each is a
+                    // whole name, and reading them off a column beats picking them
+                    // out of a run separated by a character that also appears inside
+                    // titles. It costs a line on the 2,371 tags carrying two aliases
+                    // and nothing on the 140,537 carrying one or none.
+                    ForEach(Array(aliases.enumerated()), id: \.offset) { _, alias in
+                        aliasText(alias)
+                            .font(.caption)
+                            // Size carries the tier, not colour. `.tertiary` here was
+                            // ~3:1 against every card surface — under WCAG AA, and
+                            // worst on dense CJK, where 12pt kanji strokes blur
+                            // together at that contrast.
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                 }
-
-                // The disambiguation. Below rather than beside, so the title
-                // owns its line; also lines the qualifiers up in a column, which
-                // is how you tell 23 versions of Les Misérables apart.
-                if !splitName.qualifier.isEmpty {
-                    Text(splitName.qualifier)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-
-                // The other names this fandom is tagged under. A tier below the
-                // qualifier rather than level with it: 13% of rows show both, and
-                // in matching styles they read as one blurred block instead of
-                // "what this is" followed by "what else it is called".
-                //
-                // One per line. These were joined with a middot to keep a row
-                // short, but a stack is what a list of names wants: each is a
-                // whole name, and reading them off a column beats picking them
-                // out of a run separated by a character that also appears inside
-                // titles. It costs a line on the 2,371 tags carrying two aliases
-                // and nothing on the 140,537 carrying one or none.
-                ForEach(Array(aliases.enumerated()), id: \.offset) { _, alias in
-                    aliasText(alias)
-                        .font(.caption)
-                        // Size carries the tier, not colour. `.tertiary` here was
-                        // ~3:1 against every card surface — under WCAG AA, and
-                        // worst on dense CJK, where 12pt kanji strokes blur
-                        // together at that contrast.
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
 
             if let count = fandom.workCount {
                 HStack(spacing: 4) {

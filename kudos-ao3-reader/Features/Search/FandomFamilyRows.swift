@@ -13,9 +13,15 @@ struct FandomFamilyBlock: View {
 
     @Environment(\.workCardTransitionNamespace) private var zoomNamespace
     @Environment(ThemeManager.self) private var themeManager
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @ScaledMetric(relativeTo: .caption) private var starSize = 14.5
     @ScaledMetric(relativeTo: .caption2) private var downloadFontSize = 11.5
     @ScaledMetric(relativeTo: .caption) private var allTagsSize: CGFloat = 11
+
+    /// At the accessibility sizes the figures beside a name took the row and the
+    /// name was left a column a letter or two wide ("D / o / ct / or"). There the
+    /// name has its own line and the figures go under it; the chevron goes.
+    private var stacks: Bool { dynamicTypeSize.isAccessibilitySize }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -38,7 +44,10 @@ struct FandomFamilyBlock: View {
     }
 
     private var header: some View {
-        HStack(alignment: .top, spacing: 11) {
+        let layout = stacks
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 4))
+            : AnyLayout(HStackLayout(alignment: .top, spacing: 11))
+        return layout {
             VStack(alignment: .leading, spacing: 2) {
                 Text(family.parsedTitle)
                     .font(.body.weight(.semibold))
@@ -54,7 +63,7 @@ struct FandomFamilyBlock: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
-            VStack(alignment: .trailing, spacing: 3) {
+            VStack(alignment: stacks ? .leading : .trailing, spacing: 3) {
                 if sort == .familyTotal {
                     HStack(spacing: 5) {
                         Text(countLabel)
@@ -74,11 +83,13 @@ struct FandomFamilyBlock: View {
                     .monospacedDigit()
             }
 
-            Image(systemName: "chevron.right")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.tertiary)
-                .padding(.top, 4)
-                .accessibilityHidden(true)
+            if !stacks {
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+                    .padding(.top, 4)
+                    .accessibilityHidden(true)
+            }
         }
         .contentShape(Rectangle())
     }
@@ -107,34 +118,43 @@ struct FandomFamilyBlock: View {
         _ member: FandomFamily.Member,
         libraryEntry: FandomLibraryIndex.Entry
     ) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 9) {
-            if libraryEntry.isFavourite {
-                Image(systemName: "star.fill")
-                    .font(.system(size: starSize))
-                    .foregroundStyle(Color.subjectFavoriteGold)
-                    .accessibilityLabel("Favorite")
+        let layout = stacks
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 3))
+            : AnyLayout(HStackLayout(alignment: .firstTextBaseline, spacing: 9))
+        return layout {
+            HStack(alignment: .firstTextBaseline, spacing: 9) {
+                if libraryEntry.isFavourite {
+                    Image(systemName: "star.fill")
+                        .font(.system(size: starSize))
+                        .foregroundStyle(Color.subjectFavoriteGold)
+                        .accessibilityLabel("Favorite")
+                }
+
+                Text(member.qualifierDisplay)
+                    .font(.subheadline)
+                    .foregroundStyle(.primary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
-            Text(member.qualifierDisplay)
-                .font(.subheadline)
-                .foregroundStyle(.primary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .fixedSize(horizontal: false, vertical: true)
+            HStack(alignment: .firstTextBaseline, spacing: 9) {
+                if libraryEntry.downloadedWorkCount > 0 {
+                    downloadBadge(count: libraryEntry.downloadedWorkCount)
+                }
 
-            if libraryEntry.downloadedWorkCount > 0 {
-                downloadBadge(count: libraryEntry.downloadedWorkCount)
+                Text(member.workCount.formatted())
+                    .font(.caption.weight(.medium))
+                    .monospacedDigit()
+                    .foregroundStyle(.secondary)
+                    .frame(minWidth: stacks ? 0 : 44, alignment: stacks ? .leading : .trailing)
             }
 
-            Text(member.workCount.formatted())
-                .font(.caption.weight(.medium))
-                .monospacedDigit()
-                .foregroundStyle(.secondary)
-                .frame(minWidth: 44, alignment: .trailing)
-
-            Image(systemName: "chevron.right")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.tertiary)
-                .accessibilityHidden(true)
+            if !stacks {
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+                    .accessibilityHidden(true)
+            }
         }
         .padding(.vertical, 7)
         .contentShape(Rectangle())
