@@ -70,26 +70,8 @@ fun WorkBulkActionBar(
     val allFinished = hasSelection && selectedWorks.all { it.isFinished }
     val canRemoveDownload = selectedWorks.any { it.isDownloaded && it.keptOfflineBy == null }
 
-    suspend fun setDownloaded(downloaded: Boolean) {
-        for (selected in selectedWorks) {
-            val work = workRepository.getWork(selected.id) ?: continue
-            val action = WorkDownloadSemantics.action(
-                work.hasEpub,
-                work.isDownloaded,
-                work.hasAo3WorkId,
-                work.keptOfflineBy
-            ) ?: continue
-            if (downloaded) {
-                workRepository.setSaved(work.id, true)
-                if (!work.hasEpub) {
-                    val ao3Id = WorkTags.ao3WorkIdFromUrl(work.sourceUrl) ?: continue
-                    downloadQueue?.enqueueLocal(ao3Id, work.title, work.sourceUrl, force = true)
-                }
-            } else if (action == WorkDownloadAction.RemoveDownload) {
-                workRepository.setSaved(work.id, false)
-            }
-        }
-    }
+    suspend fun setDownloaded(downloaded: Boolean) =
+        setWorksDownloaded(selectedWorks, downloaded, workRepository, downloadQueue)
 
     Surface(
         tonalElevation = 6.dp,
@@ -226,92 +208,141 @@ fun WorkBulkActionBar(
     )
 
     if (showingAddToQueue) {
-        var queues by remember { mutableStateOf<List<ReadingQueue>?>(null) }
-        LaunchedEffect(Unit) {
-            queues = queueRepository?.listQueues() ?: emptyList<ReadingQueue>()
-        }
-        AlertDialog(
-            onDismissRequest = { showingAddToQueue = false },
-            title = { Text("Add Selection to Queue") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    if (queues == null) {
-                        Text("Loading...", style = MaterialTheme.typography.bodyMedium)
-                    } else if (queues!!.isEmpty()) {
-                        Text("No custom queues yet.", style = MaterialTheme.typography.bodyMedium)
-                    } else {
-                        queues!!.forEach { queue ->
-                            TextButton(
-                                onClick = {
-                                    showingAddToQueue = false
-                                    scope.launch {
-                                        selectedWorks.forEach { runCatching { queueRepository?.addWork(queue.id, it.id) } }
-                                        onDone()
-                                    }
-                                },
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Text(queue.displayName, modifier = Modifier.fillMaxWidth())
-                            }
-                        }
-                    }
+        QueuePickerDialog(
+            title = "Add Selection to Queue",
+            queueRepository = queueRepository,
+            onPick = { queue ->
+                showingAddToQueue = false
+                scope.launch {
+                    selectedWorks.forEach { runCatching { queueRepository?.addWork(queue.id, it.id) } }
+                    onDone()
                 }
             },
-            confirmButton = { TextButton(onClick = { showingAddToQueue = false }) { Text("Close") } }
+            onDismiss = { showingAddToQueue = false }
         )
     }
 
     if (showingAddToCollection) {
-        var newName by remember { mutableStateOf("") }
-        var collections by remember { mutableStateOf<List<WorkCollection>?>(null) }
-        LaunchedEffect(Unit) {
-            collections = workRepository.allCollections()
+        AddSelectionToCollectionDialog(
+            selectedWorks = selectedWorks,
+            workRepository = workRepository,
+            onAdded = { showingAddToCollection = false; onDone() },
+            onDismiss = { showingAddToCollection = false }
+        )
+    }
+}
+
+/** Download, or its removal, for several works: what one work's Download button does, for each. */
+internal suspend fun setWorksDownloaded(
+    works: List<SavedWork>,
+    downloaded: Boolean,
+    workRepository: WorkRepository,
+    downloadQueue: DownloadQueue?
+) {
+    for (selected in works) {
+        val work = workRepository.getWork(selected.id) ?: continue
+        val action = WorkDownloadSemantics.action(
+            work.hasEpub,
+            work.isDownloaded,
+            work.hasAo3WorkId,
+            work.keptOfflineBy
+        ) ?: continue
+        if (downloaded) {
+            workRepository.setSaved(work.id, true)
+            if (!work.hasEpub) {
+                val ao3Id = WorkTags.ao3WorkIdFromUrl(work.sourceUrl) ?: continue
+                downloadQueue?.enqueueLocal(ao3Id, work.title, work.sourceUrl, force = true)
+            }
+        } else if (action == WorkDownloadAction.RemoveDownload) {
+            workRepository.setSaved(work.id, false)
         }
-        AlertDialog(
-            onDismissRequest = { showingAddToCollection = false },
-            title = { Text("Add Selection to Collection") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(
-                        value = newName,
-                        onValueChange = { newName = it },
-                        label = { Text("New or existing collection") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    if (collections != null && collections!!.isNotEmpty()) {
-                        Text("Existing collections:", style = MaterialTheme.typography.labelMedium)
-                        collections!!.forEach { col ->
-                            TextButton(
-                                onClick = {
-                                    showingAddToCollection = false
-                                    scope.launch {
-                                        selectedWorks.forEach { runCatching { workRepository.addToCollection(it.id, col.name) } }
-                                        onDone()
-                                    }
-                                },
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Text(col.name, modifier = Modifier.fillMaxWidth())
-                            }
+    }
+}
+
+/** A queue to put a selection in: the picker of Add to Queue and of Move to. */
+@Composable
+internal fun QueuePickerDialog(
+    title: String,
+    queueRepository: ReadingQueueRepository?,
+    /** The queue the selection is in, for Move to: not a place to move it. */
+    excludeQueueId: String? = null,
+    onPick: (ReadingQueue) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var queues by remember { mutableStateOf<List<ReadingQueue>?>(null) }
+    LaunchedEffect(Unit) {
+        queues = queueRepository?.listQueues().orEmpty().filter { it.id != excludeQueueId && !it.isDeleted }
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                val loaded = queues
+                if (loaded == null) {
+                    Text("Loading...", style = MaterialTheme.typography.bodyMedium)
+                } else if (loaded.isEmpty()) {
+                    Text(if (excludeQueueId == null) "No custom queues yet." else "No other queues yet.",
+                        style = MaterialTheme.typography.bodyMedium)
+                } else {
+                    loaded.forEach { queue ->
+                        TextButton(onClick = { onPick(queue) }, modifier = Modifier.fillMaxWidth()) {
+                            Text(queue.displayName, modifier = Modifier.fillMaxWidth())
                         }
                     }
                 }
-            },
-            confirmButton = {
-                TextButton(
-                    enabled = newName.trim().isNotEmpty(),
-                    onClick = {
-                        val name = newName.trim()
-                        showingAddToCollection = false
-                        scope.launch {
-                            selectedWorks.forEach { runCatching { workRepository.addToCollection(it.id, name) } }
-                            onDone()
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Close") } }
+    )
+}
+
+/** A collection, new or existing, for a selection. */
+@Composable
+internal fun AddSelectionToCollectionDialog(
+    selectedWorks: List<SavedWork>,
+    workRepository: WorkRepository,
+    onAdded: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    val scope = rememberCoroutineScope()
+    var newName by remember { mutableStateOf("") }
+    var collections by remember { mutableStateOf<List<WorkCollection>?>(null) }
+    LaunchedEffect(Unit) {
+        collections = workRepository.allCollections()
+    }
+    fun add(name: String) {
+        scope.launch {
+            selectedWorks.forEach { runCatching { workRepository.addToCollection(it.id, name) } }
+            onAdded()
+        }
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Add Selection to Collection") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = newName,
+                    onValueChange = { newName = it },
+                    label = { Text("New or existing collection") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                val existing = collections
+                if (!existing.isNullOrEmpty()) {
+                    Text("Existing collections:", style = MaterialTheme.typography.labelMedium)
+                    existing.forEach { col ->
+                        TextButton(onClick = { add(col.name) }, modifier = Modifier.fillMaxWidth()) {
+                            Text(col.name, modifier = Modifier.fillMaxWidth())
                         }
                     }
-                ) { Text("Add") }
-            },
-            dismissButton = { TextButton(onClick = { showingAddToCollection = false }) { Text("Cancel") } }
-        )
-    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(enabled = newName.trim().isNotEmpty(), onClick = { add(newName.trim()) }) { Text("Add") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+    )
 }

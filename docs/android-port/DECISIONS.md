@@ -1618,3 +1618,10 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   The sheet is the queues' tag sheet made common (`SharedTagSheet`), not a second one. The
   queue's and the collection's Select mode still offer only Remove: parts 2 and 3. Reverse:
   the "Tag" item out of `LibrarySelectionActionBar`.
+- **2026-10-11 · A selection on a queue's page or a collection's page can do what iOS's can
+  (3ck, parts 2 and 3).** `library/ScopedSelectionBar.kt`: a queue's page has Download, Move
+  to, Tag, Remove and More; a collection's has Remove from Collection, Actions and Done.
+  Move to adds each work to the other queue and then takes it out of this one (a work
+  already there simply leaves; iOS, whose picker cannot report a choice, compares counts).
+  The bar is an opaque surface: over glass its labels sat on the rows behind. Reverse: the
+  two `ScopedSelectionBar` calls out of `QueuePageScreen.kt` and `CollectionDetailScreen.kt`.

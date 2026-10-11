@@ -26,7 +26,8 @@ fun ReadingQueueBrowserScreen(
     metadataRefresh: WorkMetadataRefresh? = null,
     settingsRepository: SettingsRepository? = null,
     privacyGate: PrivacyGate? = null,
-    downloadQueue: DownloadQueue? = null
+    downloadQueue: DownloadQueue? = null,
+    workRepository: io.github.cidy02.kudos.works.WorkRepository? = null
 ) {
     var selectedQueueId by rememberSaveable { mutableStateOf(initialQueueId) }
     val queueId = selectedQueueId
@@ -47,6 +48,7 @@ fun ReadingQueueBrowserScreen(
             settingsRepository = settingsRepository,
             privacyGate = privacyGate,
             downloadQueue = downloadQueue,
+            workRepository = workRepository,
             onOpenWork = onOpenWork,
             onOpenReader = onOpenReader,
             onManageQueue = onManageQueue,

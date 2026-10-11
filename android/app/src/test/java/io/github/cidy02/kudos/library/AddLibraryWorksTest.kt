@@ -78,6 +78,19 @@ class AddLibraryWorksTest {
         assertEquals(listOf("tame"), ids(LibraryPrivacy.UNREAD_SETTING))
     }
 
+    /** Brief 3ck: a selection on a queue's or a collection's page. */
+    @Test fun aSelectionsRemovalIsAskedInTheseWordsAndOnlyMissingCopiesAreFetched() {
+        assertEquals("Remove 1 work?", SelectionActions.removeTitle(1))
+        assertEquals("Remove 3 works?", SelectionActions.removeTitle(3))
+        assertEquals("Kudos will remove the selected works from this queue. They will stay in your Library.",
+            SelectionActions.removeMessage("queue"))
+        val onDevice = work("kept").copy(sourceUrl = "https://archiveofourown.org/works/1", hasEpub = true)
+        val missing = work("gone").copy(sourceUrl = "https://archiveofourown.org/works/2", hasEpub = false)
+        val imported = work("file").copy(sourceUrl = "", hasEpub = false)
+        // Not a copy already here, and not a file AO3 never had.
+        assertEquals(listOf("gone"), SelectionActions.missingCopies(listOf(onDevice, missing, imported)).map { it.id })
+    }
+
     @Test fun theButtonCountsWhatItWillAdd() {
         assertEquals("Add", AddLibraryWorks.confirmationTitle(0))
         assertEquals("Add 3", AddLibraryWorks.confirmationTitle(3))
