@@ -30,6 +30,31 @@ struct QueueOrganizerSelectionTests {
         #expect(!pinned.isPinned && !loose.isPinned)
     }
 
+    /// The search finds a queue by a member work's title, but not by one Hide mode
+    /// hides (audit A38); the queue's own name still answers.
+    @Test func searchDoesNotAnswerForAWorkHideModeHides() throws {
+        let context = try makeContext()
+        let queue = ReadingQueueService.createQueue(named: "Late", in: context)
+        let work = SavedWork(title: "Ashfall", author: "TempusFugit")
+        work.rating = "Mature"
+        context.insert(work)
+        ReadingQueueService.add(work, to: queue, in: context)
+        let gate = PrivacyGate()
+        func found(_ term: String, hideMature: Bool = true, mode: MaturePrivacyMode) -> Bool {
+            QueueOrganizerSelection.matchesSearch(queue, term: term) {
+                !gate.isHidden($0, enabled: hideMature, mode: mode)
+            }
+        }
+
+        #expect(!found("ashfall", mode: .hide))
+        #expect(!found("tempus", mode: .hide))
+        #expect(found("late", mode: .hide))
+        #expect(found("ashfall", mode: .obscure))
+        #expect(found("ashfall", hideMature: false, mode: .hide))
+        gate.reveal(work)
+        #expect(found("ashfall", mode: .hide))
+    }
+
     /// Bulk Delete is the single-queue delete per queue: Recently Deleted, works
     /// intact. Saved for Later is never deleted, and an unselected queue is left.
     @Test func bulkDeleteSoftDeletesTheSelectedCustomQueuesOnly() throws {
