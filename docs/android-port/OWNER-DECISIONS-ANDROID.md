@@ -422,3 +422,33 @@ twice), so this is an iPhone question only.
   only just fits on the narrowest phone.
 
 Until answered: A. The ordinary sizes are untouched either way.
+
+## 23. Blur mode: may a list of names, a search or a filter list say anything about a blurred work? (both apps) (2026-10-11)
+
+Found by audit A38 (`briefs/A38-privacy-names.md`). With Hide Mature on in **Blur** mode
+(the default on both apps) a Mature or Explicit work is drawn blurred, or as "Hidden mature
+work", until you tap it. The rule in the code is that nothing may open it or name it until
+then. Places that drew a title with no blurred card were fixed on 2026-10-11 (Add Works, a
+collection's tile, Home's queue card). These three were left, because each is a choice:
+
+1. **The Reorder screen of a collection** lists every work by title and author, blurred
+   ones included (both apps). A note in the iPhone's code already calls this an open
+   question for you. In Hide mode Reorder is now off until the works are shown ("Show
+   Mature to Reorder"), as it already was for a queue.
+2. **A search or a filter answers for a blurred work.** Type a blurred work's title into
+   Search, or into a collection's filter, and its blurred card is what is left: the title
+   is confirmed. (Android's own Library search already refuses: a blurred work never
+   matches. Global search on both apps, and a collection's filter, do match. The decision
+   of 2026-10-08 was that such a match is drawn blurred.)
+3. **Filter lists and Search's "in your library" fandoms include a blurred work's fandoms
+   and tags** (both apps). In Hide mode they are left out (on the iPhone since T-394).
+
+- **A (what stands).** Blur hides a work's face, not that it exists: the three stay as they
+  are. Hide mode is the setting for someone who wants nothing shown at all.
+- **B.** Blur gives nothing away either: the Reorder screen shows "Hidden mature work" on
+  such a row (it can still be dragged), a blurred work never matches a search or a filter,
+  and its fandoms and tags are left out of the lists, until it is revealed.
+- **C.** B for the Reorder screen only (a title in plain sight), A for search and lists
+  (they give away less, and hiding matches makes a work harder to find).
+
+Until answered: A. My recommendation is C.

@@ -406,9 +406,20 @@ fun CollectionDetailScreen(
                                 }
                             )
                             if (works.size > 1) {
-                                val canReorder = filterText.isBlank()
+                                // Reorder draws every work in the collection: while Hide mode is keeping
+                                // some out of sight it would put them back on screen (the queue page's rule).
+                                val hidesMature = works.any {
+                                    LibraryPrivacy.visibility(it, privacy, reveal) == LibraryPrivacyVisibility.Hidden
+                                }
+                                val canReorder = filterText.isBlank() && !hidesMature
                                 DropdownMenuItem(
-                                    text = { Text(if (canReorder) "Reorder" else "Clear Filters to Reorder") },
+                                    text = {
+                                        Text(when {
+                                            canReorder -> "Reorder"
+                                            filterText.isNotBlank() -> "Clear Filters to Reorder"
+                                            else -> "Show Mature to Reorder"
+                                        })
+                                    },
                                     leadingIcon = { Icon(Icons.Outlined.SwapVert, contentDescription = null) },
                                     enabled = canReorder,
                                     onClick = {
