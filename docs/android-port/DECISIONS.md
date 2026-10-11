@@ -1563,3 +1563,16 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   works by title with no privacy check at all, and the Library's own History and Favorites
   lists have replaced them. Removed rather than gated: nothing opens them. Reverse: revert
   the commit that names this.
+- **2026-10-11 · Browse does not mark a fandom because of a work Hide mode hides (A38).**
+  Browse reads the Library to star a fandom, count its downloads, say "read before" and fill
+  Jump Back In. It read every work. Both screens now read `LibraryPrivacy.withoutHidden`,
+  and are given the privacy setting and the reveal state (they had neither); until the
+  setting has been read they assume the stricter one (`UNREAD_SETTING`). Obscure mode keeps
+  its works in these marks (owner question 23). The iPhone's is T-397. Reverse: `library`
+  back to the unfiltered list in `BrowseScreen.kt` and `FandomListScreen.kt`.
+- **2026-10-11 · A test that hung once is made to wait on its fake (not a product fault).**
+  `AO3CollectionsViewModelTest.aCollectionChangedElsewhereMakesTheListReadAgain` waited on
+  the screen's state for a read that is asked for off the test's clock; a list that comes
+  back the same emits nothing, so one full run in about a dozen today sat for its whole
+  minute and failed the gate. It polls the fake's own record now. The gate that failed was
+  not committed on; two clean full runs followed.

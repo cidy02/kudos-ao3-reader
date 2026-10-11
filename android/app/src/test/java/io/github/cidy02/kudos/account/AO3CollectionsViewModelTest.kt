@@ -15,6 +15,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.job
 import kotlinx.coroutines.joinAll
@@ -23,6 +24,8 @@ import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
 import org.junit.After
 import org.junit.Assert.*
@@ -87,7 +90,11 @@ class AO3CollectionsViewModelTest {
         val (model, _) = model(client)
         assertEquals(listOf(1), client.pages)
         model.collectionsChanged(1)
-        model.uiState.first { it is AO3CollectionsUiState.Loaded && client.pages.size == 2 }
+        // Wait on the fake itself, in real time. The read is asked for off the test's clock, and
+        // a list that comes back the same emits no new state: waiting on the state for the read
+        // hung once in a full run (2026-10-11), for the test's whole minute.
+        withContext(Dispatchers.Default) { withTimeout(10_000) { while (client.pages.size < 2) delay(5) } }
+        model.uiState.first { it is AO3CollectionsUiState.Loaded }
         assertEquals(listOf(1, 1), client.pages)
         model.onDisappear()
     }
