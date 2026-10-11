@@ -416,12 +416,29 @@ fun QueuePageScreen(
         FilterDialog(extra, onDismiss = { showFilters = false }, onChange = { extra = it })
     }
     if (showAdd && current != null) {
-        AddWorksDialog(
-            repository = repository,
-            queueId = current.id,
-            onDismiss = { showAdd = false },
-            onAdded = { showAdd = false; reload += 1 }
-        )
+        var candidates by remember(current.id) { mutableStateOf<List<SavedWork>?>(null) }
+        LaunchedEffect(current.id) {
+            candidates = runCatching { repository.worksAvailableToAdd(current.id) }.getOrDefault(emptyList())
+        }
+        candidates?.let { available ->
+            AddLibraryWorksSheet(
+                destinationName = current.displayName,
+                scopeName = "queue",
+                candidates = available,
+                privacy = shownSettings.privacy,
+                reveal = reveal,
+                onToggleMature = { privacyGate?.toggleRevealAll(activity) },
+                onDismiss = { showAdd = false },
+                onAdd = { chosen ->
+                    showAdd = false
+                    // On the end of the queue, in the order the picker showed them (iOS `append`).
+                    scope.launch {
+                        chosen.forEach { repository.addWork(current.id, it.id) }
+                        reload += 1
+                    }
+                }
+            )
+        }
     }
     if (showEdit && current != null && current.kindRaw == ReadingQueueKind.CUSTOM) {
         QueueEditorSheet(
@@ -640,48 +657,6 @@ private fun FilterDialog(
             }) { Text("Done") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
-    )
-}
-
-@Composable
-private fun AddWorksDialog(
-    repository: ReadingQueueRepository,
-    queueId: String,
-    onDismiss: () -> Unit,
-    onAdded: () -> Unit
-) {
-    val scope = rememberCoroutineScope()
-    var available by remember { mutableStateOf<List<SavedWork>>(emptyList()) }
-    LaunchedEffect(queueId) {
-        available = runCatching { repository.worksAvailableToAdd(queueId) }.getOrDefault(emptyList())
-    }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Add Works") },
-        text = {
-            Column(Modifier.heightIn(max = 360.dp).verticalScroll(rememberScrollState())) {
-                if (available.isEmpty()) {
-                    Text("Every work you have is already in this queue.")
-                }
-                available.forEach { work ->
-                    Text(
-                        text = work.title,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable {
-                                scope.launch {
-                                    repository.addWork(queueId, work.id)
-                                    onAdded()
-                                }
-                            }
-                            .padding(vertical = 10.dp),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-            }
-        },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Done") } }
     )
 }
 

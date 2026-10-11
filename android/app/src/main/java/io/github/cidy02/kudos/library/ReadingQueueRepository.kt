@@ -540,12 +540,15 @@ class ReadingQueueRepository(
         stampQueue(destinationQueueId, clock())
     }
 
-    /** Active library works that are not already in [queueId]. */
+    /**
+     * iOS `appendCandidates`: real Library works that are not already in [queueId]. A work that
+     * exists only as another queue's entry is not one.
+     */
     suspend fun worksAvailableToAdd(queueId: String): List<SavedWork> {
         val memberIds = queueDao.getMembershipsForQueue(queueId).map { it.workID }.toSet()
         return workDao.getAll().map { it.toDomain() }.filter { work ->
-            !work.isDeleted && work.id !in memberIds
-        }.sortedBy { it.title.lowercase() }
+            !work.isDeleted && !work.isQueueOnlyWork && work.id !in memberIds
+        }
     }
 
     private suspend fun findOrCreateTag(raw: String): TagEntity? {

@@ -601,12 +601,17 @@ fun CollectionDetailScreen(
         val currentWorkIds = works.map { it.id }.toSet()
         val availableToAdd = allSavedWorks.filter { it.id !in currentWorkIds }
 
-        AddWorksToCollectionDialog(
-            availableWorks = availableToAdd,
+        AddLibraryWorksSheet(
+            destinationName = collection?.name.orEmpty(),
+            scopeName = "collection",
+            candidates = availableToAdd,
+            privacy = privacy,
+            reveal = reveal,
+            onToggleMature = { privacyGate.toggleRevealAll(activity) },
             onDismiss = { showAddPicker = false },
-            onAdd = { selected ->
+            onAdd = { chosen ->
                 showAddPicker = false
-                addWorks(selected)
+                addWorks(chosen.mapTo(linkedSetOf()) { it.id })
             }
         )
     }
@@ -1007,115 +1012,6 @@ private fun DetailedCollectionWorkCard(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
-        }
-    }
-}
-
-@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
-@Composable
-private fun AddWorksToCollectionDialog(
-    availableWorks: List<SavedWork>,
-    onDismiss: () -> Unit,
-    onAdd: (Set<String>) -> Unit
-) {
-    var searchQuery by remember { mutableStateOf("") }
-    val selectedIds = remember { mutableStateMapOf<String, Boolean>() }
-    val filteredWorks = remember(availableWorks, searchQuery) {
-        if (searchQuery.isBlank()) availableWorks
-        else availableWorks.filter {
-            it.title.contains(searchQuery, ignoreCase = true) ||
-                it.author.contains(searchQuery, ignoreCase = true)
-        }
-    }
-
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp)
-                .padding(bottom = 28.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Text("Add Works to Collection", style = MaterialTheme.typography.titleLarge)
-
-            OutlinedTextField(
-                value = searchQuery,
-                onValueChange = { searchQuery = it },
-                label = { Text("Search your Library") },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true
-            )
-
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = 400.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                if (filteredWorks.isEmpty()) {
-                    item {
-                        Text(
-                            if (availableWorks.isEmpty()) "No other works in Library to add."
-                            else "No matches in Library.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(vertical = 16.dp)
-                        )
-                    }
-                } else {
-                    items(filteredWorks, key = { it.id }) { work ->
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                // One control with a state TalkBack can say (audit A13).
-                                .toggleable(value = selectedIds[work.id] ?: false, role = Role.Checkbox) {
-                                    selectedIds[work.id] = it
-                                }
-                                .padding(vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            Checkbox(
-                                checked = selectedIds[work.id] ?: false,
-                                onCheckedChange = null
-                            )
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    work.title,
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                                Text(
-                                    work.author,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f)) {
-                    Text("Cancel")
-                }
-                androidx.compose.material3.Button(
-                    onClick = { onAdd(selectedIds.filterValues { it }.keys) },
-                    modifier = Modifier.weight(1f),
-                    enabled = selectedIds.any { it.value }
-                ) {
-                    val count = selectedIds.count { it.value }
-                    Text(if (count > 0) "Add $count work${if (count > 1) "s" else ""}" else "Add")
-                }
-            }
         }
     }
 }

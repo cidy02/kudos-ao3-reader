@@ -1507,3 +1507,18 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   an unsubscribe is confirmed first, in iOS's words; the result is shown and the header read
   again. Mute and Block are unchanged (AO3's confirm page in the web view) until their own
   step. Reverse: `onSubscription` in `author/AuthorProfileScreen.kt` back to `onOpenWeb`.
+- **2026-10-11 · "Add Works" is one picker for a collection and a reading queue, and it never
+  names a work Hide Mature is keeping back.** Both of Android's pickers offered every
+  candidate by title (the collection's with its author too), so a Mature or Explicit work the
+  Library hides or obscures was named there, and the collection's search answered for it. The
+  queue's was also a bare list of titles: no search, no authors, one work per tap. Both now
+  use `library/AddLibraryWorksSheet.kt` (iOS `AddLibraryWorksSheet`): iOS's words, Global
+  Search's matching, several works chosen and added in the order shown, and only works that
+  are `Visible` (a "Show mature" button reveals the rest, behind the same lock as elsewhere).
+  A queue no longer offers a work that exists only as another queue's entry (iOS
+  `appendCandidates`). **A judgment:** iOS leaves out only Hide mode's works and names the
+  ones Blur mode blurs; that is treated as an iOS fault (T-392), not a pattern to copy.
+  Reverse: `AddLibraryWorks.eligible` back to `!= Hidden`.
+  Not changed, and noted: a collection's picker offers only kept works (`observeSavedWorks`),
+  where iOS offers every Library work that is not queue-only; adding to a queue that keeps
+  works offline still asks for a missing copy, as it did.
