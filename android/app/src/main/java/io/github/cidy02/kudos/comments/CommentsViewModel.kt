@@ -254,11 +254,21 @@ class CommentsViewModel(
         // whichever answered last was shown (audit A22-3).
         loadJob?.cancel()
         loadJob = viewModelScope.launch {
-            _state.value = CommentsUiState.Loading
+            // A pull to refresh keeps the page on screen until the new one is here.
+            if (!forceRefresh) _state.value = CommentsUiState.Loading
             val result = repository.loadThread(target, page, focusedId)
             ensureActive()
             present(target, result)
         }
+    }
+
+    /**
+     * Pull to refresh (iOS `.refreshable`): the page on screen, read again. Android had none, so
+     * new comments showed only after leaving the screen and coming back.
+     */
+    suspend fun refresh() {
+        load(lastPage, _focusedCommentId.value, forceRefresh = true)
+        loadJob?.join()
     }
 
     private var openedOnChapter = false

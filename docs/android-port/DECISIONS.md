@@ -1490,3 +1490,8 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
 - **2026-10-11 · A page of the Inbox that fails does not take the shown page away (as iOS).**
   The failure is a card under the rows, naming the page, with Try Again. A session that ended
   is not a failed page: everything is cleared, as before.
+- **2026-10-11 · The comments screen can be pulled to refresh (as iOS).** Android had none: new
+  comments showed only after leaving the screen and coming back. The page on screen is read
+  again and stays there until the answer is in (`CommentsViewModel.refresh`); a refresh
+  without a connection shows the kept copy and says so. Reverse: the `KudosRefreshBox` in
+  `comments/CommentsScreen.kt`.

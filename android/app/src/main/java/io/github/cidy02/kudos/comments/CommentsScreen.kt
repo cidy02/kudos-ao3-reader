@@ -368,7 +368,8 @@ fun CommentsScreen(
         } else emptyList()
     }
 
-    Box(
+    io.github.cidy02.kudos.ui.components.KudosRefreshBox(
+        onRefresh = { viewModel.refresh() },
         modifier = Modifier
             .fillMaxSize()
             .subjectScreenWash(palette, 480.dp)
