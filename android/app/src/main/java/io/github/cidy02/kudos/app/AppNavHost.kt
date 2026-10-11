@@ -1224,8 +1224,11 @@ fun AppNavHost(
             if (authorUsername.isNullOrBlank()) {
                 navController.popBackStack()
             } else {
+                // Every way in comes through here, and a work's page passes the byline's words.
+                val author = io.github.cidy02.kudos.network.ao3.author.AO3AuthorRoute.fromByline(authorUsername)
                 AuthorProfileScreen(
-                    username = authorUsername,
+                    username = author.username,
+                    initialPseud = author.pseud,
                     initialTab = if (authorRoute == Routes.AuthorSeries) io.github.cidy02.kudos.author.AuthorTab.Series
                         else io.github.cidy02.kudos.author.AuthorTab.Works,
                     authorRepository = container.authorRepository,
