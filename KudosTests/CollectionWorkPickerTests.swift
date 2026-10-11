@@ -61,6 +61,25 @@ struct CollectionWorkPickerTests {
         #expect(revealed.map(\.id) == [tame.id, explicit.id])
     }
 
+    /// A collection's page drops what Hide mode hides (it used to show it in full);
+    /// Blur mode keeps the work, for its row to blur.
+    @Test func aCollectionsPageDropsWhatHideModeHides() throws {
+        let context = try makeContext()
+        let tame = try insertWork(into: context, title: "Tame")
+        let mature = try insertWork(into: context, title: "Mature One")
+        mature.rating = "Mature"
+        let gate = PrivacyGate()
+        func listed(_ hideMature: Bool, _ mode: MaturePrivacyMode) -> [UUID] {
+            CollectionWorkPicker.listed([tame, mature], gate: gate, hideMature: hideMature, mode: mode).map(\.id)
+        }
+
+        #expect(listed(true, .hide) == [tame.id])
+        #expect(listed(true, .obscure) == [tame.id, mature.id])
+        #expect(listed(false, .hide) == [tame.id, mature.id])
+        gate.reveal(mature)
+        #expect(listed(true, .hide) == [tame.id, mature.id])
+    }
+
     // MARK: add
 
     @Test func addInsertsMembershipOnBothSides() throws {

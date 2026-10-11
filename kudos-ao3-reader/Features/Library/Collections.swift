@@ -101,9 +101,11 @@ struct CollectionCard: View {
 /// menu renames or deletes the collection itself.
 struct CollectionDetailView: View {
     @AppStorage("hideMatureContent") private var hideMature = true
+    @AppStorage("matureContentMode") private var matureMode: MaturePrivacyMode = .obscure
     let collection: WorkCollection
 
     @Environment(\.modelContext) private var context
+    @Environment(PrivacyGate.self) private var gate
     @Environment(DownloadQueue.self) private var downloadQueue
     @Environment(\.dismiss) private var dismiss
     @Environment(ThemeManager.self) private var themeManager
@@ -152,7 +154,19 @@ struct CollectionDetailView: View {
     /// The collection's works after the active filters. With no filter set, the default
     /// newest-first order is kept rather than re-sorted by the filter's default sort.
     private var visibleWorks: [SavedWork] {
-        filters.hasActiveFilters ? filters.apply(to: works) : works
+        filters.hasActiveFilters ? filters.apply(to: listedWorks) : listedWorks
+    }
+
+    /// Hide mode drops Mature/Explicit works here, as every other works list does — the
+    /// row wrappers only blur, they never remove. This page used to show them in full.
+    private var listedWorks: [SavedWork] {
+        CollectionWorkPicker.listed(works, gate: gate, hideMature: hideMature, mode: matureMode)
+    }
+
+    /// Reorder draws every work in the collection; while Hide mode is keeping some
+    /// out of sight, it would put them back on screen (as on a queue's page).
+    private var hidesMatureWorks: Bool {
+        listedWorks.count != works.count
     }
 
     /// Writes straight through to the model, like Rename beside it — there is no
@@ -351,8 +365,16 @@ struct CollectionDetailView: View {
                 }
                 .cancelRefreshOnTabChange($refreshTask)
                 .overlay {
-                    // Collection has works, but the active filters hid them all.
-                    if visibleWorks.isEmpty {
+                    // Collection has works, but Hide mode or the active filters hid them all.
+                    if listedWorks.isEmpty {
+                        ContentUnavailableView {
+                            Label("Mature works are hidden", systemImage: "eye.slash")
+                        } description: {
+                            Text("Hide Mature is hiding every work in this collection.")
+                        } actions: {
+                            MatureRevealToggle()
+                        }
+                    } else if visibleWorks.isEmpty {
                         ContentUnavailableView {
                             Label("No matching works", systemImage: "line.3.horizontal.decrease.circle")
                         } description: {
@@ -371,7 +393,7 @@ struct CollectionDetailView: View {
         .navigationTitle(collection.name)
         #endif
             .filterPanelPresentation(isPresented: $showingFilters) {
-                LibraryFilterPanel(filters: $filters, works: works, userTagNames: allTags.map(\.name))
+                LibraryFilterPanel(filters: $filters, works: listedWorks, userTagNames: allTags.map(\.name))
                     .inspectorColumnWidth(min: 280, ideal: 320, max: 380)
             }
             .toolbar {
@@ -429,11 +451,12 @@ struct CollectionDetailView: View {
                                     showingReorder = true
                                 } label: {
                                     Label(
-                                        filters.hasActiveFilters ? "Clear Filters to Reorder" : "Reorder",
+                                        filters.hasActiveFilters ? "Clear Filters to Reorder"
+                                            : hidesMatureWorks ? "Show Mature to Reorder" : "Reorder",
                                         systemImage: "arrow.up.arrow.down"
                                     )
                                 }
-                                .disabled(filters.hasActiveFilters)
+                                .disabled(filters.hasActiveFilters || hidesMatureWorks)
                             }
                             if !works.isEmpty {
                                 DisplayModeMenuPicker(mode: $displayMode, modes: [.ledger, .detailed])
@@ -708,6 +731,13 @@ struct AddToCollectionView: View {
 enum CollectionWorkPicker {
     /// Library works eligible to be added to `collection`: real works only (queue-only
     /// EPUB-preservation records are excluded) that aren't already members.
+    /// What a collection's page lists, and what its filter panel draws its tags from.
+    static func listed(
+        _ works: [SavedWork], gate: PrivacyGate, hideMature: Bool, mode: MaturePrivacyMode
+    ) -> [SavedWork] {
+        works.filter { !gate.isHidden($0, enabled: hideMature, mode: mode) }
+    }
+
     static func candidates(from works: [SavedWork], notIn collection: WorkCollection) -> [SavedWork] {
         works.filter { work in
             !work.isQueueOnlyWork && !work.collections.contains { $0.id == collection.id }
