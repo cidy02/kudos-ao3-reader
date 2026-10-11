@@ -1590,3 +1590,11 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   tap is one authenticated read of a page the reader asked for; the networking policy's
   "Author profiles" row says so. Reverse: `onModeration` in `author/AuthorProfileScreen.kt`
   back to `{ onOpenWeb(it.url) }`.
+- **2026-10-11 · A collection whose works are all hidden says so, and its tile says "1 work"
+  (found comparing empty states).** With Hide Mature in Hide mode a collection page whose
+  every work is hidden showed a bare "Works 0". It now says "Mature works are hidden / Hide
+  Mature is hiding every work in this collection." with "Show mature", as iOS since T-394.
+  The tile's spoken label said "1 works". Of iOS's 55 empty states with a fixed title, the
+  others are on Android in the same words, belong to Read Aloud, or are the reader's error
+  (Android's has more: Back, Retry, Remove offline copy). One real gap is a brief: 3cj, AO3
+  Preferences help. Reverse: the first `if` of the works list in `CollectionDetailScreen.kt`.

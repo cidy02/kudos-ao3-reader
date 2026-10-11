@@ -67,7 +67,9 @@ fun CollectionCard(
                 else SubjectWorkCardMetrics.width)
             .combinedClickable(onClick = onClick, onLongClick = onLongClick)
             .semantics {
-                contentDescription = "${collection.name}, ${collection.workIds.size} works. Opens collection."
+                // "1 work", as the line under the tile and as iOS's label say it.
+                contentDescription = "${collection.name}, ${collection.workIds.size} " +
+                    "${if (collection.workIds.size == 1) "work" else "works"}. Opens collection."
             },
         verticalArrangement = Arrangement.spacedBy(7.dp)
     ) {
