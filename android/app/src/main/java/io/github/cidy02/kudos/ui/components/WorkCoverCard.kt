@@ -311,7 +311,9 @@ fun CardMetaLine(
             text = text,
             style = MaterialTheme.typography.labelMedium,
             color = color,
-            maxLines = 1,
+            // One line cut a fandom to "Les Misérables - Victor Hu…" and "+1 other" to "+1 oth…"
+            // at twice the text size.
+            maxLines = if (io.github.cidy02.kudos.ui.subject.isAccessibilityFontScale()) 2 else 1,
             overflow = TextOverflow.Ellipsis
         )
     }

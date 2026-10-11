@@ -318,3 +318,22 @@ Seen at twice the size and unchanged at the normal one.
 Library's section pages, the reader's note editor and Find in Work, the login screens, and rows
 4 and 7 to 13 of the top twenty.
 
+
+### Seventh look (02:36 on 10-11): the Library's section pages, the login screen, the collection form
+
+Sound at twice the size: the login screen, the new-collection form, Reading History's
+grouping panel and day headers.
+
+**Two more, fixed:**
+
+- A work card's fandom line was one line at every size: "Les Misérables - Victor Hu…", and
+  "+1 other" cut to "+1 oth…". The shared meta line (`CardMetaLine`) may take two at an
+  accessibility text size.
+- Favorites › Authors: a one-word name broke in the middle beside its tile ("nine_of_wand /
+  s"). The tile is decoration; at an accessibility text size it stands down and the name has
+  the room.
+
+Seen at twice the size and unchanged at the normal one.
+
+**Not yet looked at at twice the size:** the series and tag-set forms, the reader's note
+editor and Find in Work, and rows 4 and 7 to 13 of the top twenty.
