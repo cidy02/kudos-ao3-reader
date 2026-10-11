@@ -25,21 +25,38 @@ deck's "up next" line, a search answer, a facet list) must leave the work out. i
 | **Home › Reading Queues: a queue's card named its next work (fandom and title), in Hide mode too** | Android | lead 1, confirmed on the emulator, fixed |
 | The same card | iOS | T-393 |
 
+## Round two, 2026-10-11 (Hide mode looked at on both, `-matureContentMode hide` on iOS, Settings › Privacy on Android)
+
+| Where | Platform | Result |
+|---|---|---|
+| **A collection's page showed a work Hide mode hides, in full** (title, author, fandoms, rating) | iOS | confirmed on the simulator; fixed, T-394 |
+| The Library's filter lists (Fandoms, Characters, tags, Language) offered what only hidden works carry | iOS | confirmed on the simulator; fixed, T-394 |
+| The same lists | Android | looked at in Hide mode: already right (`collectionMembers` has no hidden work) |
+| A collection's Reorder drew hidden works | both | off while a work is hidden ("Show Mature to Reorder"), the queue page's rule: iOS T-394, Android this commit |
+| Home's queue card, a collection's tile and page, in Hide mode | Android | looked at: right |
+
+Blur mode's three open choices (the Reorder screen, a search or filter answering for a
+blurred work, a blurred work's tags in lists) are **owner question 23**, not faults: the
+2026-10-08 decision draws a matching blurred work blurred, and the iPhone's code marks the
+Reorder screen as the owner's to decide.
+
 ## Leads, not confirmed (read only)
 
 Android:
 1. ~~Home › Reading Queues~~ **confirmed and fixed** (`HomeFacts.queueFace`): a hidden work
    is passed over, an obscured one is "Hidden mature work" with no fandom and no colour of
    its own. Seen on the emulator before, after, and after "Show mature".
-2. The Library filter panel is given `state.collectionMembers`, obscured works included
-   (`library/LibraryScreen.kt:596`): do its fandom and tag lists count them?
-3. A collection page's filter field matches an obscured work by title and author
-   (`library/CollectionDetailScreen.kt`, `visibleWorks`): typing a title leaves its card.
-4. The queue organizer's "Search queues, tags and works" and the queue page's filters.
+2. ~~The Library filter panel~~: Hide mode right; Blur mode is owner question 23.
+3. ~~A collection page's filter field~~: owner question 23 (a match is drawn obscured).
+4. The queue organizer's "Search queues, tags and works": **not looked at.** In Hide mode,
+   does it match a hidden work by title, and what does it show?
 5. Anything else that maps `collectionMembers` or a queue's works to names.
 
 iOS:
-6. The other 13 call sites that filter only `gate.isHidden` (grep `isHidden(`): Home and its
+6. (Two of these turned out to be missing the filter altogether, not in this list: a
+   collection's page and the Library's filter panel. **Worth a second grep for works lists
+   with no `gate` at all**, which a search for `isHidden(` cannot find.)
+   The other 13 call sites that filter only `gate.isHidden` (grep `isHidden(`): Home and its
    section lists, Library and its section lists, Search (`SearchView.swift:510`), series and
    author pages' "in your library" rows, Work Details' other works, the availability sweep,
    the reading-queue browser. By reading they hand works to cards that blur; none was looked

@@ -1539,3 +1539,9 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   own. The face is a required argument of `HomeQueueCard`, so a new caller cannot skip it.
   The count and the progress strip are for the whole queue, as before. Reverse:
   `queueFace(works)` in `HomeScreen.kt` back to `QueueFace(HomeFacts.upNext(works))`.
+- **2026-10-11 · A collection's Reorder is off while Hide mode is hiding one of its works
+  (A38).** The Reorder screen lists every work by title and author, so in Hide mode it put
+  hidden works back on screen. The menu item reads "Show Mature to Reorder" and is off, as on
+  a queue's page (and on the iPhone since T-394). Blur mode is unchanged and is owner
+  question 23, with what a search or a filter list may say about a blurred work. Reverse:
+  `hidesMature` out of `canReorder` in `CollectionDetailScreen.kt`.
