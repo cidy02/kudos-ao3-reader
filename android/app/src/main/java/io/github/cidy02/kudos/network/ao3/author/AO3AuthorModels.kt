@@ -28,6 +28,22 @@ data class AO3AuthorRoute(
 
     val bookmarksUrl: String
         get() = AO3AuthorUrls.userBookmarksUrl(username, page = 1, pseud = pseud)!!
+
+    companion object {
+        private val pseudByline = Regex("""^(.+) \(([A-Za-z0-9_]+)\)$""")
+
+        /**
+         * The account behind a byline's words. AO3 prints "pseud (account)" unless the pseud is
+         * the account's own name, and an account name has no space or bracket, so a closing
+         * "(name)" can only be AO3's. Taken whole, "Second Pseud (SecondAccount)" was asked
+         * for as an account of that name, which AO3 does not have.
+         */
+        fun fromByline(byline: String): AO3AuthorRoute {
+            val text = byline.trim()
+            val match = pseudByline.find(text) ?: return AO3AuthorRoute(text)
+            return AO3AuthorRoute(match.groupValues[2], match.groupValues[1])
+        }
+    }
 }
 
 data class AO3AuthorPseud(

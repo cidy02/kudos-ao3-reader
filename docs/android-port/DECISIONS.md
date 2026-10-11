@@ -1444,3 +1444,13 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   one favorite author was renamed or deleted. The choice is kept on the device
   (`library.favorites.authorQuickFilter`, iOS's key), outside backups. Reverse: the store's
   line in `app/KudosAppContainer.kt` and the two arguments in `app/AppNavHost.kt`.
+- **2026-10-11 · An author is opened by the account behind the byline, not by the byline's
+  words.** A work's page passed the words it shows, so "Second Pseud (SecondAccount)" was
+  asked for as an account of that name and AO3 answered 404: any author posting under a
+  pseud could not be opened from their work. AO3 prints a byline as "pseud (account)" unless
+  the pseud is the account's own name, and an account name has no space or bracket, so the
+  closing "(name)" can only be AO3's: `AO3AuthorRoute.fromByline` reads it, and the one route
+  every way in passes through (`app/AppNavHost.kt`) uses it, opening the account with that
+  pseud chosen. **Unlike iOS, Android still lets a name with no recorded account be tapped**
+  (iOS opens only a link AO3 gave it); for a file imported from elsewhere that is still a
+  guess, as it was before. Reverse: the two lines in the author route.
