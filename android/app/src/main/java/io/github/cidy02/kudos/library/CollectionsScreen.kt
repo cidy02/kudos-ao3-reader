@@ -92,7 +92,8 @@ fun CollectionsScreen(
                 reveal = reveal
             )
             collections = state.collections
-            works = state.collectionMembers.map { it.item.work }
+            // For the tiles' small covers. A tile's count still counts every member.
+            works = LibraryPrivacy.nameableWorks(state.collectionMembers)
         } catch (failure: Exception) {
             error = failure.message ?: "Could not load collections."
         } finally {

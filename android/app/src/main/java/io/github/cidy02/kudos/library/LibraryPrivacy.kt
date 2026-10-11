@@ -31,6 +31,14 @@ object LibraryPrivacy {
         }
     }
 
+    /**
+     * The works a small cover or a list of names may show. An obscured work is drawn as
+     * "Hidden mature work" where it has a card of its own; where there is no such card (a
+     * collection tile's covers) it is left out, as a hidden one already is.
+     */
+    fun nameableWorks(items: List<LibraryDisplayItem>): List<SavedWork> =
+        items.filter { it.privacyVisibility == LibraryPrivacyVisibility.Visible }.map { it.item.work }
+
     private fun SavedWork.isAdultRated(): Boolean {
         val normalized = rating.trim().lowercase()
         return normalized == "mature" ||

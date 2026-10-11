@@ -2259,10 +2259,9 @@ private fun CollectionDashboardCard(
     ledger: Boolean = false
 ) {
     var menuOpen by remember(collection.id) { mutableStateOf(false) }
-    val previews = allItems
-        .filter { display -> display.item.collections.any { it.id == collection.id } }
-        .sortedByDescending { it.item.work.dateAdded }
-        .map { it.item.work }
+    val previews = LibraryPrivacy
+        .nameableWorks(allItems.filter { display -> display.item.collections.any { it.id == collection.id } })
+        .sortedByDescending { it.dateAdded }
     if (ledger) {
         CollectionLedgerRow(
             collection = collection,

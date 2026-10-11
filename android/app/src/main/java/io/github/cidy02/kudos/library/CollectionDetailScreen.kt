@@ -947,7 +947,8 @@ private fun DetailedCollectionWorkCard(
             .padding(14.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        val primaryFandom = HomeFacts.primaryFandom(work.workFandoms)
+        // "Hidden mature work" says nothing else about it: not its fandom, its author or its length.
+        val primaryFandom = HomeFacts.primaryFandom(work.workFandoms).takeUnless { obscured }
         if (primaryFandom != null) {
             SubjectKicker(
                 text = primaryFandom,
@@ -1004,7 +1005,7 @@ private fun DetailedCollectionWorkCard(
         }
 
         val metadataLine = HomeFacts.localWorkMetadata(work.author, work.wordCount, work.chapters).joinToString(" · ")
-        if (metadataLine.isNotBlank()) {
+        if (metadataLine.isNotBlank() && !obscured) {
             Text(
                 text = metadataLine,
                 color = tokens.tertiaryInk,
