@@ -25,6 +25,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.resetMain
@@ -358,6 +359,25 @@ class CommentsViewModelContextTest {
             assertEquals(null, viewModel.focusedCommentId.value)
             if (!holdTheChapterPage) assertEquals(true, session.urls.none { "/chapters/" in it })
         }
+    }
+
+    /** Pull to refresh: the page is read again, and stays on screen while it is. */
+    @Test
+    fun aPullToRefreshReadsThePageAgainWithoutEmptyingTheScreen() = runTest(testDispatcher) {
+        val session = Session(basic)
+        val viewModel = model(session)
+        until("the first page") { loaded(viewModel) }
+        val reads = session.urls.size
+
+        val held = CompletableDeferred<Unit>()
+        session.getGate = { held }
+        val refresh = launch { viewModel.refresh() }
+        until("the read to begin") { session.urls.size > reads }
+        assertEquals("the page is still shown while AO3 answers", true, loaded(viewModel))
+        session.getGate = { null }; held.complete(Unit)
+        until("the refresh to end") { refresh.isCompleted }
+        assertEquals(true, loaded(viewModel))
+        assertEquals(reads + 1, session.urls.size)
     }
 
     /** The picker's empty sheet: while the list is asked for it is loading; a failure is said, and asking again clears it. */

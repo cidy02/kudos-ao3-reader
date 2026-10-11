@@ -559,5 +559,12 @@ All three were real.
   "Couldn't load page 2 / … / Try Again" under it, as iOS. A session that ended still clears
   everything. Seen on the emulator; one test, one mutation caught.
 
-**Still not checked:** the hints (rows 17 to 21); a pull to refresh on comments while offline
-(it kept the page already on screen, with nothing said; not looked into).
+**Looked into (2026-10-11): the pull to refresh that "kept the page with nothing said" did
+nothing, because Android's comments screen had no pull to refresh at all** (iOS's has:
+`.refreshable`). Added: the page on screen is read again and stays there until the new one
+is in; without a connection it becomes the kept copy with its line. Seen on the emulator in
+all three states.
+
+**Still not checked:** the hints (rows 17 to 21). **A small lead:** on a kept copy the figure
+strip says "0 YOURS", because the copy carries nothing that says which comments are the
+reader's (it is stripped of everything that can act).
