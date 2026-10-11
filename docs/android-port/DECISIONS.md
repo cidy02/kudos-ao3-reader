@@ -1522,3 +1522,11 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   Not changed, and noted: a collection's picker offers only kept works (`observeSavedWorks`),
   where iOS offers every Library work that is not queue-only; adding to a queue that keeps
   works offline still asks for a missing copy, as it did.
+- **2026-10-11 · A collection's tile and its page say nothing about an obscured work (audit
+  A38 opened).** The tile's small covers showed an obscured work's title and author; the
+  page's "Hidden mature work" card still showed its fandom, author, word count and chapters.
+  The tile leaves the work off (`LibraryPrivacy.nameableWorks`; its count still counts it)
+  and the card shows only its two lines. The other places to check are listed in
+  `briefs/A38-privacy-names.md`, none confirmed yet. Reverse: the two callers back to
+  `collectionMembers.map { it.item.work }`, and the two `obscured` checks out of
+  `DetailedCollectionWorkCard`.

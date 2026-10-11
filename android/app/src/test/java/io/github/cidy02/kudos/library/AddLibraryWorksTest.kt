@@ -50,6 +50,15 @@ class AddLibraryWorksTest {
         assertEquals(listOf("tame"), AddLibraryWorks.chosen(hiddenAgain, setOf("tame", "mature")).map { it.id })
     }
 
+    @Test fun aCollectionTilesCoversLeaveOutAnObscuredWork() {
+        // The covers carry a title and an author; the page's own card says "Hidden mature work".
+        val items = listOf(
+            LibraryDisplayItem(LibraryWorkListItem(tame)),
+            LibraryDisplayItem(LibraryWorkListItem(explicit), LibraryPrivacyVisibility.Obscured)
+        )
+        assertEquals(listOf("tame"), LibraryPrivacy.nameableWorks(items).map { it.id })
+    }
+
     @Test fun theButtonCountsWhatItWillAdd() {
         assertEquals("Add", AddLibraryWorks.confirmationTitle(0))
         assertEquals("Add 3", AddLibraryWorks.confirmationTitle(3))
