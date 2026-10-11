@@ -1482,3 +1482,11 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   and a change of reader forgets the request. A comment whose work the Inbox does not name
   opens on AO3. Copy Link shows no alert: Android says what was copied itself. Reverse: the
   `onReply` argument in `app/AppNavHost.kt`.
+- **2026-10-11 · A kept copy of a comments page says that it is one, and how old (audit W3).**
+  Android showed the copy kept for offline reading as if AO3 had just served it. The copy is
+  stamped when it is read (`AO3CommentThread.fetchedAt`, on the kept copy only) and the screen
+  shows iOS's sentence above it. The rule from 3ce holds for comments too: **what is shown
+  from memory says so.** Reverse: the `fetchedAt` block in `comments/CommentsScreen.kt`.
+- **2026-10-11 · A page of the Inbox that fails does not take the shown page away (as iOS).**
+  The failure is a card under the rows, naming the page, with Try Again. A session that ended
+  is not a failed page: everything is cleared, as before.

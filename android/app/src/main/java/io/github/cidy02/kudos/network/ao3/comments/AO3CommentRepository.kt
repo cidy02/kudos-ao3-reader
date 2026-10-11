@@ -56,7 +56,10 @@ class AO3CommentRepository(
                         // a refusal ("log in", "not found") is AO3's answer, not a reason to
                         // show what someone else was allowed to see (audit A17-4).
                         if (useCache && public.error is AO3Error.Network && focusedCommentId == null) {
-                            cache?.load(target, safePage, viewer)?.let { return AO3Result.Success(it) }
+                            // Marked as a kept copy, so the screen says it is one and from when.
+                            cache?.load(target, safePage, viewer)?.let {
+                                return AO3Result.Success(it.copy(fetchedAt = it.fetchedAt ?: 0L), isStale = true)
+                            }
                         }
                         return public
                     }
@@ -71,7 +74,7 @@ class AO3CommentRepository(
         // a different page: stored under the work's page 1 it became that page offline
         // (audit A22-2).
         if (useCache && thread is AO3Result.Success && focusedCommentId == null) {
-            cache?.save(thread.value, safePage, viewer)
+            cache?.save(thread.value.copy(fetchedAt = System.currentTimeMillis()), safePage, viewer)
         }
         return thread
     }

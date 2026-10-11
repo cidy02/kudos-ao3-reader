@@ -19,7 +19,8 @@ import io.github.cidy02.kudos.ui.subject.subjectPanel
 
 /** One status line in the screen's own panel. Wraps naturally at accessibility sizes. */
 @Composable
-fun CachedAO3DataRow(modifier: Modifier = Modifier, inPanel: Boolean = true) {
+fun CachedAO3DataRow(modifier: Modifier = Modifier, inPanel: Boolean = true,
+                     text: String = "Showing cached AO3 data") {
     val tokens = LocalKudosTokens.current
     Row(
         modifier.fillMaxWidth().then(if (inPanel) Modifier.subjectPanel() else Modifier)
@@ -28,7 +29,7 @@ fun CachedAO3DataRow(modifier: Modifier = Modifier, inPanel: Boolean = true) {
         verticalAlignment = Alignment.CenterVertically
     ) {
         Icon(Icons.Outlined.WifiOff, null, tint = tokens.scopePalette.accent, modifier = Modifier.size(18.dp))
-        Text("Showing cached AO3 data", color = tokens.secondaryInk, fontSize = 14.sp,
+        Text(text, color = tokens.secondaryInk, fontSize = 14.sp,
             lineHeight = 20.sp, modifier = Modifier.weight(1f))
     }
 }

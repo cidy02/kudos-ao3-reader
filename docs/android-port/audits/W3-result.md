@@ -539,3 +539,25 @@ reply (`CommentThreadRow.swift`, `expandRepliesButton`). Android says "Show 1 re
 
 **Still not checked:** an offline banner on comments, the chapter picker's failure state, the
 Inbox's failed page turn, and the hints (rows 17 to 21).
+
+### The three unchecked rows, checked and landed 2026-10-11 (Android)
+
+All three were real.
+
+- **Row 4, comments without a connection.** Android keeps a copy of each comments page and
+  shows it when AO3 cannot be reached, and **said nothing**: the copy looked like today's
+  page. It now says iOS's sentence, "You're offline. These comments are from 2 hours ago and
+  may be out of date." (the kept copy is stamped when it is read; a copy from before the
+  stamp says "earlier", iOS's own word). Seen on the emulator; the demo's offline switch now
+  covers comment pages.
+- **Row 6, the chapter picker.** With no chapter list the sheet showed "All Comments" and a
+  blank. It now shows a spinner while it asks, and "Couldn't Load Chapters / Check your
+  connection and try again." when the list failed; opening it again asks again. Test on the
+  view model; **not seen** (the demo's switch does not fail the chapter list).
+- **Row 10, the Inbox's failed page turn.** A page that would not load took away the page
+  the reader was on and showed the whole-screen failure. Now that page stays, with
+  "Couldn't load page 2 / … / Try Again" under it, as iOS. A session that ended still clears
+  everything. Seen on the emulator; one test, one mutation caught.
+
+**Still not checked:** the hints (rows 17 to 21); a pull to refresh on comments while offline
+(it kept the page already on screen, with nothing said; not looked into).

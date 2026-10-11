@@ -356,6 +356,18 @@ fun AccountInboxPane(
                     }
                     item { Spacer(Modifier.height(12.dp)) }
 
+                    state.failedPage?.let { failed ->
+                        item {
+                            ErrorStateCard(
+                                title = "Couldn't load page $failed",
+                                message = state.failedPageMessage ?: "Something went wrong.",
+                                modifier = Modifier.padding(bottom = 12.dp),
+                                primaryActionLabel = "Try Again",
+                                onPrimaryAction = { viewModel.goToPage(failed) }
+                            )
+                        }
+                    }
+
                     if (state.totalPages > 1) {
                         item {
                             InboxPaginationControls(

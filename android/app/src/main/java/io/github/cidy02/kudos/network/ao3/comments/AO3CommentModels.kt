@@ -186,7 +186,12 @@ data class AO3CommentThread(
     /** Opportunistic work-level comment total from `dl.stats dd.comments`. */
     val totalComments: Int? = null,
     /** Work title from page preface (#workskin h2.title). */
-    val workTitle: String? = null
+    val workTitle: String? = null,
+    /**
+     * Set only on a copy kept for reading without a connection: when it was read from AO3 (epoch
+     * milliseconds; 0 for a copy kept before this was recorded). Null on a page AO3 just served.
+     */
+    val fetchedAt: Long? = null
 )
 
 @Serializable

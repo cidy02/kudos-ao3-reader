@@ -300,8 +300,12 @@ fun CommentsScreen(
 
     // Chapter picker modal sheet
     if (showingChapterPicker) {
+        val chaptersLoading by viewModel.chaptersLoading.collectAsState()
+        val chaptersFailed by viewModel.chaptersFailed.collectAsState()
         ChapterPickerSheet(
             chapters = chapters,
+            chaptersLoading = chaptersLoading,
+            chaptersFailed = chaptersFailed,
             selectedChapter = selectedChapter,
             isScopeAll = scopeMode == CommentScope.All,
             totalComments = (state as? CommentsUiState.Loaded)?.thread?.totalComments,
@@ -578,6 +582,15 @@ fun CommentsScreen(
                 }
                 is CommentsUiState.Loaded -> {
                     val thread = current.thread
+                    // AO3 could not be reached and this is the copy kept from the last reading: said,
+                    // with its age. It was shown as if it were today's page.
+                    thread.fetchedAt?.let { keptAt ->
+                        item {
+                            io.github.cidy02.kudos.ui.components.CachedAO3DataRow(
+                                Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                                text = offlineCommentsLine(keptAt, System.currentTimeMillis()))
+                        }
+                    }
                     if (thread.comments.isEmpty()) {
                         item {
                             ContentUnavailableView(
@@ -728,6 +741,8 @@ fun CommentsScreen(
 @Composable
 fun ChapterPickerSheet(
     chapters: List<AO3ChapterRef>,
+    chaptersLoading: Boolean = false,
+    chaptersFailed: Boolean = false,
     selectedChapter: AO3ChapterRef?,
     isScopeAll: Boolean,
     totalComments: Int?,
@@ -794,6 +809,27 @@ fun ChapterPickerSheet(
                             fontFamily = FontFamily.Monospace,
                             color = tokens.secondaryInk
                         )
+                    }
+                }
+            }
+
+            // Without a list the sheet said nothing: "All Comments" and a blank (iOS: a spinner,
+            // or "Couldn't Load Chapters"). Opening the sheet again asks AO3 again.
+            if (chapters.isEmpty() && (chaptersLoading || chaptersFailed)) {
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 18.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    if (chaptersFailed) {
+                        Text("Couldn't Load Chapters", fontSize = 15.sp, fontWeight = FontWeight.SemiBold,
+                            color = tokens.primaryInk)
+                        Text("Check your connection and try again.", fontSize = 13.sp, lineHeight = 18.sp,
+                            color = tokens.secondaryInk)
+                    } else {
+                        androidx.compose.material3.CircularProgressIndicator(
+                            modifier = Modifier.size(22.dp).semantics { contentDescription = "Loading chapters" },
+                            strokeWidth = 2.dp, color = tokens.accent)
                     }
                 }
             }
@@ -884,4 +920,18 @@ private fun flattenAll(comments: List<AO3Comment>): List<AO3Comment> {
     }
     for (c in comments) walk(c)
     return result
+}
+
+/** iOS: "You're offline. These comments are from 2 hours ago and may be out of date." */
+internal fun offlineCommentsLine(keptAt: Long, now: Long): String {
+    val minutes = (now - keptAt) / 60_000
+    fun count(n: Long, unit: String) = "$n $unit${if (n == 1L) "" else "s"} ago"
+    val from = when {
+        keptAt <= 0L -> "earlier"
+        minutes < 1 -> "a moment ago"
+        minutes < 60 -> count(minutes, "minute")
+        minutes < 60 * 24 -> count(minutes / 60, "hour")
+        else -> count(minutes / (60 * 24), "day")
+    }
+    return "You're offline. These comments are from $from and may be out of date."
 }
