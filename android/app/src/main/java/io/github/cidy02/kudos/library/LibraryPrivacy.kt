@@ -39,6 +39,16 @@ object LibraryPrivacy {
     fun nameableWorks(items: List<LibraryDisplayItem>): List<SavedWork> =
         items.filter { it.privacyVisibility == LibraryPrivacyVisibility.Visible }.map { it.item.work }
 
+    /**
+     * [works] without what Hide Mature hides, for a screen that marks, counts or ranks things
+     * by the Library (Browse starred a fandom because of a hidden work).
+     */
+    fun withoutHidden(works: List<SavedWork>, privacy: PrivacySettings, reveal: PrivacyRevealState): List<SavedWork> =
+        works.filter { visibility(it, privacy, reveal) != LibraryPrivacyVisibility.Hidden }
+
+    /** The setting as a screen should assume it before it has been read: nothing mature shown. */
+    val UNREAD_SETTING = PrivacySettings(hideMatureContent = true, matureContentMode = MatureContentMode.Hide)
+
     /** What an obscured work is called wherever it has a row of its own. */
     const val HIDDEN_WORK_TITLE = "Hidden mature work"
 

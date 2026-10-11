@@ -66,6 +66,18 @@ class AddLibraryWorksTest {
             LibraryDisplayItem(LibraryWorkListItem(explicit), LibraryPrivacyVisibility.Obscured)))
     }
 
+    @Test fun aScreenThatMarksThingsByTheLibraryLeavesOutWhatHideModeHides() {
+        fun ids(privacy: PrivacySettings, reveal: PrivacyRevealState = PrivacyRevealState()) =
+            LibraryPrivacy.withoutHidden(all, privacy, reveal).map { it.id }
+        // Browse starred a fandom because of a hidden work. Obscure keeps its works (owner question 23).
+        assertEquals(listOf("tame"), ids(PrivacySettings(matureContentMode = MatureContentMode.Hide)))
+        assertEquals(listOf("tame", "explicit", "mature"), ids(PrivacySettings()))
+        assertEquals(listOf("tame", "explicit", "mature"),
+            ids(PrivacySettings(matureContentMode = MatureContentMode.Hide), PrivacyRevealState(revealAll = true)))
+        // Before the setting has been read a screen assumes the stricter one.
+        assertEquals(listOf("tame"), ids(LibraryPrivacy.UNREAD_SETTING))
+    }
+
     @Test fun theButtonCountsWhatItWillAdd() {
         assertEquals("Add", AddLibraryWorks.confirmationTitle(0))
         assertEquals("Add 3", AddLibraryWorks.confirmationTitle(3))

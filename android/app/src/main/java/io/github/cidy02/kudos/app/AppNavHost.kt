@@ -294,6 +294,8 @@ fun AppNavHost(
             BrowseScreen(
                 repository = container.browseRepository,
                 workRepository = container.workRepository,
+                settingsRepository = container.settingsRepository,
+                privacyGate = container.privacyGate,
                 readingLogDao = container.database.readingLogDao(),
                 onOpenCategory = { category ->
                     navController.navigate(Routes.browseFandoms(category.name, category.fandomsPath))
@@ -323,6 +325,8 @@ fun AppNavHost(
                     category = AO3MediaCategory(name = name, fandomsPath = fandomsPath),
                     repository = container.browseRepository,
                     workRepository = container.workRepository,
+                    settingsRepository = container.settingsRepository,
+                    privacyGate = container.privacyGate,
                     onOpenFandom = { fandom ->
                         rememberVisit(fandom.name)
                         navController.navigate(Routes.browseWorks(fandom.name))

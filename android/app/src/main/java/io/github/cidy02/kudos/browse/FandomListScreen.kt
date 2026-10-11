@@ -40,6 +40,7 @@ import io.github.cidy02.kudos.works.WorkSearchIndex
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -49,7 +50,9 @@ fun FandomListScreen(
     onOpenFandom: (AO3Fandom) -> Unit,
     onOpenWebFallback: (String) -> Unit,
     workRepository: WorkRepository? = null,
-    repository: AO3BrowseRepository = remember { AO3BrowseRepository() }
+    repository: AO3BrowseRepository = remember { AO3BrowseRepository() },
+    settingsRepository: io.github.cidy02.kudos.data.preferences.SettingsRepository? = null,
+    privacyGate: io.github.cidy02.kudos.app.PrivacyGate? = null
 ) {
     var phase by remember(category.name) { mutableStateOf<FandomListPhase>(FandomListPhase.Loading) }
     var families by remember(category.name) { mutableStateOf<List<FandomFamily>>(emptyList()) }
@@ -66,7 +69,16 @@ fun FandomListScreen(
     val libraryWorks by remember(workRepository) {
         workRepository?.observeLibraryWorks() ?: flowOf(emptyList())
     }.collectAsState(initial = emptyList())
-    val library = remember(libraryWorks) { FandomLibraryIndex.from(libraryWorks) }
+    // Browse reads the Library to mark fandoms. Not a work Hide Mature hides (audit A38).
+    val privacy by remember(settingsRepository) {
+        settingsRepository?.settings?.map { it.privacy } ?: flowOf(io.github.cidy02.kudos.core.model.PrivacySettings())
+    }.collectAsState(initial = io.github.cidy02.kudos.library.LibraryPrivacy.UNREAD_SETTING)
+    val reveal by remember(privacyGate) {
+        privacyGate?.state ?: kotlinx.coroutines.flow.MutableStateFlow(io.github.cidy02.kudos.app.PrivacyRevealState())
+    }.collectAsState()
+    val library = remember(libraryWorks, privacy, reveal) {
+        FandomLibraryIndex.from(io.github.cidy02.kudos.library.LibraryPrivacy.withoutHidden(libraryWorks, privacy, reveal))
+    }
     val source = (phase as? FandomListPhase.Loaded)?.fandoms.orEmpty()
 
     fun webFallback() {
