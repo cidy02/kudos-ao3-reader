@@ -38,6 +38,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.Semaphore
@@ -57,7 +58,9 @@ fun BrowseScreen(
     onOpenFandom: (String) -> Unit = {},
     workRepository: WorkRepository? = null,
     readingLogDao: ReadingLogDao? = null,
-    repository: AO3BrowseRepository = remember { AO3BrowseRepository() }
+    repository: AO3BrowseRepository = remember { AO3BrowseRepository() },
+    settingsRepository: io.github.cidy02.kudos.data.preferences.SettingsRepository? = null,
+    privacyGate: io.github.cidy02.kudos.app.PrivacyGate? = null
 ) {
     var state by remember { mutableStateOf<BrowseCategoriesState>(BrowseCategoriesState.Loading) }
     var fandomLists by remember { mutableStateOf<Map<String, List<AO3Fandom>>>(emptyMap()) }
@@ -65,7 +68,17 @@ fun BrowseScreen(
     val libraryFlow = remember(workRepository) {
         workRepository?.observeLibraryWorks() ?: flowOf(emptyList())
     }
-    val library by libraryFlow.collectAsState(initial = emptyList())
+    val allLibrary by libraryFlow.collectAsState(initial = emptyList())
+    // Browse reads the Library to mark fandoms. Not a work Hide Mature hides (audit A38).
+    val privacy by remember(settingsRepository) {
+        settingsRepository?.settings?.map { it.privacy } ?: flowOf(io.github.cidy02.kudos.core.model.PrivacySettings())
+    }.collectAsState(initial = io.github.cidy02.kudos.library.LibraryPrivacy.UNREAD_SETTING)
+    val reveal by remember(privacyGate) {
+        privacyGate?.state ?: kotlinx.coroutines.flow.MutableStateFlow(io.github.cidy02.kudos.app.PrivacyRevealState())
+    }.collectAsState()
+    val library = remember(allLibrary, privacy, reveal) {
+        io.github.cidy02.kudos.library.LibraryPrivacy.withoutHidden(allLibrary, privacy, reveal)
+    }
     val watermarkFlow = remember(readingLogDao) {
         readingLogDao?.observeWatermarks() ?: flowOf(emptyList())
     }
