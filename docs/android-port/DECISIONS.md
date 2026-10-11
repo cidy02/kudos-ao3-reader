@@ -1654,3 +1654,9 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   chip in the rail; the search field is the app's glass field, kept at the top; "Open on
   AO3" is only on the error page, as on iOS; works counts use the app's face with tabular
   figures. Reverse: the commit that names 3cl.
+- **2026-10-11 · Six pages beside the iPhone's (3cm).** Inbox: a name is no longer held to
+  half its row, "User" is no longer a chip (iOS: only Author, Me and Guest say something),
+  and a commenter with no icon is their first letter (guests keep the silhouette), in
+  threads too. AO3 Preferences: sections fold (for the visit only) and the Account rows have
+  icons. Queues: the glass search field. Collections: the header lines up with its tiles.
+  Left: AO3 collections' card tint and glyph. Reverse: the commit that names 3cm.

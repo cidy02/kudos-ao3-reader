@@ -22,6 +22,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -36,13 +38,17 @@ import io.github.cidy02.kudos.network.ao3.comments.AO3CommentParticipantRole
  * Shared role chip for native Comments and (later) Inbox notification cards.
  *
  * Product intent matches iOS `CommentParticipantBadge` (Author/Me emphasized;
- * User/Guest neutral) expressed in Material 3 chip idiom — not a pixel clone.
+ * Guest neutral) expressed in Material 3 chip idiom — not a pixel clone.
+ *
+ * Only a role that says something gets a chip (iOS): a plain commenter is nearly
+ * everyone, so "User" on each byline said nothing and crowded the name.
  */
 @Composable
 fun CommentParticipantBadge(
     role: AO3CommentParticipantRole,
     modifier: Modifier = Modifier
 ) {
+    if (role == AO3CommentParticipantRole.User) return
     val emphasized = role == AO3CommentParticipantRole.Me ||
         role == AO3CommentParticipantRole.Author
     val accessibilityLabel = when (role) {
@@ -83,17 +89,23 @@ fun CommentParticipantBadge(
 }
 
 /**
- * Circular commenter avatar (~40dp). Loads from [avatarUrl] via Coil; guests and
- * any load failure silently fall back to a person-silhouette placeholder.
- * Never shows an error state or retries visibly (matches iOS `CommentAvatar`).
+ * Circular commenter avatar (~40dp). Loads from [avatarUrl] via Coil; any load
+ * failure silently falls back to a placeholder. Never shows an error state or
+ * retries visibly (matches iOS `CommentAvatar`).
+ *
+ * The placeholder is the first letter of [name], as on iOS: most commenters have
+ * no icon, and one silhouette down a whole thread told nobody apart. A guest
+ * keeps the silhouette (AO3 gives a guest no identity to take a letter from).
  */
 @Composable
 fun CommentAvatar(
     avatarUrl: String?,
     isGuest: Boolean,
     modifier: Modifier = Modifier,
-    size: Dp = 40.dp
+    size: Dp = 40.dp,
+    name: String? = null
 ) {
+    val initial = if (isGuest) null else avatarInitial(name)
     val imageUrl = if (isGuest) null else avatarUrl
     var showPlaceholder by remember(imageUrl) { mutableStateOf(imageUrl == null) }
     val context = LocalContext.current
@@ -128,7 +140,18 @@ fun CommentAvatar(
                     onSuccess = { showPlaceholder = false }
                 )
             }
-            if (showPlaceholder || imageUrl == null) {
+            if ((showPlaceholder || imageUrl == null) && initial != null) {
+                // Part of the picture, so sized with the circle and not with the text size,
+                // and not spoken: the name beside it is.
+                Text(
+                    text = initial,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = with(LocalDensity.current) { (size * 0.42f).toSp() },
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    modifier = Modifier.clearAndSetSemantics {}
+                )
+            } else if (showPlaceholder || imageUrl == null) {
                 Icon(
                     imageVector = Icons.Outlined.Person,
                     contentDescription = null,
@@ -138,4 +161,16 @@ fun CommentAvatar(
             }
         }
     }
+}
+
+/**
+ * The first visible character of a name, uppercased (iOS `CommentAvatar.initial`). A whole
+ * character, not a code unit: AO3 names carry emoji and combining marks. Null when the name
+ * has none, which leaves the silhouette.
+ */
+internal fun avatarInitial(name: String?): String? {
+    val trimmed = name?.trim().orEmpty()
+    if (trimmed.isEmpty()) return null
+    val end = java.text.BreakIterator.getCharacterInstance().apply { setText(trimmed) }.next()
+    return trimmed.substring(0, end).uppercase()
 }

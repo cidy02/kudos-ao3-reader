@@ -772,7 +772,8 @@ internal fun InboxItemCard(
                 CommentAvatar(
                     avatarUrl = item.avatarUrl,
                     isGuest = item.isGuest,
-                    size = 40.dp
+                    size = 40.dp,
+                    name = item.commenterName
                 )
 
                 Column(
@@ -919,17 +920,24 @@ private fun InboxByline(
                     .semantics { contentDescription = "Unread" }
             )
         }
-        Text(
-            text = item.commenterName,
-            color = tokens.primaryInk,
-            fontSize = 14.sp,
-            fontWeight = FontWeight.SemiBold,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f, fill = false)
-        )
-        CommentParticipantBadge(role = role)
-        Spacer(Modifier.weight(1f))
+        // The name and its badge share what the date and "Replied" leave. A spacer of equal
+        // weight had held the name to half of that, so "Driveby Guest" was cut with room to spare.
+        Row(
+            modifier = Modifier.weight(1f),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Text(
+                text = item.commenterName,
+                color = tokens.primaryInk,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f, fill = false)
+            )
+            CommentParticipantBadge(role = role)
+        }
         if (item.isReplied) InboxRepliedBadge()
         if (item.postedAgo.isNotEmpty()) {
             Text(

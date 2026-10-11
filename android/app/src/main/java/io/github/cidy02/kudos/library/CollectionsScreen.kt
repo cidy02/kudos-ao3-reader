@@ -160,7 +160,8 @@ fun CollectionsScreen(
                         kicker = "Library",
                         title = "Collections",
                         subtitle = "${collections.size} ${if (collections.size == 1) "collection" else "collections"}",
-                        palette = tokens.scopePalette
+                        palette = tokens.scopePalette,
+                        gutter = 0.dp
                     )
                 }
 

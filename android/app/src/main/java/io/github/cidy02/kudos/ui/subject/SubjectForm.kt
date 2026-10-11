@@ -125,6 +125,7 @@ fun SubjectFormRow(
     onClick: (() -> Unit)? = null,
     valueMaxLines: Int = 1,
     labelSpokenByControl: Boolean = false,
+    leadingIcon: androidx.compose.ui.graphics.vector.ImageVector? = null,
     trailing: (@Composable () -> Unit)? = null
 ) {
     val tokens = LocalKudosTokens.current
@@ -137,6 +138,14 @@ fun SubjectFormRow(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
+        if (leadingIcon != null) {
+            Icon(
+                imageVector = leadingIcon,
+                contentDescription = null,
+                tint = LocalSubjectPalette.current.accent,
+                modifier = Modifier.padding(end = 4.dp).size(with(LocalDensity.current) { 18.sp.toDp() })
+            )
+        }
         if (stackValue) {
             Column(
                 modifier = Modifier.weight(1f),
