@@ -132,6 +132,12 @@ fun AuthorProfileScreen(
     val deletes = heldDelete ?: currentDelete
     val deleteState by (deletes?.state ?: kotlinx.coroutines.flow.flowOf(OwnWorksDeleteUi())).collectAsState(initial = OwnWorksDeleteUi())
     var readingBusy by remember { mutableStateOf(false) }
+    // Subscribe and Unsubscribe on an author's page (iOS `toggleSubscription`). The button opened
+    // the form's submit address in the web view, where it does nothing.
+    var subscriptionBusy by remember { mutableStateOf(false) }
+    var confirmingUnsubscribe by remember(route.id, sessionGeneration) {
+        mutableStateOf<io.github.cidy02.kudos.network.ao3.author.AO3AuthorSubscriptionForm?>(null) }
+    var profileMessage by remember(route.id, sessionGeneration) { mutableStateOf<String?>(null) }
     var readingStatus by remember { mutableStateOf<String?>(null) }
 
     fun loadHeader(bypassCache: Boolean = false, afterLoad: (() -> Unit)? = null) {
@@ -225,6 +231,36 @@ fun AuthorProfileScreen(
         headerStale = false; tabStale = false
         header = null; works = null; series = null; bookmarks = null; about = null
         loadHeader()
+    }
+
+    fun submitSubscription(form: io.github.cidy02.kudos.network.ao3.author.AO3AuthorSubscriptionForm) {
+        val writes = seriesWrites ?: return
+        if (subscriptionBusy) return
+        val expectedRoute = route
+        val expectedSession = sessionGeneration
+        subscriptionBusy = true
+        scope.launch {
+            val result = try {
+                writes.submitAuthorSubscription(form, expectedSession)
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                // The session changed before anything was sent, or the screen went: nothing to say.
+                currentCoroutineContext().ensureActive()
+                null
+            } finally {
+                subscriptionBusy = false
+            }
+            if (result == null || route != expectedRoute || sessionGeneration != expectedSession) return@launch
+            when (result) {
+                is AO3Result.Success -> {
+                    profileMessage = result.value.message
+                    // Every kept page of this account shows the old button, the pseuds' too.
+                    io.github.cidy02.kudos.network.ao3.AO3PageCache.shared.removeAuthorDashboards(expectedRoute.username,
+                        io.github.cidy02.kudos.network.ao3.AO3PageCache.Scope(signedInUsername, expectedSession))
+                    loadHeader(bypassCache = true)
+                }
+                is AO3Result.Failure -> profileMessage = result.error.displayMessage()
+            }
+        }
     }
 
     // iOS `loadOwnStats`: silent when it fails (the line keeps what it had), and nothing is
@@ -421,6 +457,32 @@ fun AuthorProfileScreen(
             })
     }
 
+    confirmingUnsubscribe?.let { form ->
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { confirmingUnsubscribe = null },
+            title = { Text("Unsubscribe from ${route.username}?") },
+            text = { Text("Unsubscribing here applies to the whole AO3 account, not only this pseud.") },
+            confirmButton = {
+                androidx.compose.material3.TextButton(onClick = { confirmingUnsubscribe = null; submitSubscription(form) }) {
+                    Text("Unsubscribe", color = androidx.compose.material3.MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                androidx.compose.material3.TextButton(onClick = { confirmingUnsubscribe = null }) { Text("Cancel") }
+            }
+        )
+    }
+    profileMessage?.let { message ->
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { profileMessage = null },
+            title = { Text("AO3 Profile") },
+            text = { Text(message) },
+            confirmButton = {
+                androidx.compose.material3.TextButton(onClick = { profileMessage = null }) { Text("OK") }
+            }
+        )
+    }
+
     Column(modifier.fillMaxSize()) {
     io.github.cidy02.kudos.ui.components.KudosRefreshBox(onRefresh = {
         refreshingProfile = true
@@ -517,7 +579,15 @@ fun AuthorProfileScreen(
                                 route = route,
                                 profileTitle = about?.profileTitle ?: "",
                                 isOwnProfile = false, // Since this requires more logic, assuming false for now unless we know it's our own
-                                onSubscription = onOpenWeb,
+                                onSubscription = { form ->
+                                    when {
+                                        seriesWrites == null -> onOpenWeb(form.actionUrl)
+                                        // Leaving is asked first; joining is done at once (iOS).
+                                        form.isSubscribed -> confirmingUnsubscribe = form
+                                        else -> submitSubscription(form)
+                                    }
+                                },
+                                subscriptionBusy = subscriptionBusy,
                                 onModeration = { onOpenWeb(it.url) }
                             )
                         }

@@ -392,6 +392,8 @@ internal class DemoNetworkInterceptor(
     private val workAnswers: DemoWorkSaves? = null
 ) : Interceptor {
     private val removedSubscriptions = ConcurrentHashMap.newKeySet<String>()
+    /** Authors this run has subscribed to from their page: their page then offers Unsubscribe. */
+    private val followedAuthors = ConcurrentHashMap.newKeySet<String>()
     private val collectionItems = DemoCollectionItems()
     private val userCollectionItems = DemoCollectionItems(account = true)
     private val collectionForms = DemoCollectionForms()
@@ -524,6 +526,27 @@ internal class DemoNetworkInterceptor(
                 .code(answer.first).message(if (answer.first == 200) "OK" else "Local refusal")
                 .header("Content-Type", HTML).body(answer.second.toResponseBody(HTML_TYPE)).build()
         }
+        // An author's page: Subscribe, and the Unsubscribe its page offers afterwards. Local only.
+        if (chain.request().method == "POST" && Regex("^/users/[^/]+/subscriptions(?:/$DEMO_AUTHOR_SUBSCRIPTION)?/?$").matches(path)) {
+            val buffer = Buffer()
+            chain.request().body?.writeTo(buffer)
+            val fields = buffer.readUtf8().split('&').associate { field ->
+                val parts = field.split('=', limit = 2)
+                URLDecoder.decode(parts[0], "UTF-8") to URLDecoder.decode(parts.getOrElse(1) { "" }, "UTF-8")
+            }
+            val leaving = path.trimEnd('/').endsWith("/$DEMO_AUTHOR_SUBSCRIPTION")
+            val author = fields["subscription[subscribable_id]"].orEmpty()
+            val accepted = fields["authenticity_token"] == "author-fixture-csrf-token" && author.isNotEmpty() &&
+                fields["subscription[subscribable_type]"] == "User" &&
+                if (leaving) fields["_method"] == "delete" && followedAuthors.remove(author) else followedAuthors.add(author)
+            return Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1)
+                .code(if (accepted) 200 else 422).message(if (accepted) "OK" else "Unprocessable Entity")
+                .header("Content-Type", HTML)
+                .body((if (!accepted) "<div class='flash error'>Sorry, that didn't work.</div>"
+                    else if (leaving) "<div class='flash notice'>You have successfully unsubscribed.</div>"
+                    else "<div class='flash notice'>You are now following this user.</div>").toResponseBody(HTML_TYPE))
+                .build()
+        }
         // A terminal local response, including failures. Never fall through to AO3.
         if (chain.request().method == "POST" && Regex("^/users/[^/]+/subscriptions/[^/]+/?$").matches(path)) {
             val buffer = Buffer()
@@ -585,6 +608,20 @@ internal class DemoNetworkInterceptor(
             }
             bytes = document.outerHtml().encodeToByteArray()
         }
+        // An author this run subscribed to: AO3 would now serve the form that ends it.
+        if (bytes != null && chain.request().method == "GET" && followedAuthors.isNotEmpty()) {
+            val document = Jsoup.parse(bytes.decodeToString())
+            val form = document.select("form").firstOrNull { candidate ->
+                candidate.selectFirst("input[name=subscription[subscribable_type]]")?.attr("value") == "User" &&
+                    candidate.selectFirst("input[name=subscription[subscribable_id]]")?.attr("value") in followedAuthors
+            }
+            if (form != null && form.selectFirst("input[name=_method]") == null) {
+                form.attr("action", form.attr("action").trimEnd('/') + "/$DEMO_AUTHOR_SUBSCRIPTION")
+                form.prependElement("input").attr("type", "hidden").attr("name", "_method").attr("value", "delete")
+                form.selectFirst("input[type=submit]")?.attr("value", "Unsubscribe")
+                bytes = document.outerHtml().encodeToByteArray()
+            }
+        }
         val code = if (bytes == null) 404 else if (path.trimEnd('/') == "/tag_sets/44/edit") 403 else 200
         return Response.Builder()
             .request(chain.request())
@@ -597,6 +634,8 @@ internal class DemoNetworkInterceptor(
     }
 
     private companion object {
+        /** The id the demo gives a subscription made from an author's page. */
+        const val DEMO_AUTHOR_SUBSCRIPTION = "990001"
         const val HTML = "text/html; charset=utf-8"
         val HTML_TYPE = HTML.toMediaType()
     }

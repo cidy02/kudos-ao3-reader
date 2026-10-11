@@ -1072,6 +1072,27 @@ class AO3WriteRepository(
         }
     }
 
+    /**
+     * iOS `submitAuthorSubscription`: the Subscribe or Unsubscribe form AO3 served on an author's
+     * page, sent once. Every served field goes back as it came; only the token is fresh, read
+     * from the page the form was on. Sent in the session the form was read in, or not at all.
+     * Never run against AO3.
+     */
+    suspend fun submitAuthorSubscription(
+        form: io.github.cidy02.kudos.network.ao3.author.AO3AuthorSubscriptionForm, expectedGeneration: Int
+    ): AO3Result<AO3WriteOutcome> {
+        if (client.sessionGeneration() != expectedGeneration) throw CancellationException()
+        if (client.username() == null) return AO3Result.Failure(AO3Error.AuthenticationRequired)
+        if (!AO3RedirectCookieRelay.isTrustedUrl(form.actionUrl) || !AO3RedirectCookieRelay.isTrustedUrl(form.referer)) {
+            return AO3Result.Failure(AO3Error.Validation("Couldn't build the subscription address."))
+        }
+        val leaving = form.isSubscribed
+        return indexWrite(expectedGeneration, form.referer, form.actionUrl,
+            if (leaving) AO3WriteActionKind.Unsubscribe else AO3WriteActionKind.Subscribe,
+            if (leaving) "Unsubscribed." else "Subscribed.", "AO3 didn't accept the subscription change."
+        ) { token -> form.fields.filterNot { it.first == "authenticity_token" } + ("authenticity_token" to token) }
+    }
+
     /** iOS unsubscribe(path:page:): captured index action, fresh Works-index CSRF, one POST. */
     suspend fun unsubscribe(path: String, page: Int): AO3Result<AO3WriteOutcome> {
         val generation = client.sessionGeneration()

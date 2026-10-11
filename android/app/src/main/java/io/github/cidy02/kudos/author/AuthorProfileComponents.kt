@@ -72,8 +72,9 @@ internal fun AO3AuthorHero(
     route: AO3AuthorRoute,
     profileTitle: String,
     isOwnProfile: Boolean,
-    onSubscription: (String) -> Unit,
+    onSubscription: (io.github.cidy02.kudos.network.ao3.author.AO3AuthorSubscriptionForm) -> Unit,
     onModeration: (AO3AuthorWebAction) -> Unit,
+    subscriptionBusy: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val tokens = LocalKudosTokens.current
@@ -123,7 +124,8 @@ internal fun AO3AuthorHero(
                 ) {
                     header.subscriptionForm?.let { form ->
                         Button(
-                            onClick = { onSubscription(form.actionUrl) },
+                            onClick = { onSubscription(form) },
+                            enabled = !subscriptionBusy,
                             contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp, vertical = 6.dp),
                             modifier = Modifier.height(32.dp)
                         ) {
