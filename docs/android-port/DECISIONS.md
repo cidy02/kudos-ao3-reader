@@ -1778,3 +1778,7 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
 - **2026-10-12 · The tag editor's pills (3cy).** A chosen tag's pill is drawn at its own
   height inside its 48 dp touch and drag target, as 3cx did for Edit tags' chips.
   Reverse: the commit that names 3cy.
+- **2026-10-12 · The chapter form's Post rows (3cz).** The chapter form draws its Post
+  rows as the work form does (a mark, green for the step that sends), and its publication
+  date as a choice. iOS's demo answers the chapter and series pages from copies of
+  Android's demo pages (T-400). Reverse: the commit that names 3cz; iOS T-400.

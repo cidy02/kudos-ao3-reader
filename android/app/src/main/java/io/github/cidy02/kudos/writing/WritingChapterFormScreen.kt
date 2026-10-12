@@ -1,5 +1,8 @@
 package io.github.cidy02.kudos.writing
 
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowUpward
+import androidx.compose.material.icons.filled.Description
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -135,10 +138,10 @@ internal fun WritingChapterFormScreen(model: WritingChapterFormState, workTitle:
                 WorkFormToggle("Set a different publication date", form.publishedYear.isNotEmpty(), enabled, model::dateEnabled)
             } }
             if (form.publishedYear.isNotEmpty()) item { WritingPanelRow(first = false, last = false) {
-                SubjectFormRow("Publication date", onClick = if (enabled) ({ dating = true }) else null, trailing = {
-                    Text(form.publicationDate().format(DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM)),
-                        color = tokens.secondaryInk, fontSize = 14.5.sp, lineHeight = 20.sp)
-                })
+                // A choice, drawn as one (3cr): it was grey and bare, like a value that is fixed.
+                SubjectFormRow("Publication date",
+                    value = form.publicationDate().format(DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM)),
+                    showsChoice = true, onClick = if (enabled) ({ dating = true }) else null)
             } }
             if (form.posts) item { WritingPanelRow(first = false, last = false) {
                 WorkFormToggle("Post without preview", state.postWithoutPreview, enabled, model::withoutPreview)
@@ -154,16 +157,20 @@ internal fun WritingChapterFormScreen(model: WritingChapterFormState, workTitle:
                 } }
                 item { WorkFormFootnote("The chapter was saved. Only the work total will be retried.") }
             } else {
+                // The work form's rows (and iOS's): the mark and its green say this is the step
+                // that sends the chapter. They were two plain lines of text.
                 item { WritingPanelRow(first = true, last = !form.posts) {
-                    SubjectFormRow(if (form.posts) "Post chapter now" else "Save chapter changes",
-                        onClick = if (state.busy) null else ({ run {
+                    WritingPostRow(if (form.posts) "Post chapter now" else "Save chapter changes",
+                        Icons.Filled.ArrowUpward, statusSuccessColor(tokens.theme), enabled = !state.busy, busy = state.busy) {
+                        run {
                             if (form.posts && !state.postWithoutPreview) model.openPreview()
                             else model.save(if (form.posts) AO3WorkSubmitAction.PostWithoutPreview else AO3WorkSubmitAction.Update)
-                        } }), trailing = { if (state.busy) CircularProgressIndicator(color = palette.accent,
-                            trackColor = tokens.separator, modifier = Modifier.size(20.dp), strokeWidth = 2.dp) })
+                        }
+                    }
                 } }
                 if (form.posts) item { WritingPanelRow(first = false, last = true) {
-                    SubjectFormRow("Save as draft", onClick = if (state.busy) null else ({ run { model.save(AO3WorkSubmitAction.SaveDraft) } }))
+                    WritingPostRow("Save as draft", Icons.Filled.Description, tokens.primaryInk,
+                        enabled = !state.busy) { run { model.save(AO3WorkSubmitAction.SaveDraft) } }
                 } }
             }
             item { WorkFormFootnote(CHAPTER_POST_NOTE) }
