@@ -226,3 +226,40 @@ and no visit line, on both.
 
 **Left from this brief: Clear History** (a write; a brief of its own).
 
+## Step 7, landed 2026-10-11 (Claude alone; gate 2,616): Clear History
+
+**A write to AO3. Never run against AO3; fixtures and the demo only. Owed a second review.**
+
+- **History's More menu has "Clear History"**, as iOS's has, when the page has works. It
+  opens iOS's confirmation ("Clear your entire history?" / "This clears your AO3 reading
+  history. It doesn't delete the works and can't be undone." / Cancel, Clear History).
+- **The write is iOS's `clearReadingHistory`, field for field**
+  (`AO3WriteRepository.clearReadingHistory`): one GET of AO3's own confirm page
+  (`/users/<name>/readings/confirm_clear`) for the page's token, then one POST to
+  `/users/<name>/readings/clear` carrying only that token, with the confirm page as
+  referer. It goes through `indexWrite`, as Delete from History does: the session is
+  checked before the POST, the POST is never sent twice, and "cleared" is only AO3's own
+  evidence (a success flash or a redirect; a page that confirms nothing is a failure).
+- **After AO3 confirms, the list is emptied on the device without a second read**, as on
+  iOS. A page loaded afterwards shows what AO3 has.
+- One write at a time on the screen: the row is disabled while a delete or a clear is out.
+- The demo answers both requests (`ao3_demo_readings_confirm_clear.html`, written by hand
+  and marked so; the POST is accepted only with the demo page's token).
+- `docs/AO3_NETWORKING_POLICY.md` has a "Reading history writes" row. It had none, though
+  Delete from History landed on 10-08.
+
+**Tests** (`AO3HistoryDeleteTest`): the confirm page is read once and the POST carries only
+its token to the right address with the right referer; a redirect confirms; a maintenance
+page, an error flash, a rate limit and a lost connection do not, and nothing is sent twice;
+a confirm page with no token sends nothing.
+
+**Looked at** in the demo, in airplane mode: the menu row, the confirmation, Cancel (the
+list stays), confirm (the list empties to "No reading history"), the menu afterwards. The
+log had no request outside the demo and no crash.
+
+**Not tested:** the screen's own wiring (the dialog, the emptied page) has no unit test; it
+was seen on the emulator. A failed clear's message was not seen.
+
+**Brief 3co is closed.** What it leaves for the owner: whether Android opens these lists on
+Compact, as iOS does.
+

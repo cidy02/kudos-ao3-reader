@@ -210,6 +210,7 @@ internal object DemoNetworkRoutes {
         "^/users/[^/]+/(pseuds/[^/]+/)?series" to "ao3_author_series",
         "^/users/AO3_Reader/bookmarks/?$" to "ao3_demo_account_bookmarks",
         "^/users/[^/]+/(pseuds/[^/]+/)?bookmarks" to "ao3_author_bookmarks",
+        "^/users/[^/]+/readings/confirm_clear" to "ao3_demo_readings_confirm_clear",
         "^/users/[^/]+/readings" to "ao3_readings",
         "^/users/[^/]+/subscriptions" to "ao3_subscriptions",
         // AO3's confirm pages for a block and a mute, from an author's page.
@@ -587,6 +588,17 @@ internal class DemoNetworkInterceptor(
                 .header("Content-Type", HTML)
                 .body((if (accepted) "<div class='flash notice'>Unsubscribed.</div>" else
                     "<div class='flash error'>Couldn't unsubscribe.</div>").toResponseBody(HTML_TYPE))
+                .build()
+        }
+        // The demo's whole AO3 history, cleared for this run only (the screen empties itself).
+        if (chain.request().method == "POST" && Regex("^/users/[^/]+/readings/clear/?$").matches(path)) {
+            val buffer = Buffer()
+            chain.request().body?.writeTo(buffer)
+            val accepted = buffer.readUtf8().split('&').any { it == "authenticity_token=demo-history-token" }
+            return Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1)
+                .code(if (accepted) 200 else 422).message(if (accepted) "OK" else "Unprocessable Entity")
+                .body((if (accepted) "<div class='flash notice'>Your history is now cleared.</div>" else
+                    "<div class='flash error'>Couldn't clear history.</div>").toResponseBody(HTML_TYPE))
                 .build()
         }
         // One row of the demo's AO3 history, removed for this run only (the screen hides it).

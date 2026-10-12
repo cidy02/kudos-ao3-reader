@@ -161,6 +161,11 @@ fun AccountWorksListScreen(
     var showMenu by remember { mutableStateOf(false) }
     var showLayoutMenu by remember { mutableStateOf(false) }
     var displayMode by rememberStoredChoice("account.displayMode", AccountDisplayMode.Ledger)
+    var confirmClearHistory by remember { mutableStateOf(false) }
+    // The page AO3 confirmed it cleared. The list is emptied here, as on iOS, without a
+    // second read; a page loaded afterwards is a different object and shows what AO3 has.
+    var clearedPage by remember { mutableStateOf<Any?>(null) }
+    val clearScope = rememberCoroutineScope()
     var showingFilters by remember(type) { mutableStateOf(false) }
     var filters by remember(type) { mutableStateOf(AO3SearchFilters()) }
     var subscriptionsScope by remember(type) { mutableStateOf("works") }
@@ -179,6 +184,7 @@ fun AccountWorksListScreen(
     val unsubscribeState = remember(writeRepository, generation) {
         SubscriptionUnsubscribeState(writeRepository, repository.authRepository)
     }
+    val historyBusy = unsubscribeState.busyPath.collectAsState().value != null
     var enrichedSubscriptions by remember(type, pageWorks, authState) {
         mutableStateOf(emptyMap<Long, AO3WorkSummary>())
     }
@@ -212,11 +218,25 @@ fun AccountWorksListScreen(
     val works = remember(refinedWorks, settings.privacy, reveal) {
         visibleEntries(refinedWorks, settings.privacy, reveal)
     }
-    val hasWorks = authState.isSignedIn && pageWorks.isNotEmpty() &&
+    val hasWorks = authState.isSignedIn && pageWorks.isNotEmpty() && clearedPage !== loaded?.page &&
         (type != AccountListType.Subscriptions || subscriptionsScope == "works")
     val hasNewChapters = type == AccountListType.Subscriptions && works.any {
         SubscriptionWatermarks.newChapterCount(it.remote, subscriptionWatermarks) > 0
     }
+
+    DestructiveConfirmation(
+        show = confirmClearHistory,
+        title = "Clear your entire history?",
+        text = "This clears your AO3 reading history. It doesn't delete the works and can't be undone.",
+        confirmText = "Clear History",
+        confirmBeforeDelete = true,
+        onConfirm = {
+            confirmClearHistory = false
+            val page = loaded?.page
+            clearScope.launch { unsubscribeState.confirmClearHistory { clearedPage = page } }
+        },
+        onDismissRequest = { confirmClearHistory = false }
+    )
 
     ProvidePushedShellChrome(
         hasSubjectHeader = true,
@@ -296,6 +316,21 @@ fun AccountWorksListScreen(
                                             SubscriptionWatermarks.NAMESPACE_SUBSCRIPTIONS,
                                             works.map { it.remote }.filter { it.hasPostedChapterCount() }
                                         )
+                                    }
+                                )
+                            }
+                            // iOS's History menu: the whole history, after a confirmation.
+                            if (hasWorks && type == AccountListType.History) {
+                                DropdownMenuItem(
+                                    text = { Text("Clear History", color = MaterialTheme.colorScheme.error) },
+                                    leadingIcon = {
+                                        Icon(Icons.Outlined.Delete, contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.error)
+                                    },
+                                    enabled = !historyBusy,
+                                    onClick = {
+                                        showMenu = false
+                                        confirmClearHistory = true
                                     }
                                 )
                             }
@@ -381,7 +416,7 @@ fun AccountWorksListScreen(
                     }
                 }
                 is AccountListUiState.Loaded -> {
-                    if (current.canonicalWorks.isEmpty() && current.page.works.isEmpty()) {
+                    if ((current.canonicalWorks.isEmpty() && current.page.works.isEmpty()) || clearedPage === current.page) {
                         Box(modifier = Modifier.padding(SubjectMetrics.accountGutter)) {
                             EmptyStateCard(
                                 title = type.emptyTitle,
