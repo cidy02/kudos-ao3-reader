@@ -988,7 +988,7 @@ fun AuthorProfileScreen(
                                                 leadingIcon = Icons.Outlined.Person,
                                                 onClick = { if (!current) route = p.route },
                                                 trailing = if (current) { {
-                                                    Icon(Icons.Filled.Check, "Selected", tint = tokens.accent,
+                                                    Icon(Icons.Filled.Check, "Selected", tint = LocalSubjectPalette.current.accent,
                                                         modifier = Modifier.size(18.dp))
                                                 } } else null
                                             )

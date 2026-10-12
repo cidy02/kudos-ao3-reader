@@ -190,26 +190,15 @@ fun ReaderFanMenu(
     val pillWidth = (roundActionWidth * count) + (rowSpacing * (count - 1))
 
     Box(
-        modifier = modifier
-            .statusBarsPadding()
-            .padding(top = 4.dp, end = 12.dp),
+        modifier = modifier.statusBarsPadding(),
         contentAlignment = Alignment.TopEnd
     ) {
         if (!isOpen) {
-            // Closed toggle button (44x44pt glass circle)
-            Box(
-                modifier = Modifier
-                    .size(44.dp)
-                    .clip(CircleShape)
-                    .background(tokens.cardFill.copy(alpha = 0.90f), CircleShape)
-                    .background(tokens.glassFill(), CircleShape)
-                    .border(0.5.dp, tokens.glassStroke(), CircleShape)
-                    .clickable { onOpenChange(true) }
-                    .semantics {
-                        contentDescription = "More"
-                        role = Role.Button
-                    },
-                contentAlignment = Alignment.Center
+            // Closed toggle: the bar's trailing button, opposite the back button.
+            ReaderChromeButton(
+                onClick = { onOpenChange(true) },
+                name = "More",
+                modifier = Modifier.padding(top = 6.dp, end = 4.dp)
             ) {
                 // Apple Books style glyph: 3 horizontal bars over 3 dots
                 Column(
@@ -246,6 +235,8 @@ fun ReaderFanMenu(
 
         AnimatedVisibility(
             visible = isOpen,
+            // Where the toggle's own circle is, so the menu opens out of it.
+            modifier = Modifier.padding(top = 10.dp, end = 8.dp),
             enter = fadeIn(spring(dampingRatio = 0.88f, stiffness = 400f)) +
                 scaleIn(spring(dampingRatio = 0.88f, stiffness = 400f), initialScale = 0.85f),
             exit = fadeOut(spring(dampingRatio = 0.88f, stiffness = 400f)) +

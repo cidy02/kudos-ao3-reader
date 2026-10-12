@@ -1819,3 +1819,7 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   before they are kept. A bookmark's badges are drawn whether or not the work names a
   fandom. AO3's formatted words are drawn with `AO3RichText`, which keeps plain formatting
   and http/https links only. Reverse: the commit that names 3dj.
+- **2026-10-12 · The reader's bar buttons are the app's own (3dk, iOS T-403; owner).** The
+  reader's back button and fan menu button sit where every other page's bar buttons sit,
+  with the same mark at the same size and strength. On Android they keep a round backing,
+  because they float over the page's text. Reverse: the commits that name 3dk and T-403.
