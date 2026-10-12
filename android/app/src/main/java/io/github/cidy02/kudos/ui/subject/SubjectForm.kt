@@ -23,6 +23,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -103,6 +104,16 @@ const val REQUIRED_MARK = " ∗"
 fun spokenFormLabel(label: String): String =
     if (label.endsWith(REQUIRED_MARK)) label.removeSuffix(REQUIRED_MARK) + ", required" else label
 
+/** The label as drawn: its required mark in the accent, as iOS tints it. */
+@Composable
+internal fun formLabelText(label: String): androidx.compose.ui.text.AnnotatedString =
+    if (!label.endsWith(REQUIRED_MARK)) androidx.compose.ui.text.AnnotatedString(label)
+    else androidx.compose.ui.text.buildAnnotatedString {
+        append(label.dropLast(1))
+        pushStyle(androidx.compose.ui.text.SpanStyle(color = LocalSubjectPalette.current.accent))
+        append(label.last())
+    }
+
 /** [byControl]: the row's own control (a text field) says "…, required"; the label beside it says the name. */
 internal fun Modifier.spokenAs(label: String, byControl: Boolean = false): Modifier = when {
     !label.endsWith(REQUIRED_MARK) -> this
@@ -115,6 +126,9 @@ internal fun Modifier.spokenAs(label: String, byControl: Boolean = false): Modif
  * [valueMaxLines] above one lets a value the reader has to see whole wrap instead of being cut.
  * [labelSpokenByControl]: [trailing] is a field that itself says "…, required", so the label does not
  * say it a second time. Any other trailing content (a count, a switch) leaves the label to say it.
+ * [showsChoice]: tapping the row changes its value (a menu, a sheet of options, a date). The value is
+ * in the accent with a mark after it, as iOS's pickers are. It was grey and bare, the same as a
+ * value that cannot be changed. Nothing is shown while the row has no [onClick].
  */
 @Composable
 fun SubjectFormRow(
@@ -126,10 +140,13 @@ fun SubjectFormRow(
     valueMaxLines: Int = 1,
     labelSpokenByControl: Boolean = false,
     leadingIcon: androidx.compose.ui.graphics.vector.ImageVector? = null,
+    showsChoice: Boolean = false,
     trailing: (@Composable () -> Unit)? = null
 ) {
     val tokens = LocalKudosTokens.current
     val stackValue = isAccessibilityFontScale() && value != null
+    val choice = showsChoice && onClick != null
+    val valueInk = if (choice) LocalSubjectPalette.current.accent else tokens.secondaryInk
     Row(
         modifier
             .fillMaxWidth()
@@ -151,10 +168,10 @@ fun SubjectFormRow(
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(2.dp)
             ) {
-                Text(text = label, modifier = Modifier.spokenAs(label), color = tokens.primaryInk, fontSize = 14.5.sp, lineHeight = 20.sp)
+                Text(text = formLabelText(label), modifier = Modifier.spokenAs(label), color = tokens.primaryInk, fontSize = 14.5.sp, lineHeight = 20.sp)
                 Text(
                     text = value.orEmpty(),
-                    color = tokens.secondaryInk,
+                    color = valueInk,
                     fontSize = 14.5.sp,
                     lineHeight = 20.sp,
                     maxLines = valueMaxLines,
@@ -167,7 +184,7 @@ fun SubjectFormRow(
             // wide, a letter to a line.
             val hasValue = trailing == null && value != null
             Text(
-                text = label,
+                text = formLabelText(label),
                 modifier = (if (hasValue) Modifier else Modifier.weight(1f)).spokenAs(label, byControl = labelSpokenByControl),
                 color = tokens.primaryInk,
                 fontSize = 14.5.sp,
@@ -179,7 +196,7 @@ fun SubjectFormRow(
                 Text(
                     text = value,
                     modifier = Modifier.weight(1f),
-                    color = tokens.secondaryInk,
+                    color = valueInk,
                     fontSize = 14.5.sp,
                     lineHeight = 20.sp,
                     textAlign = TextAlign.End,
@@ -193,6 +210,14 @@ fun SubjectFormRow(
                 imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
                 contentDescription = null,
                 tint = tokens.tertiaryInk,
+                modifier = Modifier.size(with(LocalDensity.current) { 18.sp.toDp() })
+            )
+        }
+        if (choice) {
+            Icon(
+                imageVector = Icons.Filled.ExpandMore,
+                contentDescription = null,
+                tint = valueInk,
                 modifier = Modifier.size(with(LocalDensity.current) { 18.sp.toDp() })
             )
         }
