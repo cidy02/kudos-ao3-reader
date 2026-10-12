@@ -192,6 +192,7 @@ private fun SyncFolderHeader() {
             Text(
                 text = "Protect Your Library",
                 style = MaterialTheme.typography.headlineLarge,
+                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
                 color = LocalKudosTokens.current.primaryInk,
                 lineHeight = 40.sp,
                 textAlign = TextAlign.Center

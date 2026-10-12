@@ -58,31 +58,14 @@ fun ReaderChromeTopBar(
         modifier = modifier
             .fillMaxWidth()
             .statusBarsPadding()
-            .padding(horizontal = 12.dp, vertical = 4.dp),
+            // Every other page's bar: 4dp in from the edges and 6dp under the status bar.
+            .padding(horizontal = 4.dp)
+            .padding(top = 6.dp, bottom = 4.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // 44x44pt Close button
-        Box(
-            modifier = Modifier
-                .size(44.dp)
-                .clip(CircleShape)
-                .background(tokens.cardFill.copy(alpha = 0.90f), CircleShape)
-                .background(tokens.glassFill(), CircleShape)
-                .border(0.5.dp, tokens.glassStroke(), CircleShape)
-                .clickable(onClick = onClose)
-                .semantics {
-                    contentDescription = "Close reader"
-                    role = Role.Button
-                },
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                contentDescription = null,
-                tint = tokens.primaryInk,
-                modifier = Modifier.size(17.dp)
-            )
+        ReaderChromeButton(onClick = onClose, name = "Close reader") {
+            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null, tint = tokens.primaryInk)
         }
 
         Spacer(modifier = Modifier.weight(1f, fill = true))
@@ -151,7 +134,43 @@ fun ReaderChromeTopBar(
 
         Spacer(modifier = Modifier.weight(1f, fill = true))
 
-        // 44x44pt placeholder reserving space for the fan menu toggle
-        Spacer(modifier = Modifier.size(44.dp))
+        // Placeholder reserving the fan menu toggle's place
+        Spacer(modifier = Modifier.size(48.dp))
+    }
+}
+
+/**
+ * One of the reader's two round bar buttons: Material's icon button where every other page's
+ * bar has one (48dp to touch, a 24dp mark), on a 40dp backing because it floats over the page's
+ * text. They were 44dp circles 12dp in and 4dp down, the back arrow 17dp: lower and further in
+ * than every other page's back arrow, and smaller (owner, 2026-10-12).
+ */
+@Composable
+internal fun ReaderChromeButton(
+    onClick: () -> Unit,
+    name: String,
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit
+) {
+    val tokens = LocalKudosTokens.current
+    Box(
+        modifier = modifier
+            .size(48.dp)
+            .clip(CircleShape)
+            .clickable(onClick = onClick)
+            .semantics {
+                contentDescription = name
+                role = Role.Button
+            },
+        contentAlignment = Alignment.Center
+    ) {
+        Box(
+            modifier = Modifier
+                .size(40.dp)
+                .background(tokens.cardFill.copy(alpha = 0.90f), CircleShape)
+                .background(tokens.glassFill(), CircleShape)
+                .border(0.5.dp, tokens.glassStroke(), CircleShape),
+            contentAlignment = Alignment.Center
+        ) { content() }
     }
 }

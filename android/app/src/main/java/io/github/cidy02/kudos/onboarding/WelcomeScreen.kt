@@ -109,6 +109,8 @@ private fun WelcomeHeader() {
             Text(
                 text = "Welcome to Kudos",
                 style = MaterialTheme.typography.headlineLarge,
+                // Bold, as iOS sets a first-run page's title. It was the body's weight.
+                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
                 color = LocalKudosTokens.current.primaryInk,
                 lineHeight = 40.sp,
                 textAlign = TextAlign.Center
