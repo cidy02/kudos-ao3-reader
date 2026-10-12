@@ -448,6 +448,9 @@ final class DemoNetworkBlock: URLProtocol {
         ("^/works/\\d+/chapters/new", "ao3_demo_chapter_995006_new"),
         ("^/works/\\d+/chapters/\\d+/edit", "ao3_demo_chapter_995006_posted"),
         ("^/works/\\d+/navigate", "ao3_chapter_navigate"),
+        // One work whose form is a draft's: every work opened the posted work's form, so the
+        // draft's own sections (Post, Preview, Delete draft) could not be looked at.
+        ("^/works/1002/edit", "ao3_demo_work_draft_edit"),
         ("^/works/\\d+/edit", "ao3_work_edit"),
         ("comments", "ao3_comments_page"),
         ("^/works/\\d+", "ao3_work_bookmarked_subscribed"),
@@ -478,6 +481,10 @@ final class DemoNetworkBlock: URLProtocol {
         ("^/tags/[^/]+/works", "ao3_tag_works"),
         ("^/works/search", "ao3_tag_works"),
         ("^/users/[^/]+/(pseuds/[^/]+/)?works", "ao3_author_works"),
+        // The demo account's own series, by the demo account: with another creator's page the
+        // reader was never one of a series's creators, and "Edit series" and "Reorder" were
+        // never offered.
+        ("^/users/AO3_Reader/(pseuds/[^/]+/)?series", "ao3_demo_author_series"),
         ("^/users/[^/]+/(pseuds/[^/]+/)?series", "ao3_author_series"),
         ("^/users/[^/]+/(pseuds/[^/]+/)?bookmarks", "ao3_author_bookmarks"),
         ("^/users/[^/]+/readings", "ao3_readings"),
