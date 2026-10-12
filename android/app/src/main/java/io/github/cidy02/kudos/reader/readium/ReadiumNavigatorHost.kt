@@ -38,6 +38,28 @@ import org.readium.r2.shared.util.AbsoluteUrl
 private const val FRAGMENT_TAG = "kudos-epub-navigator"
 
 /**
+ * Compose owns the reader's fragment and adds it again when the reader is drawn. Android also
+ * rebuilds an activity's fragments itself after a restart, and Readium's has no empty
+ * constructor: with a work open the app crashed when the activity was recreated, and when the
+ * reader came back to it after its process had been killed. Readium's dummy stands in for the
+ * rebuild and is removed before it is ever shown.
+ */
+internal object ReaderFragmentRestore {
+    /** Ahead of `super.onCreate`, which is where the fragments are rebuilt. */
+    fun before(activity: androidx.fragment.app.FragmentActivity) {
+        activity.supportFragmentManager.fragmentFactory = EpubNavigatorFragment.createDummyFactory()
+    }
+
+    /** Straight after `super.onCreate`. */
+    fun after(activity: androidx.fragment.app.FragmentActivity, savedInstanceState: android.os.Bundle?) {
+        val fm = activity.supportFragmentManager
+        val rebuilt = fm.fragments
+        if (savedInstanceState == null || rebuilt.isEmpty()) return
+        fm.beginTransaction().apply { rebuilt.forEach { remove(it) } }.commitNowAllowingStateLoss()
+    }
+}
+
+/**
  * Hosts Readium's Fragment-based [EpubNavigatorFragment] inside Compose.
  *
  * Readium's navigator is View/Fragment-based (its reflowable EPUB navigator uses
