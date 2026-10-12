@@ -545,7 +545,9 @@ fun ledgerMetadata(
     kudos: Int?,
     bookmarks: Int?,
     hits: Int?,
-    showsZeroStats: Boolean
+    showsZeroStats: Boolean,
+    /** False on a bookmark's card (iOS 1q): language, words and chapters only. */
+    includesPerformance: Boolean = true
 ): List<String> = buildList {
     language?.trim()?.takeIf { it.isNotEmpty() }?.let(::add)
     val isFullBlurb = wordCount != null
@@ -556,6 +558,7 @@ fun ledgerMetadata(
     fun count(value: Int?) = value ?: if (isFullBlurb) 0 else null
     figure(wordCount, "word")
     chapters.trim().takeIf { it.isNotEmpty() }?.let(::add)
+    if (!includesPerformance) return@buildList
     figure(count(comments), "comment")
     figure(count(kudos), "kudos", "kudos")
     figure(count(bookmarks), "bookmark")

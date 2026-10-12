@@ -29,4 +29,12 @@ class LedgerMetadataTest {
         // Subscriptions and Marked for Later: no word count, so nothing is known to be zero.
         assertEquals(listOf("2/?"), ledgerMetadata(" ", null, "2/?", null, null, null, null, showsZeroStats = true))
     }
+
+    @Test
+    fun aBookmarksCardLeavesTheEngagementFiguresOut() {
+        assertEquals(
+            listOf("English", "12,345 words", "3/3"),
+            ledgerMetadata("English", 12345, "3/3", 1, 80, 2, 900, showsZeroStats = true, includesPerformance = false)
+        )
+    }
 }

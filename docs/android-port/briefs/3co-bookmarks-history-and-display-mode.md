@@ -55,3 +55,35 @@ by a swipe or the card's menu: check which before moving Android's button.)
 - No new card beside `SensitiveWorkRow`: the ledger body takes what a bookmark adds.
 - Delete in History writes to AO3. It is single-shot and against fixtures only; moving the
   button must not change when it fires.
+
+## Step 1, landed 2026-10-11 (Claude alone; gate 2,610): the bookmark's card
+
+- **A bookmark of a work not in the Library is one card** (`SensitiveWorkRow(ledger = true,
+  bookmark = LedgerBookmark(…))`): "Rec" and "Private" beside the kicker, the note on its
+  rail and the tags as pills where the work's summary and tags would be, then language,
+  words and chapters with the day it was bookmarked ("Bookmarked 07 Jul 2026" to a screen
+  reader). No kudos or hits: they are the work's, not the bookmark's
+  (`ledgerMetadata(includesPerformance = false)`).
+- **A bookmark of a saved work** draws the work's own row and the same pieces under it,
+  now with the date, as iOS does (`showsStatus`).
+- **A fault closed on the way (privacy, A38's kind):** the note and tags of a bookmarked
+  work were drawn under its row *while the row was blurred*. A note written about a hidden
+  mature work was in plain sight. They are not drawn until the row is revealed, as on iOS
+  (`AO3BookmarksWorksBrowser.rowStack`: `!isBlurred(entry)`).
+- The note's rail is as tall as the note. At a fixed 34dp it stopped beside the second
+  line.
+
+**Tests:** `SensitiveWorkRowLedgerTest.aBookmarkIsOneCardWithItsNoteWhereTheSummaryWouldBe`,
+`LedgerMetadataTest.aBookmarksCardLeavesTheEngagementFiguresOut`. **No test for the blurred
+row's note** (the row that pairs a bookmark with a saved work is private to the screen); it
+was seen on the emulator: the demo's first bookmark is a hidden mature work with a note.
+
+**Looked at:** Bookmarks in Sepia and Dark and at twice the text size, beside the iPhone's;
+the hidden work before and after revealing.
+
+**Not the same as iOS, and left:** a bookmark's card does not unfold on Android (on iOS
+unfolding only drops the "+1" from the kicker); the author's profile draws its bookmarks
+with the detailed card and the footnote under it, now with the date.
+
+**Next: step 2, History.**
+

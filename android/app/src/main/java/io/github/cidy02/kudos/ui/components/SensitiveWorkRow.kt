@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.ui.components
 
+import androidx.compose.foundation.border
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
@@ -141,6 +142,8 @@ fun SensitiveWorkRow(
     ledger: Boolean = false,
     /** The ledger's closing date, as AO3 printed it. */
     dateText: String = "",
+    /** With [ledger]: this row is a bookmark, and draws iOS's one bookmark card. */
+    bookmark: LedgerBookmark? = null,
     onClick: () -> Unit,
     onReveal: (() -> Unit)? = null,
     onSelect: (() -> Unit)? = null,
@@ -233,9 +236,14 @@ fun SensitiveWorkRow(
                                         discoveryTags.isNotEmpty()) add(Triple("Tags", discoveryTags, SearchSubjectField.FREEFORM))
                                 },
                                 rating = rating, categories = categories, warnings = warnings, isComplete = isComplete,
-                                figures = ledgerMetadata(language, wordCount, chapters, comments, kudos, bookmarks, hits, showsZeroStats),
-                                dateText = dateText, isFavorite = isFavorite && !selecting,
-                                expandable = expandable, expanded = expanded,
+                                figures = ledgerMetadata(language, wordCount, chapters, comments, kudos, bookmarks, hits,
+                                    showsZeroStats, includesPerformance = bookmark == null),
+                                dateText = bookmark?.date ?: dateText,
+                                dateLabel = if (bookmark == null) "Updated" else "Bookmarked",
+                                badges = bookmark?.badges.orEmpty(), footnote = bookmark?.footnote,
+                                isFavorite = isFavorite && !selecting,
+                                // A bookmark's card has nothing folded away: its note and tags are out.
+                                expandable = expandable && bookmark == null, expanded = expanded,
                                 // Under the blur, or while selecting, the glyph is part of the row.
                                 onToggleExpanded = if (obscured || selecting) cardTap else { { expanded = !expanded } },
                                 palette = palette, tagSearch = tagSearch
@@ -409,6 +417,13 @@ fun SensitiveWorkRow(
 
 
 /**
+ * What a bookmark adds to the ledger card (iOS 1q, `AO3WorkRow.bookmarkCard`): "Rec" and
+ * "Private" beside the kicker, the bookmark's own note and tags where the work's summary and
+ * tags would be, and the day it was bookmarked closing the line of figures.
+ */
+class LedgerBookmark(val badges: List<String>, val date: String, val footnote: @Composable () -> Unit)
+
+/**
  * iOS `AO3WorkRow.searchLedgerCard`, which Search, Browse and the AO3 lists draw: the fandom
  * as a kicker, the title and byline beside the tray of four symbols, the summary, then one
  * line of figures in words that ends with the date. It stands in for the fandom line, the row
@@ -428,6 +443,9 @@ private fun LedgerBody(
     isComplete: Boolean?,
     figures: List<String>,
     dateText: String,
+    dateLabel: String,
+    badges: List<String>,
+    footnote: (@Composable () -> Unit)?,
     isFavorite: Boolean,
     expandable: Boolean,
     expanded: Boolean,
@@ -454,6 +472,19 @@ private fun LedgerBody(
                                 .clickable(onClickLabel = "search this fandom") {
                                     tagSearch(SearchSubjectField.FANDOM, fandom)
                                 }
+                        )
+                    }
+                    badges.forEach { badge ->
+                        Text(
+                            text = badge.uppercase(),
+                            color = tokens.secondaryInk,
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            letterSpacing = 0.6.sp,
+                            maxLines = 1,
+                            modifier = Modifier
+                                .border(0.5.dp, tokens.secondaryInk.copy(alpha = 0.5f), RoundedCornerShape(4.dp))
+                                .padding(horizontal = 5.dp, vertical = 1.dp)
                         )
                     }
                     if (expandable) {
@@ -517,7 +548,9 @@ private fun LedgerBody(
         }
     }
 
-    if (summary.isNotBlank()) {
+    footnote?.invoke()
+
+    if (footnote == null && summary.isNotBlank()) {
         Text(
             text = summary,
             style = MaterialTheme.typography.bodyMedium,
@@ -527,7 +560,7 @@ private fun LedgerBody(
         )
     }
 
-    if (expanded) {
+    if (expanded && footnote == null) {
         tagGroups.forEach { (label, tags, field) ->
             Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
                 Text(text = label, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = tokens.tertiaryInk)
@@ -546,7 +579,7 @@ private fun LedgerBody(
                     color = tokens.secondaryInk,
                     maxLines = 1,
                     softWrap = false,
-                    modifier = Modifier.semantics { contentDescription = "Updated $dateText" }
+                    modifier = Modifier.semantics { contentDescription = "$dateLabel $dateText" }
                 )
             }
         }
@@ -575,7 +608,8 @@ fun SensitiveWorkRow(
     onTagClick: ((String) -> Unit)? = null,
     onTagSearch: ((SearchSubjectField, String) -> Unit)? = null,
     onLongClick: (() -> Unit)? = null,
-    ledger: Boolean = false
+    ledger: Boolean = false,
+    bookmark: LedgerBookmark? = null
 ) {
     var showMenu by remember { mutableStateOf(false) }
     
@@ -604,6 +638,7 @@ fun SensitiveWorkRow(
             expandAll = expandAll,
             ledger = ledger,
             dateText = work.updatedDate,
+            bookmark = bookmark,
             onClick = { onOpenWork(work) },
             onTagClick = onTagClick,
             onTagSearch = onTagSearch,
