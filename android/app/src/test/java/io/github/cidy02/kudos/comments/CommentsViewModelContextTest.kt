@@ -97,6 +97,49 @@ class CommentsViewModelContextTest {
 
     private fun loaded(viewModel: CommentsViewModel) = viewModel.state.value is CommentsUiState.Loaded
 
+    private fun pageOf(viewModel: CommentsViewModel) = (viewModel.state.value as? CommentsUiState.Loaded)?.thread?.currentPage
+    private fun idsOf(viewModel: CommentsViewModel) =
+        (viewModel.state.value as CommentsUiState.Loaded).thread.comments.mapNotNull { it.numericId }
+
+    /**
+     * 3df (iOS `CommentsModel.load`): comments open on the newest, which AO3 keeps on a work's last
+     * page. One read of page 1 for the count, one of the last page, and both are kept while the
+     * screen is open, so the other order and the way back ask AO3 nothing.
+     */
+    @Test
+    fun newestFirstReadsTheFirstPageForTheCountThenTheLastAndKeepsBoth() {
+        val threePages = success(io.github.cidy02.kudos.network.ao3.writing.workFixture("ao3_comments_page"))
+        val session = Session(threePages)
+        val viewModel = CommentsViewModel(AO3CommentRepository(publicClient = PublicPage(threePages), authenticatedClient = session),
+            work, drafts, null, null, { session.generation }) { session.name }.also { models += it }
+        until("the last page is on screen") { pageOf(viewModel) == 3 }
+        assertEquals(2, session.urls.size)
+        assertEquals(false, "page=" in session.urls[0])
+        assertEquals(true, "page=3" in session.urls[1])
+        assertEquals("newest at the top", idsOf(viewModel).sortedDescending(), idsOf(viewModel))
+
+        viewModel.load(page = 1)
+        until("the first page, from what was kept") { pageOf(viewModel) == 1 }
+        viewModel.setOrder(CommentOrder.OldestFirst)
+        until("oldest first starts on the first page") { pageOf(viewModel) == 1 && idsOf(viewModel) == idsOf(viewModel).sorted() }
+        viewModel.setOrder(CommentOrder.NewestFirst)
+        until("newest first is the last page again") { pageOf(viewModel) == 3 }
+        assertEquals("nothing more was asked of AO3", 2, session.urls.size)
+
+        viewModel.viewModelScope.launch { viewModel.refresh() }
+        until("pull to refresh reads the page on screen") { session.urls.size == 3 }
+        assertEquals(true, "page=3" in session.urls[2])
+    }
+
+    @Test
+    fun aWorkWithOnePageOfCommentsIsOneRead() {
+        val session = Session(basic)
+        val viewModel = model(session)
+        until("loaded") { loaded(viewModel) }
+        assertEquals(1, pageOf(viewModel))
+        assertEquals(1, session.urls.size)
+    }
+
     private fun reply(id: Long) = AO3Comment(
         id = "comment_$id", author = AO3CommentAuthor(name = "Someone"), date = "2026-08-03", body = "Stub", canReply = true)
 

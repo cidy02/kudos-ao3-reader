@@ -1798,3 +1798,8 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   is the newest comment and says how long ago; a guest has a "Guest" pill in the thread;
   the chapter pill drops AO3's "on"; the composer's count has its thousands separator.
   Reverse: the commit that names 3de.
+- **2026-10-12 · The order of comments (3df).** Comments open newest first, from the
+  work's last page (one read of page 1 for the count, one of the last page), as iOS.
+  Pages read for a comments screen are kept in memory by that screen for five minutes
+  each, one reader's, and a write empties them (`docs/AO3_NETWORKING_POLICY.md`,
+  "Comments"). Reverse: the commit that names 3df.

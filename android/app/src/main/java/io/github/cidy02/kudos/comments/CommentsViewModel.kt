@@ -70,6 +70,11 @@ class CommentsViewModel(
      */
     private val sessionGeneration: () -> Int = { 0 },
     /**
+     * iOS `newestFirst = true`: comments open on the newest. The work's last page is where those
+     * are, so the first open reads page 1 for the count of pages and then the last (see [read]).
+     */
+    initialOrder: CommentOrder = CommentOrder.NewestFirst,
+    /**
      * Read at each save and load, never kept: the screen's first frame did not yet know who
      * was signed in, the name was captured then, and every signed-in reader's drafts were
      * stored as the guest's, where the next account found them (audit A18-2).
@@ -79,7 +84,7 @@ class CommentsViewModel(
     private val _state = MutableStateFlow<CommentsUiState>(CommentsUiState.Loading)
     val state: StateFlow<CommentsUiState> = _state.asStateFlow()
 
-    private val _order = MutableStateFlow(CommentOrder.OldestFirst)
+    private val _order = MutableStateFlow(initialOrder)
     val order: StateFlow<CommentOrder> = _order.asStateFlow()
 
     private val _scope = MutableStateFlow(
@@ -137,6 +142,25 @@ class CommentsViewModel(
     private data class Viewer(val username: String?, val generation: Int)
     private fun currentViewer() = Viewer(currentUsername(), sessionGeneration())
 
+    /**
+     * The pages read for this screen, kept while it is open and for five minutes each (iOS
+     * `CommentsPageCache`, docs/AO3_NETWORKING_POLICY.md "Comments"): in memory, this screen's own,
+     * and one reader's. Going back a page, or changing the order, asks AO3 nothing it was just
+     * asked. A write empties it: every page after the comment's may have moved.
+     */
+    private data class PageKey(val target: AO3CommentTarget, val page: Int, val viewer: Viewer)
+    private val pages = mutableMapOf<PageKey, Pair<AO3CommentThread, Long>>()
+
+    private suspend fun page(target: AO3CommentTarget, page: Int, fresh: Boolean): AO3Result<AO3CommentThread> {
+        val key = PageKey(target, page, currentViewer())
+        if (!fresh) pages[key]?.takeIf { System.currentTimeMillis() - it.second < PAGE_KEPT_MS }
+            ?.let { return AO3Result.Success(it.first) }
+        val result = repository.loadThread(target, page, null)
+        // AO3's own answer only: a copy kept from an earlier day is shown, and asked for again.
+        if (result is AO3Result.Success && !result.isStale) pages[key] = result.value to System.currentTimeMillis()
+        return result
+    }
+
     /** The reader everything now on screen was read for. [syncViewer] moves it. */
     private var viewer = currentViewer()
 
@@ -183,7 +207,8 @@ class CommentsViewModel(
 
     /** The Inbox's "Chapter Comments" until it has been shown whole: Try Again repeats it, not page 1. */
     private var pendingChapterComments: Pair<Long, Int>? = null
-    private var lastPage = 1
+    /** The page last asked for; null for the page the order starts on, until it is known. */
+    private var lastPage: Int? = 1
 
     init { open() }
 
@@ -191,8 +216,10 @@ class CommentsViewModel(
     private fun open() {
         if (initialFocusedCommentId != null && initialChapterPosition != null) {
             loadChapterComments(initialFocusedCommentId, initialChapterPosition)
-        } else {
+        } else if (initialFocusedCommentId != null) {
             load(1, initialFocusedCommentId)
+        } else {
+            loadStart()
         }
     }
 
@@ -224,6 +251,7 @@ class CommentsViewModel(
         openedOnChapter = false
         _scope.value = if (initialTarget is AO3CommentTarget.Chapter) CommentScope.ByChapter else CommentScope.All
         _currentTarget.value = initialTarget
+        pages.clear()
         open()
         return true
     }
@@ -232,12 +260,23 @@ class CommentsViewModel(
     fun retry() {
         val chapterComments = pendingChapterComments
         if (chapterComments != null) loadChapterComments(chapterComments.first, chapterComments.second)
-        else load(lastPage, _focusedCommentId.value)
+        else read(lastPage, _focusedCommentId.value, false)
     }
 
     data class ReplyTarget(val commentId: Long, val authorName: String)
 
-    fun load(page: Int = 1, focusedId: Long? = null, forceRefresh: Boolean = false) {
+    fun load(page: Int = 1, focusedId: Long? = null, forceRefresh: Boolean = false) = read(page, focusedId, forceRefresh)
+
+    /**
+     * The page the order starts on (iOS `load`): AO3's first page for oldest first, its last for
+     * newest first. AO3 has no order of its own to ask for, and its newest comments are on its last
+     * page, so newest first reads page 1 once for the count of pages and then the last one. Both are
+     * kept ([pages]): a work with one page of comments is one read, and going back to page 1 is none.
+     */
+    fun loadStart() = read(null, null, false)
+
+    /** [page] null is the page the order starts on. */
+    private fun read(page: Int?, focusedId: Long?, forceRefresh: Boolean) {
         val target = _currentTarget.value ?: return
         _focusedCommentId.value = focusedId
         lastPage = page
@@ -256,8 +295,22 @@ class CommentsViewModel(
         loadJob = viewModelScope.launch {
             // A pull to refresh keeps the page on screen until the new one is here.
             if (!forceRefresh) _state.value = CommentsUiState.Loading
-            val result = repository.loadThread(target, page, focusedId)
+            val result = when {
+                // One comment's thread is a page of its own, and is not kept as the work's.
+                focusedId != null -> repository.loadThread(target, page ?: 1, focusedId)
+                page != null -> page(target, page, forceRefresh)
+                _order.value == CommentOrder.OldestFirst -> page(target, 1, forceRefresh)
+                else -> {
+                    val first = page(target, 1, forceRefresh)
+                    ensureActive()
+                    val last = (first as? AO3Result.Success)?.value?.totalPages ?: 1
+                    if (last > 1) page(target, last, forceRefresh) else first
+                }
+            }
             ensureActive()
+            // Try Again and pull to refresh are for the page that was asked for, which for the
+            // order's start is only known now.
+            if (page == null && result is AO3Result.Success) lastPage = result.value.currentPage
             present(target, result)
         }
     }
@@ -267,7 +320,7 @@ class CommentsViewModel(
      * new comments showed only after leaving the screen and coming back.
      */
     suspend fun refresh() {
-        load(lastPage, _focusedCommentId.value, forceRefresh = true)
+        read(lastPage, _focusedCommentId.value, true)
         loadJob?.join()
     }
 
@@ -658,7 +711,17 @@ class CommentsViewModel(
      */
     private fun reloadPageOnScreen() {
         val page = (_state.value as? CommentsUiState.Loaded)?.thread?.currentPage ?: 1
+        pages.clear()
         load(page, _focusedCommentId.value)
+    }
+
+    /**
+     * After a new comment on the work: the page the order starts on, read again. AO3 puts a new
+     * comment on its last page. This reloaded page 1, where a work with more pages does not show it.
+     */
+    private fun reloadStart() {
+        pages.clear()
+        loadStart()
     }
 
     fun deleteComment(comment: AO3Comment) {
@@ -736,7 +799,7 @@ class CommentsViewModel(
                             _composerPresented.value = false
                         }
                         _message.value = result.value.message
-                        if (replyTo != null || edit != null) reloadPageOnScreen() else load()
+                        if (replyTo != null || edit != null) reloadPageOnScreen() else reloadStart()
                     }
                 }
                 is AO3Result.Failure -> if (sameReader) {
@@ -752,7 +815,7 @@ class CommentsViewModel(
                         _message.value = if (unconfirmed) {
                             "AO3 answered but didn't confirm the comment posted. Checking whether it went through…"
                         } else "The connection dropped while posting. Checking whether the comment went through…"
-                        if (replyTo != null) reloadPageOnScreen() else load()
+                        if (replyTo != null) reloadPageOnScreen() else reloadStart()
                     } else {
                         _message.value = result.error.displayMessage()
                     }
@@ -762,12 +825,18 @@ class CommentsViewModel(
         }
     }
 
+    /**
+     * iOS `newestFirst`: the other order starts on another page, so it is read (or taken from
+     * [pages]). This only turned over the page on screen, and "Newest First" was the newest of
+     * AO3's oldest page. One comment's own thread has one page, and is only turned over.
+     */
     fun setOrder(next: CommentOrder) {
+        if (_order.value == next) return
         _order.value = next
         val current = _state.value
-        if (current is CommentsUiState.Loaded) {
-            _state.value = current.copy(thread = current.thread.withSort(next))
-        }
+        if (_focusedCommentId.value != null || pendingChapterComments != null) {
+            if (current is CommentsUiState.Loaded) _state.value = current.copy(thread = current.thread.withSort(next))
+        } else loadStart()
     }
 
     private fun AO3CommentThread.withSort(order: CommentOrder): AO3CommentThread {
@@ -788,10 +857,13 @@ class CommentsViewModel(
         // does not open. One already open keeps what it was opened for (iOS `composerContext`).
         if (!_composerPresented.value) composer = null
         _currentTarget.value = target
-        load(1)
+        loadStart()
     }
 
     companion object {
+        /** iOS `CommentsPageCache.freshPage`: five minutes. */
+        private const val PAGE_KEPT_MS = 5 * 60 * 1000L
+
         fun factory(
             repository: AO3CommentRepository,
             initialTarget: AO3CommentTarget?,
@@ -803,7 +875,7 @@ class CommentsViewModel(
         ): ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 CommentsViewModel(repository, initialTarget, draftStore, initialFocusedCommentId,
-                    initialChapterPosition, sessionGeneration, currentUsername)
+                    initialChapterPosition, sessionGeneration, currentUsername = currentUsername)
             }
         }
     }
