@@ -109,7 +109,7 @@ fun QueueStorageScreen(
                 SubjectRowSeparator()
                 SubjectFormRow(
                     "Preserved Storage",
-                    value = Formatter.formatFileSize(context, preservedByteCount)
+                    value = LocalStorageFootprint.formatted(preservedByteCount)
                 )
             }
         }
@@ -136,7 +136,7 @@ fun QueueStorageScreen(
                         PreservedWorkRow(
                             work = work,
                             inSavedForLater = work.id in savedForLaterIds,
-                            size = Formatter.formatFileSize(context, fileSizes[work.id] ?: 0L),
+                            size = LocalStorageFootprint.formatted(fileSizes[work.id] ?: 0L),
                             onRemove = { pendingQueueRemoval = work },
                             // These are already on the device because a queue keeps them.
                             // This keeps the file after they leave their queues.

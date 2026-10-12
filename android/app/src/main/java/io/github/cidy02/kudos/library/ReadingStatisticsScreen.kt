@@ -382,9 +382,10 @@ private fun HoursCard(
                 Text(
                     text = ReadingInsights.hoursLabel(insights.totalSeconds),
                     color = tokens.primaryInk,
+                    // The page's own face, as iOS draws the big figures; monospace is for the
+                    // small ones that line up in columns.
                     fontSize = 44.sp,
                     fontWeight = FontWeight.Bold,
-                    fontFamily = FontFamily.Monospace,
                     maxLines = 1
                 )
                 Text(
@@ -654,9 +655,9 @@ private fun MetricCell(
         Text(
             text = figure,
             color = tokens.primaryInk,
+            // The page's own face, as iOS: "6 hours ago" was set in monospace beside its numbers.
             fontSize = 22.sp,
             fontWeight = FontWeight.Bold,
-            fontFamily = FontFamily.Monospace,
             // "14 hours ago" read "14 hou…" at twice the text size.
             maxLines = if (io.github.cidy02.kudos.ui.subject.isAccessibilityFontScale()) 2 else 1,
             overflow = TextOverflow.Ellipsis

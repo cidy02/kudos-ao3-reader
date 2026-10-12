@@ -258,7 +258,7 @@ fun SettingsDownloadsPage(repository: SettingsRepository, settings: KudosSetting
         val bytes = withContext(Dispatchers.IO) {
             context.filesDir.walkTopDown().filter { it.isFile }.sumOf { it.length() }
         }
-        storageUsed = Formatter.formatFileSize(context, bytes)
+        storageUsed = LocalStorageFootprint.formatted(bytes)
     }
     SettingsPage(title = "Downloads") {
         item {
