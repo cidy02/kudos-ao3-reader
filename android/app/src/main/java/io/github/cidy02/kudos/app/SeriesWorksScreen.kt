@@ -234,6 +234,21 @@ fun SeriesWorksScreen(
                             .fillMaxWidth()
                             .weight(1f, fill = false)
                     ) {
+                        // iOS opens a series with its own card over the works: who made it, what
+                        // it is, how much of it there is. The page read all of it and drew only
+                        // the title.
+                        item {
+                            val detail = current.detail
+                            io.github.cidy02.kudos.author.AO3SeriesRow(
+                                series = io.github.cidy02.kudos.network.ao3.author.AO3AuthorSeriesSummary(
+                                    id = 0, title = detail.title, creators = detail.creators,
+                                    fandoms = detail.page.works.firstOrNull()?.fandoms.orEmpty().take(1),
+                                    summary = detail.summary, words = detail.words, workCount = detail.workCount,
+                                    dateUpdated = detail.dateUpdated, isComplete = detail.isComplete, url = seriesUrl,
+                                    bookmarkCount = detail.bookmarkCount),
+                                displayMode = io.github.cidy02.kudos.author.AuthorDisplayMode.Ledger,
+                                onOpenSeries = null, showsTitle = false)
+                        }
                         item {
                             KudosSectionHeader(
                                 title = "Works",

@@ -224,9 +224,12 @@ internal fun AO3AuthorPerformanceStrip(work: AO3WorkSummary) {
 internal fun AO3SeriesRow(
     series: AO3AuthorSeriesSummary,
     displayMode: AuthorDisplayMode,
-    onOpenSeries: (String) -> Unit,
+    /** Null at the head of the series's own page, where the card opens nothing. */
+    onOpenSeries: ((String) -> Unit)?,
     modifier: Modifier = Modifier,
-    trailingContent: (@Composable () -> Unit)? = null
+    trailingContent: (@Composable () -> Unit)? = null,
+    /** False under a page title that already says it. */
+    showsTitle: Boolean = true
 ) {
     val tokens = LocalKudosTokens.current
     val palette = remember(series.fandoms, series.title, tokens.theme) {
@@ -236,7 +239,7 @@ internal fun AO3SeriesRow(
         modifier
             .fillMaxWidth()
             .subjectPanel(cornerRadius = 16.dp)
-            .clickable { onOpenSeries(series.url) }
+            .then(if (onOpenSeries != null) Modifier.clickable { onOpenSeries(series.url) } else Modifier)
             .padding(horizontal = 18.dp, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(if (displayMode == AuthorDisplayMode.Ledger) 10.dp else 7.dp)
     ) {
@@ -264,7 +267,7 @@ internal fun AO3SeriesRow(
                 if (hasBadges && large) FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) { badges() }
-                Text(
+                if (showsTitle) Text(
                     series.title,
                     color = tokens.primaryInk,
                     fontSize = if (displayMode == AuthorDisplayMode.Ledger) 19.sp else 17.sp,

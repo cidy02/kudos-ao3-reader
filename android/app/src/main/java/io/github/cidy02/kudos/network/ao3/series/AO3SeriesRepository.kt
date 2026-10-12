@@ -84,8 +84,21 @@ class AO3SeriesRepository(
                     meta?.select("a[rel=author][href]").orEmpty().map { it.attr("abs:href") })
                 val title = doc.selectFirst(".primary h2.heading, #main > h2.heading")?.text().orEmpty()
                     .ifEmpty { works.value.works.firstOrNull()?.seriesTitle ?: "Series" }
-                fun stat(name: String) = meta?.selectFirst("dd.$name")?.text()?.replace(",", "")?.trim()?.toIntOrNull()
-                AO3Result.Success(AO3SeriesDetailPage(works.value, title, usernames, stat("works"), stat("words")))
+                // A figure by its class, or by the label before it where AO3 gives it no class.
+                fun figure(name: String, label: String): String? = meta?.selectFirst("dd.$name")?.text()?.trim()
+                    ?: meta?.select("dl.stats dt")?.firstOrNull { it.text().trim().startsWith(label, true) }
+                        ?.nextElementSibling()?.text()?.trim()
+                fun stat(name: String, label: String) = figure(name, label)?.replace(",", "")?.toIntOrNull()
+                /** The value after one of the page's own labels ("Description:", "Series Updated:"). */
+                fun after(label: String) = meta?.children()?.firstOrNull {
+                    it.tagName() == "dt" && it.text().trim().startsWith(label, true)
+                }?.nextElementSibling()
+                AO3Result.Success(AO3SeriesDetailPage(works.value, title, usernames, stat("works", "Works"), stat("words", "Words"),
+                    creators = meta?.select("a[rel=author]").orEmpty().map { it.text().trim() }.filter { it.isNotEmpty() }.distinct(),
+                    summary = after("Description")?.text()?.trim().orEmpty(),
+                    isComplete = when (figure("complete", "Complete")?.lowercase()) { "yes" -> true; "no" -> false; else -> null },
+                    bookmarkCount = stat("bookmarks", "Bookmarks"),
+                    dateUpdated = after("Series Updated")?.text()?.trim().orEmpty()))
             }
         }
     }
@@ -114,4 +127,7 @@ class AO3SeriesRepository(
 
 /** Display-only metadata; no persistence/backup format. */
 data class AO3SeriesDetailPage(val page: AO3SearchPage, val title: String, val creatorUsernames: List<String>,
-    val workCount: Int? = null, val words: Int? = null)
+    val workCount: Int? = null, val words: Int? = null,
+    /** The series's own facts from its page's header: iOS draws them in a card over the works. */
+    val creators: List<String> = emptyList(), val summary: String = "", val isComplete: Boolean? = null,
+    val bookmarkCount: Int? = null, val dateUpdated: String = "")

@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.MenuBook
+import androidx.compose.material.icons.outlined.Event
 import androidx.compose.material.icons.outlined.ExpandLess
 import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material3.Card
@@ -424,6 +425,14 @@ fun SensitiveWorkRow(
                                     hits = hits,
                                     showsZeroStats = showsZeroStats
                                 )
+                            )
+                            // iOS's standard card closes with the day AO3 gives the work. The
+                            // ledger card had it and this one did not.
+                            if (dateText.isNotBlank()) CardMetaLine(
+                                text = dateText,
+                                icon = androidx.compose.material.icons.Icons.Outlined.Event,
+                                accessibilityLabel = "Updated $dateText",
+                                color = if (mutedHistory) tokens.secondaryInk else MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                         footer?.invoke()
