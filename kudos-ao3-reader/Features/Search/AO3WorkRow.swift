@@ -277,9 +277,15 @@ struct AO3WorkRow: View {
         }
     }
 
+    /// Series, Private and Rec sit on the kicker's line. Without a fandom there was
+    /// no line, so a private bookmark of a work that names none did not say so.
+    private var hasLedgerBadges: Bool {
+        work.seriesTitle != nil || bookmark?.isPrivate == true || bookmark?.isRecommendation == true
+    }
+
     private var searchLedgerIdentity: some View {
         VStack(alignment: .leading, spacing: 5) {
-            if primaryFandom != nil || isExpandable {
+            if primaryFandom != nil || isExpandable || hasLedgerBadges {
                 HStack(alignment: .top, spacing: 5) {
                     if let primaryFandom {
                         Button { router.searchAO3(.fandom, primaryFandom) } label: {
