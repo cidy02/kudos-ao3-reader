@@ -226,7 +226,7 @@ internal fun WritingAssociationPicker(
                             SubjectRowSeparator()
                             SubjectFormRow("Language of the source", value = form.languageOptions.firstOrNull { it.value == form.parentWork.languageID }?.title
                                 ?: form.parentWork.languageID.ifEmpty { "Select…" }, valueMaxLines = Int.MAX_VALUE,
-                                onClick = { languageChoice = true })
+                                showsChoice = true, onClick = { languageChoice = true })
                         }
                     }
                 }

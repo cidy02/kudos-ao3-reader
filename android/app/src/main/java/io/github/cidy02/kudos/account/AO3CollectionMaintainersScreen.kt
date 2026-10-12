@@ -136,7 +136,7 @@ fun AO3CollectionMaintainersScreen(
                                 // The menu has its own row, so sending cannot open the role picker.
                                 Box(Modifier.fillMaxWidth()) {
                                     SubjectFormRow("Invite as", value = state.role.title, valueMaxLines = Int.MAX_VALUE,
-                                        onClick = { roleMenu = true })
+                                        showsChoice = true, onClick = { roleMenu = true })
                                     DropdownMenu(expanded = roleMenu, onDismissRequest = { roleMenu = false }, containerColor = tokens.cardFill) {
                                         listOf(AO3CollectionParticipantRole.Moderator, AO3CollectionParticipantRole.Owner).forEach { role ->
                                             DropdownMenuItem(text = { Text(role.title, color = tokens.primaryInk,

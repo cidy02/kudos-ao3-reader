@@ -171,7 +171,7 @@ fun SubjectTextFieldRow(
             trailing()
         } else if (stacked) Column(Modifier.fillMaxWidth().padding(horizontal = 13.dp, vertical = 11.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text(label, color = tokens.primaryInk, fontSize = 14.5.sp, lineHeight = 20.sp,
+            Text(io.github.cidy02.kudos.ui.subject.formLabelText(label), color = tokens.primaryInk, fontSize = 14.5.sp, lineHeight = 20.sp,
                 modifier = Modifier.spokenAs(label, byControl = true))
             input()
         } else SubjectFormRow(label, labelSpokenByControl = true, trailing = { Box(Modifier.fillMaxWidth(0.55f)) { input() } })

@@ -238,7 +238,9 @@ fun AuthorProfileScreen(
 
     LaunchedEffect(route.id, sessionGeneration) {
         scopeState = AO3AuthorWorksScope.Works
-        tab = AuthorTab.Works
+        // The tab the page was opened on. This said Works, and it runs on the first
+        // composition too, so the account's Series row opened the reader's works.
+        tab = initialTab
         headerStale = false; tabStale = false
         header = null; works = null; series = null; bookmarks = null; about = null
         loadHeader()
@@ -344,9 +346,11 @@ fun AuthorProfileScreen(
     // iOS activation waits for a usable header before reading the selected index.
     // A missing/refused author must not trigger another read known to be unusable.
     LaunchedEffect(header, route.id, sessionGeneration) {
-        if (!refreshingProfile && header != null && !isDashboard && works == null && !tabLoading && tabError == null && tab == AuthorTab.Works) {
-            loadTab(AuthorTab.Works, 1)
-        }
+        val loaded = when (tab) {
+            AuthorTab.Works -> works; AuthorTab.Series -> series
+            AuthorTab.Bookmarks -> bookmarks; AuthorTab.About -> about
+        } != null
+        if (!refreshingProfile && header != null && !isDashboard && !loaded && !tabLoading && tabError == null) loadTab(tab, 1)
     }
 
     val shareContext = androidx.compose.ui.platform.LocalContext.current

@@ -173,7 +173,7 @@ internal fun AO3ChallengeSettingsEditScreen(slug: String, title: String, viewerI
                             form.dateField(date)?.let { key -> item { ChallengeEditPanel {
                                 val date = challengeWallClock(form[key])
                                 SubjectFormRow(labels[index], value = if (date == null) form[key].ifEmpty { "Not set" }
-                                    else challengeSentText(form[key]), valueMaxLines = Int.MAX_VALUE,
+                                    else challengeSentText(form[key]), valueMaxLines = Int.MAX_VALUE, showsChoice = true,
                                     onClick = if (!busy && form.editable(key) && date != null) ({ dateEditing = key to date }) else null)
                                 if (form[key].isEmpty() && form.editable(key)) SettingsActionRow("Set", {
                                     dateEditing = key to java.time.LocalDateTime.now(java.time.ZoneOffset.UTC)

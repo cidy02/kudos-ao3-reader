@@ -52,7 +52,7 @@ class AuthorProfileSortScreenTest {
         }
     }
 
-    private fun show() {
+    private fun show(initialTab: AuthorTab = AuthorTab.Works) {
         val chrome = PushedShellChrome()
         val repo = AO3AuthorRepository(publicClient = client, parseDispatcher = Dispatchers.Unconfined)
         compose.setContent {
@@ -60,12 +60,19 @@ class AuthorProfileSortScreenTest {
                 CompositionLocalProvider(LocalPushedShellChrome provides chrome) {
                     Column {
                         Row { chrome.trailingContent?.invoke(this) }
-                        AuthorProfileScreen("Avery_Archive", authorRepository = repo, onOpenWork = {})
+                        AuthorProfileScreen("Avery_Archive", initialTab = initialTab, authorRepository = repo, onOpenWork = {})
                     }
                 }
             }
         }
-        awaitText("Two Voices at Dawn")
+        awaitText(if (initialTab == AuthorTab.Series) "The Dawn Cycle" else "Two Voices at Dawn")
+    }
+
+    /** The account's Series row asks for the Series tab. The page reset itself to Works as it opened. */
+    @Test fun aPageOpenedOnSeriesShowsTheSeriesAndNeverAsksForTheWorks() {
+        show(AuthorTab.Series)
+        compose.onNodeWithText("The Hidden Cycle").assertExists()
+        assertTrue(requests.none { it.toHttpUrl().encodedPath.endsWith("/works") })
     }
 
     private fun awaitText(text: String) {

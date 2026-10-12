@@ -1744,3 +1744,7 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   dashboard knows it is the reader's own; "+" starts a work from the writer's Works and
   Dashboard; the dashboard's fandoms carry their counts and its sections their "See all"
   links. Reverse: the commit that names 3cq.
+- **2026-10-12 · The Series row and the form's choices (3cr).** An author page opens on the
+  tab it was asked for (the account's Series row opened Works). A form row that opens a
+  choice draws its value in the accent with "⌄" (`showsChoice`), Android's mark for iOS's
+  picker; a required mark is in the accent. Reverse: the commit that names 3cr.

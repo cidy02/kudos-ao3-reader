@@ -352,7 +352,8 @@ internal fun WritingWorkFormContent(model: WritingWorkFormState, account: String
                     if (form.backdate && form.chapter != null) {
                         SubjectRowSeparator()
                         SubjectFormRow("Publication date", value = form.publicationDate().format(DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM)),
-                            onClick = if (state.saving || state.publicationNeedRefresh) null else ({ dating = true }), valueMaxLines = Int.MAX_VALUE)
+                            onClick = if (state.saving || state.publicationNeedRefresh) null else ({ dating = true }), valueMaxLines = Int.MAX_VALUE,
+                            showsChoice = true)
                     }
                     SubjectRowSeparator()
                     WorkFormToggle("Only show to registered users", form.restricted, enabled = !state.saving && !state.publicationNeedRefresh) { model.toggle(WorkFormSwitch.Restricted, it) }
@@ -422,7 +423,7 @@ internal fun WorkFormFootnote(text: String) {
 private fun WorkFormChoiceRow(label: String, form: AO3WorkForm, kind: WorkFormChoice, enabled: Boolean = true, onPick: (WorkFormChoice) -> Unit) {
     val value = form.choiceValue(kind)
     SubjectFormRow(label, value = form.choiceOptions(kind).firstOrNull { it.value == value }?.title ?: value.ifEmpty { "Select…" },
-        valueMaxLines = Int.MAX_VALUE, onClick = if (enabled) ({ onPick(kind) }) else null)
+        valueMaxLines = Int.MAX_VALUE, showsChoice = true, onClick = if (enabled) ({ onPick(kind) }) else null)
 }
 
 @Composable
@@ -533,7 +534,7 @@ internal fun WorkFormDateSheet(date: LocalDate, onChange: (LocalDate) -> Unit, b
             if (part == null) itemsIndexed(listOf("Year" to date.year.toString(), "Month" to date.month.getDisplayName(TextStyle.FULL, Locale.getDefault()),
                 "Day" to date.dayOfMonth.toString())) { index, (label, value) ->
                 if (index > 0) SubjectRowSeparator()
-                SubjectFormRow(label, value = value, onClick = { component = label }, valueMaxLines = Int.MAX_VALUE)
+                SubjectFormRow(label, value = value, onClick = { component = label }, valueMaxLines = Int.MAX_VALUE, showsChoice = true)
             } else itemsIndexed(choices) { index, option ->
                 if (index > 0) SubjectRowSeparator()
                 val selected = when (part) { "Year" -> date.year; "Month" -> date.monthValue; else -> date.dayOfMonth }
