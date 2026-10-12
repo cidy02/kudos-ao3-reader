@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.library
 
+import io.github.cidy02.kudos.works.finishedActionLabel
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -170,7 +171,7 @@ internal fun ScopedSelectionBar(
                             add(item("Tag") { tagging = true })
                             add(item("Download missing copies", missing.isNotEmpty() && downloadQueue != null) { downloadMissing() })
                         }
-                        add(item(if (allFinished) "Mark Unfinished" else "Mark Finished") {
+                        add(item(finishedActionLabel(allFinished)) {
                             act { selectedWorks.forEach { workRepository.setFinished(it.id, !allFinished) } }
                         })
                     }
