@@ -68,6 +68,9 @@ class SearchViewModel(
     private val collections = MutableStateFlow<List<WorkCollection>>(emptyList())
 
     private var lastFilters = AO3SearchFilters()
+
+    /** The filters of the results on screen, which the filter sheet's unsaved edits are not. */
+    val resultFilters: AO3SearchFilters get() = lastFilters
     private var searchGeneration = 0
     private var requestedPage: Int? = null
     private var loadJob: Job? = null

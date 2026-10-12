@@ -2,6 +2,8 @@ package io.github.cidy02.kudos.network.ao3.search
 
 import io.github.cidy02.kudos.network.ao3.AO3Constants
 
+/** Serializable for one use: the app keeps the works its open pages were given (`RemoteSummaryCacheSaver`). */
+@kotlinx.serialization.Serializable
 data class AO3WorkSummary(
     val id: Long,
     val title: String,
