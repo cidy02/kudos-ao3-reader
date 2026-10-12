@@ -1719,3 +1719,6 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   step 4 had given it to both. The rating chip says "G", "T", "M", "E" or "NR", as iOS's
   does, so the four chips fit one line; the full rating is spoken. Reverse: the commit that
   names 3cp.
+- **2026-10-11 · A work's page names the action and counts Saved for Later (3cp, second
+  commit).** The button for a finished work says "Mark as Still Reading", as iOS; "My copy"
+  counts Saved for Later as a queue, as iOS. Reverse: the commit that names them.

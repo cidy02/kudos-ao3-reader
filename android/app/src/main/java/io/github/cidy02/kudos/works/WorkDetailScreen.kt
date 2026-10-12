@@ -1629,7 +1629,7 @@ private fun WorkDetailContent(
                 )
             }
 
-            // 11. Page Actions: "Mark as Finished" / "Finished", "Open on AO3"
+            // 11. Page Actions: "Mark as Finished" / "Mark as Still Reading", "Open on AO3"
             Spacer(Modifier.height(20.dp))
             WorkDetailPageActions(
                 isFinished = state.local?.isFinished == true,
@@ -1753,28 +1753,12 @@ private data class WorkDetailUiState(
         ?: ""
 
     val myCopySummary: String
-        get() {
-            val segments = mutableListOf<String>()
-            if (local?.isDownloaded == true) {
-                segments.add("Downloaded")
-            }
-            val queueCount = queueMemberships.size
-            if (queueCount > 0) {
-                segments.add("$queueCount " + if (queueCount == 1) "queue" else "queues")
-            }
-            val collectionCount = collections.size
-            if (collectionCount > 0) {
-                segments.add("$collectionCount " + if (collectionCount == 1) "collection" else "collections")
-            }
-            val tagCount = userTags.size
-            if (tagCount > 0) {
-                segments.add("$tagCount " + if (tagCount == 1) "tag" else "tags")
-            }
-            if (segments.isEmpty()) {
-                return "You haven't saved anything on this device yet"
-            }
-            return segments.joinToString(" · ")
-        }
+        get() = io.github.cidy02.kudos.works.detail.myCopySummary(
+            isDownloaded = local?.isDownloaded == true,
+            queueCount = queueMemberships.size + if (inSavedForLater) 1 else 0,
+            collectionCount = collections.size,
+            tagCount = userTags.size
+        )
 }
 
 private fun AO3WorkMetadata.toRemoteSummary(workId: Long): AO3WorkSummary {

@@ -70,7 +70,8 @@ class ReaderFanMenuUiTest {
             }
         }
         compose.onNodeWithText("Mark as Finished").performClick()
-        compose.onNodeWithText("Finished").assertExists()
+        // The button names what it will do next, as on iOS (it said "Finished").
+        compose.onNodeWithText("Mark as Still Reading").assertExists()
         assertEquals(1, toggles)
     }
 

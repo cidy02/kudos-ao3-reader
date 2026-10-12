@@ -460,7 +460,7 @@ fun WorkDetailCommentsSection(
 
 /**
  * Artboard 1a's page outline buttons (`WorkDetailFactsSections.swift:182`).
- * "Mark as Finished" / "Finished", and "Open on AO3".
+ * "Mark as Finished" / "Mark as Still Reading", and "Open on AO3".
  */
 @Composable
 fun WorkDetailPageActions(
@@ -478,7 +478,9 @@ fun WorkDetailPageActions(
         horizontalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         WorkDetailOutlineButton(
-            title = if (isFinished) "Finished" else "Mark as Finished",
+            // The action, as iOS `WorkActionLabels.finished`. It said "Finished", which read as
+            // a state on a button that takes the work back out of Finished.
+            title = if (isFinished) "Mark as Still Reading" else "Mark as Finished",
             enabled = !isWorking,
             onClick = onToggleFinished,
             modifier = Modifier.weight(1f)
@@ -652,4 +654,19 @@ fun WorkDetailMyCopyRow(
             )
         }
     }
+}
+
+/**
+ * iOS `WorkDetailComponents.myCopySummary`: the line under "My copy". Saved for Later is a
+ * queue like any other and counts as one; Android's count had left it out.
+ */
+internal fun myCopySummary(isDownloaded: Boolean, queueCount: Int, collectionCount: Int, tagCount: Int): String {
+    fun counted(count: Int, noun: String) = "$count " + if (count == 1) noun else "${noun}s"
+    val segments = listOfNotNull(
+        "Downloaded".takeIf { isDownloaded },
+        counted(queueCount, "queue").takeIf { queueCount > 0 },
+        counted(collectionCount, "collection").takeIf { collectionCount > 0 },
+        counted(tagCount, "tag").takeIf { tagCount > 0 }
+    )
+    return segments.joinToString(" · ").ifEmpty { "You haven't saved anything on this device yet" }
 }
