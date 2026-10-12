@@ -150,6 +150,7 @@ fun WorkDetailIdentityHeader(
             AuthorBylineRow(
                 authorNames = authorNames,
                 displayAuthor = author,
+                accent = palette.accent,
                 onOpenAuthor = onOpenAuthor
             )
         }
@@ -163,6 +164,8 @@ fun WorkDetailIdentityHeader(
 private fun AuthorBylineRow(
     authorNames: List<String>,
     displayAuthor: String,
+    /** A name that opens its author is in the page's accent, as iOS draws it. It was grey, like "Anonymous". */
+    accent: androidx.compose.ui.graphics.Color,
     onOpenAuthor: (String) -> Unit
 ) {
     val tokens = LocalKudosTokens.current
@@ -189,7 +192,7 @@ private fun AuthorBylineRow(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     text = name,
-                    color = tokens.secondaryInk,
+                    color = accent,
                     fontSize = 15.5.sp,
                     fontWeight = FontWeight.Medium,
                     maxLines = 1,

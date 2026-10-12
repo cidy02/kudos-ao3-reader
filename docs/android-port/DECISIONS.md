@@ -1803,3 +1803,5 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   Pages read for a comments screen are kept in memory by that screen for five minutes
   each, one reader's, and a write empties them (`docs/AO3_NETWORKING_POLICY.md`,
   "Comments"). Reverse: the commit that names 3df.
+- **2026-10-12 · A work page's byline (3dg).** A name that opens its author is drawn in the
+  page's accent, as iOS. Reverse: the commit that names 3dg.
