@@ -10,7 +10,9 @@ enum class AccountShortcut(val id: String, val title: String, val icon: ImageVec
     Dashboard("dashboard", "Dashboard", Icons.Outlined.GridView),
     MarkedForLater("markedForLater", "Marked for Later", Icons.Outlined.Schedule, AccountListType.MarkedForLater),
     Bookmarks("bookmarks", "Bookmarks", Icons.Outlined.BookmarkBorder, AccountListType.Bookmarks),
-    Collections("collections", "Collections", Icons.Outlined.Collections),
+    // Stacked squares, iOS's `square.stack`. Material's "Collections" is a picture gallery,
+    // and Series had the same glyph beside it.
+    Collections("collections", "Collections", Icons.Outlined.FilterNone),
     Subscriptions("subscriptions", "Subscriptions", Icons.Outlined.NotificationsNone, AccountListType.Subscriptions),
     Works("works", "Works", Icons.Outlined.Description, AccountListType.MyWorks),
     Drafts("drafts", "Drafts", Icons.Outlined.EditNote),

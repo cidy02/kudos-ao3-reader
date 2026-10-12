@@ -1735,3 +1735,7 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   the page's wash palette (`LocalShellWashes.page`), where it had kept the app accent "as
   on iOS". A page with no wash keeps the app accent. The page's content is untouched.
   Reverse: the provider around `MainScaffold`'s outer box.
+- **2026-10-12 · The symbols tray says what it does not know as iOS does (3cp, fifth
+  commit).** No rating: no tile. No category: the two figures. Unknown completion: "?".
+  And the Account hub's Collections and Series have their own glyphs. Reverse: the commit
+  that names them.

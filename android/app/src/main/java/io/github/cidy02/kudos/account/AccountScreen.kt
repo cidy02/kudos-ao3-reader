@@ -73,6 +73,8 @@ import androidx.compose.material.icons.outlined.Cancel
 import androidx.compose.material.icons.outlined.CardGiftcard
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Collections
+import androidx.compose.material.icons.outlined.FilterNone
+import androidx.compose.material.icons.outlined.Layers
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Drafts
 import androidx.compose.material.icons.outlined.EditNote
@@ -277,7 +279,7 @@ fun AccountScreen(
                     HorizontalDivider(modifier = Modifier.padding(start = 50.dp))
                     AccountScopeRow(
                         title = "Collections",
-                        icon = Icons.Outlined.Collections,
+                        icon = Icons.Outlined.FilterNone,
                         onClick = onOpenAO3Collections
                     )
                     HorizontalDivider(modifier = Modifier.padding(start = 50.dp))
@@ -303,7 +305,7 @@ fun AccountScreen(
                     HorizontalDivider(modifier = Modifier.padding(start = 50.dp))
                     AccountScopeRow(
                         title = "Series",
-                        icon = Icons.Outlined.Collections,
+                        icon = Icons.Outlined.Layers,
                         onClick = { username?.let { onOpenSeries("https://archiveofourown.org/users/$it/series") } }
                     )
                     HorizontalDivider(modifier = Modifier.padding(start = 50.dp))
@@ -1005,7 +1007,7 @@ private fun SignedOutPreviewSection() {
             HorizontalDivider(modifier = Modifier.padding(start = 50.dp))
             AccountScopeRow(title = "Bookmarks", icon = Icons.Outlined.BookmarkBorder, onClick = {})
             HorizontalDivider(modifier = Modifier.padding(start = 50.dp))
-            AccountScopeRow(title = "Collections", icon = Icons.Outlined.Collections, onClick = {})
+            AccountScopeRow(title = "Collections", icon = Icons.Outlined.FilterNone, onClick = {})
             HorizontalDivider(modifier = Modifier.padding(start = 50.dp))
             AccountScopeRow(title = "Subscriptions", icon = Icons.Outlined.NotificationsNone, onClick = {})
         }
@@ -1013,7 +1015,7 @@ private fun SignedOutPreviewSection() {
         AccountScopeGroup("Writing") {
             AccountScopeRow(title = "Works", icon = Icons.Outlined.Description, onClick = {})
             HorizontalDivider(modifier = Modifier.padding(start = 50.dp))
-            AccountScopeRow(title = "Series", icon = Icons.Outlined.Collections, onClick = {})
+            AccountScopeRow(title = "Series", icon = Icons.Outlined.Layers, onClick = {})
             HorizontalDivider(modifier = Modifier.padding(start = 50.dp))
             AccountScopeRow(title = "Drafts", icon = Icons.Outlined.Drafts, onClick = {})
         }
