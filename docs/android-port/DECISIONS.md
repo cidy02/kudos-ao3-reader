@@ -1704,3 +1704,8 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   shared list menu says "More"; a work's page and the reader say "More actions". Android
   said "More actions" on five lists, "Menu" on an author's profile and "More options" on
   the Library. Seven screens changed; a work's page keeps "More actions".
+- **2026-10-11 · Compact is the account lists' third Layout (3co, step 6).** Covers under
+  each heading in History and on the works lists; Bookmarks keeps its cards (iOS does). A
+  work not in the Library gets a cover drawn from AO3's blurb through a display-only
+  `SavedWork`. Android still opens on Ledger; opening on Compact, as iOS does, is the
+  owner's to say. Reverse: remove `Compact` from `AccountDisplayMode`.

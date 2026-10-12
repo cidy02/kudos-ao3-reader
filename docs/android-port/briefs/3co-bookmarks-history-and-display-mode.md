@@ -198,3 +198,31 @@ ring, here and on Home (the same row; iOS not checked).
 **Still left from this brief:** Compact on the account lists; Clear History; one name for
 the overflow button ("More actions", "More", "Menu").
 
+## Step 6, landed 2026-10-11 (Claude alone; gate 2,614): Compact
+
+- **"Compact" is the third Layout** on History, Bookmarks and the account's works lists:
+  covers, as many to a line as fit (iOS `AccountWorksCompactGrid`). History draws them
+  under each time heading. A bookmark's card is the same in every layout, so Bookmarks in
+  Compact draws its cards (iOS `compactRow` does the same).
+- A cover is the redesign's cover card (`SubjectWorkCoverCard`): a saved copy's own, with
+  its place in it and its blur; for a work not in the Library, one drawn from AO3's blurb
+  (a display-only `SavedWork`, marked `ponytail:` where it is made). A tap opens the work,
+  or reveals a blurred one.
+- "Expand All" is not offered in Compact (iOS).
+- **Android still opens on Ledger.** The owner has been told twice that iOS opens on
+  Compact and that the choice is theirs.
+
+**Looked at:** History in Compact beside the iPhone's, in Dark and at twice the text size;
+Bookmarks in Compact; a cover tapped (it opened the work); the menu without Expand All; the
+layout put back to Ledger.
+
+**Not seen: two covers on one line.** The demo's History has one work under each heading,
+and the demo's own-works route opens the author's page, which has no Compact (iOS has none
+there either). The arithmetic says two fit (164 + 12 + 164 in 379dp).
+
+**Not the same as iOS, and left:** Android's cover names the author and draws four tiles in
+its tray; iOS's History cover has the title and three. In Compact History has no Delete
+and no visit line, on both.
+
+**Left from this brief: Clear History** (a write; a brief of its own).
+
