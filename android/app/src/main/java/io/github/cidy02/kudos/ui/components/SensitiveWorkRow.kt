@@ -151,6 +151,12 @@ fun SensitiveWorkRow(
      * work's card (`AO3WorkRow.standardCard`) and not on a saved work's (`WorkRow`).
      */
     showsStatusTray: Boolean = false,
+    /**
+     * A saved work's detailed card, iOS `WorkRow`: every fandom is on its line, and the card
+     * unfolds only for a long summary or for tags. An AO3 work's card (`AO3WorkRow`) names one
+     * fandom and counts the rest, and unfolds for those and for its warnings too.
+     */
+    savedWork: Boolean = false,
     onClick: () -> Unit,
     onReveal: (() -> Unit)? = null,
     onSelect: (() -> Unit)? = null,
@@ -162,9 +168,10 @@ fun SensitiveWorkRow(
     var expanded by remember(id) { mutableStateOf(expandAll) }
     LaunchedEffect(expandAll) { expanded = expandAll }
     
-    val expandable = summary.length > 120 || fandoms.size > 1 || discoveryTags.isNotEmpty() ||
+    val savedCard = savedWork && !ledger
+    val expandable = summary.length > 120 || discoveryTags.isNotEmpty() ||
         relationships.isNotEmpty() || characters.isNotEmpty() || freeforms.isNotEmpty() ||
-        warnings.any { it.isNotBlank() }
+        (!savedCard && (fandoms.size > 1 || warnings.any { it.isNotBlank() }))
     
     val tokens = LocalKudosTokens.current
     val palette = SubjectPalette.fromHue(HomeFacts.workHue(fandoms, title), tokens.theme)
@@ -316,7 +323,16 @@ fun SensitiveWorkRow(
                                 }
                             }
 
-                            if (fandoms.isNotEmpty()) {
+                            if (fandoms.isNotEmpty() && savedCard) {
+                                // iOS `WorkRow`: the fandoms on one line, all of them.
+                                CardMetaLine(
+                                    text = fandoms.joinToString(", "),
+                                    icon = Icons.AutoMirrored.Outlined.MenuBook,
+                                    accessibilityLabel = "Fandom: ${fandoms.joinToString(", ")}",
+                                    color = if (mutedHistory) tokens.secondaryInk else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.clickable { tagSearch(SearchSubjectField.FANDOM, fandoms.first()) }
+                                )
+                            } else if (fandoms.isNotEmpty()) {
                                 val hidden = if (expanded) 0 else fandoms.size - 1
                                 val visibleFandoms = if (expanded) fandoms else fandoms.take(1)
                                 visibleFandoms.forEachIndexed { index, fandom ->
@@ -350,7 +366,7 @@ fun SensitiveWorkRow(
                                 val hasCategorizedDiscoveryTags = relationships.isNotEmpty() ||
                                     characters.isNotEmpty() || freeforms.isNotEmpty()
                                 val groups = buildList {
-                                    if (warnings.isNotEmpty()) {
+                                    if (warnings.isNotEmpty() && !savedCard) {
                                         add(Triple("Archive Warnings", warnings, SearchSubjectField.WARNING))
                                     }
                                     if (relationships.isNotEmpty()) {
@@ -745,6 +761,7 @@ fun SensitiveWorkRow(
         mutedHistory = mutedHistory,
         ledger = ledger,
         footer = footer,
+        savedWork = true,
         modifier = modifier
     )
 }

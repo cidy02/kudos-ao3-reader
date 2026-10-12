@@ -1722,3 +1722,8 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
 - **2026-10-11 · A work's page names the action and counts Saved for Later (3cp, second
   commit).** The button for a finished work says "Mark as Still Reading", as iOS; "My copy"
   counts Saved for Later as a queue, as iOS. Reverse: the commit that names them.
+- **2026-10-11 · A saved work's detailed card follows iOS `WorkRow`, an AO3 work's follows
+  `AO3WorkRow` (3cp, third commit).** Saved: every fandom on the line, the unfold only for
+  a long summary or tags, no warnings group when unfolded. AO3: one fandom and a count,
+  the unfold for those and warnings too, the symbols tray. Android had one rule for both.
+  Reverse: the commit that names it.

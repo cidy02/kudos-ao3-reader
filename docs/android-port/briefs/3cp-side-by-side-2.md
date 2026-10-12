@@ -1,6 +1,6 @@
 # 3cp: more pages beside the iPhone's (Android)
 
-Done 2026-10-11 by Claude, alone. Gate 2,618. Two commits. Pictures: `shots/3cp/`. The method is 3cm's.
+Done 2026-10-11 by Claude, alone. Gate 2,618. Three commits. Pictures: `shots/3cp/`. The method is 3cm's.
 
 ## Fixed
 
@@ -24,6 +24,12 @@ Done 2026-10-11 by Claude, alone. Gate 2,618. Two commits. Pictures: `shots/3cp/
    "Downloaded · 1 collection". Saved for Later is a queue and counts as one now
    (`myCopySummary`, iOS's rule, `MyCopySummaryTest`).
 
+5. **A saved work's detailed card lists every fandom and unfolds only for a long summary
+   or for tags** (iOS `WorkRow`; third commit). Android used the AO3 card's rules for both:
+   it named one fandom and "+1 other", and offered the unfold glyph to a work with nothing
+   under it but "No Archive Warnings Apply". The unfolded card no longer repeats the
+   warnings as a group, as on iOS. An AO3 work's card keeps its own rules (`savedWork`).
+
 **Compared and the same:** what a tap on a saved work's card opens (the reader, on both:
 iOS `WorkCardTap.destination`); the rest of a saved work's page (kicker, title, the four
 figures, the Read card, the tag groups, the language line, kudos and hits, My copy).
@@ -32,16 +38,21 @@ figures, the Read card, the tag groups, the language line, kudos and hits, My co
 
 - iOS's detailed card prints comments and bookmarks when they are zero ("0"); Android
   leaves them out for these demo works. May be the two demos' data.
-- Android's detailed card has an unfold glyph beside the title where iOS's has none for
-  the same work (a work with only "No Archive Warnings Apply" counts as having more to
-  show on Android).
-- **Not compared yet from this batch:** the Finished section (the pictures are taken).
+- Where a card does unfold, Android's glyph is before the title and iOS's control is at
+  the card's foot. Android's demo gives its works a tag ("Slow Burn") that iOS's demo does
+  not, so the glyph shows on Android's demo cards and on none of iOS's.
+- **The Finished section, compared on a fresh demo:** the same but for the demo's own
+  data (iOS's "Tea in the Jasmine Dragon" is a work in progress and sorts first; Android's
+  is complete and sorts second) and the zeros above.
+- **The tab bar marks Home on a Library page opened by a debug route.** Through the
+  Library tab it marks Library; nothing to fix.
 - The reader's own menu still answers "Mark as Finished" with "Finished"
   (`ReaderFanMenuUiTest` pins the page's button, now brought along; the reader's menu was
   not looked at).
 
 ## A note on the emulator's demo
 
-Sodium Lights is now under Finished on the emulator: it was opened in the reader earlier
-today and its short demo book ends on the first page. Home's "Continue reading" and
-Reading Now therefore differ from the simulator's until the demo is seeded again.
+It had drifted through the day's testing (Sodium Lights finished, "Tea in the Jasmine
+Dragon" queued, an extra queue and collection). **It was seeded afresh at 22:06**
+(`adb -s emulator-5556 shell pm clear io.github.cidy02.kudos`, then any `open_route`): the
+layout choices, the privacy setting and the reveal state are back to their defaults.
