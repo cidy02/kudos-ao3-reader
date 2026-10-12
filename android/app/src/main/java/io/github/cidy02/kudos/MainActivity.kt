@@ -30,11 +30,14 @@ class MainActivity : FragmentActivity() {
         } else {
             DemoNetwork.markNotDemo()
         }
+        io.github.cidy02.kudos.reader.readium.ReaderFragmentRestore.before(this)
         super.onCreate(savedInstanceState)
+        io.github.cidy02.kudos.reader.readium.ReaderFragmentRestore.after(this, savedInstanceState)
         enableEdgeToEdge()
         // "Open with Kudos" / "Share to Kudos" — the manifest advertises these
         // mime types, so something has to actually read the incoming Intent.
-        ExternalFileImport.offer(intent)
+        // Once: a restart hands the same Intent back, and the file was offered a second time.
+        if (savedInstanceState == null) ExternalFileImport.offer(intent)
         DemoNetwork.applyCachedPagesExtra(intent)
         publishDebugRoute(intent)
         val container = (application as KudosApplication).container

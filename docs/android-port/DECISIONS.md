@@ -1752,3 +1752,10 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   ("Series Complete: No" was read as complete). The card says Complete and Restricted in
   pills, prints the whole word count and the bookmarks, and the figure reader never takes
   a label. Reverse: the commit that names 3cs.
+- **2026-10-12 · Restarts of the activity (3ct).** The activity handles `uiMode`,
+  `fontScale`, `keyboard` and `navigation` itself, so the phone switching to dark, a
+  text-size change or a keyboard being connected no longer restarts it (what was being
+  typed was lost, and the reader crashed). Where it does restart (a language change, the
+  return after the process was killed), Readium's reader fragment is not rebuilt from
+  saved state: `ReaderFragmentRestore`. A launching file is offered for import on a fresh
+  start only. Reverse: the commit that names 3ct.
