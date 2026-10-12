@@ -1772,3 +1772,6 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
 - **2026-10-12 · A work reached by its id (3cw).** The work page's own heading, byline and
   summary are read when a page has only the work's id, and the reader is no longer told
   what the parser lacks. Reverse: the commit that names 3cw.
+- **2026-10-12 · Edit tags' chips (3cx).** A tag chip is drawn at its own size inside its
+  48 dp touch target, with "Add" after the last chip, as iOS; the layout's allowance for
+  the chip's mark grows with the text size. Reverse: the commit that names 3cx.
