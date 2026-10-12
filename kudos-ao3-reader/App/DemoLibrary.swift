@@ -442,12 +442,19 @@ final class DemoNetworkBlock: URLProtocol {
     /// Path pattern → fixture file, first match wins.
     private static let routes: [(pattern: String, fixture: String)] = [
         ("^/works/new", "ao3_work_new_draft"),
+        // Writing's own pages (the same ones Android's demo answers with). Without them "Add
+        // chapter", "Chapters" and a series's page each ended at "Couldn't load", and none of
+        // the three screens could be looked at.
+        ("^/works/\\d+/chapters/new", "ao3_demo_chapter_995006_new"),
+        ("^/works/\\d+/chapters/\\d+/edit", "ao3_demo_chapter_995006_posted"),
+        ("^/works/\\d+/navigate", "ao3_chapter_navigate"),
         ("^/works/\\d+/edit", "ao3_work_edit"),
         ("comments", "ao3_comments_page"),
         ("^/works/\\d+", "ao3_work_bookmarked_subscribed"),
         ("edit_multiple", "ao3_edit_multiple"),
         // Collections and challenges (task 5). Most specific first.
         ("^/series/\\d+/edit", "ao3_series_edit"),
+        ("^/series/\\d+/?$", "ao3_demo_dawn_series"),
         ("^/collections/[^/]+/signups/\\d+", "ao3_challenge_signup"),
         // "Your Sign-up" with none yet asks for the blank form; it got the list, and said
         // "Couldn't load sign-up".
