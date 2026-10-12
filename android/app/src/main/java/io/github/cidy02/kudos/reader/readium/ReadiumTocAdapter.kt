@@ -4,8 +4,10 @@ import io.github.cidy02.kudos.reader.ReaderSection
 import io.github.cidy02.kudos.reader.ReaderSectionBuilder
 import io.github.cidy02.kudos.reader.ReaderTocBuilder
 import io.github.cidy02.kudos.reader.ReaderTocEntry
+import kotlin.math.roundToInt
 import org.readium.r2.shared.publication.Link
 import org.readium.r2.shared.publication.Publication
+import org.readium.r2.shared.publication.services.positions
 import org.readium.r2.shared.util.Url
 
 /**
@@ -47,6 +49,21 @@ object ReadiumTocAdapter {
 
         return ReaderSectionBuilder.build(rawEntries, spineHrefs)
     }
+
+    /**
+     * Where in the work each file starts, as a whole percent, from its first position (iOS
+     * `chapterStartPercent`). Keyed by [ReaderSectionBuilder.hrefKey], so a contents row that
+     * carries a fragment finds its file. Empty when the publication has no positions.
+     */
+    suspend fun startPercents(publication: Publication): Map<String, Int> = startPercents(
+        runCatching { publication.positions() }.getOrDefault(emptyList())
+            .map { it.href.toString() to it.locations.totalProgression }
+    )
+
+    internal fun startPercents(positions: List<Pair<String, Double?>>): Map<String, Int> =
+        positions.groupBy({ ReaderSectionBuilder.hrefKey(it.first) }, { it.second })
+            .mapNotNull { (file, starts) -> starts.first()?.let { file to (it * 100).roundToInt() } }
+            .toMap()
 
     /** Resolve a TOC row to a publication [Link] suitable for [org.readium.r2.navigator.Navigator.go]. */
     fun resolveLink(publication: Publication, entry: ReaderTocEntry): Link? {
