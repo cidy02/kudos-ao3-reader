@@ -260,7 +260,15 @@ fun KudosApp(
             }
         }
 
-        when (effectiveCompletedOnboarding) {
+        // No page before the saved AO3 session is back. A page that returns with the app after
+        // its process was killed is composed at once: the Inbox asked AO3 before the session
+        // had been read from disk and told a signed-in reader "AO3 requires login". The read
+        // is a file; the wait is bounded all the same.
+        val savedSessionRead by androidx.compose.runtime.produceState(false) {
+            kotlinx.coroutines.withTimeoutOrNull(2_000) { container.authRepository.awaitSavedSession() }
+            value = true
+        }
+        when (if (savedSessionRead) effectiveCompletedOnboarding else null) {
             null -> Box(Modifier.fillMaxSize())
             false -> WelcomeScreen(
                 onContinue = {

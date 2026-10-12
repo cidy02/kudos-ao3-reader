@@ -57,6 +57,22 @@ class AO3AuthRepository(
     suspend fun restoreSession() {
         if (didRestore) return
         didRestore = true
+        try { readAndCheckSavedSession() } finally { savedSessionRead.complete(Unit) }
+    }
+
+    private val savedSessionRead = kotlinx.coroutines.CompletableDeferred<Unit>()
+
+    /**
+     * Returns once [restoreSession] has put the saved session back, or found there is none: the
+     * file's read, not its check against AO3, which can take as long as the network does.
+     *
+     * The session's generation is advanced when the restore *starts*, so a page that reloads on
+     * that asks AO3 before the session is there and is told to log in. The app draws no page
+     * until this returns, so no page is in that position.
+     */
+    suspend fun awaitSavedSession() = savedSessionRead.await()
+
+    private suspend fun readAndCheckSavedSession() {
         // Design review only (iOS AO3AuthService `DemoNetworkBlock.demoSignedIn`): a local demo
         // session; every AO3 request in the demo is answered by the fixtures.
         if (io.github.cidy02.kudos.network.ao3.DemoNetwork.isActive &&
@@ -121,6 +137,7 @@ class AO3AuthRepository(
             // only to have this continuation reinstall them immediately after.
             cookieStore.install(restored)
         }
+        savedSessionRead.complete(Unit)
 
         val validator = sessionValidator
         if (validator == null) {

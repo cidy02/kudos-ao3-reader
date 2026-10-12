@@ -6,6 +6,8 @@ import io.github.cidy02.kudos.network.ao3.AO3HttpResponse
 import io.github.cidy02.kudos.network.ao3.AO3Result
 import java.io.IOException
 import java.time.Instant
+import kotlinx.coroutines.async
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -13,6 +15,41 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class AO3SessionRestoreValidationTest {
+    /** The app draws its pages after this, so it must not wait for AO3 to answer. */
+    @Test
+    fun theSavedSessionIsBackBeforeItsCheckAgainstAO3Finishes() = runTest {
+        val session = testSession("AO3_Reader")
+        val checking = kotlinx.coroutines.CompletableDeferred<AO3SessionValidation>()
+        val repository = AO3AuthRepository(
+            sessionStore = MemorySessionStore(session),
+            cookieStore = MemoryCookieStore(),
+            sessionValidator = object : AO3SessionValidating {
+                override suspend fun validate(session: AO3Session) = checking.await()
+            }
+        )
+        val waiting = backgroundScope.async { repository.awaitSavedSession() }
+        testScheduler.runCurrent()
+        assertTrue("it waits until a restore has run", waiting.isActive)
+
+        val restore = backgroundScope.launch { repository.restoreSession() }
+        testScheduler.runCurrent()
+
+        assertTrue(waiting.isCompleted)
+        assertEquals("AO3_Reader", repository.username())
+        assertTrue("the check is still out", restore.isActive)
+        checking.complete(AO3SessionValidation.Valid(session))
+        restore.join()
+        assertEquals(AO3AuthState.SignedIn("AO3_Reader"), repository.state.value)
+    }
+
+    @Test
+    fun withNothingSavedTheWaitEndsToo() = runTest {
+        val repository = AO3AuthRepository(sessionStore = MemorySessionStore(null), cookieStore = MemoryCookieStore())
+        repository.restoreSession()
+        repository.awaitSavedSession()
+        assertEquals(AO3AuthState.SignedOut, repository.state.value)
+    }
+
     @Test
     fun restoreKeepsSessionWhenValidatorSaysValid() = runTest {
         val session = testSession("AO3_Reader")
