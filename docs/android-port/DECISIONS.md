@@ -1700,3 +1700,7 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
 - **2026-10-11 · One ledger row for saved works (3co, step 5).** A collection's Ledger draws
   the shared `WorkLedgerRow` (ring, kicker, tray) and its own copy is gone; that row's tray
   is the tray of four symbols, not four letters. Reverse: the commit that names 3co step 5.
+- **2026-10-11 · The overflow button is "More" on every list (3co's last small item).** iOS's
+  shared list menu says "More"; a work's page and the reader say "More actions". Android
+  said "More actions" on five lists, "Menu" on an author's profile and "More options" on
+  the Library. Seven screens changed; a work's page keeps "More actions".

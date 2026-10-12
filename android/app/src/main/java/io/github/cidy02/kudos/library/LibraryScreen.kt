@@ -1378,7 +1378,7 @@ private fun LibrarySectionContent(
                 if (!showsFavoriteScopes || hasWorkContent || hasPrivacyMenu) Box {
                     ToolbarCircleButton(
                         onClick = { showMenu = true },
-                        accessibilityName = "More options"
+                        accessibilityName = "More"
                     ) {
                         Icon(Icons.Filled.MoreVert, contentDescription = null)
                     }

@@ -397,7 +397,7 @@ fun RecentlyDeletedScreen(
                 Box {
                     ToolbarCircleButton(
                         onClick = { menuOpen = true },
-                        accessibilityName = "More actions"
+                        accessibilityName = "More"
                     ) {
                         Icon(Icons.Filled.MoreVert, contentDescription = null, tint = tokens.primaryInk)
                     }

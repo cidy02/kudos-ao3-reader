@@ -428,7 +428,7 @@ fun AuthorProfileScreen(
             if (!selection.isSelecting) Box {
                 ToolbarCircleButton(
                     onClick = { showMenu = true },
-                    accessibilityName = "Menu",
+                    accessibilityName = "More",
                     palette = palette
                 ) {
                     Icon(Icons.Default.MoreVert, contentDescription = null)

@@ -91,7 +91,7 @@ class OwnWorksScreenTest {
     @Test fun ownActionsAndBulkBarAreAbsentForAnotherProfileAndSignedOutReader() {
         show("Avery_Archive")
         compose.onAllNodes(hasContentDescription("Actions for", substring = true)).assertCountEquals(0)
-        compose.onNodeWithContentDescription("Menu").performClick()
+        compose.onNodeWithContentDescription("More").performClick()
         compose.onNodeWithText("Select Works").performClick()
         compose.onAllNodesWithText("Collections").assertCountEquals(0)
         compose.onAllNodesWithText("Visibility").assertCountEquals(0)
@@ -101,7 +101,7 @@ class OwnWorksScreenTest {
     @Test fun signedOutOwnRouteHasNoWriterActionsOrWriterBulkBar() {
         show(signedIn = false)
         compose.onAllNodes(hasContentDescription("Actions for", substring = true)).assertCountEquals(0)
-        compose.onNodeWithContentDescription("Menu").performClick()
+        compose.onNodeWithContentDescription("More").performClick()
         compose.onNodeWithText("Select Works").performClick()
         compose.onAllNodesWithText("Visibility").assertCountEquals(0)
         assertTrue(recorder.posts.isEmpty())

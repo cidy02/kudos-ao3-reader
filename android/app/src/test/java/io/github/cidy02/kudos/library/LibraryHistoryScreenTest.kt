@@ -195,9 +195,9 @@ class LibraryHistoryScreenTest {
         compose.onAllNodesWithText("Done").assertCountEquals(2)
         compose.onNode(hasText("Done") and hasAnyAncestor(hasTestTag("history-toolbar"))).performClick()
         compose.waitUntil(15_000) {
-            compose.onAllNodesWithContentDescription("More options").fetchSemanticsNodes().isNotEmpty()
+            compose.onAllNodesWithContentDescription("More").fetchSemanticsNodes().isNotEmpty()
         }
-        compose.onNodeWithContentDescription("More options").assertExists()
+        compose.onNodeWithContentDescription("More").assertExists()
     }
 
     @Test fun groupedHistoryRetainsItsRemoveSwipe() {
