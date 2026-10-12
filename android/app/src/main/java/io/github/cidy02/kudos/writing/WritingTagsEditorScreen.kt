@@ -136,7 +136,7 @@ internal fun WritingTagsEditorScreen(
                 }
                 itemsIndexed(chosenRows) { index, row ->
                     Row(Modifier.fillMaxWidth().padding(horizontal = SubjectMetrics.accountGutter)
-                        .padding(top = if (index == 0) 10.dp else 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        .padding(top = if (index == 0) 4.dp else 0.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         row.forEach { chip ->
                             WritingChosenChip(chip.name, chip.width, model, drag)
                         }
@@ -223,7 +223,9 @@ private fun WritingChosenChip(name: String, width: Dp, model: WritingTagsEditorS
     val tokens = LocalKudosTokens.current
     DisposableEffect(name) { onDispose { drag.bounds.remove(name) } }
     Row(Modifier.width(width), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-        SubjectChip(name, Modifier.weight(1f).heightIn(min = 48.dp)
+        // The pill is drawn at its own height, as iOS draws it, inside the 48 dp it is held and
+        // dragged by. It was drawn 48 dp tall.
+        Box(Modifier.weight(1f).heightIn(min = 48.dp)
             .onGloballyPositioned { drag.bounds[name] = it.boundsInRoot() }
             .graphicsLayer {
                 if (drag.name == name) { translationX = drag.displacement.x; translationY = drag.displacement.y }
@@ -245,7 +247,9 @@ private fun WritingChosenChip(name: String, width: Dp, model: WritingTagsEditorS
                 stateDescription = "Drag to reorder."
                 customActions = listOf(CustomAccessibilityAction("Move Earlier") { model.step(name, false); true },
                     CustomAccessibilityAction("Move Later") { model.step(name, true); true })
-            }, style = SubjectChipStyle.Pill(false), palette = tokens.scopePalette, maxLines = Int.MAX_VALUE)
+            }, contentAlignment = Alignment.CenterStart) {
+            SubjectChip(name, style = SubjectChipStyle.Pill(false), palette = tokens.scopePalette, maxLines = Int.MAX_VALUE)
+        }
         IconButton(onClick = { model.remove(name) }) {
             Icon(Icons.Default.Close, "Remove $name", tint = tokens.secondaryInk, modifier = Modifier.size(14.dp))
         }
