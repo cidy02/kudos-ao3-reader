@@ -15,11 +15,18 @@ struct ReaderChromeTopBar: View {
     /// Opens work details for this book (title pill tap).
     var onOpenDetails: (() -> Void)?
 
+    /// Where every other page's round bar buttons sit: 16pt from the screen's edge,
+    /// their top on the safe area's. The reader's own were 12pt in and 8pt lower, so
+    /// the back button jumped down and sideways on the way into a work.
+    static let edgeInset: CGFloat = 16
+
     var body: some View {
         HStack(spacing: 10) {
             Button(action: onClose) {
-                Image(systemName: "chevron.left")
-                    .font(.system(size: 15, weight: .semibold))
+                // The navigation bar's own back mark at its size: the reader's was a
+                // third smaller than the one on the page before it.
+                Image(systemName: "chevron.backward")
+                    .font(.system(size: 21.5, weight: .medium))
                     // Neutral, not the theme tint — Close has no active state to
                     // signal, same reasoning as the fan menu's own controls.
                     .foregroundStyle(Color.primary)
@@ -49,9 +56,9 @@ struct ReaderChromeTopBar: View {
                 .frame(width: 44, height: 44)
                 .allowsHitTesting(false)
         }
-        // Matches `ReadiumReaderView.chromeInset`; the host layer adds none of
-        // its own, so the back button lines up with the fan button opposite it.
-        .padding(.horizontal, 12)
+        // The host layer adds no inset of its own, and gives the fan button
+        // opposite the same one.
+        .padding(.horizontal, Self.edgeInset)
     }
 
     @ViewBuilder
