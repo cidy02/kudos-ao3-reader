@@ -1,5 +1,7 @@
 package io.github.cidy02.kudos.account
 
+import io.github.cidy02.kudos.ui.subject.SubjectWorkCoverCard
+import io.github.cidy02.kudos.library.readingProgressFraction
 import io.github.cidy02.kudos.ui.components.rememberStoredChoice
 import io.github.cidy02.kudos.network.ao3.account.historyVisitGroups
 import io.github.cidy02.kudos.network.ao3.account.historyLocalProgress
@@ -275,7 +277,7 @@ fun AccountWorksListScreen(
                                         showLayoutMenu = true
                                     }
                                 )
-                                DropdownMenuItem(
+                                if (displayMode != AccountDisplayMode.Compact) DropdownMenuItem(
                                     text = { Text(if (expandAll) "Collapse All" else "Expand All") },
                                     onClick = {
                                         showMenu = false
@@ -416,7 +418,7 @@ fun AccountWorksListScreen(
                                         currentPage = current.page.currentPage,
                                         totalPages = current.page.totalPages,
                                         expandAll = expandAll,
-                                        ledger = displayMode == AccountDisplayMode.Ledger,
+                                        mode = displayMode,
                                         palette = palette,
                                         onLoadPage = viewModel::load,
                                         onOpenWork = onOpenWork
@@ -429,7 +431,7 @@ fun AccountWorksListScreen(
                                         currentPage = current.page.currentPage,
                                         totalPages = current.page.totalPages,
                                         expandAll = expandAll,
-                                        ledger = displayMode == AccountDisplayMode.Ledger,
+                                        mode = displayMode,
                                         palette = palette,
                                         onLoadPage = viewModel::load,
                                         onOpenWork = onOpenWork,
@@ -443,7 +445,7 @@ fun AccountWorksListScreen(
                                         currentPage = current.page.currentPage,
                                         totalPages = current.page.totalPages,
                                         expandAll = expandAll,
-                                        ledger = displayMode == AccountDisplayMode.Ledger,
+                                        mode = displayMode,
                                         palette = palette,
                                         onLoadPage = viewModel::load,
                                         onOpenWork = onOpenWork
@@ -690,7 +692,7 @@ private fun BookmarksBrowser(
     currentPage: Int,
     totalPages: Int,
     expandAll: Boolean,
-    ledger: Boolean,
+    mode: AccountDisplayMode,
     palette: SubjectPalette,
     onLoadPage: (Int) -> Unit,
     onOpenWork: (AO3WorkSummary) -> Unit
@@ -777,7 +779,7 @@ private fun BookmarksBrowser(
                 ) {
                     PairedWorkRow(
                         work = work, expandAll = expandAll, onOpenWork = onOpenWork,
-                        ledger = ledger, bookmark = bookmarksByWorkId[work.remote.id]
+                        ledger = mode.ledger, bookmark = bookmarksByWorkId[work.remote.id]
                     )
                 }
             }
@@ -811,7 +813,7 @@ private fun HistoryBrowser(
     currentPage: Int,
     totalPages: Int,
     expandAll: Boolean,
-    ledger: Boolean,
+    mode: AccountDisplayMode,
     palette: SubjectPalette,
     onLoadPage: (Int) -> Unit,
     onOpenWork: (AO3WorkSummary) -> Unit,
@@ -946,10 +948,12 @@ private fun HistoryBrowser(
                     item(key = "hist-head-$index") {
                         SectionRuleHeader(title = group.bucket.title, count = group.items.size)
                     }
-                    items(group.items, key = { "hist-${it.id}" }) { work ->
+                    if (mode == AccountDisplayMode.Compact) {
+                        item(key = "hist-covers-$index") { CompactWorkCovers(group.items, onOpenWork) }
+                    } else items(group.items, key = { "hist-${it.id}" }) { work ->
                         val reading = readingsByWorkId[work.remote.id]
                         PairedWorkRow(
-                            work = work, expandAll = expandAll, onOpenWork = onOpenWork, ledger = ledger,
+                            work = work, expandAll = expandAll, onOpenWork = onOpenWork, ledger = mode.ledger,
                             footer = { obscured ->
                                 HistoryReadingFootnote(
                                     reading = reading,
@@ -1465,7 +1469,7 @@ private fun GenericAccountWorksBrowser(
     currentPage: Int,
     totalPages: Int,
     expandAll: Boolean,
-    ledger: Boolean,
+    mode: AccountDisplayMode,
     palette: SubjectPalette,
     onLoadPage: (Int) -> Unit,
     onOpenWork: (AO3WorkSummary) -> Unit
@@ -1502,8 +1506,10 @@ private fun GenericAccountWorksBrowser(
             }
         }
 
-        items(works, key = { "gen-${it.id}" }) { work ->
-            PairedWorkRow(work = work, expandAll = expandAll, onOpenWork = onOpenWork, ledger = ledger)
+        if (mode == AccountDisplayMode.Compact) {
+            item(key = "gen-covers") { CompactWorkCovers(works, onOpenWork) }
+        } else items(works, key = { "gen-${it.id}" }) { work ->
+            PairedWorkRow(work = work, expandAll = expandAll, onOpenWork = onOpenWork, ledger = mode.ledger)
         }
 
         if (totalPages > 1) {
@@ -1519,6 +1525,53 @@ private fun GenericAccountWorksBrowser(
 /**
  * An AO3 work card that enriches itself when sparse (e.g. Subscriptions).
  */
+/**
+ * iOS `AccountWorksCompactGrid`: a page of works as covers, as many to a line as fit (two on a
+ * phone, one at the large text sizes), from the left. A page is twenty works at most, so the
+ * covers are laid out together.
+ */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+private fun CompactWorkCovers(works: List<CanonicalWork>, onOpenWork: (AO3WorkSummary) -> Unit) {
+    val privacy = LocalPairedRowPrivacy.current
+    androidx.compose.foundation.layout.FlowRow(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        works.forEach { work ->
+            val local = work.local
+            val obscured = local != null && privacy.isObscured(local)
+            Box(
+                Modifier.clickable(onClickLabel = if (obscured) "reveal this work" else "open this work") {
+                    if (obscured && local != null) privacy.reveal(local) else onOpenWork(work.remote)
+                }
+            ) {
+                // The saved copy's own cover, with its place in it; else one drawn from AO3's blurb.
+                SubjectWorkCoverCard(
+                    work = local ?: work.remote.coverFace(),
+                    obscured = obscured,
+                    downloading = false,
+                    progress = local?.readingProgressFraction()
+                )
+            }
+        }
+    }
+}
+
+// ponytail: a SavedWork made only so the cover card can draw AO3's blurb; it is never stored.
+// If a second screen needs a cover for a work not in the Library, give the card plain fields.
+private fun AO3WorkSummary.coverFace() = SavedWork(
+    id = "ao3-$id",
+    title = title,
+    author = authorText,
+    rating = rating,
+    isComplete = isComplete == true,
+    workFandoms = fandoms.filter { it.isNotBlank() },
+    workCategories = categories,
+    workWarnings = warnings
+)
+
 /**
  * iOS `AO3AccountWorksList.visibleEntries`: a library work that Hide mode hides is not paired, so
  * it stays a plain AO3 row with no local state. In Blur mode it stays paired, and its row blurs.
@@ -1544,12 +1597,16 @@ private class PairedRowPrivacy(
 
 /**
  * iOS `WorkListDisplayMode` for History, Bookmarks and the account's works lists, kept under
- * its name (`account.displayMode`). iOS has a third, Compact (covers, two up), and opens on
- * it; Android has not built it and opens on the ledger.
+ * its name (`account.displayMode`): the full card, the dense row, or covers two up. iOS opens
+ * on Compact; Android opens on the ledger until the owner says otherwise.
  */
 private enum class AccountDisplayMode(val title: String) {
     Detailed("Detailed"),
-    Ledger("Ledger")
+    Ledger("Ledger"),
+    Compact("Compact");
+
+    /** A row's form. A cover grid has no rows; where a list draws rows anyway they are the ledger's. */
+    val ledger: Boolean get() = this != Detailed
 }
 
 private val LocalPairedRowPrivacy = compositionLocalOf { PairedRowPrivacy() }
