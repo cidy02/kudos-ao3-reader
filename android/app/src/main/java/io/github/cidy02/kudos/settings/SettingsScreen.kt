@@ -8,6 +8,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import io.github.cidy02.kudos.auth.AO3AuthRepository
 import io.github.cidy02.kudos.core.model.KudosSettings
@@ -39,6 +40,13 @@ fun SettingsScreen(
     val settings by repository.settings.collectAsState(initial = KudosSettings.Defaults)
     val requested = (LocalContext.current as? Activity)?.intent?.getStringExtra("kudosSettingsPage")
     val start = requested?.takeIf { it in SettingsDebugPages } ?: "hub"
+
+    // To the shell this is one route; its pages are in here. The shell hides the top row when a
+    // page is scrolled and keeps that by route, so a page opened from the scrolled list of
+    // settings had no back button until it was dragged down. Each page is named to the shell,
+    // which then keeps each one's own (`PushedShellChrome.scrollKey`).
+    val page by navController.currentBackStackEntryAsState()
+    io.github.cidy02.kudos.app.ProvidePushedShellChrome(hasSubjectHeader = null, scrollKey = page?.destination?.route)
 
     NavHost(navController = navController, startDestination = start) {
         composable("hub") {

@@ -22,6 +22,12 @@ class PushedShellChrome {
     var customTitle by mutableStateOf<String?>(null)
     var onBack by mutableStateOf<(() -> Unit)?>(null)
     var trailingContent by mutableStateOf<(@Composable RowScope.() -> Unit)?>(null)
+    /**
+     * Which of a route's own pages is showing, where one route holds several (Settings and its
+     * pages). The shell keeps "the top row is scrolled away" by route, so without this a page
+     * opened from a scrolled one started with its row hidden and no Back.
+     */
+    var scrollKey by mutableStateOf<String?>(null)
 
     /**
      * The screens composed now, in order of arrival, each with how to show its values. During a
@@ -64,6 +70,7 @@ class PushedShellChrome {
         customTitle = null
         onBack = null
         trailingContent = null
+        scrollKey = null
     }
 }
 
@@ -76,7 +83,8 @@ fun ProvidePushedShellChrome(
     hideTabBar: Boolean = false,
     customTitle: String? = null,
     onBack: (() -> Unit)? = null,
-    trailingContent: (@Composable RowScope.() -> Unit)? = null
+    trailingContent: (@Composable RowScope.() -> Unit)? = null,
+    scrollKey: String? = null
 ) {
     val screen = remember { Any() }
     SideEffect {
@@ -87,6 +95,7 @@ fun ProvidePushedShellChrome(
             chrome.customTitle = customTitle
             chrome.onBack = onBack
             chrome.trailingContent = trailingContent
+            chrome.scrollKey = scrollKey
         }
     }
     DisposableEffect(chrome) {
