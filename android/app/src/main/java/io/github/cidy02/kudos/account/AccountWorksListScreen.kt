@@ -230,7 +230,7 @@ fun AccountWorksListScreen(
                     }
                     Box {
                         IconButton(onClick = { showMenu = true }) {
-                            Icon(imageVector = Icons.Default.MoreVert, contentDescription = "More actions")
+                            Icon(imageVector = Icons.Default.MoreVert, contentDescription = "More")
                         }
                         DropdownMenu(expanded = showLayoutMenu, onDismissRequest = { showLayoutMenu = false }) {
                             AccountDisplayMode.entries.forEach { mode ->

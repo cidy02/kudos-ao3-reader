@@ -161,7 +161,7 @@ fun FandomWorksScreen(
             Box {
                 ToolbarCircleButton(
                     onClick = { showMenu = true },
-                    accessibilityName = "More actions",
+                    accessibilityName = "More",
                     palette = palette
                 ) {
                     Icon(Icons.Default.MoreVert, contentDescription = null)

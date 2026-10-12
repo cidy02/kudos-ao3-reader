@@ -204,7 +204,7 @@ class FavoriteScopesScreenTest {
             compose.onAllNodesWithText("Rereads").assertCountEquals(0)
             compose.onAllNodesWithText("Offline").assertCountEquals(0)
             compose.onAllNodesWithText("WIP").assertCountEquals(0)
-            compose.onNodeWithContentDescription("More options").performClick()
+            compose.onNodeWithContentDescription("More").performClick()
             compose.onNodeWithText("Select").assertExists()
             compose.onNodeWithText("Select").performClick()
             compose.onAllNodesWithText("Done").onFirst().performClick()
@@ -217,7 +217,7 @@ class FavoriteScopesScreenTest {
 
     @Test fun changingScopeClearsWorkSelectionAndReturningDoesNotReselectHiddenWorks() {
         show()
-        compose.onNodeWithContentDescription("More options").performClick()
+        compose.onNodeWithContentDescription("More").performClick()
         compose.onNodeWithText("Select").performClick()
         awaitText("Select All")
         compose.onNodeWithText("Select All").performClick()
@@ -262,7 +262,7 @@ class FavoriteScopesScreenTest {
         awaitText("3 authors")
         compose.onNodeWithText("alpha").assertExists()
         // iOS's outer toolbar depends on the Works shelf, not the aggregate tally.
-        compose.onAllNodesWithContentDescription("More options").assertCountEquals(0)
+        compose.onAllNodesWithContentDescription("More").assertCountEquals(0)
     }
 
     @Test fun additionalTagRequestUsesTheLibraryDashboardPredicateRatherThanPersonalTags() {

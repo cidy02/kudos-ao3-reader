@@ -195,7 +195,7 @@ fun AO3CollectionDetailScreen(
                 Box {
                     ToolbarCircleButton(
                         onClick = { showMenu = true },
-                        accessibilityName = "More actions",
+                        accessibilityName = "More",
                         palette = palette
                     ) {
                         Icon(imageVector = Icons.Default.MoreVert, contentDescription = null)
