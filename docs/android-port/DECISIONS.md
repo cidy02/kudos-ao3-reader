@@ -1727,3 +1727,6 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   a long summary or tags, no warnings group when unfolded. AO3: one fandom and a count,
   the unfold for those and warnings too, the symbols tray. Android had one rule for both.
   Reverse: the commit that names it.
+- **2026-10-11 · The finished toggle has one wording (3cp, fourth commit).** "Mark as
+  Finished" / "Mark as Still Reading", from `finishedActionLabel`, as iOS's
+  `WorkActionLabels.finished`. Six wordings across nine places are gone.

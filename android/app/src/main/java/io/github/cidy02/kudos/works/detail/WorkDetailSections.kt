@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.works.detail
 
+import io.github.cidy02.kudos.works.finishedActionLabel
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -480,7 +481,7 @@ fun WorkDetailPageActions(
         WorkDetailOutlineButton(
             // The action, as iOS `WorkActionLabels.finished`. It said "Finished", which read as
             // a state on a button that takes the work back out of Finished.
-            title = if (isFinished) "Mark as Still Reading" else "Mark as Finished",
+            title = finishedActionLabel(isFinished),
             enabled = !isWorking,
             onClick = onToggleFinished,
             modifier = Modifier.weight(1f)

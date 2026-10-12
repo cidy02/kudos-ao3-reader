@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.ui.components
 
+import io.github.cidy02.kudos.works.finishedActionLabel
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -117,7 +118,7 @@ fun WorkBulkActionBar(
                         onDone()
                     }
                 }, enabled = hasSelection) {
-                    Icon(Icons.Outlined.CheckCircle, "Mark Finished")
+                    Icon(Icons.Outlined.CheckCircle, finishedActionLabel(false))
                 }
             }
             
@@ -152,7 +153,7 @@ fun WorkBulkActionBar(
                             enabled = canRemoveDownload
                         )
                         DropdownMenuItem(
-                            text = { Text("Mark Unfinished") },
+                            text = { Text(finishedActionLabel(true)) },
                             onClick = {
                                 overflowExpanded = false
                                 scope.launch {

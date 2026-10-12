@@ -1,6 +1,6 @@
 # 3cp: more pages beside the iPhone's (Android)
 
-Done 2026-10-11 by Claude, alone. Gate 2,618. Three commits. Pictures: `shots/3cp/`. The method is 3cm's.
+Done 2026-10-11 by Claude, alone. Gate 2,618. Four commits. Pictures: `shots/3cp/`. The method is 3cm's.
 
 ## Fixed
 
@@ -30,6 +30,13 @@ Done 2026-10-11 by Claude, alone. Gate 2,618. Three commits. Pictures: `shots/3c
    under it but "No Archive Warnings Apply". The unfolded card no longer repeats the
    warnings as a group, as on iOS. An AO3 work's card keeps its own rules (`savedWork`).
 
+6. **The finished toggle has one wording, in one place** (fourth commit). iOS words it once
+   (`WorkActionLabels.finished`: "Mark as Finished" / "Mark as Still Reading"). Android
+   said it six ways across nine places: "Finished", "Mark unfinished", "Mark Unfinished"
+   (twice), "Mark Finished" (twice), and iOS's. `works/WorkActionLabels.kt`
+   `finishedActionLabel` is now the only source: a work's page, the Library's two card
+   menus and its selection overflow, both selection bars, Home's bulk bar.
+
 **Compared and the same:** what a tap on a saved work's card opens (the reader, on both:
 iOS `WorkCardTap.destination`); the rest of a saved work's page (kicker, title, the four
 figures, the Read card, the tag groups, the language line, kudos and hits, My copy).
@@ -46,9 +53,8 @@ figures, the Read card, the tag groups, the language line, kudos and hits, My co
   is complete and sorts second) and the zeros above.
 - **The tab bar marks Home on a Library page opened by a debug route.** Through the
   Library tab it marks Library; nothing to fix.
-- The reader's own menu still answers "Mark as Finished" with "Finished"
-  (`ReaderFanMenuUiTest` pins the page's button, now brought along; the reader's menu was
-  not looked at).
+- The reader's own menu has no finished toggle of its own in the code (the test named
+  `ReaderFanMenuUiTest` pins the work page's button); nothing to change there.
 
 ## A note on the emulator's demo
 

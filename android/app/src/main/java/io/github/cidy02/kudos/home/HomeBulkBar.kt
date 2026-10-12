@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.home
 
+import io.github.cidy02.kudos.works.finishedActionLabel
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -111,11 +112,11 @@ fun HomeBulkBar(
                         menuOpen = false
                         controller.tagTargets = selectedWorks
                     }
-                    Action("Mark as Finished") {
+                    Action(finishedActionLabel(false)) {
                         menuOpen = false
                         scope.launch { selectedWorks.forEach { workRepository.setFinished(it.id, true) } }
                     }
-                    Action("Mark as Still Reading") {
+                    Action(finishedActionLabel(true)) {
                         menuOpen = false
                         scope.launch { selectedWorks.forEach { workRepository.setFinished(it.id, false) } }
                     }

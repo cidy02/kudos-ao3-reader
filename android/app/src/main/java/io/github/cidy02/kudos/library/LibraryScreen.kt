@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.library
 
+import io.github.cidy02.kudos.works.finishedActionLabel
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
@@ -1203,7 +1204,7 @@ internal fun LibraryWorkMenu(
         ContextMenuItem(Icons.AutoMirrored.Outlined.List, "Add to Queue", {
             onDismiss(); actions.onAddToQueue(work.id)
         })
-        ContextMenuItem(Icons.Outlined.CheckCircle, if (work.isFinished) "Mark as Still Reading" else "Mark as Finished", {
+        ContextMenuItem(Icons.Outlined.CheckCircle, finishedActionLabel(work.isFinished), {
             onDismiss(); actions.onToggleFinished(work.id)
         })
         ContextMenuItem(Icons.Outlined.Folder, "Add to Collection", {
@@ -2107,7 +2108,7 @@ fun LibraryCarouselCard(
             )
             ContextMenuItem(
                 icon = Icons.Outlined.CheckCircle,
-                label = if (work.isFinished) "Mark unfinished" else "Mark as Finished",
+                label = finishedActionLabel(work.isFinished),
                 onClick = {
                     menuOpen = false
                     actions.onToggleFinished(work.id)
@@ -2511,12 +2512,12 @@ private fun LibrarySelectionActionBar(
                     DropdownMenuItem(text = { Text("Add to Queue") }, onClick = { overflowExpanded = false; onAddToQueue() })
                     DropdownMenuItem(text = { Text("Add to Collection") }, onClick = { overflowExpanded = false; onAddToCollection() })
                     DropdownMenuItem(text = { Text("Tag") }, onClick = { overflowExpanded = false; onTag() })
-                    DropdownMenuItem(text = { Text("Mark Finished") }, onClick = { overflowExpanded = false; onMarkFinished() })
+                    DropdownMenuItem(text = { Text(finishedActionLabel(false)) }, onClick = { overflowExpanded = false; onMarkFinished() })
                     HorizontalDivider()
                     DropdownMenuItem(text = { Text("Unfavorite") }, onClick = { overflowExpanded = false; onUnfavorite() })
                     DropdownMenuItem(text = { Text("Remove Download") }, onClick = { overflowExpanded = false; onUnsave() })
                     DropdownMenuItem(text = { Text("Remove from Saved for Later") }, onClick = { overflowExpanded = false; onRemoveFromSaveForLater() })
-                    DropdownMenuItem(text = { Text("Mark as Still Reading") }, onClick = { overflowExpanded = false; onMarkUnfinished() })
+                    DropdownMenuItem(text = { Text(finishedActionLabel(true)) }, onClick = { overflowExpanded = false; onMarkUnfinished() })
                 }
             }
             TextButton(onClick = onCancel) {
