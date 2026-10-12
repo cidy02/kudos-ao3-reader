@@ -998,8 +998,9 @@ struct ReadiumReaderView: View {
             onOpenDetails: { showingWorkDetail = true }
         )
         // Peel host zeroes SwiftUI safe regions — pad from the same frozen
-        // window safe area the page box uses (plus chromeInset).
-        .padding(.top, book.pageBoxChromeSafeTop + 8)
+        // window safe area the page box uses. Nothing more: a navigation bar's
+        // buttons start on the safe area's edge, and these line up with them.
+        .padding(.top, book.pageBoxChromeSafeTop)
         .allowsHitTesting(chromeVisible)
         .opacity(chromeVisible ? 1 : 0)
     }
@@ -1017,8 +1018,8 @@ struct ReadiumReaderView: View {
         ReaderFanMenu(isOpen: $fanMenuOpen, pills: fanPills, shareURL: shareURL,
                       roundActions: fanRoundActions,
                       accentColor: themeManager.effectiveTint, reduceMotion: reduceMotion)
-            .padding(.trailing, Self.chromeInset)
-            .padding(.top, book.pageBoxChromeSafeTop + 8)
+            .padding(.trailing, ReaderChromeTopBar.edgeInset)
+            .padding(.top, book.pageBoxChromeSafeTop)
             .allowsHitTesting(chromeVisible)
             .opacity(chromeVisible ? 1 : 0)
             // QuickLook renders the archived original in place — a PDF stays a PDF, so
