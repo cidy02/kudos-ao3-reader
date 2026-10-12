@@ -246,11 +246,9 @@ fun WorkDetailScreen(
         when (val result = repo.fetch(workId)) {
             is AO3Result.Success -> {
                 val remote = result.value.toRemoteSummary(workId)
-                state = WorkDetailUiState(
-                    remote = remote,
-                    loading = false,
-                    ao3Message = "Loaded tags and stats from AO3. Title and summary need a full work page parse."
-                )
+                // The page's own heading, byline and summary are read now. This said "Title and
+                // summary need a full work page parse." to the reader, under "AO3 Work 11".
+                state = WorkDetailUiState(remote = remote, loading = false)
             }
             is AO3Result.Failure -> {
                 state = WorkDetailUiState(
@@ -1764,10 +1762,11 @@ private data class WorkDetailUiState(
 private fun AO3WorkMetadata.toRemoteSummary(workId: Long): AO3WorkSummary {
     return AO3WorkSummary(
         id = workId,
-        title = "AO3 Work $workId",
-        authors = emptyList(),
+        title = title.ifBlank { "AO3 Work $workId" },
+        authors = authors,
         fandoms = fandoms,
-        rating = "",
+        rating = rating,
+        summary = summary,
         warnings = warnings,
         categories = categories,
         relationships = relationships,

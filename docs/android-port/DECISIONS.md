@@ -1769,3 +1769,6 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   page of the search on screen, are saved state; the search is read once more on return,
   as every restored page reads its own address. Reverse: `869eb8c0` and the commit that
   names 3cv.
+- **2026-10-12 · A work reached by its id (3cw).** The work page's own heading, byline and
+  summary are read when a page has only the work's id, and the reader is no longer told
+  what the parser lacks. Reverse: the commit that names 3cw.
