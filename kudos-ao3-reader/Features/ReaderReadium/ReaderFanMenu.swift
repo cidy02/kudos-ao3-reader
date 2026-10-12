@@ -106,6 +106,15 @@ struct ReaderFanMenu: View {
         GlassEffectContainer(spacing: Self.rowSpacing) {
             content
         }
+        // Outside the container, so over its glass. Shapes drawn inside it, as the
+        // button's label or as an overlay on the button, end up under the glass: the
+        // mark came out at about a third of its strength, grey beside the back
+        // button's solid chevron and every other round button in the app.
+        .overlay(alignment: .topTrailing) {
+            if !isOpen {
+                toggleMark.frame(width: 44, height: 44).allowsHitTesting(false)
+            }
+        }
         .tint(accentColor)
         // With the button gone while open there is no control to close the menu,
         // so give VoiceOver the standard dismiss gesture (two-finger scrub) it
@@ -331,31 +340,34 @@ struct ReaderFanMenu: View {
                 withAnimation(Self.morph) { isOpen = true }
             }
         } label: {
-            VStack(spacing: 3) {
-                VStack(spacing: 2.5) {
-                    ForEach(0 ..< 3, id: \.self) { _ in
-                        RoundedRectangle(cornerRadius: 1.1).frame(width: 22, height: 2.2)
-                    }
-                }
-                HStack(spacing: 5.5) {
-                    ForEach(0 ..< 3, id: \.self) { _ in Circle().frame(width: 2.6, height: 2.6) }
-                }
-            }
-            // Neutral, not the theme tint — this button has no active state
-            // (open/closed is a transient interaction, not a persisted toggle);
-            // matches the rest of the fan menu's own controls.
-            .foregroundStyle(Color.primary)
-            .frame(width: 44, height: 44)
-            // The glyph is thin bars and small dots; without an explicit content
-            // shape a .plain button only accepts taps that land on the strokes,
-            // well short of the 44pt target.
-            .contentShape(Circle())
+            // Empty: the mark is drawn over the container's glass (see `body`). The
+            // whole 44pt circle takes the tap.
+            Color.clear
+                .frame(width: 44, height: 44)
+                .contentShape(Circle())
         }
         .buttonStyle(.plain)
         .glassEffect(.regular, in: Circle())
         .glassEffectID(Self.rootGlassID, in: glassNamespace)
         // Only ever rendered while closed, so the label is unconditional.
         .accessibilityLabel("More")
+    }
+
+    /// Three bars over three dots. Neutral, not the theme tint — the button has no
+    /// active state (open/closed is a transient interaction, not a persisted toggle).
+    private var toggleMark: some View {
+        VStack(spacing: 3) {
+            VStack(spacing: 2.5) {
+                ForEach(0 ..< 3, id: \.self) { _ in
+                    RoundedRectangle(cornerRadius: 1.1).frame(width: 22, height: 2.2)
+                }
+            }
+            HStack(spacing: 5.5) {
+                ForEach(0 ..< 3, id: \.self) { _ in Circle().frame(width: 2.6, height: 2.6) }
+            }
+        }
+        .foregroundStyle(Color.primary)
+        .accessibilityHidden(true)
     }
 
     /// Shared by the closed button and the first open pill — the identity the
