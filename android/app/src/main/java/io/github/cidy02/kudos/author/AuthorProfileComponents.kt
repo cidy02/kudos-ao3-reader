@@ -180,14 +180,20 @@ internal fun AO3AuthorWorkCard(
     onOpenWork: (AO3WorkSummary) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Column(modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        if (displayMode == AuthorDisplayMode.Detailed) {
-            SensitiveWorkRow(work = work, onOpenWork = onOpenWork, expandAll = expandAll)
-        } else {
-            SensitiveWorkRow(work = work, onOpenWork = onOpenWork, expandAll = expandAll, ledger = true)
-        }
-        if (showsPerformance) AO3AuthorPerformanceStrip(work)
-    }
+    // iOS `showsPerformance`: on the writer's own works the kudos, comments and hits are a
+    // strip inside the ledger card, and its line of figures leaves them out. They were
+    // printed twice, on the line and again in a strip under the card. The detailed card's
+    // own row of figures already has them, so it has no strip (iOS has none there either).
+    val strip = showsPerformance && displayMode != AuthorDisplayMode.Detailed
+    SensitiveWorkRow(
+        work = work,
+        onOpenWork = onOpenWork,
+        modifier = modifier,
+        expandAll = expandAll,
+        ledger = displayMode != AuthorDisplayMode.Detailed,
+        footer = if (strip) { { AO3AuthorPerformanceStrip(work) } } else null,
+        figuresIncludePerformance = !strip
+    )
 }
 
 @Composable
@@ -202,7 +208,15 @@ internal fun AO3AuthorPerformanceStrip(work: AO3WorkSummary) {
         work.hits?.let { SubjectStatCell(it.compactCount(), "Hits") },
         work.bookmarks?.let { SubjectStatCell(it.compactCount(), "Bookmarks") }
     )
-    if (cells.isNotEmpty()) SubjectStatStrip(cells = cells, palette = palette)
+    if (cells.isEmpty()) return
+    // Four cells across cut their labels at the large text sizes ("COMMEN…"): two to a row there.
+    if (io.github.cidy02.kudos.ui.subject.isAccessibilityFontScale() && cells.size > 2) {
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            cells.chunked(2).forEach { SubjectStatStrip(cells = it, palette = palette) }
+        }
+    } else {
+        SubjectStatStrip(cells = cells, palette = palette)
+    }
 }
 
 @Composable

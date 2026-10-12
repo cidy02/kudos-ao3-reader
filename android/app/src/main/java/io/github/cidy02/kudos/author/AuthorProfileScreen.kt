@@ -77,7 +77,9 @@ fun AuthorProfileScreen(
     autocompleteRepository: io.github.cidy02.kudos.network.ao3.search.AO3TagAutocompleteRepository? = null,
     settingsRepository: io.github.cidy02.kudos.data.preferences.SettingsRepository? = null,
     workImporter: io.github.cidy02.kudos.works.WorkImporter? = null,
-    readingQueueRepository: io.github.cidy02.kudos.library.ReadingQueueRepository? = null
+    readingQueueRepository: io.github.cidy02.kudos.library.ReadingQueueRepository? = null,
+    /** Opens the new-work form. Offered on the reader's own Works and Dashboard, as iOS's "+". */
+    onNewWork: (() -> Unit)? = null
 ) {
     val account by ((authRepository ?: seriesFormRepository?.auth)?.state?.collectAsState() ?: remember {
         mutableStateOf<io.github.cidy02.kudos.auth.AO3AuthState>(io.github.cidy02.kudos.auth.AO3AuthState.SignedOut) })
@@ -420,6 +422,11 @@ fun AuthorProfileScreen(
                     Icon(Icons.Outlined.FilterList, null)
                 }
             }
+            if (!selection.isSelecting && onNewWork != null && isOwnWorks(signedInUsername, route.username) &&
+                (isDashboard || tab == AuthorTab.Works)) {
+                io.github.cidy02.kudos.ui.subject.ToolbarAddButton(onClick = onNewWork, accessibilityName = "New Work",
+                    palette = tokens.scopePalette)
+            }
             if (!selection.isSelecting && ownWorks && !works?.works.isNullOrEmpty()) {
                 ToolbarCircleButton(onClick = { selection.enter() }, accessibilityName = "Select Works", palette = tokens.scopePalette) {
                     Icon(Icons.Outlined.Checklist, null)
@@ -723,7 +730,8 @@ fun AuthorProfileScreen(
                     } else {
                         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             h.fandoms.forEach { fandom ->
-                                SubjectChip(text = fandom.name)
+                                // iOS prints how many works each has: "Star Wars (12)".
+                                SubjectChip(text = fandom.workCount?.let { "${fandom.name} ($it)" } ?: fandom.name)
                             }
                         }
                     }
@@ -740,11 +748,14 @@ fun AuthorProfileScreen(
                                     work = work,
                                     displayMode = displayMode,
                                     expandAll = false,
-                                    showsPerformance = false,
+                                    // iOS: the account's own dashboard carries them too.
+                                    showsPerformance = isOwnWorks(signedInUsername, route.username),
                                     onOpenWork = onOpenWork
                                 )
                             }
                         }
+                        // iOS 1y: each section's "See all" sits below its cards.
+                        onOpenDashboardList?.let { open -> DashboardSeeAll("works") { open(AccountListType.MyWorks) } }
                     }
                 }
                 
@@ -762,6 +773,9 @@ fun AuthorProfileScreen(
                                     onClick = { onOpenSeries(s.url) }
                                 )
                             }
+                        }
+                        DashboardSeeAll("series") {
+                            onOpenSeries("https://archiveofourown.org/users/${route.username}/series")
                         }
                     }
                 }
@@ -781,6 +795,7 @@ fun AuthorProfileScreen(
                                 )
                             }
                         }
+                        onOpenDashboardList?.let { open -> DashboardSeeAll("bookmarks") { open(AccountListType.Bookmarks) } }
                     }
                 }
             } else if (!isDashboard) {
@@ -1048,4 +1063,12 @@ internal fun ownWorksLine(name: String, count: Int?, stats: io.github.cidy02.kud
     val parts = listOfNotNull("${figure(count)} ${if (count == 1) "work" else "works"}",
         stats?.wordCount?.let { "${figure(it)} words" }, stats?.kudos?.let { "${figure(it)} kudos" })
     return if (parts.size > 1) parts.joinToString(" · ") else "${parts[0]} · $name"
+}
+
+/** iOS `AuthorDashboardSections.seeAll`: the way from a dashboard section to its whole list. */
+@Composable
+private fun DashboardSeeAll(what: String, onClick: () -> Unit) {
+    TextButton(onClick = onClick) {
+        Text("See all $what", color = LocalKudosTokens.current.scopePalette.accent, fontWeight = FontWeight.Medium)
+    }
 }

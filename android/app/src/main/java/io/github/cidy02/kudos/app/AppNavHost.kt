@@ -570,7 +570,9 @@ fun AppNavHost(
                 onOpenList = { type ->
                     navController.navigate(Routes.accountList(NavArgCodecs.encodeAccountListType(type)))
                 },
-                onOpenAO3Collections = { navController.navigate(Routes.AO3Collections) }
+                onOpenAO3Collections = { navController.navigate(Routes.AO3Collections) },
+                authRepository = container.authRepository,
+                onNewWork = { navController.navigate(io.github.cidy02.kudos.account.WritingWorkDestination.route()) }
             )
         }
         sharedComposable(Routes.About) {
@@ -950,6 +952,7 @@ fun AppNavHost(
             } else {
                 if (type == AccountListType.MyWorks && worksUsername != null) {
                     AuthorProfileScreen(
+                        onNewWork = { navController.navigate(io.github.cidy02.kudos.account.WritingWorkDestination.route()) },
                         username = worksUsername,
                         authorRepository = container.authorRepository,
                         authRepository = container.authRepository,
@@ -1217,6 +1220,7 @@ fun AppNavHost(
                 // Every way in comes through here, and a work's page passes the byline's words.
                 val author = io.github.cidy02.kudos.network.ao3.author.AO3AuthorRoute.fromByline(authorUsername)
                 AuthorProfileScreen(
+                    onNewWork = { navController.navigate(io.github.cidy02.kudos.account.WritingWorkDestination.route()) },
                     username = author.username,
                     initialPseud = author.pseud,
                     initialTab = if (authorRoute == Routes.AuthorSeries) io.github.cidy02.kudos.author.AuthorTab.Series

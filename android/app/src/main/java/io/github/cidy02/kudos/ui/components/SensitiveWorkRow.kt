@@ -157,6 +157,11 @@ fun SensitiveWorkRow(
      * fandom and counts the rest, and unfolds for those and for its warnings too.
      */
     savedWork: Boolean = false,
+    /**
+     * False where the card's foot carries kudos, comments and hits in a strip of its own (the
+     * writer's own works, iOS `showsPerformance`): the line of figures then leaves them out.
+     */
+    figuresIncludePerformance: Boolean = true,
     onClick: () -> Unit,
     onReveal: (() -> Unit)? = null,
     onSelect: (() -> Unit)? = null,
@@ -251,7 +256,7 @@ fun SensitiveWorkRow(
                                 },
                                 rating = rating, categories = categories, warnings = warnings, isComplete = isComplete,
                                 figures = ledgerMetadata(language, wordCount, chapters, comments, kudos, bookmarks, hits,
-                                    showsZeroStats, includesPerformance = bookmark == null),
+                                    showsZeroStats, includesPerformance = bookmark == null && figuresIncludePerformance),
                                 dateText = bookmark?.date ?: dateText,
                                 dateLabel = if (bookmark == null) "Updated" else "Bookmarked",
                                 badges = bookmark?.badges.orEmpty(), footnote = bookmark?.footnote,
@@ -649,7 +654,8 @@ fun SensitiveWorkRow(
     onLongClick: (() -> Unit)? = null,
     ledger: Boolean = false,
     bookmark: LedgerBookmark? = null,
-    footer: (@Composable () -> Unit)? = null
+    footer: (@Composable () -> Unit)? = null,
+    figuresIncludePerformance: Boolean = true
 ) {
     var showMenu by remember { mutableStateOf(false) }
     
@@ -681,6 +687,7 @@ fun SensitiveWorkRow(
             bookmark = bookmark,
             footer = footer,
             showsStatusTray = true,
+            figuresIncludePerformance = figuresIncludePerformance,
             onClick = { onOpenWork(work) },
             onTagClick = onTagClick,
             onTagSearch = onTagSearch,

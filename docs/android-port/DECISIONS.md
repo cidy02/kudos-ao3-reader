@@ -1739,3 +1739,8 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   commit).** No rating: no tile. No category: the two figures. Unknown completion: "?".
   And the Account hub's Collections and Series have their own glyphs. Reverse: the commit
   that names them.
+- **2026-10-12 · The writer's own pages (3cq).** A writer's kudos, comments and hits are one
+  strip inside the ledger card and are left off its line (iOS `showsPerformance`); the
+  dashboard knows it is the reader's own; "+" starts a work from the writer's Works and
+  Dashboard; the dashboard's fandoms carry their counts and its sections their "See all"
+  links. Reverse: the commit that names 3cq.
