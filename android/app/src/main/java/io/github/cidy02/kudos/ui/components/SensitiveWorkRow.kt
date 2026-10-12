@@ -144,7 +144,7 @@ fun SensitiveWorkRow(
     dateText: String = "",
     /** With [ledger]: this row is a bookmark, and draws iOS's one bookmark card. */
     bookmark: LedgerBookmark? = null,
-    /** With [ledger]: drawn last inside the card (History's visit line). */
+    /** Drawn last inside the card, in either form (History's visit line). */
     footer: (@Composable () -> Unit)? = null,
     onClick: () -> Unit,
     onReveal: (() -> Unit)? = null,
@@ -242,7 +242,7 @@ fun SensitiveWorkRow(
                                     showsZeroStats, includesPerformance = bookmark == null),
                                 dateText = bookmark?.date ?: dateText,
                                 dateLabel = if (bookmark == null) "Updated" else "Bookmarked",
-                                badges = bookmark?.badges.orEmpty(), footnote = bookmark?.footnote, footer = footer,
+                                badges = bookmark?.badges.orEmpty(), footnote = bookmark?.footnote,
                                 isFavorite = isFavorite && !selecting,
                                 // A bookmark's card has nothing folded away: its note and tags are out.
                                 expandable = expandable && bookmark == null, expanded = expanded,
@@ -385,6 +385,7 @@ fun SensitiveWorkRow(
                                 )
                             )
                         }
+                        footer?.invoke()
                     }
                 }
                 if (obscured) {
@@ -448,7 +449,6 @@ private fun LedgerBody(
     dateLabel: String,
     badges: List<String>,
     footnote: (@Composable () -> Unit)?,
-    footer: (@Composable () -> Unit)?,
     isFavorite: Boolean,
     expandable: Boolean,
     expanded: Boolean,
@@ -600,7 +600,6 @@ private fun LedgerBody(
             }
         }
     }
-    footer?.invoke()
 }
 
 @Composable

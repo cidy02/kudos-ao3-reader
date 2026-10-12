@@ -1686,3 +1686,9 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   Delete stays a button (iOS: a swipe) and is offered only where AO3 gave a link, and not
   on a blurred row. A dialog nothing could open ("Clear your entire history?") is removed:
   its confirm did not write to AO3. Reverse: the commit that names 3co step 2.
+- **2026-10-11 · History, Bookmarks and the account's works lists choose a Layout (3co,
+  step 3).** Detailed or Ledger, in the More menu as Home's section pages do it, kept as
+  iOS's `account.displayMode` in its own small preferences file (no backup or settings
+  change). Android opens on Ledger: iOS opens on Compact, which Android has not built and
+  does not offer. Whether to open on Compact once it exists is the owner's. Reverse: the
+  commit that names 3co step 3.
