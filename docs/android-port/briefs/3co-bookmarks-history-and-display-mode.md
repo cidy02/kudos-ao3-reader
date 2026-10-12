@@ -87,3 +87,32 @@ with the detailed card and the footnote under it, now with the date.
 
 **Next: step 2, History.**
 
+## Step 2, landed 2026-10-11 (Claude alone; gate 2,614): History
+
+- **Rows are in groups by time** ("This week", "Earlier", "This month", with a count), in
+  the page's own order: a heading goes in where AO3's order changes from one time to
+  another, and no row is moved (`AO3HistoryVisitBucket`, `historyVisitGroups`, ported
+  from iOS with its test cases, `AO3HistoryVisitTest`).
+- **The visit line is inside the card**, in the ledger form, with "Marked for later" and
+  "Flagged to skip" under it. A saved work's line also says where the reader is in their
+  own copy ("Ch. 14 of 24", "Finished", "42%"; `historyLocalProgress`).
+- **Delete is inside the card, and only where AO3 gave a delete link** (iOS `canDelete`).
+  It used to be offered on every row, and on a row with no link it ended in "AO3 didn't
+  show a delete link". When and what it writes is unchanged: the same confirmation, one
+  request. **Not on a blurred row**: its confirmation names the work. iOS deletes by a
+  swipe; Android keeps a button, which a screen reader can reach.
+- **Two small faults found by reading the screen and fixed:** the empty state said "No
+  works on this page are inProgress."; and a "Clear your entire history?" dialog that
+  nothing could open, whose confirm would only have hidden the rows on this device under
+  words that said AO3's history would be cleared, is removed.
+
+**Looked at:** History in Sepia and Dark and at twice the text size beside the iPhone's;
+the delete confirmation opened and cancelled; the "In progress" empty message.
+**Not done on the emulator:** a delete confirmed (it writes; the fixture path is covered by
+the existing tests), a saved work's own-progress words (the demo's history rows are not in
+the Library), a blurred history row.
+
+**Next: step 3, the Layout choice** (Detailed, Ledger, Compact) in the More menu of
+History, Bookmarks and the works lists. Until then Android's one form there is the ledger
+(Bookmarks, History) or the detailed card (the works lists).
+
