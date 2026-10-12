@@ -219,6 +219,7 @@ internal fun AO3AuthorPerformanceStrip(work: AO3WorkSummary) {
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun AO3SeriesRow(
     series: AO3AuthorSeriesSummary,
@@ -239,6 +240,16 @@ internal fun AO3SeriesRow(
             .padding(horizontal = 18.dp, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(if (displayMode == AuthorDisplayMode.Ledger) 10.dp else 7.dp)
     ) {
+        val large = io.github.cidy02.kudos.ui.subject.isAccessibilityFontScale()
+        // iOS 1w: "Complete" in green and "Restricted" in amber beside the fandom. AO3 says
+        // both on its own page, and the card said neither.
+        val hasBadges = series.isComplete == true || series.isRestricted
+        val badges: @Composable () -> Unit = {
+            if (series.isComplete == true) io.github.cidy02.kudos.ui.subject.SubjectStateBadge(
+                "Complete", SubjectPalette.fromHue(0.36, tokens.theme).accent)
+            if (series.isRestricted) io.github.cidy02.kudos.ui.subject.SubjectStateBadge(
+                "Restricted", SubjectPalette.fromHue(0.10, tokens.theme).accent)
+        }
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.Top) {
             SeriesSpineStackMark(palette)
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
@@ -246,8 +257,13 @@ internal fun AO3SeriesRow(
                     text = series.fandoms.firstOrNull() ?: "Series",
                     palette = palette,
                     size = 10.sp,
-                    ruleSpacing = 4.dp
+                    ruleSpacing = 4.dp,
+                    trailing = if (hasBadges && !large) badges else null
                 )
+                // No room beside the fandom at the large sizes: a line of their own.
+                if (hasBadges && large) FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) { badges() }
                 Text(
                     series.title,
                     color = tokens.primaryInk,
@@ -262,12 +278,22 @@ internal fun AO3SeriesRow(
         if (series.summary.isNotBlank()) {
             Text(series.summary, color = tokens.secondaryInk, fontSize = 13.5.sp, maxLines = 3)
         }
-        val meta = buildList {
-            series.workCount?.let { add(if (it == 1) "1 work" else "$it works") }
-            series.words?.let { add("${it.compactCount()} words") }
-            if (series.dateUpdated.isNotBlank()) add(series.dateUpdated)
-        }.joinToString(" · ")
-        if (meta.isNotBlank()) Text(meta, color = tokens.secondaryInk, fontSize = 11.5.sp)
+        // iOS `AO3SeriesRow.figures`: works, the whole word count, the bookmarks, and the date
+        // at the line's far end (under the figures at the large sizes).
+        val figures = listOfNotNull(
+            series.workCount?.let { if (it == 1) "1 work" else "%,d works".format(it) },
+            series.words?.let { "%,d words".format(it) },
+            series.bookmarkCount?.let { if (it == 1) "1 bookmark" else "%,d bookmarks".format(it) }
+        ).joinToString("  ·  ")
+        if (large) {
+            if (figures.isNotBlank()) Text(figures, color = tokens.secondaryInk, fontSize = 11.5.sp)
+            if (series.dateUpdated.isNotBlank()) Text(series.dateUpdated, color = tokens.secondaryInk, fontSize = 11.5.sp)
+        } else if (figures.isNotBlank() || series.dateUpdated.isNotBlank()) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(figures, color = tokens.secondaryInk, fontSize = 11.5.sp, modifier = Modifier.weight(1f))
+                Text(series.dateUpdated, color = tokens.secondaryInk, fontSize = 11.5.sp, maxLines = 1)
+            }
+        }
         if (series.creators.isNotEmpty()) {
             Text("by ${series.creators.joinToString()}", color = tokens.secondaryInk, fontSize = 12.sp)
         }

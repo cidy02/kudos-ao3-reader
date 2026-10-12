@@ -65,6 +65,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
@@ -217,6 +218,20 @@ fun SubjectRowSeparator(
 }
 
 /** Uppercase subject label and the short rule under it. */
+/**
+ * A small uppercase state pill in one colour (iOS `SubjectStateBadge`): 15 % fill, 35 % hairline.
+ * A series's "Complete" and "Restricted", a draft's "3 days left". Read aloud as written.
+ */
+@Composable
+fun SubjectStateBadge(text: String, color: Color, modifier: Modifier = Modifier) {
+    val shape = RoundedCornerShape(SubjectMetrics.chipRadius)
+    Text(text.uppercase(), color = color, fontSize = 9.5.sp, lineHeight = 14.sp,
+        fontWeight = FontWeight.SemiBold, letterSpacing = 0.5.sp, maxLines = 1,
+        modifier = modifier.background(color.copy(alpha = 0.15f), shape).border(0.5.dp, color.copy(alpha = 0.35f), shape)
+            .padding(horizontal = 8.dp, vertical = 3.dp)
+            .clearAndSetSemantics { contentDescription = text })
+}
+
 @Composable
 fun SubjectKicker(
     text: String,
@@ -226,13 +241,16 @@ fun SubjectKicker(
     size: TextUnit = 10.sp,
     ruleWidth: Dp = SubjectMetrics.kickerRuleWidth,
     ruleSpacing: Dp = 6.dp,
-    maxLines: Int = 1
+    maxLines: Int = 1,
+    /** Drawn after the words, on their line: a series's state pills. The words give way to it. */
+    trailing: (@Composable () -> Unit)? = null
 ) {
     val tokens = LocalKudosTokens.current
     Column(modifier, verticalArrangement = Arrangement.spacedBy(ruleSpacing)) {
         Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(
                 text = text.uppercase(),
+                modifier = if (trailing != null) Modifier.weight(1f, fill = false) else Modifier,
                 color = palette.accent,
                 fontSize = size,
                 lineHeight = (size.value * 1.4f).sp,
@@ -251,6 +269,7 @@ fun SubjectKicker(
                     maxLines = 1
                 )
             }
+            trailing?.invoke()
         }
         Box(
             Modifier

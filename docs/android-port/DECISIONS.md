@@ -1748,3 +1748,7 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   tab it was asked for (the account's Series row opened Works). A form row that opens a
   choice draws its value in the accent with "⌄" (`showsChoice`), Android's mark for iOS's
   picker; a required mark is in the accent. Reverse: the commit that names 3cr.
+- **2026-10-12 · The series card (3cs).** Whether a series is complete follows iOS's rule
+  ("Series Complete: No" was read as complete). The card says Complete and Restricted in
+  pills, prints the whole word count and the bookmarks, and the figure reader never takes
+  a label. Reverse: the commit that names 3cs.

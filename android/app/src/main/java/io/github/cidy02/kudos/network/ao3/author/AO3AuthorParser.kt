@@ -200,14 +200,16 @@ class AO3AuthorParser(
             words = statInt(element, "words"),
             workCount = statInt(element, "works"),
             dateUpdated = element.selectFirst("p.datetime")?.normalizedText().orEmpty(),
-            isComplete = when {
-                status.contains("complete", true) -> true
-                status.contains("wip", true) || status.contains("progress", true) -> false
-                else -> null
-            },
+            isComplete = seriesCompletion(status),
             url = url,
             creatorUsernames = ao3CreatorUsernames(element.select("h4.heading a[rel=author], h4.heading a[href*=/pseuds/]")
-                .mapNotNull { absoluteUrl(it.attr("href")) })
+                .mapNotNull { absoluteUrl(it.attr("href")) }),
+            bookmarkCount = statInt(element, "bookmarks"),
+            // The heading's image only, as iOS: a summary that says "restricted" is not a lock.
+            isRestricted = element.select("h4.heading img").any {
+                it.attr("src").contains("lockblue", true) || it.attr("title").equals("Restricted", true) ||
+                    it.attr("alt").contains("restricted", true)
+            }
         )
     }
 
@@ -343,8 +345,25 @@ class AO3AuthorParser(
             .fold(currentPage.coerceAtLeast(1)) { acc, n -> maxOf(acc, n) }
     }
 
+    /**
+     * iOS `seriesCompletion`. AO3 writes "Series Complete: Yes" or "Series Complete: No", and
+     * both say "complete": every unfinished series was read as finished.
+     */
+    private fun seriesCompletion(text: String): Boolean? {
+        val value = text.lowercase()
+        return when {
+            Regex("""\byes\b""").containsMatchIn(value) -> true
+            Regex("""\bno\b""").containsMatchIn(value) -> false
+            "in progress" in value || "incomplete" in value -> false
+            "complete" in value -> true
+            else -> null
+        }
+    }
+
     private fun statInt(element: Element, cssClass: String): Int? {
-        val text = element.selectFirst("dl.stats dd.$cssClass, .stats .$cssClass")
+        // Never the label: where a "Words:" <dt> carries the class too it comes first, and the
+        // figure after it was read as nothing.
+        val text = element.select("dl.stats dd.$cssClass, .stats .$cssClass").firstOrNull { it.tagName() != "dt" }
             ?.normalizedText()
             ?: return null
         return text.filter { it.isDigit() }.toIntOrNull()
