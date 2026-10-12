@@ -1788,3 +1788,7 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   ledger card and iOS's standard card do. Reverse: the commit that names 3da.
 - **2026-10-12 · The series form's title (3db).** Marked required ("Title ∗"), as iOS and
   as the work form. Reverse: the commit that names 3db.
+- **2026-10-12 · Challenge pages (3dc).** Each challenge page's main action is one filled
+  button (`ChallengePrimaryAction`); Sign-ups and Assignments filter with the segmented
+  control; Edit collection labels its sections as the other AO3 forms do. Reverse: the
+  commit that names 3dc.

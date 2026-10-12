@@ -75,12 +75,16 @@ fun AO3ChallengeSignUpsScreen(slug: String, title: String, viewerIsOwner: Boolea
                         PushedChallengeHeader(effectiveTitle, "Sign-ups", listOfNotNull(
                             state.total?.let { signUpCount(it, "sign-up") }, state.closeDateText.takeIf { it.isNotEmpty() }
                         ).joinToString(" · "))
-                        Row(Modifier.padding(top = 14.dp).horizontalScroll(rememberScrollState())
+                        // iOS's segmented control, as Prompts has. The pills stay for the large
+                        // text sizes, where three segments do not fit a row.
+                        if (!large) SubjectSegmentedControl(options = SignUpFilter.entries, selected = filter,
+                            onSelect = { filter = it }, title = { it.label }, contentDescription = "Sign-up filter",
+                            modifier = Modifier.padding(horizontal = SubjectMetrics.accountGutter).padding(top = 14.dp))
+                        else Row(Modifier.padding(top = 14.dp).horizontalScroll(rememberScrollState())
                             .padding(horizontal = SubjectMetrics.accountGutter), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             SignUpFilter.entries.forEach { option ->
                                 SubjectChip(option.label, style = SubjectChipStyle.Pill(filter == option), palette = palette,
-                                    maxLines = if (large) Int.MAX_VALUE else 1,
-                                    modifier = Modifier.clickable { filter = option })
+                                    maxLines = Int.MAX_VALUE, modifier = Modifier.clickable { filter = option })
                             }
                         }
                     }
@@ -162,10 +166,10 @@ fun AO3ChallengeSignUpsScreen(slug: String, title: String, viewerIsOwner: Boolea
                 if (large) {
                     SettingsActionRow("Your sign-up", { onOpenSignUp(own) })
                     SubjectRowSeparator()
-                    SettingsActionRow("Create sign-up", { onOpenSignUp(null) })
-                } else Row {
+                    ChallengePrimaryAction("Create sign-up", true, Modifier.fillMaxWidth()) { onOpenSignUp(null) }
+                } else Row(verticalAlignment = Alignment.CenterVertically) {
                     SettingsActionRow("Your sign-up", { onOpenSignUp(own) }, modifier = Modifier.weight(1f))
-                    SettingsActionRow("Create sign-up", { onOpenSignUp(null) }, modifier = Modifier.weight(1f))
+                    ChallengePrimaryAction("Create sign-up", true, Modifier.weight(1f)) { onOpenSignUp(null) }
                 }
             }
         }

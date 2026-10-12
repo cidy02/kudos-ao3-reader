@@ -98,11 +98,16 @@ fun AO3ChallengeAssignmentsScreen(slug: String, title: String, viewerIsOwner: Bo
                     Spacer(Modifier.height(76.dp))
                     SubjectHeaderBlock(kicker = title.ifEmpty { slug }, title = "Assignments", subtitle = state.subtitle,
                         palette = palette, gutter = SubjectMetrics.accountGutter)
-                    Row(Modifier.padding(top = 14.dp).horizontalScroll(rememberScrollState()).padding(horizontal = SubjectMetrics.accountGutter),
+                    // iOS's segmented control, as Prompts has. The pills stay for the large text
+                    // sizes, where three segments do not fit a row.
+                    if (!large) SubjectSegmentedControl(options = AssignmentSegment.entries, selected = segment,
+                        onSelect = { segment = it }, title = { it.label }, contentDescription = "Assignment filter",
+                        modifier = Modifier.padding(horizontal = SubjectMetrics.accountGutter).padding(top = 14.dp))
+                    else Row(Modifier.padding(top = 14.dp).horizontalScroll(rememberScrollState()).padding(horizontal = SubjectMetrics.accountGutter),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         AssignmentSegment.entries.forEach { option -> SubjectChip(option.label,
                             style = SubjectChipStyle.Pill(segment == option), palette = palette,
-                            maxLines = if (large) Int.MAX_VALUE else 1, modifier = Modifier.clickable { segment = option }) }
+                            maxLines = Int.MAX_VALUE, modifier = Modifier.clickable { segment = option }) }
                     }
                 }
                 when {
@@ -211,11 +216,11 @@ fun AO3ChallengeAssignmentsScreen(slug: String, title: String, viewerIsOwner: Bo
         if (viewerIsOwner && authState.isSignedIn && state.loaded) SettingsPanel(Modifier.padding(top = 12.dp, bottom = 26.dp)) {
             val actions: @Composable RowScope.() -> Unit = {
                 SettingsActionRow("Report a default", { model.pick(AssignmentWrite.Default) }, modifier = Modifier.weight(1f), enabled = !disabled && state.reportable.isNotEmpty())
-                AssignmentClaimAction(!disabled && state.unmatched.isNotEmpty(), Modifier.weight(1f)) { model.pick(AssignmentWrite.Claim) }
+                ChallengePrimaryAction("Claim a pinch hit", !disabled && state.unmatched.isNotEmpty(), Modifier.weight(1f)) { model.pick(AssignmentWrite.Claim) }
             }
             if (large) {
                 SettingsActionRow("Report a default", { model.pick(AssignmentWrite.Default) }, enabled = !disabled && state.reportable.isNotEmpty())
-                AssignmentClaimAction(!disabled && state.unmatched.isNotEmpty(), Modifier.fillMaxWidth()) { model.pick(AssignmentWrite.Claim) }
+                ChallengePrimaryAction("Claim a pinch hit", !disabled && state.unmatched.isNotEmpty(), Modifier.fillMaxWidth()) { model.pick(AssignmentWrite.Claim) }
             } else Row(content = actions)
         }
     }
@@ -253,13 +258,19 @@ private fun AssignmentsFailure(title: String, message: String, retry: Boolean, o
     }
 }
 
+/**
+ * The one filled action at a challenge page's foot, as iOS draws each: Claim a pinch hit, Create
+ * sign-up, New prompt, Submit sign-up. Only the first was drawn so; the others were plain lines of
+ * text beside the plain ones.
+ */
 @Composable
-private fun AssignmentClaimAction(enabled: Boolean, modifier: Modifier, onClick: () -> Unit) {
+internal fun ChallengePrimaryAction(text: String, enabled: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
     val palette = LocalKudosTokens.current.scopePalette
     Box(modifier.padding(6.dp).alpha(if (enabled) 1f else 0.45f)
         .background(palette.accent, RoundedCornerShape(12.dp)).clickable(enabled = enabled, onClick = onClick)
         .heightIn(min = 44.dp).padding(horizontal = 12.dp, vertical = 10.dp), contentAlignment = Alignment.Center) {
-        Text("Claim a pinch hit", color = palette.labelOnAccent, fontSize = 14.sp, lineHeight = 20.sp, fontWeight = FontWeight.SemiBold)
+        Text(text, color = palette.labelOnAccent, fontSize = 14.sp, lineHeight = 20.sp, fontWeight = FontWeight.SemiBold,
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center)
     }
 }
 

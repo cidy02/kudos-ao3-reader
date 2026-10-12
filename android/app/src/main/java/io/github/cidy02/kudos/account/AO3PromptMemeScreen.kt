@@ -177,7 +177,7 @@ fun AO3PromptMemeScreen(
         }
         if (authState.isSignedIn) io.github.cidy02.kudos.settings.SettingsPanel(
             Modifier.align(Alignment.BottomCenter).padding(top = 12.dp, bottom = 26.dp)) {
-            io.github.cidy02.kudos.settings.SettingsActionRow("New prompt", onOpenSignUp)
+            ChallengePrimaryAction("New prompt", true, Modifier.fillMaxWidth(), onOpenSignUp)
         }
         }
 

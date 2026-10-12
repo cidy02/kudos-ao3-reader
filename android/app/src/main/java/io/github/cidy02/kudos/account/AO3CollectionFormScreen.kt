@@ -99,7 +99,7 @@ fun AO3CollectionFormScreen(
                     }
                 }
                 item {
-                    SettingsSection(label = "Header", footnote = "The collection name is part of its web address. " +
+                    CollectionFormSection(label = "Header", footnote = "The collection name is part of its web address. " +
                         "Use letters, numbers and underscores. You can't change it after creating the collection.") {
                         val rows = listOf(Fields.TITLE to "Display title", Fields.NAME to "Collection name",
                             Fields.PARENT to "Parent collection", Fields.EMAIL to "Contact email", Fields.DESCRIPTION to "Tagline")
@@ -128,7 +128,7 @@ fun AO3CollectionFormScreen(
                     }
                 }
                 item {
-                    SettingsSection(label = "Images", footnote = null) {
+                    CollectionFormSection(label = "Images", footnote = null) {
                         listOf(Fields.HEADER_URL to "Header image URL", Fields.HEADER_ALT to "Header image alt text",
                             Fields.ICON_ALT to "Icon alt text", Fields.ICON_COMMENT to "Icon comment").forEachIndexed { index, (key, label) ->
                             if (index > 0) SubjectRowSeparator()
@@ -138,7 +138,7 @@ fun AO3CollectionFormScreen(
                     }
                 }
                 item {
-                    SettingsSection(label = "Preferences", footnote = "You can turn on any combination of these settings. " +
+                    CollectionFormSection(label = "Preferences", footnote = "You can turn on any combination of these settings. " +
                         "Unrevealed shows each work as Mystery Work, Anonymous hides its creators, and new-item emails go to the contact email.") {
                         listOf("closed" to "Closed to new items", "moderated" to "Moderated", "unrevealed" to "Unrevealed",
                             "anonymous" to "Anonymous", "email_notify" to "Email new items").forEachIndexed { index, (suffix, label) ->
@@ -152,7 +152,7 @@ fun AO3CollectionFormScreen(
                     }
                 }
                 if (form.challengeOptions.isNotEmpty()) item {
-                    SettingsSection(label = "Challenge", footnote = null) {
+                    CollectionFormSection(label = "Challenge", footnote = null) {
                         Box(Modifier.fillMaxWidth()) {
                             SubjectFormRow("Set up a challenge", value = form.challengeOptions.firstOrNull {
                                 it.first == form[Fields.CHALLENGE]
@@ -171,7 +171,7 @@ fun AO3CollectionFormScreen(
                     }
                 }
                 item {
-                    SettingsSection(label = "Profile", footnote = null) {
+                    CollectionFormSection(label = "Profile", footnote = null) {
                         listOf("intro" to "Introduction", "faq" to "FAQ", "rules" to "Rules").forEachIndexed { index, (suffix, label) ->
                             if (index > 0) SubjectRowSeparator()
                             val key = Fields.profile(suffix)
@@ -184,7 +184,7 @@ fun AO3CollectionFormScreen(
                     SettingsActionRow(saveLabel, onClick = save, enabled = state.canSave)
                 } }
                 if (slug != null) item {
-                    SettingsSection(label = "Collection actions", footnote = null, top = 12.dp) {
+                    CollectionFormSection(label = "Collection actions", footnote = null, top = 12.dp) {
                         Text("Open AO3 to close this collection. Deleting the collection leaves its works on AO3.",
                             color = tokens.secondaryInk, fontSize = 12.5.sp, lineHeight = 18.sp, modifier = Modifier.padding(13.dp))
                         SettingsActionRow("Open Collection Settings on AO3", onClick = { onOpenWeb(AO3CollectionFormUrls.form(slug)) })
@@ -220,4 +220,19 @@ private fun CollectionControlRow(label: String, control: @Composable () -> Unit)
         Text(label, color = LocalKudosTokens.current.primaryInk, fontSize = 14.5.sp, lineHeight = 20.sp)
         control()
     } else SubjectFormRow(label, trailing = control)
+}
+
+/**
+ * A section of this form, labelled as the other AO3 forms label theirs and as iOS labels this
+ * one ("HEADER", "IMAGES"). It had Settings' label, in sentence case at the body's size.
+ */
+@Composable
+private fun CollectionFormSection(
+    label: String, footnote: String?, top: androidx.compose.ui.unit.Dp = 0.dp,
+    content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit
+) {
+    androidx.compose.foundation.layout.Column {
+        io.github.cidy02.kudos.writing.WorkFormSection(label)
+        SettingsSection(footnote = footnote, top = 8.dp, content = content)
+    }
 }
