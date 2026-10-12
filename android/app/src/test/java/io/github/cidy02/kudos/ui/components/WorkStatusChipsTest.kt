@@ -81,4 +81,13 @@ class WorkStatusChipsTest {
         assertFalse(chips.contains("F/F"))
         assertFalse(chips.contains("M/M"))
     }
+
+    /** iOS `ratingLetter`: the chip shows AO3's letter so four chips fit a line; the name is still spoken. */
+    @Test
+    fun theRatingChipShowsItsLetterAndSpeaksItsName() {
+        val chip = statusChips("Teen And Up Audiences", emptyList(), emptyList(), null).first()
+        assertEquals("T", chip.text)
+        assertEquals("Teen And Up Audiences", chip.accessibilityLabel)
+        assertEquals("NR", statusChips("Not Rated", emptyList(), emptyList(), null).first().text)
+    }
 }

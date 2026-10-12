@@ -146,6 +146,11 @@ fun SensitiveWorkRow(
     bookmark: LedgerBookmark? = null,
     /** Drawn last inside the card, in either form (History's visit line). */
     footer: (@Composable () -> Unit)? = null,
+    /**
+     * The tray of four symbols beside the title of the detailed card. iOS draws it on an AO3
+     * work's card (`AO3WorkRow.standardCard`) and not on a saved work's (`WorkRow`).
+     */
+    showsStatusTray: Boolean = false,
     onClick: () -> Unit,
     onReveal: (() -> Unit)? = null,
     onSelect: (() -> Unit)? = null,
@@ -298,7 +303,7 @@ fun SensitiveWorkRow(
                                 // at what the chips below say in words. Not spoken (the chips
                                 // are), and not at the large text sizes, where it would take the
                                 // title's room.
-                                if (!isAccessibilityFontScale()) {
+                                if (showsStatusTray && !isAccessibilityFontScale()) {
                                     HomeStatusTray(
                                         rating = rating,
                                         categories = categories,
@@ -659,6 +664,7 @@ fun SensitiveWorkRow(
             dateText = work.updatedDate,
             bookmark = bookmark,
             footer = footer,
+            showsStatusTray = true,
             onClick = { onOpenWork(work) },
             onTagClick = onTagClick,
             onTagSearch = onTagSearch,

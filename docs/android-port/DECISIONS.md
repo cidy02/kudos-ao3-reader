@@ -1714,3 +1714,8 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   "cleared" only on AO3's own evidence, the list emptied on the device without a second
   read. Fixtures and the demo only; owed a second review. The networking policy gains its
   "Reading history writes" row. Reverse: the commit that names 3co step 7.
+- **2026-10-11 · The detailed card's tray is an AO3 work's only, and its rating chip is a
+  letter (3cp).** iOS draws the tray on `AO3WorkRow`'s card and not on a saved work's; 3co
+  step 4 had given it to both. The rating chip says "G", "T", "M", "E" or "NR", as iOS's
+  does, so the four chips fit one line; the full rating is spoken. Reverse: the commit that
+  names 3cp.

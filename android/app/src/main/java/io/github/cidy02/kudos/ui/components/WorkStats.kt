@@ -209,6 +209,21 @@ fun ratingDisplayName(rating: String): String? {
     }
 }
 
+/**
+ * iOS `WorkStat.ratingLetter`: AO3's own single-letter shorthand, for the row of four chips on
+ * a detailed card, where the names spelled out do not all fit on one line. Cover cards keep
+ * the name. A screen reader is given the full rating either way.
+ */
+fun ratingLetter(rating: String): String? = when (rating.trim()) {
+    "" -> null
+    "General Audiences" -> "G"
+    "Teen And Up Audiences" -> "T"
+    "Mature" -> "M"
+    "Explicit" -> "E"
+    "Not Rated" -> "NR"
+    else -> rating
+}
+
 fun chapterStatText(chapters: String): String {
     val trimmed = chapters.trim()
     if (trimmed.isEmpty()) return ""
@@ -361,7 +376,8 @@ fun statusChips(
 
     rating.takeIf { it.isNotBlank() }?.let {
         chips += WorkStatItem(
-            text = ratingDisplayName(it) ?: it,
+            // The letter, as on iOS: with the names spelled out the four chips took two lines.
+            text = ratingLetter(it) ?: it,
             accessibilityLabel = it,
             icon = WorkStatIcons.rating,
             tint = AO3StatusTint.rating(it)
