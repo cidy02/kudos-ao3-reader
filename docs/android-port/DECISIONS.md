@@ -1759,3 +1759,7 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   return after the process was killed), Readium's reader fragment is not rebuilt from
   saved state: `ReaderFragmentRestore`. A launching file is offered for import on a fresh
   start only. Reverse: the commit that names 3ct.
+- **2026-10-12 · Recovery through a kill (3cu).** A form's long text comes back through
+  the app being killed in the background (seen); its short fields do not, on either app,
+  by the editor's design. Left as designed and put to the owner (question 26). The drafts
+  note says recovery copies stay on the device, as iOS. Reverse: the commit that names 3cu.

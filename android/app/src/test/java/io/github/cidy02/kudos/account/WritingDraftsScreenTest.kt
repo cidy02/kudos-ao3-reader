@@ -105,8 +105,7 @@ class WritingDraftsScreenTest {
         assertEquals(1, client.gets.size)
         compose.onNodeWithText("Post").assertDoesNotExist()
         compose.onNodeWithText("Delete").assertDoesNotExist()
-        compose.onNodeWithText("AO3 deletes an unposted draft 30 days after you create it.").assertExists()
-        compose.onNodeWithText("Recovery copies", substring = true).assertDoesNotExist()
+        compose.onNodeWithText("AO3 deletes an unposted draft 30 days after you create it. Recovery copies stay on this device and aren't deleted with it.").assertExists()
     }
 
     @Test fun confirmedSaveReturnReadsTheCurrentDraftsPageOnceAndShowsTheServedChange() {

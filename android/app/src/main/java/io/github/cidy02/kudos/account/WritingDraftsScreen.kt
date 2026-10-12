@@ -150,8 +150,11 @@ fun WritingDraftsScreen(
                     item {
                         val orange = SubjectPalette.fromHue(DraftExpiry.Tone.Orange.hue, tokens.theme).accent
                         val shape = RoundedCornerShape(SubjectMetrics.rowRadius)
-                        // Add " Recovery copies stay on this device and aren't deleted with it." only when Android keeps writing recovery copies.
-                        Text("AO3 deletes an unposted draft 30 days after you create it.",
+                        // The second sentence waited for Android to keep recovery copies. It does: the
+                        // editor writes them (seen through the app being killed, 3cu), and deleting a
+                        // draft on AO3 leaves them alone.
+                        Text("AO3 deletes an unposted draft 30 days after you create it. Recovery copies stay on " +
+                            "this device and aren't deleted with it.",
                             color = tokens.primaryInk.withOpacity(0.78), fontSize = 12.5.sp, lineHeight = 18.sp,
                             modifier = Modifier.fillMaxWidth().padding(top = 6.dp)
                                 .background(orange.withOpacity(0.1), shape)
