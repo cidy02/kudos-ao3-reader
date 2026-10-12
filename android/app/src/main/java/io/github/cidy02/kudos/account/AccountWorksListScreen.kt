@@ -1,5 +1,8 @@
 package io.github.cidy02.kudos.account
 
+import io.github.cidy02.kudos.network.ao3.account.historyVisitGroups
+import io.github.cidy02.kudos.network.ao3.account.historyLocalProgress
+import io.github.cidy02.kudos.ui.subject.isAccessibilityFontScale
 import io.github.cidy02.kudos.ui.components.LedgerBookmark
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -798,7 +801,6 @@ private fun HistoryBrowser(
     var filter by remember { mutableStateOf("everything") }
     var deletedIds by remember { mutableStateOf(setOf<Long>()) }
     var pendingDelete by remember { mutableStateOf<CanonicalWork?>(null) }
-    var confirmClearHistory by remember { mutableStateOf(false) }
 
     val activeWorks = remember(works, deletedIds) {
         works.filter { it.remote.id !in deletedIds }
@@ -856,19 +858,6 @@ private fun HistoryBrowser(
         )
     }
 
-    DestructiveConfirmation(
-        show = confirmClearHistory,
-        title = "Clear your entire history?",
-        text = "This clears your AO3 reading history. It doesn't delete the works and can't be undone.",
-        confirmText = "Clear History",
-        confirmBeforeDelete = true,
-        onConfirm = {
-            confirmClearHistory = false
-            deletedIds = works.map { it.remote.id }.toSet()
-        },
-        onDismissRequest = { confirmClearHistory = false }
-    )
-
     val subtitle = buildString {
         append(if (displayedWorks.size == 1) "1 work" else "${displayedWorks.size} works")
         if (totalPages > 1) {
@@ -919,58 +908,95 @@ private fun HistoryBrowser(
             item {
                 EmptyStateCard(
                     title = "No matching works",
-                    message = "No works on this page are ${filter}."
+                    message = "No works on this page are ${if (filter == "inProgress") "in progress" else filter}."
                 )
             }
         } else {
-            items(displayedWorks, key = { "hist-${it.id}" }) { work ->
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    PairedWorkRow(work = work, expandAll = expandAll, onOpenWork = onOpenWork)
-
-                    val reading = readingsByWorkId[work.remote.id]
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 8.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        if (reading != null) {
-                            val facts = listOfNotNull(
-                                reading.visitCountDisplay,
-                                reading.versionDisplay,
-                                reading.lastVisitedDisplay
-                            ).joinToString(" · ")
-                            Text(
-                                text = facts,
-                                color = LocalKudosTokens.current.secondaryInk,
-                                fontSize = 12.sp,
-                                fontFamily = FontFamily.Monospace,
-                                modifier = Modifier.weight(1f, fill = false)
-                            )
-                        } else {
-                            Spacer(modifier = Modifier.width(1.dp))
-                        }
-
-                        SubjectChip(
-                            text = "Delete",
-                            style = SubjectChipStyle.Neutral,
-                            leadingIcon = Icons.Outlined.Delete,
-                            palette = palette,
-                            modifier = Modifier.clickable(enabled = !busy) { pendingDelete = work }
+            // iOS 1t: a heading where the page's own order changes from one time to another,
+            // and the visit line inside the card.
+            historyVisitGroups(displayedWorks) { readingsByWorkId[it.remote.id]?.lastVisited.orEmpty() }
+                .forEachIndexed { index, group ->
+                    item(key = "hist-head-$index") {
+                        SectionRuleHeader(title = group.bucket.title, count = group.items.size)
+                    }
+                    items(group.items, key = { "hist-${it.id}" }) { work ->
+                        val reading = readingsByWorkId[work.remote.id]
+                        PairedWorkRow(
+                            work = work, expandAll = expandAll, onOpenWork = onOpenWork, ledger = true,
+                            footer = { obscured ->
+                                HistoryReadingFootnote(
+                                    reading = reading,
+                                    localProgress = work.local?.let {
+                                        historyLocalProgress(it.isFinished, it.lastSpineIndex, it.chapters, it.readingProgress)
+                                    },
+                                    palette = palette,
+                                    // iOS offers the delete only for a row AO3 gave a link for. Not on
+                                    // a blurred row: its confirmation names the work.
+                                    onDelete = { pendingDelete = work }.takeIf { reading?.readingId != null && !obscured },
+                                    deleteEnabled = !busy
+                                )
+                            }
                         )
                     }
                 }
-            }
         }
 
         if (totalPages > 1) {
             item {
                 KudosPaginationBar(currentPage = currentPage, totalPages = totalPages, onPageChange = onLoadPage)
             }
+        }
+    }
+}
+
+/**
+ * iOS `AO3HistoryReadingFootnote`, inside the card: visits, the reader's own place, the version
+ * and the last visit on one line, then what AO3 flags. A missing fact is left out. The delete
+ * is a swipe on iOS; here it is a button beside the line.
+ */
+@Composable
+private fun HistoryReadingFootnote(
+    reading: AO3ReadingEntry?,
+    localProgress: String?,
+    palette: SubjectPalette,
+    onDelete: (() -> Unit)?,
+    deleteEnabled: Boolean
+) {
+    val tokens = LocalKudosTokens.current
+    val facts = listOfNotNull(
+        reading?.visitCountDisplay, localProgress, reading?.versionDisplay, reading?.lastVisitedDisplay
+    ).joinToString(" · ")
+    val flags = listOfNotNull(
+        "Marked for later".takeIf { reading?.isMarkedForLater == true },
+        "Flagged to skip".takeIf { reading?.isFlaggedToSkip == true }
+    ).joinToString("  ·  ")
+    if (facts.isEmpty() && flags.isEmpty() && onDelete == null) return
+    val words: @Composable (Modifier) -> Unit = { modifier ->
+        Column(modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            if (facts.isNotEmpty()) {
+                Text(facts, color = tokens.secondaryInk, fontSize = 11.5.sp, lineHeight = 16.sp,
+                    style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum"))
+            }
+            if (flags.isNotEmpty()) Text(flags, color = tokens.tertiaryInk, fontSize = 11.sp, lineHeight = 15.sp)
+        }
+    }
+    val delete: @Composable () -> Unit = {
+        if (onDelete != null) {
+            SubjectChip(
+                text = "Delete",
+                style = SubjectChipStyle.Neutral,
+                leadingIcon = Icons.Outlined.Delete,
+                palette = palette,
+                modifier = Modifier.clickable(enabled = deleteEnabled, onClickLabel = "delete from history", onClick = onDelete)
+            )
+        }
+    }
+    // Beside the words; under them at the large text sizes, where there is no room for both.
+    if (isAccessibilityFontScale()) {
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) { words(Modifier.fillMaxWidth()); delete() }
+    } else {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            words(Modifier.weight(1f)); delete()
         }
     }
 }
@@ -1499,7 +1525,9 @@ private fun PairedWorkRow(
     /** iOS draws Marked for Later and Subscriptions as the ledger card, always. */
     ledger: Boolean = false,
     /** This row's bookmark, on the Bookmarks list. */
-    bookmark: AO3AuthorBookmark? = null
+    bookmark: AO3AuthorBookmark? = null,
+    /** Drawn last inside the ledger card; told whether the row is blurred. */
+    footer: (@Composable (obscured: Boolean) -> Unit)? = null
 ) {
     val local = work.local
     if (local != null) {
@@ -1512,7 +1540,8 @@ private fun PairedWorkRow(
                 obscured = obscured,
                 onReveal = { privacy.reveal(local) },
                 onOpenWork = { onOpenWork(work.remote) },
-                ledger = ledger
+                ledger = ledger,
+                footer = footer?.let { { it(obscured) } }
             )
             // iOS: a saved work's row does not know about bookmarks, so the same pieces sit
             // under it, and not while the row is blurred. The note and tags of a hidden work
@@ -1523,7 +1552,7 @@ private fun PairedWorkRow(
         }
     } else {
         EnrichingWorkRow(work = work.remote, expandAll = expandAll, onOpenWork = onOpenWork, ledger = ledger,
-            bookmark = bookmark)
+            bookmark = bookmark, footer = footer?.let { { it(false) } })
     }
 }
 
@@ -1533,7 +1562,8 @@ private fun EnrichingWorkRow(
     expandAll: Boolean,
     onOpenWork: (AO3WorkSummary) -> Unit,
     ledger: Boolean = false,
-    bookmark: AO3AuthorBookmark? = null
+    bookmark: AO3AuthorBookmark? = null,
+    footer: (@Composable () -> Unit)? = null
 ) {
     val context = LocalContext.current
     val enricher = remember {
@@ -1551,6 +1581,7 @@ private fun EnrichingWorkRow(
         expandAll = expandAll,
         onOpenWork = onOpenWork,
         ledger = ledger,
+        footer = footer,
         // A work not in the Library draws its bookmark inside the one card (iOS 1q).
         bookmark = bookmark?.let { mark ->
             LedgerBookmark(

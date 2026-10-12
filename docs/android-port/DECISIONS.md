@@ -1681,3 +1681,8 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   under it. **A blurred work's bookmark note and tags are not drawn until it is revealed**
   (they were; iOS never drew them). Reverse: the commit that names 3co step 1, but not the
   blur rule.
+- **2026-10-11 · History is grouped by time, with its visit line and Delete inside the
+  card (3co, step 2).** Groups follow AO3's own order (iOS's rule, ported with its tests).
+  Delete stays a button (iOS: a swipe) and is offered only where AO3 gave a link, and not
+  on a blurred row. A dialog nothing could open ("Clear your entire history?") is removed:
+  its confirm did not write to AO3. Reverse: the commit that names 3co step 2.

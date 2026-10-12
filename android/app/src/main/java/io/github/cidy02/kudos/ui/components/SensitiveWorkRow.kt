@@ -144,6 +144,8 @@ fun SensitiveWorkRow(
     dateText: String = "",
     /** With [ledger]: this row is a bookmark, and draws iOS's one bookmark card. */
     bookmark: LedgerBookmark? = null,
+    /** With [ledger]: drawn last inside the card (History's visit line). */
+    footer: (@Composable () -> Unit)? = null,
     onClick: () -> Unit,
     onReveal: (() -> Unit)? = null,
     onSelect: (() -> Unit)? = null,
@@ -240,7 +242,7 @@ fun SensitiveWorkRow(
                                     showsZeroStats, includesPerformance = bookmark == null),
                                 dateText = bookmark?.date ?: dateText,
                                 dateLabel = if (bookmark == null) "Updated" else "Bookmarked",
-                                badges = bookmark?.badges.orEmpty(), footnote = bookmark?.footnote,
+                                badges = bookmark?.badges.orEmpty(), footnote = bookmark?.footnote, footer = footer,
                                 isFavorite = isFavorite && !selecting,
                                 // A bookmark's card has nothing folded away: its note and tags are out.
                                 expandable = expandable && bookmark == null, expanded = expanded,
@@ -446,6 +448,7 @@ private fun LedgerBody(
     dateLabel: String,
     badges: List<String>,
     footnote: (@Composable () -> Unit)?,
+    footer: (@Composable () -> Unit)?,
     isFavorite: Boolean,
     expandable: Boolean,
     expanded: Boolean,
@@ -597,6 +600,7 @@ private fun LedgerBody(
             }
         }
     }
+    footer?.invoke()
 }
 
 @Composable
@@ -609,7 +613,8 @@ fun SensitiveWorkRow(
     onTagSearch: ((SearchSubjectField, String) -> Unit)? = null,
     onLongClick: (() -> Unit)? = null,
     ledger: Boolean = false,
-    bookmark: LedgerBookmark? = null
+    bookmark: LedgerBookmark? = null,
+    footer: (@Composable () -> Unit)? = null
 ) {
     var showMenu by remember { mutableStateOf(false) }
     
@@ -639,6 +644,7 @@ fun SensitiveWorkRow(
             ledger = ledger,
             dateText = work.updatedDate,
             bookmark = bookmark,
+            footer = footer,
             onClick = { onOpenWork(work) },
             onTagClick = onTagClick,
             onTagSearch = onTagSearch,
@@ -680,7 +686,8 @@ fun SensitiveWorkRow(
     onLongClick: (() -> Unit)? = null,
     showsZeroStats: Boolean = LocalShowsZeroStats.current,
     mutedHistory: Boolean = false,
-    ledger: Boolean = false
+    ledger: Boolean = false,
+    footer: (@Composable () -> Unit)? = null
 ) {
     SensitiveWorkRow(
         id = work.id,
@@ -717,6 +724,7 @@ fun SensitiveWorkRow(
         showsZeroStats = showsZeroStats,
         mutedHistory = mutedHistory,
         ledger = ledger,
+        footer = footer,
         modifier = modifier
     )
 }
