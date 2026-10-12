@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.library
 
+import io.github.cidy02.kudos.ui.subject.WorkLedgerRow
 import io.github.cidy02.kudos.ui.components.rememberStoredChoice
 import androidx.compose.ui.semantics.Role
 import androidx.compose.foundation.selection.toggleable
@@ -97,7 +98,6 @@ import io.github.cidy02.kudos.ui.subject.ToolbarAddButton
 import io.github.cidy02.kudos.ui.subject.ToolbarCircleButton
 import io.github.cidy02.kudos.ui.components.SensitiveWorkRow
 import io.github.cidy02.kudos.ui.subject.WorkSelectionBubble
-import io.github.cidy02.kudos.ui.subject.defaultWorkSignals
 import io.github.cidy02.kudos.ui.subject.subjectScreenWash
 import io.github.cidy02.kudos.works.DownloadQueue
 import io.github.cidy02.kudos.works.WorkMetadataRefresh
@@ -853,9 +853,26 @@ private fun CollectionWorkListItem(
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
                     )
                 } else {
-                    LedgerCollectionWorkCard(
-                        work = work,
+                    // The row Home's lists draw (iOS `WorkRow.ledger`): the reading ring, the
+                    // kicker and the tray. This page had a thinner copy of its own.
+                    WorkLedgerRow(
+                        title = work.title,
+                        author = work.author.ifBlank { "Anonymous" },
+                        fandoms = work.workFandoms,
+                        metadata = HomeFacts.localWorkMetadata(work.author, work.wordCount, work.chapters)
+                            .joinToString(" · "),
+                        progress = work.readingProgressFraction() ?: 0.0,
+                        progressState = when {
+                            work.isFinished -> "Finished"
+                            work.readingProgressFraction() != null -> "Reading"
+                            else -> null
+                        },
+                        rating = work.rating,
+                        categories = work.workCategories,
+                        warnings = work.workWarnings,
+                        isComplete = work.isComplete,
                         obscured = obscured,
+                        favorite = work.isFavorite,
                         selected = isSelecting && isSelected,
                         onClick = {
                             when {
@@ -920,106 +937,5 @@ private fun CollectionWorkListItem(
                 onRemove()
             }
         )
-    }
-}
-
-@OptIn(ExperimentalFoundationApi::class)
-@Composable
-private fun LedgerCollectionWorkCard(
-    work: SavedWork,
-    obscured: Boolean,
-    selected: Boolean,
-    onClick: () -> Unit,
-    onLongClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val tokens = LocalKudosTokens.current
-    val subject = work.workFandoms.firstOrNull { it.isNotBlank() } ?: work.title
-    val palette = remember(subject, tokens.theme) {
-        SubjectPalette.fromHue(coverHue(subject).toDouble() / 360.0, tokens.theme)
-    }
-    val shape = RoundedCornerShape(16.dp)
-
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .clip(shape)
-            .background(palette.cardWash)
-            .border(
-                if (selected) 2.dp else 0.5.dp,
-                if (selected) tokens.accent else palette.cardBorder,
-                shape
-            )
-            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
-            .padding(14.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        // "Hidden mature work" says nothing else about it: not its fandom, its author or its length.
-        val primaryFandom = HomeFacts.primaryFandom(work.workFandoms).takeUnless { obscured }
-        if (primaryFandom != null) {
-            SubjectKicker(
-                text = primaryFandom,
-                palette = palette,
-                trailingCount = (work.workFandoms.count { it.isNotBlank() } - 1).coerceAtLeast(0),
-                size = 9.sp,
-                ruleSpacing = 4.dp
-            )
-        }
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = if (obscured) "Hidden mature work" else work.title.ifBlank { "Untitled work" },
-                color = tokens.primaryInk,
-                fontSize = 17.sp,
-                fontWeight = FontWeight.SemiBold,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f, fill = false)
-            )
-            if (work.isFavorite) {
-                Text("★", color = Color(0xFFFFC107), fontSize = 14.sp)
-            }
-        }
-
-        if (!obscured && work.author.isNotBlank()) {
-            Text(
-                text = "by ${work.author}",
-                color = tokens.secondaryInk,
-                fontSize = 13.sp,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
-
-        if (obscured) {
-            Text(
-                text = "Tap to reveal",
-                color = tokens.secondaryInk,
-                fontSize = 13.sp
-            )
-        } else if (work.summary.isNotBlank()) {
-            Text(
-                text = work.summary.strippingHtml(),
-                color = tokens.secondaryInk,
-                fontSize = 13.sp,
-                maxLines = 3,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
-
-        val metadataLine = HomeFacts.localWorkMetadata(work.author, work.wordCount, work.chapters).joinToString(" · ")
-        if (metadataLine.isNotBlank() && !obscured) {
-            Text(
-                text = metadataLine,
-                color = tokens.tertiaryInk,
-                fontSize = 11.5.sp,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
     }
 }

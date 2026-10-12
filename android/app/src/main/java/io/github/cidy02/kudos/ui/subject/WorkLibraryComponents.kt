@@ -62,12 +62,6 @@ object SubjectWorkCardMetrics {
     val spacing = 12.dp
 }
 
-data class WorkCardSignal(
-    val text: String,
-    val description: String,
-    val tint: Color
-)
-
 @Composable
 fun WorkCarouselSection(
     title: String,
@@ -127,7 +121,10 @@ fun WorkLedgerRow(
     metadata: String,
     progress: Double,
     progressState: String?,
-    signals: List<WorkCardSignal>,
+    rating: String,
+    categories: List<String>,
+    warnings: List<String>,
+    isComplete: Boolean,
     obscured: Boolean,
     favorite: Boolean,
     selected: Boolean,
@@ -181,7 +178,7 @@ fun WorkLedgerRow(
                 if (favorite) Text("★", color = Color(0xFFFFC107), fontSize = 13.sp)
             }
             Text(metadata, color = tokens.secondaryInk, fontSize = 11.5.sp)
-            LedgerSignalGrid(signals.take(4), palette)
+            HomeStatusTray(rating, categories, warnings, isComplete, HomeStatusArrangement.Grid, tileSize = 22.dp)
         }
     } else Row(
         Modifier
@@ -228,33 +225,9 @@ fun WorkLedgerRow(
                 overflow = TextOverflow.Ellipsis
             )
         }
-        LedgerSignalGrid(signals.take(4), palette)
+        HomeStatusTray(rating, categories, warnings, isComplete, HomeStatusArrangement.Grid, tileSize = 22.dp)
     }
     if (obscured) RevealCapsule(Modifier.align(Alignment.Center))
-    }
-}
-
-@Composable
-private fun LedgerSignalGrid(signals: List<WorkCardSignal>, palette: SubjectPalette) {
-    val fontScale = LocalDensity.current.fontScale
-    val tileSize = 22.dp * fontScale
-    Column(verticalArrangement = Arrangement.spacedBy(3.dp * fontScale)) {
-        signals.chunked(2).forEach { row ->
-            Row(horizontalArrangement = Arrangement.spacedBy(3.dp * fontScale)) {
-                row.forEach { signal ->
-                    Box(
-                        Modifier
-                            .size(tileSize)
-                            .clip(RoundedCornerShape(6.dp * fontScale))
-                            .background(signal.tint.copy(alpha = 0.34f))
-                            .semantics { contentDescription = signal.description },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(signal.text, color = palette.accentOnFill, fontSize = 8.sp, fontWeight = FontWeight.Bold)
-                    }
-                }
-            }
-        }
     }
 }
 
@@ -350,22 +323,3 @@ private fun ActionButtons(actions: List<SwipeAction>, width: Dp, onClick: (Swipe
     }
 }
 
-fun defaultWorkSignals(
-    rating: String,
-    categories: List<String>,
-    warnings: List<String>,
-    complete: Boolean
-): List<WorkCardSignal> = listOf(
-    WorkCardSignal(ratingShort(rating), rating.ifBlank { "Not rated" }, Color(0xFFFFC107)),
-    WorkCardSignal(categories.firstOrNull()?.take(1)?.uppercase() ?: "○", categories.firstOrNull() ?: "No category", Color(0xFF35C46A)),
-    WorkCardSignal(if (warnings.isEmpty()) "○" else "!", warnings.firstOrNull() ?: "No warnings", Color(0xFF8B8792)),
-    WorkCardSignal(if (complete) "✓" else "…", if (complete) "Complete" else "Work in progress", Color(0xFF35C46A))
-)
-
-private fun ratingShort(rating: String): String = when {
-    rating.contains("Explicit", true) -> "E"
-    rating.contains("Mature", true) -> "M"
-    rating.contains("Teen", true) -> "T"
-    rating.contains("General", true) -> "G"
-    else -> "NR"
-}
