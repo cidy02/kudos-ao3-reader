@@ -256,10 +256,14 @@ internal data class WritingChipSize(val name: String, val width: Dp)
 
 /** Measure flow rows once, then virtualize each row rather than composing a whole long list. */
 @Composable
-internal fun writingChipRows(names: List<String>, width: Dp, chosen: Boolean): List<List<WritingChipSize>> {
+internal fun writingChipRows(
+    names: List<String>, width: Dp, chosen: Boolean,
+    /** What a chip is wider than its words by: its padding, and whatever stands beside them. */
+    extra: Dp = if (chosen) 78.dp else 45.dp
+): List<List<WritingChipSize>> {
     val measurer = rememberTextMeasurer()
     val density = LocalDensity.current
-    return remember(names, width, chosen, measurer, density) {
+    return remember(names, width, extra, measurer, density) {
         val result = mutableListOf<List<WritingChipSize>>()
         var row = mutableListOf<WritingChipSize>()
         var used = 0.dp
@@ -267,7 +271,7 @@ internal fun writingChipRows(names: List<String>, width: Dp, chosen: Boolean): L
             val textWidth = with(density) {
                 measurer.measure(name, TextStyle(fontSize = 13.sp, lineHeight = 18.sp), softWrap = false).size.width.toDp()
             }
-            val chipWidth = (textWidth + if (chosen) 78.dp else 45.dp).coerceAtMost(width).coerceAtLeast(0.dp)
+            val chipWidth = (textWidth + extra).coerceAtMost(width).coerceAtLeast(0.dp)
             val gap = if (row.isEmpty()) 0.dp else 8.dp
             if (row.isNotEmpty() && used + gap + chipWidth > width) {
                 result.add(row); row = mutableListOf(); used = 0.dp

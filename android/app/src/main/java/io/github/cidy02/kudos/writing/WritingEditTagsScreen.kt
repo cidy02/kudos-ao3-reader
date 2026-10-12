@@ -75,8 +75,13 @@ internal fun WritingEditTagsScreen(
     }
     BoxWithConstraints(Modifier.fillMaxSize().subjectScreenWash(palette)) {
         val chipWidth = (maxWidth - SubjectMetrics.accountGutter * 2 - 28.dp).coerceAtLeast(0.dp)
+        val chipExtra = with(androidx.compose.ui.platform.LocalDensity.current) { 22.dp + 6.dp + 11.sp.toDp() + 1.dp }
         val chipRows = WritingTagKind.entries.associateWith { tagKind ->
-            writingChipRows(form?.let(tagKind::values).orEmpty() + "Add", chipWidth, chosen = true)
+            // A chip here is its words, its padding and a small mark inside it. It was laid out
+            // at the width of the tag editor's chip, which has a 48 dp button beside it: every
+            // chip was 38 dp too wide, blank past its "×", and "Add" was pushed to a row of its
+            // own. The mark is sized in sp, so its share grows with the reader's text size.
+            writingChipRows(form?.let(tagKind::values).orEmpty() + "Add", chipWidth, chosen = true, extra = chipExtra)
         }
         LazyColumn(Modifier.fillMaxSize().testTag("Writing edit tags"), contentPadding = PaddingValues(bottom = 24.dp)) {
             item {
@@ -154,24 +159,31 @@ internal fun WritingEditTagsScreen(
                         val lastRow = rowIndex == rows.lastIndex
                         Row(Modifier.padding(horizontal = SubjectMetrics.accountGutter)
                             .writingSuggestionPanel(false, lastRow && kindIndex == WritingTagKind.entries.lastIndex)
-                            .fillMaxWidth().padding(horizontal = 14.dp).padding(bottom = if (lastRow) 12.dp else 8.dp),
+                            .fillMaxWidth().padding(horizontal = 14.dp).padding(bottom = if (lastRow) 12.dp else 0.dp),
                             horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            // The chip is drawn at its own height, as iOS draws it, inside the 48 dp
+                            // it is touched by. It was drawn 48 dp tall.
                             row.forEachIndexed { chipIndex, chip ->
                                 if (lastRow && chipIndex == row.lastIndex) {
-                                    SubjectChip("Add", Modifier.width(chip.width).heightIn(min = 48.dp)
+                                    Box(Modifier.width(chip.width).heightIn(min = 48.dp)
                                         .clickable(role = Role.Button) { addingKind = tagKind }
-                                        .semantics { contentDescription = "Add ${tagKind.title}" },
-                                        style = SubjectChipStyle.Dashed, leadingIcon = Icons.Default.Add,
-                                        palette = palette, maxLines = Int.MAX_VALUE)
+                                        .semantics(mergeDescendants = true) { contentDescription = "Add ${tagKind.title}" },
+                                        contentAlignment = Alignment.CenterStart) {
+                                        SubjectChip("Add", style = SubjectChipStyle.Dashed, leadingIcon = Icons.Default.Add,
+                                            palette = palette, maxLines = Int.MAX_VALUE)
+                                    }
                                 } else {
-                                    SubjectChip(chip.name, Modifier.width(chip.width).heightIn(min = 48.dp)
+                                    Box(Modifier.width(chip.width).heightIn(min = 48.dp)
                                         .clickable(role = Role.Button) {
                                             // The list as it is now, not as it was drawn: two removes
                                             // before a redraw used to bring the first tag back.
                                             val now = model.state.value.form?.let(tagKind::values) ?: values
                                             model.writingTags(tagKind, now.filterNot { it == chip.name })
-                                        }.semantics { contentDescription = "Remove ${chip.name}" },
-                                        trailingIcon = Icons.Default.Close, palette = palette, maxLines = Int.MAX_VALUE)
+                                        }.semantics(mergeDescendants = true) { contentDescription = "Remove ${chip.name}" },
+                                        contentAlignment = Alignment.CenterStart) {
+                                        SubjectChip(chip.name, trailingIcon = Icons.Default.Close, palette = palette,
+                                            maxLines = Int.MAX_VALUE)
+                                    }
                                 }
                             }
                         }
