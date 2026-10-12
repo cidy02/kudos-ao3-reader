@@ -1256,6 +1256,66 @@ extension EnvironmentValues {
     }
 }
 
+/// The colour of the screen on top, for the chrome that sits outside every
+/// screen: the tab bar, and toolbar buttons that do not inherit the screen's
+/// own tint. Owner, 2026-10-11: "make the tab bar accent color and any chrome
+/// button accent color follow the current wash for the current screen".
+///
+/// A washed screen reports itself when it appears and withdraws when it goes;
+/// the one that appeared last and is still showing is the current one. A push
+/// makes the new screen current and a pop gives the colour back, a tab switch
+/// does the same between tabs, and a screen with no wash leaves nothing
+/// current, which is the app's own accent.
+@MainActor @Observable
+final class ScreenWashRegistry {
+    @ObservationIgnored private var showing: [UUID: (tint: Color, order: Int)] = [:]
+    @ObservationIgnored private var counter = 0
+    /// Nil when no washed screen is showing.
+    private(set) var current: Color?
+
+    func show(_ id: UUID, tint: Color?) {
+        guard let tint else { return hide(id) }
+        if let entry = showing[id] {
+            showing[id] = (tint, entry.order)
+        } else {
+            counter += 1
+            showing[id] = (tint, counter)
+        }
+        refresh()
+    }
+
+    func hide(_ id: UUID) {
+        guard showing.removeValue(forKey: id) != nil else { return }
+        refresh()
+    }
+
+    private func refresh() {
+        let top = showing.values.max { $0.order < $1.order }?.tint
+        if top != current { current = top }
+    }
+}
+
+/// Reports a washed screen's tint to `ScreenWashRegistry` for as long as the
+/// screen is showing. A nil tint is a screen with no wash of its own.
+private struct ReportsScreenWash: ViewModifier {
+    let tint: Color?
+    @Environment(ScreenWashRegistry.self) private var registry: ScreenWashRegistry?
+    @State private var id = UUID()
+
+    func body(content: Content) -> some View {
+        content
+            .onAppear { registry?.show(id, tint: tint) }
+            .onDisappear { registry?.hide(id) }
+            .onChange(of: tint) { _, tint in registry?.show(id, tint: tint) }
+    }
+}
+
+extension View {
+    func reportsScreenWash(_ tint: Color?) -> some View {
+        modifier(ReportsScreenWash(tint: tint))
+    }
+}
+
 /// Paints the subject wash behind a screen's content, full-bleed under the
 /// status bar. `height` is how far down the saturated part reaches before it
 /// has fully resolved to the page — the spec varies it by how much chrome the
@@ -1279,6 +1339,7 @@ private struct SubjectWash: ViewModifier {
             // a modifier cannot look at what it has already been applied to.
             .environment(\.isOnSubjectWash, true)
             .screenTint(palette)
+            .reportsScreenWash(palette.tint)
     }
 }
 
