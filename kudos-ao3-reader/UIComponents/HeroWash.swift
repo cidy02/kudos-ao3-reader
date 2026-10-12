@@ -26,6 +26,7 @@ private struct HeroWash: ViewModifier {
             }
             .tint(palette?.tint)
             .environment(\.screenTint, palette?.tint)
+            .reportsScreenWash(palette?.tint)
     }
 }
 
