@@ -234,6 +234,17 @@ fun MainScaffold(
             Modifier.subjectScreenWash(scopePalette)
         else -> Modifier
     }
+    // Owner, 2026-10-11: the tab bar and the chrome buttons take the colour of the screen on
+    // top (iOS T-399, `ScreenWashRegistry`). `LocalShellWashes` already knows the page's wash:
+    // the shell repaints its top bar with it. The page's own content keeps what it had; the
+    // provider further in sets both again for it.
+    val pagePalette = io.github.cidy02.kudos.ui.subject.LocalShellWashes.current.page?.palette
+    val appScheme = MaterialTheme.colorScheme
+    CompositionLocalProvider(
+        LocalKudosTokens provides (pagePalette?.let { tokens.copy(accent = it.tint) } ?: tokens),
+        io.github.cidy02.kudos.ui.subject.LocalSubjectPalette provides (pagePalette ?: scopePalette)
+    ) {
+    MaterialTheme(colorScheme = pagePalette?.let { appScheme.copy(primary = it.tint) } ?: appScheme) {
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -260,8 +271,8 @@ fun MainScaffold(
             ) {
                 // Under a hero wash the page's controls take the hero's colour too, as iOS's
                 // `heroWash` does through `screenTint` (owner, 2026-10-03). The shell's own
-                // chrome and tab bar sit outside this and keep the app accent, as on iOS.
-                val scheme = MaterialTheme.colorScheme
+                // chrome and tab bar take the page's wash from the provider around the shell.
+                val scheme = appScheme
                 CompositionLocalProvider(
                     LocalShellOverlayState provides overlay,
                     LocalPushedShellChrome provides pushedChrome,
@@ -450,6 +461,8 @@ fun MainScaffold(
                     .onSizeChanged { barHeight = with(density) { it.height.toDp() } }
             )
         }
+    }
+    }
     }
 }
 
