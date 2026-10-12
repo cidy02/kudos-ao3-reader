@@ -170,7 +170,8 @@ internal fun WritingSeriesContent(model: WritingSeriesState, title: String, subt
             item { WorkFormSection("Series") }
             item {
                 Column(Modifier.padding(horizontal = SubjectMetrics.accountGutter).writingSuggestionPanel(true, false)) {
-                    SubjectTextFieldRow("Title", form.title, "Title", { value -> model.edit { it.copy(title = value) } }, enabled = !state.saving)
+                    // AO3 will not save a series without one, and iOS marks it: "Title ∗".
+                    SubjectTextFieldRow("Title ∗", form.title, "Title", { value -> model.edit { it.copy(title = value) } }, enabled = !state.saving)
                     SubjectRowSeparator()
                 }
             }
