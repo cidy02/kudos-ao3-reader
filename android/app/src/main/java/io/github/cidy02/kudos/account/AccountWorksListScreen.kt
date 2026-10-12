@@ -156,6 +156,17 @@ fun AccountWorksListScreen(
     val activity = context as? FragmentActivity
     val authState by repository.authRepository.state.collectAsState()
     var showMenu by remember { mutableStateOf(false) }
+    var showLayoutMenu by remember { mutableStateOf(false) }
+    val listPreferences = remember(context) {
+        context.getSharedPreferences(AccountListPreferences, android.content.Context.MODE_PRIVATE)
+    }
+    var displayMode by remember {
+        mutableStateOf(
+            runCatching {
+                AccountDisplayMode.valueOf(listPreferences.getString("account.displayMode", null).orEmpty())
+            }.getOrDefault(AccountDisplayMode.Ledger)
+        )
+    }
     var showingFilters by remember(type) { mutableStateOf(false) }
     var filters by remember(type) { mutableStateOf(AO3SearchFilters()) }
     var subscriptionsScope by remember(type) { mutableStateOf("works") }
@@ -229,6 +240,19 @@ fun AccountWorksListScreen(
                         IconButton(onClick = { showMenu = true }) {
                             Icon(imageVector = Icons.Default.MoreVert, contentDescription = "More actions")
                         }
+                        DropdownMenu(expanded = showLayoutMenu, onDismissRequest = { showLayoutMenu = false }) {
+                            AccountDisplayMode.entries.forEach { mode ->
+                                DropdownMenuItem(
+                                    text = { Text(mode.title) },
+                                    trailingIcon = { if (mode == displayMode) Text("✓", color = tokens.accent) },
+                                    onClick = {
+                                        displayMode = mode
+                                        listPreferences.edit().putString("account.displayMode", mode.name).apply()
+                                        showLayoutMenu = false
+                                    }
+                                )
+                            }
+                        }
                         DropdownMenu(
                             expanded = showMenu,
                             onDismissRequest = { showMenu = false }
@@ -249,9 +273,17 @@ fun AccountWorksListScreen(
                                     }
                                 )
                             }
-                            // These lists have fixed layouts on iOS. Android's other lists draw
-                            // detailed cards; there is no account display-mode setting to switch.
+                            // Marked for Later and Subscriptions have one layout on iOS; the
+                            // other lists choose theirs here (iOS `DisplayModeMenuPicker`).
                             if (hasWorks && type != AccountListType.MarkedForLater && type != AccountListType.Subscriptions) {
+                                DropdownMenuItem(
+                                    text = { Text("Layout") },
+                                    trailingIcon = { Text(displayMode.title, color = tokens.secondaryInk, fontSize = 13.sp) },
+                                    onClick = {
+                                        showMenu = false
+                                        showLayoutMenu = true
+                                    }
+                                )
                                 DropdownMenuItem(
                                     text = { Text(if (expandAll) "Collapse All" else "Expand All") },
                                     onClick = {
@@ -393,6 +425,7 @@ fun AccountWorksListScreen(
                                         currentPage = current.page.currentPage,
                                         totalPages = current.page.totalPages,
                                         expandAll = expandAll,
+                                        ledger = displayMode == AccountDisplayMode.Ledger,
                                         palette = palette,
                                         onLoadPage = viewModel::load,
                                         onOpenWork = onOpenWork
@@ -405,6 +438,7 @@ fun AccountWorksListScreen(
                                         currentPage = current.page.currentPage,
                                         totalPages = current.page.totalPages,
                                         expandAll = expandAll,
+                                        ledger = displayMode == AccountDisplayMode.Ledger,
                                         palette = palette,
                                         onLoadPage = viewModel::load,
                                         onOpenWork = onOpenWork,
@@ -418,6 +452,7 @@ fun AccountWorksListScreen(
                                         currentPage = current.page.currentPage,
                                         totalPages = current.page.totalPages,
                                         expandAll = expandAll,
+                                        ledger = displayMode == AccountDisplayMode.Ledger,
                                         palette = palette,
                                         onLoadPage = viewModel::load,
                                         onOpenWork = onOpenWork
@@ -664,6 +699,7 @@ private fun BookmarksBrowser(
     currentPage: Int,
     totalPages: Int,
     expandAll: Boolean,
+    ledger: Boolean,
     palette: SubjectPalette,
     onLoadPage: (Int) -> Unit,
     onOpenWork: (AO3WorkSummary) -> Unit
@@ -748,10 +784,9 @@ private fun BookmarksBrowser(
                     modifier = Modifier.fillMaxWidth(),
                     verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    // iOS draws a bookmark as its ledger card in every layout (1q).
                     PairedWorkRow(
                         work = work, expandAll = expandAll, onOpenWork = onOpenWork,
-                        ledger = true, bookmark = bookmarksByWorkId[work.remote.id]
+                        ledger = ledger, bookmark = bookmarksByWorkId[work.remote.id]
                     )
                 }
             }
@@ -785,6 +820,7 @@ private fun HistoryBrowser(
     currentPage: Int,
     totalPages: Int,
     expandAll: Boolean,
+    ledger: Boolean,
     palette: SubjectPalette,
     onLoadPage: (Int) -> Unit,
     onOpenWork: (AO3WorkSummary) -> Unit,
@@ -922,7 +958,7 @@ private fun HistoryBrowser(
                     items(group.items, key = { "hist-${it.id}" }) { work ->
                         val reading = readingsByWorkId[work.remote.id]
                         PairedWorkRow(
-                            work = work, expandAll = expandAll, onOpenWork = onOpenWork, ledger = true,
+                            work = work, expandAll = expandAll, onOpenWork = onOpenWork, ledger = ledger,
                             footer = { obscured ->
                                 HistoryReadingFootnote(
                                     reading = reading,
@@ -1438,6 +1474,7 @@ private fun GenericAccountWorksBrowser(
     currentPage: Int,
     totalPages: Int,
     expandAll: Boolean,
+    ledger: Boolean,
     palette: SubjectPalette,
     onLoadPage: (Int) -> Unit,
     onOpenWork: (AO3WorkSummary) -> Unit
@@ -1475,7 +1512,7 @@ private fun GenericAccountWorksBrowser(
         }
 
         items(works, key = { "gen-${it.id}" }) { work ->
-            PairedWorkRow(work = work, expandAll = expandAll, onOpenWork = onOpenWork)
+            PairedWorkRow(work = work, expandAll = expandAll, onOpenWork = onOpenWork, ledger = ledger)
         }
 
         if (totalPages > 1) {
@@ -1513,6 +1550,18 @@ private class PairedRowPrivacy(
     val isObscured: (SavedWork) -> Boolean = { false },
     val reveal: (SavedWork) -> Unit = {}
 )
+
+/**
+ * iOS `WorkListDisplayMode` for History, Bookmarks and the account's works lists, kept under
+ * its name (`account.displayMode`). iOS has a third, Compact (covers, two up), and opens on
+ * it; Android has not built it and opens on the ledger.
+ */
+private enum class AccountDisplayMode(val title: String) {
+    Detailed("Detailed"),
+    Ledger("Ledger")
+}
+
+private const val AccountListPreferences = "account-lists"
 
 private val LocalPairedRowPrivacy = compositionLocalOf { PairedRowPrivacy() }
 
@@ -1580,7 +1629,8 @@ private fun EnrichingWorkRow(
         work = enriched ?: work,
         expandAll = expandAll,
         onOpenWork = onOpenWork,
-        ledger = ledger,
+        // A bookmark is iOS's one card in every layout (1q).
+        ledger = ledger || bookmark != null,
         footer = footer,
         // A work not in the Library draws its bookmark inside the one card (iOS 1q).
         bookmark = bookmark?.let { mark ->

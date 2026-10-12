@@ -116,3 +116,35 @@ the Library), a blurred history row.
 History, Bookmarks and the works lists. Until then Android's one form there is the ledger
 (Bookmarks, History) or the detailed card (the works lists).
 
+## Step 3, landed 2026-10-11 (Claude alone; gate 2,614): the Layout choice, in part
+
+- **History, Bookmarks and the account's works lists have "Layout" in their More menu**,
+  with **Detailed** and **Ledger**, drawn the way Home's section pages already draw theirs
+  (a second menu with a tick). The choice is kept between launches under iOS's own name
+  (`account.displayMode`, in the `account-lists` preferences; not in a backup, as iOS's is
+  not). Marked for Later and Subscriptions have one layout, as on iOS.
+- A bookmark of a work not in the Library is the one bookmark card in either layout (iOS
+  1q). History's visit line and Delete are inside the card in either layout.
+- **Android opens on Ledger; iOS opens on Compact.** Compact (covers, two up; in History a
+  column of covers under each heading) **is not built**, so it is not offered. The works
+  lists therefore changed their opening look from the detailed card to the ledger.
+
+**Looked at:** History's menu, the Layout menu, Detailed beside the iPhone's Detailed, the
+choice kept across a restart of the app, and back to Ledger. **Not looked at:** the choice
+on Bookmarks and on a works list (the same state and the same rows).
+
+## Left from this brief
+
+1. **Compact** on the three lists, then offer it. Whether Android then opens on it, as iOS
+   does, is the owner's to say (told in the 20:28 report; the ledger stands until then).
+2. **iOS's detailed card has the tray of four symbols at its top right; Android's has
+   not.** Seen in step 3's picture. Small: `HomeStatusTray` in the standard body.
+3. **Clear History.** iOS's History menu has it and it writes to AO3
+   (`confirmClearReadingsURL`, `clearReadingsURL`). Android has no such write and no menu
+   row; the dialog removed in step 2 was a shell of it. A missing feature, with a write: a
+   brief of its own, fixtures only.
+4. **The other two display modes are not kept between launches, and one opens differently.**
+   An author's profile opens on Detailed and forgets (iOS: Ledger, kept as
+   `authorProfile.displayMode`); a local collection's is kept only while the app lives (iOS
+   keeps `collection.displayMode`).
+
