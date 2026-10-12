@@ -29,6 +29,7 @@ class SensitiveWorkRowLedgerTest {
 
     private fun show(
         obscured: Boolean = false,
+        bookmark: LedgerBookmark? = null,
         onReveal: () -> Unit = {},
         onSearch: (SearchSubjectField, String) -> Unit = { _, _ -> }
     ) = compose.setContent {
@@ -40,7 +41,7 @@ class SensitiveWorkRowLedgerTest {
                 warnings = listOf("No Archive Warnings Apply"), categories = listOf("F/M"),
                 rating = "Teen And Up Audiences", isComplete = true, wordCount = 1200, chapters = "1/1",
                 kudos = 3, language = "English", showsZeroStats = false, obscured = obscured,
-                ledger = true, dateText = "09 Jul 2026",
+                ledger = true, dateText = "09 Jul 2026", bookmark = bookmark,
                 onClick = {}, onReveal = onReveal, onTagSearch = onSearch
             )
         }
@@ -81,5 +82,20 @@ class SensitiveWorkRowLedgerTest {
         }
         assertEquals(taps, revealed)
         assertEquals(0, searched)
+    }
+
+    @Test fun aBookmarkIsOneCardWithItsNoteWhereTheSummaryWouldBe() {
+        show(bookmark = LedgerBookmark(listOf("Rec"), "07 Jul 2026") { androidx.compose.material3.Text("Reread the ending.") })
+
+        compose.onNodeWithText("REC").assertExists()
+        compose.onNodeWithText("Reread the ending.").assertExists()
+        // The bookmark's note stands where the work's summary would, and its date closes the line.
+        compose.onAllNodesWithText("A city that never sleeps.").assertCountEquals(0)
+        compose.onNodeWithContentDescription("Bookmarked 07 Jul 2026").assertExists()
+        compose.onAllNodesWithText("09 Jul 2026").assertCountEquals(0)
+        // Language, words and chapters only: the kudos are the work's, not the bookmark's.
+        compose.onNodeWithText("English  ·  1,200 words  ·  1/1").assertExists()
+        // Nothing is folded away on a bookmark's card.
+        compose.onAllNodesWithText("Show more").assertCountEquals(0)
     }
 }

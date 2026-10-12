@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.account
 
+import io.github.cidy02.kudos.ui.components.LedgerBookmark
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -744,14 +745,11 @@ private fun BookmarksBrowser(
                     modifier = Modifier.fillMaxWidth(),
                     verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    PairedWorkRow(work = work, expandAll = expandAll, onOpenWork = onOpenWork)
-
-                    val bookmark = bookmarksByWorkId[work.remote.id]
-                    if (bookmark != null) {
-                        Box(modifier = Modifier.padding(horizontal = 8.dp)) {
-                            AO3BookmarkFootnote(bookmark = bookmark)
-                        }
-                    }
+                    // iOS draws a bookmark as its ledger card in every layout (1q).
+                    PairedWorkRow(
+                        work = work, expandAll = expandAll, onOpenWork = onOpenWork,
+                        ledger = true, bookmark = bookmarksByWorkId[work.remote.id]
+                    )
                 }
             }
         }
@@ -1499,21 +1497,33 @@ private fun PairedWorkRow(
     expandAll: Boolean,
     onOpenWork: (AO3WorkSummary) -> Unit,
     /** iOS draws Marked for Later and Subscriptions as the ledger card, always. */
-    ledger: Boolean = false
+    ledger: Boolean = false,
+    /** This row's bookmark, on the Bookmarks list. */
+    bookmark: AO3AuthorBookmark? = null
 ) {
     val local = work.local
     if (local != null) {
         val privacy = LocalPairedRowPrivacy.current
-        SensitiveWorkRow(
-            work = local,
-            expandAll = expandAll,
-            obscured = privacy.isObscured(local),
-            onReveal = { privacy.reveal(local) },
-            onOpenWork = { onOpenWork(work.remote) },
-            ledger = ledger
-        )
+        val obscured = privacy.isObscured(local)
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            SensitiveWorkRow(
+                work = local,
+                expandAll = expandAll,
+                obscured = obscured,
+                onReveal = { privacy.reveal(local) },
+                onOpenWork = { onOpenWork(work.remote) },
+                ledger = ledger
+            )
+            // iOS: a saved work's row does not know about bookmarks, so the same pieces sit
+            // under it, and not while the row is blurred. The note and tags of a hidden work
+            // were drawn under its blur.
+            if (bookmark != null && !obscured) {
+                AO3BookmarkFootnote(bookmark = bookmark, modifier = Modifier.padding(horizontal = 8.dp))
+            }
+        }
     } else {
-        EnrichingWorkRow(work = work.remote, expandAll = expandAll, onOpenWork = onOpenWork, ledger = ledger)
+        EnrichingWorkRow(work = work.remote, expandAll = expandAll, onOpenWork = onOpenWork, ledger = ledger,
+            bookmark = bookmark)
     }
 }
 
@@ -1522,7 +1532,8 @@ private fun EnrichingWorkRow(
     work: AO3WorkSummary,
     expandAll: Boolean,
     onOpenWork: (AO3WorkSummary) -> Unit,
-    ledger: Boolean = false
+    ledger: Boolean = false,
+    bookmark: AO3AuthorBookmark? = null
 ) {
     val context = LocalContext.current
     val enricher = remember {
@@ -1539,6 +1550,16 @@ private fun EnrichingWorkRow(
         work = enriched ?: work,
         expandAll = expandAll,
         onOpenWork = onOpenWork,
-        ledger = ledger
+        ledger = ledger,
+        // A work not in the Library draws its bookmark inside the one card (iOS 1q).
+        bookmark = bookmark?.let { mark ->
+            LedgerBookmark(
+                badges = listOfNotNull("Private".takeIf { mark.isPrivate }, "Rec".takeIf { mark.isRecommendation }),
+                date = mark.date,
+                footnote = {
+                    if (mark.notes.isNotBlank() || mark.tags.isNotEmpty()) AO3BookmarkFootnote(mark, showsStatus = false)
+                }
+            )
+        }
     )
 }

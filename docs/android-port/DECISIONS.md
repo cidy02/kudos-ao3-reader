@@ -1675,3 +1675,9 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   ledger card (3cn, step 2)**, as iOS always does there; a work also in the Library draws
   the same body (iOS draws its library row). The footer under a subscribed work wraps at
   the large text sizes. Reverse: `ledger = true` at three call sites.
+- **2026-10-11 · A bookmark is one card (3co, step 1).** A work not in the Library draws
+  iOS's bookmark card (Rec and Private by the kicker, the note and tags inside, the day it
+  was bookmarked, no kudos or hits); a saved work draws its own row with the same pieces
+  under it. **A blurred work's bookmark note and tags are not drawn until it is revealed**
+  (they were; iOS never drew them). Reverse: the commit that names 3co step 1, but not the
+  blur rule.

@@ -1,5 +1,8 @@
 package io.github.cidy02.kudos.author
 
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -321,7 +324,12 @@ private fun SeriesSpineStackMark(palette: SubjectPalette) {
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-internal fun AO3BookmarkFootnote(bookmark: AO3AuthorBookmark, modifier: Modifier = Modifier) {
+internal fun AO3BookmarkFootnote(
+    bookmark: AO3AuthorBookmark,
+    modifier: Modifier = Modifier,
+    /** Private, Rec and the date, for a row whose card cannot carry them (iOS `showsStatus`). */
+    showsStatus: Boolean = true
+) {
     val tokens = LocalKudosTokens.current
     val title = bookmark.work?.title.orEmpty()
     val fandoms = bookmark.work?.fandoms.orEmpty()
@@ -333,14 +341,29 @@ internal fun AO3BookmarkFootnote(bookmark: AO3AuthorBookmark, modifier: Modifier
             if (bookmark.isPrivate) add("Private")
             if (bookmark.isRecommendation) add("Rec")
         }
-        if (badges.isNotEmpty()) {
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        if (showsStatus && (badges.isNotEmpty() || bookmark.date.isNotBlank())) {
+            FlowRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                itemVerticalAlignment = Alignment.CenterVertically
+            ) {
                 badges.forEach { SubjectChip(it, style = SubjectChipStyle.Tinted, palette = palette) }
+                Spacer(Modifier.weight(1f))
+                if (bookmark.date.isNotBlank()) {
+                    Text(
+                        bookmark.date, color = tokens.secondaryInk, fontSize = 11.5.sp, maxLines = 1,
+                        modifier = Modifier.semantics { contentDescription = "Bookmarked ${bookmark.date}" }
+                    )
+                }
             }
         }
         if (bookmark.notes.isNotBlank()) {
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Box(Modifier.size(width = 2.dp, height = 34.dp).background(palette.accent, CircleShape))
+            // The rail is as tall as the note; at a fixed 34dp it stopped beside its second line.
+            Row(
+                modifier = Modifier.height(IntrinsicSize.Min),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Box(Modifier.width(2.dp).fillMaxHeight().background(palette.accent, CircleShape))
                 Text(bookmark.notes, color = tokens.secondaryInk, fontSize = 14.sp, modifier = Modifier.weight(1f))
             }
         }
