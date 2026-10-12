@@ -1794,3 +1794,7 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   commit that names 3dc.
 - **2026-10-12 · Edit collection's Save (3dd).** A filled button, as iOS and as the
   challenge pages' actions. Reverse: the commit that names 3dd.
+- **2026-10-12 · Comments (3de).** The header's creators are separated by commas; "Latest"
+  is the newest comment and says how long ago; a guest has a "Guest" pill in the thread;
+  the chapter pill drops AO3's "on"; the composer's count has its thousands separator.
+  Reverse: the commit that names 3de.

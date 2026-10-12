@@ -132,6 +132,24 @@ object AO3CommentTimestamp {
         return null
     }
 
+    /**
+     * How long ago, in few letters, for a figure's cell: "3mo ago", "2d ago" (iOS's narrow
+     * relative style). A moment in the future reads "now".
+     */
+    fun relativeNarrow(then: Date, now: Date = Date()): String {
+        val minutes = (now.time - then.time) / 60_000
+        val days = minutes / (60 * 24)
+        return when {
+            minutes < 1 -> "now"
+            minutes < 60 -> "${minutes}m ago"
+            minutes < 60 * 24 -> "${minutes / 60}h ago"
+            days < 7 -> "${days}d ago"
+            days < 30 -> "${days / 7}w ago"
+            days < 365 -> "${days / 30}mo ago"
+            else -> "${days / 365}y ago"
+        }
+    }
+
     fun displayText(rawText: String): String {
         val date = parse(rawText) ?: return rawText
         val now = System.currentTimeMillis()
@@ -482,8 +500,9 @@ fun CommentPostRow(
                         )
                 )
 
-                // Role badge: Author / Me only
-                if (participantRole != AO3CommentParticipantRole.User && participantRole != AO3CommentParticipantRole.Guest) {
+                // Role badge: the author, the reader, and a guest (iOS draws "Guest" beside the
+                // name; only an ordinary account goes without one).
+                if (participantRole != AO3CommentParticipantRole.User) {
                     CommentParticipantBadge(role = participantRole, palette = palette)
                 }
             }
@@ -646,17 +665,20 @@ fun CommentParticipantBadge(
 ) {
     val isAuthor = role == AO3CommentParticipantRole.Author
     val isMe = role == AO3CommentParticipantRole.Me
-    if (!isAuthor && !isMe) return
+    // A guest is said to be one, in a quiet pill, as iOS says it. It was drawn for nobody but
+    // the author and the reader, so a guest's name read like an account's.
+    val isGuest = role == AO3CommentParticipantRole.Guest
+    if (!isAuthor && !isMe && !isGuest) return
 
     val label = role.label
     val tokens = LocalKudosTokens.current
 
     Surface(
         shape = RoundedCornerShape(percent = 50),
-        color = palette.accent,
+        color = if (isGuest) tokens.glassFill(0.14) else palette.accent,
         // "Me" and "Author" are the pill's words; spoken, they say whose comment it is (iOS).
         modifier = modifier.semantics(mergeDescendants = true) {
-            contentDescription = if (isMe) "Your comment" else "Work author"
+            contentDescription = if (isMe) "Your comment" else if (isGuest) "Guest" else "Work author"
         }
     ) {
         Row(
@@ -676,7 +698,7 @@ fun CommentParticipantBadge(
                 text = label,
                 fontSize = 10.sp,
                 fontWeight = FontWeight.SemiBold,
-                color = palette.solidButtonLabel
+                color = if (isGuest) tokens.secondaryInk else palette.solidButtonLabel
             )
         }
     }

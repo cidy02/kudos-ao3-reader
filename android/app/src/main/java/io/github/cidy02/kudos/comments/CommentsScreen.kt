@@ -400,9 +400,11 @@ fun CommentsScreen(
                     trailing = if (authors.isNotEmpty()) {
                         {
                             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                for (author in authors) {
+                                // "Calytrix, Second Pseud": without the comma two creators
+                                // read as one name.
+                                for ((index, author) in authors.withIndex()) {
                                     Text(
-                                        text = author.displayName,
+                                        text = author.displayName + if (index < authors.lastIndex) "," else "",
                                         fontSize = 15.sp,
                                         color = tokens.primaryInk,
                                         modifier = Modifier.clickable {
@@ -902,8 +904,11 @@ private data class LoadedFigures(
 private fun calculateFigures(thread: AO3CommentThread): LoadedFigures {
     val all = flattenAll(thread.comments)
     val mine = all.count { it.editPath != null }
-    val latestRaw = all.mapNotNull { it.date.takeIf { d -> d.isNotBlank() } }.firstOrNull()
-    val latestFormatted = latestRaw?.let { AO3CommentTimestamp.displayText(it) }
+    // The newest of them, and how long ago, as iOS says it ("3mo ago"). This took the first
+    // comment's date, which under "Oldest" is the oldest, and printed the day.
+    val latestFormatted = all.mapNotNull { AO3CommentTimestamp.parse(it.date) }.maxOrNull()
+        ?.let { AO3CommentTimestamp.relativeNarrow(it) }
+        ?: all.firstNotNullOfOrNull { it.date.takeIf { d -> d.isNotBlank() } }
 
     return LoadedFigures(
         threads = thread.comments.size,
