@@ -155,7 +155,7 @@ fun ReaderSearchSheet(
                         fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f)
                     )
                     ToolbarCircleButton(onClick = dismiss, accessibilityName = "Done") {
-                        Icon(Icons.Filled.Check, contentDescription = null, tint = tokens.accent)
+                        Icon(Icons.Filled.Check, contentDescription = null, tint = tokens.scopePalette.accent)
                     }
                 }
                 BasicTextField(

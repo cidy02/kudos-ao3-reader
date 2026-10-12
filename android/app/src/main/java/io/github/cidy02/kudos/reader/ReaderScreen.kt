@@ -347,6 +347,9 @@ private fun ReaderReading(
                 ReadiumProgressAdapter.initialLocator(state.restoreTarget, publication)
             }
             val tocEntries = remember(publication) { ReadiumTocAdapter.entries(publication) }
+            val chapterStarts by androidx.compose.runtime.produceState(emptyMap<String, Int>(), publication) {
+                value = ReadiumTocAdapter.startPercents(publication)
+            }
             val sections = remember(publication) { ReadiumTocAdapter.sections(publication) }
             val progressLabel = ReaderProgressDisplay.label(state.liveProgress, sections, state.work.chapters)
             var positions by remember(publication) { mutableStateOf<List<List<Locator>>>(emptyList()) }
@@ -859,7 +862,14 @@ private fun ReaderReading(
                             },
                             onDeleteAnnotation = { annotation ->
                                 showDeleteNoteConfirm = annotation
-                            }
+                            },
+                            onDone = {
+                                scope.launch {
+                                    sheetState.hide()
+                                    showTocSheet = false
+                                }
+                            },
+                            startPercent = { chapterStarts[ReaderSectionBuilder.hrefKey(it.href)] }
                         )
                     }
                 }
@@ -955,7 +965,9 @@ private fun ReaderDisplaySheet(
                 modifier = Modifier.weight(1f)
             )
             ToolbarCircleButton(onClick = onDone, accessibilityName = "Done") {
-                Icon(Icons.Filled.Check, contentDescription = null)
+                // The accent that reads on every theme, on all three of the reader's sheets: this
+                // tick was the ink's colour and Find in Work's the raw accent.
+                Icon(Icons.Filled.Check, contentDescription = null, tint = tokens.scopePalette.accent)
             }
         }
 

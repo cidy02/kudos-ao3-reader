@@ -73,12 +73,15 @@ fun <T> SubjectSegmentedControl(
                     .padding(vertical = 6.dp, horizontal = 4.dp),
                 contentAlignment = Alignment.Center
             ) {
+                val label = title(option)
                 Text(
-                    text = title(option),
+                    text = label,
                     color = if (isSelected) tokens.primaryInk else tokens.secondaryInk,
                     fontSize = 13.sp,
                     fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
-                    maxLines = if (large) 2 else 1,
+                    // A second line is for a label of several words. One word given two lines was
+                    // broken across them ("Bookmar / ks") where it could have been set smaller.
+                    maxLines = if (large && ' ' in label.trim()) 2 else 1,
                     textAlign = TextAlign.Center,
                     overflow = TextOverflow.Ellipsis,
                     autoSize = TextAutoSize.StepBased(minFontSize = 9.sp, maxFontSize = 13.sp)

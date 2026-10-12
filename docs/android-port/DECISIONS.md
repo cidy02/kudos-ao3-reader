@@ -1823,3 +1823,7 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   reader's back button and fan menu button sit where every other page's bar buttons sit,
   with the same mark at the same size and strength. On Android they keep a round backing,
   because they float over the page's text. Reverse: the commits that name 3dk and T-403.
+- **2026-10-12 · The reader's sheets share one header and one kind of control (3dl).** Each
+  has a title and a Done tick in the palette's accent; a choice between views is the app's
+  segmented control, not Material's tabs. In that control a one-word label is never broken
+  across lines. Reverse: the commit that names 3dl.

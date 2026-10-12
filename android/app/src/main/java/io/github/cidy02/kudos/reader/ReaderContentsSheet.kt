@@ -23,9 +23,8 @@ import androidx.compose.material.icons.filled.BorderColor
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.PrimaryTabRow
-import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -45,6 +44,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.cidy02.kudos.core.model.ReadingAnnotation
 import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
+import io.github.cidy02.kudos.ui.subject.SubjectSegmentedControl
+import io.github.cidy02.kudos.ui.subject.ToolbarCircleButton
 import kotlin.math.roundToInt
 
 /**
@@ -63,7 +64,11 @@ fun ReaderContentsSheet(
     onDeleteAnnotation: (ReadingAnnotation) -> Unit,
     onBookmarkEntry: ((ReaderTocEntry) -> Unit)? = null,
     onAddNoteToEntry: ((ReaderTocEntry) -> Unit)? = null,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    /** Closes the sheet: the tick its sibling sheets have beside their titles. */
+    onDone: (() -> Unit)? = null,
+    /** Where in the work a chapter starts, as a whole percent (iOS `chapterStartPercent`). */
+    startPercent: (ReaderTocEntry) -> Int? = { null }
 ) {
     val tokens = LocalKudosTokens.current
     var selectedTab by remember { mutableIntStateOf(initialTab.coerceIn(0, 2)) }
@@ -75,34 +80,30 @@ fun ReaderContentsSheet(
             .navigationBarsPadding()
             .padding(bottom = 16.dp)
     ) {
-        // Segmented Control
-        PrimaryTabRow(
-            selectedTabIndex = selectedTab,
-            containerColor = tokens.theme.cardSurface,
-            contentColor = tokens.primaryInk,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 8.dp)
+        // A title and Done, as this reader's other sheets (Find in Work, Display & Themes) and
+        // as iOS. This one opened on a bare row of tabs.
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            tabs.forEachIndexed { index, title ->
-                Tab(
-                    selected = selectedTab == index,
-                    onClick = { selectedTab = index },
-                    text = {
-                        // One line that shrinks to its third of the sheet: at twice the text size the
-                        // three tabs broke mid-word ("Content / s", "Highlig / hts").
-                        Text(
-                            text = title,
-                            fontWeight = if (selectedTab == index) FontWeight.SemiBold else FontWeight.Normal,
-                            color = if (selectedTab == index) tokens.accent else tokens.secondaryInk,
-                            maxLines = 1,
-                            softWrap = false,
-                            autoSize = androidx.compose.foundation.text.TextAutoSize.StepBased(minFontSize = 7.sp, maxFontSize = 14.sp)
-                        )
-                    }
-                )
+            Text("Contents", color = tokens.primaryInk, fontSize = 17.sp, fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.weight(1f))
+            if (onDone != null) {
+                ToolbarCircleButton(onClick = onDone, accessibilityName = "Done") {
+                    Icon(Icons.Filled.Check, contentDescription = null, tint = tokens.scopePalette.accent)
+                }
             }
         }
+        // The app's segmented control, as iOS draws it and as every other choice of this kind
+        // in the app. It was Material's row of tabs, on a strip of another colour.
+        SubjectSegmentedControl(
+            options = tabs.indices.toList(),
+            selected = selectedTab,
+            onSelect = { selectedTab = it },
+            title = { tabs[it] },
+            contentDescription = "Section",
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+        )
 
         when (selectedTab) {
             0 -> {
@@ -153,6 +154,16 @@ fun ReaderContentsSheet(
                                         TextButton(onClick = { onAddNoteToEntry(entry) }) {
                                             Text("Add Note", color = tokens.secondaryInk)
                                         }
+                                    }
+                                    // Where the chapter starts, as iOS prints it and in the
+                                    // unit the bookmark rows and the position card use.
+                                    startPercent(entry)?.let { percent ->
+                                        Text(
+                                            text = "$percent%",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontFamily = FontFamily.Monospace,
+                                            color = tokens.secondaryInk
+                                        )
                                     }
                                 }
                             }
