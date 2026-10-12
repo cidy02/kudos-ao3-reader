@@ -1775,3 +1775,6 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
 - **2026-10-12 · Edit tags' chips (3cx).** A tag chip is drawn at its own size inside its
   48 dp touch target, with "Add" after the last chip, as iOS; the layout's allowance for
   the chip's mark grows with the text size. Reverse: the commit that names 3cx.
+- **2026-10-12 · The tag editor's pills (3cy).** A chosen tag's pill is drawn at its own
+  height inside its 48 dp touch and drag target, as 3cx did for Edit tags' chips.
+  Reverse: the commit that names 3cy.
