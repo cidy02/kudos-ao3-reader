@@ -1786,3 +1786,5 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   from the series's page (creator, description, figures, complete, bookmarks, updated),
   under the page's title. The standard AO3 work card closes with the work's date, as the
   ledger card and iOS's standard card do. Reverse: the commit that names 3da.
+- **2026-10-12 · The series form's title (3db).** Marked required ("Title ∗"), as iOS and
+  as the work form. Reverse: the commit that names 3db.

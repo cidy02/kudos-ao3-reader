@@ -139,7 +139,7 @@ class WritingSeriesScreenTest {
 
     @Test fun realFieldsSaveBylineOnceAndLeaveConfirmedFormOpen() {
         show()
-        compose.onNodeWithContentDescription("Title").performTextReplacement("A new dawn")
+        compose.onNodeWithContentDescription("Title, required").performTextReplacement("A new dawn")
         compose.onNodeWithContentDescription("Creators").performTextReplacement("friend (pseud)")
         compose.onNodeWithText("Save").performClick()
         reach("Series was successfully updated.")
@@ -153,7 +153,7 @@ class WritingSeriesScreenTest {
     @Test fun refusalRetainsTitleBylineAndEveryOtherField() {
         show()
         setup.client.postResponse = seriesResponse(422, "<div id='error'><ul><li>Byline is invalid</li></ul></div>")
-        compose.onNodeWithContentDescription("Title").performTextReplacement("Still here")
+        compose.onNodeWithContentDescription("Title, required").performTextReplacement("Still here")
         compose.onNodeWithContentDescription("Creators").performTextReplacement("rejected (pseud)")
         val before = model.state.value.form
         compose.onNodeWithText("Save").performClick()
@@ -237,7 +237,7 @@ class WritingSeriesScreenTest {
             title = row.title + " — a long original title about lanterns carried across the quiet harbour at dawn") }) } }
         for (theme in listOf(KudosThemeMode.Light, KudosThemeMode.Dark, KudosThemeMode.Sepia, KudosThemeMode.Oled)) {
             compose.runOnIdle { mode = theme }
-            for (label in listOf("Title", "Creators", "Series summary", "Series notes", "Series is complete", "Reorder works", "Remove works", "Delete series on AO3", "Save")) {
+            for (label in listOf("Title ∗", "Creators", "Series summary", "Series notes", "Series is complete", "Reorder works", "Remove works", "Delete series on AO3", "Save")) {
                 if (label != "Save") reach(label)
                 val nodes = compose.onAllNodesWithText(label, useUnmergedTree = true)
                 val count = nodes.fetchSemanticsNodes().size
