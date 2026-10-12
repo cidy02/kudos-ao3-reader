@@ -1,7 +1,11 @@
 package io.github.cidy02.kudos.settings
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Text
@@ -16,6 +20,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.cidy02.kudos.data.preferences.SettingsRepository
 import io.github.cidy02.kudos.reader.settings.ReaderPreferences
@@ -96,8 +101,31 @@ internal fun SettingsListeningPage(
                     onValueChangeFinished = updateRate,
                     accessibilityLabel = "Audition speed"
                 )
-                listOf(0.9f to "0.9x", 1f to "1.0x (default)", 1.1f to "1.1x").forEach { (rate, label) ->
+                val speeds = listOf(0.9f to "0.9x", 1f to "1.0x (default)", 1.1f to "1.1x")
+                // iOS sets the three side by side, the one in use dimmed. They were three lines
+                // of text down the panel. At the large text sizes they stay lines: three do not
+                // fit a row.
+                if (io.github.cidy02.kudos.ui.subject.isAccessibilityFontScale()) speeds.forEach { (rate, label) ->
                     SettingsActionRow(label, onClick = { updateRate(rate) }, enabled = speech.rate != rate)
+                } else androidx.compose.foundation.layout.Row(
+                    Modifier.fillMaxWidth().padding(horizontal = 13.dp).padding(bottom = 10.dp),
+                    horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)
+                ) {
+                    val tokens = io.github.cidy02.kudos.ui.subject.LocalKudosTokens.current
+                    speeds.forEach { (rate, label) ->
+                        val inUse = speech.rate == rate
+                        androidx.compose.foundation.layout.Box(
+                            Modifier.weight(1f).heightIn(min = 44.dp)
+                                .background(tokens.glassFill(if (inUse) 0.05 else 0.12), androidx.compose.foundation.shape.RoundedCornerShape(10.dp))
+                                .clickable(enabled = !inUse, role = androidx.compose.ui.semantics.Role.Button) { updateRate(rate) }
+                                .padding(horizontal = 6.dp, vertical = 8.dp),
+                            contentAlignment = androidx.compose.ui.Alignment.Center
+                        ) {
+                            androidx.compose.material3.Text(label, fontSize = 13.sp, lineHeight = 17.sp,
+                                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                color = if (inUse) tokens.secondaryInk.copy(alpha = 0.45f) else tokens.scopePalette.accent)
+                        }
+                    }
                 }
                 SubjectRowSeparator()
                 if (auditionRequested) {

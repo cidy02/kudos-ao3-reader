@@ -1809,3 +1809,8 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   pages (Settings), each page is named to the shell so its "top row scrolled away" is its
   own (`PushedShellChrome.scrollKey`): a page opened from a scrolled one has its back
   button. The list calls the privacy mode "Blur". Reverse: the commit that names 3dh.
+- **2026-10-12 · Sizes, Listening's speeds, Insights' figures (3di).** A size is written one
+  way ("8 KB", `LocalStorageFootprint.formatted`); Listening's three speeds sit side by
+  side; Insights' big figures are in the page's face. "Words per hour" counts a work's
+  whole length for every sitting on both apps: recorded, not changed (owner question 27).
+  Reverse: the commit that names 3di.
