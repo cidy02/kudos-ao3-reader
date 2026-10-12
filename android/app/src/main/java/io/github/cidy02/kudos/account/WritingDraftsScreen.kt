@@ -72,6 +72,7 @@ import io.github.cidy02.kudos.ui.subject.SubjectHeaderBlock
 import io.github.cidy02.kudos.ui.subject.SubjectKicker
 import io.github.cidy02.kudos.ui.subject.SubjectMetrics
 import io.github.cidy02.kudos.ui.subject.SubjectPalette
+import io.github.cidy02.kudos.ui.subject.SubjectStateBadge
 import io.github.cidy02.kudos.ui.subject.ToolbarAddButton
 import io.github.cidy02.kudos.ui.subject.isAccessibilityFontScale
 import io.github.cidy02.kudos.ui.subject.subjectScreenWash
@@ -288,14 +289,8 @@ private fun DraftCard(work: AO3WorkSummary, deletion: LocalDate?, today: LocalDa
 
 @Composable
 private fun DraftExpiryBadge(days: Int) {
-    val tokens = LocalKudosTokens.current
-    val color = SubjectPalette.fromHue(DraftExpiry.tone(days).hue, tokens.theme).accent
-    val text = DraftExpiry.chipText(days)
-    val shape = RoundedCornerShape(SubjectMetrics.chipRadius)
-    Text(text.uppercase(), color = color, fontSize = 9.5.sp, lineHeight = 14.sp,
-        fontWeight = FontWeight.SemiBold, letterSpacing = 0.5.sp,
-        modifier = Modifier.background(color.withOpacity(0.15), shape).border(0.5.dp, color.withOpacity(0.35), shape)
-            .padding(horizontal = 8.dp, vertical = 3.dp).clearAndSetSemantics { contentDescription = text })
+    SubjectStateBadge(DraftExpiry.chipText(days),
+        SubjectPalette.fromHue(DraftExpiry.tone(days).hue, LocalKudosTokens.current.theme).accent)
 }
 
 /** Reuses the account cards' status mapping and glyphs, in iOS's four-cell tray. */

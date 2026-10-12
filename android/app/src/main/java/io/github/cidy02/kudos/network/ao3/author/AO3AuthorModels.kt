@@ -220,7 +220,11 @@ data class AO3AuthorSeriesSummary(
     val dateUpdated: String,
     val isComplete: Boolean?,
     val url: String,
-    val creatorUsernames: List<String> = emptyList()
+    val creatorUsernames: List<String> = emptyList(),
+    /** Public bookmarks on the series. AO3 leaves the figure out when there are none. */
+    val bookmarkCount: Int? = null,
+    /** The blue members-only lock beside the title. The red hidden-by-admin lock is not this. */
+    val isRestricted: Boolean = false
 )
 
 data class AO3AuthorSeriesPage(
