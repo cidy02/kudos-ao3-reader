@@ -1709,3 +1709,8 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   work not in the Library gets a cover drawn from AO3's blurb through a display-only
   `SavedWork`. Android still opens on Ledger; opening on Compact, as iOS does, is the
   owner's to say. Reverse: remove `Compact` from `AccountDisplayMode`.
+- **2026-10-11 · Clear History is native on Android (3co, step 7).** iOS's write, field for
+  field: AO3's confirm page for the token, one POST to `readings/clear`, never retried,
+  "cleared" only on AO3's own evidence, the list emptied on the device without a second
+  read. Fixtures and the demo only; owed a second review. The networking policy gains its
+  "Reading history writes" row. Reverse: the commit that names 3co step 7.

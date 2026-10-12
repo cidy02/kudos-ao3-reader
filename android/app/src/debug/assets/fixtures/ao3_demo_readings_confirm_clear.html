@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<!-- Demo stand-in, written by hand for the demo library: the shape of AO3's
+     readings/confirm_clear page as the app needs it (the page's token and its form).
+     It was not captured from AO3. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="csrf-token" content="demo-history-token">
+<title>Clear History | Archive of Our Own</title>
+</head>
+<body class="logged-in">
+<div id="main" class="readings-confirm_clear dashboard region" role="main">
+  <h2 class="heading">Are you sure you want to clear your entire history?</h2>
+  <p class="caution notice">This will permanently delete your reading history. It cannot be undone.</p>
+  <form action="/users/AO3_Reader/readings/clear" accept-charset="UTF-8" method="post">
+    <input type="hidden" name="authenticity_token" value="demo-history-form-token">
+    <p class="actions"><input type="submit" value="Yes, Clear My History"></p>
+  </form>
+</div>
+</body>
+</html>

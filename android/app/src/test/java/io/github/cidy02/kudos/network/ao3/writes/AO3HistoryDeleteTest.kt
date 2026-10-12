@@ -60,4 +60,41 @@ class AO3HistoryDeleteTest {
         assertTrue(AO3WriteRepository(noId).deleteReading(0, 1) is AO3Result.Failure)
         assertTrue(noId.gets.isEmpty() && noId.posts.isEmpty())
     }
+
+    private val confirmPage = "<meta name='csrf-token' content='fresh-confirm-token'>" +
+        "<form action='/users/AO3_Reader/readings/clear' method='post'><input name='authenticity_token' value='form-token'></form>"
+
+    /** iOS `clearReadingHistory`: the confirm page's token, one POST with nothing else in it. */
+    @Test fun clearingAsksAo3sConfirmPageThenPostsOnce() = runTest {
+        val client = FakeAuthenticatedClient(
+            listOf(success(confirmPage)),
+            listOf(success("<div class='flash notice'>Your history is now cleared.</div>"))
+        )
+        val result = AO3WriteRepository(client).clearReadingHistory()
+        assertEquals("History cleared.", (result as AO3Result.Success).value.message)
+        val confirm = "https://archiveofourown.org/users/AO3_Reader/readings/confirm_clear"
+        assertEquals(listOf(confirm), client.gets)
+        assertEquals("https://archiveofourown.org/users/AO3_Reader/readings/clear", client.posts.single().url)
+        assertEquals(listOf("authenticity_token" to "fresh-confirm-token"), client.posts.single().fields)
+        assertEquals(confirm, client.posts.single().headers["Referer"])
+    }
+
+    @Test fun clearingIsDoneOnlyOnAo3sOwnEvidenceAndIsNeverSentTwice() = runTest {
+        val answers = listOf(
+            success("", status = 302) to true,
+            success("<p>The Archive is down for maintenance.</p>") to false, // a page that confirms nothing
+            success("<div class='flash error'>Sorry, you don't have permission.</div>") to false,
+            AO3Result.Failure(AO3Error.RateLimited(1000)) to false,
+            AO3Result.Failure(AO3Error.Network("Lost connection")) to false
+        )
+        for ((answer, confirmed) in answers) {
+            val client = FakeAuthenticatedClient(listOf(success(confirmPage)), listOf(answer))
+            assertEquals(confirmed, AO3WriteRepository(client).clearReadingHistory() is AO3Result.Success)
+            assertEquals(1, client.posts.size)
+        }
+        // No token on the confirm page: nothing is sent.
+        val noToken = FakeAuthenticatedClient(listOf(success("<p>Are you sure?</p>")), emptyList())
+        assertTrue(AO3WriteRepository(noToken).clearReadingHistory() is AO3Result.Failure)
+        assertTrue(noToken.posts.isEmpty())
+    }
 }

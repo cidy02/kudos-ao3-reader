@@ -1175,6 +1175,24 @@ class AO3WriteRepository(
     }
 
     /**
+     * iOS `clearReadingHistory`: the whole of AO3's reading history. The token comes from AO3's
+     * own confirm page (`readings/confirm_clear`), whose form posts to `readings/clear` with
+     * nothing but the token (`confirm_clear.html.erb`, `post :clear`). One request, never
+     * retried, and only AO3's own evidence is "cleared". Never run against AO3.
+     */
+    suspend fun clearReadingHistory(): AO3Result<AO3WriteOutcome> {
+        val generation = client.sessionGeneration()
+        val username = client.username() ?: return AO3Result.Failure(AO3Error.AuthenticationRequired)
+        val readings = AO3AccountUrls().url(AccountListType.History, username, 1).substringBefore('?')
+        val endpoint = "$readings/clear"
+        if (!AO3RedirectCookieRelay.isTrustedUrl(endpoint)) {
+            return AO3Result.Failure(AO3Error.Validation("Couldn't build the history address."))
+        }
+        return indexWrite(generation, "$readings/confirm_clear", endpoint, AO3WriteActionKind.History,
+            "History cleared.", "Couldn't clear history.") { token -> listOf("authenticity_token" to token) }
+    }
+
+    /**
      * A write whose form lives on one of the account's index pages: a fresh general token
      * from that page, one POST never retried, and AO3's own evidence before "done"
      * (iOS `readingsWriteResult`).

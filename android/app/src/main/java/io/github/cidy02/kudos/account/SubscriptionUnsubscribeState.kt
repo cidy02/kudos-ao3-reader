@@ -31,6 +31,10 @@ internal class SubscriptionUnsubscribeState(
     suspend fun confirmDeleteReading(readingId: Long, page: Int, onSuccess: () -> Unit) =
         confirmWrite("reading:$readingId", { repository.deleteReading(readingId, page) }, onSuccess)
 
+    /** The whole of AO3's reading history; only the confirmation's own button calls this. */
+    suspend fun confirmClearHistory(onSuccess: () -> Unit) =
+        confirmWrite("readings:clear", { repository.clearReadingHistory() }, onSuccess)
+
     /** One write at a time for this screen and this session; the row changes only on AO3's confirmation. */
     private suspend fun confirmWrite(key: String, write: suspend () -> AO3Result<*>, onSuccess: () -> Unit) {
         if (mutableBusyPath.value != null || generation != auth.generation.value) return
