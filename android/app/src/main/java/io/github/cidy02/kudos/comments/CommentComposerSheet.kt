@@ -283,7 +283,7 @@ fun CommentComposerSheet(
                         color = tokens.secondaryInk
                     )
                     Text(
-                        text = "$remainingCharacters left",
+                        text = "%,d left".format(remainingCharacters),
                         fontSize = 11.5.sp,
                         fontFamily = FontFamily.Monospace,
                         color = if (remainingCharacters < 0) MaterialTheme.colorScheme.error else tokens.secondaryInk

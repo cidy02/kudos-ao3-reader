@@ -182,7 +182,8 @@ class AO3CommentParser(
         val chapterId = chapterLink?.attr("href")?.let { href ->
             Regex("""/chapters/(\d+)""").find(href)?.groupValues?.getOrNull(1)?.toLongOrNull()
         }
-        val chapterLabel = element.selectFirst(".parent")?.normalizedText()?.takeIf { it.isNotBlank() }
+        // AO3 writes "on Chapter 3" after the name; the pill says "Chapter 3", as iOS's does.
+        val chapterLabel = element.selectFirst(".parent")?.normalizedText()?.removePrefix("on ")?.takeIf { it.isNotBlank() }
 
         return AO3Comment(
             id = id,
