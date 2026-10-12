@@ -100,6 +100,15 @@ import io.github.cidy02.kudos.works.WorkTags
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.rememberCoroutineScope
 
+/** A page of a search as one line of saved state: the page, then the filters as saved searches store them. */
+internal object KeptSearch {
+    fun write(page: Int, filters: AO3SearchFilters): String = "$page\n${SearchFiltersCodec.encode(filters)}"
+    fun read(saved: String): Pair<Int, AO3SearchFilters>? {
+        val page = saved.substringBefore('\n').toIntOrNull() ?: return null
+        return SearchFiltersCodec.decode(saved.substringAfter('\n', "")).takeIf { it.isSearchable }?.let { page to it }
+    }
+}
+
 sealed interface SearchUiState {
     data object Idle : SearchUiState
     data object Loading : SearchUiState
@@ -153,6 +162,24 @@ fun SearchScreen(
     val savedSearches by viewModel.savedSearches.collectAsState()
     val localMatches by viewModel.localMatches.collectAsState()
     val isPaging by viewModel.isPaging.collectAsState()
+
+    // The search on screen, through the app's process being killed: Search came back with its
+    // field empty and its results gone. Kept as saved state, and read once more on return, as
+    // every other page reads its own address again. A search never run is never read.
+    var kept by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf<String?>(null) }
+    LaunchedEffect(viewModel) {
+        val saved = kept?.let(KeptSearch::read)
+        if (saved != null && viewModel.state.value is SearchUiState.Idle) {
+            viewModel.updateFilters(saved.second)
+            viewModel.runSearch(saved.first, saved.second)
+        }
+        var settled = saved == null
+        viewModel.state.collect { now ->
+            if (now !is SearchUiState.Idle) settled = true
+            if (now is SearchUiState.Results) kept = KeptSearch.write(now.page.currentPage, viewModel.resultFilters)
+            else if (now is SearchUiState.Idle && settled) kept = null
+        }
+    }
 
     val remoteSelection = rememberRemoteWorkSelection()
     var localSelecting by remember { mutableStateOf(false) }

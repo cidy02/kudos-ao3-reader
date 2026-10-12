@@ -88,7 +88,11 @@ fun AppNavHost(
     // newer entry adding a different id. A miss (evicted, or reached another
     // way) just falls back to the same AO3 fetch WorkDetailSource.Ao3WorkId
     // already does.
-    val remoteSummaryCache = remember { mutableMapOf<Long, AO3WorkSummary>() }
+    // Kept through the process being killed. In memory only, a work's page came back from a
+    // kill by its id alone: "AO3 Work 11", without its title, summary or chapter count.
+    val remoteSummaryCache = androidx.compose.runtime.saveable.rememberSaveable(saver = RemoteSummaryCacheSaver) {
+        mutableMapOf<Long, AO3WorkSummary>()
+    }
     // Browse leaves composition the moment a fandom opens, which cancels the
     // screen's own scope before the visit row is written.
     val visitScope = rememberCoroutineScope()
@@ -1349,3 +1353,15 @@ private fun androidx.navigation.NavController.collectionsChanged() {
     val list = runCatching { getBackStackEntry(Routes.AO3Collections) }.getOrNull() ?: return
     list.savedStateHandle[COLLECTIONS_CHANGED] = (list.savedStateHandle.get<Int>(COLLECTIONS_CHANGED) ?: 0) + 1
 }
+
+/**
+ * The works the open pages were given, as saved state. The newest few only: saved state has to
+ * stay small, and a page further down the stack falls back to reading AO3 by the work's id.
+ */
+internal val RemoteSummaryCacheSaver = androidx.compose.runtime.saveable.Saver<MutableMap<Long, AO3WorkSummary>, String>(
+    save = { cache -> kotlinx.serialization.json.Json.encodeToString(cache.values.toList().takeLast(8)) },
+    restore = { saved ->
+        runCatching { kotlinx.serialization.json.Json.decodeFromString<List<AO3WorkSummary>>(saved) }
+            .getOrDefault(emptyList()).associateByTo(mutableMapOf()) { it.id }
+    }
+)

@@ -1763,3 +1763,9 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   the app being killed in the background (seen); its short fields do not, on either app,
   by the editor's design. Left as designed and put to the owner (question 26). The drafts
   note says recovery copies stay on the device, as iOS. Reverse: the commit that names 3cu.
+- **2026-10-12 · Back from a kill (3cv).** The app draws no page until the saved AO3
+  session has been read back (bounded at two seconds), so a page that returns with the app
+  never asks AO3 as a signed-out reader. The works that open pages were given, and the
+  page of the search on screen, are saved state; the search is read once more on return,
+  as every restored page reads its own address. Reverse: `869eb8c0` and the commit that
+  names 3cv.
