@@ -81,6 +81,32 @@ class AO3SeriesRepositoryParseTest {
         assertEquals(AO3Error.Network("offline"), (result as AO3Result.Failure).error)
     }
 
+    /** iOS draws these in a card over the series's works; the page read them and drew only the title. */
+    @Test fun theSeriesOwnFactsComeFromItsPageWithOrWithoutClassesOnItsFigures() = runTest {
+        val url = "https://archiveofourown.org/series/321"
+        val html = io.github.cidy02.kudos.writing.seriesFixture("ao3_demo_dawn_series")
+        suspend fun detail(page: String) = (AO3SeriesRepository(FakeSeriesClient(mapOf(url to page)),
+            pageCache = io.github.cidy02.kudos.network.ao3.AO3PageCache()).detailPage(url) as AO3Result.Success).value
+        val demo = detail(html)
+        assertEquals(listOf("Avery Writes"), demo.creators)
+        assertEquals("Three stories about a difficult sunrise.", demo.summary)
+        assertEquals(true, demo.isComplete)
+        assertEquals(null, demo.bookmarkCount); assertEquals("", demo.dateUpdated)
+
+        // AO3's own page labels each figure, and has an updated date, bookmarks and notes.
+        val labelled = html.replace(Regex("<dl class=\"stats\">.*?</dl>"),
+            "<dl class=\"stats\"><dt>Words:</dt><dd>45,678</dd><dt>Works:</dt><dd>3</dd><dt>Complete:</dt><dd>No</dd>" +
+                "<dt>Bookmarks:</dt><dd><a href=\"/series/321/bookmarks\">62</a></dd></dl>")
+            .replace("<dt>Stats:</dt>", "<dt>Series Updated:</dt><dd>2026-07-08</dd>" +
+                "<dt>Notes:</dt><dd><blockquote class=\"userstuff\">Not the description.</blockquote></dd><dt>Stats:</dt>")
+        assertTrue(labelled.contains("<dt>Complete:</dt><dd>No</dd>") && labelled.contains("Series Updated"))
+        val real = detail(labelled)
+        assertEquals(3, real.workCount); assertEquals(45678, real.words)
+        assertEquals(false, real.isComplete); assertEquals(62, real.bookmarkCount)
+        assertEquals("2026-07-08", real.dateUpdated)
+        assertEquals("Three stories about a difficult sunrise.", real.summary)
+    }
+
     @Test fun detailIdentityComesFromSameShowReadAndNeverDisplayedPseudOrWorkByline() = runTest {
         val url = "https://archiveofourown.org/series/321"
         val html = io.github.cidy02.kudos.writing.seriesFixture("ao3_demo_dawn_series")

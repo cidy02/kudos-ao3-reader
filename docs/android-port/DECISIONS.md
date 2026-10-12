@@ -1782,3 +1782,7 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   rows as the work form does (a mark, green for the step that sends), and its publication
   date as a choice. iOS's demo answers the chapter and series pages from copies of
   Android's demo pages (T-400). Reverse: the commit that names 3cz; iOS T-400.
+- **2026-10-12 · A series's page (3da).** The page opens with the series's own card, read
+  from the series's page (creator, description, figures, complete, bookmarks, updated),
+  under the page's title. The standard AO3 work card closes with the work's date, as the
+  ledger card and iOS's standard card do. Reverse: the commit that names 3da.
