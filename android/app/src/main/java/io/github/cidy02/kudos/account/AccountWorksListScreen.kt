@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.account
 
+import io.github.cidy02.kudos.ui.components.rememberStoredChoice
 import io.github.cidy02.kudos.network.ao3.account.historyVisitGroups
 import io.github.cidy02.kudos.network.ao3.account.historyLocalProgress
 import io.github.cidy02.kudos.ui.subject.isAccessibilityFontScale
@@ -157,16 +158,7 @@ fun AccountWorksListScreen(
     val authState by repository.authRepository.state.collectAsState()
     var showMenu by remember { mutableStateOf(false) }
     var showLayoutMenu by remember { mutableStateOf(false) }
-    val listPreferences = remember(context) {
-        context.getSharedPreferences(AccountListPreferences, android.content.Context.MODE_PRIVATE)
-    }
-    var displayMode by remember {
-        mutableStateOf(
-            runCatching {
-                AccountDisplayMode.valueOf(listPreferences.getString("account.displayMode", null).orEmpty())
-            }.getOrDefault(AccountDisplayMode.Ledger)
-        )
-    }
+    var displayMode by rememberStoredChoice("account.displayMode", AccountDisplayMode.Ledger)
     var showingFilters by remember(type) { mutableStateOf(false) }
     var filters by remember(type) { mutableStateOf(AO3SearchFilters()) }
     var subscriptionsScope by remember(type) { mutableStateOf("works") }
@@ -247,7 +239,6 @@ fun AccountWorksListScreen(
                                     trailingIcon = { if (mode == displayMode) Text("✓", color = tokens.accent) },
                                     onClick = {
                                         displayMode = mode
-                                        listPreferences.edit().putString("account.displayMode", mode.name).apply()
                                         showLayoutMenu = false
                                     }
                                 )
@@ -1560,8 +1551,6 @@ private enum class AccountDisplayMode(val title: String) {
     Detailed("Detailed"),
     Ledger("Ledger")
 }
-
-private const val AccountListPreferences = "account-lists"
 
 private val LocalPairedRowPrivacy = compositionLocalOf { PairedRowPrivacy() }
 

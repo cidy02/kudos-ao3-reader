@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.library
 
+import io.github.cidy02.kudos.ui.components.rememberStoredChoice
 import androidx.compose.ui.semantics.Role
 import androidx.compose.foundation.selection.toggleable
 import androidx.activity.compose.BackHandler
@@ -59,7 +60,6 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -140,7 +140,8 @@ fun CollectionDetailScreen(
     var error by remember(collectionId) { mutableStateOf<String?>(null) }
     var collection by remember(collectionId) { mutableStateOf<WorkCollection?>(null) }
     var works by remember(collectionId) { mutableStateOf<List<SavedWork>>(emptyList()) }
-    var displayMode by rememberSaveable(collectionId) { mutableStateOf(CollectionDisplayMode.Detailed) }
+    // iOS `collection.displayMode`: one choice for every collection, kept between launches.
+    var displayMode by rememberStoredChoice("collection.displayMode", CollectionDisplayMode.Detailed)
     var isSelecting by remember(collectionId) { mutableStateOf(false) }
     var selectedIds by remember(collectionId) { mutableStateOf<Set<String>>(emptySet()) }
     var menuOpen by remember { mutableStateOf(false) }
@@ -831,7 +832,9 @@ private fun CollectionWorkListItem(
                 )
             }
             Box(Modifier.weight(1f)) {
-                if (displayMode == CollectionDisplayMode.Ledger) {
+                // Detailed is the full card and Ledger the dense row, as on iOS. They were the
+                // other way round, so a collection opened on the dense row under "Detailed".
+                if (displayMode == CollectionDisplayMode.Detailed) {
                     val progress = work.readingProgressFraction() ?: 0.0
                     SensitiveWorkRow(
                         work = work,
@@ -850,7 +853,7 @@ private fun CollectionWorkListItem(
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
                     )
                 } else {
-                    DetailedCollectionWorkCard(
+                    LedgerCollectionWorkCard(
                         work = work,
                         obscured = obscured,
                         selected = isSelecting && isSelected,
@@ -922,7 +925,7 @@ private fun CollectionWorkListItem(
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun DetailedCollectionWorkCard(
+private fun LedgerCollectionWorkCard(
     work: SavedWork,
     obscured: Boolean,
     selected: Boolean,
