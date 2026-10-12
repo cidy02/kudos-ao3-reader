@@ -181,7 +181,9 @@ fun AO3CollectionFormScreen(
                     }
                 }
                 item { SettingsSection(footnote = null, top = 18.dp) {
-                    SettingsActionRow(saveLabel, onClick = save, enabled = state.canSave)
+                    // The form's one action, filled as iOS draws it and as the challenge pages'
+                    // actions are (3dc). It was a line of text.
+                    ChallengePrimaryAction(saveLabel, state.canSave, Modifier.fillMaxWidth(), save)
                 } }
                 if (slug != null) item {
                     CollectionFormSection(label = "Collection actions", footnote = null, top = 12.dp) {

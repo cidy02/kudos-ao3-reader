@@ -1792,3 +1792,5 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   button (`ChallengePrimaryAction`); Sign-ups and Assignments filter with the segmented
   control; Edit collection labels its sections as the other AO3 forms do. Reverse: the
   commit that names 3dc.
+- **2026-10-12 · Edit collection's Save (3dd).** A filled button, as iOS and as the
+  challenge pages' actions. Reverse: the commit that names 3dd.
