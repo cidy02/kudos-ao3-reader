@@ -218,7 +218,7 @@ fun AO3ChallengeSignUpScreen(slug: String, title: String, existingID: Int? = nul
                 CircularProgressIndicator(color = palette.accent, trackColor = tokens.separator,
                     modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
             }
-            SettingsActionRow("Submit sign-up", { scope.launch { model.save() } }, enabled = form != null && !busy)
+            ChallengePrimaryAction("Submit sign-up", form != null && !busy, Modifier.fillMaxWidth()) { scope.launch { model.save() } }
         }
         SettingsPanel(Modifier.padding(top = 12.dp, bottom = 26.dp)) {
             if (isAccessibilityFontScale()) {
