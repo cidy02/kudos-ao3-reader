@@ -158,7 +158,9 @@ fun MainScaffold(
     val hasSubjectHeader = pushedChrome.hasSubjectHeader ?: Routes.hasSubjectHeader(currentRoute)
     val isPushedSubject = !shell && !reader && hasSubjectHeader
 
-    val activeRoute = if (reader) null else currentRoute
+    // The key the top row's scroll state is kept under: the route, and the route's own page where
+    // it has several.
+    val activeRoute = if (reader) null else currentRoute?.let { route -> pushedChrome.scrollKey?.let { "$route#$it" } ?: route }
     // A screen that takes over inside one route (an editor opened from a scrolled form) must start
     // with its buttons showing: the row its predecessor scrolled away otherwise stayed away.
     val pushedHolder = pushedChrome.holder

@@ -1805,3 +1805,7 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   "Comments"). Reverse: the commit that names 3df.
 - **2026-10-12 · A work page's byline (3dg).** A name that opens its author is drawn in the
   page's accent, as iOS. Reverse: the commit that names 3dg.
+- **2026-10-12 · Settings' pages and the top row (3dh).** Where one route holds several
+  pages (Settings), each page is named to the shell so its "top row scrolled away" is its
+  own (`PushedShellChrome.scrollKey`): a page opened from a scrolled one has its back
+  button. The list calls the privacy mode "Blur". Reverse: the commit that names 3dh.

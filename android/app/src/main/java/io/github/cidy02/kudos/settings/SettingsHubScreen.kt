@@ -74,7 +74,8 @@ fun SettingsHubScreen(
 
     val privacyString = if (settings.privacy.hideMatureContent) {
         val modeTitle = when (settings.privacy.matureContentMode) {
-            MatureContentMode.Obscure -> "Obscure"
+            // "Blur", as the Privacy page and iOS call it. The list said "Obscure mature works".
+            MatureContentMode.Obscure -> "Blur"
             MatureContentMode.Hide -> "Hide"
         }
         "$modeTitle mature works"
