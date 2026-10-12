@@ -35,7 +35,13 @@ class AO3WorkMetadataParser {
             // The first byline is the work's; a chapter can carry one of its own further down.
             authorIdentitiesJSON = io.github.cidy02.kudos.network.ao3.author.AO3AuthorIdentities.json(
                 document.selectFirst("h3.byline")?.select("a[rel=author]").orEmpty()
-            )
+            ),
+            title = document.selectFirst("h2.title.heading")?.normalizedText().orEmpty(),
+            authors = document.selectFirst("h3.byline")?.select("a[rel=author]").orEmpty()
+                .map { it.normalizedText() }.dedupeFirstSeen(),
+            // The work's own: a chapter's summary sits in a preface of its own, without the title.
+            summary = document.selectFirst("div.preface:has(h2.title) div.summary blockquote.userstuff")
+                ?.normalizedText().orEmpty()
         )
     }
 

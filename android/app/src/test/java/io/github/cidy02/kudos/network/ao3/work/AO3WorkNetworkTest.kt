@@ -71,6 +71,36 @@ class AO3EpubDownloaderTest {
 }
 
 class AO3WorkMetadataParserTest {
+    /** A work reached by its id alone has no list to take these from. */
+    @Test
+    fun readsTheWorksOwnHeadingBylineAndSummaryAndNotAChapters() {
+        val page = """
+            <html><body><div id="workskin">
+            <div class="preface group">
+              <h2 class="title heading">
+                The Weight of Water &amp; 星
+              </h2>
+              <h3 class="byline heading">
+                <a rel="author" href="/users/avery/pseuds/Avery%20Writes">Avery Writes</a>,
+                <a rel="author" href="/users/second/pseuds/second">second</a>
+              </h3>
+              <div class="summary module"><h3 class="heading">Summary:</h3>
+                <blockquote class="userstuff"><p>A long walk home</p><p>in the rain.</p></blockquote></div>
+              <div class="notes module"><blockquote class="userstuff"><p>Not the summary.</p></blockquote></div>
+            </div>
+            <div class="chapter preface group"><h3 class="title">Chapter 1</h3>
+              <div id="summary" class="summary module"><blockquote class="userstuff"><p>A chapter's.</p></blockquote></div>
+            </div></div></body></html>
+        """.trimIndent()
+        val metadata = AO3WorkMetadataParser().parse(page)
+        assertEquals("The Weight of Water & 星", metadata.title)
+        assertEquals(listOf("Avery Writes", "second"), metadata.authors)
+        assertEquals("A long walk home in the rain.", metadata.summary)
+
+        val bare = AO3WorkMetadataParser().parse(workHtml)
+        assertEquals("", bare.title); assertEquals(emptyList<String>(), bare.authors); assertEquals("", bare.summary)
+    }
+
     @Test
     fun parsesCanonicalWorkTagsAndStats() {
         val metadata = AO3WorkMetadataParser().parse(workHtml)
