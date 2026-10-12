@@ -1730,3 +1730,8 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
 - **2026-10-11 · The finished toggle has one wording (3cp, fourth commit).** "Mark as
   Finished" / "Mark as Still Reading", from `finishedActionLabel`, as iOS's
   `WorkActionLabels.finished`. Six wordings across nine places are gone.
+- **2026-10-12 · The tab bar and chrome buttons take the colour of the screen on top
+  (owner, 2026-10-11; iOS T-399).** Android's shell draws its own chrome and tab bar under
+  the page's wash palette (`LocalShellWashes.page`), where it had kept the app accent "as
+  on iOS". A page with no wash keeps the app accent. The page's content is untouched.
+  Reverse: the provider around `MainScaffold`'s outer box.
