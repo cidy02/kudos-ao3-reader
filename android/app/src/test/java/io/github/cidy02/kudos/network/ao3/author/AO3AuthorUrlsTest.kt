@@ -60,6 +60,20 @@ class AO3AuthorUrlsTest {
     }
 
     @Test
+    fun aPseudOfTwoWordsReadFromALinkIsItsNameAndIsAskedForOnce() {
+        val about = AO3AuthorParser().parseAbout(
+            """<div class="user home profile"><dl class="meta"><dd class="pseuds">
+               <a href="/users/Avery_Archive/pseuds/Avery%20Writes">Avery Writes</a>,
+               <a href="https://archiveofourown.org/users/Avery_Archive/pseuds/NightShift">NightShift</a>
+               </dd></dl></div>""",
+            AO3AuthorRoute("Avery_Archive", "Avery Writes")
+        )
+        assertEquals(listOf("Avery Writes", "NightShift"), about.pseuds.map { it.route.pseud })
+        assertEquals("/users/Avery_Archive/pseuds/Avery%20Writes/works",
+            about.pseuds.first().route.worksUrl.toHttpUrl().encodedPath)
+    }
+
+    @Test
     fun aBylineWithAPseudOpensTheAccountBehindIt() {
         val route = AO3AuthorRoute.fromByline(" Second Pseud (SecondAccount) ")
         assertEquals(AO3AuthorRoute("SecondAccount", "Second Pseud"), route)

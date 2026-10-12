@@ -30,13 +30,14 @@ class SensitiveWorkRowLedgerTest {
     private fun show(
         obscured: Boolean = false,
         bookmark: LedgerBookmark? = null,
+        fandoms: List<String> = listOf("Doctor Who (2005)", "Torchwood"),
         onReveal: () -> Unit = {},
         onSearch: (SearchSubjectField, String) -> Unit = { _, _ -> }
     ) = compose.setContent {
         KudosTheme(KudosThemeMode.Light) {
             SensitiveWorkRow(
                 id = "1", title = "Sodium Lights", author = "nine_of_wands",
-                fandoms = listOf("Doctor Who (2005)", "Torchwood"), summary = "A city that never sleeps.",
+                fandoms = fandoms, summary = "A city that never sleeps.",
                 discoveryTags = emptyList(), relationships = listOf("Rose Tyler/Tenth Doctor"),
                 warnings = listOf("No Archive Warnings Apply"), categories = listOf("F/M"),
                 rating = "Teen And Up Audiences", isComplete = true, wordCount = 1200, chapters = "1/1",
@@ -82,6 +83,11 @@ class SensitiveWorkRowLedgerTest {
         }
         assertEquals(taps, revealed)
         assertEquals(0, searched)
+    }
+
+    @Test fun aPrivateBookmarkSaysSoWhenItsWorkNamesNoFandom() {
+        show(bookmark = LedgerBookmark(listOf("Private"), "") {}, fandoms = emptyList())
+        compose.onNodeWithText("PRIVATE").assertExists()
     }
 
     @Test fun aBookmarkIsOneCardWithItsNoteWhereTheSummaryWouldBe() {

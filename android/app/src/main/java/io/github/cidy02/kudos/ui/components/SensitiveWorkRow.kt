@@ -511,7 +511,9 @@ private fun LedgerBody(
     val named = fandoms.filter { it.isNotBlank() }
     val identity: @Composable (Modifier) -> Unit = { modifier ->
         Column(modifier, verticalArrangement = Arrangement.spacedBy(5.dp)) {
-            if (named.isNotEmpty() || expandable) {
+            // The badges too: a private bookmark of a work that names no fandom had no line to
+            // say "Private" on, and said nothing.
+            if (named.isNotEmpty() || expandable || badges.isNotEmpty()) {
                 Row(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalAlignment = Alignment.Top) {
                     named.firstOrNull()?.let { fandom ->
                         SubjectKicker(

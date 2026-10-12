@@ -206,7 +206,9 @@ data class AO3AuthorAbout(
     val pseuds: List<AO3AuthorPseud>,
     val joinedDate: String,
     val userId: Long?,
-    val actions: List<AO3AuthorWebAction>
+    val actions: List<AO3AuthorWebAction>,
+    /** The bio as AO3 sent it; `AO3RichText` cleans it before drawing. */
+    val bioHtml: String = ""
 )
 
 data class AO3AuthorSeriesSummary(
