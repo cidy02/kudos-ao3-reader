@@ -1,5 +1,7 @@
 package io.github.cidy02.kudos.ui.subject
 
+import androidx.compose.material.icons.filled.People
+import androidx.compose.material.icons.filled.Help
 import io.github.cidy02.kudos.ui.components.hiddenMatureWorkSemantics
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -325,12 +327,17 @@ internal fun CoverSurface(
     }
 }
 
+/**
+ * iOS `WorkStatusIconGrid`: AO3's own quadrant, in this app's symbols. A work AO3 gave no
+ * rating for has no rating tile (a sparse list row); no category is the two figures, not a
+ * dash; and a completion nobody knows is "?", not the ring of a work in progress.
+ */
 @Composable
 fun HomeStatusTray(
     rating: String,
     categories: List<String>,
     warnings: List<String>,
-    isComplete: Boolean,
+    isComplete: Boolean?,
     arrangement: HomeStatusArrangement,
     tileSize: Dp,
     modifier: Modifier = Modifier
@@ -342,19 +349,23 @@ fun HomeStatusTray(
     val category = categories.firstOrNull { AO3StatusTint.category(it) != null }
     val categoryTint = category?.let { AO3StatusTint.category(it) } ?: AO3StatusTint.gray
     val warningTint = if (HomeFacts.hasRealArchiveWarning(warnings)) AO3StatusTint.orange else AO3StatusTint.gray
-    val completeTint = if (isComplete) AO3StatusTint.green else AO3StatusTint.gray
-    val marks: @Composable () -> Unit = {
-        StatusTile(scaledTileSize, ratingTint) { RatingMark(rating, ratingTint, scaledTileSize) }
-        StatusTile(scaledTileSize, categoryTint) { CategoryMark(categories, categoryTint, scaledTileSize) }
-        StatusTile(scaledTileSize, warningTint) {
-            Icon(
-                Icons.Filled.Error,
-                contentDescription = "Warnings",
-                tint = warningTint,
-                modifier = Modifier.size(scaledTileSize * 0.58f)
-            )
+    val completeTint = if (isComplete == true) AO3StatusTint.green else AO3StatusTint.gray
+    val tiles: List<@Composable () -> Unit> = buildList {
+        if (rating.isNotBlank()) {
+            add { StatusTile(scaledTileSize, ratingTint) { RatingMark(rating, ratingTint, scaledTileSize) } }
         }
-        StatusTile(scaledTileSize, completeTint) { CompletionMark(isComplete, completeTint, scaledTileSize) }
+        add { StatusTile(scaledTileSize, categoryTint) { CategoryMark(categories, categoryTint, scaledTileSize) } }
+        add {
+            StatusTile(scaledTileSize, warningTint) {
+                Icon(
+                    Icons.Filled.Error,
+                    contentDescription = "Warnings",
+                    tint = warningTint,
+                    modifier = Modifier.size(scaledTileSize * 0.58f)
+                )
+            }
+        }
+        add { StatusTile(scaledTileSize, completeTint) { CompletionMark(isComplete, completeTint, scaledTileSize) } }
     }
     val trayShape = RoundedCornerShape(SubjectMetrics.trayRadius)
     if (arrangement == HomeStatusArrangement.Grid) {
@@ -362,20 +373,8 @@ fun HomeStatusTray(
             modifier.background(tokens.glassFill(0.16), trayShape).padding(4.dp * fontScale),
             verticalArrangement = Arrangement.spacedBy(3.dp * fontScale)
         ) {
-            Row(horizontalArrangement = Arrangement.spacedBy(3.dp * fontScale)) {
-                StatusTile(scaledTileSize, ratingTint) { RatingMark(rating, ratingTint, scaledTileSize) }
-                StatusTile(scaledTileSize, categoryTint) { CategoryMark(categories, categoryTint, scaledTileSize) }
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(3.dp * fontScale)) {
-                StatusTile(scaledTileSize, warningTint) {
-                    Icon(
-                        Icons.Filled.Error,
-                        contentDescription = "Warnings",
-                        tint = warningTint,
-                        modifier = Modifier.size(scaledTileSize * 0.58f)
-                    )
-                }
-                StatusTile(scaledTileSize, completeTint) { CompletionMark(isComplete, completeTint, scaledTileSize) }
+            tiles.chunked(2).forEach { pair ->
+                Row(horizontalArrangement = Arrangement.spacedBy(3.dp * fontScale)) { pair.forEach { it() } }
             }
         }
     } else {
@@ -387,7 +386,7 @@ fun HomeStatusTray(
             horizontalArrangement = Arrangement.spacedBy(4.dp * fontScale, Alignment.CenterHorizontally),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            marks()
+            tiles.forEach { it() }
         }
     }
 }
@@ -450,6 +449,16 @@ private fun CategoryMark(categories: List<String>, tint: Color, tileSize: Dp) {
         }
         return
     }
+    if (named == null) {
+        // No category given: iOS's two figures ("N/A"), not a dash.
+        Icon(
+            Icons.Filled.People,
+            contentDescription = "No category",
+            tint = tint,
+            modifier = Modifier.size(tileSize * 0.6f)
+        )
+        return
+    }
     val glyph = when (named) {
         "F/F" -> "⚢"
         "M/M" -> "⚣"
@@ -470,8 +479,16 @@ private fun CategoryMark(categories: List<String>, tint: Color, tileSize: Dp) {
 }
 
 @Composable
-private fun CompletionMark(isComplete: Boolean, tint: Color, tileSize: Dp) {
-    if (isComplete) {
+private fun CompletionMark(isComplete: Boolean?, tint: Color, tileSize: Dp) {
+    if (isComplete == null) {
+        // Nobody knows: iOS `questionmark.circle.fill`. It drew the ring of a work in progress.
+        Icon(
+            Icons.Filled.Help,
+            contentDescription = "Completion unknown",
+            tint = tint,
+            modifier = Modifier.size(tileSize * 0.58f)
+        )
+    } else if (isComplete) {
         Icon(
             Icons.Outlined.Verified,
             contentDescription = "Complete",

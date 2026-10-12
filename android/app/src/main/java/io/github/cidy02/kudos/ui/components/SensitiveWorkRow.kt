@@ -315,7 +315,7 @@ fun SensitiveWorkRow(
                                         rating = rating,
                                         categories = categories,
                                         warnings = warnings,
-                                        isComplete = isComplete == true,
+                                        isComplete = isComplete,
                                         arrangement = HomeStatusArrangement.Grid,
                                         tileSize = 22.dp,
                                         modifier = Modifier.clearAndSetSemantics {}
@@ -570,7 +570,7 @@ private fun LedgerBody(
             rating = rating,
             categories = categories,
             warnings = warnings,
-            isComplete = isComplete == true,
+            isComplete = isComplete,
             arrangement = HomeStatusArrangement.Grid,
             tileSize = 22.dp
         )

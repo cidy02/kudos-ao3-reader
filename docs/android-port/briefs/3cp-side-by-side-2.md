@@ -1,6 +1,6 @@
 # 3cp: more pages beside the iPhone's (Android)
 
-Done 2026-10-11 by Claude, alone. Gate 2,618. Four commits. Pictures: `shots/3cp/`. The method is 3cm's.
+Done 2026-10-11 and 10-12 by Claude, alone. Gate 2,618. Five commits. Pictures: `shots/3cp/`. The method is 3cm's.
 
 ## Fixed
 
@@ -37,11 +37,29 @@ Done 2026-10-11 by Claude, alone. Gate 2,618. Four commits. Pictures: `shots/3cp
    `finishedActionLabel` is now the only source: a work's page, the Library's two card
    menus and its selection overflow, both selection bars, Home's bulk bar.
 
+7. **The tray of four symbols says what it does not know as iOS does** (fifth commit;
+   `HomeStatusTray`, shared by Home's cards, the cover cards, the ledger rows and the AO3
+   cards). A work AO3 gave no rating for has no rating tile (it drew a grey shield with
+   "?"); no category is the two figures (it drew a dash); a completion nobody knows is "?"
+   (it drew the dashed ring of a work in progress, which said something untrue). An AO3
+   card passes what it knows (`isComplete: Boolean?`); a saved work's is unchanged.
+8. **The Account hub's Collections and Series have their own glyphs** (fifth commit):
+   stacked squares and layers, iOS's `square.stack` and `square.stack.3d.up`. Both drew
+   Material's "Collections", which is a picture gallery.
+
 **Compared and the same:** what a tap on a saved work's card opens (the reader, on both:
 iOS `WorkCardTap.destination`); the rest of a saved work's page (kicker, title, the four
 figures, the Read card, the tag groups, the language line, kudos and hits, My copy).
 
 ## Seen, and left
+
+- **Home's "Last opened" where iOS names the chapter** is the simulator's own reading
+  position (its demo had been read into chapter 2), not a difference: both take the
+  chapter's name from the reader's place when there is one.
+- **"6+" on Subscriptions** is the cached size of the list, which iOS prints too when it
+  has one.
+- One older list inside `AccountScreen.kt` still draws the picture-gallery glyph in AO3 red
+  beside each collection (line 1327); not looked at.
 
 - iOS's detailed card prints comments and bookmarks when they are zero ("0"); Android
   leaves them out for these demo works. May be the two demos' data.
