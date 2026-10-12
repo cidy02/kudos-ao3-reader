@@ -1,8 +1,13 @@
 package io.github.cidy02.kudos.network.ao3.author
 
 import io.github.cidy02.kudos.network.ao3.AO3Constants
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.addJsonObject
 import kotlinx.serialization.json.buildJsonArray
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.put
 import org.jsoup.nodes.Element
 
@@ -28,5 +33,21 @@ object AO3AuthorIdentities {
             }
         }
         return if (identities.isEmpty()) "" else identities.toString()
+    }
+
+    /**
+     * One name of a byline as AO3 prints its account, "pseud (account)" or the account alone,
+     * for [AO3AuthorRoute.fromByline]. The name's own words are a pseud: asked for as an
+     * account, "Avery Writes" is nobody, or somebody else. Null when no kept link has the name.
+     */
+    fun byline(json: String, displayName: String): String? {
+        val identities = runCatching { Json.parseToJsonElement(json) as? JsonArray }.getOrNull() ?: return null
+        fun JsonObject.text(key: String) = (this[key] as? JsonPrimitive)?.contentOrNull?.takeIf { it.isNotBlank() }
+        val identity = identities.filterIsInstance<JsonObject>().firstOrNull {
+            it.text("displayName") == displayName.trim() && it.text("kind") in setOf("registered", "orphaned")
+        } ?: return null
+        val username = identity.text("username") ?: return null
+        val pseud = identity.text("pseud")
+        return if (pseud == null || pseud == username) username else "$pseud ($username)"
     }
 }

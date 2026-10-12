@@ -178,7 +178,8 @@ internal fun AO3AuthorWorkCard(
     expandAll: Boolean,
     showsPerformance: Boolean,
     onOpenWork: (AO3WorkSummary) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    bookmark: io.github.cidy02.kudos.ui.components.LedgerBookmark? = null
 ) {
     // iOS `showsPerformance`: on the writer's own works the kudos, comments and hits are a
     // strip inside the ledger card, and its line of figures leaves them out. They were
@@ -190,11 +191,20 @@ internal fun AO3AuthorWorkCard(
         onOpenWork = onOpenWork,
         modifier = modifier,
         expandAll = expandAll,
-        ledger = displayMode != AuthorDisplayMode.Detailed,
+        // A bookmark is iOS's one card in every layout (1q).
+        ledger = displayMode != AuthorDisplayMode.Detailed || bookmark != null,
+        bookmark = bookmark,
         footer = if (strip) { { AO3AuthorPerformanceStrip(work) } } else null,
         figuresIncludePerformance = !strip
     )
 }
+
+/** A bookmark as the one card carries it (iOS 1q): its badges, its day, then its note and tags. */
+internal fun AO3AuthorBookmark.asLedgerBookmark() = io.github.cidy02.kudos.ui.components.LedgerBookmark(
+    badges = listOfNotNull("Private".takeIf { isPrivate }, "Rec".takeIf { isRecommendation }),
+    date = date,
+    footnote = { if (notes.isNotBlank() || tags.isNotEmpty()) AO3BookmarkFootnote(this, showsStatus = false) }
+)
 
 @Composable
 internal fun AO3AuthorPerformanceStrip(work: AO3WorkSummary) {

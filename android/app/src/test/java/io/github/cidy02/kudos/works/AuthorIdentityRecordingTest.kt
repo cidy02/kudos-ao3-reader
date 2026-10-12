@@ -28,6 +28,22 @@ class AuthorIdentityRecordingTest {
         )
     }
 
+    /** The page a tapped name opens: the link's account, whatever words the link shows. */
+    @Test fun aTappedNameOpensItsAccountNotAnAccountOfThatName() {
+        val json = AO3AuthorIdentities.json(links(
+            """<a rel="author" href="/users/Avery_Archive/pseuds/Avery%20Writes">Avery Writes</a>,
+               $pseudLink, <a rel="author" href="/users/Solo/pseuds/Solo">Solo</a>"""
+        ))
+        fun route(name: String) = AO3AuthorIdentities.byline(json, name)
+            ?.let { io.github.cidy02.kudos.network.ao3.author.AO3AuthorRoute.fromByline(it) }
+        assertEquals("Avery_Archive" to "Avery Writes", route("Avery Writes")?.let { it.username to it.pseud })
+        assertEquals("SecondAccount" to "Second Pseud", route("Second Pseud (SecondAccount)")?.let { it.username to it.pseud })
+        assertEquals("Solo" to null, route("Solo")?.let { it.username to it.pseud })
+        assertEquals(null, route("Somebody Else"))
+        assertEquals(null, AO3AuthorIdentities.byline("", "Avery Writes"))
+        assertEquals(null, AO3AuthorIdentities.byline("not json", "Avery Writes"))
+    }
+
     @Test fun anonymousNamesNoAccountAndAnOrphanedWorkNamesNoneToCheck() {
         assertEquals("", AO3AuthorIdentities.json(links("by Anonymous")))
         val orphaned = AO3AuthorIdentities.json(links("""<a rel="author" href="/users/orphan_account/pseuds/x">x (orphan_account)</a>"""))

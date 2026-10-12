@@ -1814,3 +1814,8 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   side; Insights' big figures are in the page's face. "Words per hour" counts a work's
   whole length for every sitting on both apps: recorded, not changed (owner question 27).
   Reverse: the commit that names 3di.
+- **2026-10-12 · Another author's page (3dj).** A tapped name opens the account its link
+  names, never an account of the name's words. Addresses read from a page are decoded
+  before they are kept. A bookmark's badges are drawn whether or not the work names a
+  fandom. AO3's formatted words are drawn with `AO3RichText`, which keeps plain formatting
+  and http/https links only. Reverse: the commit that names 3dj.

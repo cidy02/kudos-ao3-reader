@@ -6,7 +6,6 @@ import io.github.cidy02.kudos.ui.components.rememberStoredChoice
 import io.github.cidy02.kudos.network.ao3.account.historyVisitGroups
 import io.github.cidy02.kudos.network.ao3.account.historyLocalProgress
 import io.github.cidy02.kudos.ui.subject.isAccessibilityFontScale
-import io.github.cidy02.kudos.ui.components.LedgerBookmark
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -81,6 +80,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import io.github.cidy02.kudos.app.ProvidePushedShellChrome
 import io.github.cidy02.kudos.auth.isSignedIn
 import io.github.cidy02.kudos.author.AO3BookmarkFootnote
+import io.github.cidy02.kudos.author.asLedgerBookmark
 import io.github.cidy02.kudos.core.model.SavedWork
 import io.github.cidy02.kudos.data.preferences.SettingsRepository
 import io.github.cidy02.kudos.library.LibraryPrivacy
@@ -1714,14 +1714,6 @@ private fun EnrichingWorkRow(
         ledger = ledger || bookmark != null,
         footer = footer,
         // A work not in the Library draws its bookmark inside the one card (iOS 1q).
-        bookmark = bookmark?.let { mark ->
-            LedgerBookmark(
-                badges = listOfNotNull("Private".takeIf { mark.isPrivate }, "Rec".takeIf { mark.isRecommendation }),
-                date = mark.date,
-                footnote = {
-                    if (mark.notes.isNotBlank() || mark.tags.isNotEmpty()) AO3BookmarkFootnote(mark, showsStatus = false)
-                }
-            )
-        }
+        bookmark = bookmark?.asLedgerBookmark()
     )
 }

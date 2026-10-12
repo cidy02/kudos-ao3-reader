@@ -10,6 +10,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Checklist
 import io.github.cidy02.kudos.ui.components.rememberRemoteWorkSelection
 import io.github.cidy02.kudos.network.ao3.writing.AO3WorkFormRepository
@@ -24,6 +25,8 @@ import io.github.cidy02.kudos.network.ao3.search.AO3SearchFilters
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -57,6 +60,16 @@ enum class AuthorTab(val label: String) {
 }
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+/** iOS's grouped section: a plain heading over one panel of rows. */
+@Composable
+private fun AuthorAboutSection(title: String, content: @Composable ColumnScope.() -> Unit) {
+    Column {
+        Text(title, color = LocalKudosTokens.current.secondaryInk, fontSize = 15.sp, lineHeight = 21.sp,
+            modifier = Modifier.padding(start = 4.dp, bottom = 8.dp).semantics { heading() })
+        Column(Modifier.fillMaxWidth().subjectPanel(), content = content)
+    }
+}
+
 @Composable
 fun AuthorProfileScreen(
     username: String,
@@ -920,18 +933,19 @@ fun AuthorProfileScreen(
                                 item { EmptyStateCard("No visible bookmarks", "No bookmarks by this author are visible to you on AO3.") }
                             } else {
                                 items(pageData.bookmarks, key = { it.id }) { bm ->
-                                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                        bm.work?.let { work ->
-                                            AO3AuthorWorkCard(
-                                                work = work,
-                                                displayMode = displayMode,
-                                                expandAll = false,
-                                                showsPerformance = false,
-                                                onOpenWork = onOpenWork
-                                            )
-                                        }
-                                        AO3BookmarkFootnote(bookmark = bm)
-                                    }
+                                    // iOS: the note, the tags, Rec and the day are in the work's
+                                    // card, as on the reader's own Bookmarks. They sat loose
+                                    // under it here.
+                                    bm.work?.let { work ->
+                                        AO3AuthorWorkCard(
+                                            work = work,
+                                            displayMode = displayMode,
+                                            expandAll = false,
+                                            showsPerformance = false,
+                                            onOpenWork = onOpenWork,
+                                            bookmark = bm.asLedgerBookmark()
+                                        )
+                                    } ?: AO3BookmarkFootnote(bookmark = bm)
                                 }
                                 item {
                                     PagerRow(
@@ -950,46 +964,47 @@ fun AuthorProfileScreen(
                             if (a == null) {
                                 item { EmptyStateCard("No about", "Profile details unavailable.") }
                             } else {
+                                // iOS's three sections, each a heading over a panel. They were loose
+                                // lines under a second copy of the profile's title, which the header
+                                // already shows, and the bio was one grey paragraph without its links.
                                 item {
-                                    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                                        if (a.profileTitle.isNotBlank()) {
-                                            Text(a.profileTitle, color = tokens.primaryInk, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+                                    AuthorAboutSection("Bio") {
+                                        if (a.bioHtml.isBlank()) {
+                                            Text("This user has not added a bio.", color = tokens.secondaryInk,
+                                                fontSize = 15.sp, modifier = Modifier.padding(14.dp))
+                                        } else {
+                                            io.github.cidy02.kudos.ui.components.AO3RichText(
+                                                a.bioHtml, onOpenAo3 = onOpenWeb, modifier = Modifier.padding(14.dp))
                                         }
-                                        Text(
-                                            a.bioText.ifBlank { "This user has not added a bio." },
-                                            color = tokens.secondaryInk,
-                                            fontSize = 15.sp
-                                        )
-                                        
-                                        if (a.pseuds.isNotEmpty()) {
-                                            SectionRuleHeader(title = "Pseuds")
-                                            a.pseuds.forEach { p ->
-                                                Text(
-                                                    text = p.name,
-                                                    color = tokens.accent,
-                                                    fontSize = 15.sp,
-                                                    modifier = Modifier
-                                                        .fillMaxWidth()
-                                                        .clickable {
-                                                            if (route != p.route) route = p.route
-                                                        }
-                                                        .padding(vertical = 4.dp)
-                                                )
-                                            }
+                                    }
+                                }
+                                if (a.pseuds.isNotEmpty()) item {
+                                    AuthorAboutSection("Pseuds") {
+                                        a.pseuds.forEachIndexed { index, p ->
+                                            if (index > 0) SubjectRowSeparator()
+                                            val current = route.pseud.equals(p.route.pseud, true)
+                                            SubjectFormRow(
+                                                p.name,
+                                                leadingIcon = Icons.Outlined.Person,
+                                                onClick = { if (!current) route = p.route },
+                                                trailing = if (current) { {
+                                                    Icon(Icons.Filled.Check, "Selected", tint = tokens.accent,
+                                                        modifier = Modifier.size(18.dp))
+                                                } } else null
+                                            )
                                         }
-                                        
-                                        SectionRuleHeader(title = "Account")
-                                        if (a.joinedDate.isNotBlank()) {
-                                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                                Text("Joined", color = tokens.secondaryInk, fontSize = 15.sp)
-                                                Text(a.joinedDate, color = tokens.primaryInk, fontSize = 15.sp)
-                                            }
-                                        }
-                                        a.userId?.let {
-                                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                                Text("User ID", color = tokens.secondaryInk, fontSize = 15.sp)
-                                                Text(it.toString(), color = tokens.primaryInk, fontSize = 15.sp)
-                                            }
+                                    }
+                                }
+                                val facts = listOfNotNull(
+                                    route.pseud?.let { "Selected Pseud" to it },
+                                    a.joinedDate.takeIf { it.isNotBlank() }?.let { "Joined" to it },
+                                    a.userId?.let { "User ID" to "%,d".format(it) }
+                                )
+                                if (facts.isNotEmpty()) item {
+                                    AuthorAboutSection("Account") {
+                                        facts.forEachIndexed { index, (label, value) ->
+                                            if (index > 0) SubjectRowSeparator()
+                                            SubjectFormRow(label, value = value)
                                         }
                                     }
                                 }

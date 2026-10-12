@@ -99,8 +99,8 @@ class AO3AuthorParser(
         }
         val title = doc.selectFirst("div.user.home.profile > h3.heading")
             ?.normalizedText().orEmpty()
-        val bio = doc.selectFirst("div.bio blockquote.userstuff")
-            ?.normalizedText().orEmpty()
+        val bioElement = doc.selectFirst("div.bio blockquote.userstuff")
+        val bio = bioElement?.normalizedText().orEmpty()
         val pseuds = parsePseuds(
             doc.select("dl.meta dd.pseuds a[href*=/pseuds/]"),
             route.username
@@ -115,7 +115,8 @@ class AO3AuthorParser(
             pseuds = pseuds,
             joinedDate = metadataValue(doc, "joined"),
             userId = parseUserId(doc),
-            actions = actions
+            actions = actions,
+            bioHtml = bioElement?.html()?.takeIf { bio.isNotEmpty() }.orEmpty()
         )
     }
 
@@ -374,11 +375,16 @@ class AO3AuthorParser(
         return match.groupValues[1].replace(",", "").toIntOrNull()
     }
 
+    /**
+     * Resolved, so the names are decoded. A pseud of two words was kept as "Avery%20Writes":
+     * it matched no chosen pseud (listed twice, never ticked), and choosing it asked AO3 for
+     * "Avery%2520Writes", which is nobody.
+     */
     private fun routeFromPath(href: String): AO3AuthorRoute? {
-        val path = href.trim()
-        val match = Regex("""/users/([^/]+)(?:/pseuds/([^/?#]+))?""").find(path) ?: return null
-        val user = match.groupValues[1]
-        val pseud = match.groupValues.getOrNull(2)?.takeIf { it.isNotBlank() }
+        val path = AO3Constants.baseHttpUrl.resolve(href.trim())?.pathSegments ?: return null
+        val at = path.indexOf("users")
+        val user = path.getOrNull(at + 1)?.takeIf { at >= 0 && it.isNotBlank() } ?: return null
+        val pseud = path.getOrNull(at + 3)?.takeIf { path.getOrNull(at + 2) == "pseuds" && it.isNotBlank() }
         return AO3AuthorRoute(user, pseud)
     }
 
