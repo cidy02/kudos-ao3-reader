@@ -776,7 +776,42 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
         }
     }
 
-    private struct WebViewPageSample {
+    /// pageCount + scroll-derived page from the same sample so first unmask
+    /// is not progression-mapped (progression ≠ CSS page boxes → snap).
+    ///
+    /// **No sample from a page that is not there yet.** Before a chapter loads the
+    /// web view holds a blank document, 980 wide by default, and for a moment its
+    /// window has no size at all. The first ticks landed on it: two blank samples
+    /// agreed on one page ("Page 1 of 1", the slider off), or the 980-wide document
+    /// was divided by a stand-in width of 1 ("Page 1 of 980" for a chapter of four
+    /// screens). Either was accepted and stuck until the next chapter. Seen on the
+    /// demo work, 2026-10-12.
+    static let pageSampleJS = """
+    (function() {
+        var se = document.scrollingElement || document.documentElement;
+        if (!se) return null;
+        if (!document.body || !document.body.firstChild) return null;
+        if ((window.innerWidth || 0) < 32 || (window.innerHeight || 0) < 32) return null;
+        var vw = Math.max(1, window.innerWidth || 1);
+        var vh = Math.max(1, window.innerHeight || 1);
+        var scrollW = se.scrollWidth || vw;
+        var scrollH = se.scrollHeight || vh;
+        var x = Math.abs(window.scrollX || se.scrollLeft || 0);
+        var y = window.scrollY || se.scrollTop || 0;
+        var horizontal = scrollW > vw * 1.15;
+        var page, pageCount;
+        if (horizontal) {
+            pageCount = Math.max(1, Math.round(scrollW / vw));
+            page = Math.min(pageCount, Math.max(1, Math.round(x / vw) + 1));
+        } else {
+            pageCount = Math.max(1, Math.round(scrollH / vh));
+            page = Math.min(pageCount, Math.max(1, Math.round(y / vh) + 1));
+        }
+        return { pageCount: pageCount, page: page, horizontal: horizontal };
+    })();
+    """
+
+    struct WebViewPageSample {
         let pageCount: Int
         let page: Int
         let horizontal: Bool
@@ -816,30 +851,7 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
         guard let primary = ranked.first else { return }
         let webViewsToSample = [primary.0]
 
-        // pageCount + scroll-derived page from the same sample so first unmask
-        // is not progression-mapped (progression ≠ CSS page boxes → snap).
-        let js = """
-        (function() {
-            var se = document.scrollingElement || document.documentElement;
-            if (!se) return null;
-            var vw = Math.max(1, window.innerWidth || 1);
-            var vh = Math.max(1, window.innerHeight || 1);
-            var scrollW = se.scrollWidth || vw;
-            var scrollH = se.scrollHeight || vh;
-            var x = Math.abs(window.scrollX || se.scrollLeft || 0);
-            var y = window.scrollY || se.scrollTop || 0;
-            var horizontal = scrollW > vw * 1.15;
-            var page, pageCount;
-            if (horizontal) {
-                pageCount = Math.max(1, Math.round(scrollW / vw));
-                page = Math.min(pageCount, Math.max(1, Math.round(x / vw) + 1));
-            } else {
-                pageCount = Math.max(1, Math.round(scrollH / vh));
-                page = Math.min(pageCount, Math.max(1, Math.round(y / vh) + 1));
-            }
-            return { pageCount: pageCount, page: page, horizontal: horizontal };
-        })();
-        """
+        let js = Self.pageSampleJS
 
         var samples: [WebViewPageSample] = []
         for webView in webViewsToSample {
@@ -874,7 +886,7 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
         )
     }
 
-    private static func evaluatePageSample(
+    static func evaluatePageSample(
         webView: WKWebView,
         js: String,
         area: CGFloat
