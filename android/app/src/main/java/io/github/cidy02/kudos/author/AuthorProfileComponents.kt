@@ -184,50 +184,9 @@ internal fun AO3AuthorWorkCard(
         if (displayMode == AuthorDisplayMode.Detailed) {
             SensitiveWorkRow(work = work, onOpenWork = onOpenWork, expandAll = expandAll)
         } else {
-            AO3AuthorLedgerWorkRow(work = work, onOpenWork = onOpenWork)
+            SensitiveWorkRow(work = work, onOpenWork = onOpenWork, expandAll = expandAll, ledger = true)
         }
         if (showsPerformance) AO3AuthorPerformanceStrip(work)
-    }
-}
-
-@Composable
-private fun AO3AuthorLedgerWorkRow(work: AO3WorkSummary, onOpenWork: (AO3WorkSummary) -> Unit) {
-    val tokens = LocalKudosTokens.current
-    val palette = remember(work.fandoms, work.title, tokens.theme) {
-        SubjectPalette.fromHue(HomeFacts.workHue(work.fandoms, work.title), tokens.theme)
-    }
-    Column(
-        Modifier
-            .fillMaxWidth()
-            .background(palette.cardWash, RoundedCornerShape(16.dp))
-            .border(0.5.dp, palette.cardBorder, RoundedCornerShape(16.dp))
-            .clickable { onOpenWork(work) }
-            .padding(horizontal = 18.dp, vertical = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        SubjectKicker(
-            text = HomeFacts.primaryFandom(work.fandoms) ?: "Work",
-            palette = palette,
-            trailingCount = (work.fandoms.size - 1).coerceAtLeast(0)
-        )
-        Text(
-            work.title,
-            color = tokens.primaryInk,
-            fontSize = 19.sp,
-            fontWeight = FontWeight.SemiBold,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis
-        )
-        Text("by ${work.authorText}", color = tokens.secondaryInk, fontSize = 13.sp, maxLines = 1)
-        if (work.summary.isNotBlank()) {
-            Text(work.summary, color = tokens.secondaryInk, fontSize = 13.5.sp, maxLines = 3)
-        }
-        val meta = buildList {
-            work.wordCount?.let { add("${it.compactCount()} words") }
-            if (work.chapters.isNotBlank()) add(work.chapters)
-            if (work.updatedDate.isNotBlank()) add(work.updatedDate)
-        }.joinToString(" · ")
-        if (meta.isNotBlank()) Text(meta, color = tokens.secondaryInk, fontSize = 11.5.sp)
     }
 }
 

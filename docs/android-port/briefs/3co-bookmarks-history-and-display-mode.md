@@ -148,3 +148,33 @@ on Bookmarks and on a works list (the same state and the same rows).
    `authorProfile.displayMode`); a local collection's is kept only while the app lives (iOS
    keeps `collection.displayMode`).
 
+## Step 4, landed 2026-10-11 (Claude alone; gate 2,614): what was left, items 2 and 4, and a swap
+
+- **The detailed card has the tray of four symbols at its top right**, as iOS's has
+  (`HomeStatusTray` in `SensitiveWorkRow`'s standard body). Not spoken (the chips under
+  it say the same in words) and not drawn at the large text sizes, where it would take
+  the title's room (iOS draws it there too; its tray does not grow with the text).
+- **An author's profile opens on the ledger and keeps the choice** (iOS
+  `authorProfile.displayMode`). It opened on the detailed card and forgot. Its ledger is
+  now the ledger card every AO3 list draws; its own thinner row (no tray, no figures) is
+  deleted.
+- **A local collection keeps its choice** between launches (iOS `collection.displayMode`,
+  one for every collection).
+- One helper, `rememberStoredChoice`, keeps all three (and the account lists') in a small
+  file, `layout-choices`, under iOS's names. No setting and no backup changes.
+- **Found by looking, and fixed: a collection's two layouts were the wrong way round.**
+  "Detailed" drew the dense row and "Display · Ledger" the full card, so a collection
+  opened on the dense row where iOS opens on the full card. Picture:
+  `shots/3co/collection-modes-were-swapped-…png`.
+
+**Looked at:** the author's profile opening on the ledger, Detailed chosen and kept across
+a restart, and back; the tray on the detailed card on the author's works, a collection and
+Home's Reading Now; a collection opening on the full card, Ledger, and back, with the
+choice kept across a restart.
+
+**Not the same as iOS, and left:** a collection's dense row has no reading ring and no tray
+(iOS's has both; Home's section pages have a row that does, `LibrarySubjectLedgerRow`).
+The three overflow buttons are named three ways ("More actions", "More", "Menu").
+
+**Still left from this brief:** Compact on the account lists; Clear History.
+

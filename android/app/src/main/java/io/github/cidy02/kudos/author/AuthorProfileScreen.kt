@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.author
 
+import io.github.cidy02.kudos.ui.components.rememberStoredChoice
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -108,7 +109,9 @@ fun AuthorProfileScreen(
     var tabError by remember { mutableStateOf<String?>(null) }
     
     var scopeState by remember { mutableStateOf(AO3AuthorWorksScope.Works) }
-    var displayMode by remember { mutableStateOf(AuthorDisplayMode.Detailed) }
+    // iOS `authorProfile.displayMode`: the ledger first, and the choice kept. It opened on
+    // the detailed card and forgot.
+    var displayMode by rememberStoredChoice("authorProfile.displayMode", AuthorDisplayMode.Ledger)
     
     var worksSort by remember(route.id, sessionGeneration) { mutableStateOf(AO3AuthorWorksSort()) }
     var worksFilters by remember(route.id, sessionGeneration) { mutableStateOf(AO3SearchFilters()) }

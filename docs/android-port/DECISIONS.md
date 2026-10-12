@@ -1692,3 +1692,8 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   change). Android opens on Ledger: iOS opens on Compact, which Android has not built and
   does not offer. Whether to open on Compact once it exists is the owner's. Reverse: the
   commit that names 3co step 3.
+- **2026-10-11 · Layout choices open and are kept as on iOS (3co, step 4).** The author's
+  profile opens on the ledger; the author's, a collection's and the account lists' choices
+  are kept between launches in `layout-choices` under iOS's names. A collection's Detailed
+  and Ledger were swapped and are put right, so a collection opens on the full card. The
+  detailed card carries the symbols tray. Reverse: the commit that names 3co step 4.

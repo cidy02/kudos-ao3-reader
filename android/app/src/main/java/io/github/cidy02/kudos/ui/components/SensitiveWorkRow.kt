@@ -294,6 +294,21 @@ fun SensitiveWorkRow(
                                         modifier = Modifier.padding(8.dp)
                                     )
                                 }
+                                // iOS `standardCard`: AO3's own quadrant beside the title, a glance
+                                // at what the chips below say in words. Not spoken (the chips
+                                // are), and not at the large text sizes, where it would take the
+                                // title's room.
+                                if (!isAccessibilityFontScale()) {
+                                    HomeStatusTray(
+                                        rating = rating,
+                                        categories = categories,
+                                        warnings = warnings,
+                                        isComplete = isComplete == true,
+                                        arrangement = HomeStatusArrangement.Grid,
+                                        tileSize = 22.dp,
+                                        modifier = Modifier.clearAndSetSemantics {}
+                                    )
+                                }
                             }
 
                             if (fandoms.isNotEmpty()) {
