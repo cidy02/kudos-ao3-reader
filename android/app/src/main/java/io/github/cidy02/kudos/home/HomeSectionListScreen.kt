@@ -87,7 +87,6 @@ import io.github.cidy02.kudos.ui.subject.SwipeActionRow
 import io.github.cidy02.kudos.ui.subject.ToolbarCircleButton
 import io.github.cidy02.kudos.ui.subject.WorkLedgerRow
 import io.github.cidy02.kudos.ui.subject.compactCount
-import io.github.cidy02.kudos.ui.subject.defaultWorkSignals
 import io.github.cidy02.kudos.ui.subject.subjectScreenWash
 import io.github.cidy02.kudos.works.DownloadQueue
 import io.github.cidy02.kudos.works.WorkMetadataRefresh
@@ -760,12 +759,10 @@ private fun HomeSectionLedgerRow(
                 work.readingProgressFraction() != null -> "Reading"
                 else -> null
             },
-            signals = defaultWorkSignals(
-                work.rating,
-                work.workCategories,
-                work.workWarnings,
-                work.isComplete
-            ),
+            rating = work.rating,
+            categories = work.workCategories,
+            warnings = work.workWarnings,
+            isComplete = work.isComplete,
             obscured = obscured,
             favorite = work.isFavorite,
             selected = selecting && selected,

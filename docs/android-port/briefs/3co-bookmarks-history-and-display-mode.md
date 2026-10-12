@@ -178,3 +178,23 @@ The three overflow buttons are named three ways ("More actions", "More", "Menu")
 
 **Still left from this brief:** Compact on the account lists; Clear History.
 
+## Step 5, landed 2026-10-11 (Claude alone; gate 2,614): the ledger row
+
+- **A collection's Ledger is the row iOS draws** (`WorkRow.ledger`): the reading ring, the
+  fandom kicker, the title, the author and figures, the tray. It is the shared
+  `WorkLedgerRow`, which Home's section pages already drew; the collection page's own
+  thinner copy (100 lines, no ring, no tray, its own hue rule) is deleted.
+- **That shared row's tray is the tray of four symbols** every other card has
+  (`HomeStatusTray`). It drew four letters ("T", "F", "!", "✓") in its own little grid;
+  that grid and what fed it are deleted (`WorkCardSignal`, `defaultWorkSignals`).
+- Net: 30 lines added, 164 removed.
+
+**Looked at:** a collection's Ledger beside the iPhone's, in Dark and at twice the text
+size; Home's Reading Now in Ledger. Both layouts were put back as they were found.
+
+**Seen and left:** a finished work whose stored place is 3% draws "3% FINISHED" in its
+ring, here and on Home (the same row; iOS not checked).
+
+**Still left from this brief:** Compact on the account lists; Clear History; one name for
+the overflow button ("More actions", "More", "Menu").
+

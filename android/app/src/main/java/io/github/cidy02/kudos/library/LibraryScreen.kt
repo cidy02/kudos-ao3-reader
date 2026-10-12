@@ -137,7 +137,6 @@ import io.github.cidy02.kudos.ui.subject.WorkCardCarousel
 import io.github.cidy02.kudos.ui.subject.SubjectWorkCoverCard
 import io.github.cidy02.kudos.ui.components.SensitiveWorkRow
 import io.github.cidy02.kudos.ui.subject.WorkSectionLayout
-import io.github.cidy02.kudos.ui.subject.defaultWorkSignals
 import io.github.cidy02.kudos.ui.subject.subjectPanel
 import io.github.cidy02.kudos.ui.subject.subjectScreenWash
 import java.time.Instant

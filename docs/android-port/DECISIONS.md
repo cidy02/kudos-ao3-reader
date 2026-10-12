@@ -1697,3 +1697,6 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   are kept between launches in `layout-choices` under iOS's names. A collection's Detailed
   and Ledger were swapped and are put right, so a collection opens on the full card. The
   detailed card carries the symbols tray. Reverse: the commit that names 3co step 4.
+- **2026-10-11 · One ledger row for saved works (3co, step 5).** A collection's Ledger draws
+  the shared `WorkLedgerRow` (ring, kicker, tray) and its own copy is gone; that row's tray
+  is the tray of four symbols, not four letters. Reverse: the commit that names 3co step 5.
