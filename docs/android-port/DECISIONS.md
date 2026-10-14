@@ -1827,3 +1827,9 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   has a title and a Done tick in the palette's accent; a choice between views is the app's
   segmented control, not Material's tabs. In that control a one-word label is never broken
   across lines. Reverse: the commit that names 3dl.
+- **2026-10-14 · Read Aloud uses the device's own voice until the Kokoro pack is installed
+  (3dm).** As iOS's Automatic engine. Only an on-device voice is used, never one that needs the
+  network, so the work's text stays on the phone; with none the reader offers the pack as
+  before. The pack's download moved from the refusal banner to a row in the reader's Display &
+  Themes: the same user-started download from the reader, no new network use. Reverse: the
+  commit that names 3dm.

@@ -892,6 +892,9 @@ private fun ReaderReading(
                             preferences = state.preferences,
                             keepScreenAwake = keepScreenAwake,
                             availableVoices = availableVoices,
+                            voicePackInstalled = io.github.cidy02.kudos.reader.speech.TTSDownloadWorker.isModelDownloaded(context),
+                            voicePackProgress = speechController.downloadProgress.collectAsState().value,
+                            onDownloadVoicePack = speechController::enqueueDownload,
                             onDone = { showDisplaySheet = false },
                             onFontSizeChange = viewModel::setFontSizePercent,
                             onThemeChange = viewModel::setColorTheme,
@@ -923,6 +926,9 @@ private fun ReaderDisplaySheet(
     preferences: ReaderPreferences,
     keepScreenAwake: Boolean,
     availableVoices: List<io.github.cidy02.kudos.reader.speech.TTSVoice> = emptyList(),
+    voicePackInstalled: Boolean = true,
+    voicePackProgress: Float? = null,
+    onDownloadVoicePack: () -> Unit = {},
     onDone: () -> Unit = {},
     onFontSizeChange: (Int) -> Unit,
     onThemeChange: (ReaderColorTheme) -> Unit,
@@ -1111,6 +1117,16 @@ private fun ReaderDisplaySheet(
                 formatValue = { "%.1f".format(it) },
                 onValueChangeFinished = onSpeechPitchChange
             )
+            // Read Aloud uses the device's own voice until then. This was the one way to the pack,
+            // and it showed only when reading was refused for want of it.
+            if (!voicePackInstalled) {
+                SubjectRowSeparator()
+                if (voicePackProgress != null) {
+                    SubjectFormRow("Downloading Kokoro Voice Pack", value = "${(voicePackProgress * 100).toInt()}%")
+                } else {
+                    SettingsActionRow("Download Kokoro Voice Pack (about 45 MB)", onClick = onDownloadVoicePack)
+                }
+            }
         }
 
         SettingsGroupLabel("Font", Modifier.padding(top = 22.dp))
