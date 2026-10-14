@@ -25,7 +25,7 @@ import androidx.compose.ui.unit.sp
 import io.github.cidy02.kudos.data.preferences.SettingsRepository
 import io.github.cidy02.kudos.reader.settings.ReaderPreferences
 import io.github.cidy02.kudos.reader.settings.ReaderSpeechPreferences
-import io.github.cidy02.kudos.reader.speech.KokoroTTSController
+import io.github.cidy02.kudos.reader.speech.AutomaticTTSService
 import io.github.cidy02.kudos.reader.speech.SpeechStatus
 import io.github.cidy02.kudos.reader.speech.TTSDownloadWorker
 import io.github.cidy02.kudos.reader.speech.TTSService
@@ -39,7 +39,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun SettingsListeningPage(repository: SettingsRepository) {
     val context = LocalContext.current.applicationContext
-    val service = remember(context) { KokoroTTSController(context) }
+    val service = remember(context) { AutomaticTTSService(context) }
     DisposableEffect(service) {
         onDispose { service.shutdown() }
     }
@@ -130,7 +130,7 @@ internal fun SettingsListeningPage(
                 SubjectRowSeparator()
                 if (auditionRequested) {
                     SubjectFormRow("Playing Sample")
-                    SubjectFormRow("Engine", value = "Kokoro")
+                    SubjectFormRow("Engine", value = if (packInstalled) "Kokoro" else "Device voice")
                     SubjectFormRow("Voice", value = voiceName ?: "Automatic")
                     SettingsActionRow("Stop", onClick = {
                         auditionRequested = false
@@ -139,7 +139,8 @@ internal fun SettingsListeningPage(
                 } else {
                     SettingsActionRow(
                         "Play Sample",
-                        enabled = status != SpeechStatus.UNAVAILABLE && voices.isNotEmpty(),
+                        // The device's own voice reads without the pack, as iOS's Apple voice does.
+                        enabled = status != SpeechStatus.UNAVAILABLE,
                         onClick = { auditionRequested = true }
                     )
                 }
@@ -149,7 +150,8 @@ internal fun SettingsListeningPage(
             SettingsSection(
                 label = "Kokoro Pack",
                 footnote = when {
-                    !packInstalled -> "Download the Kokoro Voice Pack from the reader to use Read Aloud."
+                    !packInstalled -> "Read Aloud uses your device's own voice. For Kokoro's, download its " +
+                        "Voice Pack in the reader, from Display & Themes."
                     status == SpeechStatus.UNAVAILABLE -> "The installed voice pack could not be opened."
                     else -> null
                 }
@@ -160,7 +162,8 @@ internal fun SettingsListeningPage(
         item {
             SettingsSection(
                 label = "Read Aloud",
-                footnote = "Kudos doesn't send your reading, your library or any usage data."
+                footnote = "Automatic starts with your device's own voice, then uses Kokoro after you install " +
+                    "its optional voice pack. Kudos doesn't send your reading, your library or any usage data."
             ) {
                 ListeningChoiceRow(
                     label = "Voice",

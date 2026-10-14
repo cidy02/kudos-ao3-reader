@@ -405,7 +405,7 @@ private fun PositionMiniPlayer(
                     ) {
                         Icon(
                             imageVector = if (status == SpeechStatus.PLAYING) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-                            contentDescription = if (status == SpeechStatus.PLAYING) "Pause TTS" else "Play TTS",
+                            contentDescription = if (status == SpeechStatus.PLAYING) "Pause" else "Play",
                             tint = tokens.primaryInk,
                             modifier = Modifier.size(28.dp)
                         )
@@ -430,7 +430,7 @@ private fun PositionMiniPlayer(
                 ) {
                     Icon(
                         imageVector = Icons.Filled.Stop,
-                        contentDescription = "Stop TTS",
+                        contentDescription = "Stop reading aloud",
                         tint = tokens.primaryInk
                     )
                 }

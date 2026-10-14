@@ -38,7 +38,7 @@ class ReaderSpeechController(
     private val onUtteranceStart: ((String) -> Unit)? = null
 ) {
     private val appContext = context.applicationContext
-    private val tts = KokoroTTSController(appContext)
+    private val tts = AutomaticTTSService(appContext)
     
     private val scope = CoroutineScope(Dispatchers.Main + Job())
 
@@ -86,16 +86,11 @@ class ReaderSpeechController(
     init {
         scope.launch {
             tts.status.collect { ttsStatus ->
-                // Map the inner TTS service status to the controller's status, except when we override it
-                if (ttsStatus == SpeechStatus.UNAVAILABLE && !TTSDownloadWorker.isModelDownloaded(appContext)) {
-                    _status.value = SpeechStatus.MODEL_NOT_DOWNLOADED
-                } else if (_status.value != SpeechStatus.MODEL_NOT_DOWNLOADED) {
-                    _status.value = ttsStatus
-                    if (ttsStatus == SpeechStatus.STOPPED && currentIndex < currentQueue.size) {
-                        // The chunk finished playing. We should speak the next one.
-                        // Actually, tts.speak() is suspending and blocks until done, so we handle sequencing in speakCurrent().
-                    }
-                }
+                // No voice at all, neither the device's nor a downloaded one: the reader offers
+                // the Kokoro pack. It used to be offered, and reading refused, whenever the pack
+                // was missing, however good the device's own voice.
+                _status.value = if (ttsStatus == SpeechStatus.UNAVAILABLE &&
+                    !TTSDownloadWorker.isModelDownloaded(appContext)) SpeechStatus.MODEL_NOT_DOWNLOADED else ttsStatus
             }
         }
         
@@ -115,15 +110,10 @@ class ReaderSpeechController(
                     }
                 }
         }
-
-        if (!TTSDownloadWorker.isModelDownloaded(appContext)) {
-            _status.value = SpeechStatus.MODEL_NOT_DOWNLOADED
-        }
     }
 
     fun enqueueDownload() {
         TTSDownloadWorker.enqueue(appContext)
-        _status.value = SpeechStatus.MODEL_NOT_DOWNLOADED
     }
 
     fun configure(preferences: ReaderPreferences, title: String = workTitle) {
