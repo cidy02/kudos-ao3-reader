@@ -775,37 +775,12 @@ private fun AccountAvatar(
     avatarUrl: String?,
     onClick: (() -> Unit)? = null
 ) {
-    Box(
-        modifier = Modifier
-            .size(56.dp)
-            .clip(CircleShape)
-            .background(MaterialTheme.colorScheme.surfaceVariant)
-            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
-        contentAlignment = Alignment.Center
-    ) {
-        if (avatarUrl != null) {
-            AsyncImage(
-                model = ImageRequest.Builder(LocalContext.current)
-                    .data(avatarUrl)
-                    .crossfade(true)
-                    .build(),
-                contentDescription = "View Profile",
-                modifier = Modifier.fillMaxSize(),
-                contentScale = ContentScale.Crop,
-                error = painterResource(id = R.drawable.ic_kudos_mark),
-                placeholder = painterResource(id = R.drawable.ic_kudos_mark)
-            )
-        } else {
-            Icon(
-                painter = painterResource(id = R.drawable.ic_kudos_mark),
-                contentDescription = "Default avatar",
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(8.dp),
-                tint = Color.Unspecified
-            )
-        }
-    }
+    // The account's avatar, or a person glyph: iOS draws the same `AO3AuthorAvatar` here.
+    io.github.cidy02.kudos.author.AO3AuthorAvatar(
+        url = avatarUrl, name = "AO3 account", size = 56.dp, isCircular = true,
+        modifier = if (onClick != null) Modifier.clip(androidx.compose.foundation.shape.CircleShape).clickable(onClick = onClick) else Modifier,
+        spokenName = if (onClick != null) "View Profile" else "AO3 account profile image"
+    )
 }
 
 @Composable
@@ -980,21 +955,7 @@ private fun SignedOutPreviewSection() {
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.padding(bottom = 16.dp)
         ) {
-            Box(
-                modifier = Modifier
-                    .size(44.dp)
-                    .clip(androidx.compose.foundation.shape.CircleShape)
-                    .background(MaterialTheme.colorScheme.surfaceVariant)
-            ) {
-                Icon(
-                    painter = painterResource(id = R.drawable.ic_kudos_mark),
-                    contentDescription = null,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(8.dp),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
+            io.github.cidy02.kudos.author.AO3AuthorAvatar(url = null, name = "AO3 account", size = 44.dp, isCircular = true)
             Text(
                 text = "Your username",
                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),

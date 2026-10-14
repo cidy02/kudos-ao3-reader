@@ -7,6 +7,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material.icons.outlined.AccountBox
+import androidx.compose.material.icons.outlined.AccountCircle
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -94,15 +97,7 @@ internal fun AO3AuthorHero(
         horizontalArrangement = Arrangement.spacedBy(14.dp),
         verticalAlignment = Alignment.Top
     ) {
-        AsyncImage(
-            model = ImageRequest.Builder(context).data(header.avatarUrl).crossfade(true).build(),
-            contentDescription = "${route.displayName} profile image",
-            contentScale = ContentScale.Crop,
-            modifier = Modifier
-                .size(72.dp)
-                .background(tokens.glassFill(), RoundedCornerShape(8.dp))
-                .clip(RoundedCornerShape(8.dp))
-        )
+        AO3AuthorAvatar(url = header.avatarUrl, name = route.displayName, size = 72.dp)
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
             Text(
                 route.displayName,
@@ -436,3 +431,39 @@ internal fun AO3DashboardCompactCard(
     }
 }
 
+/**
+ * iOS `AO3AuthorAvatar`: the avatar when it loads, otherwise a person glyph at 42% of the size
+ * over a quiet fill, square with soft corners on an author page and round on the Account
+ * header. Android's fallbacks were the Kudos mark on Account and a blank square on an author's
+ * page. The glyph sits underneath, so a loaded image simply covers it.
+ */
+@Composable
+internal fun AO3AuthorAvatar(
+    url: String?,
+    name: String,
+    size: androidx.compose.ui.unit.Dp,
+    isCircular: Boolean = false,
+    modifier: Modifier = Modifier,
+    spokenName: String = "$name profile image"
+) {
+    val tokens = LocalKudosTokens.current
+    val shape = if (isCircular) androidx.compose.foundation.shape.CircleShape else RoundedCornerShape(8.dp)
+    Box(
+        modifier = modifier.size(size).clip(shape).background(tokens.glassFill(), shape)
+            .semantics { contentDescription = spokenName },
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            if (isCircular) Icons.Outlined.AccountCircle else Icons.Outlined.AccountBox,
+            contentDescription = null, tint = tokens.secondaryInk, modifier = Modifier.size(size * 0.42f)
+        )
+        if (url != null) {
+            AsyncImage(
+                model = ImageRequest.Builder(LocalContext.current).data(url).crossfade(true).build(),
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize()
+            )
+        }
+    }
+}
