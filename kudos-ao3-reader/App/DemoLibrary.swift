@@ -474,6 +474,9 @@ final class DemoNetworkBlock: URLProtocol {
         ("^/collections/[^/]+/works", "ao3_tag_works"),
         ("^/collections/[^/]+/?$", "ao3_collection_show"),
         ("^/users/[^/]+/collections", "ao3_collections_index"),
+        // "Your items" (the reader's own works in collections) said "Couldn't load collection
+        // items": the demo had no page for it. The same page Android's demo answers with.
+        ("^/users/[^/]+/collection_items", "ao3_demo_user_collection_items"),
         ("^/tag_sets/\\d+", "ao3_tag_set"),
         ("^/media/[^/]+/fandoms", "ao3_media_fandoms"),
         ("^/media/?$", "ao3_media"),
