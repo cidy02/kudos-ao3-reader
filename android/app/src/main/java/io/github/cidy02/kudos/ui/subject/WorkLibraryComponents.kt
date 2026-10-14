@@ -72,6 +72,8 @@ fun WorkCarouselSection(
     emptyMessage: String,
     layout: WorkSectionLayout,
     modifier: Modifier = Modifier,
+    /** iOS `SectionEmptyState`: the section's glyph before its empty line. */
+    emptyIcon: androidx.compose.ui.graphics.vector.ImageVector? = null,
     content: @Composable () -> Unit
 ) {
     val tokens = LocalKudosTokens.current
@@ -85,12 +87,22 @@ fun WorkCarouselSection(
         )
         AnimatedVisibility(!collapsed) {
             if (count == 0) {
-                Text(
-                    text = emptyMessage,
-                    color = tokens.secondaryInk,
-                    fontSize = 13.sp,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-                )
+                Row(
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    emptyIcon?.let {
+                        androidx.compose.material3.Icon(
+                            it, contentDescription = null, tint = tokens.secondaryInk.copy(alpha = 0.6f),
+                            modifier = Modifier.padding(top = 1.dp).size(16.dp)
+                        )
+                    }
+                    Text(
+                        text = emptyMessage,
+                        color = tokens.secondaryInk,
+                        fontSize = 13.sp
+                    )
+                }
             } else {
                 content()
             }

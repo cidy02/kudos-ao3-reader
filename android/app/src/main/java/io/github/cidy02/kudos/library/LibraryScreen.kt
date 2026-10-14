@@ -956,7 +956,8 @@ private fun LibraryDashboardWorkSection(
         onToggleCollapsed = onToggleCollapsed,
         onSeeAll = onSeeAll,
         emptyMessage = kind.emptyMessage,
-        layout = layout
+        layout = layout,
+        emptyIcon = kind.emptyStateIcon
     ) {
         if (layout == WorkSectionLayout.Shelves) {
             WorkCardCarousel(items.take(ShelfLimit), key = { it.item.work.id }) { display ->
