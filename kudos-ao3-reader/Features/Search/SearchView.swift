@@ -457,6 +457,11 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
             Text("Search your Library or AO3 by title, author, or tag. "
                 + "You can browse fandoms and categories in the Browse tab.")
         }
+        // The theme's backdrop, as the saved searches' list has from `.cardList()`.
+        // Alone on the page the prompt had none: plain white under Sepia, the
+        // system's black under Dark.
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(themeManager.appTheme.cardBackdrop.ignoresSafeArea())
     }
 
     /// A one-line description of a saved search's filters (the query, then the most
