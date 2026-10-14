@@ -5,7 +5,6 @@ import io.github.cidy02.kudos.core.model.ReadingQueueKind
 import io.github.cidy02.kudos.core.model.SavedWork
 import java.time.Duration
 import java.time.Instant
-import java.util.Locale
 
 /**
  * Decisions behind the queue organizer and queue page, kept out of the views.
@@ -156,22 +155,9 @@ object ReadingQueueFacts {
         return (hash % 360u).toDouble() / 360.0
     }
 
-    fun byteCountString(bytes: Long): String {
-        if (bytes < 1000L) return "$bytes B"
-        val units = arrayOf("KB", "MB", "GB", "TB")
-        var value = bytes / 1000.0
-        var unit = 0
-        while (value >= 1000.0 && unit < units.lastIndex) {
-            value /= 1000.0
-            unit += 1
-        }
-        val text = if (value >= 10.0) {
-            String.format(Locale.US, "%.0f", value)
-        } else {
-            String.format(Locale.US, "%.1f", value)
-        }
-        return "$text ${units[unit]}"
-    }
+    /** iOS `queueByteCountString`: the one way the app writes a size ("12 KB", not "12.3 KB"). */
+    fun byteCountString(bytes: Long): String =
+        io.github.cidy02.kudos.settings.LocalStorageFootprint.formatted(bytes)
 
     /**
      * [mayAnswer]: a work Hide Mature hides does not answer a search, here as in Search

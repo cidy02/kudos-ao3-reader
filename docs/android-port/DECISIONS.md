@@ -1833,3 +1833,7 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   before. The pack's download moved from the refusal banner to a row in the reader's Display &
   Themes: the same user-started download from the reader, no new network use. Reverse: the
   commit that names 3dm.
+- **2026-10-14 · Queues, Collections, More on AO3 (3dn).** More on AO3's rows carry iOS's
+  glyphs as Material outlined icons; a mosaic tile's title may shrink to 85% as iOS's; every
+  size in the app is written by `LocalStorageFootprint.formatted`. Reverse: the commit that
+  names 3dn.
