@@ -1,6 +1,9 @@
 package io.github.cidy02.kudos.account
 
 import androidx.compose.foundation.background
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -255,8 +258,13 @@ private fun CollectionItemPanel(
     val tokens = LocalKudosTokens.current
     val accessibility = isAccessibilityFontScale()
     val palette = SubjectPalette.fromHue(HomeFacts.workHue(emptyList(), item.collectionTitle), tokens.theme)
+    // iOS `.subjectCard(palette:)`: each card on the card surface with its collection's own
+    // wash and border, as the collections list colours them. It was the neutral panel.
+    val cardShape = RoundedCornerShape(SubjectMetrics.rowRadius)
     Column(Modifier.padding(top = 10.dp).padding(horizontal = SubjectMetrics.accountGutter).fillMaxWidth()
-        .subjectPanel().alpha(if (draft.remove) 0.7f else 1f).padding(horizontal = 18.dp, vertical = 16.dp),
+        .clip(cardShape).background(tokens.theme.cardSurface).background(palette.rowWash)
+        .border(0.5.dp, palette.rowBorder, cardShape)
+        .alpha(if (draft.remove) 0.7f else 1f).padding(horizontal = 18.dp, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)) {
         val eyebrow: @Composable () -> Unit = {
             SubjectKicker(item.collectionTitle, palette, maxLines = if (accessibility) Int.MAX_VALUE else 1)
