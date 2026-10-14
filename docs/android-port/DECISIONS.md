@@ -1849,3 +1849,6 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   takes the theme's backdrop. Reverse: the commits that name 3dq and T-405.
 - **2026-10-14 · Two stand-ins replaced (3dr).** The Settings hub names the chosen font; the
   author hero knows your own page. Reverse: the commit that names 3dr.
+- **2026-10-14 · Dead account-list code removed (3ds).** Five unused functions in
+  `AccountScreen.kt`, whose cards had do-nothing menu actions. Reverse: the commit that names
+  3ds.
