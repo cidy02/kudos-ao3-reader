@@ -680,7 +680,9 @@ fun AuthorProfileScreen(
                                 header = h,
                                 route = route,
                                 profileTitle = about?.profileTitle ?: "",
-                                isOwnProfile = false, // Since this requires more logic, assuming false for now unless we know it's our own
+                                // iOS `isOwnProfile`. It was always false, so your own page, reached from
+                                // a byline, offered to subscribe to, mute and block yourself.
+                                isOwnProfile = signedInUsername?.equals(route.username, ignoreCase = true) == true,
                                 onSubscription = { form ->
                                     when {
                                         seriesWrites == null -> onOpenWeb(form.actionUrl)

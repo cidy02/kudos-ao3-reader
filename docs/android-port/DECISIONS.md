@@ -1847,3 +1847,5 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   Its panels drop the Mac-only "Recently read" block and carry iOS's figure glyphs. Every
   compact count is written as Foundation's compact notation. On iOS, Search's empty prompt
   takes the theme's backdrop. Reverse: the commits that name 3dq and T-405.
+- **2026-10-14 · Two stand-ins replaced (3dr).** The Settings hub names the chosen font; the
+  author hero knows your own page. Reverse: the commit that names 3dr.

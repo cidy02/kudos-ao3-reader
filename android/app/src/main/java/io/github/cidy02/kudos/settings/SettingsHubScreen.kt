@@ -40,7 +40,9 @@ import io.github.cidy02.kudos.BuildConfig
 fun SettingsHubScreen(
     navController: NavController,
     settings: KudosSettings,
-    authRepository: AO3AuthRepository?
+    authRepository: AO3AuthRepository?,
+    /** The chosen reading font's name, as iOS's hub shows it. It always said "System". */
+    fontName: String = "System"
 ) {
     val chrome = LocalPushedShellChrome.current
     LaunchedEffect(Unit) {
@@ -51,7 +53,6 @@ fun SettingsHubScreen(
     val palette = LocalSubjectPalette.current
     val authState by (authRepository?.state ?: kotlinx.coroutines.flow.flowOf(AO3AuthState.SignedOut)).collectAsState(initial = AO3AuthState.SignedOut)
 
-    val fontName = "System" // We don't have direct access to font name string without repo, but it's ok for hub
     val themeMatched = settings.reader.matchAppReaderTheme
     val appTheme = settings.app.appTheme.name
     val readerTheme = settings.reader.readerTheme.storageValue.replaceFirstChar { it.uppercase() }
