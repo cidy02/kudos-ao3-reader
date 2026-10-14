@@ -13,12 +13,37 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.Article
+import androidx.compose.material.icons.automirrored.outlined.Assignment
+import androidx.compose.material.icons.automirrored.outlined.CallSplit
+import androidx.compose.material.icons.automirrored.outlined.HelpOutline
+import androidx.compose.material.icons.outlined.Badge
+import androidx.compose.material.icons.outlined.BarChart
+import androidx.compose.material.icons.outlined.CardGiftcard
+import androidx.compose.material.icons.outlined.Checklist
+import androidx.compose.material.icons.outlined.CollectionsBookmark
+import androidx.compose.material.icons.outlined.Description
+import androidx.compose.material.icons.outlined.Drafts
+import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.EditNote
+import androidx.compose.material.icons.outlined.Email
+import androidx.compose.material.icons.outlined.FavoriteBorder
+import androidx.compose.material.icons.outlined.FileDownload
+import androidx.compose.material.icons.outlined.Flag
+import androidx.compose.material.icons.outlined.Palette
+import androidx.compose.material.icons.outlined.PanTool
+import androidx.compose.material.icons.outlined.People
+import androidx.compose.material.icons.outlined.PersonAdd
+import androidx.compose.material.icons.outlined.QuestionAnswer
+import androidx.compose.material.icons.outlined.ReportProblem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import io.github.cidy02.kudos.app.LocalPushedShellChrome
@@ -77,6 +102,8 @@ fun AccountMoreOnAO3Screen(
                             if (index > 0) SubjectRowSeparator()
                             SubjectFormRow(
                                 label = row.title,
+                                // iOS's glyph in the accent before each row; Android's had none.
+                                leadingIcon = row.icon,
                                 showsDisclosure = true,
                                 // A page of the reader's own has no address when signed out:
                                 // the row does nothing, as on iOS.
@@ -115,22 +142,22 @@ internal object MoreOnAO3 {
         data class Site(val path: String) : Target
     }
 
-    data class Row(val title: String, val target: Target)
+    data class Row(val title: String, val target: Target, val icon: ImageVector)
     data class Section(val title: String, val rows: List<Row>, val footnote: String? = null)
 
-    private fun user(title: String, suffix: String) = Row(title, Target.User(suffix))
-    private fun site(title: String, path: String) = Row(title, Target.Site(path))
+    private fun user(title: String, suffix: String, icon: ImageVector) = Row(title, Target.User(suffix), icon)
+    private fun site(title: String, path: String, icon: ImageVector) = Row(title, Target.Site(path), icon)
 
     val sections = listOf(
         Section(
             "Post and manage",
             listOf(
-                site("Post new work", "/works/new"),
-                site("Import work", "/works/new?import=true"),
-                user("Edit works in bulk", "works/show_multiple"),
-                user("Manage collection items", "collection_items"),
-                user("Related works", "related_works"),
-                user("Drafts", "works/drafts")
+                site("Post new work", "/works/new", Icons.Outlined.Edit),
+                site("Import work", "/works/new?import=true", Icons.Outlined.FileDownload),
+                user("Edit works in bulk", "works/show_multiple", Icons.Outlined.Checklist),
+                user("Manage collection items", "collection_items", Icons.Outlined.CollectionsBookmark),
+                user("Related works", "related_works", Icons.AutoMirrored.Outlined.CallSplit),
+                user("Drafts", "works/drafts", Icons.Outlined.Drafts)
             ),
             "These open your AO3 pages in Browse. You can find works, series, bookmarks, history and inbox " +
                 "in the Reading, Writing and Activity sections of Account."
@@ -138,33 +165,33 @@ internal object MoreOnAO3 {
         Section(
             "Challenges",
             listOf(
-                user("Sign-ups", "signups"),
-                user("Assignments", "assignments"),
-                user("Claims", "claims"),
-                user("Gifts given and received", "gifts")
+                user("Sign-ups", "signups", Icons.Outlined.EditNote),
+                user("Assignments", "assignments", Icons.AutoMirrored.Outlined.Assignment),
+                user("Claims", "claims", Icons.Outlined.Flag),
+                user("Gifts given and received", "gifts", Icons.Outlined.CardGiftcard)
             )
         ),
         Section(
             "Your account",
             listOf(
-                user("Profile", "profile"),
-                user("Invitations", "invitations"),
-                user("Skins and site styles", "skins"),
-                user("Pseuds", "pseuds"),
-                user("Co-Creator Requests", "creatorships"),
-                user("Statistics", "stats")
+                user("Profile", "profile", Icons.Outlined.Badge),
+                user("Invitations", "invitations", Icons.Outlined.Email),
+                user("Skins and site styles", "skins", Icons.Outlined.Palette),
+                user("Pseuds", "pseuds", Icons.Outlined.People),
+                user("Co-Creator Requests", "creatorships", Icons.Outlined.PersonAdd),
+                user("Statistics", "stats", Icons.Outlined.BarChart)
             )
         ),
         Section(
             "The archive",
             listOf(
-                site("Support and feedback", "/support"),
-                site("Report abuse", "/abuse_reports/new"),
-                site("Terms of Service", "/tos"),
-                site("Content policy", "/content"),
-                site("Privacy policy", "/privacy"),
-                site("FAQs", "/faq"),
-                site("Donate to the OTW", "/donate")
+                site("Support and feedback", "/support", Icons.AutoMirrored.Outlined.HelpOutline),
+                site("Report abuse", "/abuse_reports/new", Icons.Outlined.ReportProblem),
+                site("Terms of Service", "/tos", Icons.Outlined.Description),
+                site("Content policy", "/content", Icons.AutoMirrored.Outlined.Article),
+                site("Privacy policy", "/privacy", Icons.Outlined.PanTool),
+                site("FAQs", "/faq", Icons.Outlined.QuestionAnswer),
+                site("Donate to the OTW", "/donate", Icons.Outlined.FavoriteBorder)
             ),
             "These public AO3 pages open in Browse. You don't need to sign in to view them."
         )

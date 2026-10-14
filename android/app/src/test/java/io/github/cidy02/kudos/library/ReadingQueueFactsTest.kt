@@ -82,7 +82,9 @@ class ReadingQueueFactsTest {
         assertEquals(190.0 / 360.0, ReadingQueueFacts.displayHue(named), 0.000_000_1)
         val picked = named.copy(hue = 0.2)
         assertEquals(0.2, ReadingQueueFacts.displayHue(picked), 0.0)
-        assertEquals("1.5 KB", ReadingQueueFacts.byteCountString(1500))
+        // iOS's ByteCountFormatter, as everywhere else in the app: whole kilobytes.
+        assertEquals("2 KB", ReadingQueueFacts.byteCountString(1500))
+        assertEquals("12 KB", ReadingQueueFacts.byteCountString(12_345))
         assertEquals("nothing kept yet", ReadingQueueFacts.storageLine(0, 0))
         assertEquals("Home › Queues › Queue details", ReadingQueueFacts.kicker("Home", isDetails = true))
         assertTrue(SubjectHueSwatches.matches(SubjectHueSwatches.all[1], 0.4424))

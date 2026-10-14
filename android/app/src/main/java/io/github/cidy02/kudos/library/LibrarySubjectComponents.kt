@@ -257,7 +257,11 @@ private fun MosaicWorkTile(work: SavedWork, modifier: Modifier) {
             lineHeight = 12.sp,
             fontWeight = FontWeight.SemiBold,
             maxLines = if (accessibility) Int.MAX_VALUE else 2,
-            overflow = TextOverflow.Ellipsis
+            overflow = TextOverflow.Ellipsis,
+            // iOS lets the title shrink to 85% before giving up (`minimumScaleFactor(0.85)`). A long
+            // word was broken across the lines instead ("Unanswere / d Is Not U…").
+            autoSize = if (accessibility) null
+                else androidx.compose.foundation.text.TextAutoSize.StepBased(minFontSize = 8.sp, maxFontSize = 9.5.sp, stepSize = 0.25.sp)
         )
         Spacer(if (accessibility) Modifier.height(4.dp) else Modifier.weight(1f).height(4.dp))
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
