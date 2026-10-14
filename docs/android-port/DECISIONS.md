@@ -1840,3 +1840,5 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
 - **2026-10-14 · Author links and My copy (3do).** On a work's page an author's name is a link
   only when AO3 linked it to an account, as iOS; otherwise it is plain text. My copy shows
   Preservation for a kept work and iOS's origin sentences. Reverse: the commit that names 3do.
+- **2026-10-14 · Library dashboard (3dp).** An empty section's line starts with the section's
+  glyph, as iOS. Reverse: the commit that names 3dp.
