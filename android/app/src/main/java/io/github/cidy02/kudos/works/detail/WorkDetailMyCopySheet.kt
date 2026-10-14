@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.DatePicker
@@ -443,6 +444,11 @@ private fun MyCopyStorageSection(
         }
 
         MyCopyValueRow(title = "Download", value = statusText)
+        // iOS: a work kept for later says whether its copy is preserved. Android's sheet had
+        // the "Kept" figure above and no row saying what had become of it.
+        if (work.isQueuedForLater) {
+            MyCopyValueRow(title = "Preservation", value = preservationStatusLabel(work.epubPreservationStatusRaw))
+        }
 
         val sourceText = if (work.hasAo3WorkId) "Archive of Our Own" else "Imported file"
         MyCopyValueRow(title = "Source", value = sourceText)
@@ -546,16 +552,23 @@ private fun MyCopyOriginSection(
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         MyCopyGroupHeader(title = "Origin")
 
+        // iOS's sentences: an imported file is not "Imported EPUB file." but what it lacks.
         val originSentence = if (work.hasAo3WorkId) {
             "From Archive of Our Own."
         } else {
-            "Imported EPUB file."
+            "This imported work doesn't include the website where it was first posted."
         }
-        Text(
-            text = originSentence,
-            fontSize = 14.5.sp,
-            color = tokens.primaryInk
-        )
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.Top) {
+            Icon(
+                Icons.Outlined.Description, contentDescription = null, tint = tokens.secondaryInk,
+                modifier = Modifier.padding(top = 2.dp).size(18.dp)
+            )
+            Text(
+                text = originSentence,
+                fontSize = 14.5.sp,
+                color = tokens.primaryInk
+            )
+        }
 
         if (work.sourceUrl.isNotBlank()) {
             SelectionContainer {
@@ -570,7 +583,7 @@ private fun MyCopyOriginSection(
 
         if (!work.hasAo3WorkId) {
             Text(
-                text = "Kudos can't update this work's tags, stats, or availability from an imported file. You also can't leave kudos or comments here.",
+                text = "Kudos can't update this work's tags, stats, or availability from its source. You also can't leave kudos or comments here.",
                 fontSize = 12.sp,
                 color = tokens.secondaryInk
             )
@@ -921,3 +934,12 @@ private fun pickerInstant(millis: Long): Instant = Instant.ofEpochMilli(millis)
     .toLocalDate()
     .atStartOfDay(ZoneId.systemDefault())
     .toInstant()
+
+/** iOS `WorkDetailPresentation.preservationStatusLabel`, by the stored name iOS also writes. */
+internal fun preservationStatusLabel(raw: String?): String = when (raw) {
+    "preserved" -> "Preserved offline"
+    "preserving" -> "Preserving…"
+    "queued" -> "Preservation queued"
+    "failed", "missingFile" -> "Needs restore"
+    else -> "Not preserved"
+}

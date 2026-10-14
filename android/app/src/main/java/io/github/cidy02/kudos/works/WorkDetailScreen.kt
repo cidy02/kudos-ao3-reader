@@ -1491,6 +1491,7 @@ private fun WorkDetailContent(
                 authorNames = state.tappableAuthorNames,
                 fandoms = state.fandoms,
                 palette = palette,
+                isLinked = state::hasAccount,
                 onOpenAuthor = { name -> onOpenAuthor(state.accountByline(name)) }
             )
 
@@ -1726,10 +1727,15 @@ private data class WorkDetailUiState(
      * page was asked for as an account of that name, and came back as "AO3 user" with none of
      * the account's pseuds.
      */
-    fun accountByline(name: String): String =
+    fun accountByline(name: String): String = accountOf(name) ?: name
+
+    /** Only a name AO3 linked to an account opens a page (iOS: never a guessed address). */
+    fun hasAccount(name: String): Boolean = accountOf(name) != null
+
+    private fun accountOf(name: String): String? =
         listOfNotNull(remote?.authorIdentitiesJSON, local?.authorIdentitiesJSON).firstNotNullOfOrNull {
             io.github.cidy02.kudos.network.ao3.author.AO3AuthorIdentities.byline(it, name)
-        } ?: name
+        }
     // iOS shows the library copy's summary when it has one, stripped of the EPUB's HTML.
     val summary: String = local?.summary?.takeIf { it.isNotEmpty() }?.strippingHtml() ?: remote?.summary ?: ""
     val sourceUrl: String = local?.sourceUrl ?: remote?.workUrl ?: ""
