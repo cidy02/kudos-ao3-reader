@@ -50,7 +50,10 @@ fun SettingsScreen(
 
     NavHost(navController = navController, startDestination = start) {
         composable("hub") {
-            SettingsHubScreen(navController, settings, authRepository)
+            val importedFonts by remember(customFontRepository) { customFontRepository.observeImported() }
+                .collectAsState(initial = emptyList())
+            SettingsHubScreen(navController, settings, authRepository,
+                fontName = io.github.cidy02.kudos.core.model.ReaderFontCatalog.name(settings.reader.readerFontId, importedFonts))
         }
         composable("appearance") {
             SettingsAppearancePage(repository, settings)

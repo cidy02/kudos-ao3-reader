@@ -35,4 +35,8 @@ object ReaderFontCatalog {
         }
         return builtIns + imported
     }
+
+    /** iOS `ReaderFontOption.current(id:customFonts:).name`; an id no longer present reads as System. */
+    fun name(id: String, customFonts: List<CustomFont>): String =
+        options(customFonts).firstOrNull { it.id == id }?.name ?: builtIns.first().name
 }
