@@ -1842,3 +1842,8 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   Preservation for a kept work and iOS's origin sentences. Reverse: the commit that names 3do.
 - **2026-10-14 · Library dashboard (3dp).** An empty section's line starts with the section's
   glyph, as iOS. Reverse: the commit that names 3dp.
+- **2026-10-14 · Browse sees the Library; counts as iOS writes them (3dq, iOS T-405).** Browse
+  reads the Library as state, so its downloaded counts, read marks and Jump Back In follow it.
+  Its panels drop the Mac-only "Recently read" block and carry iOS's figure glyphs. Every
+  compact count is written as Foundation's compact notation. On iOS, Search's empty prompt
+  takes the theme's backdrop. Reverse: the commits that name 3dq and T-405.

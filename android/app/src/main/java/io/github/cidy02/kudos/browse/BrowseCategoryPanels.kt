@@ -21,6 +21,9 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.outlined.LibraryBooks
+import androidx.compose.material.icons.filled.ArrowCircleDown
+import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -195,24 +198,18 @@ fun CategoryPanel(
                 modifier = Modifier.size(12.dp)
             )
         }
-        if (stats.recentFandoms.isNotEmpty() || stats.clusterFandoms.isNotEmpty()) {
-            Column(
-                modifier = Modifier.padding(horizontal = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                if (stats.recentFandoms.isNotEmpty()) {
-                    RecentlyReadBlock(stats.recentFandoms, onOpenFandom)
-                }
-                if (stats.clusterFandoms.isNotEmpty()) {
-                    FandomChipCluster(
-                        fandoms = stats.clusterFandoms,
-                        total = stats.familyCount ?: stats.clusterFandoms.size,
-                        palette = palette,
-                        familiarNames = familiar,
-                        onOpenFandom = onOpenFandom
-                    )
-                }
-            }
+        // The chips only, as the iPhone's panel: a fandom read before is marked by its bar.
+        // A "Recently read" block above them is iOS's Mac card; here it said the same names
+        // twice, "Doctor Who" two times over for Doctor Who and Doctor Who (2005).
+        if (stats.clusterFandoms.isNotEmpty()) {
+            FandomChipCluster(
+                fandoms = stats.clusterFandoms,
+                total = stats.familyCount ?: stats.clusterFandoms.size,
+                palette = palette,
+                familiarNames = familiar,
+                onOpenFandom = onOpenFandom,
+                modifier = Modifier.padding(horizontal = 16.dp)
+            )
         }
     }
 }
@@ -231,42 +228,26 @@ private fun CategoryCountsLine(stats: CategoryStats, palette: SubjectPalette) {
         return
     }
     FlowRow(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        CountBit("${count.compactCount()} fandoms", palette)
+        CountBit(Icons.AutoMirrored.Outlined.LibraryBooks, "${count.compactCount()} fandoms", palette)
         stats.workCount?.let { works ->
             val figure = works.compactCount()
             val label = if (stats.isApproximateWorkCount) "~$figure works" else "$figure works"
-            CountBit(label, palette)
+            CountBit(Icons.Outlined.Description, label, palette)
         }
         if (stats.savedCount > 0) {
-            CountBit("${stats.savedCount} downloaded", palette)
+            CountBit(Icons.Filled.ArrowCircleDown, "${stats.savedCount} downloaded", palette)
         }
     }
 }
 
+/** iOS `statItem`: the figure's glyph in the card's accent, the words in the secondary ink. */
 @Composable
-private fun CountBit(text: String, palette: SubjectPalette) {
-    Text(text = text, color = palette.accent, fontSize = 11.sp, fontWeight = FontWeight.Medium)
-}
-
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun RecentlyReadBlock(fandoms: List<String>, onOpenFandom: (String) -> Unit) {
-    val tokens = LocalKudosTokens.current
-    Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
-        Text(
-            text = "Recently read",
-            color = tokens.tertiaryInk,
-            fontSize = 11.sp,
-            fontWeight = FontWeight.SemiBold
-        )
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            fandoms.forEach { fandom ->
-                SubjectChip(
-                    text = FandomDisplayName.bareTitle(fandom),
-                    modifier = Modifier.clickable { onOpenFandom(fandom) }
-                )
-            }
-        }
+private fun CountBit(icon: androidx.compose.ui.graphics.vector.ImageVector, text: String, palette: SubjectPalette) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+        // Sized with the words, as iOS's glyph is: at twice the text size it stayed a speck.
+        Icon(icon, contentDescription = null, tint = palette.accent,
+            modifier = Modifier.size(with(androidx.compose.ui.platform.LocalDensity.current) { 11.sp.toDp() }))
+        Text(text = text, color = LocalKudosTokens.current.secondaryInk, fontSize = 11.sp)
     }
 }
 
@@ -277,11 +258,12 @@ private fun FandomChipCluster(
     total: Int,
     palette: SubjectPalette,
     familiarNames: Set<String>,
-    onOpenFandom: (String) -> Unit
+    onOpenFandom: (String) -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val shown = fandoms.size
     val remainder = (total - shown).coerceAtLeast(0)
-    FlowRow(horizontalArrangement = Arrangement.spacedBy(7.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+    FlowRow(modifier = modifier, horizontalArrangement = Arrangement.spacedBy(7.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
         fandoms.forEach { fandom ->
             val familiar = fandom.names.any { it.lowercase(Locale.US) in familiarNames }
             ClusterChip(
