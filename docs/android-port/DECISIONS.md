@@ -1837,3 +1837,6 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   glyphs as Material outlined icons; a mosaic tile's title may shrink to 85% as iOS's; every
   size in the app is written by `LocalStorageFootprint.formatted`. Reverse: the commit that
   names 3dn.
+- **2026-10-14 · Author links and My copy (3do).** On a work's page an author's name is a link
+  only when AO3 linked it to an account, as iOS; otherwise it is plain text. My copy shows
+  Preservation for a kept work and iOS's origin sentences. Reverse: the commit that names 3do.

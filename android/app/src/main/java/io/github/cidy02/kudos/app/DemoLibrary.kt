@@ -352,6 +352,7 @@ object DemoLibrary {
                 val tagged = withDemoAffinityTags(work)
                 if (tagged != work) workRepository.upsert(tagged)
             }
+            markQueuedCopiesPreserved(database, workRepository, clock)
             seedRecentlyDeleted(database, workRepository, fileStore, clock)
             return
         }
@@ -485,7 +486,22 @@ object DemoLibrary {
             }
         }
 
+        markQueuedCopiesPreserved(database, workRepository, clock)
         seedRecentlyDeleted(database, workRepository, fileStore, clock)
+    }
+
+    /**
+     * A copy kept in a queue is preserved, as adding it to a queue preserves it in the app. The
+     * demo adds them directly, so My copy said "Not preserved" under its own "Kept" figure, and
+     * Queue Storage listed the same work as preserved. Only a status never recorded is filled in.
+     */
+    private suspend fun markQueuedCopiesPreserved(database: KudosDatabase, workRepository: WorkRepository, clock: () -> Instant) {
+        for (row in database.workDao().getAllIncludingDeleted()) {
+            val work = workRepository.getWork(row.id) ?: continue
+            if (work.isQueuedForLater && work.hasEpub && work.epubPreservationStatusRaw == null) {
+                workRepository.upsert(work.copy(epubPreservationStatusRaw = "preserved", preservedAt = clock()))
+            }
+        }
     }
 
     private fun withDemoAffinityTags(work: SavedWork): SavedWork {

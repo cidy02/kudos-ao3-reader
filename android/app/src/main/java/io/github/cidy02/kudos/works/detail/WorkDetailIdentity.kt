@@ -133,6 +133,8 @@ fun WorkDetailIdentityHeader(
     fandoms: List<String>,
     palette: SubjectPalette,
     modifier: Modifier = Modifier,
+    /** Whether a name opens its author: only one AO3 linked to an account (iOS `AO3AuthorBylineResolver`). */
+    isLinked: (String) -> Boolean = { true },
     onOpenAuthor: (String) -> Unit = {}
 ) {
     val namedFandoms = fandoms.filter { it.isNotBlank() }
@@ -151,6 +153,7 @@ fun WorkDetailIdentityHeader(
                 authorNames = authorNames,
                 displayAuthor = author,
                 accent = palette.accent,
+                isLinked = isLinked,
                 onOpenAuthor = onOpenAuthor
             )
         }
@@ -166,6 +169,7 @@ private fun AuthorBylineRow(
     displayAuthor: String,
     /** A name that opens its author is in the page's accent, as iOS draws it. It was grey, like "Anonymous". */
     accent: androidx.compose.ui.graphics.Color,
+    isLinked: (String) -> Boolean,
     onOpenAuthor: (String) -> Unit
 ) {
     val tokens = LocalKudosTokens.current
@@ -190,17 +194,22 @@ private fun AuthorBylineRow(
     ) {
         authorNames.forEachIndexed { index, name ->
             Row(verticalAlignment = Alignment.CenterVertically) {
+                // A name AO3 never linked to an account (a file from elsewhere, an old copy not yet
+                // refreshed) is plain text, as on iOS: opened by its words it was a guessed address,
+                // and could be somebody else's page.
+                val linked = isLinked(name)
                 Text(
                     text = name,
-                    color = accent,
+                    color = if (linked) accent else tokens.secondaryInk,
                     fontSize = 15.5.sp,
                     fontWeight = FontWeight.Medium,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier
                         .weight(1f, fill = false)
-                        .semantics { contentDescription = "Author: $name" }
-                        .clickable { onOpenAuthor(name) }
+                        .then(if (linked) Modifier
+                            .semantics { contentDescription = "Author: $name" }
+                            .clickable { onOpenAuthor(name) } else Modifier)
                 )
                 if (index < authorNames.lastIndex) {
                     Text(
