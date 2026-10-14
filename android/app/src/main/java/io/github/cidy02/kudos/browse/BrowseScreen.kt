@@ -15,6 +15,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -70,6 +71,10 @@ fun BrowseScreen(
     val allLibrary by libraryFlow.collectAsState(initial = emptyList())
     // Browse reads the Library to mark fandoms. Not a work Hide Mature hides (audit A38).
     val library = io.github.cidy02.kudos.library.rememberShownWorks(allLibrary, settingsRepository, privacyGate)
+    // Read as state below. The flow is started once, and a plain value captured then was the
+    // Library as it stood on the first frame, empty: no category ever counted a download or
+    // marked a fandom read, and Jump Back In knew only visits.
+    val currentLibrary by rememberUpdatedState(library)
     val watermarkFlow = remember(readingLogDao) {
         readingLogDao?.observeWatermarks() ?: flowOf(emptyList())
     }
@@ -84,7 +89,7 @@ fun BrowseScreen(
             BrowseInputs(
                 categories = (state as? BrowseCategoriesState.Loaded)?.categories.orEmpty(),
                 lists = fandomLists,
-                library = library,
+                library = currentLibrary,
                 watermarks = watermarks
             )
         }.collect { tick ->

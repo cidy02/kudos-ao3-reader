@@ -101,23 +101,32 @@ object SubjectMetrics {
     val panelRadius = 14.dp
 }
 
-/** A count on a chip or section header: 999, 1K, 1.5K, 1.2M. */
+/**
+ * A count on a chip or section header: 999, 1K, 1.5K, 48K, 312K, 1.2M. Foundation's compact
+ * notation, as iOS writes them: two significant digits, never fewer than the whole number. It
+ * kept a decimal at any size ("48.3K", "312.4K") where the iPhone says "48K" and "312K".
+ */
 fun Int.compactCount(): String {
     val negative = this < 0
     val magnitude = if (negative) -toLong() else toLong()
-    val body = when {
-        magnitude < 1_000L -> magnitude.toString()
-        magnitude < 1_000_000L -> compactUnit(magnitude, 1_000.0, "K")
-        magnitude < 1_000_000_000L -> compactUnit(magnitude, 1_000_000.0, "M")
-        else -> compactUnit(magnitude, 1_000_000_000.0, "B")
+    val body = if (magnitude < 1_000L) magnitude.toString() else {
+        var index = compactUnits.indexOfLast { magnitude >= it.first }
+        var rounded = compactRound(magnitude, compactUnits[index].first)
+        // 999,950 rounds to 1,000K, which is 1M.
+        if (rounded >= java.math.BigDecimal(1_000) && index < compactUnits.lastIndex) {
+            rounded = compactRound(magnitude, compactUnits[++index].first)
+        }
+        rounded.stripTrailingZeros().toPlainString() + compactUnits[index].second
     }
     return if (negative) "-$body" else body
 }
 
-private fun compactUnit(magnitude: Long, unit: Double, suffix: String): String {
-    val rounded = round(magnitude / unit * 10.0) / 10.0
-    val text = if (abs(rounded - rounded.toInt()) < 0.05) rounded.toInt().toString() else rounded.toString()
-    return text + suffix
+private val compactUnits = listOf(1_000L to "K", 1_000_000L to "M", 1_000_000_000L to "B")
+
+private fun compactRound(magnitude: Long, unit: Long): java.math.BigDecimal {
+    val value = java.math.BigDecimal(magnitude).divide(java.math.BigDecimal(unit))
+    val digits = maxOf(2, value.toBigInteger().toString().length)
+    return value.round(java.math.MathContext(digits, java.math.RoundingMode.HALF_EVEN))
 }
 
 @Composable
