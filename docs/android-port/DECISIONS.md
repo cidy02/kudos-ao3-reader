@@ -1852,3 +1852,6 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
 - **2026-10-14 · Dead account-list code removed (3ds).** Five unused functions in
   `AccountScreen.kt`, whose cards had do-nothing menu actions. Reverse: the commit that names
   3ds.
+- **2026-10-14 · One avatar view (3dt).** Account and author pages share `AO3AuthorAvatar`,
+  whose fallback is iOS's person glyph, not the Kudos mark or a blank square. Reverse: the
+  commit that names 3dt.
