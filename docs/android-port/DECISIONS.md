@@ -1855,3 +1855,6 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
 - **2026-10-14 · One avatar view (3dt).** Account and author pages share `AO3AuthorAvatar`,
   whose fallback is iOS's person glyph, not the Kudos mark or a blank square. Reverse: the
   commit that names 3dt.
+- **2026-10-14 · Collection item cards in their collection's colour (3du; iOS T-406).** As
+  iOS's `subjectCard`. On iOS the demo answers "Your items". Reverse: the commits that name
+  3du and T-406.
