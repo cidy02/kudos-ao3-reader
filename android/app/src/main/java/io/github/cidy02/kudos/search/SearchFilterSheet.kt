@@ -233,7 +233,7 @@ fun SearchFilterSheet(
                             FilterDateRow("Before", filters.dateTo) { onFiltersChange(filters.copy(dateTo = it)) }
                             SubjectRowSeparator()
                         }
-                        FilterLanguageRow(filters.language) { onFiltersChange(filters.copy(language = it)) }
+                        FilterLanguageRow(filters.language, filters.languageTitle) { onFiltersChange(filters.withLanguage(it)) }
                     }
                 }
                 item {

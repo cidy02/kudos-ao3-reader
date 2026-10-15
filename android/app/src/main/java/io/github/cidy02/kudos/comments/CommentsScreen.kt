@@ -164,6 +164,7 @@ fun CommentsScreen(
     val order by viewModel.order.collectAsState()
     val draft by viewModel.draft.collectAsState()
     val submitting by viewModel.submitting.collectAsState()
+    val canReverify by viewModel.canReverify.collectAsState()
     val message by viewModel.message.collectAsState()
     val composerPresented by viewModel.composerPresented.collectAsState()
     val composerParent by viewModel.composerParent.collectAsState()
@@ -290,6 +291,12 @@ fun CommentsScreen(
             onDismissRequest = { viewModel.clearMessage() },
             title = { Text("AO3") },
             text = { Text(message.orEmpty()) },
+            dismissButton = {
+                if (canReverify) TextButton(onClick = {
+                    viewModel.clearMessage()
+                    viewModel.reverify()
+                }, enabled = !submitting) { Text("Check Again") }
+            },
             confirmButton = {
                 TextButton(onClick = { viewModel.clearMessage() }) {
                     Text("OK")

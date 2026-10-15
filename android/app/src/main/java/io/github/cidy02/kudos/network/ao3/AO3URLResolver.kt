@@ -7,10 +7,8 @@ import java.net.URI
  * non-AO3 / non-http(s) destinations for in-app navigation and write form action URLs.
  */
 object AO3URLResolver {
-    private val trustedHosts = setOf(
-        "archiveofourown.org",
-        "www.archiveofourown.org"
-    )
+    private fun trustedHost(host: String) =
+        host == "archiveofourown.org" || host.endsWith(".archiveofourown.org")
 
     /**
      * @return absolute https URL on a trusted AO3 host, or null if the href is
@@ -51,21 +49,16 @@ object AO3URLResolver {
         if (scheme != "http" && scheme != "https") return null
 
         val host = uri.host?.lowercase() ?: return null
-        if (!allowExternalHost && host !in trustedHosts) return null
+        if (!allowExternalHost && !trustedHost(host)) return null
 
-        // Force https for AO3 hosts.
-        val https = if (host in trustedHosts && scheme == "http") {
-            URI("https", uri.userInfo, host, uri.port, uri.path, uri.query, uri.fragment).toString()
-        } else {
-            absolute
-        }
-        return https
+        if (trustedHost(host) && scheme != "https") return null
+        return absolute
     }
 
     fun isTrustedAo3Host(url: String): Boolean {
         return try {
             val host = URI(url).host?.lowercase() ?: return false
-            host in trustedHosts
+            trustedHost(host)
         } catch (_: Exception) {
             false
         }

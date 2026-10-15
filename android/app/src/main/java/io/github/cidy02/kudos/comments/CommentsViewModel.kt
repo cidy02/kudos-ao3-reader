@@ -16,6 +16,10 @@ import io.github.cidy02.kudos.network.ao3.comments.AO3CommentRepository
 import io.github.cidy02.kudos.network.ao3.comments.AO3CommentTarget
 import io.github.cidy02.kudos.network.ao3.comments.AO3CommentThread
 import io.github.cidy02.kudos.network.ao3.comments.CommentDraftStore
+import io.github.cidy02.kudos.network.ao3.comments.CommentDraftIdentity
+import io.github.cidy02.kudos.network.ao3.comments.CommentSubmissionKey
+import io.github.cidy02.kudos.network.ao3.comments.CommentSubmissionStore
+import io.github.cidy02.kudos.network.ao3.comments.CommentVerification
 import io.github.cidy02.kudos.network.ao3.displayMessage
 import io.github.cidy02.kudos.network.ao3.isOffline
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -74,6 +78,7 @@ class CommentsViewModel(
      * are, so the first open reads page 1 for the count of pages and then the last (see [read]).
      */
     initialOrder: CommentOrder = CommentOrder.NewestFirst,
+    private val submissions: CommentSubmissionStore = CommentSubmissionStore.shared,
     /**
      * Read at each save and load, never kept: the screen's first frame did not yet know who
      * was signed in, the name was captured then, and every signed-in reader's drafts were
@@ -139,7 +144,9 @@ class CommentsViewModel(
     val composerTarget: StateFlow<AO3CommentTarget?> = _composerTarget.asStateFlow()
 
     /** Who the model reads and writes for: the published name and that session's count. */
-    private data class Viewer(val username: String?, val generation: Int)
+    private data class Viewer(val username: String?, val generation: Int) {
+        val draftIdentity get() = CommentDraftIdentity.forViewer(username, generation)
+    }
     private fun currentViewer() = Viewer(currentUsername(), sessionGeneration())
 
     /**
@@ -199,8 +206,12 @@ class CommentsViewModel(
     private val _collapsedRootIds = MutableStateFlow<Set<Long>>(emptySet())
     val collapsedRootIds: StateFlow<Set<Long>> = _collapsedRootIds.asStateFlow()
 
-    /** Tracks the hash of the last successfully or ambiguously submitted content to prevent double-posts. */
-    private var lastSubmittedContentHash: Int? = null
+    private var draftHandoff: Job? = null
+    private val _canReverify = MutableStateFlow(false)
+    val canReverify: StateFlow<Boolean> = _canReverify.asStateFlow()
+    private var pendingVerification: Pair<Composer, CommentSubmissionKey>? = null
+        set(value) { field = value; _canReverify.value = value != null }
+    private var draftSave: Job? = null
 
     /** The load that owns the screen. A newer one cancels it, and its answer is not applied. */
     private var loadJob: Job? = null
@@ -234,7 +245,17 @@ class CommentsViewModel(
     fun syncViewer(): Boolean {
         val now = currentViewer()
         if (now == viewer) return false
-        saveDraft()
+        val saved = saveDraft()
+        val previous = viewer
+        val oldIdentity = previous.draftIdentity
+        val newIdentity = now.draftIdentity
+        if (oldIdentity?.startsWith(CommentDraftIdentity.UNNAMED_PREFIX) == true && newIdentity != null &&
+            now.generation - previous.generation in 0..1) {
+            draftHandoff = viewModelScope.launch {
+                saved?.join()
+                draftStore?.move(oldIdentity, newIdentity)
+            }
+        }
         viewer = now
         composer = null
         pendingReplyId = null
@@ -243,7 +264,7 @@ class CommentsViewModel(
         _editTarget.value = null
         _composerParent.value = null
         _draft.value = ""
-        lastSubmittedContentHash = null
+        pendingVerification = null
         _chapters.value = emptyList()
         chaptersViewer = null
         _chaptersFailed.value = false
@@ -433,11 +454,12 @@ class CommentsViewModel(
                 // Restore a top-level draft on initial load.
                 val untouched = composerGeneration
                 val reader = currentViewer()
+                draftHandoff?.join()
                 val draftContent = draftStore?.getDraft(
                     workId = target.workId,
                     chapterId = (target as? AO3CommentTarget.Chapter)?.chapterId,
                     parentId = null,
-                    username = reader.username
+                    username = reader.draftIdentity
                 )
                 // Only into a field nobody has opened. Reading the store suspends: a load that finished
                 // just after Reply was tapped put the work's own draft into the reply, where it was
@@ -601,11 +623,12 @@ class CommentsViewModel(
                 // used to keep whatever an edit had left in it, and a draft that arrived
                 // late replaced what had been typed meanwhile (audit A18-1).
                 viewModelScope.launch {
+                    draftHandoff?.join()
                     val stored = draftStore?.getDraft(
                         workId = target.workId,
                         chapterId = (target as? AO3CommentTarget.Chapter)?.chapterId,
                         parentId = null,
-                        username = mine.viewer.username
+                        username = mine.viewer.draftIdentity
                     ).orEmpty()
                     // Reply or Edit was tapped, the sheet closed, the reader moved to another chapter
                     // or is no longer the same reader, while the store was read: this opening is over,
@@ -614,6 +637,7 @@ class CommentsViewModel(
                     mine.draftRead = true
                     _draft.value = stored
                     _composerPresented.value = true
+                    checkUnresolved(mine)
                 }
             }
         }
@@ -628,23 +652,27 @@ class CommentsViewModel(
         _composerParent.value = null
     }
 
-    fun saveDraft() {
+    fun saveDraft(): Job? {
         // iOS `saveDraft`: an edit never uses the draft store. It has no slot of its own, so
         // its text went into the new-comment slot and replaced the comment waiting there.
         // The slot and the reader are the composer's own, not whatever the screen shows now.
-        val open = composer ?: return
-        if (open.edit != null) return
-        if (!open.draftRead) return
+        val open = composer ?: return null
+        if (open.edit != null) return null
+        if (!open.draftRead) return null
         val content = _draft.value
-        viewModelScope.launch {
+        val handoff = draftHandoff
+        val previousSave = draftSave
+        return viewModelScope.launch {
+            previousSave?.join()
+            handoff?.join()
             draftStore?.saveDraft(
                 content = content,
                 workId = open.target.workId,
                 chapterId = (open.target as? AO3CommentTarget.Chapter)?.chapterId,
                 parentId = open.replyTo,
-                username = open.viewer.username
+                username = open.viewer.draftIdentity
             )
-        }
+        }.also { draftSave = it }
     }
 
     fun updateDraft(content: String) {
@@ -666,16 +694,18 @@ class CommentsViewModel(
         _message.value = null
         _composerPresented.value = true
         viewModelScope.launch {
+            draftHandoff?.join()
             val draftContent = draftStore?.getDraft(
                 workId = target.workId,
                 chapterId = (target as? AO3CommentTarget.Chapter)?.chapterId,
                 parentId = id,
-                username = mine.viewer.username
+                username = mine.viewer.draftIdentity
             )
             if (composer !== mine || currentViewer() != mine.viewer) return@launch
             mine.draftRead = true
             // What the reader typed while the store was read stands, and is now saved.
             if (_draft.value.isNotEmpty()) saveDraft() else if (draftContent != null) _draft.value = draftContent
+            checkUnresolved(mine)
         }
     }
 
@@ -729,100 +759,142 @@ class CommentsViewModel(
         val id = comment.id?.toLongOrNull() ?: return
         if (syncViewer()) return
         val asked = currentViewer()
+        if (!_submitting.compareAndSet(false, true)) return
         viewModelScope.launch {
-            _submitting.value = true
-            val result = repository.deleteComment(id)
-            // The reader changed while AO3 answered: the screen is the new reader's, and stays as it is.
-            if (currentViewer() == asked) when (result) {
-                is AO3Result.Success -> {
-                    _message.value = "Comment deleted."
-                    reloadPageOnScreen()
+            try {
+                val result = repository.deleteComment(id)
+                // The reader changed while AO3 answered: the screen stays the new reader's.
+                if (currentViewer() == asked) when (result) {
+                    is AO3Result.Success -> {
+                        _message.value = "Comment deleted."
+                        reloadPageOnScreen()
+                    }
+                    is AO3Result.Failure -> _message.value = result.error.displayMessage()
                 }
-                is AO3Result.Failure -> {
-                    _message.value = result.error.displayMessage()
-                }
-            }
-            _submitting.value = false
+            } finally { _submitting.value = false }
         }
+    }
+
+    private fun submissionKey(sent: Composer, content: String) = CommentSubmissionKey.of(
+        sent.target, sent.replyTo, content, sent.viewer.username.orEmpty()
+    )
+
+    private fun checkUnresolved(sent: Composer) {
+        if (sent.edit != null || _draft.value.isBlank()) return
+        val key = submissionKey(sent, _draft.value)
+        if (submissions.entry(key)?.phase == CommentSubmissionStore.Phase.Ambiguous) verify(sent, key)
+    }
+
+    /** Check Again always uses the original pending body, even if the composer was edited. */
+    fun reverify() { pendingVerification?.let { (sent, key) -> verify(sent, key) } }
+
+    private fun verify(sent: Composer, key: CommentSubmissionKey) {
+        if (!_submitting.compareAndSet(false, true)) return
+        val entry = submissions.entry(key)
+        if (entry == null || entry.phase != CommentSubmissionStore.Phase.Ambiguous) {
+            _submitting.value = false
+            return
+        }
+        pendingVerification = sent to key
+        viewModelScope.launch {
+            try {
+                val result = repository.verifySubmission(key, entry, sent.viewer.generation)
+                if (currentViewer() != sent.viewer) return@launch
+                if (result is AO3Result.Failure) {
+                    _message.value = commentsReadErrorMessage(result.error)
+                    return@launch
+                }
+                val verdict = (result as AO3Result.Success).value
+                submissions.resolve(key, verdict)
+                when (verdict) {
+                    CommentVerification.Found -> posted(sent, key)
+                    CommentVerification.Absent -> {
+                        pendingVerification = null
+                        _message.value = "AO3's comments show no matching post. You can try posting again."
+                    }
+                    CommentVerification.Unknown -> _message.value =
+                        "Couldn't confirm whether the comment posted. Check again before posting this comment again."
+                }
+            } finally { _submitting.value = false }
+        }
+    }
+
+    private suspend fun posted(sent: Composer, key: CommentSubmissionKey?) {
+        draftSave?.join()
+        if (sent.edit == null) draftStore?.clearVariants(sent.target.workId, sent.replyTo, sent.viewer.draftIdentity)
+        if (currentViewer() != sent.viewer) return
+        if (pendingVerification?.second == key) pendingVerification = null
+        if (composer === sent) {
+            composer = null
+            _draft.value = ""
+            _replyTarget.value = null
+            _editTarget.value = null
+            _composerParent.value = null
+            _composerPresented.value = false
+        }
+        _message.value = if (sent.edit == null) "Posted." else "Comment updated."
+        if (sent.replyTo != null || sent.edit != null) reloadPageOnScreen() else reloadStart()
     }
 
     fun submitComment() {
         if (syncViewer()) return
-        // Sent to what this composer was opened for, as the reader who opened it.
         val sent = composer ?: return
-        val target = sent.target
         val content = _draft.value
-        if (content.isBlank()) return
-
-        val edit = sent.edit
-        val replyTo = sent.replyTo
-        val contentHash = content.hashCode()
-
-        if (contentHash == lastSubmittedContentHash) {
-            _message.value = "You just posted this. Reload to see if it appeared."
+        if (content.isBlank() || _submitting.value) return
+        val key = if (sent.edit == null) submissionKey(sent, content) else null
+        if (key != null && submissions.entry(key) != null) {
+            when (submissions.entry(key)?.phase) {
+                CommentSubmissionStore.Phase.Ambiguous -> verify(sent, key)
+                CommentSubmissionStore.Phase.Succeeded -> _message.value = "You just posted this. Reload to see if it appeared."
+                else -> Unit
+            }
             return
         }
-
+        // Admission happens before launch: two taps in the same frame cannot both send.
+        if (!_submitting.compareAndSet(false, true)) return
+        if (key != null && !submissions.begin(key)) { _submitting.value = false; return }
         viewModelScope.launch {
-            _submitting.value = true
-            _message.value = null
-
-            val result = if (edit != null && edit.editPath != null) {
-                repository.editComment(edit.editPath, content)
-            } else {
-                repository.submitComment(target, content, replyTo)
-            }
-            // The reader changed while AO3 answered: the screen is the new reader's and is left as it
-            // is, except that a comment AO3 confirmed is no longer a draft (iOS returns before that
-            // too, and leaves the posted text waiting as one).
-            val sameReader = currentViewer() == sent.viewer
-
-            when (result) {
-                is AO3Result.Success -> {
-                    // Its own slot. An edit has none: this used to clear the new comment waiting in
-                    // the work's slot (iOS clears only `if editTarget == nil`).
-                    if (edit == null) draftStore?.clearDraft(
-                        workId = target.workId,
-                        chapterId = (target as? AO3CommentTarget.Chapter)?.chapterId,
-                        parentId = replyTo,
-                        username = sent.viewer.username
-                    )
-                    if (sameReader) {
-                        lastSubmittedContentHash = contentHash
-                        // Its own sheet, if that is still the one open. A composer opened since the
-                        // send keeps its target and its text.
-                        if (composer === sent) {
-                            composer = null
-                            _draft.value = ""
-                            _replyTarget.value = null
-                            _editTarget.value = null
-                            _composerParent.value = null
-                            _composerPresented.value = false
+            var needsVerification = false
+            try {
+                if (currentViewer() != sent.viewer) {
+                    key?.let { submissions.resolve(it, CommentVerification.Absent) }
+                    return@launch
+                }
+                _message.value = null
+                val result = if (sent.edit?.editPath != null) {
+                    repository.editComment(sent.edit.editPath, content)
+                } else {
+                    repository.submitComment(sent.target, content, sent.replyTo) { hidden ->
+                        key?.let { submissions.prepared(it, hidden) }
+                    }
+                }
+                when (result) {
+                    is AO3Result.Success -> {
+                        key?.let(submissions::succeed)
+                        posted(sent, key)
+                    }
+                    is AO3Result.Failure -> {
+                        val unconfirmed = (result.error as? AO3Error.Validation)?.message ==
+                            io.github.cidy02.kudos.network.ao3.account.AO3CollectionFields.UNCONFIRMED
+                        if (key != null && (unconfirmed || (result.error is AO3Error.Network && !result.error.isOffline()))) {
+                            submissions.ambiguous(key)
+                            if (currentViewer() == sent.viewer) {
+                                pendingVerification = sent to key
+                                needsVerification = true
+                            }
+                        } else {
+                            key?.let { submissions.resolve(it, CommentVerification.Absent) }
+                            if (currentViewer() == sent.viewer) _message.value = result.error.displayMessage()
                         }
-                        _message.value = result.value.message
-                        if (replyTo != null || edit != null) reloadPageOnScreen() else reloadStart()
                     }
                 }
-                is AO3Result.Failure -> if (sameReader) {
-                    val unconfirmed = (result.error as? AO3Error.Validation)?.message ==
-                        io.github.cidy02.kudos.network.ao3.account.AO3CollectionFields.UNCONFIRMED
-                    // An edit AO3 did not confirm is a failure to read and decide on, as on iOS:
-                    // no reload, and the edit stays an edit.
-                    if (edit == null && (unconfirmed || (result.error is AO3Error.Network && !result.error.isOffline()))) {
-                        // The text stays in the composer. The thread is read again so the reader
-                        // can see whether it arrived; the same text is not sent twice by a tap.
-                        lastSubmittedContentHash = contentHash
-                        // iOS `ambiguousSubmitMessage`: which of the two happened, in its words.
-                        _message.value = if (unconfirmed) {
-                            "AO3 answered but didn't confirm the comment posted. Checking whether it went through…"
-                        } else "The connection dropped while posting. Checking whether the comment went through…"
-                        if (replyTo != null) reloadPageOnScreen() else reloadStart()
-                    } else {
-                        _message.value = result.error.displayMessage()
-                    }
-                }
+            } finally {
+                // Cancellation after sending has no authoritative answer: reopening checks it.
+                if (key != null && submissions.entry(key)?.phase == CommentSubmissionStore.Phase.Sending)
+                    submissions.ambiguous(key)
+                _submitting.value = false
             }
-            _submitting.value = false
+            if (needsVerification) verify(sent, key!!)
         }
     }
 

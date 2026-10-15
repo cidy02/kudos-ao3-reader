@@ -219,8 +219,8 @@ fun summaryLabels(filters: AO3SearchFilters, excluding: String? = null): List<Su
     if (filters.updated != AO3Updated.ANY) {
         add(filters.updated.title)
     }
-    if (filters.language != AO3Language.ANY) {
-        add(filters.language.title)
+    if (filters.languageId != null) {
+        add(filters.languageTitle)
     }
     // Sort last, and unconditionally: unlike every entry above there is always an
     // order in effect, so this is the one label that is never noise — and it is the

@@ -17,6 +17,27 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class SubscriptionUnsubscribeStateTest {
+    @Test fun unmarkKeepsTheRowUntilAO3ConfirmsAndPublishesFailureWithoutRemovingIt() = runTest {
+        for (confirmed in listOf(false, true)) {
+            val auth = AO3AuthRepository(MemorySessionStore(testSession()), MemoryCookieStore())
+            auth.restoreSession()
+            val client = HeldUnsubscribeClient(auth)
+            val state = SubscriptionUnsubscribeState(AO3WriteRepository(client), auth)
+            var removed = false
+            val pending = async { state.unmarkForLater(42) { removed = true } }
+            client.postEntered.await()
+            assertFalse(removed)
+            state.unmarkForLater(42) { fail("A second tap must do nothing") }
+            assertEquals(1, client.posts)
+            client.reply.complete(response(if (confirmed) "<div class='flash notice'>Unmarked.</div>" else "<p>Maintenance</p>"))
+            pending.await()
+            assertEquals(confirmed, removed)
+            assertEquals(!confirmed, state.error.value != null)
+            assertEquals(1, client.posts)
+            assertEquals(1, client.gets)
+        }
+    }
+
     @Test fun confirmationPostsOnceBusyBlocksDuplicatesAndSuccessEmptiesLaterPage() = runTest {
         val auth = AO3AuthRepository(MemorySessionStore(testSession()), MemoryCookieStore())
         auth.restoreSession()

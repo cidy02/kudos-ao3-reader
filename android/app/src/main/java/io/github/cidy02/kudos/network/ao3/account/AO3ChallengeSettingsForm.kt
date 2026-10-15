@@ -21,7 +21,7 @@ data class AO3ChallengeSettingsForm(
         if (it.type == "checkbox") if (it.browserChecked) "1" else "0" else it.values.lastOrNull().orEmpty()
     } ?: controls.lastOrNull { it.name == name }?.values?.lastOrNull().orEmpty()
     fun value(key: String) = this[field(key)]
-    val scheduleIsEditable get() = value("time_zone").isNotEmpty()
+    val scheduleIsEditable get() = value("time_zone").isNotBlank()
     val isValid get() = generalErrors.isEmpty() && fieldErrors.isEmpty()
     fun dateField(key: String) = listOf(field("${key}_string"), field(key)).firstOrNull { control(it) != null }
     fun editable(name: String): Boolean {
@@ -58,6 +58,9 @@ data class AO3ChallengeSettingsForm(
         val submitter = controls.indexOfFirst { !it.disabled && it.type == "submit" && it.tag in setOf("input", "button") }
         return buildList {
             controls.forEachIndexed { index, served ->
+                if (!scheduleIsEditable && (served.name == field("time_zone") || challengeDateKeys.any {
+                        served.name == field(it) || served.name == field("${it}_string")
+                    })) return@forEachIndexed
                 val changed = changes[served.name].takeIf { index == controls.indexOfLast { it.name == served.name && it.type != "hidden" } }
                 val control = if (changed == null || served.type == "hidden") served else when (served.type) {
                     "checkbox" -> served.copy(browserChecked = changed == "1")

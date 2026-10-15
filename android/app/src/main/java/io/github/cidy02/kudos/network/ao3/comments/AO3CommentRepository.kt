@@ -96,7 +96,8 @@ class AO3CommentRepository(
     suspend fun submitComment(
         target: AO3CommentTarget,
         content: String,
-        parentCommentId: Long? = null
+        parentCommentId: Long? = null,
+        onFormPrepared: (Boolean) -> Unit = {}
     ): AO3Result<AO3WriteOutcome> {
         val text = content.trim()
         if (text.isEmpty()) return AO3Result.Failure(AO3Error.Validation("Write a comment first."))
@@ -143,6 +144,11 @@ class AO3CommentRepository(
             form?.pseudId ?: formParser.parseDefaultPseudId(page.body)
         }
 
+        val commentableId = replyParentId ?: target.workId
+        onFormPrepared(org.jsoup.Jsoup.parse(page.body).selectFirst(
+            "#add_comment_placeholder form#comment_for_$commentableId p.notice, " +
+                "#add_comment_reply_placeholder_$commentableId form#comment_for_$commentableId p.notice"
+        ) != null)
         val fields = buildList {
             add("authenticity_token" to token)
             add("comment[comment_content]" to text)
@@ -181,6 +187,37 @@ class AO3CommentRepository(
                 }
             }
         }
+    }
+
+    /** Authenticated evidence only: no public fallback, cache, polling, or POST. */
+    suspend fun verifySubmission(
+        key: CommentSubmissionKey, entry: CommentSubmissionStore.Entry, expectedGeneration: Int
+    ): AO3Result<CommentVerification> {
+        fun sameReader() = authenticatedClient.sessionGeneration() == expectedGeneration &&
+            authenticatedClient.username() == key.identity
+        if (!sameReader()) return AO3Result.Success(CommentVerification.Unknown)
+        var authenticationFailure: AO3Result.Failure? = null
+        val target = AO3CommentTarget.Work(key.workId)
+        suspend fun read(page: Int, parent: Long?): AO3CommentThread? {
+            if (!sameReader()) return null
+            val url = parent?.let { AO3CommentUrls.commentThreadUrl(it) } ?: target.pageUrl(page)
+            val response = when (val result = authenticatedClient.getAuthenticated(url)) {
+                is AO3Result.Success -> result
+                is AO3Result.Failure -> {
+                    if (result.error == AO3Error.AuthenticationRequired) authenticationFailure = result
+                    return null
+                }
+            }
+            if (!sameReader()) return null
+            return (parseThread(response.value.body, response.value.url, target, response.value.statusCode,
+                page, parent != null) as? AO3Result.Success)?.value
+        }
+        val first = read(1, key.parentId) ?: return authenticationFailure ?: AO3Result.Success(CommentVerification.Unknown)
+        val page = if (key.parentId == null && first.totalPages > 1) {
+            read(first.totalPages, null) ?: return authenticationFailure ?: AO3Result.Success(CommentVerification.Unknown)
+        } else first
+        if (!sameReader()) return AO3Result.Success(CommentVerification.Unknown)
+        return AO3Result.Success(commentVerification(page, key, entry))
     }
 
     suspend fun editComment(path: String, content: String): AO3Result<AO3WriteOutcome> {

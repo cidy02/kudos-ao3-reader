@@ -105,7 +105,7 @@ class AO3SearchUrlBuilder {
         add("work_search[date_from]", filters.dateFrom?.toString())
         add("work_search[date_to]", filters.dateTo?.toString())
         add("work_search[revised_at]", filters.updated.ao3Value)
-        add("work_search[language_id]", filters.language.code)
+        add("work_search[language_id]", filters.languageId)
         add("work_search[sort_column]", filters.sort.sortColumn)
         // iOS: never carry Ascending back onto Best Match (worst match first).
         if (filters.sort.sortColumn != null) {

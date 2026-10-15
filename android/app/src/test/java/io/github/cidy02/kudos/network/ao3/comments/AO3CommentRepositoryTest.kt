@@ -17,6 +17,22 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class AO3CommentRepositoryTest {
+    @Test fun hiddenCommentNoticeIsCapturedBeforeSendingEvenFromChapterScope() = runTest {
+        val html = writeResource("ao3/comments/comments_basic.html")
+            .replace("<form id=\"new_comment\"", "<div id='add_comment_placeholder'><form id=\"comment_for_123\"")
+            .replace("</form>", "<p class='notice'>Comments are moderated.</p></form></div>")
+        val client = FakeAuthenticatedClient(listOf(success(html)), listOf(success("<p>Maintenance</p>")))
+        var hidden = false
+        val result = AO3CommentRepository(FakePublicClient(success(html)), client)
+            .submitComment(AO3CommentTarget.Chapter(123, 77), "body") {
+                assertTrue(client.posts.isEmpty())
+                hidden = it
+            }
+        assertTrue(hidden)
+        assertTrue(result is AO3Result.Failure)
+        assertEquals(1, client.posts.size)
+    }
+
     @Test
     fun a200PageWithoutTheCommentsListIsAParseErrorNotAnEmptyPage() = runTest {
         val missingLists = listOf(
