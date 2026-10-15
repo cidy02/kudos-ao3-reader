@@ -1899,3 +1899,6 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   (3ej, A50 F4 to F6).** It stops in the background; a bare byline name is no longer read as
   an account (narrows 3b: iOS never does); a stale cached page is not an answer. Reverse: the
   commit that names 3ej.
+- **2026-10-15 · A50 F2 and F3 fixed; F7 left open (3ek).** The subscribe button waits for the
+  page to reload; a cleared history stays cleared on every page. Reverse: the commit that
+  names 3ek.

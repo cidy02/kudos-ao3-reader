@@ -164,7 +164,9 @@ fun AccountWorksListScreen(
     var confirmClearHistory by remember { mutableStateOf(false) }
     // The page AO3 confirmed it cleared. The list is emptied here, as on iOS, without a
     // second read; a page loaded afterwards is a different object and shows what AO3 has.
-    var clearedPage by remember { mutableStateOf<Any?>(null) }
+    // Cleared on AO3, so every page of it is empty: not just the page on screen when Clear was
+    // confirmed, which left a page opened meanwhile showing what was cleared (A50 F3).
+    var historyCleared by remember { mutableStateOf(false) }
     val clearScope = rememberCoroutineScope()
     var showingFilters by remember(type) { mutableStateOf(false) }
     var filters by remember(type) { mutableStateOf(AO3SearchFilters()) }
@@ -218,7 +220,7 @@ fun AccountWorksListScreen(
     val works = remember(refinedWorks, settings.privacy, reveal) {
         visibleEntries(refinedWorks, settings.privacy, reveal)
     }
-    val hasWorks = authState.isSignedIn && pageWorks.isNotEmpty() && clearedPage !== loaded?.page &&
+    val hasWorks = authState.isSignedIn && pageWorks.isNotEmpty() && !historyCleared &&
         (type != AccountListType.Subscriptions || subscriptionsScope == "works")
     val hasNewChapters = type == AccountListType.Subscriptions && works.any {
         SubscriptionWatermarks.newChapterCount(it.remote, subscriptionWatermarks) > 0
@@ -232,8 +234,7 @@ fun AccountWorksListScreen(
         confirmBeforeDelete = true,
         onConfirm = {
             confirmClearHistory = false
-            val page = loaded?.page
-            clearScope.launch { unsubscribeState.confirmClearHistory { clearedPage = page } }
+            clearScope.launch { unsubscribeState.confirmClearHistory { historyCleared = true } }
         },
         onDismissRequest = { confirmClearHistory = false }
     )
@@ -416,7 +417,7 @@ fun AccountWorksListScreen(
                     }
                 }
                 is AccountListUiState.Loaded -> {
-                    if ((current.canonicalWorks.isEmpty() && current.page.works.isEmpty()) || clearedPage === current.page) {
+                    if ((current.canonicalWorks.isEmpty() && current.page.works.isEmpty()) || historyCleared) {
                         Box(modifier = Modifier.padding(SubjectMetrics.accountGutter)) {
                             EmptyStateCard(
                                 title = type.emptyTitle,
