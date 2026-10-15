@@ -9,6 +9,18 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
 import io.github.cidy02.kudos.ui.subject.SubjectPalette
+import io.github.cidy02.kudos.core.model.SavedWork
+
+/** PreservedWorkService.deleteConfirmationMessage, including a batch's last AO3 copy. */
+fun workDeletionMessage(works: List<SavedWork>): String {
+    val subject = if (works.size == 1) "This work" else "At least one selected work"
+    return if (works.any { it.ao3Unavailable }) {
+        "$subject is no longer available on AO3. If you don't restore it within 90 days, " +
+            "Kudos will permanently remove this copy, and you can't download it from AO3 again."
+    } else {
+        "Works move to Recently Deleted. You can restore them for the next 90 days."
+    }
+}
 
 @Composable
 fun DestructiveConfirmation(

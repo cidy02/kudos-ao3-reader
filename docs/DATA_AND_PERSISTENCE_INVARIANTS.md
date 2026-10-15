@@ -44,7 +44,7 @@ Rules that protect user data. Breaking any of these is a regression even if test
 
 ## Queues / collections / library behavior
 
-- Removing a work from a queue is non-destructive; queue-only works auto-soft-delete (not hard) when leaving their last queue unsaved/unfavorited.
+- Removing a queue membership alone is non-destructive. Explicit remove-and-delete-if-queue-only actions soft-delete (not hard-delete) unsaved/unfavorited works when they leave their last queue.
 - Soft-deleted works keep memberships/collection links (restore re-joins) but are **filtered at render time** everywhere (`isPendingDeletion` exclusions in every list `@Query` + relationship-derived listings).
 - Queue-preserved EPUBs (`epubPreservationStatus`) are protected from history-clearing paths.
 

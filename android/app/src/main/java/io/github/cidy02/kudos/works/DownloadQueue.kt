@@ -206,8 +206,7 @@ class DownloadQueue(
             ?: AO3URLResolver.canonicalWorkUrl(item.ao3WorkId)
         val existing = WorkIdentityIndex.findExisting(
             candidateSourceUrl = source,
-            byId = { workRepository.getWork(it) },
-            bySourceUrl = { workRepository.findBySourceUrl(it) }
+            loadWorks = workRepository::listWorksForIdentity
         )
         if (existing != null) {
             return workImporter.downloadExisting(existing)
@@ -233,8 +232,7 @@ class DownloadQueue(
             ?: AO3URLResolver.canonicalWorkUrl(item.ao3WorkId)
         val existing = WorkIdentityIndex.findExisting(
             candidateSourceUrl = source,
-            byId = { workRepository.getWork(it) },
-            bySourceUrl = { workRepository.findBySourceUrl(it) }
+            loadWorks = workRepository::listWorksForIdentity
         )
         if (existing == null) return false
         if (existing.isDeleted) {

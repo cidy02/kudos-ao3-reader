@@ -38,6 +38,27 @@ class ReadingLogServiceTest {
         database.close()
     }
 
+    /** ReadingLogTests.markVisitedUpdatesExistingWatermark. */
+    @Test
+    fun markVisitedUpdatesExistingWatermark() = runTest {
+        val newest = SavedWork(title = "Newest in Fandom", author = "A", ao3WorkID = 99)
+        val dao = database.readingLogDao()
+        io.github.cidy02.kudos.browse.FandomVisits.markVisited(dao, "The Untamed (TV)", now, newest)
+        val first = dao.getAllWatermarks().single()
+        advance(60)
+        io.github.cidy02.kudos.browse.FandomVisits.markVisited(dao, "The Untamed (TV)", now, newest)
+        val row = dao.getAllWatermarks().single()
+        assertEquals(first.id, row.id)
+        assertEquals("The Untamed (TV)", row.fandomName)
+        assertEquals(99, row.newestWorkIDSeen)
+        assertEquals("Newest in Fandom", row.newestWorkTitleSeen)
+        assertEquals(now, row.lastVisitedAt)
+        // A visit with no newest snapshot (the Browse entry path on both platforms) keeps it.
+        advance(60)
+        io.github.cidy02.kudos.browse.FandomVisits.markVisited(dao, "The Untamed (TV)", now)
+        assertEquals(99, dao.getAllWatermarks().single().newestWorkIDSeen)
+    }
+
     @Test
     fun startThenEndPersistsAllIosFields() = runTest {
         val started = work()

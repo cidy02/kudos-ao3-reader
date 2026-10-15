@@ -163,19 +163,21 @@ class WorkImporter(
     }
 
     suspend fun downloadExisting(work: SavedWork): WorkImportResult {
-        val workId = WorkTags.ao3WorkIdFromUrl(work.sourceUrl)
-            ?: return WorkImportResult.Failure(work, AO3Error.Validation("No AO3 work id found for this work."))
+        val resolved = workRepository.resolveLocalWork(work.id)
+            ?: return WorkImportResult.Failure(null, AO3Error.Validation("This local work no longer exists."))
+        val workId = WorkIdentityIndex.ao3WorkId(resolved)
+            ?: return WorkImportResult.Failure(resolved, AO3Error.Validation("No AO3 work id found for this work."))
 
         return when (val download = downloader.download(workId)) {
             is AO3Result.Failure -> {
                 if (download.error is AO3Error.NotFound) {
-                    val updated = workRepository.upsert(work.copy(ao3Unavailable = true, lastAvailabilityCheck = Instant.now(), lastModifiedAt = Instant.now()))
+                    val updated = workRepository.upsert(resolved.copy(ao3Unavailable = true, lastAvailabilityCheck = Instant.now(), lastModifiedAt = Instant.now()))
                     WorkImportResult.Failure(updated, download.error)
                 } else {
-                    WorkImportResult.Failure(work, download.error)
+                    WorkImportResult.Failure(resolved, download.error)
                 }
             }
-            is AO3Result.Success -> persistDownloadedEpub(work, download.value)
+            is AO3Result.Success -> persistDownloadedEpub(resolved, download.value)
         }
     }
 
@@ -252,13 +254,16 @@ class WorkImporter(
             lastModifiedAt = workRepository.currentInstant()
         )
         if (epubMetadata != null) {
-            val existing = WorkIdentityIndex.findExisting(
-                candidateSourceUrl = epubMetadata.sourceUrl,
-                byId = { workRepository.getWork(it) },
-                bySourceUrl = { workRepository.findBySourceUrl(it) }
+            val existing = WorkIdentityIndex.findImportedEpub(
+                sourceUrl = epubMetadata.sourceUrl,
+                title = epubMetadata.title,
+                author = epubMetadata.author,
+                sourceSize = finalBytes.size.toLong(),
+                loadWorks = workRepository::listWorksForIdentity,
+                epubSize = fileStore::workEpubSize
             )
             if (existing != null) {
-                if (!existing.hasEpub) {
+                if (!existing.hasEpub || !fileStore.workEpubExists(existing.id)) {
                     when (val write = fileStore.writeWorkEpub(existing.id, finalBytes)) {
                         is FileWriteResult.Failure -> return WorkImportResult.Failure(
                             existing,
@@ -397,8 +402,7 @@ class WorkImporter(
     private suspend fun findExisting(summary: AO3WorkSummary): SavedWork? {
         return WorkIdentityIndex.findExisting(
             candidateSourceUrl = summary.workUrl,
-            byId = { workRepository.getWork(it) },
-            bySourceUrl = { workRepository.findBySourceUrl(it) }
+            loadWorks = workRepository::listWorksForIdentity
         )
     }
 

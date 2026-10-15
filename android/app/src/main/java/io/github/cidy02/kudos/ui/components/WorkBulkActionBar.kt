@@ -195,7 +195,7 @@ fun WorkBulkActionBar(
     DestructiveConfirmation(
         show = confirmDelete,
         title = if (selectedWorks.size == 1) "Remove 1 work?" else "Remove ${selectedWorks.size} works?",
-        text = "Selected works move to Recently Deleted for 90 days.",
+        text = workDeletionMessage(selectedWorks),
         confirmText = "Remove",
         confirmBeforeDelete = true,
         onConfirm = {

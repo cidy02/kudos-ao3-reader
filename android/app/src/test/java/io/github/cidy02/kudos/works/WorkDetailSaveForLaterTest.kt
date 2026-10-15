@@ -52,6 +52,7 @@ class WorkDetailSaveForLaterTest {
     @get:Rule val folder = TemporaryFolder()
     private lateinit var database: KudosDatabase
     private lateinit var queues: ReadingQueueRepository
+    private lateinit var works: WorkRepository
     private lateinit var anchor: SavedWork
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private val storeScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -64,7 +65,7 @@ class WorkDetailSaveForLaterTest {
         val context = ApplicationProvider.getApplicationContext<Context>()
         database = Room.inMemoryDatabaseBuilder(context, KudosDatabase::class.java).allowMainThreadQueries().build()
         val files = WorkFileStore(Paths.get(folder.root.absolutePath, "works"))
-        val works = WorkRepository(database, files)
+        works = WorkRepository(database, files)
         queues = ReadingQueueRepository(database, epubOnDisk = files::workEpubExists,
             enqueueDownloads = { throw AssertionError("Series used background queue") })
         val html = fixture(if (seriesId == 999) "ao3_demo_series" else "ao3_demo_series_two_pages_1")
@@ -130,6 +131,22 @@ class WorkDetailSaveForLaterTest {
         open(true, 25, hasSeries = false); save(); await("Saved for Later.")
         compose.onNodeWithText("Preserve Series?").assertDoesNotExist()
         assertEquals(listOf(anchor.id), members().map { it.work!!.id })
+        assertTrue(reads.isEmpty())
+    }
+
+    @Test fun existingLocalDetailRevivesBeforeSavingForLater() {
+        open(true, 25, hasSeries = false)
+        compose.waitUntil(15_000) { compose.onAllNodesWithContentDescription("More actions").fetchSemanticsNodes().isNotEmpty() }
+        // The view is still bound to the old live snapshot while another action deletes it.
+        runBlocking { works.softDelete(anchor.id) }
+        save()
+        await("Saved for Later.")
+        val revived = runBlocking { works.getWork(anchor.id)!! }
+        assertFalse(revived.isDeleted)
+        assertNull(revived.deletedAt)
+        assertNull(revived.permanentDeletionScheduledAt)
+        assertEquals(listOf(anchor.id), members().map { it.work!!.id })
+        assertTrue(runBlocking { database.syncTombstoneDao().getByRecord(anchor.id, "savedWork").isEmpty() })
         assertTrue(reads.isEmpty())
     }
     @Test fun settingOffPromptsAndOnlyThisWorkKeepsJustTheAnchor() {

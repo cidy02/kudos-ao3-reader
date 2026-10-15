@@ -121,6 +121,8 @@ class ReadingQueueRepositoryTest {
         val queue = repository.ensureSavedForLaterQueue()
         repository.addWork(queue.id, kept.id)
         repository.addWork(queue.id, softDeleted.id)
+        // Add is an acquisition and revives; this fixture tests a deletion made afterwards.
+        database.workDao().upsert(softDeleted.toEntity())
 
         assertEquals(listOf("Kept"), repository.listWorks(queue.id).map { it.title })
     }
@@ -183,16 +185,17 @@ class ReadingQueueRepositoryTest {
         val queue = repository.ensureSavedForLaterQueue()
         repository.addWork(queue.id, notSavedWork.id)
 
-        repository.removeWork(queue.id, notSavedWork.id)
+        repository.removeWorkAndDeleteIfQueueOnly(queue.id, notSavedWork.id)
         val updatedUnsaved = database.workDao().getById(notSavedWork.id)!!.toDomain()
         assertFalse(updatedUnsaved.isQueuedForLater)
         assertTrue("queue-only work loses its only queue -> soft-deleted", updatedUnsaved.isDeleted)
+        assertEquals(1, database.syncTombstoneDao().getByRecord(notSavedWork.id, "savedWork").size)
 
         val savedWork = savedWork("work-saved", title = "Saved").copy(isSaved = true, isQueuedForLater = false)
         database.workDao().upsert(savedWork.toEntity())
         repository.addWork(queue.id, savedWork.id)
 
-        repository.removeWork(queue.id, savedWork.id)
+        repository.removeWorkAndDeleteIfQueueOnly(queue.id, savedWork.id)
         val updatedSaved = database.workDao().getById(savedWork.id)!!.toDomain()
         assertFalse(updatedSaved.isQueuedForLater)
         assertTrue("an explicitly-saved work is never deleted just for losing a queue", updatedSaved.isSaved)
@@ -207,7 +210,7 @@ class ReadingQueueRepositoryTest {
         val queue = repository.ensureSavedForLaterQueue()
         repository.addWork(queue.id, favoritedWork.id)
 
-        repository.removeWork(queue.id, favoritedWork.id)
+        repository.removeWorkAndDeleteIfQueueOnly(queue.id, favoritedWork.id)
 
         val updated = database.workDao().getById(favoritedWork.id)!!.toDomain()
         assertFalse(updated.isQueuedForLater)
@@ -229,10 +232,183 @@ class ReadingQueueRepositoryTest {
         assertTrue("still queued via the second membership", afterFirstRemoval.isQueuedForLater)
         assertFalse("not deleted while still in another queue", afterFirstRemoval.isDeleted)
 
-        repository.removeWork(custom.id, work.id)
+        repository.removeWorkAndDeleteIfQueueOnly(custom.id, work.id)
         val afterLastRemoval = database.workDao().getById(work.id)!!.toDomain()
         assertFalse(afterLastRemoval.isQueuedForLater)
         assertTrue("last queue membership dropped for a queue-only work -> soft-deleted", afterLastRemoval.isDeleted)
+    }
+
+    /** ReadingQueueTests.removeLastQueueMembershipDoesNotDeleteWorkByDefault. */
+    @Test
+    fun removeLastQueueMembershipDoesNotDeleteWorkByDefault() = runTest {
+        val work = savedWork("queue-only", "Reading copy").copy(
+            isSaved = false, hasEpub = true, readiumLocator = "kept place"
+        )
+        val repo = ReadingQueueRepository(database, clock = { now }, epubOnDisk = { it == work.id })
+        database.workDao().upsert(work.toEntity())
+        val queue = repo.createQueue("Reading")
+        val membership = repo.addWork(queue.id, work.id)
+        now = fixedNow.plusSeconds(30)
+        repo.removeWork(queue.id, work.id)
+        val remaining = database.workDao().getById(work.id)!!
+        assertFalse(remaining.isDeleted)
+        assertFalse(remaining.isQueuedForLater)
+        assertNull(remaining.deletedAt)
+        assertNull(remaining.permanentDeletionScheduledAt)
+        assertTrue(remaining.hasEpub)
+        assertEquals("kept place", remaining.readiumLocator)
+        assertEquals("notPreserved", remaining.epubPreservationStatusRaw)
+        assertNull(remaining.preservedAt)
+        assertEquals(now, remaining.lastModifiedAt)
+        assertTrue(database.readingQueueDao().getMembershipsForWork(work.id).isEmpty())
+        assertEquals(1, database.syncTombstoneDao().getByRecord(membership.id, "readingQueueMembership").size)
+        assertTrue(database.syncTombstoneDao().getByRecord(work.id, "savedWork").isEmpty())
+    }
+
+    /** PreservedWorkTests.addToSavedForLaterRevivesRecentlyDeletedWork, including repeat add. */
+    @Test
+    fun addToSavedForLaterRevivesRecentlyDeletedWork() = runTest {
+        val work = savedWork("deleted-work", "Requeued").copy(
+            isDeleted = true, deletedAt = fixedNow,
+            permanentDeletionScheduledAt = fixedNow.plusSeconds(1), hasEpub = false
+        )
+        database.workDao().upsert(work.toEntity())
+        database.syncTombstoneDao().upsert(io.github.cidy02.kudos.core.model.SyncTombstone(
+            recordID = work.id, recordTypeRaw = "savedWork"
+        ).toEntity())
+        val membership = repository.addToSavedForLater(work.id, enqueueMissingEpub = false)
+        var revived = database.workDao().getById(work.id)!!
+        assertFalse(revived.isDeleted)
+        assertNull(revived.deletedAt)
+        assertNull(revived.permanentDeletionScheduledAt)
+        assertTrue(revived.isQueuedForLater)
+        assertFalse(revived.hasEpub)
+        assertTrue(database.syncTombstoneDao().getByRecord(work.id, "savedWork").isEmpty())
+
+        // A soft-delete preserves the membership, so the duplicate-add fast path must revive too.
+        database.workDao().upsert(revived.copy(isDeleted = true, deletedAt = fixedNow,
+            permanentDeletionScheduledAt = fixedNow.plusSeconds(1)))
+        database.syncTombstoneDao().upsert(io.github.cidy02.kudos.core.model.SyncTombstone(
+            recordID = work.id, recordTypeRaw = "savedWork"
+        ).toEntity())
+        val repeated = repository.addToSavedForLater(work.id, enqueueMissingEpub = false)
+        revived = database.workDao().getById(work.id)!!
+        assertEquals(membership.id, repeated.id)
+        assertFalse(revived.isDeleted)
+        assertNull(revived.permanentDeletionScheduledAt)
+        assertTrue(database.syncTombstoneDao().getByRecord(work.id, "savedWork").isEmpty())
+        assertEquals(1, database.workDao().getAllIncludingDeleted().size)
+    }
+
+    /** ReadingQueueTests.normalizeClearsStaleQueueFlagWithoutMembership. */
+    @Test
+    fun normalizeClearsStaleQueueFlagWithoutMembership() = runTest {
+        val work = savedWork("stale", "Stale").copy(isQueuedForLater = true,
+            epubPreservationStatusRaw = "preserved", preservedAt = fixedNow, lastModifiedAt = fixedNow)
+        database.workDao().upsert(work.toEntity())
+        now = fixedNow.plusSeconds(30)
+        repository.normalizeAllQueuedWorks()
+        val normalized = database.workDao().getById(work.id)!!
+        assertFalse(normalized.isQueuedForLater)
+        assertEquals("notPreserved", normalized.epubPreservationStatusRaw)
+        assertNull(normalized.preservedAt)
+        assertEquals(fixedNow, normalized.lastModifiedAt)
+        assertTrue(database.readingQueueDao().getAllMemberships().isEmpty())
+        assertFalse(normalized.isDeleted)
+    }
+
+    /** ReadingQueueTests.queuedWorkKeepsEPUBWhenMarkedFinished / removeLastQueueMembershipRecomputesQueueFlag. */
+    @Test
+    fun addingAndRemovingMembershipReconcilesPreservationStatus() = runTest {
+        val onDisk = mutableSetOf("present")
+        val repo = ReadingQueueRepository(database, clock = { now }, epubOnDisk = { it in onDisk })
+        val queue = repo.createQueue("Keep", keepsWorksOffline = false)
+        for (id in listOf("present", "missing")) {
+            database.workDao().upsert(savedWork(id, id).copy(hasEpub = id == "present").toEntity())
+            repo.addWork(queue.id, id)
+        }
+        assertEquals("preserved", database.workDao().getById("present")!!.epubPreservationStatusRaw)
+        assertEquals(now, database.workDao().getById("present")!!.preservedAt)
+        assertEquals("queued", database.workDao().getById("missing")!!.epubPreservationStatusRaw)
+        onDisk.clear()
+        repo.addWork(queue.id, "present") // duplicate add normalizes a file lost meanwhile
+        assertEquals("missingFile", database.workDao().getById("present")!!.epubPreservationStatusRaw)
+        assertFalse(database.workDao().getById("present")!!.hasEpub)
+        repo.removeWork(queue.id, "present")
+        assertEquals("notPreserved", database.workDao().getById("present")!!.epubPreservationStatusRaw)
+        assertNull(database.workDao().getById("present")!!.preservedAt)
+    }
+
+    /** PreservedWorkTests.sweepExpiredHardDeletingAQueueTombstonesMembershipsAndUpdatesWork. */
+    @Test
+    fun sweepExpiredHardDeletingAQueueTombstonesMembershipsAndUpdatesWork() = runTest {
+        val work = savedWork("queue-work", "Work").copy(isSaved = false)
+        database.workDao().upsert(work.toEntity())
+        val queue = repository.createQueue("Expired")
+        val membership = repository.addWork(queue.id, work.id)
+        repository.deleteQueue(queue.id)
+        // A recoverable queue still holds its memberships.
+        repository.normalizeAllQueuedWorks()
+        assertTrue(database.workDao().getById(work.id)!!.isQueuedForLater)
+        now = fixedNow.plus(io.github.cidy02.kudos.works.WorkRepository.RECOVERY_WINDOW).plusSeconds(1)
+        assertEquals(1, repository.sweepExpiredQueueSoftDeletes())
+        assertNull(database.readingQueueDao().getQueueById(queue.id))
+        assertTrue(database.readingQueueDao().getMembershipsForWork(work.id).isEmpty())
+        val remaining = database.workDao().getById(work.id)!!
+        assertFalse(remaining.isQueuedForLater)
+        assertFalse(remaining.isDeleted)
+        assertEquals("notPreserved", remaining.epubPreservationStatusRaw)
+        assertEquals(now, remaining.lastModifiedAt)
+        assertEquals(1, database.syncTombstoneDao().getByRecord(membership.id, "readingQueueMembership").size)
+        assertEquals(1, database.syncTombstoneDao().getByRecord(queue.id, "readingQueue").size)
+    }
+
+    @Test
+    fun hardDeletingOneQueueKeepsOtherMembershipAndStaleConfirmationKeepsRestoredQueue() = runTest {
+        val work = savedWork("shared", "Shared")
+        database.workDao().upsert(work.toEntity())
+        val first = repository.createQueue("First")
+        val second = repository.createQueue("Second")
+        repository.addWork(first.id, work.id)
+        repository.addWork(second.id, work.id)
+        repository.deleteQueue(first.id)
+        repository.restoreQueueFromRecentlyDeleted(first.id)
+        repository.hardDeleteQueue(first.id, onlyIfStillDeleted = true)
+        assertEquals(2, database.readingQueueDao().getMembershipsForWork(work.id).size)
+        repository.deleteQueue(first.id)
+        repository.hardDeleteQueue(first.id, onlyIfStillDeleted = true)
+        assertTrue(database.workDao().getById(work.id)!!.isQueuedForLater)
+        assertEquals(second.id, database.readingQueueDao().getMembershipsForWork(work.id).single().queueID)
+    }
+
+    /** ReadingQueueTests.collidingTagRenameCollapsesTheTwoTags. */
+    @Test
+    fun collidingTagRenameCollapsesTheTwoTags() = runTest {
+        val first = savedWork("first", "First")
+        val second = savedWork("second", "Second")
+        database.workDao().upsert(first.toEntity())
+        database.workDao().upsert(second.toEntity())
+        val firstQueue = repository.createQueue("Q", tagNames = listOf("slow burn"))
+        val otherQueue = repository.createQueue("Other", tagNames = listOf("slow burn", "fluff"))
+        val from = database.tagDao().getByName("slow burn")!!
+        val into = database.tagDao().getByName("fluff")!!
+        database.tagDao().addToWork(WorkTagCrossRef(first.id, from.id))
+        database.tagDao().addToWork(WorkTagCrossRef(second.id, into.id))
+        now = now.plusSeconds(1)
+        repository.renameUserTag(from.id, "fluff")
+        assertEquals(listOf("fluff"), database.tagDao().getAll().map { it.name })
+        assertEquals(listOf(into.id), database.tagDao().getTagsForWork(first.id).map { it.id })
+        assertEquals(listOf(into.id), database.tagDao().getTagsForWork(second.id).map { it.id })
+        assertEquals(listOf("fluff"), repository.tagsForQueue(firstQueue.id).map { it.name })
+        assertEquals(listOf("fluff"), repository.tagsForQueue(otherQueue.id).map { it.name })
+        assertEquals(now, database.workDao().getById(first.id)!!.lastModifiedAt)
+        assertTrue(database.workDao().getById(first.id)!!.searchText.contains("fluff"))
+
+        repository.replaceQueueTags(firstQueue.id, listOf("Angst", "hurt"))
+        val hurt = database.tagDao().getByName("hurt")!!
+        repository.renameUserTag(hurt.id, "angst")
+        assertEquals(setOf("Angst", "angst", "fluff"), database.tagDao().getAll().map { it.name }.toSet())
+        assertEquals(setOf("Angst", "angst"), repository.tagsForQueue(firstQueue.id).map { it.name }.toSet())
     }
 
     @Test
@@ -410,6 +586,8 @@ class ReadingQueueRepositoryTest {
         assertTrue(database.tagDao().getTagsForWork(member.id).isEmpty())
         repository.renameUserTag(comfort.id, "Slow Burn")
         assertEquals("Slow Burn", repository.allTags().first { it.id == comfort.id }.name)
+        assertTrue(database.tagDao().getTagsForWork(outsider.id).any { it.id == comfort.id })
+        assertTrue(repository.tagsForQueue(other.id).any { it.id == comfort.id && it.name == "Slow Burn" })
     }
 
     @Test
@@ -468,7 +646,7 @@ class ReadingQueueRepositoryTest {
         repo.addWork(loose.id, flagged.id)
         repo.addWork(loose.id, local.id)
         repo.addWork(loose.id, deleted.id)
-        assertEquals(setOf(33L), enqueued.map { it.ao3WorkId }.toSet())
+        assertEquals(setOf(33L, 44L), enqueued.map { it.ao3WorkId }.toSet())
 
         val queuedBeforeOff = enqueued.toList()
         assertFalse(
@@ -480,7 +658,7 @@ class ReadingQueueRepositoryTest {
         assertEquals(queuedBeforeOff, enqueued)
         assertTrue(present.id in onDisk)
         assertTrue(database.workDao().getById(present.id)!!.hasEpub)
-        assertTrue(database.workDao().getById(flagged.id)!!.hasEpub)
+        assertFalse("queue add reconciles a missing file", database.workDao().getById(flagged.id)!!.hasEpub)
         assertFalse(database.workDao().getById(missing.id)!!.isDeleted)
 
         enqueued.clear()

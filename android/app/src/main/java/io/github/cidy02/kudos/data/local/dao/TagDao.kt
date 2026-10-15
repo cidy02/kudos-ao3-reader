@@ -55,4 +55,16 @@ interface TagDao {
 
     @Query("DELETE FROM work_tag_cross_refs WHERE workId = :workId AND tagId = :tagId")
     suspend fun removeFromWork(workId: String, tagId: String)
+
+    @Query("SELECT workId FROM work_tag_cross_refs WHERE tagId = :tagId")
+    suspend fun getWorkIdsForTag(tagId: String): List<String>
+
+    @Query("SELECT queueId FROM queue_tag_cross_refs WHERE tagId = :tagId")
+    suspend fun getQueueIdsForTag(tagId: String): List<String>
+
+    @Query("UPDATE user_tags SET name = :name WHERE id = :tagId")
+    suspend fun rename(tagId: String, name: String)
+
+    @Query("DELETE FROM user_tags WHERE id = :tagId")
+    suspend fun deleteById(tagId: String)
 }

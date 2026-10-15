@@ -1,5 +1,7 @@
 package io.github.cidy02.kudos.library
 
+import io.github.cidy02.kudos.ui.components.workDeletionMessage
+
 import io.github.cidy02.kudos.works.finishedActionLabel
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
@@ -374,7 +376,7 @@ fun LibraryScreen(
     DestructiveConfirmation(
         show = confirmBulkRemove,
         title = if (state.selectedCount == 1) "Delete 1 work?" else "Delete ${state.selectedCount} works?",
-        text = "Selected works move to Recently Deleted for 90 days.",
+        text = workDeletionMessage(state.collectionMembers.filter { it.item.work.id in state.selectedWorkIds }.map { it.item.work }),
         confirmText = "Delete",
         confirmBeforeDelete = state.confirmBeforeDelete,
         onConfirm = {
@@ -415,7 +417,7 @@ fun LibraryScreen(
     DestructiveConfirmation(
         show = confirmRemoveOne != null,
         title = "Delete this work?",
-        text = "This work moves to Recently Deleted for 90 days.",
+        text = workDeletionMessage(listOfNotNull(state.collectionMembers.firstOrNull { it.item.work.id == confirmRemoveOne }?.item?.work)),
         confirmText = "Delete",
         confirmBeforeDelete = state.confirmBeforeDelete,
         onConfirm = {
@@ -1049,6 +1051,7 @@ internal fun LibrarySubjectLedgerRow(
                 work = work,
                 showsZeroStats = showsZeroStats,
                 mutedHistory = abandoned,
+                ledger = kind.defaultsToLedgerRows,
                 onOpenWork = {
                     if (work.hasEpub) actions.onOpenReader(work.id) else actions.onOpenWork(work.id)
                 },
