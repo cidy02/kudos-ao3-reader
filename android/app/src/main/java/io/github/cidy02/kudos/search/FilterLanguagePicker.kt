@@ -48,9 +48,9 @@ internal fun matchingFilterLanguages(query: String): List<AO3Language> {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun FilterLanguageRow(selection: AO3Language, onChange: (AO3Language) -> Unit) {
+internal fun FilterLanguageRow(selection: AO3Language, value: String = selection.title, onChange: (AO3Language) -> Unit) {
     var picking by remember { mutableStateOf(false) }
-    SubjectFormRow("Language", value = selection.title, showsDisclosure = true, valueMaxLines = 3,
+    SubjectFormRow("Language", value = value, showsDisclosure = true, valueMaxLines = 3,
         onClick = { picking = true })
     if (picking) {
         val tokens = LocalKudosTokens.current
@@ -77,11 +77,12 @@ internal fun FilterLanguageRow(selection: AO3Language, onChange: (AO3Language) -
                 LazyColumn(Modifier.fillMaxWidth().heightIn(max = 520.dp).subjectPanel()) {
                     itemsIndexed(matches, key = { _, language -> language.name }) { index, language ->
                         if (index > 0) SubjectRowSeparator()
+                        val isSelected = language == selection && value == selection.title
                         SubjectFormRow(language.title,
-                            modifier = Modifier.semantics { selected = language == selection },
+                            modifier = Modifier.semantics { selected = isSelected },
                             onClick = { onChange(language) },
                             trailing = {
-                                if (language == selection) Icon(Icons.Outlined.Check, null, tint = tokens.accent)
+                                if (isSelected) Icon(Icons.Outlined.Check, null, tint = tokens.accent)
                             })
                     }
                 }

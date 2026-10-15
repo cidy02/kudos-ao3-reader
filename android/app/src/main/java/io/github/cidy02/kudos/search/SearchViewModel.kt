@@ -137,7 +137,7 @@ class SearchViewModel(
      * to run them as a new search (audit A20-3, the same on iOS).
      */
     fun discardFilterEdits() {
-        if (_state.value !is SearchUiState.Results) return
+        if (_state.value is SearchUiState.Idle) return
         _filters.value = lastFilters.copy(query = _filters.value.query)
     }
 

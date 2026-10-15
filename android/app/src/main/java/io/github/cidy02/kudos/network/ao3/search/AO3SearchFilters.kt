@@ -2,6 +2,8 @@ package io.github.cidy02.kudos.network.ao3.search
 
 import java.time.LocalDate
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 
 data class AO3SearchFilters(
     val query: String = "",
@@ -44,6 +46,17 @@ data class AO3SearchFilters(
     /** Imported values not representable by these controls; retained across ordinary copy edits. */
     val preservedFilterValues: Map<String, PreservedSearchFilterValue> = emptyMap()
 ) {
+    /** A future language from an imported search still constrains the live request. */
+    val languageId: String?
+        get() = language.code ?: preservedFilterValues["language"]?.raw?.let { raw ->
+            val id = if (raw is JsonObject) raw["id"] else raw
+            (id as? JsonPrimitive)?.takeIf { it.isString }?.content?.takeIf { it.isNotBlank() && it != "any" }
+        }
+
+    val languageTitle: String get() = if (language == AO3Language.ANY) languageId ?: language.title else language.title
+
+    fun withLanguage(value: AO3Language) = copy(language = value, preservedFilterValues = preservedFilterValues - "language")
+
     /** A sort with its natural direction, as the filter sheet and iOS's header menus set it (A49 F13). */
     fun withSort(sort: AO3SearchSort): AO3SearchFilters = copy(sort = sort, sortDirection = sort.naturalDirection)
 

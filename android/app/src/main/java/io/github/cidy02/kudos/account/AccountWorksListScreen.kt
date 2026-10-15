@@ -448,7 +448,8 @@ fun AccountWorksListScreen(
                                         expandAll = expandAll,
                                         palette = palette,
                                         onLoadPage = viewModel::load,
-                                        onOpenWork = onOpenWork
+                                        onOpenWork = onOpenWork,
+                                        writer = unsubscribeState
                                     )
                                 }
                                 AccountListType.Bookmarks -> {
@@ -529,6 +530,7 @@ private fun MarkedForLaterBrowser(
     expandAll: Boolean,
     palette: SubjectPalette,
     onLoadPage: (Int) -> Unit,
+    writer: SubscriptionUnsubscribeState,
     onOpenWork: (AO3WorkSummary) -> Unit
 ) {
     val context = LocalContext.current
@@ -544,8 +546,22 @@ private fun MarkedForLaterBrowser(
         )
     }
 
+    val writeScope = rememberCoroutineScope()
+    val busy by writer.busyPath.collectAsState()
+    val writeError by writer.error.collectAsState()
+    if (writeError != null) AlertDialog(
+        onDismissRequest = writer::dismissError,
+        title = { Text("Couldn't unmark") },
+        text = { Text(writeError.orEmpty()) },
+        confirmButton = { TextButton(onClick = writer::dismissError) { Text("OK") } }
+    )
     var filter by remember { mutableStateOf("all") }
-    var unmarkedIds by remember { mutableStateOf(setOf<Long>()) }
+    var unmarkedIds by remember(writer) { mutableStateOf(setOf<Long>()) }
+    val unmark: (Long) -> Unit = { workId ->
+        if (busy == null) writeScope.launch {
+            writer.unmarkForLater(workId) { unmarkedIds = unmarkedIds + workId }
+        }
+    }
 
     val activeWorks = remember(works, unmarkedIds) {
         works.filter { it.remote.id !in unmarkedIds }
@@ -638,7 +654,7 @@ private fun MarkedForLaterBrowser(
                     expandAll = expandAll,
                     palette = palette,
                     onOpenWork = onOpenWork,
-                    onUnmark = { unmarkedIds = unmarkedIds + work.remote.id }
+                    onUnmark = { unmark(work.remote.id) }
                 )
             }
 
@@ -654,7 +670,7 @@ private fun MarkedForLaterBrowser(
                         expandAll = expandAll,
                         palette = palette,
                         onOpenWork = onOpenWork,
-                        onUnmark = { unmarkedIds = unmarkedIds + work.remote.id }
+                        onUnmark = { unmark(work.remote.id) }
                     )
                 }
             }
@@ -670,7 +686,7 @@ private fun MarkedForLaterBrowser(
                     expandAll = expandAll,
                     palette = palette,
                     onOpenWork = onOpenWork,
-                    onUnmark = { unmarkedIds = unmarkedIds + work.remote.id }
+                    onUnmark = { unmark(work.remote.id) }
                 )
             }
         }

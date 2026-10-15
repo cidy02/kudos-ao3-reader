@@ -1990,3 +1990,14 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   not the hidden "0" AO3 writes before it (a private bookmark read as public, and an edit saved
   it public). The posting pseud is read from a hidden input first, as iOS's
   `parseDefaultPseudID`. Tests port iOS's on its own fixture. Reverse: the commit that names 3ff.
+- **2026-10-15 · A55's write and request faults fixed (3fg; Codex, reviewed and gated by
+  Claude).** Marked for Later's Unmark really unmarks on AO3 (a fenced token read, one
+  `mark_as_read` PATCH-override POST, the row removed only on AO3's notice; it was only hidden on
+  screen while the page said it was removed on AO3). A comment cannot go twice: admission is
+  synchronous, and a lost answer is verified (never reposted on its own) across reopening, as
+  iOS's `CommentSubmissionTests`. An unnamed session's drafts move to the verified account; a
+  post clears only its own chapter's drafts. Challenge schedules are not re-sent without a
+  timezone; a saved search keeps an unknown language's ID; closing filters during the first
+  load drops unapplied edits; the URL resolver (no live caller) takes iOS's trust rules. One
+  of Codex's tests set its fake AO3's answer too early (the form read got the maintenance page
+  and nothing posted); Claude moved the switch to the POST. Reverse: the commit that names 3fg.

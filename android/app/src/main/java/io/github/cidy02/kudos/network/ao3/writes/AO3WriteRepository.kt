@@ -1263,6 +1263,18 @@ class AO3WriteRepository(
         }
     }
 
+    /** The tap's session, a fresh work-page token, and one Rails PATCH override. */
+    suspend fun unmarkForLater(workId: Long, expectedGeneration: Int?): AO3Result<AO3WriteOutcome> {
+        if (client.sessionGeneration() != expectedGeneration) throw CancellationException()
+        if (client.username() == null) return AO3Result.Failure(AO3Error.AuthenticationRequired)
+        if (workId <= 0) return AO3Result.Failure(AO3Error.BadRequest)
+        val referer = AO3WriteUrls.workUrl(workId)
+        return indexWrite(expectedGeneration, referer, "${referer.substringBefore('?')}/mark_as_read", AO3WriteActionKind.MarkForLater,
+            "Unmarked.", "Couldn't unmark for later.") { token ->
+            listOf("_method" to "patch", "authenticity_token" to token)
+        }
+    }
+
     suspend fun markForLater(workId: Long): AO3Result<AO3WriteOutcome> {
         val workUrl = AO3WriteUrls.workUrl(workId)
         val html = when (val page = client.getAuthenticated(workUrl)) {

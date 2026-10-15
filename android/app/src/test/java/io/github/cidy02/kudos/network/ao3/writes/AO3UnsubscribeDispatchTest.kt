@@ -46,6 +46,33 @@ class AO3UnsubscribeDispatchTest {
         assertEquals(listOf("GET"), requests)
     }
 
+    @Test fun unmarkSessionChangeInsideSharedPacingWaitPreventsPostDispatch() = runTest {
+        val auth = AO3AuthRepository(MemorySessionStore(testSession()), MemoryCookieStore())
+        auth.restoreSession()
+        val requests = java.util.concurrent.CopyOnWriteArrayList<String>()
+        // Terminal application interceptor: no chain.proceed and no sockets, even on a bug.
+        val http = OkHttpClient.Builder().addInterceptor { chain ->
+            requests.add(chain.request().method)
+            Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1)
+                .code(200).message("OK")
+                .body("<meta name='csrf-token' content='fresh'>".toResponseBody()).build()
+        }.build()
+        val config = AO3NetworkConfig(minDelayBetweenRequestsMillis = 600)
+        var paced = false
+        val coordinator = AO3RequestCoordinator(config, AO3Clock { 0 }, AO3Delay {
+            paced = true
+            auth.logout()
+        })
+        val client = OkHttpAO3Client(http, config, coordinator)
+        val repository = AO3WriteRepository(DefaultAO3AuthenticatedClient(client, client, auth))
+        try {
+            repository.unmarkForLater(42, auth.generation.value)
+            fail("Stale queued write must be cancelled")
+        } catch (_: CancellationException) { }
+        assertTrue(paced)
+        assertEquals(listOf("GET"), requests)
+    }
+
     /**
      * Audit A17-3: the plain authenticated POST (comments, kudos, bookmark, subscribe, Inbox,
      * preferences) copied the cookie and then waited its turn with no further check, so a

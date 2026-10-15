@@ -120,7 +120,8 @@ class KudosAppContainer(
         AO3AuthRepository(
             sessionStore = EncryptedFileAO3SessionStore(appContext),
             cookieStore = AndroidAO3CookieStore(),
-            sessionValidator = LiveAO3SessionValidator(client = ao3Client)
+            sessionValidator = LiveAO3SessionValidator(client = ao3Client),
+            commentDraftStore = commentDraftStore
         )
     }
     val collectionDetailRepository: io.github.cidy02.kudos.account.AO3CollectionDetailRepository by lazy {

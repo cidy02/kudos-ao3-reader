@@ -1,5 +1,7 @@
 package io.github.cidy02.kudos.search
 
+import okhttp3.HttpUrl.Companion.toHttpUrl
+
 import io.github.cidy02.kudos.network.ao3.search.AO3ChapterCount
 import io.github.cidy02.kudos.network.ao3.search.AO3SortDirection
 import io.github.cidy02.kudos.network.ao3.search.AO3Category
@@ -27,6 +29,22 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class SearchFiltersCodecTest {
+    @Test fun languageDecodesEveryShapeAndUnknownIdStillReachesAO3() {
+        for (language in listOf("\"zzz\"", "{\"id\":\"zzz\",\"title\":\"Future\"}", "{\"id\":\"zzz\"}")) {
+            val filters = SearchFiltersCodec.decode("{\"language\":$language}")
+            assertEquals("zzz", filters.languageId)
+            assertEquals("zzz", filters.languageTitle)
+            assertTrue(summaryLabels(filters).any { it.text == "zzz" })
+            val url = io.github.cidy02.kudos.network.ao3.search.AO3SearchUrlBuilder().buildSearchUrl(filters, 1)
+            assertEquals("zzz", url.toHttpUrl().queryParameter("work_search[language_id]"))
+            assertEquals("zzz", SearchFiltersCodec.decode(SearchFiltersCodec.encode(filters.copy(query = "edited"))).languageId)
+            assertEquals(null, filters.withLanguage(io.github.cidy02.kudos.network.ao3.search.AO3Language.ANY).languageId)
+        }
+        for (language in listOf("\"fr\"", "{\"id\":\"fr\",\"title\":\"Stale Name\"}", "{\"id\":\"fr\"}")) {
+            assertEquals("fr", SearchFiltersCodec.decode("{\"language\":$language}").languageId)
+        }
+    }
+
     @Test
     fun roundTripsFullFilterSet() {
         val original = AO3SearchFilters(
