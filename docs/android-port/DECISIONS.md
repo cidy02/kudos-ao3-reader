@@ -1920,3 +1920,5 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   chip row on the plain Works list. Reverse: the commit that names 3eq.
 - **2026-10-15 · Challenges compared with iOS (3er).** The same; Challenge Settings' footnote
   has iOS's whole sentence again. Reverse: the commit that names 3er.
+- **2026-10-15 · Tag set and prompt meme compared with iOS (3es).** The same; a prompt's tags
+  are a caption line, not a chip. Reverse: the commit that names 3es.
