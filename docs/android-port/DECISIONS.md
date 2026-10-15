@@ -1913,3 +1913,6 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
 - **2026-10-15 · The page cache after writes, as iOS (3eo, A37 F1, F2, F4).** A removal stops
   only reads of the pages it removed; an own-work write forgets the writer's pages; a series
   write forgets the series and its creator's lists. Reverse: the commit that names 3eo.
+- **2026-10-15 · A37 F8, F9, F11, F12 fixed (3ep).** Assignments write only from cleanly read
+  lists and ask for the due date again on Refresh; a series keeps its page when the next fails;
+  the own author page's menus take the app's colours. Reverse: the commit that names 3ep.

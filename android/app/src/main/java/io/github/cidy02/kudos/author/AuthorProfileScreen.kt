@@ -457,55 +457,58 @@ fun AuthorProfileScreen(
                 ) {
                     Icon(Icons.Default.MoreVert, contentDescription = null)
                 }
-                DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+                DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false },
+                    // The app's card colour and ink, as its other menus: Material's own fell through
+                    // in OLED (A37 F12).
+                    containerColor = tokens.cardFill) {
                     if (!isDashboard && !ownWorks && tab == AuthorTab.Works && !works?.works.isNullOrEmpty()) {
                         DropdownMenuItem(text = { Text("Select Works", color = tokens.primaryInk, lineHeight = 22.sp) },
                             onClick = { showMenu = false; selection.enter() })
                     }
                     if (isDashboard) {
                         DropdownMenuItem(
-                            text = { Text("My Works") },
+                            text = { Text("My Works", color = tokens.primaryInk, lineHeight = 22.sp) },
                             onClick = { showMenu = false; onOpenDashboardList?.invoke(AccountListType.MyWorks) }
                         )
                         DropdownMenuItem(
-                            text = { Text("My Collections") },
+                            text = { Text("My Collections", color = tokens.primaryInk, lineHeight = 22.sp) },
                             onClick = { showMenu = false; onOpenAO3Collections?.invoke() }
                         )
                         DropdownMenuItem(
-                            text = { Text("My Bookmarks") },
+                            text = { Text("My Bookmarks", color = tokens.primaryInk, lineHeight = 22.sp) },
                             onClick = { showMenu = false; onOpenDashboardList?.invoke(AccountListType.Bookmarks) }
                         )
                         DropdownMenuItem(
-                            text = { Text("My Subscriptions") },
+                            text = { Text("My Subscriptions", color = tokens.primaryInk, lineHeight = 22.sp) },
                             onClick = { showMenu = false; onOpenDashboardList?.invoke(AccountListType.Subscriptions) }
                         )
                         DropdownMenuItem(
-                            text = { Text("Marked for Later") },
+                            text = { Text("Marked for Later", color = tokens.primaryInk, lineHeight = 22.sp) },
                             onClick = { showMenu = false; onOpenDashboardList?.invoke(AccountListType.MarkedForLater) }
                         )
                         DropdownMenuItem(
-                            text = { Text("My History") },
+                            text = { Text("My History", color = tokens.primaryInk, lineHeight = 22.sp) },
                             onClick = { showMenu = false; onOpenDashboardList?.invoke(AccountListType.History) }
                         )
                         HorizontalDivider()
                     }
                     DropdownMenuItem(
-                        text = { Text("Ledger Mode") },
+                        text = { Text("Ledger Mode", color = tokens.primaryInk, lineHeight = 22.sp) },
                         onClick = { displayMode = AuthorDisplayMode.Ledger; showMenu = false }
                     )
                     DropdownMenuItem(
-                        text = { Text("Detailed Mode") },
+                        text = { Text("Detailed Mode", color = tokens.primaryInk, lineHeight = 22.sp) },
                         onClick = { displayMode = AuthorDisplayMode.Detailed; showMenu = false }
                     )
                     HorizontalDivider()
                     DropdownMenuItem(
-                        text = { Text("Open on AO3") },
+                        text = { Text("Open on AO3", color = tokens.primaryInk, lineHeight = 22.sp) },
                         onClick = { showMenu = false; onOpenWeb(AO3AuthorUrls.userProfileUrl(route.username) ?: "") }
                     )
                     // iOS `ShareLink(item: route.dashboardURL)`: the pseud's page when one is chosen.
                     AO3AuthorUrls.userDashboardUrl(route.username, route.pseud)?.let { profileUrl ->
                         DropdownMenuItem(
-                            text = { Text("Share Profile") },
+                            text = { Text("Share Profile", color = tokens.primaryInk, lineHeight = 22.sp) },
                             onClick = {
                                 showMenu = false
                                 val send = android.content.Intent(android.content.Intent.ACTION_SEND)
@@ -907,7 +910,7 @@ fun AuthorProfileScreen(
                                             Box {
                                                 ToolbarCircleButton(onClick = { menu = true }, accessibilityName = "Actions for ${s.title}",
                                                     palette = palette) { Icon(Icons.Default.MoreVert, null) }
-                                                DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                                                DropdownMenu(expanded = menu, onDismissRequest = { menu = false }, containerColor = tokens.cardFill) {
                                                     DropdownMenuItem(text = { Text("Edit", color = tokens.primaryInk, lineHeight = 20.sp) },
                                                         onClick = { menu = false; editingSeries = s to false })
                                                     DropdownMenuItem(text = { Text("Reorder", color = tokens.primaryInk, lineHeight = 20.sp) },
