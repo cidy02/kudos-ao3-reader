@@ -1916,3 +1916,5 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
 - **2026-10-15 · A37 F8, F9, F11, F12 fixed (3ep).** Assignments write only from cleanly read
   lists and ask for the due date again on Refresh; a series keeps its page when the next fails;
   the own author page's menus take the app's colours. Reverse: the commit that names 3ep.
+- **2026-10-15 · An author's Works can be narrowed to one fandom, as iOS (3eq).** The Fandom
+  chip row on the plain Works list. Reverse: the commit that names 3eq.

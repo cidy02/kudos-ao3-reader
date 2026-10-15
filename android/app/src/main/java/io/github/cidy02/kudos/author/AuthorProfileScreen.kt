@@ -124,6 +124,10 @@ fun AuthorProfileScreen(
     var tabError by remember { mutableStateOf<String?>(null) }
     
     var scopeState by remember { mutableStateOf(AO3AuthorWorksScope.Works) }
+    // iOS `AO3AuthorFandomFilterSection`: one of the author's fandoms, from the list AO3 prints
+    // beside the plain works list. Android read that list and never offered it.
+    var selectedFandom by remember(route.id, sessionGeneration) {
+        mutableStateOf<io.github.cidy02.kudos.network.ao3.author.AO3AuthorFandom?>(null) }
     // iOS `authorProfile.displayMode`: the ledger first, and the choice kept. It opened on
     // the detailed card and forgot.
     var displayMode by rememberStoredChoice("authorProfile.displayMode", AuthorDisplayMode.Ledger)
@@ -195,6 +199,7 @@ fun AuthorProfileScreen(
         val expectedRoute = route
         val expectedScope = scopeState
         val expectedSort = worksSort
+        val expectedFandom = selectedFandom.takeIf { expectedScope == AO3AuthorWorksScope.Works }
         val expectedSession = sessionGeneration
         val generation = ++loadGeneration
         tabTask?.cancel()
@@ -205,11 +210,14 @@ fun AuthorProfileScreen(
         tabTask = scope.launch {
             fun current(): Boolean = generation == loadGeneration && route == expectedRoute &&
                 sessionGeneration == expectedSession && tab == target && page == pageNum &&
-                (target != AuthorTab.Works || (scopeState == expectedScope && worksSort == expectedSort))
+                (target != AuthorTab.Works || (scopeState == expectedScope && worksSort == expectedSort &&
+                    selectedFandom.takeIf { expectedScope == AO3AuthorWorksScope.Works } == expectedFandom))
             try {
                 when (target) {
                     AuthorTab.Works -> {
-                        val r = authorRepository.loadWorks(expectedRoute, pageNum, expectedScope, expectedSort, bypassCache)
+                        val r = if (expectedFandom != null)
+                            authorRepository.loadFandomWorks(expectedFandom, pageNum, expectedSort, bypassCache)
+                        else authorRepository.loadWorks(expectedRoute, pageNum, expectedScope, expectedSort, bypassCache)
                         currentCoroutineContext().ensureActive()
                         if (!current()) return@launch
                         when (r) {
@@ -661,6 +669,7 @@ fun AuthorProfileScreen(
                                     // The plain list only: under "In collections", or narrowed to
                                     // complete works, AO3's count is of a different list.
                                     tab == AuthorTab.Works && scopeState == AO3AuthorWorksScope.Works && route.pseud == null &&
+                                        selectedFandom == null &&
                                         worksSort.completion == io.github.cidy02.kudos.network.ao3.author.AO3AuthorWorksCompletion.Any ->
                                         ownWorksLine(route.displayName, works?.summary?.total, stats)
                                     else -> route.displayName
@@ -847,6 +856,30 @@ fun AuthorProfileScreen(
                                                 if (scopeState != scopeVal) { scopeState = scopeVal; loadTab(tab, 1) }
                                             }
                                         )
+                                    }
+                                }
+                            }
+                            // Only over the plain list: AO3 offers the facet there alone, and "In
+                            // collections" and Gifts would show fandoms that do not describe them.
+                            val fandoms = header?.fandoms.orEmpty()
+                            if (scopeState == AO3AuthorWorksScope.Works && fandoms.isNotEmpty()) item {
+                                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    SectionRuleHeader("Fandom")
+                                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        item {
+                                            SubjectChip(text = "All", style = SubjectChipStyle.Pill(selectedFandom == null),
+                                                modifier = Modifier.clickable {
+                                                    if (selectedFandom != null) { selection.exit(); selectedFandom = null; loadTab(tab, 1) }
+                                                })
+                                        }
+                                        items(fandoms, key = { it.url }) { fandom ->
+                                            val count = fandom.workCount?.let { " (${it.compactCount()})" }.orEmpty()
+                                            SubjectChip(text = io.github.cidy02.kudos.browse.FandomDisplayName.bareTitle(fandom.name) + count,
+                                                style = SubjectChipStyle.Pill(selectedFandom == fandom),
+                                                modifier = Modifier.clickable {
+                                                    if (selectedFandom != fandom) { selection.exit(); selectedFandom = fandom; loadTab(tab, 1) }
+                                                })
+                                        }
                                     }
                                 }
                             }
