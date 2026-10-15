@@ -330,7 +330,8 @@ internal fun FavoriteAffinityList(state: LibraryUiState, onScope: (FavoriteScope
             state.error != null -> item { ErrorStateCard("Favorites", state.error, Modifier.padding(horizontal = 16.dp)) }
             rows.isEmpty() -> item {
                 FavoriteAffinityEmptyCard(scope, hiddenByFilter = allRows.isNotEmpty(),
-                    Modifier.padding(horizontal = 16.dp, vertical = 14.dp))
+                    Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+                    someUnchecked = scope == FavoriteScope.Authors && allRows.any { it.username == null })
             }
             else -> {
                 item { SectionRuleHeader(scope.title, count = rows.size, modifier = Modifier.padding(top = 18.dp)) }
@@ -346,7 +347,9 @@ internal fun FavoriteAffinityList(state: LibraryUiState, onScope: (FavoriteScope
 }
 
 @Composable
-internal fun FavoriteAffinityEmptyCard(scope: FavoriteScope, hiddenByFilter: Boolean, modifier: Modifier = Modifier) {
+internal fun FavoriteAffinityEmptyCard(scope: FavoriteScope, hiddenByFilter: Boolean, modifier: Modifier = Modifier,
+    /** Some authors have no AO3 account Kudos knows, so "With new work" could not ask about them. */
+    someUnchecked: Boolean = false) {
     val tokens = LocalKudosTokens.current
     // Two chips can hide rows, Tags' "Unread works" and Authors' "With new work": a sentence each.
     val hiddenByUnread = hiddenByFilter && scope == FavoriteScope.Tags
@@ -356,7 +359,9 @@ internal fun FavoriteAffinityEmptyCard(scope: FavoriteScope, hiddenByFilter: Boo
         Text(if (hiddenByUnread) "No unread works" else if (hiddenByFilter) "No new work" else "Nothing read yet",
             fontSize = 15.sp, lineHeight = 20.sp, fontWeight = FontWeight.SemiBold, color = tokens.primaryInk)
         Text(if (hiddenByUnread) "Every work in your library under these tags has been opened. Tap All to see them again."
-            else if (hiddenByFilter) "None of these $noun has posted something you have not already read. Tap All to see them again."
+            // Authors with no known account were never asked: the sentence says only what was (A51 F6).
+            else if (hiddenByFilter) (if (someUnchecked) "None of the $noun Kudos could check on AO3 has posted something you have not already read. "
+                else "None of these $noun has posted something you have not already read. ") + "Tap All to see them again."
             else "These $noun come from works you have read and are ranked by your reading. You don't need to favorite them first.",
             fontSize = 12.5.sp, lineHeight = 18.sp, color = tokens.secondaryInk)
     }

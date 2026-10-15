@@ -1927,3 +1927,5 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
 - **2026-10-15 · A51 fixed: writes are one-shot to OkHttp; comment delete at the comment;
   and four screen-state fixes (3ev).** F3 not a fault (disclosed); F4 and F6 left. Reverse:
   the commit that names 3ev.
+- **2026-10-15 · "No new work" names only the authors Kudos could check (3ew, T-410; A51 F6).**
+  Both apps. Reverse: the commits that name 3ew and T-410.
