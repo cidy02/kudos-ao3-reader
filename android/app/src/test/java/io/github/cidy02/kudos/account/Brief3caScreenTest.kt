@@ -19,7 +19,6 @@ import androidx.test.core.app.ApplicationProvider
 import io.github.cidy02.kudos.app.*
 import io.github.cidy02.kudos.auth.*
 import io.github.cidy02.kudos.author.AuthorProfileScreen
-import io.github.cidy02.kudos.browse.TagWorksScreen
 import io.github.cidy02.kudos.browse.FandomWorksScreen
 import io.github.cidy02.kudos.network.ao3.browse.AO3BrowseRepository
 import io.github.cidy02.kudos.comments.*
@@ -150,46 +149,33 @@ class Brief3caScreenTest {
         }
     }
 
-    @Test fun row6EmptyTagDistinguishesFiltersAndClearResetsWithOneExplicitRead() {
+    @Test fun row6EmptyTagDistinguishesFiltersAndClearResetsWithOneExplicitRead() = emptyWorksPage(isTag = true)
+
+    // The tag's works page is the fandom's (3eb), worded for each; both pairs and the reset.
+    @Test fun row6EmptyFandomDistinguishesFiltersAndClearResets() = emptyWorksPage(isTag = false)
+
+    private fun emptyWorksPage(isTag: Boolean) {
         client.emptyWorks = true
-        var fandom by mutableStateOf(false)
-        show {
-            if (fandom) FandomWorksScreen("Test fandom", works, {}, repository = AO3BrowseRepository(client))
-            else TagWorksScreen("Test tag", works, {}, repository = AO3SearchRepository(client, writer()))
-        }
-        awaitText("AO3 has no works for this tag right now.")
+        val noun = if (isTag) "tag" else "fandom"
+        val narrowedText = if (isTag) "No works with this tag match your filters." else "No works in this fandom match your filters."
+        show { FandomWorksScreen("Test $noun", works, {}, repository = AO3BrowseRepository(client), isTag = isTag) }
+        awaitText("AO3 has no works for this $noun right now.")
         compose.onNodeWithText("Clear Filters").assertDoesNotExist()
         assertEquals(1, client.gets.size)
-        compose.onNodeWithContentDescription("Filters").performClick()
-        compose.onNodeWithTag("AO3 filter form").performScrollToNode(hasText("Completion"))
-        compose.onNodeWithText("Completion").performClick()
-        compose.onNodeWithText("Complete").performClick()
-        assertEquals(1, client.gets.size)
-        compose.onNodeWithContentDescription("Apply filters").performClick()
-        awaitText("No works with this tag match your filters.")
-        compose.onNodeWithText("No matching works").assertExists()
-        noClipping("No works with this tag match your filters.")
-        assertEquals(2, client.gets.size)
-        assertEquals("T", client.gets.last().toHttpUrl().queryParameter("work_search[complete]"))
-        compose.onNodeWithText("Clear Filters").performClick()
-        awaitText("AO3 has no works for this tag right now.")
-        assertEquals(3, client.gets.size)
-        assertNull(client.gets.last().toHttpUrl().queryParameter("work_search[complete]"))
-        // Fandom already matches iOS; guard that unchanged sibling's pair and reset too.
-        compose.runOnIdle { fandom = true }
-        awaitText("AO3 has no works for this fandom right now.")
-        assertEquals(4, client.gets.size)
         compose.onNodeWithContentDescription("Filter").performClick()
         compose.onNodeWithTag("AO3 filter form").performScrollToNode(hasText("Completion"))
         compose.onNodeWithText("Completion").performClick()
         compose.onNodeWithText("Complete").performClick()
+        assertEquals(1, client.gets.size)
         compose.onNodeWithContentDescription("Apply filters").performClick()
-        awaitText("No works in this fandom match your filters.")
-        noClipping("No works in this fandom match your filters.")
-        assertEquals(5, client.gets.size)
+        awaitText(narrowedText)
+        compose.onNodeWithText("No matching works").assertExists()
+        noClipping(narrowedText)
+        assertEquals(2, client.gets.size)
+        assertEquals("T", client.gets.last().toHttpUrl().queryParameter("work_search[complete]"))
         compose.onNodeWithText("Clear Filters").performClick()
-        awaitText("AO3 has no works for this fandom right now.")
-        assertEquals(6, client.gets.size)
+        awaitText("AO3 has no works for this $noun right now.")
+        assertEquals(3, client.gets.size)
         assertNull(client.gets.last().toHttpUrl().queryParameter("work_search[complete]"))
         assertTrue(client.posts.isEmpty())
     }
