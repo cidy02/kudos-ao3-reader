@@ -230,7 +230,9 @@ class AO3TagSetWritesTest {
         for ((reply, reason) in listOf(response(422, "<div class='flash error'>Locked for review.</div>") to "Locked for review.",
             response(200, "") to unconfirmed,
             AO3Result.Failure(AO3Error.RateLimited(null)) to "AO3 is rate-limiting requests. Wait a moment and try again.",
-            AO3Result.Failure(AO3Error.Network("drop", IOException("drop"))) to "Couldn't reach AO3. Check your connection and try again.")) {
+            // The POST went: its lost answer may have landed (A37 F10), not "try again".
+            AO3Result.Failure(AO3Error.Network("drop", IOException("drop"))) to
+                "AO3 didn't answer, so the change may have gone through. Check on AO3 before trying again.")) {
             val (auth, client, repo) = tagSetSetup()
             val model = AO3TagSetState(42, repo, tagSetWrites(client, auth))
             model.load()

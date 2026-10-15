@@ -29,6 +29,8 @@ object AO3CollectionFields {
     val multilineParameters = profileParameters + DESCRIPTION
     const val INVALID_NAME = "That URL name isn't valid on AO3. Use letters, numbers, and underscores, and don't start or end with an underscore."
     const val UNCONFIRMED = "AO3 replied but didn't confirm the change went through. Check on AO3 before trying again."
+    /** The connection went after the write was sent: it may have landed (A37 F10). */
+    const val NO_ANSWER = "AO3 didn't answer, so the change may have gone through. Check on AO3 before trying again."
     const val DELETE_MESSAGE = "This removes the collection, its challenge settings and any gift assignments from AO3. " +
         "The works stay with their creators. Unrevealed works become visible, and anonymous works show their creators. " +
         "Type the collection name to confirm."

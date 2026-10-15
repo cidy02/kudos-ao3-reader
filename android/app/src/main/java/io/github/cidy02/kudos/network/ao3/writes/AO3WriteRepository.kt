@@ -854,7 +854,10 @@ class AO3WriteRepository(
     }
 
     private fun collectionWriteVerdict(response: AO3Result<AO3HttpResponse>, fallback: String): AO3Result<Unit> = when (response) {
-        is AO3Result.Failure -> response
+        // Only after a POST: a lost answer is not "try again" (it read "AO3 took too long to
+        // answer. Try again.", and a second tap sent the same claim again; A37 F10).
+        is AO3Result.Failure -> if (response.error is AO3Error.Network)
+            AO3Result.Failure(AO3Error.Validation(AO3CollectionFields.NO_ANSWER)) else response
         is AO3Result.Success -> {
             val error = parser.writeErrorMessage(response.value.body)
             when {
