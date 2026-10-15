@@ -1,12 +1,12 @@
-# A49: review what Claude landed alone on Android, 3dh to 3dw (2026-10-12 to 10-14)
+# A49: review what Claude landed alone on Android, 3dh to 3ec (2026-10-12 to 10-14)
 
 **Read-only.** Change no source file. Do not build, commit, push, switch branches, sign in or
 contact archiveofourown.org. Write exactly one file, in this worktree:
 `docs/android-port/audits/A49-result.md`. **Leave no other file behind.** Do not edit `TASKS.md`.
 
-Read the Android code as it stands on `android/redesign-parity` at `cce20bf1` (in
+Read the Android code as it stands on `android/redesign-parity` at `0b679d91` (in
 `~/kudos-android-lane`, read-only; your own worktree may be behind it). Each change has a note
-in `docs/android-port/briefs/` named after it (3dh … 3dw). iOS, where a change copies it, is
+in `docs/android-port/briefs/` named after it (3dh … 3ec). iOS, where a change copies it, is
 `/Users/cidy02/kudos-ios-polish/kudos-ao3-reader/` (read-only).
 
 Every change below was written, built and looked at by one agent with no second reader. Find
@@ -25,27 +25,37 @@ Take them in this order and stop where you run out of time (say where):
    that leaves the player saying PLAYING with nothing playing, or reading two things at once?
    The controller now maps UNAVAILABLE to MODEL_NOT_DOWNLOADED only when the pack is missing:
    is there a state the reader can no longer leave?
-2. **3dj, an author's page** (`network/ao3/author/AO3AuthorIdentities.kt` `byline`,
+2. **3eb, links tapped in a work** (`reader/ReaderLinkHandler.kt`, `ReaderScreen.kt`'s
+   `onExternalLink`, `app/AppNavHost.kt`'s `onOpenAo3Link`). An AO3 author, work or tag link
+   now opens in the app. Can a link that is not AO3's be taken for one (a look-alike host,
+   `archiveofourown.org.evil.example`, a userinfo `@` trick, `http` versus `https`)? Can a
+   crafted tag or user name break the route it is put in (a "/" or "%" in it)?
+3. **3dy and 3dz, typed words kept** (`library/QueueSettingsScreen.kt`'s description written
+   as typed under a `Mutex`; `reader/ReaderNoteEditor.kt`'s `onKeep` from `onDispose`). Can
+   either write to the wrong queue or highlight, write after a delete, write twice, or lose
+   the last keystrokes? Does `onDispose` run on a rotation and save a half-typed note, and is
+   that harmful?
+4. **3dj, an author's page** (`network/ao3/author/AO3AuthorIdentities.kt` `byline`,
    `AO3AuthorParser.routeFromPath`, `ui/components/AO3RichText.kt`). The bio is a stranger's
    HTML: can anything in `AO3RichTextHtml.clean` let through a link that is not http or https,
    or an image or script? Does a tapped link outside AO3 open anything without the reader
    choosing to? Does the decoded pseud ever produce a doubly encoded or wrong address?
-3. **3do, author links** (`works/WorkDetailScreen.kt` `hasAccount`, `accountByline`). A name
+5. **3do, author links** (`works/WorkDetailScreen.kt` `hasAccount`, `accountByline`). A name
    is a link only with an AO3 account. Is there a case where the wrong account opens (two
    co-authors with the same display name, a pseud equal to another account's name)?
-4. **3dq, Browse and counts** (`browse/BrowseScreen.kt` `currentLibrary`,
+6. **3dq, Browse and counts** (`browse/BrowseScreen.kt` `currentLibrary`,
    `ui/subject/SubjectComponents.kt` `compactCount`). `compactCount` is used in about twenty
    places: any caller that relied on the old decimals (a value that now reads wrong, such as
    "1M" for 999,950 where a count must be exact)?
-5. **3dl, the Contents sheet** (`reader/ReaderContentsSheet.kt`,
+7. **3dl, the Contents sheet** (`reader/ReaderContentsSheet.kt`,
    `readium/ReadiumTocAdapter.startPercents`). Can `publication.positions()` be slow or fail
    on a large work in a way that blocks the reader?
-6. **3ds, removed code** (`account/AccountScreen.kt`). 476 lines were deleted as unused.
+8. **3ds and 3ec, removed code** (`account/AccountScreen.kt`, 476 lines; `browse/TagWorksScreen.kt`, 370) were deleted as unused.
    Anything still reached by reflection, a navigation string or a test?
-7. **3dw, Settings' header** (`settings/SettingsScreen.kt`). `hasSubjectHeader = true` for
+9. **3dw, Settings' header** (`settings/SettingsScreen.kt`). `hasSubjectHeader = true` for
    every page in Settings: is there a page there with no header of its own, which would now
    lose its back button or title?
-8. If time is left: 3dr (`settings/SettingsScreen.kt` font name; `author/AuthorProfileScreen.kt`
+10. If time is left: 3ea (`reader/ReaderContentText.speakableParagraphs`, Read Aloud's text), 3dr (`settings/SettingsScreen.kt` font name; `author/AuthorProfileScreen.kt`
    `isOwnProfile`), 3dt (`AO3AuthorAvatar`), 3dv (`browse/FandomWorksScreen.kt`).
 
 End with a short list: the findings worth fixing first, one line each.
