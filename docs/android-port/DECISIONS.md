@@ -1902,3 +1902,5 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
 - **2026-10-15 · A50 F2 and F3 fixed; F7 left open (3ek).** The subscribe button waits for the
   page to reload; a cleared history stays cleared on every page. Reverse: the commit that
   names 3ek.
+- **2026-10-15 · Edit multiple works reads each work's tags once (3em, A37 F5).** The changes
+  are merged into the form that is sent. Reverse: the commit that names 3em.

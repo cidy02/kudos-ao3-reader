@@ -46,8 +46,9 @@ class WritingBulkEditTest {
         val merged = changes.applying(current.copy(additionalTags = listOf("Maps", "maps", "remove me", "Own tag")))
         assertEquals(listOf("Maps", "Own tag", "Fluff"), merged.additionalTags)
         assertTrue(writes.bulkEditWorks(changes, 7) is AO3Result.Success)
-        assertEquals(listOf("GET https://archiveofourown.org/works/11/edit_tags", "GET https://archiveofourown.org/works/11/edit_tags",
-            "POST https://archiveofourown.org/works/11/update_tags", "GET https://archiveofourown.org/works/22/edit_tags", "GET https://archiveofourown.org/works/22/edit_tags",
+        // One read per work (A37 F5: two let an edit made elsewhere between them be undone).
+        assertEquals(listOf("GET https://archiveofourown.org/works/11/edit_tags",
+            "POST https://archiveofourown.org/works/11/update_tags", "GET https://archiveofourown.org/works/22/edit_tags",
             "POST https://archiveofourown.org/works/22/update_tags", "GET https://archiveofourown.org/works/11/edit", "POST https://archiveofourown.org/users/AO3_Reader/works/update_multiple"), client.requests)
         for ((index, post) in client.posts.take(2).withIndex()) {
             val id = client.ids[index]
@@ -62,7 +63,7 @@ class WritingBulkEditTest {
         client.clear(); client.refuseTagID = 11
         val failure = writes.bulkEditWorks(changes, 7) as AO3Result.Failure
         assertEquals(AO3Error.Validation("Refused 11"), failure.error)
-        assertEquals(3, client.requests.size); assertEquals(1, client.posts.size)
+        assertEquals(2, client.requests.size); assertEquals(1, client.posts.size) // one read, one refused POST
     }
 
     @Test fun formChoicesComeOnlyFromServedHtmlAndBlankChoicesAreNotInvented() {
@@ -146,17 +147,22 @@ class WritingBulkEditTest {
         client.postFailure = null; model.load(retry = true); assertNotNull(model.state.value.form)
     }
 
-    @Test fun secondTagReadSuppliesFreshTokenAndActionWhileFirstReadSuppliesMergedLists() = runBlocking<Unit> {
+    @Test fun theOneReadSuppliesTheTokenAndTheTagsTheChangesMergeInto() = runBlocking<Unit> {
+        // A37 F5: changes were applied to a first read and copied over a second, so a group
+        // edited elsewhere between the two (here, Relationships) was written back as it was.
         val client = BulkRecordingClient(listOf(11)); var reads = 0
         client.beforeGet = {
             reads++
-            client.readBody = client.tagPage(11).let { if (reads == 1) it else it.replace("demo-tags-11==", "fresh-second==") }
+            client.readBody = client.tagPage(11).replace("demo-tags-11==", "fresh-second==")
+                .replace("Mira &amp; Sol", "Edited Elsewhere")
         }
         val answer = AO3WriteRepository(client).bulkEditWorks(AO3BulkEditChanges(client.ids,
             added = mapOf("work[freeform_string]" to listOf("Fluff"))), 7)
-        assertTrue(answer is AO3Result.Success); assertEquals(2, reads); assertEquals(1, client.posts.size)
+        assertTrue(answer is AO3Result.Success); assertEquals(1, reads); assertEquals(1, client.posts.size)
+        val fields = client.posts.single().fields
         assertEquals("fresh-second==", client.posts.single().headers["X-CSRF-Token"])
-        assertEquals("fresh-second==", client.posts.single().fields.first { it.first == "authenticity_token" }.second)
+        assertEquals("fresh-second==", fields.first { it.first == "authenticity_token" }.second)
+        assertTrue(fields.first { it.first == "work[relationship_string]" }.second.startsWith("Edited Elsewhere"))
     }
 
     @Test fun defaultAuthenticatedClientAddsOnlyItsSessionCookieAndFencesBeforePost() = runBlocking<Unit> {
