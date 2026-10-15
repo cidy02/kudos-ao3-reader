@@ -569,6 +569,8 @@ struct AccountView: View {
             // (see Search's saved searches).
             if let notice = auth.noticeMessage {
                 Text(notice)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
                     .pageBodyRow(top: 8, gutter: SubjectMetrics.accountGutter)
             }
         }
