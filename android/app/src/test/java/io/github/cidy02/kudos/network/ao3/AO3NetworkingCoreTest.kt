@@ -313,7 +313,7 @@ class AO3ClientRetryTest {
             server.enqueue(MockResponse.Builder().code(200).body("ok").build())
             val config = AO3NetworkConfig(minDelayBetweenRequestsMillis = 0)
             val client = OkHttpAO3Client(OkHttpAO3Client.defaultOkHttpClient(config), config,
-                delay = RecordingDelay())
+                delay = RecordingDelay(), isAllowedUrl = { true })
             client.postForm(server.url("/works/1/kudos").toString(), listOf("a" to "1"), emptyMap())
             assertEquals(1, server.requestCount)
         }
@@ -327,7 +327,7 @@ class AO3ClientRetryTest {
             server.enqueue(MockResponse.Builder().code(200).body("ok").build())
             val config = AO3NetworkConfig(minDelayBetweenRequestsMillis = 0)
             val client = OkHttpAO3Client(OkHttpAO3Client.defaultOkHttpClient(config), config,
-                delay = RecordingDelay())
+                delay = RecordingDelay(), isAllowedUrl = { true })
             client.postForm(server.url("/works/1/kudos").toString(), listOf("a" to "1"), emptyMap())
             assertEquals(1, server.requestCount)
         }
@@ -444,7 +444,7 @@ class AO3ClientCoalescingTest {
             })
             coordinator.coordinate { Unit } // Reserve the first slot so this GET must wait.
             val coalescer = AO3RequestCoalescer<AO3RequestKey, AO3Result<AO3HttpResponse>>(this)
-            val client = OkHttpAO3Client(OkHttpClient(), config, coordinator, coalescer)
+            val client = OkHttpAO3Client(OkHttpClient(), config, coordinator, coalescer, isAllowedUrl = { true })
             val url = server.url("/works/1").toString()
             val first = async { client.get(url) }
             val second = async { client.get(url) }
@@ -481,7 +481,8 @@ class AO3ClientCoalescingTest {
                 delay = AO3Delay {
                     enteredBackoff.complete(Unit)
                     try { release.await() } finally { backoffStopped = true }
-                }
+                },
+                isAllowedUrl = { true }
             )
             val waiting = async { client.get(server.url("/works/1").toString()) }
             enteredBackoff.await()
@@ -518,7 +519,7 @@ class AO3ClientCoalescingTest {
             }.build()
             val client = OkHttpAO3Client(http,
                 AO3NetworkConfig(minDelayBetweenRequestsMillis = 0),
-                coalescer = AO3RequestCoalescer(this))
+                coalescer = AO3RequestCoalescer(this), isAllowedUrl = { true })
             val url = server.url("/users/Writer").toString()
             val cache = AO3PageCache()
             val key = AO3PageCache.Key(url, AO3PageCache.Scope(null, null), AO3PageCache.Kind.Dashboard)
@@ -669,7 +670,8 @@ private fun testClient(
         coordinator = AO3RequestCoordinator(config = config, delay = delay),
         coalescer = AO3RequestCoalescer(),
         retryPolicy = AO3RetryPolicy(config),
-        delay = delay
+        delay = delay,
+        isAllowedUrl = { true }
     )
 }
 

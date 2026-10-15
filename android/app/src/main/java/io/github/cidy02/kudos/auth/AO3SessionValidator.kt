@@ -89,10 +89,10 @@ class LiveAO3SessionValidator(
                 .filter { it.key.equals("Set-Cookie", ignoreCase = true) }
                 .flatMap { it.value }
                 .mapNotNull { line -> Cookie.parse(responseUrl, line) }
-                .filter { AO3StoredCookie.isAO3Domain(it.domain) }
+                .filter { AO3StoredCookie.isAO3Domain(it.domain) && it.name in AO3StoredCookie.IdentityCookieNames }
 
             if (setCookies.isEmpty()) {
-                return if (username == session.username) session else session.copy(username = username)
+                return session.identityOnly().copy(username = username)
             }
 
             val byKey = linkedMapOf<String, AO3StoredCookie>()

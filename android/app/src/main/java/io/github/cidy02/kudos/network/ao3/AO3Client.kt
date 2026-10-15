@@ -13,12 +13,14 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import okhttp3.Call
 import okhttp3.Callback
+import okhttp3.HttpUrl
+import okhttp3.HttpUrl.Companion.toHttpUrl
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
-import okhttp3.HttpUrl.Companion.toHttpUrl
 
 interface AO3Client {
     suspend fun get(
@@ -69,7 +71,8 @@ class OkHttpAO3Client(
     private val coalescer: AO3RequestCoalescer<AO3RequestKey, AO3Result<AO3HttpResponse>> =
         AO3RequestCoalescer(),
     private val retryPolicy: AO3RetryPolicy = AO3RetryPolicy(config),
-    private val delay: AO3Delay = CoroutineAO3Delay
+    private val delay: AO3Delay = CoroutineAO3Delay,
+    private val isAllowedUrl: (HttpUrl) -> Boolean = { AO3RedirectCookieRelay.isTrustedUrl(it) }
 ) : AO3Client, AO3FormPostClient {
     constructor(
         config: AO3NetworkConfig = AO3NetworkConfig()
@@ -112,6 +115,7 @@ class OkHttpAO3Client(
         url: String,
         headers: Map<String, String>
     ): AO3Result<AO3HttpResponse> {
+        rejectedUrl(url)?.let { return it }
         val key = try {
             AO3RequestKey.get(url, headers)
         } catch (error: IllegalArgumentException) {
@@ -131,6 +135,7 @@ class OkHttpAO3Client(
         url: String,
         headers: Map<String, String>
     ): AO3Result<AO3BinaryResponse> {
+        rejectedUrl(url)?.let { return it }
         val key = try {
             AO3RequestKey.get(url, headers)
         } catch (error: IllegalArgumentException) {
@@ -149,6 +154,7 @@ class OkHttpAO3Client(
         formFields: List<Pair<String, String>>,
         headers: Map<String, String>
     ): AO3Result<AO3HttpResponse> {
+        rejectedUrl(url)?.let { return it }
         val canonicalUrl = try {
             url.toHttpUrl().toString()
         } catch (error: IllegalArgumentException) {
@@ -168,10 +174,21 @@ class OkHttpAO3Client(
         formFields: List<Pair<String, String>>,
         headers: Map<String, String>,
         beforeSend: () -> Unit
-    ): AO3Result<AO3HttpResponse> = executeWithRetry(
-        AO3HttpMethod.POST, url.toHttpUrl().toString(), headers,
-        AO3FormEncoding.encode(formFields), beforeSend
-    )
+    ): AO3Result<AO3HttpResponse> {
+        rejectedUrl(url)?.let { return it }
+        return executeWithRetry(
+            AO3HttpMethod.POST, url.toHttpUrl().toString(), headers,
+            AO3FormEncoding.encode(formFields), beforeSend
+        )
+    }
+
+    // Check before coalescing, pacing, or constructing a call (including checked writes).
+    private fun rejectedUrl(url: String): AO3Result.Failure? {
+        val parsed = url.toHttpUrlOrNull()
+            ?: return AO3Result.Failure(AO3Error.Validation("Invalid AO3 URL: $url"))
+        return if (isAllowedUrl(parsed)) null
+        else AO3Result.Failure(AO3Error.Validation("Only HTTPS AO3 URLs are allowed."))
+    }
 
     private suspend fun executeWithRetry(
         method: AO3HttpMethod,

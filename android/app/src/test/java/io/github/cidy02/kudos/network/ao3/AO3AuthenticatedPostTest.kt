@@ -93,7 +93,8 @@ private fun postClient(delay: AO3Delay = PostRecordingDelay()): OkHttpAO3Client 
         coordinator = AO3RequestCoordinator(config = config, delay = delay),
         coalescer = AO3RequestCoalescer(),
         retryPolicy = AO3RetryPolicy(config),
-        delay = delay
+        delay = delay,
+        isAllowedUrl = { true }
     )
 }
 

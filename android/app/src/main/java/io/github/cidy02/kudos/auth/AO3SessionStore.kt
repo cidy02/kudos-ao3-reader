@@ -73,7 +73,7 @@ class EncryptedFileAO3SessionStore(
         if (!encryptedFile.exists()) return@withContext null
         try {
             val bytes = openEncrypted(forWrite = false).openFileInput().use { it.readBytes() }
-            json.decodeFromString(AO3Session.serializer(), bytes.toString(StandardCharsets.UTF_8))
+            json.decodeFromString(AO3Session.serializer(), bytes.toString(StandardCharsets.UTF_8)).identityOnly()
         } catch (_: IllegalArgumentException) {
             deleteBlocking()
             null
@@ -89,7 +89,7 @@ class EncryptedFileAO3SessionStore(
     override suspend fun save(session: AO3Session) = withContext(Dispatchers.IO) {
         dir.mkdirs()
         if (encryptedFile.exists()) encryptedFile.delete()
-        val payload = json.encodeToString(AO3Session.serializer(), session)
+        val payload = json.encodeToString(AO3Session.serializer(), session.identityOnly())
             .toByteArray(StandardCharsets.UTF_8)
         openEncrypted(forWrite = true).openFileOutput().use { out ->
             out.write(payload)
@@ -154,7 +154,7 @@ class EncryptedFileAO3SessionStore(
             // Inline save without dispatchers (already on IO).
             dir.mkdirs()
             if (encryptedFile.exists()) encryptedFile.delete()
-            val payload = json.encodeToString(AO3Session.serializer(), session)
+            val payload = json.encodeToString(AO3Session.serializer(), session.identityOnly())
                 .toByteArray(StandardCharsets.UTF_8)
             openEncrypted(forWrite = true).openFileOutput().use { it.write(payload) }
             legacyPlainFile.delete()
@@ -192,7 +192,7 @@ class FileAO3SessionStore(
     override suspend fun load(): AO3Session? = withContext(Dispatchers.IO) {
         if (!sessionFile.exists()) return@withContext null
         try {
-            json.decodeFromString(AO3Session.serializer(), sessionFile.readText())
+            json.decodeFromString(AO3Session.serializer(), sessionFile.readText()).identityOnly()
         } catch (error: IllegalArgumentException) {
             deleteBlocking()
             null
@@ -205,7 +205,7 @@ class FileAO3SessionStore(
     override suspend fun save(session: AO3Session) = withContext(Dispatchers.IO) {
         sessionFile.parentFile?.mkdirs()
         val temp = File(sessionFile.parentFile, "${sessionFile.name}.tmp")
-        temp.writeText(json.encodeToString(AO3Session.serializer(), session))
+        temp.writeText(json.encodeToString(AO3Session.serializer(), session.identityOnly()))
         if (!temp.renameTo(sessionFile)) {
             temp.copyTo(sessionFile, overwrite = true)
             temp.delete()

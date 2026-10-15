@@ -30,9 +30,16 @@ class AO3AccountParser(
         return when (type) {
             AccountListType.Bookmarks -> {
                 val searchPage = searchParser.parseWorksListPage(html, page, "li.bookmark.blurb")
-                val authorBookmarks = runCatching {
-                    io.github.cidy02.kudos.network.ao3.author.AO3AuthorParser().parseBookmarksPage(html, page).bookmarks
-                }.getOrDefault(emptyList())
+                val authorBookmarks = io.github.cidy02.kudos.network.ao3.author.AO3AuthorParser()
+                    .parseBookmarksPage(html, page).bookmarks
+                val blurbs = Jsoup.parse(html).select("li.bookmark.blurb")
+                // Series, external and deleted bookmarks may legitimately yield no works.
+                val hasWorkHeading = blurbs.any { blurb ->
+                    blurb.select("h4.heading a[href*=/works/]").any { workIdFromPath(it.attr("href")) != null }
+                }
+                if (hasWorkHeading && authorBookmarks.none { it.work != null }) {
+                    throw AO3AccountParseException.MissingRequiredStructure("AO3 work bookmarks could not be parsed.")
+                }
                 searchPage.copy(bookmarkDetails = authorBookmarks)
             }
             AccountListType.Subscriptions -> parseSubscriptionsPage(html, page)
