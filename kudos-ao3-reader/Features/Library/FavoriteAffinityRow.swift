@@ -333,6 +333,8 @@ struct FavoriteAffinityRow: View {
 struct FavoriteAffinityEmptyCard: View {
     let scope: LibrarySectionListView.FavoriteScope
     let hiddenByFilter: Bool
+    /// Some authors have no AO3 account Kudos knows, so "With new work" could not ask about them.
+    var someUnchecked = false
 
     @ScaledMetric(relativeTo: .headline) private var titleSize: CGFloat = 15
     @ScaledMetric(relativeTo: .footnote) private var detailSize: CGFloat = 12.5
@@ -366,7 +368,11 @@ struct FavoriteAffinityEmptyCard: View {
             return "Every work in your library under these tags has been opened. Tap All to see them again."
         }
         if hiddenByFilter {
-            return "None of these \(noun) has posted something you have not already read. "
+            // Authors with no AO3 account Kudos knows (Anonymous, a file from elsewhere, a work
+            // saved before accounts were kept) were never asked: the sentence says only what was.
+            return (someUnchecked
+                ? "None of the \(noun) Kudos could check on AO3 has posted something you have not already read. "
+                : "None of these \(noun) has posted something you have not already read. ")
                 + "Tap All to see them again."
         }
         return "These \(noun) come from works you have read and are ranked by your reading. "
