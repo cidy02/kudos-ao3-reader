@@ -60,10 +60,15 @@ class AO3ChapterFormParser {
         val controls = form?.let { AO3WorkFormParser().servedControls(doc, it) }.orEmpty()
         pane.select("form, .landmark, img").remove()
         val blocks = pane.select("h2.title, h3.title, .module > h3.heading, .userstuff").mapNotNull { element ->
+            if (element.text().isBlank()) return@mapNotNull null
             if (element.hasClass("userstuff")) AO3ChapterPreview.Block(AO3ChapterPreview.Kind.Html, element.html())
             else element.text().trim().takeIf(String::isNotEmpty)?.let {
                 AO3ChapterPreview.Block(if (element.hasClass("title")) AO3ChapterPreview.Kind.Heading else AO3ChapterPreview.Kind.Label, it)
             }
+        }.ifEmpty {
+            val content = pane.selectFirst("#workskin") ?: pane
+            if (content.text().isBlank()) invalid(CHAPTER_PREVIEW_UNAVAILABLE)
+            listOf(AO3ChapterPreview.Block(AO3ChapterPreview.Kind.Html, content.html()))
         }
         return AO3ChapterPreview(path.getOrNull(1)?.toLongOrNull(), path.getOrNull(3)?.toLongOrNull(),
             doc.selectFirst("meta[name=csrf-token]")?.attr("content")?.let(::trimWritingTag)?.takeIf(String::isNotEmpty),

@@ -126,7 +126,8 @@ class WritingChapterSaveTest {
 
     @Test fun missingPreviewIdentityOrPaneRetainsTheFormAndExistingPreviewDoesNotRefresh() = runTest {
         for ((kind, html, reason, revision) in listOf(
-            PreviewCase("new", "<main id=main><div id=previewpane></div></main>", AO3CollectionFields.UNCONFIRMED, 0),
+            PreviewCase("new", "<main id=main><div id=previewpane><div id=workskin><p>Hello.</p></div></div></main>", AO3CollectionFields.UNCONFIRMED, 0),
+            PreviewCase("new", "<main id=main><div id=previewpane></div></main>", CHAPTER_PREVIEW_UNAVAILABLE, 0),
             PreviewCase("new", "<main id=main><form><div id=error><ul><li>Content can't be blank</li></ul></div></form></main>", "Content can't be blank", 0),
             PreviewCase("new", "<main></main>", CHAPTER_PREVIEW_UNAVAILABLE, 0),
             PreviewCase("draft", chapterPreviewHtml(12302), null, 0)

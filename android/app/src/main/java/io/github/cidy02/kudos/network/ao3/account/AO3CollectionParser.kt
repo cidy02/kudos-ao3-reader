@@ -41,8 +41,8 @@ class AO3CollectionParser {
         val viewerIsOwner = doc.select("a[href]").any { it.attr("href").endsWith(editPath) }
         
         val header = doc.selectFirst("div.primary.header.module")
-        val worksCount = header?.let { intStat("works", it) } ?: navCount(doc, "/collections/$slug/works") ?: 0
-        val bookmarksCount = header?.let { intStat("bookmarks", it) } ?: navCount(doc, "/collections/$slug/bookmarks") ?: 0
+        val worksCount = header?.let { intStat("works", it) } ?: navCount(doc, "/collections/$slug/works")
+        val bookmarksCount = header?.let { intStat("bookmarks", it) } ?: navCount(doc, "/collections/$slug/bookmarks")
         
         val nav = doc.select("ul.navigation.actions").map { it.normalizedText() }.joinToString(" ")
         val hasJoin = doc.selectFirst("form[action*=/participants/join]") != null || nav.contains("Join", ignoreCase = true)

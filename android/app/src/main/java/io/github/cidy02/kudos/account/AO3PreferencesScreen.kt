@@ -226,7 +226,7 @@ fun AO3PreferencesScreen(
                     }
                 }
 
-                item {
+                if (snap.webLinks.isNotEmpty()) item {
                     Column(modifier = Modifier.padding(top = 18.dp)) {
                         SubjectFieldLabel(
                             text = "Account",
@@ -238,19 +238,21 @@ fun AO3PreferencesScreen(
                                 .padding(horizontal = SubjectMetrics.accountGutter)
                                 .subjectPanel()
                         ) {
-                            SubjectFormRow("Edit profile", leadingIcon = Icons.Outlined.Badge, showsDisclosure = true, onClick = { onOpenWeb("profile/edit") })
-                            SubjectRowSeparator()
-                            SubjectFormRow("Manage pseuds", leadingIcon = Icons.Outlined.Group, showsDisclosure = true, onClick = { onOpenWeb("pseuds") })
-                            SubjectRowSeparator()
-                            SubjectFormRow("Change username", leadingIcon = Icons.Outlined.AlternateEmail, showsDisclosure = true, onClick = { onOpenWeb("change_username") })
-                            SubjectRowSeparator()
-                            SubjectFormRow("Change password", leadingIcon = Icons.Outlined.Key, showsDisclosure = true, onClick = { onOpenWeb("change_password") })
-                            SubjectRowSeparator()
-                            SubjectFormRow("Change email", leadingIcon = Icons.Outlined.Email, showsDisclosure = true, onClick = { onOpenWeb("change_email") })
-                            SubjectRowSeparator()
-                            SubjectFormRow("Blocked users", leadingIcon = Icons.Outlined.BackHand, showsDisclosure = true, onClick = { onOpenWeb("blocked/users") })
-                            SubjectRowSeparator()
-                            SubjectFormRow("Muted users", leadingIcon = Icons.Outlined.VolumeOff, showsDisclosure = true, onClick = { onOpenWeb("muted/users") })
+                            snap.webLinks.forEachIndexed { index, link ->
+                                if (index > 0) SubjectRowSeparator()
+                                val icon = when (link.url.substringBefore('?').trimEnd('/').substringAfterLast('/')) {
+                                    "edit" -> Icons.Outlined.Badge
+                                    "pseuds" -> Icons.Outlined.Group
+                                    "change_username" -> Icons.Outlined.AlternateEmail
+                                    "change_password" -> Icons.Outlined.Key
+                                    "change_email" -> Icons.Outlined.Email
+                                    "blocked" -> Icons.Outlined.BackHand
+                                    "muted" -> Icons.Outlined.VolumeOff
+                                    else -> Icons.Outlined.ChevronRight
+                                }
+                                SubjectFormRow(link.title, leadingIcon = icon, showsDisclosure = true,
+                                    onClick = { onOpenWeb(link.url) })
+                            }
                         }
                     }
                 }
