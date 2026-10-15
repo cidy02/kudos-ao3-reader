@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.writing
 
+import io.github.cidy02.kudos.network.ao3.AO3Error
 import io.github.cidy02.kudos.auth.isSignedIn
 import io.github.cidy02.kudos.network.ao3.AO3Result
 import io.github.cidy02.kudos.network.ao3.search.AO3WorkSummary
@@ -33,11 +34,19 @@ internal class WritingSeriesState(val id: Long, private val repository: AO3Serie
      * its own page again; any other screen would have been answered from the cache for five
      * minutes with the old title, order or works (audit A39, the fault 3cd's bulk edit had).
      */
-    private fun seriesChanged() {
-        changed = true
-        io.github.cidy02.kudos.network.ao3.AO3PageCache.shared.removePages(
-            "/series/$id", io.github.cidy02.kudos.network.ao3.AO3PageCache.Scope(auth.username(), generation))
-    }
+    private fun seriesChanged() { changed = true; forgetSeriesPages() }
+
+    /**
+     * The series' pages and its creator's series lists, any viewer (iOS `removeSeries`; A37 F2),
+     * after a save and after an answer that may hide one (unconfirmed, or lost): only the
+     * series page used to go, and only after a confirmed save. A plain refusal keeps them.
+     */
+    private fun forgetSeriesPages() =
+        io.github.cidy02.kudos.network.ao3.AO3PageCache.shared.removeSeries(id, auth.username())
+
+    private fun AO3Error.mayHaveLanded() = this is AO3Error.Network || this is AO3Error.Validation &&
+        message in setOf(io.github.cidy02.kudos.network.ao3.account.AO3CollectionFields.UNCONFIRMED,
+            io.github.cidy02.kudos.network.ao3.account.AO3CollectionFields.NO_ANSWER)
     private var attempted = false
     private var manageAttempted = false
     private var loadJob: Job? = null
@@ -121,11 +130,13 @@ internal class WritingSeriesState(val id: Long, private val repository: AO3Serie
                         val fresh = keepingMetadata(rows, result.value)
                         mutable.value = state.value.copy(rows = fresh, form = state.value.form?.copy(works = fresh), orderSaved = true)
                     }
-                    is AO3Result.Failure -> if (active) mutable.value = state.value.copy(error = workFormFailure(result.error))
+                    is AO3Result.Failure -> { if (result.error.mayHaveLanded()) forgetSeriesPages()
+                        if (active) mutable.value = state.value.copy(error = workFormFailure(result.error)) }
                 }
             } else when (val result = writes.saveSeries(form!!, generation)) {
                 is AO3Result.Success -> if (current()) { seriesChanged(); mutable.value = state.value.copy(notice = result.value) }
-                is AO3Result.Failure -> if (active) mutable.value = state.value.copy(error = workFormFailure(result.error))
+                is AO3Result.Failure -> { if (result.error.mayHaveLanded()) forgetSeriesPages()
+                    if (active) mutable.value = state.value.copy(error = workFormFailure(result.error)) }
             }
             currentCoroutineContext().ensureActive()
         } catch (_: CancellationException) {
@@ -146,9 +157,12 @@ internal class WritingSeriesState(val id: Long, private val repository: AO3Serie
                 is AO3Result.Success -> if (current()) { seriesChanged(); mutable.value = state.value.copy(form = state.value.form?.let {
                     it.copy(works = keepingMetadata(it.works, result.value)) }) }
                 // "Was not removed" is untrue of a removal AO3 may have carried out; iOS says both sentences.
-                is AO3Result.Failure -> if (active) mutable.value = state.value.copy(error = workFormFailure(result.error).let {
-                    if (it == io.github.cidy02.kudos.network.ao3.account.AO3CollectionFields.UNCONFIRMED) it
-                    else "${row.displayTitle} was not removed. $it" })
+                is AO3Result.Failure -> {
+                    if (result.error.mayHaveLanded()) forgetSeriesPages()
+                    if (active) mutable.value = state.value.copy(error = workFormFailure(result.error).let {
+                        if (it == io.github.cidy02.kudos.network.ao3.account.AO3CollectionFields.UNCONFIRMED) it
+                        else "${row.displayTitle} was not removed. $it" })
+                }
             }
         } catch (_: CancellationException) {
             if (active) mutable.value = state.value.copy(error = "Your AO3 session changed, so nothing was removed.")

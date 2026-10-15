@@ -417,6 +417,10 @@ class AO3WriteRepository(
         val response = withContext(NonCancellable) {
             client.postAuthenticatedInSession(action, fields, writeHeaders(token, referer), expectedGeneration)
         }
+        // Sent: whatever AO3 answered, the writer's own pages kept from before are in doubt
+        // (iOS `submitWorkForm`; A37 F1). The opener reads its page again; others were served
+        // the old rating or a deleted work for five minutes.
+        client.username()?.let(io.github.cidy02.kudos.network.ao3.AO3PageCache.shared::removeAuthorPages)
         if (!judgedByCaller) movedOnAfterWrite(expectedGeneration, response)?.let { return it }
         return response
     }

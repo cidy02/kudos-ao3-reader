@@ -1910,3 +1910,6 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
 - **2026-10-15 · A comments page without AO3's list is an error (3el, A50 F7, Codex).** As
   iOS: a work's or chapter's page needs `#comments_placeholder > ol.thread`; a page without
   it shows the error and Retry, not "No Comments Yet". Reverse: the commit that names 3el.
+- **2026-10-15 · The page cache after writes, as iOS (3eo, A37 F1, F2, F4).** A removal stops
+  only reads of the pages it removed; an own-work write forgets the writer's pages; a series
+  write forgets the series and its creator's lists. Reverse: the commit that names 3eo.

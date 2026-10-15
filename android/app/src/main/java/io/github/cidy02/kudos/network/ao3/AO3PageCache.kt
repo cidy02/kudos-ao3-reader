@@ -19,6 +19,24 @@ class AO3PageCache(
     private data class Entry(val response: AO3HttpResponse, val freshUntil: Long, val staleUntil: Long)
     private val entries = mutableMapOf<Key, Entry>()
     private var revision = 0L
+    /**
+     * What each removal took, so a read in flight is stopped only when its own page was
+     * removed after it began. Every removal used to stop every read: one page's 404 left an
+     * unrelated page loading for good (A37 F4). The last 64 are kept; a read older than the
+     * oldest kept is stopped, to be safe.
+     */
+    private class Removal(val at: Long, val matches: (Key) -> Boolean)
+    private val removals = ArrayDeque<Removal>()
+    private var forgottenThrough = 0L
+
+    private fun removed(matches: (Key) -> Boolean) {
+        removals.addLast(Removal(++revision, matches))
+        while (removals.size > 64) forgottenThrough = removals.removeFirst().at
+    }
+
+    @Synchronized
+    private fun removedSince(key: Key, version: Long): Boolean =
+        forgottenThrough > version || removals.any { it.at > version && it.matches(key) }
 
     @Synchronized
     fun value(key: Key, stale: Boolean = false): AO3HttpResponse? {
@@ -39,26 +57,58 @@ class AO3PageCache(
     }
 
     @Synchronized
-    fun remove(key: Key) { revision++; entries.remove(key) }
+    fun remove(key: Key) { removed { it == key }; entries.remove(key) }
+
+    /** A page that would not parse is dropped; that is no write, so no read is stopped for it. */
+    @Synchronized
+    private fun evict(key: Key) { entries.remove(key) }
 
     /** Every filter/page variant; a write changes totals and row state across the Inbox. */
     @Synchronized
     fun removePages(path: String, scope: Scope) {
-        revision++
-        entries.keys.removeAll { it.scope == scope && URI(it.url).path == path }
+        val matches = { key: Key -> key.scope == scope && URI(key.url).path == path }
+        removed(matches)
+        entries.keys.removeAll(matches)
     }
 
     @Synchronized
     fun removeAuthorDashboards(username: String, scope: Scope) {
-        revision++
-        entries.keys.removeAll {
-            it.scope == scope && it.kind == Kind.Dashboard &&
-                URI(it.url).path.split('/').getOrNull(2)?.equals(username, true) == true
+        val matches = { key: Key ->
+            key.scope == scope && key.kind == Kind.Dashboard &&
+                URI(key.url).path.split('/').getOrNull(2)?.equals(username, true) == true
         }
+        removed(matches)
+        entries.keys.removeAll(matches)
+    }
+
+    /**
+     * iOS `removeAuthorPages` (T-379): one of this account's own works, chapters or drafts was
+     * written to, so every kept page under its address (works, series, bookmarks, stats, the
+     * dashboard, any pseud, any viewer) may list what is no longer so (A37 F1).
+     */
+    @Synchronized
+    fun removeAuthorPages(username: String) {
+        val prefix = "/users/${username.lowercase()}/"
+        val dashboard = "/users/${username.lowercase()}"
+        val matches = { key: Key -> URI(key.url).path.lowercase().let { it.startsWith(prefix) || it == dashboard } }
+        removed(matches)
+        entries.keys.removeAll(matches)
+    }
+
+    /** iOS `removeSeries` (T-378): a series' own pages and its creator's series lists, any viewer (A37 F2). */
+    @Synchronized
+    fun removeSeries(id: Long, creator: String?) {
+        val listPrefix = creator?.let { "/users/${it.lowercase()}/" }
+        val matches = { key: Key ->
+            val path = URI(key.url).path.lowercase()
+            path == "/series/$id" || listPrefix != null && path.startsWith(listPrefix) && path.endsWith("/series")
+        }
+        removed(matches)
+        entries.keys.removeAll(matches)
     }
 
     @Synchronized
-    fun clear() { revision++; entries.clear() }
+    fun clear() { removed { true }; entries.clear() }
 
     @Synchronized
     private fun revision(): Long = revision
@@ -76,7 +126,7 @@ class AO3PageCache(
         val key = Key(url, viewerScope, kind)
         val version = revision()
         fun requireCurrent() {
-            if (scope(auth) != viewerScope || version != revision()) throw CancellationException()
+            if (scope(auth) != viewerScope || removedSince(key, version)) throw CancellationException()
         }
         suspend fun parsed(response: AO3HttpResponse, stale: Boolean): AO3Result<T> {
             val result = parse(response)
@@ -90,14 +140,14 @@ class AO3PageCache(
         suspend fun fallback(failure: AO3Result.Failure): AO3Result<T> {
             val copy = value(key, stale = true) ?: return failure
             val cached = parsed(copy, true)
-            if (cached is AO3Result.Failure) remove(key)
+            if (cached is AO3Result.Failure) evict(key)
             return cached
         }
         currentCoroutineContext().ensureActive()
         requireCurrent()
         if (!bypassCache) value(key)?.let {
             val cached = parsed(it, false)
-            if (cached is AO3Result.Failure) remove(key)
+            if (cached is AO3Result.Failure) evict(key)
             return cached
         }
         val result = fetch()
@@ -116,14 +166,14 @@ class AO3PageCache(
                     }
                     loaded is AO3Result.Failure && loaded.error.allowsPageFallback() ->
                         fallback(loaded)
-                    else -> { remove(key); loaded }
+                    else -> { evict(key); loaded }
                 }
             }
             is AO3Result.Failure -> {
                 if (result.error.allowsPageFallback()) {
                     fallback(result)
                 } else {
-                    remove(key)
+                    evict(key)
                     result
                 }
             }

@@ -101,6 +101,56 @@ class AO3PageCacheTest {
         assertNull(cache.value(key(viewer = AO3PageCache.Scope(null, null)), stale = true))
     }
 
+    @Test fun anotherPagesFailureOrRemovalDoesNotStopThisRead() = runBlocking<Unit> {
+        // A37 F4: one page's 404, or one page's removal, stopped every read in flight, and an
+        // unrelated screen stayed loading.
+        val cache = AO3PageCache()
+        val anon = AO3PageCache.Scope(null, null)
+        val series = key("/series/7", anon, AO3PageCache.Kind.SeriesDetail)
+        val author = key("/users/Gone", anon)
+        val started = CompletableDeferred<Unit>()
+        val finish = CompletableDeferred<Unit>()
+        val reading = async {
+            cache.read(series.url, series.kind, null,
+                fetch = { started.complete(Unit); finish.await(); AO3Result.Success(response(series)) },
+                parse = { AO3Result.Success(it.body) })
+        }
+        started.await()
+        cache.read(author.url, author.kind, null, fetch = { AO3Result.Failure(AO3Error.NotFound) },
+            parse = { AO3Result.Success(it.body) })
+        cache.removePages("/users/Somebody", anon)
+        finish.complete(Unit)
+        assertEquals(AO3Result.Success("saved"), reading.await())
+    }
+
+    @Test fun anOwnWorkWriteForgetsEveryPageUnderTheWritersAddressOnly() {
+        // A37 F1, iOS removeAuthorPages: works, pseuds, series, stats and the dashboard, any viewer.
+        val cache = AO3PageCache()
+        val other = AO3PageCache.Scope("Someone", 2)
+        val mine = listOf(key("/users/Writer"), key("/users/Writer/works?page=2", kind = AO3PageCache.Kind.Works),
+            key("/users/writer/pseuds/Pen/works", other, AO3PageCache.Kind.Works), key("/users/Writer/stats", kind = AO3PageCache.Kind.Stats))
+        val kept = listOf(key("/users/Writerly"), key("/users/Other/works", kind = AO3PageCache.Kind.Works),
+            key("/series/7", kind = AO3PageCache.Kind.SeriesDetail))
+        (mine + kept).forEach { cache.insert(it, response(it)) }
+        cache.removeAuthorPages("Writer")
+        mine.forEach { assertNull(it.url, cache.value(it, stale = true)) }
+        kept.forEach { assertNotNull(it.url, cache.value(it, stale = true)) }
+    }
+
+    @Test fun aSeriesWriteForgetsTheSeriesAndItsCreatorsSeriesLists() {
+        // A37 F2, iOS removeSeries.
+        val cache = AO3PageCache()
+        val gone = listOf(key("/series/7", kind = AO3PageCache.Kind.SeriesDetail),
+            key("/users/Writer/series", kind = AO3PageCache.Kind.AuthorSeries),
+            key("/users/Writer/pseuds/Pen/series", kind = AO3PageCache.Kind.AuthorSeries))
+        val kept = listOf(key("/series/70", kind = AO3PageCache.Kind.SeriesDetail),
+            key("/users/Writer/works", kind = AO3PageCache.Kind.Works), key("/users/Other/series", kind = AO3PageCache.Kind.AuthorSeries))
+        (gone + kept).forEach { cache.insert(it, response(it)) }
+        cache.removeSeries(7, "Writer")
+        gone.forEach { assertNull(it.url, cache.value(it, stale = true)) }
+        kept.forEach { assertNotNull(it.url, cache.value(it, stale = true)) }
+    }
+
     @Test fun parserFailureRemovesOnlyTheFailedCopyAndDoesNotFallback() = runBlocking<Unit> {
         val cache = AO3PageCache()
         val key = key(viewer = AO3PageCache.Scope(null, null))
