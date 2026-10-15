@@ -13,6 +13,7 @@ import io.github.cidy02.kudos.author.AuthorWorksSortFields
 import io.github.cidy02.kudos.network.ao3.author.AO3AuthorWorksSort
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Search
@@ -295,7 +296,8 @@ fun SearchFilterSheet(
                             }
                         }
                         if (onSave != null) FilterGroup {
-                            SubjectFormRow("Save Search…", onClick = if (filters.isSearchable) onSave else null)
+                            SubjectFormRow("Save Search…", onClick = if (filters.isSearchable) onSave else null,
+                                leadingIcon = Icons.Outlined.BookmarkBorder)
                         }
                         // Android's existing dismissal row remains available.
                         FilterGroup { SubjectFormRow("Close", onClick = onDismiss) }
@@ -326,7 +328,9 @@ private fun <T> FilterChoiceRow(
 ) {
     var expanded by remember { mutableStateOf(false) }
     Box {
-        SubjectFormRow(title, value = label(selected), showsDisclosure = true, onClick = { expanded = true },
+        // A menu of choices: the value in the accent with the mark iOS's pickers have (3cr's
+        // `showsChoice`). It was grey with a page arrow, as though it opened another page.
+        SubjectFormRow(title, value = label(selected), showsChoice = true, onClick = { expanded = true },
             valueMaxLines = 3)
         DropdownMenu(expanded, onDismissRequest = { expanded = false }) {
             options.forEach { option ->

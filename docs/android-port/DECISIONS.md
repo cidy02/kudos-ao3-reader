@@ -1863,3 +1863,5 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   header. Reverse: the commit that names 3dv.
 - **2026-10-14 · Settings declares its own header (3dw).** Fixes 3dh's regression, where
   Settings first opened under a plain top bar. Reverse: the commit that names 3dw.
+- **2026-10-14 · The filter panel's menus look like choices (3dx).** As iOS's pickers, with
+  `showsChoice`; Save Search has iOS's bookmark glyph. Reverse: the commit that names 3dx.
