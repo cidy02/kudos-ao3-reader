@@ -43,9 +43,12 @@ object AO3AuthorIdentities {
     fun byline(json: String, displayName: String): String? {
         val identities = runCatching { Json.parseToJsonElement(json) as? JsonArray }.getOrNull() ?: return null
         fun JsonObject.text(key: String) = (this[key] as? JsonPrimitive)?.contentOrNull?.takeIf { it.isNotBlank() }
-        val identity = identities.filterIsInstance<JsonObject>().firstOrNull {
+        val matches = identities.filterIsInstance<JsonObject>().filter {
             it.text("displayName") == displayName.trim() && it.text("kind") in setOf("registered", "orphaned")
-        } ?: return null
+        }
+        // Two accounts printed alike: no link rather than the first one's (A49 F9).
+        if (matches.mapNotNull { it.text("username")?.lowercase() }.distinct().size > 1) return null
+        val identity = matches.firstOrNull() ?: return null
         val username = identity.text("username") ?: return null
         val pseud = identity.text("pseud")
         return if (pseud == null || pseud == username) username else "$pseud ($username)"
