@@ -555,7 +555,8 @@ fun SearchScreen(
             } else {
                 null
             },
-            autocompleteRepository = autocompleteRepository
+            autocompleteRepository = autocompleteRepository,
+            opensHalfHeight = true
         )
     }
     if (showSaveSheet) {

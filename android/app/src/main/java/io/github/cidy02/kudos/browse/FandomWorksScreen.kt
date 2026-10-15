@@ -379,7 +379,8 @@ fun FandomWorksScreen(
             onClear = { filters = AO3BrowseRepository.browseBaseline(); load() },
             onDismiss = { showFilterSheet = false; filters = loadedFilters },
             localTagSuggestions = localTagSuggestions,
-            autocompleteRepository = autocompleteRepository
+            autocompleteRepository = autocompleteRepository,
+            opensHalfHeight = true
         )
     }
 }

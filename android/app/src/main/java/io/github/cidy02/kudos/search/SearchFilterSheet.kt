@@ -88,14 +88,16 @@ fun SearchFilterSheet(
     showFandomPicker: Boolean = true,
     canReset: Boolean = filters.hasActiveFilters,
     worksSort: AO3AuthorWorksSort? = null,
-    onApplyWorksSort: (AO3AuthorWorksSort) -> Unit = {}
+    onApplyWorksSort: (AO3AuthorWorksSort) -> Unit = {},
+    /** Search and Browse open at half height over their results, as iOS (spec 1ao); drag for more. */
+    opensHalfHeight: Boolean = false
 ) {
     val tokens = LocalKudosTokens.current
     var sortDraft by remember { mutableStateOf(worksSort ?: AO3AuthorWorksSort()) }
     val seededSort = remember { worksSort }
     ModalBottomSheet(
         onDismissRequest = onDismiss,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = !opensHalfHeight),
         containerColor = tokens.background
     ) {
         Column(

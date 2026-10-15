@@ -1972,3 +1972,7 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   (`BackupError.ReplaceNotUndone`) instead of "not replaced". A53 F2: Marked for Later's "synced"
   is stamped when AO3's answer is accepted (`Loaded.fetchedAt`), not when drawn. Reverse: the
   commit that names 3fc.
+- **2026-10-15 · Search's and Browse's filter sheets open at half height (3fe), as iOS** (spec
+  1ao, `detents: [.medium, .large]`); drag for the rest. Android opened them full height, kept
+  from the first filter sheet (epic 4, July). The author's and the account lists' sheets keep
+  full height, as iOS's. Reverse: `opensHalfHeight = false` at the two call sites.
