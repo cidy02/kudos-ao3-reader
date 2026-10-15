@@ -33,21 +33,37 @@ class AutomaticTTSService(
     private val packInstalled: () -> Boolean = { TTSDownloadWorker.isModelDownloaded(context.applicationContext) }
 ) : TTSService {
     private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
-    private fun active(): TTSService = if (packInstalled()) kokoro else device
+    /**
+     * The engine of the reading under way, so Pause, Resume and the player's state stay with it
+     * when the pack finishes downloading mid-reading; they followed the pack's arrival and
+     * reached Kokoro while the device still spoke (A49 F3).
+     */
+    @Volatile private var owner: TTSService? = null
+    /** Kokoro when its pack is here and has not failed to open; the device's voice otherwise. */
+    private fun active(): TTSService =
+        owner ?: if (packInstalled() && kokoro.status.value != SpeechStatus.UNAVAILABLE) kokoro else device
 
     override val status: StateFlow<SpeechStatus> =
-        combine(kokoro.status, device.status) { k, d -> if (packInstalled()) k else d }
+        combine(kokoro.status, device.status) { k, d -> if (active() === kokoro) k else d }
             .stateIn(scope, SharingStarted.Eagerly, active().status.value)
     override val spokenText: StateFlow<String> =
-        combine(kokoro.spokenText, device.spokenText) { k, d -> if (packInstalled()) k else d }
+        combine(kokoro.spokenText, device.spokenText) { k, d -> if (active() === kokoro) k else d }
             .stateIn(scope, SharingStarted.Eagerly, "")
     /** Kokoro's voices; the device's own is the one its Settings chose (Automatic). */
     override val availableVoices: StateFlow<List<TTSVoice>> = kokoro.availableVoices
 
-    override suspend fun speak(text: String) = active().speak(text)
+    override suspend fun speak(text: String) {
+        // A pack that is there but will not open reads with the device's voice: Read Aloud
+        // skipped silently through the text (A49 F4).
+        val engine = if (packInstalled() && kokoro.ensureReady()) kokoro else device
+        if (owner !== engine) owner?.stop()
+        owner = engine
+        engine.speak(text)
+    }
     override fun pause() = active().pause()
     override fun resume() = active().resume()
     override fun stop() {
+        owner = null
         kokoro.stop()
         device.stop()
     }
@@ -128,9 +144,17 @@ class SystemTTSService(context: Context) : TTSService {
                 if (_status.first { it != SpeechStatus.PAUSED } != SpeechStatus.PLAYING) return
                 val id = "kudos-${utterances.incrementAndGet()}"
                 val ended = CompletableDeferred<Boolean>()
-                utterance = id to ended
-                _spokenText.value = chunks[index]
-                if (engine.speak(chunks[index], TextToSpeech.QUEUE_FLUSH, null, id) != TextToSpeech.SUCCESS) return
+                // Checked and handed over under Pause's and Stop's lock: a Stop between the
+                // check above and the hand-over was followed by speech (A49 F2), and a reading
+                // a newer one replaced must not speak.
+                val handed = synchronized(handover) {
+                    _status.value == SpeechStatus.PLAYING && readings.get() == reading && run {
+                        utterance = id to ended
+                        _spokenText.value = chunks[index]
+                        engine.speak(chunks[index], TextToSpeech.QUEUE_FLUSH, null, id) == TextToSpeech.SUCCESS
+                    }
+                }
+                if (!handed) return
                 // Cut off by a pause: the same stretch again on resume.
                 if (ended.await()) index++
             }
@@ -146,16 +170,18 @@ class SystemTTSService(context: Context) : TTSService {
     }
 
     override fun pause() {
-        if (_status.value != SpeechStatus.PLAYING) return
-        _status.value = SpeechStatus.PAUSED
-        cutOff()
+        synchronized(handover) {
+            if (_status.value != SpeechStatus.PLAYING) return
+            _status.value = SpeechStatus.PAUSED
+            cutOff()
+        }
     }
 
     override fun resume() {
         if (_status.value == SpeechStatus.PAUSED) _status.value = SpeechStatus.PLAYING
     }
 
-    override fun stop() {
+    override fun stop() = synchronized(handover) {
         if (_status.value != SpeechStatus.UNAVAILABLE) _status.value = SpeechStatus.STOPPED
         _spokenText.value = ""
         cutOff()

@@ -6,6 +6,14 @@
     <!-- Best-effort "update ready" notification (Android 13+ requires runtime grant). -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+    <!-- Android 11+ shows an app only the speech engines it asks for: a separately installed
+         offline engine was invisible, and Read Aloud offered the Kokoro pack (A49 F1). -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.TTS_SERVICE" />
+        </intent>
+    </queries>
+
     <application
         android:name=".KudosApplication"
         android:allowBackup="false"

@@ -104,7 +104,10 @@ class ReaderSpeechController(
                         _downloadProgress.value = if (p >= 0f) p else null
                     } else if (info != null && info.state.isFinished) {
                         _downloadProgress.value = null
-                        if (TTSDownloadWorker.isModelDownloaded(appContext)) {
+                        // Only a player waiting for the pack is ready now; a reading under way
+                        // goes on (A49 F3: it was marked stopped while the device spoke).
+                        if (TTSDownloadWorker.isModelDownloaded(appContext) &&
+                            _status.value == SpeechStatus.MODEL_NOT_DOWNLOADED) {
                             _status.value = SpeechStatus.STOPPED
                         }
                     }

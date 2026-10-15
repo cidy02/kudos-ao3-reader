@@ -67,6 +67,22 @@ class SystemTTSServiceTest {
         assertEquals(listOf("First stretch.", "Second stretch.", "Second stretch."), shadow.spokenTextList)
     }
 
+    @Test fun aPackThatWillNotOpenReadsWithTheDeviceVoice() = runBlocking {
+        // A49 F4: the pack's files are here (says packInstalled) but Kokoro cannot open them.
+        ShadowTextToSpeech.addVoice(voice("local", Locale.getDefault()))
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val service = AutomaticTTSService(context, packInstalled = { true })
+        val shadow = shadowOf(ShadowTextToSpeech.getLastTextToSpeechInstance())
+        shadow.onInitListener.onInit(TextToSpeech.SUCCESS)
+        val reading = async(Dispatchers.Default) { service.speak("Read by the device.") }
+        withTimeout(5_000) { while (shadow.lastSpokenText != "Read by the device.") kotlinx.coroutines.delay(10) }
+        assertEquals(SpeechStatus.PLAYING, withTimeout(5_000) {
+            while (service.status.value != SpeechStatus.PLAYING) kotlinx.coroutines.delay(10); service.status.value
+        })
+        service.stop()
+        withTimeout(5_000) { reading.await() }
+    }
+
     @Test fun withNoVoiceOnTheDeviceItIsUnavailable() {
         ShadowTextToSpeech.addVoice(voice("cloud", Locale.getDefault(), network = true))
         val service = SystemTTSService(ApplicationProvider.getApplicationContext())
