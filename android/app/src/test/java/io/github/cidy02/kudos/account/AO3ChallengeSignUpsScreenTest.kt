@@ -74,7 +74,7 @@ class AO3ChallengeSignUpsScreenTest {
         compose.onNodeWithText("All").performClick()
         reach("Load page 2 of 2"); compose.onNodeWithText("Load page 2 of 2").performClick()
         compose.waitForIdle()
-        compose.waitUntil(15_000) { client.gets.size == 7 }
+        compose.waitUntil(15_000) { client.gets.size == signUpsOpeningReads.size + 1 }
         reach("emberpost"); awaitText("emberpost")
         assertEquals(signUpsOpeningReads + signUpsLast, client.gets)
         compose.onNodeWithText("Load page 2 of 2").assertDoesNotExist()

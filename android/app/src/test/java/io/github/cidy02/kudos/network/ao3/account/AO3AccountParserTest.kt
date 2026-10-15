@@ -97,6 +97,22 @@ class AO3MarkedForLaterParserTest {
 
 class AO3HistoryParserTest {
     @Test
+    fun readsADeletedWorkRow() {
+        val entries = AO3AccountParser().parseAccountList(
+            accountResourceText("ao3/account/ios_readings.html"), 1, AccountListType.History
+        ).readingEntries
+        assertEquals(4, entries.size)
+        val deleted = entries[3]
+        assertTrue(deleted.isDeletedWork)
+        org.junit.Assert.assertNull(deleted.workId)
+        assertEquals("12 Jan 2023", deleted.lastVisited)
+        assertEquals("Last visited 12 Jan 2023", deleted.lastVisitedDisplay)
+        assertTrue(entries.take(3).all { !it.isDeletedWork })
+        // The deleted-row rule must retain both existing live-row date shapes too.
+        assertEquals(listOf("2 days", "04 Mar 2024", "about 1 month"), entries.take(3).map { it.lastVisited })
+    }
+
+    @Test
     fun parsesHistoryAndPagination() {
         val page = AO3AccountParser().parseAccountList(
             accountResourceText("ao3/account/history.html"),
@@ -126,6 +142,33 @@ class AO3BookmarksParserTest {
 }
 
 class AO3SubscriptionsParserTest {
+    @Test
+    fun readsTitleAndAllBylineAuthors() {
+        val html = """<html><body><dl class="subscription index group">
+            <dt><a href="/works/45678901">A Study in Pink</a>
+              by <a href="/users/holmes/pseuds/holmes" rel="author">holmes</a></dt>
+            <dd><form action="/users/me/subscriptions/1" method="post"></form></dd>
+            <dt><a href="/works/12345">Another Fic</a>
+              by <a href="/users/writer/pseuds/penname" rel="author">penname</a>
+              and <a href="/users/cowriter/pseuds/cowriter" rel="author">cowriter</a></dt>
+            <dd><form action="/users/me/subscriptions/2" method="post"></form></dd>
+            </dl></body></html>"""
+        val works = AO3AccountParser().parseSubscriptionsPage(html, 1).works
+        assertEquals(listOf("A Study in Pink", "Another Fic"), works.map { it.title })
+        assertEquals(listOf("holmes"), works[0].authors)
+        assertEquals("holmes", io.github.cidy02.kudos.network.ao3.author.AO3AuthorIdentities.byline(
+            works[0].authorIdentitiesJSON, "holmes"))
+        assertEquals(listOf("penname", "cowriter"), works[1].authors)
+        assertEquals("penname, cowriter", works[1].authorText)
+        val identities = kotlinx.serialization.json.Json.parseToJsonElement(works[1].authorIdentitiesJSON)
+            as kotlinx.serialization.json.JsonArray
+        assertEquals(2, identities.size)
+        assertEquals("penname (writer)", io.github.cidy02.kudos.network.ao3.author.AO3AuthorIdentities.byline(
+            works[1].authorIdentitiesJSON, "penname"))
+        assertEquals("cowriter", io.github.cidy02.kudos.network.ao3.author.AO3AuthorIdentities.byline(
+            works[1].authorIdentitiesJSON, "cowriter"))
+    }
+
     @Test
     fun bundledMixedPageKeepsWorksSeriesAndUsersSeparate() {
         val candidates = listOf("src/debug/assets", "app/src/debug/assets", "android/app/src/debug/assets")

@@ -10,6 +10,45 @@ class AO3PreferencesParserTest {
     private val parser = AO3PreferencesParser()
 
     @Test
+    fun parsesTogglesSelectsTextAndWebLinks() {
+        val snapshot = parser.parse(fixture("ao3/preferences/ios_preferences.html"))
+        assertEquals("https://archiveofourown.org/users/ExampleUser/preference", snapshot.actionUrl)
+        assertEquals("put", snapshot.httpMethodOverride)
+        assertEquals("csrf-token-abc123==", snapshot.csrfToken)
+        val toggles = snapshot.sections.flatMap { it.toggles }
+        assertTrue(toggles.first { it.name == "preference[disable_share_links]" }.checked)
+        assertTrue(toggles.first { it.name == "preference[disable_share_links]" }.label.contains("share buttons"))
+        assertEquals(false, toggles.first { it.name == "preference[minimize_search_engines]" }.checked)
+        assertTrue(toggles.first { it.name == "preference[adult]" }.checked)
+        assertTrue(toggles.first { it.name == "preference[kudos_emails_off]" }.checked)
+        assertEquals(listOf("Privacy", "Display", "Comments"), snapshot.sections.map { it.title })
+        assertEquals("42", snapshot.selects.first { it.name == "preference[skin_id]" }.selectedValue)
+        assertTrue(snapshot.selects.first { it.name == "preference[skin_id]" }.options.contains("42" to "Reversi"))
+        assertEquals("America/New_York", snapshot.selects.first { it.name == "preference[time_zone]" }.selectedValue)
+        assertEquals("TITLE - AUTHOR", snapshot.textFields.first { it.name == "preference[work_title_format]" }.value)
+        assertTrue(snapshot.hiddenFields.contains("preference[id]" to "99"))
+        assertTrue(snapshot.webLinks.contains(AO3PreferenceWebLink("Change Password",
+            "https://archiveofourown.org/users/ExampleUser/change_password")))
+        assertEquals(listOf("profile/edit", "pseuds", "blocked", "muted", "change_username", "change_password", "change_email"),
+            snapshot.webLinks.map { it.url.substringAfter("/users/ExampleUser/") })
+        assertTrue(snapshot.webLinks.none { it.url.contains("/preferences") })
+    }
+
+    @Test
+    fun webLinksExcludePreferencesAndHelpAndKeepOnlyOneOfEachServedAddress() {
+        val doc = org.jsoup.Jsoup.parse(fixture("ao3/preferences/ios_preferences.html"))
+        doc.selectFirst("ul.navigation")!!.append("""
+            <li><a href="/users/ExampleUser/preferences">Preferences</a></li>
+            <li><a href="/help/preferences_privacy">Help</a></li>
+            <li><a href="/users/ExampleUser/change_password">Duplicate</a></li>
+            <li><a href="">Empty address</a></li>
+            """)
+        val links = parser.parse(doc.outerHtml()).webLinks
+        assertEquals(7, links.size)
+        assertEquals("Change Password", links.first { it.url.endsWith("/change_password") }.title)
+    }
+
+    @Test
     fun capturesHelpUrlNearToggleLabelFromFixture() {
         val snapshot = parser.parse(fixture("ao3/preferences/ao3_preferences.html"))
         val toggle = snapshot.sections

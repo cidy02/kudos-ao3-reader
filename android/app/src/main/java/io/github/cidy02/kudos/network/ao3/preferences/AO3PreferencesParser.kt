@@ -2,6 +2,7 @@ package io.github.cidy02.kudos.network.ao3.preferences
 
 import io.github.cidy02.kudos.network.ao3.AO3Constants
 import io.github.cidy02.kudos.network.ao3.writes.normalizedText
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Element
 
@@ -83,6 +84,15 @@ class AO3PreferencesParser {
             it.attr("name") to it.attr("value")
         }.filter { it.first != "authenticity_token" && it.first != "_method" }
 
+        val webLinks = doc.selectFirst("ul.navigation.actions, ul.navigation")?.select("a[href]")
+            .orEmpty().mapNotNull { anchor ->
+                val title = anchor.normalizedText().takeIf { it.isNotEmpty() } ?: return@mapNotNull null
+                val url = absoluteUrl(anchor.attr("href"))?.toHttpUrlOrNull() ?: return@mapNotNull null
+                val path = url.encodedPath.lowercase()
+                if (path.contains("/preferences") || path.startsWith("/help/")) return@mapNotNull null
+                AO3PreferenceWebLink(title, url.toString())
+            }.distinctBy { it.url }
+
         if (sections.isEmpty() && selects.isEmpty() && textFields.isEmpty()) {
             throw AO3PreferencesParseException("No preference fields found.")
         }
@@ -94,7 +104,8 @@ class AO3PreferencesParser {
             sections = sections,
             selects = selects,
             textFields = textFields,
-            hiddenFields = hidden
+            hiddenFields = hidden,
+            webLinks = webLinks
         )
     }
 

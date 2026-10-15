@@ -194,6 +194,17 @@ class Brief3caScreenTest {
         assertTrue(client.gets.isEmpty()); assertTrue(client.posts.isEmpty())
     }
 
+    @Test fun preferencesAccountRowsOpenTheServedAddressWithoutAnotherRead() {
+        var opened: String? = null
+        show { AO3PreferencesScreen("Avery_Archive", AO3PreferencesRepository(writer()), onOpenWeb = { opened = it }) }
+        awaitText("AO3 Preferences")
+        compose.onNodeWithTag("AO3 preferences").performScrollToNode(hasText("Change Password"))
+        compose.onNodeWithText("Change Password").performClick()
+        assertEquals("https://archiveofourown.org/users/ExampleUser/change_password", opened)
+        assertEquals(1, client.gets.size)
+        assertTrue(client.posts.isEmpty())
+    }
+
     @Test fun row12ExpiredPreferenceSaveKeepsEditsShowsIosMessageAndExpiresOnlyItsSession() {
         val repo = AO3PreferencesRepository(writer())
         show { AO3PreferencesScreen("Avery_Archive", repo) }

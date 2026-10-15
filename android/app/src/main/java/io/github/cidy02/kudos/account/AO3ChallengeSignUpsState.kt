@@ -75,11 +75,22 @@ internal class AO3ChallengeSignUpsState(private val slug: String, private val vi
                 var matchError: String? = null
                 if (closed) {
                     val joined = mutableListOf<AO3SignUpAssignment>()
-                    for (list in listOf(SignUpAssignmentList.Complete, SignUpAssignmentList.Open, SignUpAssignmentList.Defaults)) {
-                        val result = repository.getSignUpAssignments(slug, list)
-                        checkSession()
-                        if (result is AO3Result.Failure) { matchError = result.error.moderationMessage(); break }
-                        joined += (result as AO3Result.Success).value
+                    join@ for (list in listOf(SignUpAssignmentList.Complete, SignUpAssignmentList.Open, SignUpAssignmentList.Defaults)) {
+                        var page = 1
+                        while (true) {
+                            checkSession()
+                            currentCoroutineContext().ensureActive()
+                            val result = repository.getChallengeAssignments(slug, list, page)
+                            checkSession()
+                            if (result is AO3Result.Failure) {
+                                matchError = result.error.moderationMessage()
+                                break@join
+                            }
+                            val loaded = (result as AO3Result.Success).value
+                            joined += loaded.rows
+                            if (page >= loaded.totalPages) break
+                            page += 1
+                        }
                     }
                     if (matchError == null) assignments = joined
                 }

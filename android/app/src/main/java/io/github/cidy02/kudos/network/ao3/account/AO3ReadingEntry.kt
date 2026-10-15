@@ -78,11 +78,11 @@ data class AO3ReadingEntry(
         }
 
         private fun parseLastVisited(text: String): String {
-            val marker = "Last visited:"
-            val start = text.indexOf(marker)
+            val marker = "last visited"
+            val start = text.indexOf(marker, ignoreCase = true)
             if (start < 0) return ""
-            val rest = text.substring(start + marker.length).trim()
-            val candidate = rest.substringBefore("(").substringBefore("Visited").trim()
+            val rest = text.substring(start + marker.length).trimStart(':', ' ')
+            val candidate = rest.substringBefore("(").substringBefore(")").substringBefore("Visited").trim()
             return candidate
         }
 
