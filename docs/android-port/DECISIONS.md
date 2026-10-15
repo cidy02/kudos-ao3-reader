@@ -1904,3 +1904,6 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   names 3ek.
 - **2026-10-15 · Edit multiple works reads each work's tags once (3em, A37 F5).** The changes
   are merged into the form that is sent. Reverse: the commit that names 3em.
+- **2026-10-15 · A lost answer after a collection write says it may have landed (3en, A37
+  F10).** Not "try again". Goes further than iOS's generic failure, against a repeat write.
+  Reverse: the commit that names 3en.
