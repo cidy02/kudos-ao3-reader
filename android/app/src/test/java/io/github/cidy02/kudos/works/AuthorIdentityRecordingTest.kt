@@ -42,6 +42,12 @@ class AuthorIdentityRecordingTest {
         assertEquals(null, route("Somebody Else"))
         assertEquals(null, AO3AuthorIdentities.byline("", "Avery Writes"))
         assertEquals(null, AO3AuthorIdentities.byline("not json", "Avery Writes"))
+        // Two accounts printed alike: no link, rather than always the first one's (A49 F9).
+        val twins = AO3AuthorIdentities.json(links(
+            """<a rel="author" href="/users/FirstAccount/pseuds/Alex">Alex</a>,
+               <a rel="author" href="/users/SecondAccount/pseuds/Alex">Alex</a>"""
+        ))
+        assertEquals(null, AO3AuthorIdentities.byline(twins, "Alex"))
     }
 
     @Test fun anonymousNamesNoAccountAndAnOrphanedWorkNamesNoneToCheck() {

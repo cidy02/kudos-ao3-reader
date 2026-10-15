@@ -1888,3 +1888,6 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
 - **2026-10-14 · Codex's A49 findings F1 to F4 fixed (3eg).** Read Aloud: the speech engine
   query in the manifest; speech handed over under Stop's lock; one engine per reading;
   the device's voice when the pack will not open. Reverse: the commit that names 3eg.
+- **2026-10-14 · A49 F9 and F11 fixed; F10 kept as iOS (3eh).** A name two accounts share is
+  not a link; Contents' percentages off the main thread; the compact "50k+ words" stays, as
+  iOS's spec 1ay. Reverse: the commit that names 3eh.

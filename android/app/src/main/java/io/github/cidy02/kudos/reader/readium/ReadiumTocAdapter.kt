@@ -1,5 +1,7 @@
 package io.github.cidy02.kudos.reader.readium
 
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.Dispatchers
 import io.github.cidy02.kudos.reader.ReaderSection
 import io.github.cidy02.kudos.reader.ReaderSectionBuilder
 import io.github.cidy02.kudos.reader.ReaderTocBuilder
@@ -55,15 +57,23 @@ object ReadiumTocAdapter {
      * `chapterStartPercent`). Keyed by [ReaderSectionBuilder.hrefKey], so a contents row that
      * carries a fragment finds its file. Empty when the publication has no positions.
      */
-    suspend fun startPercents(publication: Publication): Map<String, Int> = startPercents(
-        runCatching { publication.positions() }.getOrDefault(emptyList())
-            .map { it.href.toString() to it.locations.totalProgression }
-    )
+    suspend fun startPercents(publication: Publication): Map<String, Int> = withContext(Dispatchers.Default) {
+        // Off the main thread: a long work has thousands of positions (A49 F11).
+        startPercents(
+            runCatching { publication.positions() }.getOrDefault(emptyList())
+                .map { it.href.toString() to it.locations.totalProgression }
+        )
+    }
 
-    internal fun startPercents(positions: List<Pair<String, Double?>>): Map<String, Int> =
-        positions.groupBy({ ReaderSectionBuilder.hrefKey(it.first) }, { it.second })
-            .mapNotNull { (file, starts) -> starts.first()?.let { file to (it * 100).roundToInt() } }
-            .toMap()
+    /** Each file's first position only. */
+    internal fun startPercents(positions: List<Pair<String, Double?>>): Map<String, Int> {
+        val starts = LinkedHashMap<String, Int>()
+        for ((href, progression) in positions) {
+            val file = ReaderSectionBuilder.hrefKey(href)
+            if (file !in starts && progression != null) starts[file] = (progression * 100).roundToInt()
+        }
+        return starts
+    }
 
     /** Resolve a TOC row to a publication [Link] suitable for [org.readium.r2.navigator.Navigator.go]. */
     fun resolveLink(publication: Publication, entry: ReaderTocEntry): Link? {
