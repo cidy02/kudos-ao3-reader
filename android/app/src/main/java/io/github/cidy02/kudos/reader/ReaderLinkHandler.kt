@@ -9,8 +9,11 @@ sealed interface ReaderLinkDestination {
     /** An AO3 work link -> open native Work Detail. */
     data class WorkDetail(val workId: Long) : ReaderLinkDestination
 
-    /** An AO3 tag link -> Search/Browse (wiring deferred; see HANDOFF.md). */
+    /** An AO3 tag link -> the tag's works page (iOS `TagWorksView`). */
     data class TagSearch(val tag: String) : ReaderLinkDestination
+
+    /** An AO3 user or pseud link -> the author's page. */
+    data class Author(val username: String) : ReaderLinkDestination
 
     /** Any other absolute URL -> open externally (browser/custom tab/intent). */
     data class External(val url: String) : ReaderLinkDestination
@@ -29,6 +32,7 @@ class ReaderLinkHandler {
         if (url.isEmpty()) return ReaderLinkDestination.Unhandled
 
         if (url.isAo3Url()) {
+            authorFromUrl(url)?.let { return ReaderLinkDestination.Author(it) }
             WorkTags.ao3WorkIdFromUrl(url)?.let { return ReaderLinkDestination.WorkDetail(it) }
             tagFromUrl(url)?.let { return ReaderLinkDestination.TagSearch(it) }
         }
@@ -46,8 +50,16 @@ class ReaderLinkHandler {
         if (index < 0) return null
         val raw = url.substring(index + marker.length).substringBefore('/').substringBefore('?')
         if (raw.isBlank()) return null
-        val decoded = runCatching { URLDecoder.decode(raw, "UTF-8") }.getOrDefault(raw)
-        return decoded.takeIf { it.isNotBlank() }
+        // A "+" in a path is itself, not a space; AO3 writes "/" "&" "." "?" "#" as *s* *a* *d* *q* *h*.
+        val decoded = runCatching { URLDecoder.decode(raw.replace("+", "%2B"), "UTF-8") }.getOrDefault(raw)
+        val name = MUNGED.fold(decoded) { text, (munged, plain) -> text.replace(munged, plain) }
+        return name.takeIf { it.isNotBlank() }
+    }
+
+    /** iOS's `authorRoute(for:)`: /users/<name>, with or without a pseud after it. */
+    private fun authorFromUrl(url: String): String? {
+        val segments = runCatching { URI(url).path }.getOrNull()?.split('/')?.filter { it.isNotEmpty() } ?: return null
+        return segments.getOrNull(1)?.takeIf { segments.first() == "users" }
     }
 
     private fun String.isAo3Url(): Boolean {
@@ -57,6 +69,7 @@ class ReaderLinkHandler {
     }
 
     private companion object {
+        val MUNGED = listOf("*s*" to "/", "*a*" to "&", "*d*" to ".", "*q*" to "?", "*h*" to "#")
         const val AO3_HOST = "archiveofourown.org"
     }
 }

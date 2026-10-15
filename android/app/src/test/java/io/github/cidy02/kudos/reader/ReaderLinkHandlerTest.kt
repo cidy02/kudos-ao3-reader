@@ -32,6 +32,24 @@ class ReaderLinkHandlerTest {
     }
 
     @Test
+    fun ao3TagNamesAreReadAsAo3WritesThem() {
+        assertEquals(
+            ReaderLinkDestination.TagSearch("Harry Potter/Ginny Weasley & Friends"),
+            handler.classify("https://archiveofourown.org/tags/Harry%20Potter*s*Ginny%20Weasley%20*a*%20Friends/works")
+        )
+        assertEquals(ReaderLinkDestination.TagSearch("C++"), handler.classify("https://archiveofourown.org/tags/C++/works"))
+    }
+
+    @Test
+    fun ao3UserAndPseudLinksOpenTheAuthor() {
+        assertEquals(ReaderLinkDestination.Author("avery"), handler.classify("https://archiveofourown.org/users/avery"))
+        assertEquals(
+            ReaderLinkDestination.Author("avery"),
+            handler.classify("https://archiveofourown.org/users/avery/pseuds/Avery%20Writes/works")
+        )
+    }
+
+    @Test
     fun externalUrlBecomesExternal() {
         val result = handler.classify("https://example.com/page")
         assertTrue(result is ReaderLinkDestination.External)
