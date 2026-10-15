@@ -32,6 +32,7 @@ import io.github.cidy02.kudos.reader.speech.TTSService
 import io.github.cidy02.kudos.reader.speech.applySpeechPreferences
 import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
 import io.github.cidy02.kudos.ui.subject.SubjectFormRow
+import io.github.cidy02.kudos.ui.subject.SubjectToggle
 import io.github.cidy02.kudos.ui.subject.SubjectRowSeparator
 import java.util.Locale
 import kotlinx.coroutines.launch
@@ -171,6 +172,19 @@ internal fun SettingsListeningPage(
                         ?: "Automatic (best available)",
                     choices = listOf("" to "Automatic (best available)") + voices.map { it.id to "${it.name} · On device" },
                     onSelect = { id -> scope.launch { repository.updateSpeechVoiceIdentifier(id) } }
+                )
+                SubjectRowSeparator()
+                SubjectFormRow(
+                    "Read author's notes",
+                    trailing = {
+                        SubjectToggle(
+                            checked = speech.readAuthorNotes,
+                            onCheckedChange = { on -> scope.launch { repository.updateSpeechReadAuthorNotes(on) } },
+                            // iOS's hint, said by TalkBack.
+                            contentDescription = "Read author's notes. Author's notes often carry content " +
+                                "warnings. Turn this off to hear only the story."
+                        )
+                    }
                 )
                 SubjectRowSeparator()
                 SubjectSliderRow(

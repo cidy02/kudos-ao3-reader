@@ -3,7 +3,9 @@ package io.github.cidy02.kudos.reader.settings
 /** Device-local speech settings, shared by Listening and the reader; not a backup DTO. */
 data class ReaderSpeechPreferences(
     val rate: Float = DEFAULT_RATE,
-    val voiceIdentifier: String? = null
+    val voiceIdentifier: String? = null,
+    /** iOS's "Read author's notes" (on unless turned off): off skips a note and its label. */
+    val readAuthorNotes: Boolean = true
 ) {
     fun applyTo(preferences: ReaderPreferences): ReaderPreferences = preferences.copy(
         speechRate = rate,

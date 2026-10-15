@@ -599,7 +599,7 @@ private fun ReaderReading(
                                             scope.launch {
                                                 val from = state.liveProgress?.locatorJson
                                                     ?.let { ReadiumNavigatorController.locatorFromJson(it) }
-                                                val paragraphs = ReaderContentText.paragraphs(publication, from)
+                                                val paragraphs = ReaderContentText.paragraphs(publication, from, viewModel.readsAuthorNotes())
                                                 if (paragraphs.isNotEmpty()) speechController.startReading(paragraphs)
                                             }
                                         }
@@ -695,7 +695,7 @@ private fun ReaderReading(
                                     scope.launch {
                                         val from = state.liveProgress?.locatorJson
                                             ?.let { ReadiumNavigatorController.locatorFromJson(it) }
-                                        val paragraphs = ReaderContentText.paragraphs(publication, from)
+                                        val paragraphs = ReaderContentText.paragraphs(publication, from, viewModel.readsAuthorNotes())
                                             .ifEmpty {
                                                 buildList {
                                                     if (state.work.title.isNotBlank()) add(state.work.title)

@@ -1880,3 +1880,6 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   (3eb, 3ec).** An AO3 author, work or tag tapped in a work's text opens its page in the
   app, as iOS; the tag opens `FandomWorksScreen(isTag = true)` and `TagWorksScreen` is
   removed. Reverse: the commits that name 3eb and 3ec.
+- **2026-10-14 · Read Aloud's "Read author's notes" (3ee).** iOS's switch and rule, in
+  Settings › Listening only (the reader's sheet waits on question 12). Reverses part of 3ak's
+  "left out". Reverse: the commit that names 3ee.

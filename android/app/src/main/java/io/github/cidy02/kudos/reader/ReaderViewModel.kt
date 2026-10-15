@@ -441,6 +441,9 @@ class ReaderViewModel(
         }
     }
 
+    /** Settings › Listening's "Read author's notes", read when Read Aloud starts. */
+    suspend fun readsAuthorNotes(): Boolean = settingsRepository.speechPreferences.first().readAuthorNotes
+
     fun setSpeechRate(rate: Float) {
         viewModelScope.launch { settingsRepository.updateSpeechRate(rate) }
     }
