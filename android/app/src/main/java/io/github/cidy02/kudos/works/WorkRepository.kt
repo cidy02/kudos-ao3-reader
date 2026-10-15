@@ -194,6 +194,15 @@ class WorkRepository(
 
     suspend fun getWork(id: String): SavedWork? = workDao.getById(id)?.toDomain()?.let { decorate(it) }
 
+    internal suspend fun listWorksForIdentity(): List<SavedWork> =
+        decorate(workDao.getAllIncludingDeleted().map { it.toDomain() })
+
+    /** Re-read a detail screen's local match before acting; revival does not invent an EPUB. */
+    suspend fun resolveLocalWork(workId: String): SavedWork? {
+        val work = getWork(workId) ?: return null
+        return if (work.isDeleted) restoreFromRecentlyDeleted(workId) else work
+    }
+
     suspend fun updateDownloadedAt(workId: String, downloadedAt: Instant): SavedWork? {
         val work = getWork(workId) ?: return null
         return upsert(work.copy(downloadedAt = downloadedAt, lastModifiedAt = clock()))
@@ -838,26 +847,31 @@ class WorkRepository(
      * No-ops if the collection is missing or soft-deleted.
      */
     suspend fun addWorkToCollection(workId: String, collectionId: String): List<WorkCollection> {
-        val entity = collectionDao.getById(collectionId) ?: return collectionsForWork(workId)
-        if (entity.isDeleted) return collectionsForWork(workId)
-        collectionDao.addWork(CollectionWorkCrossRef(collectionId, workId))
-        touchCollection(collectionId)
-        if (entity.keepsWorksOffline == true) releaseHeldCopy(workId)
-        // Retract any tombstone from a prior removal of this same pairing — a
-        // stale one here would make a later backup restore silently drop this
-        // work back out of the collection despite the user just re-adding it.
-        val xorId = membershipRecordId(collectionId, workId)
-        tombstoneDao.deleteByRecord(
-            xorId,
-            SyncTombstoneRecordType.WORK_COLLECTION_MEMBERSHIP
-        )
-        // android-v0.2.1-alpha wrote colon-form rows; retract those too so a
-        // re-add is not suppressed by a legacy tombstone that only the dual-form
-        // merge path would still honor.
-        tombstoneDao.deleteByRecord(
-            legacyCollectionMembershipRecordId(collectionId, workId),
-            SyncTombstoneRecordType.WORK_COLLECTION_MEMBERSHIP
-        )
+        database.withTransaction {
+            val entity = collectionDao.getById(collectionId) ?: return@withTransaction
+            if (entity.isDeleted) return@withTransaction
+            if (entity.keepsWorksOffline == true) releaseHeldCopy(workId)
+            if (workId in collectionDao.getWorkIdsForCollection(collectionId)) return@withTransaction
+            val now = clock()
+            collectionDao.addWork(CollectionWorkCrossRef(collectionId, workId))
+            touchCollection(collectionId, now)
+            workDao.getById(workId)?.let { workDao.upsert(it.copy(lastModifiedAt = now)) }
+            // Retract any tombstone from a prior removal of this same pairing — a
+            // stale one here would make a later backup restore silently drop this
+            // work back out of the collection despite the user just re-adding it.
+            val xorId = membershipRecordId(collectionId, workId)
+            tombstoneDao.deleteByRecord(
+                xorId,
+                SyncTombstoneRecordType.WORK_COLLECTION_MEMBERSHIP
+            )
+            // android-v0.2.1-alpha wrote colon-form rows; retract those too so a
+            // re-add is not suppressed by a legacy tombstone that only the dual-form
+            // merge path would still honor.
+            tombstoneDao.deleteByRecord(
+                legacyCollectionMembershipRecordId(collectionId, workId),
+                SyncTombstoneRecordType.WORK_COLLECTION_MEMBERSHIP
+            )
+        }
         return collectionsForWork(workId)
     }
 
@@ -878,7 +892,7 @@ class WorkRepository(
                 )
             )
             collectionDao.removeWork(collectionId, workId)
-            touchCollection(collectionId)
+            touchCollection(collectionId, now)
         }
         return collectionsForWork(workId)
     }
@@ -893,9 +907,9 @@ class WorkRepository(
     private fun membershipRecordId(collectionId: String, workId: String): String =
         collectionMembershipRecordId(collectionId, workId)
 
-    private suspend fun touchCollection(collectionId: String) {
+    private suspend fun touchCollection(collectionId: String, now: Instant) {
         val entity = collectionDao.getById(collectionId) ?: return
-        collectionDao.upsert(entity.copy(lastModifiedAt = clock()))
+        collectionDao.upsert(entity.copy(lastModifiedAt = now, lastMembershipChangedAt = now))
     }
 
     /**
@@ -973,6 +987,10 @@ class WorkRepository(
     }
 
     companion object {
+        /** CollectionWorkPicker.candidates: includes unkept history, excludes queue-only rows. */
+        fun collectionCandidates(works: List<SavedWork>, memberIds: Set<String>): List<SavedWork> =
+            works.filter { !it.isDeleted && !it.isQueueOnlyWork && it.id !in memberIds }
+
         /** PreservedWorkService.retractTombstone, shared by live restore and backup snapshots. */
         fun retractWorkTombstone(
             tombstones: List<SyncTombstone>,

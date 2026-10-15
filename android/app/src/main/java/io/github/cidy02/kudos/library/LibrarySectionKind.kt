@@ -44,6 +44,9 @@ enum class LibrarySectionKind(
     val groupTitle: String
         get() = if (this == ReadingNow) "In progress" else title
 
+    val defaultsToLedgerRows: Boolean
+        get() = this == History || this == Favorites
+
     fun items(state: LibraryUiState): List<LibraryDisplayItem> = when (this) {
         ReadingNow -> state.continueReading
         SavedForLater -> state.savedForLater

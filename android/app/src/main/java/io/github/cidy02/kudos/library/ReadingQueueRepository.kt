@@ -42,8 +42,8 @@ class ReadingQueueRepository(
     private val database: KudosDatabase,
     private val clock: () -> Instant = { Instant.now() },
     private val uuidFactory: () -> String = { UUID.randomUUID().toString() },
-    /** The EPUB file, not the hasEpub flag. Missing files are what Keep fetches. */
-    private val epubOnDisk: suspend (String) -> Boolean = { false },
+    /** Null means no file probe; only a real probe may invalidate a stored EPUB flag. */
+    private val epubOnDisk: (suspend (String) -> Boolean)? = null,
     /** Serial [io.github.cidy02.kudos.works.DownloadQueue]. Empty means no network. */
     private val enqueueDownloads: (List<DownloadQueueItem>) -> Unit = {}
 ) {
@@ -97,9 +97,12 @@ class ReadingQueueRepository(
             ?: error("Queue not found: $queueId")
         require(!queue.isDeleted) { "Cannot add works to a deleted queue." }
 
-        queueDao.getMembershipForWork(queueId, workId)?.let { return it.toDomain() }
-
+        reviveWorkIfNeeded(workId)
         val now = clock()
+        queueDao.getMembershipForWork(queueId, workId)?.let {
+            normalizeWork(workId, now)
+            return it.toDomain()
+        }
         val nextOrder = queueDao.getMembershipsForQueue(queueId)
             .maxOfOrNull { it.sortOrderInQueue }
             ?.plus(1)
@@ -115,23 +118,7 @@ class ReadingQueueRepository(
         queueDao.upsertMembership(membership.toEntity())
         touchQueueMembershipChanged(queueId, now)
 
-        // Queue-add localizes a not-yet-local work as queue-only (T-89), but a work
-        // that was already local (e.g. reading history) needs the flag stamped here
-        // too - this runs for every addWork caller, not just the ones that already
-        // went through WorkDetailScreen's queue-add localize path.
-        val workEntity = workDao.getById(workId)
-        if (workEntity != null) {
-            val keepsCopy = queue.keepsWorksOffline != false
-            if (!workEntity.isQueuedForLater || (keepsCopy && workEntity.freedAt != null)) {
-                workDao.upsert(
-                    workEntity.copy(
-                        isQueuedForLater = true,
-                        freedAt = if (keepsCopy) null else workEntity.freedAt,
-                        lastModifiedAt = now
-                    )
-                )
-            }
-        }
+        normalizeWork(workId, now, markModified = true)
 
         if (enqueueMissingEpub && KeepOffline.queueKeeps(queue.keepsWorksOffline)) {
             workDao.getById(workId)?.toDomain()?.let { enqueueMissing(listOf(it)) }
@@ -156,7 +143,12 @@ class ReadingQueueRepository(
         return moved
     }
 
+    /** Removing a membership alone keeps the work and its EPUB live. */
     suspend fun removeWork(queueId: String, workId: String) {
+        removeMembership(queueId, workId, deleteIfQueueOnly = false)
+    }
+
+    private suspend fun removeMembership(queueId: String, workId: String, deleteIfQueueOnly: Boolean) {
         database.withTransaction {
             val existing = queueDao.getMembershipForWork(queueId, workId) ?: return@withTransaction
             val now = clock()
@@ -178,44 +170,41 @@ class ReadingQueueRepository(
             queueDao.deleteMembershipById(existing.id)
             touchQueueMembershipChanged(queueId, now)
 
-            // iOS parity: removeFromQueueAndDeleteIfQueueOnly. Once a work loses its last
-            // queue membership, clear the flag; if it was queue-only (never explicitly
-            // saved or favorited), the user is abandoning it entirely - soft-delete it
-            // the same way any other removal goes to Recently Deleted, rather than
-            // leaving an orphaned, invisible row behind forever.
-            //
-            // Read the work inside the same transaction as the membership
-            // removal, before deciding whether its last queue kept it alive.
             val freshEntity = workDao.getById(workId)
             if (freshEntity != null) {
-                val remainingCount = queueDao.getActiveMembershipCountForWork(workId)
-                // Must read isQueueOnlyWork from the still-queued entity, before the
-                // flag gets cleared below - isQueueOnlyWork is defined in terms of
-                // isQueuedForLater, so checking it on the already-cleared copy would
-                // always read false regardless of prior state.
                 val wasQueueOnly = freshEntity.toDomain().isQueueOnlyWork
-                if (remainingCount == 0 && freshEntity.isQueuedForLater) {
-                    val cleared = freshEntity.copy(isQueuedForLater = false, lastModifiedAt = now)
-                    if (wasQueueOnly) {
-                        workDao.upsert(
-                            cleared.copy(
-                                isDeleted = true,
-                                deletedAt = now,
-                                permanentDeletionScheduledAt = now.plus(WorkRepository.RECOVERY_WINDOW)
-                            )
-                        )
-                    } else {
-                        workDao.upsert(cleared)
-                    }
+                normalizeWork(workId, now, markModified = true)
+                val normalized = workDao.getById(workId) ?: return@withTransaction
+                if (deleteIfQueueOnly && wasQueueOnly && !normalized.isQueuedForLater) {
+                    workDao.upsert(normalized.copy(
+                        isDeleted = true,
+                        deletedAt = now,
+                        permanentDeletionScheduledAt = now.plus(WorkRepository.RECOVERY_WINDOW)
+                    ))
+                    upsertSignedTombstone(SyncTombstone(
+                        id = uuidFactory(),
+                        recordID = workId.lowercase(),
+                        recordTypeRaw = SyncTombstoneRecordType.SAVED_WORK,
+                        createdAt = now,
+                        lastModifiedAt = now,
+                        sourceURL = WorkTags.canonicalAO3WorkURL(normalized.sourceUrl).orEmpty(),
+                        ao3WorkID = normalized.ao3WorkID ?: WorkTags.ao3WorkIdFromUrl(normalized.sourceUrl)
+                            ?.takeIf { it in Int.MIN_VALUE.toLong()..Int.MAX_VALUE.toLong() }?.toInt(),
+                        deletionReason = "workDeleted"
+                    ))
                 }
             }
         }
     }
 
+    suspend fun removeWorkAndDeleteIfQueueOnly(queueId: String, workId: String) {
+        removeMembership(queueId, workId, deleteIfQueueOnly = true)
+    }
+
     suspend fun removeFromAllQueuesAndDeleteIfQueueOnly(workId: String) {
         val memberships = queueDao.getMembershipsForWork(workId)
         for (membership in memberships) {
-            removeWork(membership.queueID, workId)
+            removeWorkAndDeleteIfQueueOnly(membership.queueID, workId)
         }
     }
 
@@ -372,7 +361,7 @@ class ReadingQueueRepository(
      */
     private suspend fun enqueueMissing(works: List<SavedWork>) {
         val onDisk = works.associate { work ->
-            work.id to runCatching { epubOnDisk(work.id) }.getOrDefault(false)
+            work.id to runCatching { epubOnDisk?.invoke(work.id) == true }.getOrDefault(false)
         }
         val items = KeepOffline.downloadItems(works) { work -> onDisk[work.id] == true }
         if (items.isNotEmpty()) enqueueDownloads(items)
@@ -507,13 +496,33 @@ class ReadingQueueRepository(
         return if (other.id == tagId) null else other.toDomain()
     }
 
-    /** Renames the shared tag. A colliding name is left untouched. */
+    /** Exact-name collisions consolidate every link, as iOS's tag uniqueness constraint does. */
     suspend fun renameUserTag(tagId: String, proposed: String) {
-        if (tagRenameConflict(tagId, proposed) != null) return
-        val current = tagDao.getById(tagId) ?: return
-        val trimmed = proposed.trim()
-        if (trimmed.isEmpty() || trimmed == current.name) return
-        tagDao.upsert(current.copy(name = trimmed))
+        database.withTransaction {
+            val current = tagDao.getById(tagId) ?: return@withTransaction
+            val trimmed = proposed.trim()
+            if (trimmed.isEmpty() || trimmed == current.name) return@withTransaction
+            val workIds = tagDao.getWorkIdsForTag(tagId)
+            val queueIds = tagDao.getQueueIdsForTag(tagId)
+            val target = tagDao.getByName(trimmed)
+            if (target != null && target.id != tagId) {
+                for (workId in workIds) tagDao.addToWork(WorkTagCrossRef(workId, target.id))
+                for (queueId in queueIds) readingLogDao.upsertQueueTag(QueueTagCrossRef(queueId, target.id))
+                tagDao.deleteById(tagId)
+            } else {
+                // UPDATE preserves foreign-key links; INSERT OR REPLACE cascades them away.
+                tagDao.rename(tagId, trimmed)
+            }
+            val now = clock()
+            for (workId in workIds) {
+                val work = workDao.getById(workId)?.toDomain() ?: continue
+                val indexed = io.github.cidy02.kudos.works.WorkSearchIndex.reindex(
+                    work.copy(lastModifiedAt = now), tagDao.getTagsForWork(workId).map { it.name }
+                )
+                workDao.upsert(indexed.toEntity())
+            }
+            for (queueId in queueIds) stampQueue(queueId, now)
+        }
     }
 
     /**
@@ -593,7 +602,7 @@ class ReadingQueueRepository(
 
     suspend fun removeFromSavedForLater(workId: String) {
         val queue = queueDao.getActiveQueueByKind(ReadingQueueKind.SAVED_FOR_LATER) ?: return
-        removeWork(queue.id, workId)
+        removeWorkAndDeleteIfQueueOnly(queue.id, workId)
     }
 
     suspend fun renameQueue(queueId: String, newName: String) {
@@ -659,22 +668,78 @@ class ReadingQueueRepository(
     }
 
     suspend fun hardDeleteQueue(queueId: String, onlyIfStillDeleted: Boolean = false) {
-        // See `WorkRepository.hardDelete`.
-        if (onlyIfStillDeleted && queueDao.getQueueById(queueId)?.isDeleted == false) return
-        queueDao.deleteQueueById(queueId)
-        // Membership rows cascade via FK in DB.
-        val now = clock()
-        upsertSignedTombstone(
-            SyncTombstone(
+        database.withTransaction {
+            // See `WorkRepository.hardDelete`: keep 3fh's stale-confirmation guard.
+            if (onlyIfStillDeleted && queueDao.getQueueById(queueId)?.isDeleted == false) return@withTransaction
+            val now = clock()
+            val memberships = queueDao.getMembershipsForQueue(queueId)
+            for (membership in memberships) {
+                upsertSignedTombstone(SyncTombstone(
+                    id = uuidFactory(),
+                    recordID = membership.id,
+                    recordTypeRaw = SyncTombstoneRecordType.READING_QUEUE_MEMBERSHIP,
+                    createdAt = now,
+                    lastModifiedAt = now,
+                    deletionReason = "queueDeleted"
+                ))
+                queueDao.deleteMembershipById(membership.id)
+            }
+            upsertSignedTombstone(SyncTombstone(
                 id = uuidFactory(),
                 recordID = queueId,
                 recordTypeRaw = SyncTombstoneRecordType.READING_QUEUE,
                 createdAt = now,
                 lastModifiedAt = now,
-                deletedOnDeviceID = "",
                 deletionReason = "queueDeleted"
-            )
+            ))
+            queueDao.deleteQueueById(queueId)
+            for (workId in memberships.map { it.workID }.distinct()) {
+                normalizeWork(workId, now, markModified = true)
+            }
+        }
+    }
+
+    /** iOS normalizeAllQueuedWorks: reconcile members and orphaned flags, without deleting works. */
+    suspend fun normalizeAllQueuedWorks() {
+        database.withTransaction {
+            val ids = queueDao.getAllMemberships().mapTo(mutableSetOf()) { it.workID }
+            workDao.getAllIncludingDeleted().filter { it.isQueuedForLater }.forEach { ids += it.id }
+            val now = clock()
+            for (workId in ids) normalizeWork(workId, now)
+        }
+    }
+
+    private suspend fun normalizeWork(workId: String, now: Instant, markModified: Boolean = false) {
+        val work = workDao.getById(workId) ?: return
+        // A Recently Deleted queue still owns its memberships until permanent deletion.
+        val hasMembership = queueDao.getMembershipsForWork(workId).any {
+            queueDao.getQueueById(it.queueID) != null
+        }
+        val hasFile = epubOnDisk?.invoke(workId) ?: work.hasEpub
+        val releaseHold = work.freedAt != null && workDao.isKeptOffline(workId)
+        var status = work.epubPreservationStatusRaw ?: "notPreserved"
+        var preservedAt = work.preservedAt
+        if (!hasFile && status == "preserved") status = "missingFile"
+        if (hasMembership) {
+            if (work.hasEpub && hasFile) {
+                if (status != "preserving") status = "preserved"
+                if (preservedAt == null) preservedAt = now
+            } else if (status == "notPreserved") {
+                status = "queued"
+            }
+        } else {
+            status = "notPreserved"
+            preservedAt = null
+        }
+        val normalized = work.copy(
+            isQueuedForLater = hasMembership,
+            hasEpub = work.hasEpub && hasFile,
+            freedAt = if (releaseHold) null else work.freedAt,
+            epubPreservationStatusRaw = status,
+            preservedAt = preservedAt,
+            lastModifiedAt = if (markModified || releaseHold) now else work.lastModifiedAt
         )
+        if (normalized != work) workDao.upsert(normalized)
     }
 
     suspend fun sweepExpiredQueueSoftDeletes(): Int {
@@ -700,6 +765,27 @@ class ReadingQueueRepository(
 
     private suspend fun upsertSignedTombstone(tombstone: SyncTombstone) {
         tombstoneDao.upsert(TombstoneSigning.sign(tombstone).toEntity())
+    }
+
+    private suspend fun reviveWorkIfNeeded(workId: String) {
+        database.withTransaction {
+            val entity = workDao.getById(workId) ?: return@withTransaction
+            if (!entity.isDeleted) return@withTransaction
+            workDao.upsert(entity.copy(
+                isDeleted = false,
+                deletedAt = null,
+                permanentDeletionScheduledAt = null,
+                lastModifiedAt = clock()
+            ))
+            tombstoneDao.deleteSavedWorkByIdentity(
+                recordId = entity.id,
+                ao3WorkId = entity.ao3WorkID ?: WorkTags.ao3WorkIdFromUrl(entity.sourceUrl)
+                    ?.takeIf { it in Int.MIN_VALUE.toLong()..Int.MAX_VALUE.toLong() }?.toInt(),
+                canonicalSourceUrl = WorkTags.canonicalAO3WorkURL(entity.sourceUrl).orEmpty(),
+                sourceUrl = entity.sourceUrl,
+                recordType = SyncTombstoneRecordType.SAVED_WORK
+            )
+        }
     }
 
     private suspend fun touchQueueMembershipChanged(queueId: String, now: Instant) {
@@ -765,34 +851,11 @@ class ReadingQueueRepository(
                 // The shared identity matcher handles UUID-backed and canonical AO3 identities.
                 val existing = io.github.cidy02.kudos.works.WorkIdentityIndex.findExisting(
                     candidateSourceUrl = summary.workUrl,
-                    byId = { workDao.getById(it)?.toDomain() },
-                    bySourceUrl = { workDao.getBySourceUrl(it)?.toDomain() }
+                    loadWorks = { workDao.getAllIncludingDeleted().map { it.toDomain() } }
                 )
 
                 if (existing != null) {
-                    if (existing.isDeleted) {
-                        val now = clock()
-                        val entity = workDao.getById(existing.id)
-                        if (entity != null) {
-                            workDao.upsert(entity.copy(
-                                isDeleted = false,
-                                deletedAt = null,
-                                permanentDeletionScheduledAt = null,
-                                lastModifiedAt = now
-                            ))
-                            val ao3Id = WorkTags.ao3WorkIdFromUrl(existing.sourceUrl)
-                                ?.takeIf { it in Int.MIN_VALUE.toLong()..Int.MAX_VALUE.toLong() }
-                                ?.toInt()
-                            tombstoneDao.deleteSavedWorkByIdentity(
-                                recordId = existing.id,
-                                ao3WorkId = ao3Id,
-                                canonicalSourceUrl = WorkTags.canonicalAO3WorkURL(existing.sourceUrl)
-                                    .orEmpty(),
-                                sourceUrl = existing.sourceUrl,
-                                recordType = SyncTombstoneRecordType.SAVED_WORK
-                            )
-                        }
-                    }
+                    reviveWorkIfNeeded(existing.id)
 
                     // ReadingQueueService.swift:623–627: unavailable copies never cause another read.
                     if (existing.ao3Unavailable) {
@@ -830,7 +893,7 @@ class ReadingQueueRepository(
 
                 // Owner 2026-10-07: anonymous EPUB endpoints cannot serve restricted works.
                 // Do not attempt a known refusal (nor add an authenticated bulk read).
-                if (summary.isRestricted && (existing == null || !existing.hasEpub || !epubOnDisk(existing.id))) {
+                if (summary.isRestricted && (existing == null || !existing.hasEpub || epubOnDisk?.invoke(existing.id) != true)) {
                     result.skipped += 1
                     progress?.invoke(result.copy())
                     continue

@@ -129,8 +129,10 @@ class LibraryHistoryScreenTest {
         compose.onNodeWithText("READ, NOT FINISHED").assertExists()
         selectGrouping("Fandom")
         awaitText("3 works")
-        reach("DOCTOR WHO")
-        compose.onNodeWithText("DOCTOR WHO").assertExists()
+        // iOS WorkRow.ledgerRow also names the fandom on each work; select the group heading.
+        val fandomHeading = hasText("DOCTOR WHO") and !hasClickAction()
+        compose.onNode(hasScrollAction()).performScrollToNode(fandomHeading)
+        compose.onNode(fandomHeading).assertExists()
         selectGrouping("Flat")
         awaitText("3 works · most recently read first")
         reach("ALL")

@@ -77,8 +77,8 @@ data class SavedWork(
      * `SavedWork.epubPreservationStatusRaw` / `preservedAt` /
      * `lastPreservationAttemptAt`).
      *
-     * Explicit Android queue/series preservation stamps these existing fields.
-     * Imported rows retain their nullable state until an actual attempt; no backfill.
+     * Queue normalization reconciles these fields against memberships and the local file;
+     * explicit preservation attempts also stamp them.
      * Never use a failed/cancelled status to remove an EPUB or a membership.
      */
     val epubPreservationStatusRaw: String? = null,

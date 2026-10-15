@@ -149,6 +149,29 @@ class DownloadQueueTest {
     }
 
     @Test
+    fun queuedDownloadFindsAStoredDownloadUrlAndKeepsItsLocalIdentity() = runBlocking {
+        repository.upsert(SavedWork(id = existingWorkId, title = "Local", author = "Writer",
+            sourceUrl = "https://archiveofourown.org/downloads/99/story.epub", hasEpub = false,
+            isSaved = true, readiumLocator = "kept place"))
+        repository.softDelete(existingWorkId)
+        val downloads = AtomicInteger(0)
+        val queue = queue(downloadBytes = {
+            downloads.incrementAndGet()
+            AO3Result.Success(epubBytes)
+        })
+        queue.enqueue(listOf(item(99, "Same work").copy(summary = null)))
+        awaitIdle(queue)
+        assertEquals(DownloadQueueStatus.Done, queue.items.value.single().status)
+        assertEquals(1, downloads.get())
+        val revived = repository.getWork(existingWorkId)!!
+        assertFalse(revived.isDeleted)
+        assertEquals("kept place", revived.readiumLocator)
+        assertTrue(fileStore.workEpubExists(existingWorkId))
+        assertEquals(1, database.workDao().getAllIncludingDeleted().size)
+        assertTrue(database.syncTombstoneDao().getByRecord(existingWorkId, "savedWork").isEmpty())
+    }
+
+    @Test
     fun cancelRemovesQueuedButLeavesInFlight() = runBlocking {
         val started = AtomicInteger(0)
         val release = CompletableDeferred<Unit>()

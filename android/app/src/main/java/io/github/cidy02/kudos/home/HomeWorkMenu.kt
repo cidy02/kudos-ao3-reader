@@ -1,5 +1,7 @@
 package io.github.cidy02.kudos.home
 
+import io.github.cidy02.kudos.ui.components.workDeletionMessage
+
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -268,7 +270,7 @@ fun HomeWorkDialogs(
         } else {
             "Delete ${controller.deleteTargets.size} works?"
         },
-        text = "Selected works move to Recently Deleted for 90 days.",
+        text = workDeletionMessage(controller.deleteTargets),
         confirmText = "Delete",
         confirmBeforeDelete = confirmBeforeDelete,
         onConfirm = {
