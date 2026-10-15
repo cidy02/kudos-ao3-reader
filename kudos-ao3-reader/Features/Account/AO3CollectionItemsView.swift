@@ -572,6 +572,16 @@ struct AO3CollectionItemCard: View {
 
     private var isRemoved: Bool { staging.isRemoved(item) }
 
+    /// Beside chips and a button that do not shrink, a row's words had a column a letter
+    /// wide and the card ran off both sides of the screen at the accessibility sizes:
+    /// there each row stacks.
+    private func row(spacing: CGFloat, @ViewBuilder _ content: () -> some View) -> some View {
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 6))
+            : AnyLayout(HStackLayout(alignment: .center, spacing: spacing))
+        return layout { content() }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             headerRow
@@ -598,12 +608,14 @@ struct AO3CollectionItemCard: View {
 
     /// The collection is the eyebrow, with the item's role beside it.
     private var headerRow: some View {
-        HStack(alignment: .center, spacing: 8) {
+        row(spacing: 8) {
             SubjectKicker(
                 text: item.collectionTitle,
                 palette: palette,
                 ruleWidth: SubjectMetrics.kickerRuleWidth,
-                ruleSpacing: 5
+                ruleSpacing: 5,
+                // Whole at the accessibility sizes, on its own line there (Android the same).
+                lineLimit: dynamicTypeSize.isAccessibilitySize ? 3 : 1
             )
             Spacer(minLength: 6)
             if !item.role.isEmpty {
@@ -668,7 +680,7 @@ struct AO3CollectionItemCard: View {
         value: AO3CollectionItemApproval,
         set: @escaping (AO3CollectionItemApproval) -> Void
     ) -> some View {
-        HStack(spacing: 12) {
+        row(spacing: 12) {
             settingsLabel(label)
             Menu {
                 Picker(label, selection: Binding(get: { value }, set: set)) {
@@ -691,7 +703,7 @@ struct AO3CollectionItemCard: View {
         _ label: String,
         value: AO3CollectionItemApproval
     ) -> some View {
-        HStack(spacing: 12) {
+        row(spacing: 12) {
             settingsLabel(label)
             approvalChip(value, showsChevron: false)
         }
@@ -733,7 +745,7 @@ struct AO3CollectionItemCard: View {
         isEditable: Bool,
         set: @escaping (Bool) -> Void
     ) -> some View {
-        HStack(spacing: 12) {
+        row(spacing: 12) {
             settingsLabel(label)
             if isEditable {
                 Toggle(label, isOn: Binding(get: { isOn }, set: set))
@@ -773,7 +785,7 @@ struct AO3CollectionItemCard: View {
     }
 
     private var footerRow: some View {
-        HStack(spacing: 12) {
+        row(spacing: 12) {
             if !item.creatorByline.isEmpty {
                 Text(item.creatorByline)
                     .font(.system(size: captionSize))
@@ -788,8 +800,8 @@ struct AO3CollectionItemCard: View {
                     Text(isRemoved ? "Keep" : "Remove from collection")
                         .font(.system(size: actionSize, weight: .semibold))
                         .foregroundStyle(isRemoved ? AnyShapeStyle(.tint) : AnyShapeStyle(.red))
-                        .lineLimit(1)
-                        .fixedSize()
+                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
+                        .fixedSize(horizontal: !dynamicTypeSize.isAccessibilitySize, vertical: true)
                 }
                 .buttonStyle(.plain)
             }
