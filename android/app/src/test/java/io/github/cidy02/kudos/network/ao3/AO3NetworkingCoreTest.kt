@@ -246,6 +246,20 @@ class AO3ClientStatusMappingTest {
 
 class AO3ClientRetryTest {
     @Test
+    fun theAppsClientNeverSendsAPostTwice() = runTest {
+        // A50 F1: OkHttp answered a 408 by sending the POST again by itself.
+        withServer { server ->
+            server.enqueue(MockResponse.Builder().code(408).body("timeout").build())
+            server.enqueue(MockResponse.Builder().code(200).body("ok").build())
+            val config = AO3NetworkConfig(minDelayBetweenRequestsMillis = 0)
+            val client = OkHttpAO3Client(OkHttpAO3Client.defaultOkHttpClient(config), config,
+                delay = RecordingDelay())
+            client.postForm(server.url("/works/1/kudos").toString(), listOf("a" to "1"), emptyMap())
+            assertEquals(1, server.requestCount)
+        }
+    }
+
+    @Test
     fun retriesServerErrorForGetThenReturnsSuccess() = runTest {
         withServer { server ->
             val delay = RecordingDelay()

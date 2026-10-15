@@ -245,6 +245,9 @@ fun CommentComposerSheet(
                 BasicTextField(
                     value = textFieldValue,
                     onValueChange = send,
+                    // Not while it sends, as iOS: words typed then were erased when the earlier
+                    // text was accepted (A50 F9).
+                    readOnly = submitting,
                     textStyle = TextStyle(
                         fontSize = 15.sp,
                         lineHeight = 22.sp,
