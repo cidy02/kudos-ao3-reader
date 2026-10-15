@@ -40,6 +40,23 @@ class AO3SearchParserBasicTest {
 }
 
 class AO3SearchParserNoResultsTest {
+    @Test(expected = AO3SearchParseException.MissingRequiredStructure::class)
+    fun blurbsPresentButNoneParseableThrowsInsteadOfLookingEmpty() {
+        AO3SearchParser().parseSearchPage("""<html><body>
+            <li class="work blurb"><p>markup AO3 no longer uses</p></li>
+            <li class="work blurb"><p>markup AO3 no longer uses</p></li>
+            </body></html>""", page = 1)
+    }
+
+    @Test
+    fun oneMalformedBlurbDoesNotDiscardTheWorksThatParsed() {
+        val page = AO3SearchParser().parseSearchPage("""<html><body>
+            <li class="work blurb">broken</li>
+            <li id="work_789" class="work blurb"><h4 class="heading"><a href="/works/789">Kept</a></h4></li>
+            </body></html>""", page = 1)
+        assertEquals(listOf(789L), page.works.map { it.id })
+    }
+
     @Test
     fun noResultsPageDoesNotCrash() {
         val page = AO3SearchParser().parseSearchPage(parserResourceText("ao3/search_no_results.html"), page = 2)

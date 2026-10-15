@@ -2027,3 +2027,15 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   `aRestoreCannotRelaxPrivacyGates`). A57's other faults are brief 3fk; the document
   converter's gaps (imported HTML, text and PDF become one chapter without metadata) are a
   feature, recorded. Reverse: the commit that names 3fj.
+- **2026-10-15 · The client requests only HTTPS AO3 hosts; unreadable results are errors; only
+  identity cookies are kept; a rotated session cookie replaces the old one (3fk part 1; A57;
+  Codex, reviewed and gated by Claude).** `OkHttpAO3Client` refuses any other host before
+  coalescing, pacing or a call (injectable for tests on local servers); the session cookie
+  was already AO3-only. A works list or account bookmarks page whose blurbs exist but none
+  parse fails closed, as iOS; the account parser keeps raising its own error. Only
+  `_otwarchive_session` and `user_credentials` are kept, as iOS. Found by Codex's new test: the
+  session merge keyed cookies by their domain as written, so a web-login cookie
+  (`.archiveofourown.org`) and AO3's rotation (`archiveofourown.org`) were kept side by side and
+  the stale one sent first; the key now drops the leading dot. **SameSite is not stored:**
+  WebView treats a cookie without it as Lax, iOS's value; the session format is unchanged.
+  Reverse: the commit that names 3fk.

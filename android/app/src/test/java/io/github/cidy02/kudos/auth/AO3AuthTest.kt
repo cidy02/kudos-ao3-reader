@@ -103,9 +103,9 @@ class AO3CookieJarTest {
             username = "AO3_Reader",
             cookies = listOf(
                 AO3StoredCookie(name = "_otwarchive_session", value = "secret"),
-                AO3StoredCookie(name = "pref", value = "works", path = "/works"),
+                AO3StoredCookie(name = "user_credentials", value = "works", path = "/works"),
                 AO3StoredCookie(
-                    name = "old",
+                    name = "_otwarchive_session",
                     value = "expired",
                     expiresAtEpochMillis = Instant.parse("2026-06-27T11:00:00Z").toEpochMilli()
                 )
@@ -114,7 +114,7 @@ class AO3CookieJarTest {
         val jar = AO3CookieJar(clock)
 
         assertEquals(
-            "pref=works; _otwarchive_session=secret",
+            "user_credentials=works; _otwarchive_session=secret",
             jar.cookieHeader(session, "${AO3Constants.BASE_URL}/works/123")
         )
         assertEquals(

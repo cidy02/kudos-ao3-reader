@@ -126,6 +126,43 @@ class AO3HistoryParserTest {
 }
 
 class AO3BookmarksParserTest {
+    @Test(expected = AO3AccountParseException.MissingRequiredStructure::class)
+    fun accountBookmarksPageStillThrowsWhenAWorkHeadingFailsToParse() {
+        AO3AccountParser().parseAccountList("""<html><body><ol class="bookmark index group">
+            <li id="bookmark_nope" class="bookmark blurb group">
+              <h4 class="heading"><a href="/works/789">Broken markup</a></h4>
+            </li>
+            <li id="bookmark_2" class="bookmark blurb group">
+              <h4 class="heading"><a href="/series/55">A Series</a></h4>
+            </li>
+            </ol></body></html>""", page = 1, type = AccountListType.Bookmarks)
+    }
+
+    @Test
+    fun unrecognizedBookmarksMarkupThrowsInsteadOfLookingEmpty() {
+        try {
+            AO3AccountParser().parseAccountList("<html><body><p>nope</p></body></html>",
+                page = 1, type = AccountListType.Bookmarks)
+            fail("Expected a bookmarks parse failure")
+        } catch (_: io.github.cidy02.kudos.network.ao3.author.AO3AuthorParseException) {
+            // Same assertion as iOS accountBookmarksPageStillThrowsWhenAWorkHeadingFailsToParse.
+        }
+    }
+
+    @Test
+    fun onlyNonWorkBookmarksAreEmptyAndRetainPagination() {
+        val page = AO3AccountParser().parseAccountList("""<html><body>
+            <ol class="bookmark index group">
+              <li id="bookmark_1" class="bookmark blurb"><h4 class="heading"><a href="/series/55">Series</a></h4>
+                <blockquote class="userstuff notes">see <a href="/works/789">this</a></blockquote></li>
+              <li id="bookmark_2" class="bookmark blurb"><h4 class="heading"><a href="/external_works/3">External</a></h4></li>
+              <li id="bookmark_3" class="bookmark blurb">Deleted work</li>
+            </ol><ol class="pagination"><li>1</li><li>2</li></ol>
+            </body></html>""", page = 1, type = AccountListType.Bookmarks)
+        assertTrue(page.works.isEmpty())
+        assertEquals(2, page.totalPages)
+    }
+
     @Test
     fun parsesBookmarkBlurbsAndSkipsNonWorkBookmarks() {
         val page = AO3AccountParser().parseAccountList(

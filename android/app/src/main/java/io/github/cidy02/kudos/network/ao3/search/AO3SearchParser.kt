@@ -19,7 +19,8 @@ class AO3SearchParser {
     fun parseWorksListPage(
         html: String,
         page: Int,
-        blurbSelector: String
+        blurbSelector: String,
+        requireParseableBlurbs: Boolean = blurbSelector != "li.bookmark.blurb"
     ): AO3SearchPage {
         if (AO3OverloadDetector.isOverloadPage(html)) {
             throw AO3SearchParseException.Overloaded()
@@ -27,10 +28,14 @@ class AO3SearchParser {
 
         val currentPage = page.coerceAtLeast(1)
         val document = Jsoup.parse(html, AO3Constants.BASE_URL)
-        val works = document.select(blurbSelector)
+        val blurbs = document.select(blurbSelector)
+        val works = blurbs
             .mapNotNull { element ->
                 runCatching { parseWorkSummary(element) }.getOrNull()
             }
+        if (requireParseableBlurbs && blurbs.isNotEmpty() && works.isEmpty()) {
+            throw AO3SearchParseException.MissingRequiredStructure("AO3 work blurbs could not be parsed.")
+        }
 
         return AO3SearchPage(
             works = works,
@@ -146,7 +151,6 @@ class AO3SearchParser {
             ?.let { return it }
 
         val href = element.selectFirst("h4.heading a[href*=/works/]")?.attr("href")
-            ?: element.selectFirst("a[href*=/works/]")?.attr("href")
         return href?.let(::workIdFromPath)
     }
 
