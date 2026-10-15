@@ -162,6 +162,9 @@ class Brief3caScreenTest {
         awaitText("AO3 has no works for this $noun right now.")
         compose.onNodeWithText("Clear Filters").assertDoesNotExist()
         assertEquals(1, client.gets.size)
+        // A tag is in the address only; a fandom filter of its name asked for a fandom so named (A49 F12).
+        assertEquals(if (isTag) null else "Test fandom",
+            client.gets.first().toHttpUrl().queryParameter("work_search[fandom_names]"))
         compose.onNodeWithContentDescription("Filter").performClick()
         compose.onNodeWithTag("AO3 filter form").performScrollToNode(hasText("Completion"))
         compose.onNodeWithText("Completion").performClick()

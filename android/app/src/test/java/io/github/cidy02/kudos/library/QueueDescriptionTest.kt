@@ -5,7 +5,9 @@ import android.content.Context
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.onNodeWithText
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import io.github.cidy02.kudos.app.LocalPushedShellChrome
@@ -14,6 +16,7 @@ import io.github.cidy02.kudos.data.local.KudosDatabase
 import io.github.cidy02.kudos.ui.theme.KudosTheme
 import io.github.cidy02.kudos.ui.theme.KudosThemeMode
 import kotlinx.coroutines.runBlocking
+import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -48,5 +51,10 @@ class QueueDescriptionTest {
         }
         compose.onNodeWithContentDescription("Description").performTextInput("Night bus reads")
         compose.waitUntil(5_000) { runBlocking { repository.getQueue(queue.id)?.notes } == "Night bus reads" }
+        // A colour picked next keeps it: it wrote the page's old, empty description back (A49 F7).
+        compose.onNodeWithText("Colour").performClick()
+        compose.onNodeWithText("Mint").performClick()
+        compose.waitUntil(5_000) { runBlocking { repository.getQueue(queue.id)?.hue } == 0.4424 }
+        assertEquals("Night bus reads", runBlocking { repository.getQueue(queue.id)?.notes })
     }
 }

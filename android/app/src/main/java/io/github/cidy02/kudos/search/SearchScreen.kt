@@ -404,7 +404,7 @@ fun SearchScreen(
                                     onPageCount = 0,
                                     isPaging = isPaging,
                                     onSortSelected = { sort ->
-                                        val next = filters.copy(sort = sort)
+                                        val next = filters.withSort(sort)
                                         viewModel.updateFilters(next)
                                         viewModel.runSearch(searchFilters = next)
                                     },
@@ -440,7 +440,7 @@ fun SearchScreen(
                                 },
                                 onSortSelected = { sort ->
                                     remoteSelection.exit()
-                                    val next = filters.copy(sort = sort)
+                                    val next = filters.withSort(sort)
                                     viewModel.updateFilters(next)
                                     viewModel.runSearch(searchFilters = next)
                                 },
