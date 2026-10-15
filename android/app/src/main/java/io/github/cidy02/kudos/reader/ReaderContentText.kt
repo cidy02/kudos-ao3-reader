@@ -28,7 +28,41 @@ object ReaderContentText {
             ?: return@withContext emptyList()
         val full = runCatching { content.text() }.getOrNull().orEmpty()
         if (full.isBlank()) return@withContext emptyList()
-        splitIntoSpeakableChunks(full.take(MAX_CHARS))
+        // ponytail: MAX_CHARS still ends a session after about 14,000 words; read on chapter
+        // by chapter (as iOS) if long listening matters.
+        speakableParagraphs(full.take(MAX_CHARS)).flatMap(::splitIntoSpeakableChunks)
+    }
+
+    /**
+     * iOS's `KokoroBoilerplateFilter` (3ea). Readium gives one paragraph per line; they were
+     * run together, AO3's own labels ("Chapter Notes", "Summary") and its closing plug were
+     * read out, and a link was spelt out letter by letter. Now each paragraph is its own
+     * stretch, a paragraph that is nothing but a label is dropped (a note that only starts
+     * with one is read), and a link is said as its site ("tumblr.com.").
+     */
+    internal fun speakableParagraphs(text: String): List<String> =
+        text.split('\n').map { it.replace(WHITESPACE, " ").trim() }
+            .filter { it.isNotEmpty() && normalized(it) !in LABELS && normalized(it) != KUDOS_PLUG }
+            .map { paragraph -> URL.replace(paragraph) { host(it.value) } }
+
+    private val WHITESPACE = Regex("\\s+")
+    private val URL = Regex("(?:https?://|www\\.)\\S+")
+    private val LABELS = setOf(
+        "Summary", "Notes", "End Notes", "Chapter Summary", "Chapter Notes",
+        "Author's Note", "Author's Note:"
+    )
+    private const val KUDOS_PLUG =
+        "Please drop by the Archive and comment to let the creator know if you enjoyed their work!"
+
+    private fun normalized(text: String) = text.replace('\u2019', '\'').replace('\u2018', '\'')
+
+    private fun host(run: String): String {
+        val rest = run.substringAfter("://").removePrefix("www.")
+        val host = rest.takeWhile { it !in "/?#" }
+        if (host.isEmpty()) return "a link"
+        // Keep the sentence's own full stop the match took with it ("…works/407062.").
+        val last = run.last()
+        return if (last in ".,;:!?" && !host.endsWith(last)) host + last else host
     }
 
     fun splitIntoSpeakableChunks(text: String): List<String> {

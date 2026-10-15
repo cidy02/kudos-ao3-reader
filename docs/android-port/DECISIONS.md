@@ -1873,3 +1873,6 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   keeps a changed note when it is swiped away or closed with Back; dismissing keeps the
   colour as iOS's swipe did. Android's Add note pop-up ignores a tap beside it while a note
   is typed. Reverse: the commits that name 3dz and T-407.
+- **2026-10-14 · Read Aloud says what iOS's says (3ea).** Paragraphs kept apart; AO3's
+  labels and closing plug dropped; a link said as its site (iOS's `KokoroBoilerplateFilter`).
+  Reverse: `speakableParagraphs` in `reader/ReaderContentText.kt`.
