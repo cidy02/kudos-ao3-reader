@@ -4,6 +4,7 @@ import io.github.cidy02.kudos.network.ao3.writes.writeResource
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -40,6 +41,28 @@ class AO3CommentThreadParserTest {
 
         assertTrue(thread.comments.isEmpty())
         assertEquals("comment-token", thread.form?.authenticityToken)
+    }
+
+    @Test
+    fun onlyTheAuthoritativeEmptyListIsAnEmptyCommentsPage() {
+        val target = AO3CommentTarget.Chapter(123, 456)
+        val url = target.pageUrl()
+        val standalone = writeResource("ao3/comments/comment_thread_reply_form.html")
+        val invalidPages = listOf(
+            standalone, // A bare thread is not a work/chapter comments page.
+            "<div id='comments_placeholder'><div><ol class='thread'></ol></div></div>",
+            "<div id='comments_placeholder'><ol class='thread'><li>Changed markup</li></ol></div>"
+        )
+        for (html in invalidPages) {
+            assertThrows(IllegalArgumentException::class.java) { parser.parseThread(html, url, target) }
+        }
+        assertTrue(parser.parseThread(writeResource("ao3/comments/comments_empty.html"), url, target).comments.isEmpty())
+        assertEquals(1, parser.parseThread(standalone, AO3CommentUrls.commentThreadUrl(1252794206), target,
+            isStandaloneThread = true).comments.size)
+        assertThrows(IllegalArgumentException::class.java) {
+            parser.parseThread("<main><ol class='thread'></ol></main>", AO3CommentUrls.commentThreadUrl(9), target,
+                isStandaloneThread = true)
+        }
     }
 
     @Test

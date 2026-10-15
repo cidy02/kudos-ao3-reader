@@ -140,6 +140,22 @@ class CommentsViewModelContextTest {
         assertEquals(1, session.urls.size)
     }
 
+    @Test
+    fun anUnrecognised200PageStopsNewestPageDiscoveryAndRetryCanLoadTheEmptyList() {
+        var html = "<html><body><p>This work could have adult content.</p>" +
+            "<ol class='pagination'><li>1</li><li>3</li></ol></body></html>"
+        val session = Session(basic) { url -> success(html, url = url) }
+        val viewModel = model(session)
+        until("the parse error") { viewModel.state.value is CommentsUiState.Error }
+        assertEquals("an invalid first page cannot discover a newest page", 1, session.urls.size)
+
+        html = writeResource("ao3/comments/comments_empty.html")
+        viewModel.retry()
+        until("the recognised empty page") { loaded(viewModel) }
+        assertEquals(emptyList<Long>(), idsOf(viewModel))
+        assertEquals(2, session.urls.size)
+    }
+
     private fun reply(id: Long) = AO3Comment(
         id = "comment_$id", author = AO3CommentAuthor(name = "Someone"), date = "2026-08-03", body = "Stub", canReply = true)
 
@@ -332,7 +348,8 @@ class CommentsViewModelContextTest {
             "</h4><p class=\"datetime\">1 Jan 2026</p><blockquote class=\"userstuff\"><p>c$id</p></blockquote>" +
             (if (replies.isEmpty()) "" else "<ol class=\"thread\">" + replies.joinToString("") + "</ol>") + "</li>"
     private fun page(vararg roots: String) =
-        success("<html><body class=\"logged-in\"><ol class=\"thread\">" + roots.joinToString("") + "</ol></body></html>")
+        success("<html><body class=\"logged-in\"><div id=\"comments_placeholder\"><ol class=\"thread\">" +
+            roots.joinToString("") + "</ol></div></body></html>")
 
     /** The ids of the rows the list would draw with every conversation opened, as the screen builds them. */
     private fun drawn(viewModel: CommentsViewModel): List<String> {

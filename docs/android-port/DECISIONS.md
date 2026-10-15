@@ -1907,3 +1907,6 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
 - **2026-10-15 · A lost answer after a collection write says it may have landed (3en, A37
   F10).** Not "try again". Goes further than iOS's generic failure, against a repeat write.
   Reverse: the commit that names 3en.
+- **2026-10-15 · A comments page without AO3's list is an error (3el, A50 F7, Codex).** As
+  iOS: a work's or chapter's page needs `#comments_placeholder > ol.thread`; a page without
+  it shows the error and Retry, not "No Comments Yet". Reverse: the commit that names 3el.
