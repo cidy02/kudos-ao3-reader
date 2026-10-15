@@ -1985,3 +1985,8 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   preview is an error; a deleted work keeps its last visit; AO3 Preferences lists the account
   links AO3 serves (opened only in the in-app view's AO3 allow-list). Reverse: the commit
   that names 3fd.
+- **2026-10-15 · A private bookmark stays private; a single-pseud comment carries its pseud
+  (3ff; A55 #1, #3).** The bookmark form's private and rec flags are read from the checkbox,
+  not the hidden "0" AO3 writes before it (a private bookmark read as public, and an edit saved
+  it public). The posting pseud is read from a hidden input first, as iOS's
+  `parseDefaultPseudID`. Tests port iOS's on its own fixture. Reverse: the commit that names 3ff.
