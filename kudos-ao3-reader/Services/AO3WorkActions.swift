@@ -415,10 +415,17 @@ extension AO3AuthService {
         if changes.hasTagChanges {
             for workID in changes.workIDs {
                 lastResponse = try await AO3RequestCoordinator.shared.withSlot {
-                    let form = try await loadEditTagsForm(workID: workID)
-                    let merged = changes.applying(to: form.tags)
-                    return try await editTags(
-                        workID: workID, current: form.tags, desired: merged
+                    // One read per work, the changes merged into the form that is sent.
+                    // `editTags` read the form again and assigned every tag group from this
+                    // first read, so a group edited elsewhere in between (Relationships, say)
+                    // was written back with its older value though untouched (Android A37 F5).
+                    try requireWorkSession()
+                    var form = try await loadEditTagsForm(workID: workID)
+                    form.tags = changes.applying(to: form.tags)
+                    return try await submitWorkForm(
+                        form.actionURL,
+                        form.parameters(submit: .update),
+                        referer: AO3Client.workEditTagsURL(workID: workID)
                     )
                 }
             }
