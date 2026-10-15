@@ -163,23 +163,16 @@ class AO3WriteRepository(
         }
     }
 
-    /** Swift merges per work, then editTags itself reads its fresh token/action again. */
+    /** Per work: its Edit Tags form read once, the changes merged into it, that form sent (A37 F5). */
     suspend fun bulkEditWorks(changes: AO3BulkEditChanges, expectedGeneration: Int): AO3Result<Unit> {
         requireCollectionSession(expectedGeneration)
         val username = client.username() ?: return AO3Result.Failure(AO3Error.Validation("Log in to AO3 first."))
         if (changes.workIDs.isEmpty()) return AO3Result.Failure(AO3Error.Validation("Select at least one work."))
         if (changes.hasTags) for (id in changes.workIDs) {
-            requireCollectionSession(expectedGeneration)
-            val page = when (val read = client.getAuthenticated(AO3WorkFormUrls.editTags(id))) {
-                is AO3Result.Failure -> return read
-                is AO3Result.Success -> read.value
-            }
-            requireCollectionSession(expectedGeneration)
-            val form = try { AO3WorkFormParser().parse(page.body, page.url) }
-                catch (_: Exception) { return AO3Result.Failure(AO3Error.Parse("Couldn't read AO3's work form.")) }
-            if (form.kind != AO3WorkFormKind.EditTags || form.workID != id)
-                return AO3Result.Failure(AO3Error.Parse("Couldn't read AO3's work form."))
-            when (val answer = editWorkTags(changes.applying(form), expectedGeneration)) {
+            // Merged into the one form that is sent: the changes were applied to a first read
+            // and copied over a second, so a tag group edited elsewhere between the two was
+            // written back with its older value though untouched here (A37 F5).
+            when (val answer = editWorkTags(id, expectedGeneration) { fresh -> changes.applying(fresh) }) {
                 is AO3Result.Failure -> return answer
                 is AO3Result.Success -> Unit
             }
@@ -227,11 +220,18 @@ class AO3WriteRepository(
 
     /** iOS editTags: fresh form/token/action, desired tags, one single-shot POST. */
     suspend fun editWorkTags(desired: AO3WorkForm, expectedGeneration: Int): AO3Result<Unit> {
-        requireCollectionSession(expectedGeneration)
-        if (client.username() == null) return AO3Result.Failure(AO3Error.Validation("Log in to AO3 first."))
         if (desired.kind != AO3WorkFormKind.EditTags)
             return AO3Result.Failure(AO3Error.Parse("Couldn't read AO3's work form."))
         val id = desired.workID ?: return AO3Result.Failure(AO3Error.Parse("Couldn't read AO3's work form."))
+        return editWorkTags(id, expectedGeneration) { fresh -> fresh.withTagsFrom(desired) }
+    }
+
+    /** The work's Edit Tags form read once, [merge] applied to it, and that form sent. */
+    private suspend fun editWorkTags(
+        id: Long, expectedGeneration: Int, merge: (AO3WorkForm) -> AO3WorkForm
+    ): AO3Result<Unit> {
+        requireCollectionSession(expectedGeneration)
+        if (client.username() == null) return AO3Result.Failure(AO3Error.Validation("Log in to AO3 first."))
         val referer = AO3WorkFormUrls.editTags(id)
         val page = when (val result = client.getAuthenticated(referer)) {
             is AO3Result.Failure -> return result
@@ -247,7 +247,7 @@ class AO3WriteRepository(
           catch (_: Exception) { return AO3Result.Failure(AO3Error.Parse("Couldn't read AO3's work form.")) }
         if (fresh.kind != AO3WorkFormKind.EditTags || fresh.workID != id)
             return AO3Result.Failure(AO3Error.Parse("Couldn't read AO3's work form."))
-        return submitWork(fresh.withTagsFrom(desired), expectedGeneration, referer, tagsOnly = true)
+        return submitWork(merge(fresh), expectedGeneration, referer, tagsOnly = true)
     }
 
     private suspend fun submitWork(form: AO3WorkForm, expectedGeneration: Int, referer: String,
