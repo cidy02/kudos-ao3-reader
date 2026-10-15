@@ -908,6 +908,10 @@ struct ReaderSpeechMiniPlayer: View {
                     )
                 }
             }
+            // The glyphs take text styles but sit in fixed 44pt buttons: at the accessibility
+            // sizes they grew past their buttons and into each other. They stop growing at the
+            // largest standard size; the caption below keeps growing.
+            .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
 
             Text(controller.spokenText)
                 .font(.footnote)
