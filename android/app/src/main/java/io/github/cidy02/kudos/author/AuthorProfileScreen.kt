@@ -261,7 +261,7 @@ fun AuthorProfileScreen(
 
     fun submitSubscription(form: io.github.cidy02.kudos.network.ao3.author.AO3AuthorSubscriptionForm) {
         val writes = seriesWrites ?: return
-        if (subscriptionBusy) return
+        if (subscriptionBusy || headerLoading) return
         val expectedRoute = route
         val expectedSession = sessionGeneration
         subscriptionBusy = true
@@ -691,7 +691,9 @@ fun AuthorProfileScreen(
                                         else -> submitSubscription(form)
                                     }
                                 },
-                                subscriptionBusy = subscriptionBusy,
+                                // And while the page reloads after one: the button still holds the
+                                // old form, and a tap resent it (A50 F2).
+                                subscriptionBusy = subscriptionBusy || headerLoading,
                                 moderationBusy = moderationBusy,
                                 onModeration = { action ->
                                     if (seriesWrites == null) onOpenWeb(action.url) else beginModeration(action)
