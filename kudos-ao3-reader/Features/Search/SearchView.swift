@@ -443,10 +443,14 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                     .cardRow()
                 } header: {
                     Text("Saved Searches")
-                } footer: {
-                    Text("Search above for works in your Library or on AO3. "
-                        + "To explore by fandom, use the Browse tab.")
                 }
+                // A row, not the section's footer: a plain list paints a footer on a white
+                // band, which stood out under Sepia (and Dark's would be the system's).
+                Text("Search above for works in your Library or on AO3. "
+                    + "To explore by fandom, use the Browse tab.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .bareListRow()
             }
             .cardList()
         }

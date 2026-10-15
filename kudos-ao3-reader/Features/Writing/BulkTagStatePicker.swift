@@ -164,10 +164,14 @@ private struct BulkNameListEditor: View {
                     .onSubmit(add)
                 Button("Add", action: add)
                     .disabled(trimmed.isEmpty)
-            } footer: {
-                Text("Enter the collection name exactly as it appears on AO3. If AO3 doesn't "
-                    + "recognize it, you will see that when you save.")
             }
+            // A row, not the section's footer: a plain list paints a footer on a white band
+            // (see Search's saved searches).
+            Text("Enter the collection name exactly as it appears on AO3. If AO3 doesn't "
+                + "recognize it, you will see that when you save.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .bareListRow()
         }
         .cardList()
         .navigationTitle(title)

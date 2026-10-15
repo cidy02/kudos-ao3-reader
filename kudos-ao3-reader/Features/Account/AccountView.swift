@@ -565,7 +565,8 @@ struct AccountView: View {
                 onLogin: { showingLogin = true }
             )
             .pageBodyRow(top: 10, gutter: SubjectMetrics.accountGutter)
-        } footer: {
+            // A row, not the section's footer: a plain list paints a footer on a white band
+            // (see Search's saved searches).
             if let notice = auth.noticeMessage {
                 Text(notice)
                     .pageBodyRow(top: 8, gutter: SubjectMetrics.accountGutter)
