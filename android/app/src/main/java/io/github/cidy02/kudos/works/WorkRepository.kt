@@ -441,7 +441,12 @@ class WorkRepository(
         }
         // Files cannot roll back with Room. Remove only after the rows and every
         // deletion marker commit; a failed DAO write must leave the reader's EPUB.
-        if (removed) fileStore.deleteWorkEpub(workId)
+        if (removed) {
+            fileStore.deleteWorkEpub(workId)
+            // An imported work's original and its conversion record go with it; they were left
+            // behind for good, unreachable (A57, iOS `permanentDeletionRemovesThePreservedOriginal`).
+            fileStore.deleteOriginal(workId)
+        }
     }
 
     /**

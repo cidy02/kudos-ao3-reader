@@ -507,6 +507,20 @@ class WorkLifecycleRepositoryTest {
         )
     }
 
+    /** A57, iOS `permanentDeletionRemovesThePreservedOriginal`. */
+    @Test
+    fun deleteForeverRemovesTheImportedOriginalToo() = runTest {
+        repository.upsert(sampleSavedWork().copy(hasEpub = true))
+        fileStore.writeWorkEpub(workUuid, epubBytes)
+        fileStore.writeOriginal(workUuid, "txt", "Chapter 1".toByteArray())
+        assertNotNull(fileStore.originalFile(workUuid))
+        repository.softDelete(workUuid)
+
+        repository.hardDelete(workUuid, onlyIfStillDeleted = true)
+
+        assertNull(fileStore.originalFile(workUuid))
+    }
+
     /** A56, iOS `deletePermanentlyLeavesALiveWorkCollectionAndQueueAlone`. */
     @Test
     fun aStaleDeleteForeverLeavesAWorkRestoredMeanwhileAlone() = runTest {

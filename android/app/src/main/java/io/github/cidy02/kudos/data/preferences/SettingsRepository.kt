@@ -527,7 +527,9 @@ class SettingsRepository(
             prefs[Keys.ReaderWordSpacing] = settings.reader.readerWordSpacing
             prefs[Keys.ReaderMargin] = settings.reader.readerMargin
             prefs[Keys.ReaderJustify] = settings.reader.readerJustify
-            prefs[Keys.ConfirmBeforeDelete] = settings.app.confirmBeforeDelete
+            // Tighten only, like the privacy gates below: a restore must not switch off the
+            // reader's delete confirmation (A57, iOS `aRestoreCannotRelaxPrivacyGates`).
+            prefs[Keys.ConfirmBeforeDelete] = current.app.confirmBeforeDelete || settings.app.confirmBeforeDelete
             prefs[Keys.HideMatureContent] = current.privacy.hideMatureContent || settings.privacy.hideMatureContent
             
             val newMatureMode = if (current.privacy.matureContentMode == MatureContentMode.Hide) {
