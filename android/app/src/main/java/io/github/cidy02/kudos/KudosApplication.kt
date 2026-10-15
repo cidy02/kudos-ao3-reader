@@ -63,6 +63,7 @@ class KudosApplication : Application(), Configuration.Provider {
         // Apple PreservedWorkService launch sweep: permanently remove soft-deleted
         // works and collections past permanentDeletionScheduledAt (90-day window).
         applicationScope.launch {
+            runCatching { container.backupRepository.recoverInterruptedReplace() }
             runCatching {
                 TombstoneLocalMigration.runIfNeeded(
                     container.database,

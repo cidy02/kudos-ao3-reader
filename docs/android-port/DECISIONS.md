@@ -1956,3 +1956,11 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   now / N min ago" (stamped when a page arrives, read again each minute, not stored), and its
   All list is headed "Everything else" even when nothing is updated. A choice already made is
   kept. Reverse: the commit that names 3fb.
+- **2026-10-15 · A failed Replace leaves the library as it was; an export names the books it
+  left out (3fa, A52 #1 and #8; Codex, reviewed and gated by Claude).** Replace runs in one
+  Room transaction; before a file is overwritten it is moved aside under a fixed sibling name
+  (`.kudos-replace-undo`; Android refuses hard links, seen on the emulator) and moved back on
+  failure; launch and every Replace first repair asides a crash left. Merge and Reconcile keep
+  their partial apply (sync relies on its pending-file flags). The export says "N books were
+  left out because their files are missing: …". No schema or archive change. Reverse: the
+  commit that names 3fa.

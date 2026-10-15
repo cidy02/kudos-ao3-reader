@@ -78,16 +78,15 @@ fun BackupScreen(
             busy = true
             statusMessage = null
             try {
-                val bytes = repository.exportV2ZipBytes()
+                val result = repository.exportV2Zip()
                 withContext(Dispatchers.IO) {
                     context.contentResolver.openOutputStream(uri)?.use { out ->
-                        out.write(bytes)
+                        out.write(result.bytes)
                         out.flush()
                     } ?: error("Could not open the chosen location for writing.")
                 }
                 statusIsError = false
-                statusMessage =
-                    "Exported ${bytes.size / 1024} KB as a v${BackupVersion.CURRENT} .kudosbackup ZIP."
+                statusMessage = result.toUserMessage()
             } catch (error: Exception) {
                 statusIsError = true
                 statusMessage = userFacingError("Export failed", error)
@@ -173,11 +172,8 @@ fun BackupScreen(
                 }
             } catch (error: Exception) {
                 statusIsError = true
-                // A Replace that fails after its records are in leaves the library part replaced
-                // (iOS rolls back; A52). Say so, and where the library as it was is kept.
                 statusMessage = userFacingError("Import failed", error) + (safetyName?.let {
-                    " Part of your library may already have been replaced. It was saved as $it " +
-                        "first: import that file with Replace to go back."
+                    " Your library was not replaced. The safety copy is $it."
                 } ?: "")
             } finally {
                 busy = false
