@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.files
 
+import io.github.cidy02.kudos.backup.BackupFileUndo
 import io.github.cidy02.kudos.backup.BackupPaths
 import java.io.IOException
 import java.nio.file.Files
@@ -9,13 +10,13 @@ import java.util.UUID
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-class WorkFileStore(
+open class WorkFileStore(
     private val filesRoot: Path
 ) {
-    private val worksDirectory: Path
+    internal val worksDirectory: Path
         get() = filesRoot.resolve("works").normalize()
 
-    suspend fun writeWorkEpub(workId: String, bytes: ByteArray): FileWriteResult {
+    open suspend fun writeWorkEpub(workId: String, bytes: ByteArray): FileWriteResult {
         if (bytes.isEmpty()) return FileWriteResult.Failure("EPUB download was empty.")
         return withContext(Dispatchers.IO) {
             try {
@@ -146,9 +147,11 @@ class WorkFileStore(
         if (!Files.isDirectory(originalsDirectory)) return null
         val record = conversionRecordPath(workId)
         Files.newDirectoryStream(originalsDirectory, "$uuid.*").use { stream ->
-            // The conversion record shares the prefix and is not the original (iOS
-            // `existingOriginalDocumentURL`): rebuilding would try to convert its own bookkeeping.
-            return stream.firstOrNull { Files.isRegularFile(it) && it != record }
+            // Records and undo asides share the prefix but must never be treated as originals.
+            return stream.firstOrNull {
+                Files.isRegularFile(it) && it != record &&
+                    !it.fileName.toString().endsWith(BackupFileUndo.UNDO_SUFFIX)
+            }
         }
     }
 
@@ -159,13 +162,13 @@ class WorkFileStore(
         return Files.deleteIfExists(existing)
     }
 
-    private fun conversionRecordPath(workId: String): Path =
+    internal fun conversionRecordPath(workId: String): Path =
         originalsDirectory.resolve("${UUID.fromString(workId)}${BackupPaths.CONVERSION_RECORD_SUFFIX}").normalize()
 
-    private val originalsDirectory: Path
+    internal val originalsDirectory: Path
         get() = filesRoot.resolve("originals").normalize()
 
-    private fun originalPath(workId: String, extension: String): Path {
+    internal fun originalPath(workId: String, extension: String): Path {
         val uuid = UUID.fromString(workId).toString()
         val safeExtension = extension.lowercase().filter { it.isLetterOrDigit() }.ifEmpty { "bin" }
         val path = originalsDirectory.resolve("$uuid.$safeExtension").normalize()

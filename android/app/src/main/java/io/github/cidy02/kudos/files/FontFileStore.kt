@@ -15,7 +15,7 @@ import kotlinx.coroutines.withContext
 class FontFileStore(
     private val filesRoot: Path
 ) {
-    private val fontsDirectory: Path
+    internal val fontsDirectory: Path
         get() = filesRoot.resolve("fonts").normalize()
 
     fun fontPath(fileName: String): Path {
