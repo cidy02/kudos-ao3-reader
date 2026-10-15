@@ -1865,3 +1865,7 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   Settings first opened under a plain top bar. Reverse: the commit that names 3dw.
 - **2026-10-14 · The filter panel's menus look like choices (3dx).** As iOS's pickers, with
   `showsChoice`; Save Search has iOS's bookmark glyph. Reverse: the commit that names 3dx.
+- **2026-10-14 · A queue's description is written as it is typed (3dy).** It was lost when
+  the page was left without the field losing focus. The New Queue sheet loses its
+  Description field (iOS's has none; the details page edits it) and picks tags from one
+  row with a "+ New tag" chip. Reverse: the commit that names 3dy.
