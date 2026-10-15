@@ -418,16 +418,21 @@ class WorkRepository(
      * tombstone so a later backup import does not resurrect it by UUID.
      * Used by "Delete forever" and [sweepExpiredSoftDeletes].
      */
-    suspend fun hardDelete(workId: String) {
-        database.withTransaction {
+    suspend fun hardDelete(workId: String, onlyIfStillDeleted: Boolean = false) {
+        val removed = database.withTransaction {
+            // From Recently Deleted and the expiry sweeps, only what is still deleted: a stale
+            // confirmation or an expiry snapshot must not erase a work restored meanwhile, with its
+            // EPUB, place and marks (A56, iOS `deletePermanentlyLeavesALiveWorkCollectionAndQueueAlone`).
+            if (onlyIfStillDeleted && workDao.getById(workId)?.isDeleted == false) return@withTransaction false
             val work = getWork(workId)
             if (work != null) recordWorkTombstone(work, clock(), deletionReason = "workDeleted")
             deleteDependents(workId)
             workDao.deleteById(workId)
+            true
         }
         // Files cannot roll back with Room. Remove only after the rows and every
         // deletion marker commit; a failed DAO write must leave the reader's EPUB.
-        fileStore.deleteWorkEpub(workId)
+        if (removed) fileStore.deleteWorkEpub(workId)
     }
 
     /**
@@ -486,7 +491,7 @@ class WorkRepository(
         val now = clock()
         val expired = workDao.getExpiredSoftDeletes(now)
         for (entity in expired) {
-            hardDelete(entity.id)
+            hardDelete(entity.id, onlyIfStillDeleted = true)
         }
         return expired.size
     }
@@ -501,11 +506,11 @@ class WorkRepository(
     suspend fun hardDeleteAllPending(): Int {
         val deletedWorks = workDao.getDeleted()
         for (entity in deletedWorks) {
-            hardDelete(entity.id)
+            hardDelete(entity.id, onlyIfStillDeleted = true)
         }
         val deletedCollections = collectionDao.getDeleted()
         for (entity in deletedCollections) {
-            hardDeleteCollection(entity.id)
+            hardDeleteCollection(entity.id, onlyIfStillDeleted = true)
         }
         return deletedWorks.size + deletedCollections.size
     }
@@ -931,7 +936,9 @@ class WorkRepository(
      * Permanently deletes the collection shelf. Works remain in Library (Apple
      * parity). Cross-ref rows cascade via FK when the collection row is removed.
      */
-    suspend fun hardDeleteCollection(collectionId: String) {
+    suspend fun hardDeleteCollection(collectionId: String, onlyIfStillDeleted: Boolean = false) {
+        // See [hardDelete].
+        if (onlyIfStillDeleted && collectionDao.getById(collectionId)?.isDeleted == false) return
         collectionDao.removeAllWorks(collectionId)
         collectionDao.deleteById(collectionId)
         recordCollectionTombstone(collectionId, clock(), deletionReason = "collectionDeleted")
@@ -942,7 +949,7 @@ class WorkRepository(
         val now = clock()
         val expired = collectionDao.getExpiredSoftDeletes(now)
         for (entity in expired) {
-            hardDeleteCollection(entity.id)
+            hardDeleteCollection(entity.id, onlyIfStillDeleted = true)
         }
         return expired.size
     }
