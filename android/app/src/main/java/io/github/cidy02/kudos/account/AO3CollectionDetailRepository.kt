@@ -29,7 +29,6 @@ import io.github.cidy02.kudos.network.ao3.account.AO3SignUpsPage
 import io.github.cidy02.kudos.network.ao3.account.AO3ChallengeSignUpsUrls
 import io.github.cidy02.kudos.network.ao3.account.AO3ChallengeSignUpsParser
 import io.github.cidy02.kudos.network.ao3.account.SignUpAssignmentList
-import io.github.cidy02.kudos.network.ao3.account.AO3SignUpAssignment
 import io.github.cidy02.kudos.network.ao3.account.AO3ChallengeSignUpForm
 import io.github.cidy02.kudos.network.ao3.account.AO3ChallengeSignUpUrls
 import io.github.cidy02.kudos.network.ao3.account.AO3ChallengeSignUpParser
@@ -71,12 +70,6 @@ class AO3CollectionDetailRepository(
         fetch(AO3ChallengeSignUpsUrls.page(slug, page)) {
             AO3ChallengeSignUpsParser().parse(it, page)
         }
-    suspend fun getSignUpAssignments(slug: String, list: SignUpAssignmentList):
-        AO3Result<List<AO3SignUpAssignment>> =
-        fetch(AO3ChallengeSignUpsUrls.assignments(slug, list)) {
-            AO3ChallengeSignUpsParser().parseAssignments(it)
-        }
-
     suspend fun getChallengeAssignments(slug: String, list: SignUpAssignmentList, page: Int = 1) =
         fetch(AO3ChallengeSignUpsUrls.assignments(slug, list, page)) {
             AO3ChallengeSignUpsParser().parseAssignmentPage(it, list, page)

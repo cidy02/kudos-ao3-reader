@@ -3,15 +3,88 @@ package io.github.cidy02.kudos.account
 import io.github.cidy02.kudos.network.ao3.*
 import io.github.cidy02.kudos.network.ao3.account.*
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import org.junit.Assert.*
 import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class AO3ChallengeSignUpsTest {
     private val parser = AO3ChallengeSignUpsParser()
+
+    @Test fun assignmentJoinFetchesEveryPageIncludingOpenAssignments() = runTest {
+        val (_, client, repo) = signUpsSetup()
+        val expected = mutableListOf<String>()
+        for (list in listOf(SignUpAssignmentList.Complete, SignUpAssignmentList.Open, SignUpAssignmentList.Defaults)) {
+            val totalPages = if (list == SignUpAssignmentList.Open) 3 else 2
+            for (page in 1..totalPages) {
+                val url = AO3ChallengeSignUpsUrls.assignments("winter_exchange", list, page)
+                expected += url
+                // Only the last Open page contains this visible sign-up's recipient.
+                val recipient = if (list == SignUpAssignmentList.Open && page == 3) 4 else 200 + page
+                val html = """<h2 class="heading">Assignments</h2>
+                    <dl class="index"><dt>Giver<span> for <a href="/collections/winter_exchange/signups/$recipient">Recipient</a></span></dt>
+                    <dd><input name="default_$page" type="checkbox"></dd></dl>
+                    <ol class="pagination"><li>$totalPages</li></ol>"""
+                client.replies[url] = challengeResponse(url, html)
+            }
+        }
+        val model = AO3ChallengeSignUpsState("winter_exchange", true, true, repo)
+        model.load()
+        assertEquals(listOf(signUpsSettings) + expected + listOf(signUpsFirst, signUpsLast), client.gets)
+        assertEquals(7, model.state.value.assignments?.size)
+        val openThird = expected[4].toHttpUrl()
+        assertEquals("true", openThird.queryParameter("unfulfilled"))
+        assertEquals("3", openThird.queryParameter("page"))
+        assertEquals(SignUpMatch.Matched, signUpMatch(model.state.value.rows.first(), model.state.value.assignments))
+        assertEquals(0, client.posts)
+    }
+
+    @Test fun aFailedLaterAssignmentPageStopsTheJoinAndNeverPublishesPartialUnmatched() = runTest {
+        for (failedIndex in listOf(1, 3, 5)) for (malformed in listOf(false, true)) {
+            val (_, client, repo) = signUpsSetup()
+            val failed = signUpsAssignmentReads[failedIndex]
+            client.replies[failed] = if (malformed) challengeResponse(failed, "<h2 class=heading>Assignments</h2>")
+                else AO3Result.Failure(AO3Error.Forbidden)
+            val model = AO3ChallengeSignUpsState("winter_exchange", true, true, repo)
+            model.load()
+            assertEquals(listOf(signUpsSettings) + signUpsAssignmentReads.take(failedIndex + 1) +
+                listOf(signUpsFirst, signUpsLast), client.gets)
+            assertEquals(4, model.state.value.rows.size)
+            assertNull(model.state.value.assignments)
+            assertNotNull(model.state.value.matchError)
+            assertTrue(model.state.value.matchNote!!.contains(model.state.value.matchError!!))
+            assertTrue(model.state.value.rows.all { signUpMatch(it, model.state.value.assignments) == SignUpMatch.Unknown })
+            assertTrue(model.state.value.filtered(SignUpFilter.Unmatched).isEmpty())
+            assertEquals(0, client.posts)
+        }
+    }
+
+    @Test fun closingOrReplacingTheSessionDuringALaterAssignmentPageStopsAllFurtherReads() = runTest {
+        for (close in listOf(true, false)) {
+            val (auth, client, repo) = signUpsSetup()
+            val entered = CompletableDeferred<Unit>()
+            val release = CompletableDeferred<Unit>()
+            val later = signUpsAssignmentReads[1]
+            client.afterGet = { url -> if (url == later) { entered.complete(Unit); release.await() } }
+            val model = AO3ChallengeSignUpsState("winter_exchange", true, true, repo)
+            val task = async { model.load() }
+            entered.await()
+            assertNull(model.state.value.assignments)
+            if (close) model.close() else auth.logout()
+            release.complete(Unit)
+            assertTrue(runCatching { task.await() }.isFailure)
+            assertEquals(listOf(signUpsSettings) + signUpsAssignmentReads.take(2), client.gets)
+            assertNull(model.state.value.assignments)
+            assertTrue(model.state.value.rows.isEmpty())
+            model.load(refresh = true)
+            assertEquals(3, client.gets.size)
+            assertEquals(0, client.posts)
+        }
+    }
 
     @Test fun bothPagesAndEveryAssignmentFixtureHaveIosTagsBylinesAnyOptionalTextAndMatchStates() {
         val first = parser.parse(challengeFixture("ao3_demo_winter_signups_1"))
@@ -87,7 +160,7 @@ class AO3ChallengeSignUpsTest {
     }
 
     @Test fun optionalFailuresAreRememberedRowsSurviveAndMoreReadsJustOnePage() = runTest {
-        for (failed in listOf(signUpsSettings, signUpsAssignmentReads[0], signUpsAssignmentReads[1], signUpsLast)) {
+        for (failed in listOf(signUpsSettings, signUpsAssignmentReads[0], signUpsAssignmentReads[2], signUpsLast)) {
             val (_, client, repo) = signUpsSetup()
             client.replies[failed] = AO3Result.Failure(AO3Error.Forbidden)
             val model = AO3ChallengeSignUpsState("winter_exchange", true, true, repo)
@@ -160,11 +233,13 @@ internal val signUpAssignmentFixtures = listOf("ao3_demo_winter_assignments_comp
 internal val signUpsSettings = ChallengeSettingsDestinations.challengeSettingsEditView("winter_exchange", AO3ChallengeKind.GiftExchange)
 internal val signUpsFirst = AO3ChallengeSignUpsUrls.page("winter_exchange")
 internal val signUpsLast = AO3ChallengeSignUpsUrls.page("winter_exchange", 2)
-internal val signUpsAssignmentReads = listOf(SignUpAssignmentList.Complete, SignUpAssignmentList.Open, SignUpAssignmentList.Defaults).map { AO3ChallengeSignUpsUrls.assignments("winter_exchange", it) }
+internal val signUpsAssignmentReads = listOf(SignUpAssignmentList.Complete, SignUpAssignmentList.Open, SignUpAssignmentList.Defaults)
+    .flatMap { list -> (1..2).map { AO3ChallengeSignUpsUrls.assignments("winter_exchange", list, it) } }
 internal val signUpsOpeningReads = listOf(signUpsSettings) + signUpsAssignmentReads + listOf(signUpsFirst, signUpsLast)
 internal suspend fun signUpsSetup(signedIn: Boolean = true) = promptMemeSetup(signedIn).also { (_, client, _) ->
     client.replies[signUpsSettings] = challengeResponse(signUpsSettings, challengeFixture("ao3_demo_winter_settings"))
     client.replies[signUpsFirst] = challengeResponse(signUpsFirst, challengeFixture("ao3_demo_winter_signups_1"))
     client.replies[signUpsLast] = challengeResponse(signUpsLast, challengeFixture("ao3_demo_winter_signups_2"))
-    signUpsAssignmentReads.zip(signUpAssignmentFixtures).forEach { (url, fixture) -> client.replies[url] = challengeResponse(url, challengeFixture(fixture)) }
+    val fixtures = signUpAssignmentFixtures.flatMap { listOf(it, "${it}_2") }
+    signUpsAssignmentReads.zip(fixtures).forEach { (url, fixture) -> client.replies[url] = challengeResponse(url, challengeFixture(fixture)) }
 }

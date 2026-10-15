@@ -139,13 +139,15 @@ class AO3AccountParser(
             val workId = workIdFromPath(workLink.attr("href")) ?: return@mapNotNull null
             element.unsubscribeAction()?.let { paths.putIfAbsent(workId, it) }
             val title = workLink.normalizedText().ifBlank { "Untitled" }
-            val authors = element.select("a[href*=/users/]").map { it.normalizedText() }
+            val authorLinks = element.select("a[href*=/users/]")
+            val authors = authorLinks.map { it.normalizedText() }
                 .filter { it.isNotBlank() }
                 .distinct()
             AO3WorkSummary(
                 id = workId,
                 title = title,
                 authors = authors,
+                authorIdentitiesJSON = io.github.cidy02.kudos.network.ao3.author.AO3AuthorIdentities.json(authorLinks),
                 fandoms = emptyList(),
                 rating = "",
                 warnings = emptyList(),

@@ -1976,3 +1976,12 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   1ao, `detents: [.medium, .large]`); drag for the rest. Android opened them full height, kept
   from the first filter sheet (epic 4, July). The author's and the account lists' sheets keep
   full height, as iOS's. Reverse: `opensHalfHeight = false` at the two call sites.
+- **2026-10-15 · A54's six parsing faults fixed (3fd; Codex, reviewed and gated by Claude).**
+  Sign-ups join every page of Complete, Open and Defaults before showing who is matched (a
+  recipient matched on page 2 showed UNMATCHED); like iOS, uncapped, sequential and paced, only
+  when an owner or maintainer opens the screen, any failure leaving the match unknown (written
+  into the networking policy). A collection's absent totals stay unknown, not 0, and the strip
+  leaves them out as iOS's `statCells`. Subscription bylines keep their accounts; an empty
+  preview is an error; a deleted work keeps its last visit; AO3 Preferences lists the account
+  links AO3 serves (opened only in the in-app view's AO3 allow-list). Reverse: the commit
+  that names 3fd.

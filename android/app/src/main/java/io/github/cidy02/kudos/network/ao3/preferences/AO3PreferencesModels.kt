@@ -3,6 +3,8 @@ package io.github.cidy02.kudos.network.ao3.preferences
 /** iOS `AO3PreferenceHelpRef`: the "?" beside a preferences heading or field. */
 data class AO3PreferenceHelpRef(val title: String, val url: String)
 
+data class AO3PreferenceWebLink(val title: String, val url: String)
+
 /** One topic of an AO3 help page: a `dt` and its `dd`s. */
 data class AO3PreferenceHelpEntry(val heading: String, val body: String)
 
@@ -53,5 +55,6 @@ data class AO3PreferencesSnapshot(
     val sections: List<AO3PreferenceSection>,
     val selects: List<AO3PreferenceSelect>,
     val textFields: List<AO3PreferenceTextField>,
-    val hiddenFields: List<Pair<String, String>>
+    val hiddenFields: List<Pair<String, String>>,
+    val webLinks: List<AO3PreferenceWebLink> = emptyList()
 )

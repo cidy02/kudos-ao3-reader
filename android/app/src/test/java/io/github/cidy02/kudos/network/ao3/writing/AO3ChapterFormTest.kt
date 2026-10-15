@@ -92,6 +92,27 @@ class AO3ChapterFormTest {
         assertThrows(AO3WorkFormParseException.LoginRequired::class.java) { AO3ChapterFormParser().parse("<form id=new_user action='/users/login'></form>", AO3ChapterUrls.form(995006, null)) }
     }
 
+    @Test fun previewExtractsThePreviewPane() {
+        val html = """<html><body>
+            <div id="previewpane"><div class="draft work"><div id="workskin"><p>Hello.</p></div></div></div>
+            </body></html>"""
+        for (workOnly in listOf(false, true)) {
+            val preview = AO3ChapterFormParser().preview(html, AO3ChapterUrls.form(995006, null), workOnly)
+            assertEquals(AO3ChapterPreview.Kind.Html, preview.blocks.single().kind)
+            assertTrue(preview.blocks.single().text.contains("Hello."))
+            // This is the same rich-text path the preview pane draws.
+            val rendered = io.github.cidy02.kudos.writing.WritingBufferPreview.state(preview.blocks.single().text)
+                as io.github.cidy02.kudos.writing.WritingBufferPreview.State.Rendered
+            assertEquals("Hello.", rendered.blocks.single().runs.joinToString("") { it.text })
+            for (empty in listOf("", "<div id=workskin></div>", "<div class=userstuff> </div>", "<img src='/image'>")) {
+                assertEquals(CHAPTER_PREVIEW_UNAVAILABLE,
+                    assertThrows(AO3WorkFormParseException.InvalidForm::class.java) {
+                        AO3ChapterFormParser().preview("<div id=previewpane>$empty</div>", AO3ChapterUrls.form(995006, null), workOnly)
+                    }.message)
+            }
+        }
+    }
+
     @Test fun previewAdoptsOnlyConfirmedSameWorkDraftIdentityAndNeverInventsControls() {
         val form = AO3ChapterFormParser().parse(workFixture("ao3_demo_chapter_995006_new"), AO3ChapterUrls.form(995006, null))
         val html = "<meta name=csrf-token content='fresh=='><main id=main><div id=previewpane><h3 class=title>New Tide</h3><div class=userstuff><p>Kept <img src='https://example.invalid/image'>text</p></div></div><form method=post action='/works/995006/chapters/12303'><input name=_method value=patch><input name=edit_button type=submit><input name=post_button type=submit></form></main>"

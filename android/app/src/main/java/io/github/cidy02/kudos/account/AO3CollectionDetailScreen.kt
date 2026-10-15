@@ -56,6 +56,7 @@ import io.github.cidy02.kudos.data.preferences.SettingsRepository
 import io.github.cidy02.kudos.home.HomeFacts
 import io.github.cidy02.kudos.network.ao3.AO3Constants
 import io.github.cidy02.kudos.network.ao3.AO3Result
+import io.github.cidy02.kudos.network.ao3.account.AO3Collection
 import io.github.cidy02.kudos.network.ao3.account.AO3CollectionPerson
 import io.github.cidy02.kudos.network.ao3.account.AO3CollectionPeoplePage
 import io.github.cidy02.kudos.network.ao3.account.AO3CollectionShow
@@ -256,12 +257,10 @@ fun AO3CollectionDetailScreen(
             }
 
             show?.let { collectionShow ->
-                item {
+                val cells = collectionStatCells(collectionShow.collection)
+                if (cells.isNotEmpty()) item {
                     SubjectStatStrip(
-                        cells = listOf(
-                            SubjectStatCell(collectionShow.collection.worksCount.toString(), "Works"),
-                            SubjectStatCell(collectionShow.collection.bookmarksCount.toString(), "Bookmarks")
-                        ),
+                        cells = cells,
                         palette = palette,
                         modifier = Modifier
                             .padding(top = 12.dp)
@@ -404,6 +403,11 @@ internal fun CollectionManageRow(label: String, url: String, onOpenModeration: (
         }
     })
 }
+
+internal fun collectionStatCells(collection: AO3Collection): List<SubjectStatCell> = listOfNotNull(
+    collection.worksCount?.let { SubjectStatCell(it.toString(), "Works") },
+    collection.bookmarksCount?.let { SubjectStatCell(it.toString(), "Bookmarks") }
+)
 
 private fun androidx.compose.foundation.lazy.LazyListScope.collectionSegmentContent(
     segment: AO3CollectionSegment,
