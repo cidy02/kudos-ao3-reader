@@ -1929,3 +1929,12 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   the commit that names 3ev.
 - **2026-10-15 · "No new work" names only the authors Kudos could check (3ew, T-410; A51 F6).**
   Both apps. Reverse: the commits that name 3ew and T-410.
+- **2026-10-15 · The shared GET coalescer stops a read nobody waits for, and a reload after a
+  write never joins a read begun before it (3ex; A51 F4, A37 F3).** Codex wrote it, Claude
+  reviewed and gated it. The last waiter to leave cancels the shared request before it is
+  sent or retried; a cache-bypassing read (the reload after a write) runs on its own. Left,
+  narrower: an ordinary read opened while a pre-write GET of the same page is in flight still
+  joins it (rare; a later reload corrects it). iOS: its `RequestCoalescer` already counts
+  waiters (F4 was Android catching up); a reload joining an earlier GET is a documented
+  limit there (`AO3Client.swift`, "Not atomic with the fetch that follows it"); not changed.
+  Reverse: the commit that names 3ex.
