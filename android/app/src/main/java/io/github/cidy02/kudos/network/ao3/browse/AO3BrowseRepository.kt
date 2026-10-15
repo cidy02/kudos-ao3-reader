@@ -96,6 +96,21 @@ class AO3BrowseRepository(
         return searchRepository.searchTagWorks(trimmed, searchFilters, page)
     }
 
+    /**
+     * Any tag's works: the tag is in the address and only the reader's own filters are sent,
+     * as iOS's `TagWorksView`. A fandom filter of the tag's name asked AO3 for a fandom called
+     * "Fluff" (A49 F12).
+     */
+    suspend fun worksForTag(
+        tagName: String,
+        page: Int = 1,
+        filters: AO3SearchFilters? = null
+    ): AO3Result<AO3SearchPage> {
+        val trimmed = tagName.trim()
+        if (trimmed.isEmpty()) return AO3Result.Failure(AO3Error.Validation("No tag selected."))
+        return searchRepository.searchTagWorks(trimmed, filters ?: browseBaseline(), page)
+    }
+
     companion object {
         /**
          * Browse's starting filters. Date Updated, not the app-wide RELEVANCE

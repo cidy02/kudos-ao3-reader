@@ -44,6 +44,9 @@ data class AO3SearchFilters(
     /** Imported values not representable by these controls; retained across ordinary copy edits. */
     val preservedFilterValues: Map<String, PreservedSearchFilterValue> = emptyMap()
 ) {
+    /** A sort with its natural direction, as the filter sheet and iOS's header menus set it (A49 F13). */
+    fun withSort(sort: AO3SearchSort): AO3SearchFilters = copy(sort = sort, sortDirection = sort.naturalDirection)
+
     val hasActiveFilters: Boolean
         get() = fandom.isNotBlank() ||
             characters.isNotBlank() ||

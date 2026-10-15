@@ -123,12 +123,15 @@ fun FandomWorksScreen(
         (context.applicationContext as? io.github.cidy02.kudos.KudosApplication)?.container?.tagAutocompleteRepository
     }
 
+    suspend fun fetch(page: Int, with: AO3SearchFilters) =
+        if (isTag) repository.worksForTag(fandomName, page, with) else repository.worksForFandom(fandomName, page, with)
+
     fun load(page: Int = 1) {
         loadedFilters = filters
         state = FandomWorksState.Loading
         val generation = ++loadGeneration
         scope.launch {
-            val result = when (val result = repository.worksForFandom(fandomName, page, filters)) {
+            val result = when (val result = fetch(page, filters)) {
                 is AO3Result.Success -> FandomWorksState.Loaded(result.value)
                 is AO3Result.Failure -> FandomWorksState.Error(result.error.displayMessage(), page)
             }
@@ -143,7 +146,7 @@ fun FandomWorksScreen(
     suspend fun refresh() {
         val page = (state as? FandomWorksState.Loaded)?.page?.currentPage ?: return
         val generation = ++loadGeneration
-        val result = when (val result = repository.worksForFandom(fandomName, page, loadedFilters)) {
+        val result = when (val result = fetch(page, loadedFilters)) {
             is AO3Result.Success -> FandomWorksState.Loaded(result.value)
             is AO3Result.Failure -> FandomWorksState.Error(result.error.displayMessage(), page)
         }
@@ -278,7 +281,7 @@ fun FandomWorksScreen(
                                         sort = filters.sort,
                                         sortOptions = io.github.cidy02.kudos.network.ao3.search.AO3SearchSort.entries
                                             .filter { it != io.github.cidy02.kudos.network.ao3.search.AO3SearchSort.RELEVANCE },
-                                        onSortSelected = { sort -> filters = filters.copy(sort = sort); load() },
+                                        onSortSelected = { sort -> filters = filters.withSort(sort); load() },
                                         modifier = Modifier.padding(bottom = 4.dp)
                                     )
                                 }

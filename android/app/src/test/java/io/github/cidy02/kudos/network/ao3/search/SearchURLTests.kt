@@ -56,6 +56,15 @@ class SearchURLTests {
     }
 
     @Test
+    fun aSortPickedFromAHeaderTakesItsNaturalDirection() {
+        // The header menus kept the last sort's direction: Title came back Z to A (A49 F13).
+        val byDate = AO3SearchFilters(sort = AO3SearchSort.DATE_UPDATED, sortDirection = AO3SortDirection.DESCENDING)
+        assertEquals(AO3SortDirection.ASCENDING, byDate.withSort(AO3SearchSort.TITLE).sortDirection)
+        val byTitle = AO3SearchFilters(sort = AO3SearchSort.TITLE, sortDirection = AO3SortDirection.ASCENDING)
+        assertEquals(AO3SortDirection.DESCENDING, byTitle.withSort(AO3SearchSort.KUDOS).sortDirection)
+    }
+
+    @Test
     fun sortSendsColumnAndDirectionTogether() {
         assertEquals(AO3SortDirection.ASCENDING, AO3SearchSort.TITLE.naturalDirection)
         assertEquals(AO3SortDirection.ASCENDING, AO3SearchSort.CREATOR.naturalDirection)

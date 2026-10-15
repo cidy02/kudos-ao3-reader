@@ -50,6 +50,16 @@ class ReaderLinkHandlerTest {
     }
 
     @Test
+    fun onlyThePathNamesThePage() {
+        // A query or fragment named another page, or became part of the tag (A49 F5).
+        assertEquals(ReaderLinkDestination.TagSearch("Fluff"),
+            handler.classify("https://archiveofourown.org/tags/Fluff?next=/works/123"))
+        assertEquals(ReaderLinkDestination.TagSearch("Fluff"), handler.classify("https://archiveofourown.org/tags/Fluff#top"))
+        assertEquals(ReaderLinkDestination.WorkDetail(123L),
+            handler.classify("https://archiveofourown.org/collections/winter/works/123"))
+    }
+
+    @Test
     fun externalUrlBecomesExternal() {
         val result = handler.classify("https://example.com/page")
         assertTrue(result is ReaderLinkDestination.External)

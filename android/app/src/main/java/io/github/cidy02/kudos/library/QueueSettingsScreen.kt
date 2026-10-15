@@ -1,5 +1,7 @@
 package io.github.cidy02.kudos.library
 
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.Mutex
 import androidx.compose.material.icons.outlined.Add
@@ -185,9 +187,17 @@ fun QueueSettingsScreen(
             // focus, and leaving the page is not that, so a description typed and then left
             // straight away was lost. Each write takes the latest text when it runs, so the
             // last one wins whatever order they finish in.
+            // The screen's queue takes the text too, so a colour, Keep or tag written next does
+            // not write the old description back over it (A49 F7). The write outlives the page
+            // (started at once, not cancellable), so leaving mid-write keeps it (A49 F6).
             onValueChange = {
                 notes = it
-                scope.launch { notesWrites.withLock { writeQueue(repository, current, tags, notes = notes) } }
+                queue = current.copy(notes = it)
+                scope.launch(start = CoroutineStart.UNDISPATCHED) {
+                    withContext(NonCancellable) {
+                        notesWrites.withLock { writeQueue(repository, current, tags, notes = notes) }
+                    }
+                }
             },
             textStyle = TextStyle(color = tokens.primaryInk, fontSize = 16.sp, fontFamily = FontFamily.Serif),
             cursorBrush = SolidColor(palette.accent),

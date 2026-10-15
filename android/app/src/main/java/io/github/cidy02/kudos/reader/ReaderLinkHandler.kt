@@ -1,6 +1,5 @@
 package io.github.cidy02.kudos.reader
 
-import io.github.cidy02.kudos.works.WorkTags
 import java.net.URLDecoder
 import java.net.URI
 
@@ -32,9 +31,18 @@ class ReaderLinkHandler {
         if (url.isEmpty()) return ReaderLinkDestination.Unhandled
 
         if (url.isAo3Url()) {
-            authorFromUrl(url)?.let { return ReaderLinkDestination.Author(it) }
-            WorkTags.ao3WorkIdFromUrl(url)?.let { return ReaderLinkDestination.WorkDetail(it) }
-            tagFromUrl(url)?.let { return ReaderLinkDestination.TagSearch(it) }
+            // From the path alone: a query or fragment ("?next=/works/123", "#top") named a
+            // different page or became part of a tag (A49 F5).
+            val path = runCatching { URI(url).rawPath }.getOrNull().orEmpty()
+                .split('/').filter { it.isNotEmpty() }.map(::decode)
+            when (path.firstOrNull()) {
+                "users" -> path.getOrNull(1)?.takeIf { it.isNotBlank() }?.let { return ReaderLinkDestination.Author(it) }
+                "tags" -> path.getOrNull(1)?.let(::unmunge)?.takeIf { it.isNotBlank() }
+                    ?.let { return ReaderLinkDestination.TagSearch(it) }
+            }
+            // A work anywhere in the path ("/collections/x/works/123", "/works/1/chapters/2").
+            path.indexOf("works").takeIf { it >= 0 }?.let { path.getOrNull(it + 1)?.toLongOrNull() }
+                ?.let { return ReaderLinkDestination.WorkDetail(it) }
         }
 
         return if (url.startsWith("http://", true) || url.startsWith("https://", true)) {
@@ -44,23 +52,12 @@ class ReaderLinkHandler {
         }
     }
 
-    private fun tagFromUrl(url: String): String? {
-        val marker = "/tags/"
-        val index = url.indexOf(marker)
-        if (index < 0) return null
-        val raw = url.substring(index + marker.length).substringBefore('/').substringBefore('?')
-        if (raw.isBlank()) return null
-        // A "+" in a path is itself, not a space; AO3 writes "/" "&" "." "?" "#" as *s* *a* *d* *q* *h*.
-        val decoded = runCatching { URLDecoder.decode(raw.replace("+", "%2B"), "UTF-8") }.getOrDefault(raw)
-        val name = MUNGED.fold(decoded) { text, (munged, plain) -> text.replace(munged, plain) }
-        return name.takeIf { it.isNotBlank() }
-    }
+    // A "+" in a path is itself, not a space.
+    private fun decode(segment: String): String =
+        runCatching { URLDecoder.decode(segment.replace("+", "%2B"), "UTF-8") }.getOrDefault(segment)
 
-    /** iOS's `authorRoute(for:)`: /users/<name>, with or without a pseud after it. */
-    private fun authorFromUrl(url: String): String? {
-        val segments = runCatching { URI(url).path }.getOrNull()?.split('/')?.filter { it.isNotEmpty() } ?: return null
-        return segments.getOrNull(1)?.takeIf { segments.first() == "users" }
-    }
+    /** AO3 writes "/" "&" "." "?" "#" in a tag's address as *s* *a* *d* *q* *h*. */
+    private fun unmunge(tag: String): String = MUNGED.fold(tag) { text, (munged, plain) -> text.replace(munged, plain) }
 
     private fun String.isAo3Url(): Boolean {
         val host = runCatching { URI(this).host }.getOrNull() ?: return false

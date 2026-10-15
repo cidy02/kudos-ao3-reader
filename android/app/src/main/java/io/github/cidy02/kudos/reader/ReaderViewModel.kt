@@ -1,5 +1,8 @@
 package io.github.cidy02.kudos.reader
 
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.CoroutineStart
 import android.content.Context
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.map
@@ -315,8 +318,12 @@ class ReaderViewModel(
     }
 
     fun updateNote(id: String, note: String) {
-        viewModelScope.launch {
-            annotationEditMutex.withLock { annotationRepository.updateNote(id, note) }
+        // Started at once and not cancellable: a note kept as the reader closes is written
+        // even when this view model is cleared while it waits for the lock (A49 F8).
+        viewModelScope.launch(start = CoroutineStart.UNDISPATCHED) {
+            withContext(NonCancellable) {
+                annotationEditMutex.withLock { annotationRepository.updateNote(id, note) }
+            }
         }
     }
 
