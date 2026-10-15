@@ -191,7 +191,9 @@ fun AO3ChallengeSettingsScreen(
                                         SubjectFormRow("Defaults and pinch hits", showsDisclosure = true,
                                             onClick = { onOpenAssignments(slug, effectiveTitle, !data.settings.signupOpen) })
                                     }
-                                    ChallengeFootnote("AO3 matches participants.")
+                                    // iOS's whole sentence: what Kudos can and cannot do here was left out.
+                                    ChallengeFootnote("AO3 matches participants. In Kudos, you can view sign-ups and assignments " +
+                                        "and ask for a pinch hitter, but you can't run the match.")
                                     ChallengeSection("At AO3")
                                     SettingsPanel(Modifier.padding(top = 8.dp)) {
                                         SubjectFormRow("Run matching", value = "Opens AO3", showsDisclosure = true, valueMaxLines = Int.MAX_VALUE,
