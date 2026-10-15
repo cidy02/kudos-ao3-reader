@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.app
 
+import io.github.cidy02.kudos.reader.ReaderLinkDestination
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -1106,7 +1107,16 @@ fun AppNavHost(
                             )
                         )
                     },
-                    settingsRepository = container.settingsRepository
+                    settingsRepository = container.settingsRepository,
+                    onOpenAo3Link = { destination ->
+                        when (destination) {
+                            is ReaderLinkDestination.WorkDetail ->
+                                navigateToWorkDetail(WorkDetailSource.Ao3WorkId(destination.workId))
+                            is ReaderLinkDestination.TagSearch -> navController.navigate(Routes.tagWorks(destination.tag))
+                            is ReaderLinkDestination.Author -> navController.navigate(Routes.authorProfile(destination.username))
+                            else -> Unit
+                        }
+                    }
                 )
             }
         }

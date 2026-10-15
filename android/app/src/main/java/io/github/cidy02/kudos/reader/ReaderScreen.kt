@@ -156,7 +156,9 @@ fun ReaderScreen(
     onOpenComments: (Long, Int?) -> Unit,
     /** Local library work id (not AO3 id) — opens Work Detail over the reader stack. */
     onOpenWorkDetail: (String) -> Unit,
-    settingsRepository: io.github.cidy02.kudos.data.preferences.SettingsRepository? = null
+    settingsRepository: io.github.cidy02.kudos.data.preferences.SettingsRepository? = null,
+    /** An AO3 work, tag or author link tapped in the text: opened in the app, as iOS. */
+    onOpenAo3Link: (ReaderLinkDestination) -> Unit = {}
 ) {
     val uiState by viewModel.state.collectAsState()
     val settingsState = settingsRepository?.settings?.collectAsState(initial = io.github.cidy02.kudos.core.model.KudosSettings.Defaults)
@@ -197,7 +199,7 @@ fun ReaderScreen(
                     null
                 }
             )
-            is ReaderUiState.Reading -> ReaderReading(state, viewModel, onBack, onOpenComments, onOpenWorkDetail, settings)
+            is ReaderUiState.Reading -> ReaderReading(state, viewModel, onBack, onOpenComments, onOpenWorkDetail, settings, onOpenAo3Link)
         }
     }
 }
@@ -210,7 +212,8 @@ private fun ReaderReading(
     onBack: () -> Unit,
     onOpenComments: (Long, Int?) -> Unit,
     onOpenWorkDetail: (String) -> Unit,
-    settings: io.github.cidy02.kudos.core.model.KudosSettings
+    settings: io.github.cidy02.kudos.core.model.KudosSettings,
+    onOpenAo3Link: (ReaderLinkDestination) -> Unit
 ) {
     val context = LocalContext.current
     val workActions = remember(context) { ReaderWorkActions(context) }
@@ -467,14 +470,12 @@ private fun ReaderReading(
                             )
                         },
                         onExternalLink = { url ->
+                            // A work, tag or author on AO3 opens in the app (iOS's `openAO3Link`);
+                            // they went to the phone's browser, which in the demo reached AO3.
                             when (val destination = linkHandler.classify(url)) {
-                                is ReaderLinkDestination.WorkDetail -> openExternal(
-                                    context,
-                                    "https://archiveofourown.org/works/${destination.workId}"
-                                )
                                 is ReaderLinkDestination.External -> openExternal(context, destination.url)
-                                is ReaderLinkDestination.TagSearch -> openExternal(context, url)
                                 ReaderLinkDestination.Unhandled -> Unit
+                                else -> onOpenAo3Link(destination)
                             }
                         },
                         fontDeclarations = state.preferences.fontDeclarations,
