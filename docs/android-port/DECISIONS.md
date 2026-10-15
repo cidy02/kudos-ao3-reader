@@ -1938,3 +1938,8 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   waiters (F4 was Android catching up); a reload joining an earlier GET is a documented
   limit there (`AO3Client.swift`, "Not atomic with the fetch that follows it"); not changed.
   Reverse: the commit that names 3ex.
+- **2026-10-15 · Save Search opens over the filter sheet, on both apps (3ey, T-412).** iPhone:
+  the save sheet was attached under the filter sheet and never opened. Android: it opened by
+  closing the filter sheet, which skipped dropping unapplied edits (A20-3), so the next page
+  tap ran them as a new search. Now both open Save over the filters and return to them.
+  Reverse: the commits that name 3ey and T-412.
