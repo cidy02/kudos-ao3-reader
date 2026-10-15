@@ -93,12 +93,16 @@ fun SeriesWorksScreen(
     val context = LocalContext.current
 
     fun load(page: Int = 1, bypassCache: Boolean = false): kotlinx.coroutines.Job {
-        state = SeriesWorksState.Loading
+        // The page on screen stays while another is asked for, and stays if that fails, as iOS
+        // keeps its works: a failed page 2 replaced page 1 with "Couldn't load series" (A37 F11).
+        val shown = state as? SeriesWorksState.Loaded
+        state = shown?.copy(loadingPage = page, pageError = null) ?: SeriesWorksState.Loading
         val generation = ++loadGeneration
         return scope.launch {
             val next = when (val result = seriesRepository.detailPage(seriesUrl, page, bypassCache)) {
                 is AO3Result.Success -> SeriesWorksState.Loaded(result.value, result.isStale)
-                is AO3Result.Failure -> SeriesWorksState.Error(result.error.displayMessage(), page)
+                is AO3Result.Failure -> shown?.copy(pageError = result.error.displayMessage() to page)
+                    ?: SeriesWorksState.Error(result.error.displayMessage(), page)
             }
             if (generation == loadGeneration) state = next
         }
@@ -220,6 +224,16 @@ fun SeriesWorksScreen(
             is SeriesWorksState.Loaded -> {
                 if (current.isStale) io.github.cidy02.kudos.ui.components.CachedAO3DataRow(
                     Modifier.padding(horizontal = 16.dp, vertical = 12.dp))
+                current.loadingPage?.let { LoadingStateCard("Loading page $it…", Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) }
+                current.pageError?.let { (message, failed) ->
+                    ErrorStateCard(
+                        title = "Couldn't load page $failed",
+                        message = message,
+                        primaryActionLabel = "Try Again",
+                        onPrimaryAction = { load(failed, bypassCache = true) },
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
+                    )
+                }
                 if (current.page.works.isEmpty()) {
                     EmptyStateCard(
                         title = "No visible works",
@@ -330,7 +344,8 @@ fun SeriesWorksScreen(
 
 private sealed interface SeriesWorksState {
     data object Loading : SeriesWorksState
-    data class Loaded(val detail: io.github.cidy02.kudos.network.ao3.series.AO3SeriesDetailPage, val isStale: Boolean = false) : SeriesWorksState {
+    data class Loaded(val detail: io.github.cidy02.kudos.network.ao3.series.AO3SeriesDetailPage, val isStale: Boolean = false,
+        val loadingPage: Int? = null, val pageError: Pair<String, Int>? = null) : SeriesWorksState {
         val page get() = detail.page
     }
     data class Error(val message: String, val page: Int) : SeriesWorksState

@@ -45,7 +45,15 @@ internal data class ChallengeAssignmentsUiState(
     val unmatched get() = rows(SignUpAssignmentList.Defaults)
     val claimed get() = rows(SignUpAssignmentList.PinchHits)
     val reportable get() = matched.filter { !it.fulfilled && !it.defaulted }
-    fun candidates(kind: AssignmentWrite) = if (kind == AssignmentWrite.Default) reportable else unmatched
+    /**
+     * Only the rows of lists the last load read cleanly can be written from. A list AO3 refused
+     * kept its earlier rows in memory, hidden on screen but still offered to claim or report
+     * (A37 F8); iOS starts every load from nothing.
+     */
+    private fun usable(list: SignUpAssignmentList) = if (list in errors) emptyList() else rows(list)
+    fun candidates(kind: AssignmentWrite) = if (kind == AssignmentWrite.Default)
+        (usable(SignUpAssignmentList.Complete) + usable(SignUpAssignmentList.Open)).filter { !it.fulfilled && !it.defaulted }
+    else usable(SignUpAssignmentList.Defaults)
     val matchedError get() = errors[SignUpAssignmentList.Complete] ?: errors[SignUpAssignmentList.Open]
     val subtitle get() = listOfNotNull(
         if (loaded && matchedError == null) "${matched.size} matched" else null,
@@ -66,6 +74,8 @@ internal class AO3ChallengeAssignmentsState(private val slug: String, private va
     private var attempted = false
     private var dueAttempted = false
     private var dueSucceeded = false
+    /** AO3 refused the settings form: not asked again on Refresh. */
+    private var dueRefused = false
     private var closed = knownClosed
     private var job: Job? = null
     private val mutable = MutableStateFlow(ChallengeAssignmentsUiState())
@@ -90,6 +100,7 @@ internal class AO3ChallengeAssignmentsState(private val slug: String, private va
         mutable.value = state.value.copy(dueRaw = "", dueZone = "")
         val answer = repository.getChallengeSettingsForm(slug)
         checkSession()
+        dueRefused = (answer as? AO3Result.Failure)?.error.let { it == AO3Error.Forbidden || it == AO3Error.AuthenticationRequired }
         if (answer is AO3Result.Success) {
             dueSucceeded = true
             closed = answer.value.kind == AO3ChallengeKind.GiftExchange && !answer.value.signupOpen
@@ -102,7 +113,9 @@ internal class AO3ChallengeAssignmentsState(private val slug: String, private va
             more == null && attempted && !refresh || more != null && more in state.value.blocked) return
         if (more != null && state.value.pages[more]?.let { it.currentPage < it.totalPages } != true) return
         attempted = true
-        if (refresh && more == null && dueSucceeded) dueAttempted = false
+        // Refresh asks for the due date again unless AO3 refused it, as iOS reads it on every load:
+        // a timed-out read stayed unasked until the screen was reopened (A37 F9).
+        if (refresh && more == null && !dueRefused) dueAttempted = false
         if (!auth.state.value.isSignedIn || !maintainer) {
             mutable.value = state.value.copy(failure = if (!auth.state.value.isSignedIn) "Sign in to AO3 to view assignments."
                 else "AO3 shows assignments to collection owners and moderators after sign-ups close.", terminal = true)
