@@ -1883,3 +1883,5 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
 - **2026-10-14 · Read Aloud's "Read author's notes" (3ee).** iOS's switch and rule, in
   Settings › Listening only (the reader's sheet waits on question 12). Reverses part of 3ak's
   "left out". Reverse: the commit that names 3ee.
+- **2026-10-14 · Codex's A49 findings F5, F6, F7, F8, F12, F13 fixed (3ef).** Each read against
+  the code first; all six real. Reverse: the commit that names 3ef.
