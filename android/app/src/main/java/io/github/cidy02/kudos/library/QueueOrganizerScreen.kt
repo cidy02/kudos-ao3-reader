@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.library
 
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -457,6 +458,12 @@ private fun OrganizerRow(
                 }
                 if (reordering) {
                     DragGrip(Modifier.queueDragHandle(true, onStep))
+                }
+                // The row opens its queue: iOS's list says so with a chevron, as Android's other
+                // opening rows do.
+                if (!selecting && !reordering) {
+                    Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null,
+                        tint = tokens.tertiaryInk, modifier = Modifier.size(20.dp))
                 }
             }
         }

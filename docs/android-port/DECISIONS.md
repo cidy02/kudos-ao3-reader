@@ -1922,3 +1922,5 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   has iOS's whole sentence again. Reverse: the commit that names 3er.
 - **2026-10-15 · Tag set and prompt meme compared with iOS (3es).** The same; a prompt's tags
   are a caption line, not a chip. Reverse: the commit that names 3es.
+- **2026-10-15 · Queue rows show a chevron (3eu).** As iOS's list rows and Android's other
+  opening rows. A37 F3 left open (shared with iOS). Reverse: the commit that names 3eu.
