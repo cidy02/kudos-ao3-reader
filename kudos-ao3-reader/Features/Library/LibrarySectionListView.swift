@@ -595,7 +595,10 @@ struct LibrarySectionListView: View {
 
             if rows.isEmpty {
                 Section {
-                    FavoriteAffinityEmptyCard(scope: favoriteScope, hiddenByFilter: !allRows.isEmpty)
+                    FavoriteAffinityEmptyCard(
+                        scope: favoriteScope, hiddenByFilter: !allRows.isEmpty,
+                        someUnchecked: favoriteScope == .authors && allRows.contains { $0.username == nil }
+                    )
                         .pageBodyRow(top: 14, gutter: SubjectMetrics.gutter)
                 }
             } else {
