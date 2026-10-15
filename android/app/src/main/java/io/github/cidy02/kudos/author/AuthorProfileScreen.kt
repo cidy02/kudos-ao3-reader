@@ -623,7 +623,11 @@ fun AuthorProfileScreen(
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         if (headerLoading && header == null) {
-            item { LoadingStateCard("Loading author profile") }
+            item {
+                // Below the bar like every other state of this page: it sat under the back button.
+                Spacer(Modifier.height(WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 56.dp))
+                LoadingStateCard("Loading author profile")
+            }
         } else if (headerError != null && header == null) {
             if (headerError == AO3Error.NotFound) {
                 item {
