@@ -610,9 +610,9 @@ fun CollectionDetailScreen(
     }
 
     if (showAddPicker) {
-        val allSavedWorks by workRepository.observeSavedWorks().collectAsState(initial = emptyList())
+        val allSavedWorks by workRepository.observeLibraryWorks().collectAsState(initial = emptyList())
         val currentWorkIds = works.map { it.id }.toSet()
-        val availableToAdd = allSavedWorks.filter { it.id !in currentWorkIds }
+        val availableToAdd = WorkRepository.collectionCandidates(allSavedWorks, currentWorkIds)
 
         AddLibraryWorksSheet(
             destinationName = collection?.name.orEmpty(),

@@ -2,6 +2,7 @@ package io.github.cidy02.kudos.works
 
 import io.github.cidy02.kudos.core.model.SavedWork
 import io.github.cidy02.kudos.network.ao3.AO3URLResolver
+import java.util.Locale
 
 /**
  * Port of Apple `WorkIdentityIndex` lookup tiers for deduping library works:
@@ -16,7 +17,8 @@ import io.github.cidy02.kudos.network.ao3.AO3URLResolver
 object WorkIdentityIndex {
     fun snapshot(works: List<SavedWork>): WorkIdentitySnapshot = WorkIdentitySnapshot(works)
 
-    fun ao3WorkId(work: SavedWork): Long? = WorkTags.ao3WorkIdFromUrl(work.sourceUrl)
+    fun ao3WorkId(work: SavedWork): Long? = work.ao3WorkID?.toLong()
+        ?: WorkTags.canonicalAO3WorkURL(work.sourceUrl)?.let(WorkTags::ao3WorkIdFromUrl)
 
     fun canonicalSourceUrl(work: SavedWork): String? {
         val id = ao3WorkId(work) ?: return work.sourceUrl.takeIf { it.isNotBlank() }
@@ -24,30 +26,41 @@ object WorkIdentityIndex {
     }
 
     /**
-     * Find an existing local work matching [candidate] by identity tiers.
-     * [byId] and [bySourceUrl] are provided by the repository/DAO layer.
+     * Find an existing local work matching the candidate by identity tiers.
+     * Include Recently Deleted rows and canonicalize both sides through the shared index.
      */
     suspend fun findExisting(
         candidateSourceUrl: String,
         candidateLocalId: String? = null,
-        byId: suspend (String) -> SavedWork?,
-        bySourceUrl: suspend (String) -> SavedWork?
+        loadWorks: suspend () -> List<SavedWork>
     ): SavedWork? {
-        candidateLocalId?.let { id ->
-            byId(id)?.let { return it }
-        }
-        val ao3Id = WorkTags.ao3WorkIdFromUrl(candidateSourceUrl)
-        if (ao3Id != null) {
-            val canonical = AO3URLResolver.canonicalWorkUrl(ao3Id)
-            bySourceUrl(canonical)?.let { return it }
-            // Also try common www variant if stored that way.
-            bySourceUrl(canonical.replace("https://archiveofourown.org", "https://www.archiveofourown.org"))
-                ?.let { return it }
-        }
+        val works = loadWorks()
+        val index = snapshot(works)
+        index.existingWork(sourceUrl = candidateSourceUrl)?.let { return it }
         if (candidateSourceUrl.isNotBlank()) {
-            bySourceUrl(candidateSourceUrl)?.let { return it }
+            works.firstOrNull { it.sourceUrl == candidateSourceUrl }?.let { return it }
         }
-        return null
+        return index.existingWork(recordId = candidateLocalId)
+    }
+
+    /** iOS user-EPUB fallback: title, author and on-disk size, after source identity. */
+    internal suspend fun findImportedEpub(
+        sourceUrl: String,
+        title: String,
+        author: String,
+        sourceSize: Long,
+        loadWorks: suspend () -> List<SavedWork>,
+        epubSize: suspend (String) -> Long?
+    ): SavedWork? {
+        val works = loadWorks()
+        findExisting(sourceUrl, loadWorks = { works })?.let { return it }
+        fun key(value: String) = value.trim().lowercase(Locale.ROOT)
+        val titleKey = key(title)
+        if (titleKey.isEmpty()) return null
+        val authorKey = key(author)
+        return works.firstOrNull {
+            key(it.title) == titleKey && key(it.author) == authorKey && epubSize(it.id) == sourceSize
+        }
     }
 }
 

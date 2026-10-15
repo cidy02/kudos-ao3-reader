@@ -57,6 +57,10 @@ open class WorkFileStore(
         }
     }
 
+    suspend fun workEpubSize(workId: String): Long? = withContext(Dispatchers.IO) {
+        runCatching { Files.size(workEpubPath(workId)) }.getOrNull()
+    }
+
     fun workEpubPath(workId: String): Path {
         val uuid = UUID.fromString(workId).toString()
         val path = worksDirectory.resolve("$uuid.epub").normalize()

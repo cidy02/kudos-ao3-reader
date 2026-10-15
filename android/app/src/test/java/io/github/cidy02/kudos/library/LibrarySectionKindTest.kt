@@ -5,6 +5,14 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 
 class LibrarySectionKindTest {
+    /** LibrarySectionKindTests.historyAndFavoritesDefaultToLedgerRows. */
+    @Test
+    fun historyAndFavoritesDefaultToLedgerRows() {
+        LibrarySectionKind.entries.forEach { kind ->
+            assertEquals(kind == LibrarySectionKind.History || kind == LibrarySectionKind.Favorites, kind.defaultsToLedgerRows)
+        }
+    }
+
     @Test
     fun dashboardOrderMatchesIos() {
         assertEquals(

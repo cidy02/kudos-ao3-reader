@@ -239,6 +239,99 @@ class WorkLifecycleRepositoryTest {
         database.close()
     }
 
+    /** PreservedWorkTests.resolveLocalWorkRevivesASoftDeletedWorkWithoutMaskingAMissingEPUB. */
+    @Test
+    fun resolveLocalWorkRevivesASoftDeletedWorkWithoutMaskingAMissingEPUB() = runTest {
+        val original = repository.upsert(sampleSavedWork().copy(hasEpub = false, readiumLocator = "reader's place"))
+        repository.softDelete(original.id)
+        val resolved = repository.resolveLocalWork(original.id)!!
+        assertEquals(original.id, resolved.id)
+        assertFalse(resolved.isDeleted)
+        assertNull(resolved.deletedAt)
+        assertNull(resolved.permanentDeletionScheduledAt)
+        assertFalse(resolved.hasEpub)
+        assertFalse(fileStore.workEpubExists(resolved.id))
+        assertEquals("reader's place", resolved.readiumLocator)
+        assertTrue(database.syncTombstoneDao().getByRecord(resolved.id, SyncTombstoneRecordType.SAVED_WORK).isEmpty())
+        assertEquals(1, database.workDao().getAllIncludingDeleted().size)
+    }
+
+    /** CollectionWorkPickerTests.addStampsBothSidesModified, through the real membership writer. */
+    @Test
+    fun addStampsBothSidesModified() = runTest {
+        repository.upsert(sampleSavedWork())
+        val collection = repository.createCollection("Shelf")
+        clockNow = clockNow.plusSeconds(30)
+        repository.addWorkToCollection(workUuid, collection.id)
+        assertEquals(clockNow, repository.getWork(workUuid)!!.lastModifiedAt)
+        assertEquals(clockNow, repository.getCollection(collection.id)!!.lastModifiedAt)
+        assertEquals(clockNow, repository.getCollection(collection.id)!!.lastMembershipChangedAt)
+        val chosenAt = clockNow
+        clockNow = clockNow.plusSeconds(30)
+        repository.addWorkToCollection(workUuid, collection.id)
+        assertEquals(chosenAt, repository.getCollection(collection.id)!!.lastMembershipChangedAt)
+        repository.removeFromCollection(workUuid, collection.id)
+        assertEquals(clockNow, repository.getCollection(collection.id)!!.lastMembershipChangedAt)
+    }
+
+    /** CollectionMembershipDeletionTests.renamingACollectionDoesNotOverrideARemovalElsewhere. */
+    @Test
+    fun renamingACollectionDoesNotOverrideARemovalElsewhere() = runTest {
+        val work = repository.upsert(sampleSavedWork())
+        val collection = repository.createCollection("Shelf")
+        repository.addWorkToCollection(work.id, collection.id)
+        val chosenAt = clockNow
+        val removedAt = chosenAt.plusSeconds(100)
+        clockNow = chosenAt.plusSeconds(9_000)
+        repository.renameCollection(collection.id, "Comfort rereads")
+        val local = repository.getCollection(collection.id)!!
+        assertEquals(chosenAt, local.lastMembershipChangedAt)
+        assertEquals(clockNow, local.lastModifiedAt)
+        val tombstone = SyncTombstone(
+            recordID = io.github.cidy02.kudos.core.model.collectionMembershipRecordId(collection.id, work.id),
+            recordTypeRaw = SyncTombstoneRecordType.WORK_COLLECTION_MEMBERSHIP,
+            createdAt = removedAt, lastModifiedAt = removedAt
+        )
+        val archived = io.github.cidy02.kudos.backup.BackupCollection(
+            id = collection.id, name = "Shelf", dateAdded = chosenAt.toString(),
+            lastModifiedAt = chosenAt.toString(), workIDs = emptyList()
+        )
+        val result = io.github.cidy02.kudos.backup.BackupMergeService.merge(
+            current = io.github.cidy02.kudos.backup.BackupLibrarySnapshot(
+                works = listOf(work), collections = listOf(local), tombstones = listOf(tombstone)
+            ),
+            backup = io.github.cidy02.kudos.backup.KudosBackupPackage(
+                io.github.cidy02.kudos.backup.KudosBackupManifest(8, clockNow.toString(), collections = listOf(archived))
+            ),
+            mode = io.github.cidy02.kudos.backup.BackupImportMode.MERGE,
+            now = clockNow
+        )
+        assertTrue(result.snapshot.collections.single().workIds.isEmpty())
+    }
+
+    /** CollectionWorkPickerTests' candidate rules, including an unkept history record. */
+    @Test
+    fun collectionCandidatesIncludeUnkeptHistoryButExcludeMembersQueueOnlyAndDeleted() = runTest {
+        val history = sampleSavedWork().copy(isSaved = false, isFavorite = false, lastReadDate = clockNow)
+        val member = history.copy(id = "22222222-2222-4222-8222-222222222222")
+        val queued = history.copy(id = "33333333-3333-4333-8333-333333333333", isQueuedForLater = true)
+        val deleted = history.copy(id = "44444444-4444-4444-8444-444444444444", isDeleted = true)
+        listOf(history, member, queued, deleted).forEach { repository.upsert(it) }
+        val all = repository.observeLibraryWorks().first()
+        assertEquals(listOf(history.id), WorkRepository.collectionCandidates(all, setOf(member.id)).map { it.id })
+        assertEquals(listOf(history.id), WorkRepository.collectionCandidates(listOf(history, deleted), emptySet()).map { it.id })
+    }
+
+    /** PreservedWorkTests.deleteConfirmationMessageEscalatesWhenAO3Unavailable. */
+    @Test
+    fun deleteConfirmationMessageEscalatesWhenAO3Unavailable() {
+        val available = sampleSavedWork()
+        val unavailable = available.copy(ao3Unavailable = true)
+        assertTrue(io.github.cidy02.kudos.ui.components.workDeletionMessage(listOf(available)).contains("Recently Deleted"))
+        assertTrue(io.github.cidy02.kudos.ui.components.workDeletionMessage(listOf(unavailable)).contains("no longer available"))
+        assertTrue(io.github.cidy02.kudos.ui.components.workDeletionMessage(listOf(available, unavailable)).contains("can't download"))
+    }
+
     /** Swift ReadingLogTests.moveBackToInProgressStoresTheOverrideAndRebuckets. */
     @Test
     fun moveBackToInProgressStoresTheOverrideAndRebuckets() = runTest {
@@ -781,6 +874,72 @@ class WorkLifecycleRepositoryTest {
         assertNull(kept.freedAt)
     }
 
+    @Test
+    fun queueReconciliationKeepsRealCopiesWithAndWithoutAFileProbe() = runTest {
+        val bytes = javaClass.getResourceAsStream("/epub/sample-source-less.epub").use { requireNotNull(it).readBytes() }
+        for (withProbe in listOf(false, true)) {
+            val work = repository.upsert(sampleSavedWork(java.util.UUID.randomUUID().toString()).copy(
+                isSaved = false, hasEpub = true, isFinished = true,
+                freedAt = clockNow.minusSeconds(90L * 86_400), readiumLocator = "kept place"
+            ))
+            fileStore.writeWorkEpub(work.id, bytes)
+            val queues = if (withProbe) {
+                io.github.cidy02.kudos.library.ReadingQueueRepository(
+                    database, clock = { clockNow }, epubOnDisk = fileStore::workEpubExists
+                )
+            } else {
+                io.github.cidy02.kudos.library.ReadingQueueRepository(database, clock = { clockNow })
+            }
+            val keep = queues.createQueue("Keep $withProbe")
+            val loose = queues.createQueue("Loose $withProbe", keepsWorksOffline = false)
+            val membership = queues.addWork(keep.id, work.id, enqueueMissingEpub = false)
+            assertTrue(repository.getWork(work.id)!!.isDownloaded)
+            assertNull(repository.getWork(work.id)!!.freedAt)
+
+            // Repeat add must release a stale hold too, without duplicating membership.
+            repository.upsert(repository.getWork(work.id)!!.copy(freedAt = work.freedAt))
+            assertEquals(membership.id, queues.addWork(keep.id, work.id, enqueueMissingEpub = false).id)
+            assertNull(repository.getWork(work.id)!!.freedAt)
+            queues.normalizeAllQueuedWorks()
+            assertEquals(0, repository.sweepHeldCopies(everything = true))
+            assertTrue(repository.getWork(work.id)!!.isDownloaded)
+
+            queues.addWork(loose.id, work.id, enqueueMissingEpub = false)
+            queues.hardDeleteQueue(keep.id)
+            queues.removeWork(loose.id, work.id)
+            val remaining = repository.getWork(work.id)!!
+            assertTrue(remaining.hasEpub)
+            assertFalse(remaining.isDeleted)
+            assertFalse(remaining.isQueuedForLater)
+            assertEquals("kept place", remaining.readiumLocator)
+            assertTrue(bytes.contentEquals(Files.readAllBytes(fileStore.workEpubPath(work.id))))
+        }
+    }
+
+    @Test
+    fun readdingACollectionKeeperPreservesItsRealCopyAndMembershipClock() = runTest {
+        val bytes = javaClass.getResourceAsStream("/epub/sample-source-less.epub").use { requireNotNull(it).readBytes() }
+        val work = repository.upsert(sampleSavedWork().copy(isSaved = false, hasEpub = true,
+            isFinished = true, freedAt = clockNow.minusSeconds(90L * 86_400)))
+        fileStore.writeWorkEpub(work.id, bytes)
+        val collection = repository.createCollection("Keep later")
+        repository.addWorkToCollection(work.id, collection.id)
+        val chosenAt = repository.getCollection(collection.id)!!.lastMembershipChangedAt
+        assertEquals(work.freedAt, repository.getWork(work.id)!!.freedAt)
+        val entity = database.collectionDao().getById(collection.id)!!
+        database.collectionDao().upsert(entity.copy(keepsWorksOffline = true))
+        clockNow = clockNow.plusSeconds(30)
+
+        repository.addWorkToCollection(work.id, collection.id)
+
+        assertNull(repository.getWork(work.id)!!.freedAt)
+        assertEquals(clockNow, repository.getWork(work.id)!!.lastModifiedAt)
+        assertEquals(chosenAt, repository.getCollection(collection.id)!!.lastMembershipChangedAt)
+        assertEquals(0, repository.sweepHeldCopies(everything = true))
+        assertTrue(repository.getWork(work.id)!!.isDownloaded)
+        assertTrue(bytes.contentEquals(Files.readAllBytes(fileStore.workEpubPath(work.id))))
+    }
+
     /**
      * iOS `PrivacyDataView.freedHistory`. Clear reading history used to take every finished
      * work, saved and downloaded ones included, under a message promising otherwise (audit A14).
@@ -861,6 +1020,115 @@ class WorkImporterLifecycleTest {
     @After
     fun tearDown() {
         database.close()
+    }
+
+    /** PreservedWorkTests.userEPUBImportRevivesRecentlyDeletedDuplicate (source-less fixture). */
+    @Test
+    fun userEPUBImportRevivesRecentlyDeletedDuplicate() = runTest {
+        val bytes = javaClass.getResourceAsStream("/epub/sample-source-less.epub").use { requireNotNull(it).readBytes() }
+        assertEquals("", EpubImportMetadata.inspect(bytes).sourceUrl)
+        val importer = importer(AO3Result.Failure(AO3Error.Network("offline")), AO3Result.Failure(AO3Error.Network("offline")))
+        val first = (importer.importLocalEpub("first.epub", bytes) as WorkImportResult.Success).work
+        repository.upsert(first.copy(readiumLocator = "kept locator", isFavorite = true))
+        repository.softDelete(first.id)
+
+        val revived = (importer.importLocalEpub("renamed.epub", bytes) as WorkImportResult.Success).work
+        assertEquals(first.id, revived.id)
+        assertFalse(revived.isDeleted)
+        assertNull(revived.deletedAt)
+        assertNull(revived.permanentDeletionScheduledAt)
+        assertEquals("kept locator", revived.readiumLocator)
+        assertTrue(revived.isFavorite)
+        assertEquals(first.downloadedAt, revived.downloadedAt)
+        assertTrue(fileStore.workEpubExists(first.id))
+        assertTrue(database.syncTombstoneDao().getByRecord(first.id, SyncTombstoneRecordType.SAVED_WORK).isEmpty())
+        assertEquals(1, database.workDao().getAllIncludingDeleted().size)
+    }
+
+    /** PreservedWorkTests.addToSavedForLaterRevivesRecentlyDeletedWork's offline assertion. */
+    @Test
+    fun requeuedWorkStaysRevivedWhenPreservationFailsOffline() = runTest {
+        val original = repository.upsert(sampleSavedWork().copy(hasEpub = false))
+        repository.softDelete(original.id)
+        val queues = io.github.cidy02.kudos.library.ReadingQueueRepository(database, epubOnDisk = fileStore::workEpubExists)
+        queues.addToSavedForLater(original.id, enqueueMissingEpub = false)
+        val offline = AO3Result.Failure(AO3Error.Network("offline"))
+        val result = importer(offline, offline).preserveQueuedWork(repository.getWork(original.id)!!)
+        assertTrue(result is WorkImportResult.Failure)
+        val revived = repository.getWork(original.id)!!
+        assertFalse(revived.isDeleted)
+        assertNull(revived.deletedAt)
+        assertNull(revived.permanentDeletionScheduledAt)
+        assertTrue(revived.isQueuedForLater)
+        assertFalse(revived.hasEpub)
+        assertEquals("failed", revived.epubPreservationStatusRaw)
+        assertTrue(queues.isInSavedForLater(original.id))
+        assertTrue(database.syncTombstoneDao().getByRecord(original.id, SyncTombstoneRecordType.SAVED_WORK).isEmpty())
+        assertEquals(1, database.workDao().getAllIncludingDeleted().size)
+    }
+
+    /** ReadingQueueTests.removeLastQueueMembershipDoesNotDeleteWorkByDefault's actual-file assertion. */
+    @Test
+    fun removingLastQueueMembershipKeepsTheActualEpubAndPlace() = runTest {
+        val bytes = javaClass.getResourceAsStream("/epub/sample-source-less.epub").use { requireNotNull(it).readBytes() }
+        val work = repository.upsert(sampleSavedWork().copy(isSaved = false, hasEpub = true, readiumLocator = "kept place"))
+        fileStore.writeWorkEpub(work.id, bytes)
+        val queues = io.github.cidy02.kudos.library.ReadingQueueRepository(database, epubOnDisk = fileStore::workEpubExists)
+        val queue = queues.createQueue("Reading")
+        queues.addWork(queue.id, work.id, enqueueMissingEpub = false)
+        queues.removeWork(queue.id, work.id)
+        val remaining = repository.getWork(work.id)!!
+        assertFalse(remaining.isDeleted)
+        assertFalse(remaining.isQueuedForLater)
+        assertNull(remaining.permanentDeletionScheduledAt)
+        assertEquals("kept place", remaining.readiumLocator)
+        assertTrue(fileStore.workEpubExists(work.id))
+        assertTrue(bytes.contentEquals(Files.readAllBytes(fileStore.workEpubPath(work.id))))
+    }
+
+    @Test
+    fun directRedownloadRevivesBeforeAnOfflineFailure() = runTest {
+        val existing = repository.upsert(sampleSavedWork().copy(hasEpub = false))
+        repository.softDelete(existing.id)
+        val offline = AO3Result.Failure(AO3Error.Network("offline"))
+        val result = importer(offline, offline).downloadExisting(repository.getWork(existing.id)!!)
+        assertTrue(result is WorkImportResult.Failure)
+        val revived = repository.getWork(existing.id)!!
+        assertFalse(revived.isDeleted)
+        assertNull(revived.permanentDeletionScheduledAt)
+        assertFalse(revived.hasEpub)
+        assertTrue(database.syncTombstoneDao().getByRecord(existing.id, SyncTombstoneRecordType.SAVED_WORK).isEmpty())
+    }
+
+    @Test
+    fun sourceLessImportDoesNotCollapseDifferentTitlesOrFileSizes() = runTest {
+        val importer = importer(AO3Result.Failure(AO3Error.NotFound), AO3Result.Failure(AO3Error.NotFound))
+        fun epub(title: String, text: String) = io.github.cidy02.kudos.works.converters.EpubBuilder.buildEpub(title, "<p>$text</p>")
+        val originalBytes = epub("First", "A chapter")
+        val first = (importer.importLocalEpub("first.epub", originalBytes) as WorkImportResult.Success).work
+        val renamed = (importer.importLocalEpub("renamed.epub", epub("Second", "A chapter")) as WorkImportResult.Success).work
+        assertTrue(first.id != renamed.id)
+        val changedBytes = epub("First", "An entirely different and much longer chapter, with other words and content.")
+        assertTrue(originalBytes.size != changedBytes.size)
+        val changed = (importer.importLocalEpub("changed.epub", changedBytes) as WorkImportResult.Success).work
+        assertTrue(first.id != changed.id)
+        assertEquals(3, database.workDao().getAllIncludingDeleted().size)
+    }
+
+    /** PreservedWorkTests.importEPUBMergesAcrossAO3URLVariants. */
+    @Test
+    fun importEPUBMergesAcrossAO3URLVariants() = runTest {
+        val existing = repository.upsert(sampleSavedWork().copy(
+            sourceUrl = "https://archiveofourown.org/downloads/123/story.epub",
+            ao3WorkID = null,
+            readiumLocator = "kept locator"
+        ))
+        val imported = (importer(AO3Result.Failure(AO3Error.NotFound), AO3Result.Success(epubBytes))
+            .download(sampleSummary()) as WorkImportResult.Success).work
+        assertEquals(existing.id, imported.id)
+        assertEquals("kept locator", imported.readiumLocator)
+        assertEquals(1, database.workDao().getAllIncludingDeleted().size)
+        assertTrue(fileStore.workEpubExists(existing.id))
     }
 
     @Test

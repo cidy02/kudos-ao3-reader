@@ -2007,3 +2007,15 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   expiry snapshot can no longer erase a live work with its EPUB, place and marks (iOS
   `deletePermanentlyLeavesALiveWorkCollectionAndQueueAlone`). The launch sweeps run under the
   persistence gate, after any restore or sync holding it. Reverse: the commit that names 3fh.
+- **2026-10-15 · A56's Library, queue and reading-record faults fixed (3fi, 3fi-2; Codex,
+  reviewed and gated by Claude).** Remove from Queue keeps the work (Remove from Later and
+  Remove from All Queues may still send a queue-only work to Recently Deleted, as iOS). Opening,
+  queueing or re-importing a work in Recently Deleted revives it instead of making a second
+  copy (a source-less EPUB matched by title, author and size, as iOS); `/downloads/<id>` and
+  `/works/<id>` match both ways. Deleting a queue tombstones its memberships and normalizes its
+  works; a collection's membership clock (already stored) is stamped on add and remove, not on
+  rename; adding to a collection stamps the work too. Deleting a last copy AO3 no longer has
+  says so. Collection pickers offer reading and history works; colliding tag renames merge
+  everywhere; only History and Favorites default to ledger rows. 3fi first broke ten tests: its
+  normalization read "no file probe given" as "file missing" and cleared `hasEpub`; 3fi-2 reads
+  it as unknown. No schema or backup-format change. Reverse: the commit that names 3fi.

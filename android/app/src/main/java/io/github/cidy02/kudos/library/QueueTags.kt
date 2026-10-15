@@ -501,7 +501,7 @@ private fun QueueTagEditDialog(
     var conflict by remember { mutableStateOf<Tag?>(null) }
     var mergeTarget by remember { mutableStateOf<Tag?>(null) }
     val trimmed = name.trim()
-    val blocked = trimmed.isEmpty() || trimmed == tag.name || conflict != null
+    val blocked = trimmed.isEmpty() || trimmed == tag.name || (conflict != null && conflict?.name != trimmed)
 
     LaunchedEffect(trimmed) {
         conflict = if (trimmed.isEmpty() || trimmed == tag.name) null
@@ -515,7 +515,9 @@ private fun QueueTagEditDialog(
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Name") }, singleLine = true)
                 Text(
-                    text = if (conflict != null) {
+                    text = if (conflict?.name == trimmed) {
+                        "Saving merges these tags on all works and queues."
+                    } else if (conflict != null) {
                         "You already have a tag called “${conflict?.name}”."
                     } else {
                         "Renaming this tag also renames it on your works and other queues."

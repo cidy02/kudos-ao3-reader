@@ -1,5 +1,7 @@
 package io.github.cidy02.kudos.home
 
+import io.github.cidy02.kudos.ui.components.workDeletionMessage
+
 import android.content.Context
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
@@ -549,7 +551,7 @@ fun HomeSectionListScreen(
     DestructiveConfirmation(
         show = pendingDelete != null,
         title = "Delete this work?",
-        text = "Kudos will move this work to Recently Deleted. You can restore it for the next 90 days.",
+        text = workDeletionMessage(listOfNotNull(pendingDelete?.let { displayById[it]?.item?.work })),
         confirmText = "Delete",
         confirmBeforeDelete = snapshot?.confirmBeforeDelete ?: true,
         onConfirm = {

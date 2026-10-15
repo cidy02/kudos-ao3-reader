@@ -1,5 +1,7 @@
 package io.github.cidy02.kudos.works
 
+import io.github.cidy02.kudos.ui.components.workDeletionMessage
+
 import androidx.compose.ui.semantics.Role
 import androidx.compose.foundation.selection.toggleable
 import android.content.Context
@@ -225,8 +227,7 @@ fun WorkDetailScreen(
         val canonical = AO3URLResolver.canonicalWorkUrl(workId)
         val existing = WorkIdentityIndex.findExisting(
             candidateSourceUrl = canonical,
-            byId = { workRepository.getWork(it) },
-            bySourceUrl = { workRepository.findBySourceUrl(it) }
+            loadWorks = workRepository::listWorksForIdentity
         )
         if (existing != null) {
             refreshLocal(existing.id, remote = null)
@@ -363,8 +364,7 @@ fun WorkDetailScreen(
                     val refreshed = if (sourceUrl != null) {
                         WorkIdentityIndex.findExisting(
                             candidateSourceUrl = sourceUrl,
-                            byId = { workRepository.getWork(it) },
-                            bySourceUrl = { workRepository.findBySourceUrl(it) }
+                            loadWorks = workRepository::listWorksForIdentity
                         )
                     } else null
                     if (refreshed != null) {
@@ -418,13 +418,14 @@ fun WorkDetailScreen(
     fun ensureLocalThen(queueOnly: Boolean = false, action: suspend (SavedWork) -> Unit) {
         val local = state.local
         if (local != null) {
-            if (queueOnly && !local.isQueuedForLater) {
-                runWorkAction {
-                    val updated = local.copy(isQueuedForLater = true, lastModifiedAt = Instant.now())
+            runWorkAction {
+                val resolved = workRepository.resolveLocalWork(local.id) ?: return@runWorkAction
+                if (queueOnly && !resolved.isQueuedForLater) {
+                    val updated = resolved.copy(isQueuedForLater = true, lastModifiedAt = Instant.now())
                     action(workRepository.upsert(updated))
+                } else {
+                    action(resolved)
                 }
-            } else {
-                runWorkAction { action(local) }
             }
             return
         }
@@ -597,7 +598,7 @@ fun WorkDetailScreen(
     DestructiveConfirmation(
         show = confirmRemove,
         title = "Remove from Library",
-        text = "This moves the work to Recently Deleted for 90 days. You can restore it from Library → Recently Deleted. After 90 days it is permanently removed (including any downloaded EPUB).",
+        text = workDeletionMessage(listOfNotNull(state.local)),
         confirmText = "Remove",
         confirmBeforeDelete = settings.app.confirmBeforeDelete,
         onConfirm = {

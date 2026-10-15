@@ -94,6 +94,28 @@ class DeletionTransactionTest {
     }
 
     @Test
+    fun queueHardDeleteRollsBackMembershipTombstonesAndFlagsWhenQueueDeleteFails() = runTest {
+        seed()
+        val repository = ReadingQueueRepository(db, clock = { now.plusSeconds(1) })
+        val beforeQueue = db.readingQueueDao().getQueueById(QUEUE)
+        val beforeWork = db.workDao().getById(WORK)
+        failDelete("reading_queues", "id", QUEUE, "readingQueue", QUEUE)
+        expectSecondStatementFailure { repository.hardDeleteQueue(QUEUE) }
+        assertEquals(beforeQueue, db.readingQueueDao().getQueueById(QUEUE))
+        assertEquals(beforeWork, db.workDao().getById(WORK))
+        assertNotNull(db.readingQueueDao().getMembershipForWork(QUEUE, WORK))
+        assertTrue(db.syncTombstoneDao().getAll().isEmpty())
+        requireTombstoneBeforeDelete("reading_queues", "id", QUEUE, "readingQueue", QUEUE)
+        orderTrigger("member_order", "reading_queue_memberships", "id", MEMBER, "readingQueueMembership", MEMBER, false)
+        repository.hardDeleteQueue(QUEUE)
+        assertNull(db.readingQueueDao().getQueueById(QUEUE))
+        assertNull(db.readingQueueDao().getMembershipForWork(QUEUE, WORK))
+        assertFalse(db.workDao().getById(WORK)!!.isQueuedForLater)
+        assertFalse(db.workDao().getById(WORK)!!.isDeleted)
+        assertEquals(setOf("readingQueue", "readingQueueMembership"), db.syncTombstoneDao().getAll().map { it.recordTypeRaw }.toSet())
+    }
+
+    @Test
     fun workHardDeleteRollsBackEveryDependentAndKeepsEpubWhenFinalDaoDeleteThrows() = runTest {
         seed()
         files.writeWorkEpub(WORK, io.github.cidy02.kudos.works.converters.EpubBuilder.buildEpub("Work", "<p>Text.</p>"))
