@@ -15,10 +15,14 @@ paragraph that is nothing but one of iOS's labels, or the plug, is dropped (a no
 merely starts with one is read); a link is said as its site ("archiveofourown.org.").
 `ReaderContentTextTest` has both. Seen on the emulator: Read Aloud still starts.
 
-## Left (a `ponytail:` note in the code)
+## The length limit (3ed, the same evening)
 
-A session still ends after 80,000 characters (about 14,000 words, an hour and a half).
-iOS reads on chapter by chapter. Worth doing if long listening matters.
+A session ended after 80,000 characters (about 14,000 words, an hour and a half), though
+`content.text()` had already read the whole rest of the work in, so the cap saved nothing.
+It is gone: Read Aloud runs to the end of the work, as iOS's reads on. The `ponytail:` note
+left in the code: the rest of the work is read in before the first word, so a very long
+work may be slow to start; walk `content.iterator()` lazily if that shows. Gate 2,658;
+seen on the emulator that it still starts.
 
 ## Display & Themes, lower half, beside the iPhone's
 

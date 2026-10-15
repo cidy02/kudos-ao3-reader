@@ -13,7 +13,6 @@ import org.readium.r2.shared.publication.services.content.content
  */
 @OptIn(ExperimentalReadiumApi::class)
 object ReaderContentText {
-    private const val MAX_CHARS = 80_000
     private const val CHUNK = 350
 
     /** iOS disables Read aloud when Readium has no extractable content service. */
@@ -28,9 +27,11 @@ object ReaderContentText {
             ?: return@withContext emptyList()
         val full = runCatching { content.text() }.getOrNull().orEmpty()
         if (full.isBlank()) return@withContext emptyList()
-        // ponytail: MAX_CHARS still ends a session after about 14,000 words; read on chapter
-        // by chapter (as iOS) if long listening matters.
-        speakableParagraphs(full.take(MAX_CHARS)).flatMap(::splitIntoSpeakableChunks)
+        // To the end of the work, as iOS reads on. It stopped after 80,000 characters (about an
+        // hour and a half), though `text()` had already read the rest in.
+        // ponytail: the rest of the work is read in before the first word; walk
+        // `content.iterator()` lazily if a very long work is slow to start.
+        speakableParagraphs(full).flatMap(::splitIntoSpeakableChunks)
     }
 
     /**
