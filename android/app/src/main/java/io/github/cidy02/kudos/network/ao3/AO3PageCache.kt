@@ -4,6 +4,7 @@ import io.github.cidy02.kudos.network.ao3.writes.AO3AuthenticatedClient
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.withContext
 import java.net.URI
 
 /** iOS AO3AuthorPageCache: process memory only, 5 minutes fresh / 24 hours fallback, 128 pages. */
@@ -150,7 +151,7 @@ class AO3PageCache(
             if (cached is AO3Result.Failure) evict(key)
             return cached
         }
-        val result = fetch()
+        val result = if (bypassCache) withContext(AO3UncoalescedRead()) { fetch() } else fetch()
         currentCoroutineContext().ensureActive()
         requireCurrent()
         return when (result) {

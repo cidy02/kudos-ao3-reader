@@ -1,10 +1,12 @@
 package io.github.cidy02.kudos.network.ao3
 
 import java.time.Instant
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
@@ -110,6 +112,63 @@ class AO3RequestCoordinatorTest {
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class AO3RequestCoalescerTest {
+    @Test
+    fun lastWaiterLeavingCancelsTheOperationBeforeItsFetch() = runTest {
+        val coalescer = AO3RequestCoalescer<String, String>(this)
+        val release = CompletableDeferred<Unit>()
+        var fetches = 0
+        var stopped = false
+        val first = async {
+            coalescer.coalesce("same") {
+                try {
+                    release.await() // Waiting for a pacing slot, before the fetch.
+                    fetches += 1
+                    "unwanted"
+                } finally {
+                    stopped = true
+                }
+            }
+        }
+        runCurrent()
+        val second = async { coalescer.coalesce("same") { error("Must join the first") } }
+        runCurrent()
+
+        first.cancelAndJoin()
+        assertFalse(stopped)
+        second.cancelAndJoin()
+        runCurrent()
+        assertTrue(stopped)
+        assertEquals(0, coalescer.inFlightCount())
+        release.complete(Unit)
+        runCurrent()
+        assertEquals(0, fetches)
+        assertEquals("new request", coalescer.coalesce("same") { "new request" })
+    }
+
+    @Test
+    fun cancellingOneWaiterLeavesTheSharedOperationForTheOther() = runTest {
+        val coalescer = AO3RequestCoalescer<String, String>(this)
+        val release = CompletableDeferred<Unit>()
+        var fetches = 0
+        val first = async {
+            coalescer.coalesce("same") {
+                release.await()
+                fetches += 1
+                "shared"
+            }
+        }
+        runCurrent()
+        val second = async { coalescer.coalesce("same") { error("Must join the first") } }
+        runCurrent()
+
+        first.cancelAndJoin()
+        assertEquals(1, coalescer.inFlightCount())
+        release.complete(Unit)
+        assertEquals("shared", second.await())
+        assertEquals(1, fetches)
+        assertEquals(0, coalescer.inFlightCount())
+    }
+
     @Test
     fun identicalConcurrentRequestsShareOneOperationAndThenEvict() = runTest {
         val coalescer = AO3RequestCoalescer<String, String>(this)
@@ -371,7 +430,116 @@ class AO3ClientUserAgentTest {
     }
 }
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class AO3ClientCoalescingTest {
+    @Test
+    fun lastWaiterLeavingDuringPacingPreventsDispatch() = runTest {
+        withServer { server ->
+            server.enqueue(MockResponse.Builder().code(200).body("unwanted").build())
+            val config = AO3NetworkConfig()
+            val release = CompletableDeferred<Unit>()
+            var pacingStopped = false
+            val coordinator = AO3RequestCoordinator(config, FakeClock(), AO3Delay {
+                try { release.await() } finally { pacingStopped = true }
+            })
+            coordinator.coordinate { Unit } // Reserve the first slot so this GET must wait.
+            val coalescer = AO3RequestCoalescer<AO3RequestKey, AO3Result<AO3HttpResponse>>(this)
+            val client = OkHttpAO3Client(OkHttpClient(), config, coordinator, coalescer)
+            val url = server.url("/works/1").toString()
+            val first = async { client.get(url) }
+            val second = async { client.get(url) }
+            runCurrent()
+            assertEquals(1, coalescer.inFlightCount())
+            try {
+                first.cancelAndJoin()
+                second.cancelAndJoin()
+                runCurrent()
+                assertTrue(pacingStopped)
+                assertEquals(0, coalescer.inFlightCount())
+                assertEquals(0, server.requestCount)
+            } finally {
+                release.complete(Unit)
+            }
+            runCurrent()
+            assertEquals(0, server.requestCount)
+        }
+    }
+
+    @Test
+    fun lastWaiterLeavingDuringBackoffPreventsRetry() = runTest {
+        withServer { server ->
+            server.enqueue(MockResponse.Builder().code(500).body("try later").build())
+            server.enqueue(MockResponse.Builder().code(200).body("unwanted retry").build())
+            val enteredBackoff = CompletableDeferred<Unit>()
+            val release = CompletableDeferred<Unit>()
+            var backoffStopped = false
+            val config = AO3NetworkConfig(minDelayBetweenRequestsMillis = 0)
+            val client = OkHttpAO3Client(
+                okHttpClient = OkHttpClient(),
+                config = config,
+                coalescer = AO3RequestCoalescer(this),
+                delay = AO3Delay {
+                    enteredBackoff.complete(Unit)
+                    try { release.await() } finally { backoffStopped = true }
+                }
+            )
+            val waiting = async { client.get(server.url("/works/1").toString()) }
+            enteredBackoff.await()
+            try {
+                waiting.cancelAndJoin()
+                runCurrent()
+                assertTrue(backoffStopped)
+            } finally {
+                release.complete(Unit)
+            }
+            runCurrent()
+            assertEquals(1, server.requestCount)
+        }
+    }
+
+    @Test
+    fun bypassingPageReadDoesNotJoinAnOrdinaryGetStartedBeforeRemoval() = runTest {
+        withServer { server ->
+            server.enqueue(MockResponse.Builder().code(200).addHeader("X-Test-Hold", "yes")
+                .body("before write").build())
+            server.enqueue(MockResponse.Builder().code(200).body("after write").build())
+            val started = CompletableDeferred<Unit>()
+            val release = CountDownLatch(1)
+            val http = OkHttpClient.Builder().addInterceptor { chain ->
+                val response = chain.proceed(chain.request())
+                if (response.header("X-Test-Hold") != null) {
+                    started.complete(Unit)
+                    if (!release.await(5, TimeUnit.SECONDS)) {
+                        response.close()
+                        throw java.io.IOException("Earlier GET was not released")
+                    }
+                }
+                response
+            }.build()
+            val client = OkHttpAO3Client(http,
+                AO3NetworkConfig(minDelayBetweenRequestsMillis = 0),
+                coalescer = AO3RequestCoalescer(this))
+            val url = server.url("/users/Writer").toString()
+            val cache = AO3PageCache()
+            val key = AO3PageCache.Key(url, AO3PageCache.Scope(null, null), AO3PageCache.Kind.Dashboard)
+            val ordinary = async { client.get(url) }
+            try {
+                started.await()
+                cache.removePages("/users/Writer", key.scope)
+                val fresh = cache.read(url, key.kind, null, bypassCache = true,
+                    fetch = { client.get(url) }, parse = { AO3Result.Success(it.body) })
+                assertEquals(AO3Result.Success("after write"), fresh)
+                assertFalse(ordinary.isCompleted)
+                assertEquals(2, server.requestCount)
+                assertEquals("after write", cache.value(key)?.body)
+            } finally {
+                release.countDown()
+            }
+            assertEquals("before write", (ordinary.await() as AO3Result.Success).value.body)
+            assertEquals("after write", cache.value(key)?.body)
+        }
+    }
+
     @Test
     fun identicalConcurrentGetsShareOneServerRequest() = runTest {
         withServer { server ->

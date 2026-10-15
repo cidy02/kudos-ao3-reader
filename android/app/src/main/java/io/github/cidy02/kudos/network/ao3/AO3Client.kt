@@ -6,6 +6,8 @@ import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
@@ -180,7 +182,9 @@ class OkHttpAO3Client(
     ): AO3Result<AO3HttpResponse> {
         var retryNumber = 0
         while (true) {
+            currentCoroutineContext().ensureActive()
             val result = coordinator.coordinate {
+                currentCoroutineContext().ensureActive()
                 beforeSend()
                 performOnce(method, url, headers, formBody)
             }
