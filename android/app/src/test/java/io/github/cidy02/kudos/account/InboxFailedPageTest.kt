@@ -36,7 +36,8 @@ class InboxFailedPageTest {
         override suspend fun get(url: String, headers: Map<String, String>): AO3Result<AO3HttpResponse> =
             failing?.let { AO3Result.Failure(it) } ?: AO3Result.Success(AO3HttpResponse(url, 200, emptyMap(),
                 listOf("src/debug/assets", "app/src/debug/assets", "android/app/src/debug/assets")
-                    .map { File("$it/fixtures/ao3_inbox_manage.html") }.first(File::isFile).readText()))
+                    .map { File("$it/fixtures/${if (url.contains("show_comments=true")) "ao3_comments_empty" else "ao3_inbox_manage"}.html") }
+                    .first(File::isFile).readText()))
         override suspend fun getAuthenticated(url: String) = get(url, emptyMap())
         override suspend fun postAuthenticated(url: String, formFields: List<Pair<String, String>>,
             headers: Map<String, String>) = AO3Result.Failure(AO3Error.NotFound)

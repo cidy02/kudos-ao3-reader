@@ -73,7 +73,8 @@ class AO3CommentRepository(
                 }
             }
         }
-        val thread = parseThread(response.body, response.url, target, response.statusCode, safePage)
+        val thread = parseThread(response.body, response.url, target, response.statusCode, safePage,
+            isStandaloneThread = focusedCommentId != null)
         // Only a work's or chapter's own page is kept. One comment's thread (an Inbox row) is
         // a different page: stored under the work's page 1 it became that page offline
         // (audit A22-2).
@@ -244,12 +245,13 @@ class AO3CommentRepository(
         finalUrl: String,
         target: AO3CommentTarget,
         statusCode: Int,
-        page: Int
+        page: Int,
+        isStandaloneThread: Boolean
     ): AO3Result<AO3CommentThread> {
         return try {
             AO3Result.Success(
                 withContext(Dispatchers.Default) {
-                    parser.parseThread(html, finalUrl, target, page)
+                    parser.parseThread(html, finalUrl, target, page, isStandaloneThread)
                 }
             )
         } catch (error: AO3CommentParseException.LoginRequired) {
