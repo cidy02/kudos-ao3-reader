@@ -414,6 +414,20 @@ class WorkLifecycleRepositoryTest {
         )
     }
 
+    /** A56, iOS `deletePermanentlyLeavesALiveWorkCollectionAndQueueAlone`. */
+    @Test
+    fun aStaleDeleteForeverLeavesAWorkRestoredMeanwhileAlone() = runTest {
+        repository.upsert(sampleSavedWork().copy(hasEpub = true))
+        fileStore.writeWorkEpub(workUuid, epubBytes)
+        repository.softDelete(workUuid)
+        repository.restoreFromRecentlyDeleted(workUuid) // elsewhere, while the confirmation was open
+
+        repository.hardDelete(workUuid, onlyIfStillDeleted = true) // as Recently Deleted calls it
+
+        assertNotNull(repository.getWork(workUuid))
+        assertTrue(fileStore.workEpubExists(workUuid))
+    }
+
     /** T-245 item G: nothing that belonged to the work survives it untombstoned. */
     @Test
     fun hardDeleteTombstonesAndRemovesMembershipsAndAnnotations() = runTest {

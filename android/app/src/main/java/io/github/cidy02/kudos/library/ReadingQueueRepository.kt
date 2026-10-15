@@ -658,7 +658,9 @@ class ReadingQueueRepository(
         return restored.toDomain()
     }
 
-    suspend fun hardDeleteQueue(queueId: String) {
+    suspend fun hardDeleteQueue(queueId: String, onlyIfStillDeleted: Boolean = false) {
+        // See `WorkRepository.hardDelete`.
+        if (onlyIfStillDeleted && queueDao.getQueueById(queueId)?.isDeleted == false) return
         queueDao.deleteQueueById(queueId)
         // Membership rows cascade via FK in DB.
         val now = clock()
@@ -681,7 +683,7 @@ class ReadingQueueRepository(
             it.isDeleted && it.permanentDeletionScheduledAt != null && it.permanentDeletionScheduledAt!! <= now 
         }
         for (entity in expired) {
-            hardDeleteQueue(entity.id)
+            hardDeleteQueue(entity.id, onlyIfStillDeleted = true)
         }
         return expired.size
     }

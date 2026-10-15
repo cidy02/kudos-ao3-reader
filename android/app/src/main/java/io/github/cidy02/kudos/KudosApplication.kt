@@ -70,10 +70,14 @@ class KudosApplication : Application(), Configuration.Provider {
                     container.settingsRepository
                 )
             }
-            runCatching { container.workRepository.sweepExpiredSoftDeletes() }
-            runCatching { container.workRepository.sweepExpiredCollectionSoftDeletes() }
-            runCatching { container.readingQueueRepository.sweepExpiredQueueSoftDeletes() }
-            runCatching { container.workRepository.sweepHeldCopies() }
+            // Behind the persistence gate, so a restore or a sync never has records or files
+            // swept from under it (A56, iOS `sweepExpiredIsANoOpWhileTheOperationGateIsHeld`).
+            container.persistenceGate.withLock {
+                runCatching { container.workRepository.sweepExpiredSoftDeletes() }
+                runCatching { container.workRepository.sweepExpiredCollectionSoftDeletes() }
+                runCatching { container.readingQueueRepository.sweepExpiredQueueSoftDeletes() }
+                runCatching { container.workRepository.sweepHeldCopies() }
+            }
             // Paced rebuild of stale library searchText (schema bump / pre-index / restore).
             runCatching { container.workRepository.rebuildSearchIndexIfNeeded() }
             // Opportunistic background tag refresh (404 detection).

@@ -2001,3 +2001,9 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   load drops unapplied edits; the URL resolver (no live caller) takes iOS's trust rules. One
   of Codex's tests set its fake AO3's answer too early (the form read got the maintenance page
   and nothing posted); Claude moved the switch to the POST. Reverse: the commit that names 3fg.
+- **2026-10-15 · Delete Forever spares what was restored meanwhile; the launch sweeps wait for
+  the persistence gate (3fh; A56 #1, #2).** Hard deletes take `onlyIfStillDeleted`; Recently
+  Deleted, the expiry sweeps and `hardDeleteAllPending` pass `true`, so a stale confirmation or
+  expiry snapshot can no longer erase a live work with its EPUB, place and marks (iOS
+  `deletePermanentlyLeavesALiveWorkCollectionAndQueueAlone`). The launch sweeps run under the
+  persistence gate, after any restore or sync holding it. Reverse: the commit that names 3fh.

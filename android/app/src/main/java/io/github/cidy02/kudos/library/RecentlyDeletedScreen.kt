@@ -266,10 +266,10 @@ class RecentlyDeletedViewModel(
         viewModelScope.launch {
             when {
                 entry.isHeldCopy -> workRepository.freeHeldCopy(entry.id)
-                entry.noun == "work" -> workRepository.hardDelete(entry.id)
-                entry.noun == "collection" -> workRepository.hardDeleteCollection(entry.id)
+                entry.noun == "work" -> workRepository.hardDelete(entry.id, onlyIfStillDeleted = true)
+                entry.noun == "collection" -> workRepository.hardDeleteCollection(entry.id, onlyIfStillDeleted = true)
                 entry.noun == "reading queue" -> {
-                    queueRepository?.hardDeleteQueue(entry.id)
+                    queueRepository?.hardDeleteQueue(entry.id, onlyIfStillDeleted = true)
                     queueTick.value += 1
                 }
             }
@@ -309,9 +309,9 @@ class RecentlyDeletedViewModel(
             for (entry in entries) {
                 when {
                     entry.isHeldCopy -> workRepository.freeHeldCopy(entry.id)
-                    entry.noun == "work" -> workRepository.hardDelete(entry.id)
-                    entry.noun == "collection" -> workRepository.hardDeleteCollection(entry.id)
-                    entry.noun == "reading queue" -> queueRepository?.hardDeleteQueue(entry.id)
+                    entry.noun == "work" -> workRepository.hardDelete(entry.id, onlyIfStillDeleted = true)
+                    entry.noun == "collection" -> workRepository.hardDeleteCollection(entry.id, onlyIfStillDeleted = true)
+                    entry.noun == "reading queue" -> queueRepository?.hardDeleteQueue(entry.id, onlyIfStillDeleted = true)
                 }
             }
             if (entries.any { it.noun == "reading queue" }) {
@@ -325,7 +325,7 @@ class RecentlyDeletedViewModel(
             workRepository.hardDeleteAllPending()
             val queues = queueRepository?.listRecentlyDeletedQueues().orEmpty()
             for (queue in queues) {
-                queueRepository?.hardDeleteQueue(queue.id)
+                queueRepository?.hardDeleteQueue(queue.id, onlyIfStillDeleted = true)
             }
             val currentHeld = state.value.heldEntries
             for (held in currentHeld) {
