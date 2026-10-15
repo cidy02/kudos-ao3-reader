@@ -56,4 +56,16 @@ class SettingsRepositoryPrivacyTest {
             current.privacy.requireBiometricToReveal
         )
     }
+
+    /** A57, iOS `aRestoreCannotRelaxPrivacyGates`: the delete confirmation only tightens too. */
+    @Test
+    fun aRestoreCannotSwitchOffTheDeleteConfirmation() = runTest {
+        val dataStore = PreferenceDataStoreFactory.create(produceFile = { File(tmpFolder.root, "confirm.preferences_pb") })
+        val repo = SettingsRepository(dataStore)
+        repo.replaceAll(KudosSettings(app = KudosSettings().app.copy(confirmBeforeDelete = true)))
+
+        repo.replaceAll(KudosSettings(app = KudosSettings().app.copy(confirmBeforeDelete = false)))
+
+        assertTrue(repo.settings.first().app.confirmBeforeDelete)
+    }
 }

@@ -2019,3 +2019,11 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   everywhere; only History and Favorites default to ledger rows. 3fi first broke ten tests: its
   normalization read "no file probe given" as "file missing" and cleared `hasEpub`; 3fi-2 reads
   it as unknown. No schema or backup-format change. Reverse: the commit that names 3fi.
+- **2026-10-15 · A permanent delete removes an imported original; a restore cannot switch off
+  the delete confirmation (3fj; A57).** `hardDelete` (when it removes the work) now also deletes
+  the work's preserved original and conversion record, as iOS
+  (`permanentDeletionRemovesThePreservedOriginal`); they were left behind, unreachable. The
+  settings restore treats `confirmBeforeDelete` as tighten-only, like the privacy gates (iOS
+  `aRestoreCannotRelaxPrivacyGates`). A57's other faults are brief 3fk; the document
+  converter's gaps (imported HTML, text and PDF become one chapter without metadata) are a
+  feature, recorded. Reverse: the commit that names 3fj.
