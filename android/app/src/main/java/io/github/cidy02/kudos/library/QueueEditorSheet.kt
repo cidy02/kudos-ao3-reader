@@ -1,5 +1,8 @@
 package io.github.cidy02.kudos.library
 
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.selected
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -13,8 +16,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.OutlinedTextField
@@ -32,7 +33,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -70,11 +70,10 @@ fun QueueEditorSheet(
     var name by remember(existing?.id) { mutableStateOf(if (editing) existing!!.name else "") }
     var hue by remember(existing?.id) { mutableStateOf(existing?.hue) }
     var colorHex by remember(existing?.id) { mutableStateOf(existing?.colorHex) }
-    var notes by remember(existing?.id) { mutableStateOf(existing?.notes.orEmpty()) }
     var keep by remember(existing?.id) { mutableStateOf(existing?.keepsWorksOffline != false) }
     var tags by remember(existing?.id) { mutableStateOf<List<String>>(emptyList()) }
     var knownTags by remember { mutableStateOf<List<Tag>>(emptyList()) }
-    var newTag by remember { mutableStateOf("") }
+    var newTag by remember { mutableStateOf<String?>(null) }
     var seed by remember(existing?.id) { mutableStateOf(false) }
     var seedCount by remember(existing?.id) { mutableIntStateOf(0) }
     var saving by remember { mutableStateOf(false) }
@@ -129,7 +128,8 @@ fun QueueEditorSheet(
                                             hue = hue,
                                             colorHex = colorHex,
                                             keepsWorksOffline = keep,
-                                            notes = notes,
+                                            // The description is edited on the queue's own page.
+                                            notes = existing.notes,
                                             tagNames = tags
                                         )
                                     )
@@ -140,7 +140,6 @@ fun QueueEditorSheet(
                                         hue = hue,
                                         colorHex = colorHex,
                                         keepsWorksOffline = keep,
-                                        notes = notes.ifBlank { null },
                                         tagNames = tags,
                                         seedFromSavedForLater = seed
                                     )
@@ -188,45 +187,9 @@ fun QueueEditorSheet(
                     }
                 )
                 SubjectFieldLabel("Tags", Modifier.padding(top = 14.dp))
-                TagToggleRow(knownTags, tags, palette) { tags = it }
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(
-                        value = newTag,
-                        onValueChange = { newTag = it },
-                        modifier = Modifier.weight(1f),
-                        placeholder = { Text("New tag") },
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                        keyboardActions = KeyboardActions(onDone = {
-                            val trimmed = newTag.trim()
-                            if (trimmed.isNotEmpty() && tags.none { it.equals(trimmed, ignoreCase = true) }) {
-                                tags = tags + trimmed
-                            }
-                            newTag = ""
-                        })
-                    )
-                    TextButton(
-                        onClick = {
-                            val trimmed = newTag.trim()
-                            if (trimmed.isNotEmpty() && tags.none { it.equals(trimmed, ignoreCase = true) }) {
-                                tags = tags + trimmed
-                            }
-                            newTag = ""
-                        },
-                        enabled = newTag.isNotBlank()
-                    ) { Text("+ New tag", color = palette.accent) }
-                }
-                if (tags.isNotEmpty()) {
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        tags.forEach { tag ->
-                            SubjectChip(
-                                text = tag,
-                                style = SubjectChipStyle.Tinted,
-                                palette = palette
-                            )
-                        }
-                    }
-                }
+                // As iOS: every tag, then names typed here, then a "+ New tag" chip that asks
+                // for one. It was a text field and a second row repeating the chosen tags.
+                TagToggleRow(knownTags, tags, palette, onChange = { tags = it }, onNew = { newTag = "" })
                 FormFootnote("A tag you use here is the same tag on your works.")
                 SubjectFieldLabel("Offline", Modifier.padding(top = 14.dp))
                 Row(
@@ -245,13 +208,6 @@ fun QueueEditorSheet(
                     "When this is on, every work you add is downloaded for offline reading. " +
                         "When it is off, the queue keeps only your list and uses no extra storage."
                 )
-                SubjectFieldLabel("Description", Modifier.padding(top = 14.dp))
-                OutlinedTextField(
-                    value = notes,
-                    onValueChange = { notes = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    minLines = 3
-                )
                 if (!editing) {
                     SubjectFieldLabel("Start from", Modifier.padding(top = 14.dp))
                     Column(Modifier.fillMaxWidth().subjectPanel()) {
@@ -267,7 +223,7 @@ fun QueueEditorSheet(
                             subtitle = if (seedCount == 0) {
                                 "You have no works in Saved for Later to copy."
                             } else {
-                                "Copy $seedCount works. They stay in Saved for Later."
+                                "Copy $seedCount work${if (seedCount == 1) "" else "s"}. They stay in Saved for Later."
                             },
                             selected = seed,
                             enabled = seedCount > 0,
@@ -277,6 +233,26 @@ fun QueueEditorSheet(
                 }
             }
         }
+    }
+    newTag?.let { typed ->
+        AlertDialog(
+            onDismissRequest = { newTag = null },
+            title = { Text("New tag") },
+            text = {
+                OutlinedTextField(typed, { newTag = it }, placeholder = { Text("Tag") }, singleLine = true)
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val trimmed = typed.trim()
+                    // A name matching a tag already there, ignoring case, picks that one (iOS's rule).
+                    val name = (knownTags.map { it.name } + tags).firstOrNull { it.equals(trimmed, ignoreCase = true) }
+                        ?: trimmed
+                    if (name.isNotEmpty() && name !in tags) tags = tags + name
+                    newTag = null
+                }) { Text("Add") }
+            },
+            dismissButton = { TextButton(onClick = { newTag = null }) { Text("Cancel") } }
+        )
     }
     if (error != null) {
         AlertDialog(
@@ -294,28 +270,28 @@ private fun TagToggleRow(
     known: List<Tag>,
     selected: List<String>,
     palette: SubjectPalette,
-    onChange: (List<String>) -> Unit
+    onChange: (List<String>) -> Unit,
+    onNew: () -> Unit
 ) {
-    if (known.isEmpty()) return
+    val choices = known.map { it.name } + selected.filter { name -> known.none { it.name.equals(name, ignoreCase = true) } }
     FlowRow(
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp)
+        horizontalArrangement = Arrangement.spacedBy(7.dp),
+        verticalArrangement = Arrangement.spacedBy(7.dp)
     ) {
-        known.forEach { tag ->
-            val on = selected.any { it.equals(tag.name, ignoreCase = true) }
-            TextButton(onClick = {
-                onChange(
-                    if (on) selected.filterNot { it.equals(tag.name, ignoreCase = true) }
-                    else selected + tag.name
-                )
-            }) {
-                SubjectChip(
-                    text = tag.name,
-                    style = if (on) SubjectChipStyle.Tinted else SubjectChipStyle.Neutral,
-                    palette = palette
-                )
-            }
+        choices.forEach { name ->
+            val on = selected.any { it.equals(name, ignoreCase = true) }
+            SubjectChip(
+                text = name,
+                style = if (on) SubjectChipStyle.Tinted else SubjectChipStyle.Neutral,
+                palette = palette,
+                modifier = Modifier
+                    .semantics { this.selected = on }
+                    .clickable {
+                        onChange(if (on) selected.filterNot { it.equals(name, ignoreCase = true) } else selected + name)
+                    }
+            )
         }
+        SubjectChip(text = "+ New tag", style = SubjectChipStyle.Dashed, modifier = Modifier.clickable(onClick = onNew))
     }
 }
 
@@ -345,12 +321,12 @@ private fun SeedRow(
 }
 
 @Composable
-internal fun FormFootnote(text: String) {
+internal fun FormFootnote(text: String, modifier: Modifier = Modifier) {
     Text(
         text = text,
         color = LocalKudosTokens.current.secondaryInk,
         fontSize = 11.5.sp,
-        modifier = Modifier.padding(horizontal = 4.dp)
+        modifier = modifier.padding(horizontal = 4.dp)
     )
 }
 

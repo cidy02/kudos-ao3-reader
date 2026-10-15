@@ -1,5 +1,16 @@
 package io.github.cidy02.kudos.library
 
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.sync.Mutex
+import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.Icons
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.foundation.text.BasicTextField
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -23,7 +34,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import io.github.cidy02.kudos.app.ProvidePushedShellChrome
@@ -80,6 +90,7 @@ fun QueueSettingsScreen(
     var vocabulary by remember(queueId) { mutableIntStateOf(0) }
     var notes by remember(queueId) { mutableStateOf("") }
     var notesFocused by remember { mutableStateOf(false) }
+    val notesWrites = remember { Mutex() }
     var reload by remember(queueId) { mutableIntStateOf(0) }
     var colourMenu by remember { mutableStateOf(false) }
     var showTags by remember { mutableStateOf(false) }
@@ -167,23 +178,32 @@ fun QueueSettingsScreen(
             }
         }
         SubjectFieldLabel("Description", Modifier.padding(start = 16.dp, top = 8.dp))
-        OutlinedTextField(
+        // iOS's: the note itself in serif, edited in place, not a boxed field.
+        BasicTextField(
             value = notes,
-            onValueChange = { notes = it },
-            modifier = Modifier
-                .padding(horizontal = 16.dp)
-                .fillMaxWidth()
-                .onFocusChanged { state ->
-                    val was = notesFocused
-                    notesFocused = state.isFocused
-                    if (was && !state.isFocused && notes != current.notes.orEmpty()) {
-                        scope.launch {
-                            writeQueue(repository, current, tags, notes = notes)
-                            reload += 1
-                        }
+            // Written as it is typed, as iOS does. It was written only when the field lost
+            // focus, and leaving the page is not that, so a description typed and then left
+            // straight away was lost. Each write takes the latest text when it runs, so the
+            // last one wins whatever order they finish in.
+            onValueChange = {
+                notes = it
+                scope.launch { notesWrites.withLock { writeQueue(repository, current, tags, notes = notes) } }
+            },
+            textStyle = TextStyle(color = tokens.primaryInk, fontSize = 16.sp, fontFamily = FontFamily.Serif),
+            cursorBrush = SolidColor(palette.accent),
+            decorationBox = { inner ->
+                Box {
+                    if (notes.isEmpty()) {
+                        Text("Add a description", color = tokens.tertiaryInk, fontSize = 16.sp, fontFamily = FontFamily.Serif)
                     }
-                },
-            minLines = 3
+                    inner()
+                }
+            },
+            modifier = Modifier
+                .padding(horizontal = 16.dp, vertical = 6.dp)
+                .fillMaxWidth()
+                .semantics { contentDescription = "Description" }
+                .onFocusChanged { notesFocused = it.isFocused }
         )
         SubjectFieldLabel("Tags", Modifier.padding(start = 16.dp, top = 16.dp))
         FlowRow(
@@ -195,8 +215,9 @@ fun QueueSettingsScreen(
                 SubjectChip(
                     text = name,
                     style = SubjectChipStyle.Tinted,
+                    trailingIcon = Icons.Outlined.Close,
                     palette = palette,
-                    modifier = Modifier.clickable {
+                    modifier = Modifier.semantics { contentDescription = "Remove $name" }.clickable {
                         scope.launch {
                             writeQueue(repository, current, tags.filterNot { it == name })
                             reload += 1
@@ -205,8 +226,9 @@ fun QueueSettingsScreen(
                 )
             }
             SubjectChip(
-                text = "+ Tag",
+                text = "Add tag",
                 style = SubjectChipStyle.Dashed,
+                leadingIcon = Icons.Outlined.Add,
                 modifier = Modifier.clickable { showTags = true }
             )
         }
@@ -270,7 +292,8 @@ fun QueueSettingsScreen(
         }
         FormFootnote(
             "When this is off, the queue keeps only your list. It doesn't download or keep copies, " +
-                "so it uses no extra storage."
+                "so it uses no extra storage.",
+            Modifier.padding(start = 16.dp, end = 16.dp, top = 6.dp)
         )
         SubjectFormRow(
             label = "Manage all tags",
