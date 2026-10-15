@@ -202,11 +202,15 @@ fun FandomWorksScreen(
     ) {
         Spacer(Modifier.windowInsetsTopHeight(WindowInsets.statusBars))
         Spacer(Modifier.height(56.dp))
-        SubjectHeaderBlock(
-            kicker = "Browse",
-            title = fandomName,
-            palette = palette
-        )
+        // Until the works are in, the fandom names the page. Then the results' own head does,
+        // as iOS's Browse page (spec 1k): there were two heads, this one over the old card.
+        if ((state as? FandomWorksState.Loaded)?.page?.summary == null) {
+            SubjectHeaderBlock(
+                kicker = "Browse",
+                title = fandomName,
+                palette = palette
+            )
+        }
 
         when (val current = state) {
             FandomWorksState.Loading -> LoadingStateCard(
@@ -245,9 +249,11 @@ fun FandomWorksScreen(
                             .fillMaxWidth()
                             .weight(1f, fill = false)
                     ) {
+                        // No side padding on the list: the results' head carries its own margins,
+                        // as on Search; the pagers and rows take theirs.
                         LazyColumn(
                             verticalArrangement = Arrangement.spacedBy(12.dp),
-                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+                            contentPadding = PaddingValues(vertical = 12.dp),
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             item {
@@ -261,13 +267,18 @@ fun FandomWorksScreen(
                                         filterLabels = summaryLabels(filters, excluding = fandomName),
                                         subjectCategory = summary.subjectCategory(current.page.works),
                                         onEditFilters = { showFilterSheet = true },
+                                        // iOS: the page's own head, with the sort beside the
+                                        // subject; a tag listing has no Best Match.
+                                        presentation = io.github.cidy02.kudos.search.SearchHeroPresentation.SubjectPage,
+                                        currentPage = current.page.currentPage,
+                                        totalPages = current.page.totalPages,
+                                        sort = filters.sort,
+                                        sortOptions = io.github.cidy02.kudos.network.ao3.search.AO3SearchSort.entries
+                                            .filter { it != io.github.cidy02.kudos.network.ao3.search.AO3SearchSort.RELEVANCE },
+                                        onSortSelected = { sort -> filters = filters.copy(sort = sort); load() },
                                         modifier = Modifier.padding(bottom = 4.dp)
                                     )
                                 }
-                                KudosSectionHeader(
-                                    title = "Works",
-                                    subtitle = "Page ${current.page.currentPage} of ${current.page.totalPages}"
-                                )
                                 // Above the results as well as below, matching Apple:
                                 // the pager was reachable only after scrolling the
                                 // whole page, so changing page meant reading to the
@@ -275,7 +286,8 @@ fun FandomWorksScreen(
                                 KudosPaginationBar(
                                     currentPage = current.page.currentPage,
                                     totalPages = current.page.totalPages,
-                                    onPageChange = { load(it) }
+                                    onPageChange = { load(it) },
+                                    modifier = Modifier.padding(horizontal = 16.dp)
                                 )
                             }
                             items(current.page.works, key = { it.id }) { work ->
@@ -283,10 +295,11 @@ fun FandomWorksScreen(
                                     SelectableRemoteWorkRow(
                                         work = work,
                                         selected = selection.isSelected(work.id),
-                                        onToggle = { selection.toggle(work.id) }
+                                        onToggle = { selection.toggle(work.id) },
+                                        modifier = Modifier.padding(horizontal = 16.dp)
                                     )
                                 } else {
-                                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                         LocalIndicatorRow(BrowseLocalIndicators.forWork(work, savedByUrl))
                                         SensitiveWorkRow(
                                             work = work,
@@ -301,7 +314,8 @@ fun FandomWorksScreen(
                                 KudosPaginationBar(
                                     currentPage = current.page.currentPage,
                                     totalPages = current.page.totalPages,
-                                    onPageChange = { load(it) }
+                                    onPageChange = { load(it) },
+                                    modifier = Modifier.padding(horizontal = 16.dp)
                                 )
                             }
                         }

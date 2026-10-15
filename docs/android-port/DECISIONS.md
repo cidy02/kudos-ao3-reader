@@ -1858,3 +1858,6 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
 - **2026-10-14 · Collection item cards in their collection's colour (3du; iOS T-406).** As
   iOS's `subjectCard`. On iOS the demo answers "Your items". Reverse: the commits that name
   3du and T-406.
+- **2026-10-14 · A fandom's works page takes the results' own head (3dv).** As iOS's Browse
+  and as Search: spec 1k's page head with its sort, not the older card under a second
+  header. Reverse: the commit that names 3dv.
