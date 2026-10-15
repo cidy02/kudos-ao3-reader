@@ -547,7 +547,8 @@ fun SearchScreen(
             onDismiss = { showFilterSheet = false; viewModel.discardFilterEdits() },
             onSave = if (savedSearchRepository != null) {
                 {
-                    showFilterSheet = false
+                    // Over the filter sheet, which stays open, as on iOS: closing it here
+                    // skipped `discardFilterEdits`, so the next page tap ran unapplied edits.
                     saveName = defaultSavedSearchName(filters)
                     showSaveSheet = true
                 }
