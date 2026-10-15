@@ -46,7 +46,10 @@ fun SettingsScreen(
     // settings had no back button until it was dragged down. Each page is named to the shell,
     // which then keeps each one's own (`PushedShellChrome.scrollKey`).
     val page by navController.currentBackStackEntryAsState()
-    io.github.cidy02.kudos.app.ProvidePushedShellChrome(hasSubjectHeader = null, scrollKey = page?.destination?.route)
+    // Every page here draws its own header. `null` (3dh) was re-applied each time this
+    // screen recomposed, after the hub had said otherwise, so Settings first opened under a
+    // plain top bar ("Settings" and a theme button) over an empty band.
+    io.github.cidy02.kudos.app.ProvidePushedShellChrome(hasSubjectHeader = true, scrollKey = page?.destination?.route)
 
     NavHost(navController = navController, startDestination = start) {
         composable("hub") {
