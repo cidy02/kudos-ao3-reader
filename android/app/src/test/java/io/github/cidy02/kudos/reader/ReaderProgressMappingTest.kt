@@ -158,6 +158,15 @@ class ReaderProgressPreservesLegacyFieldsTest {
     }
 
     @Test
+    fun aBlankLocatorKeepsTheSavedPlace() {
+        // iOS `emptyLocatorIsIgnored` (A52): "" is not a place to resume from.
+        val previous = work(locator = "existing")
+        val progress = ReaderProgress(spineIndex = 2, scrollFraction = 0.3, locatorJson = "", totalProgression = 0.5)
+
+        assertEquals("existing", mapper.applyProgress(previous, progress, now).readiumLocator)
+    }
+
+    @Test
     fun movedLocatorRetiresTheMacPercent() {
         val envelope = ReaderLocatorCodec.encodeEnvelope(RAW_LOCATOR)!!
         val previous = work(locator = envelope).copy(legacyReaderProgress = 0.9)

@@ -1943,3 +1943,10 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   closing the filter sheet, which skipped dropping unapplied edits (A20-3), so the next page
   tap ran them as a new search. Now both open Save over the filters and return to them.
   Reverse: the commits that name 3ey and T-412.
+- **2026-10-15 · A52's four small ones fixed (3ez):** a blank reading locator never overwrites
+  the saved place; a work's stored AO3 ID identifies it in a restore (as iOS); an export
+  refuses what its own import would refuse; a Replace that fails part-way says so and names the
+  safety copy. Two kept by design and recorded in A52's triage: every deletion keeps its
+  suppressors (5c F6), and content clocks are clamped to the archive's export date. A failed
+  Replace's rollback and naming what an export left out are brief 3fa. Reverse: the commit
+  that names 3ez.
