@@ -269,7 +269,7 @@ class AccountListViewModel(
                             )
                         )
                     }
-                    AccountListUiState.Loaded(result.value)
+                    AccountListUiState.Loaded(result.value, fetchedAt = System.currentTimeMillis())
                 }
                 is AO3Result.Failure -> {
                     if (result.error == AO3Error.AuthenticationRequired) {
@@ -291,7 +291,7 @@ class AccountListViewModel(
         val loaded = mutableState.value as? AccountListUiState.Loaded ?: return
         ++loadRequest
         loadJob?.cancel()
-        mutableState.value = AccountListUiState.Loaded(loaded.page.copy(works = emptyList(), currentPage = 1, totalPages = 1, summary = null))
+        mutableState.value = loaded.copy(page = loaded.page.copy(works = emptyList(), currentPage = 1, totalPages = 1, summary = null))
     }
 
     fun removeSubscription(workId: Long, page: Int) {

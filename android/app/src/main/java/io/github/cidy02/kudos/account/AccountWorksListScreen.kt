@@ -441,8 +441,8 @@ fun AccountWorksListScreen(
                                 AccountListType.MarkedForLater -> {
                                     MarkedForLaterBrowser(
                                         works = works,
-                                        // A new page object is a fetch that succeeded (iOS `lastSyncedAt`).
-                                        syncedAt = remember(current.page) { System.currentTimeMillis() },
+                                        // Stamped when AO3's answer was accepted, not when drawn (A53 F2).
+                                        syncedAt = current.fetchedAt,
                                         currentPage = current.page.currentPage,
                                         totalPages = current.page.totalPages,
                                         expandAll = expandAll,
@@ -523,7 +523,7 @@ fun AccountWorksListScreen(
 @Composable
 private fun MarkedForLaterBrowser(
     works: List<CanonicalWork>,
-    syncedAt: Long,
+    syncedAt: Long?,
     currentPage: Int,
     totalPages: Int,
     expandAll: Boolean,
@@ -575,7 +575,7 @@ private fun MarkedForLaterBrowser(
     }
     val subtitle = buildString {
         append(if (displayedWorks.size == 1) "1 work" else "${displayedWorks.size} works")
-        append(" · synced ${relativeSyncPhrase(syncedAt, now)}")
+        if (syncedAt != null) append(" · synced ${relativeSyncPhrase(syncedAt, now)}")
         if (totalPages > 1) {
             append(" · page $currentPage of $totalPages")
         }

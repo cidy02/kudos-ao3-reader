@@ -37,7 +37,14 @@ import kotlinx.coroutines.launch
 @Composable
 fun AO3ChallengeSignUpScreen(slug: String, title: String, existingID: Int? = null,
     repository: AO3CollectionDetailRepository, writes: AO3WriteRepository,
-    onWithdrawn: (String) -> Unit = {}) {
+    onWithdrawn: (String) -> Unit = {}) = ProvideCollectionPalette(slug, title) {
+    ChallengeSignUpContent(slug, title, existingID, repository, writes, onWithdrawn)
+}
+
+@Composable
+private fun ChallengeSignUpContent(slug: String, title: String, existingID: Int?,
+    repository: AO3CollectionDetailRepository, writes: AO3WriteRepository,
+    onWithdrawn: (String) -> Unit) {
     val auth = repository.authRepository
     val generation by auth.generation.collectAsState()
     val authState by auth.state.collectAsState()

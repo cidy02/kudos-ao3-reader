@@ -44,6 +44,13 @@ import kotlinx.coroutines.launch
 @Composable
 fun AO3ChallengeAssignmentsScreen(slug: String, title: String, viewerIsOwner: Boolean,
     viewerIsMaintainer: Boolean, knownClosed: Boolean?, repository: AO3CollectionDetailRepository,
+    writes: AO3WriteRepository, onOpenWeb: (String) -> Unit) = ProvideCollectionPalette(slug, title) {
+    ChallengeAssignmentsContent(slug, title, viewerIsOwner, viewerIsMaintainer, knownClosed, repository, writes, onOpenWeb)
+}
+
+@Composable
+private fun ChallengeAssignmentsContent(slug: String, title: String, viewerIsOwner: Boolean,
+    viewerIsMaintainer: Boolean, knownClosed: Boolean?, repository: AO3CollectionDetailRepository,
     writes: AO3WriteRepository, onOpenWeb: (String) -> Unit) {
     val auth = repository.authRepository
     val generation by auth.generation.collectAsState()
