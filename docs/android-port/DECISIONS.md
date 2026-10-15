@@ -1950,3 +1950,9 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   suppressors (5c F6), and content clocks are clamped to the archive's export date. A failed
   Replace's rollback and naming what an export left out are brief 3fa. Reverse: the commit
   that names 3ez.
+- **2026-10-15 · The account lists open on Compact, and Marked for Later says when it synced
+  (3fb), as iOS.** Android kept Ledger as the first layout from before Compact was built
+  (3co step 6); iOS opens on Compact. Marked for Later's subtitle gains iOS's "· synced just
+  now / N min ago" (stamped when a page arrives, read again each minute, not stored), and its
+  All list is headed "Everything else" even when nothing is updated. A choice already made is
+  kept. Reverse: the commit that names 3fb.

@@ -160,7 +160,9 @@ fun AccountWorksListScreen(
     val authState by repository.authRepository.state.collectAsState()
     var showMenu by remember { mutableStateOf(false) }
     var showLayoutMenu by remember { mutableStateOf(false) }
-    var displayMode by rememberStoredChoice("account.displayMode", AccountDisplayMode.Ledger)
+    // Opens on Compact, as iOS (`AO3AccountWorksList.displayMode`); Ledger was kept from before
+    // Compact was built here (3co step 6).
+    var displayMode by rememberStoredChoice("account.displayMode", AccountDisplayMode.Compact)
     var confirmClearHistory by remember { mutableStateOf(false) }
     // The page AO3 confirmed it cleared. The list is emptied here, as on iOS, without a
     // second read; a page loaded afterwards is a different object and shows what AO3 has.
@@ -439,6 +441,8 @@ fun AccountWorksListScreen(
                                 AccountListType.MarkedForLater -> {
                                     MarkedForLaterBrowser(
                                         works = works,
+                                        // A new page object is a fetch that succeeded (iOS `lastSyncedAt`).
+                                        syncedAt = remember(current.page) { System.currentTimeMillis() },
                                         currentPage = current.page.currentPage,
                                         totalPages = current.page.totalPages,
                                         expandAll = expandAll,
@@ -519,6 +523,7 @@ fun AccountWorksListScreen(
 @Composable
 private fun MarkedForLaterBrowser(
     works: List<CanonicalWork>,
+    syncedAt: Long,
     currentPage: Int,
     totalPages: Int,
     expandAll: Boolean,
@@ -560,8 +565,17 @@ private fun MarkedForLaterBrowser(
         else -> activeWorks
     }
 
+    // "synced 2 min ago" is an age: read the clock again each minute, as iOS's TimelineView.
+    var now by remember { mutableStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(syncedAt) {
+        while (true) {
+            now = System.currentTimeMillis()
+            kotlinx.coroutines.delay(60_000)
+        }
+    }
     val subtitle = buildString {
         append(if (displayedWorks.size == 1) "1 work" else "${displayedWorks.size} works")
+        append(" · synced ${relativeSyncPhrase(syncedAt, now)}")
         if (totalPages > 1) {
             append(" · page $currentPage of $totalPages")
         }
@@ -645,6 +659,11 @@ private fun MarkedForLaterBrowser(
                 }
             }
         } else {
+            // On All, iOS heads the run "Everything else" even when nothing is updated
+            // (`AO3MarkedForLaterGrouping.sections`); a narrowed pill is one flat list.
+            if (filter == "all" && displayedWorks.isNotEmpty()) item {
+                SectionRuleHeader(title = "Everything else", count = displayedWorks.size)
+            }
             items(displayedWorks, key = { "mfl-${it.id}" }) { work ->
                 MarkedForLaterRow(
                     work = work,
@@ -1717,4 +1736,16 @@ private fun EnrichingWorkRow(
         // A work not in the Library draws its bookmark inside the one card (iOS 1q).
         bookmark = bookmark?.asLedgerBookmark()
     )
+}
+
+/** iOS `AO3MarkedForLaterCopy.relativeSyncPhrase`: short, and the same in every locale. */
+internal fun relativeSyncPhrase(syncedAtMillis: Long, nowMillis: Long): String {
+    val seconds = maxOf(0L, (nowMillis - syncedAtMillis) / 1000)
+    if (seconds < 60) return "just now"
+    val minutes = seconds / 60
+    if (minutes < 60) return if (minutes == 1L) "1 min ago" else "$minutes min ago"
+    val hours = minutes / 60
+    if (hours < 24) return if (hours == 1L) "1 hr ago" else "$hours hr ago"
+    val days = hours / 24
+    return if (days == 1L) "1 day ago" else "$days days ago"
 }
