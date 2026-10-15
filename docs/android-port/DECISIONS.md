@@ -1861,3 +1861,5 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
 - **2026-10-14 · A fandom's works page takes the results' own head (3dv).** As iOS's Browse
   and as Search: spec 1k's page head with its sort, not the older card under a second
   header. Reverse: the commit that names 3dv.
+- **2026-10-14 · Settings declares its own header (3dw).** Fixes 3dh's regression, where
+  Settings first opened under a plain top bar. Reverse: the commit that names 3dw.
