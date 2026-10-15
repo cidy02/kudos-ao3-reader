@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.reader
 
+import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.Role
@@ -789,14 +790,15 @@ private fun ReaderReading(
 
             state.highlights.firstOrNull { it.id == state.editingAnnotationId }?.let { annotation ->
                 // A swatch writes straight to the highlight so the page shows it at once.
-                // Cancel, and dismissing the sheet, take that back too (audit A12-6, iOS the same).
+                // Cancel takes that back (audit A12-6). Dismissing the sheet keeps the colour
+                // and a typed note, as iOS's swipe does (3dz): only Cancel throws work away.
                 val colourOnOpen = remember(annotation.id) { annotation.colorRaw }
                 val cancelNote = {
                     if (annotation.colorRaw != colourOnOpen) viewModel.recolorHighlight(annotation.id, colourOnOpen)
                     viewModel.closeNoteEditor()
                 }
                 ModalBottomSheet(
-                    onDismissRequest = cancelNote,
+                    onDismissRequest = { viewModel.closeNoteEditor() },
                     sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
                     containerColor = tokens.background,
                     contentColor = tokens.primaryInk,
@@ -811,6 +813,7 @@ private fun ReaderReading(
                                 viewModel.closeNoteEditor()
                             },
                             onColorChange = { color -> viewModel.recolorHighlight(annotation.id, color) },
+                            onKeep = { note -> viewModel.updateNote(annotation.id, note) },
                             onDelete = {
                                 viewModel.closeNoteEditor()
                                 showDeleteNoteConfirm = annotation
@@ -1166,6 +1169,8 @@ private fun AnnotateDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
+        // A tap beside the dialog no longer throws a typed note away (3dz); Cancel and Back do.
+        properties = DialogProperties(dismissOnClickOutside = note.isBlank()),
         title = { Text(if (state.asNote) "Add note" else "Highlight") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {

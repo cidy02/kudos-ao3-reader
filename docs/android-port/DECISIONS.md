@@ -1869,3 +1869,7 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   the page was left without the field losing focus. The New Queue sheet loses its
   Description field (iOS's has none; the details page edits it) and picks tags from one
   row with a "+ New tag" chip. Reverse: the commit that names 3dy.
+- **2026-10-14 · Only Cancel throws a typed note away (3dz, both apps).** The note editor
+  keeps a changed note when it is swiped away or closed with Back; dismissing keeps the
+  colour as iOS's swipe did. Android's Add note pop-up ignores a tap beside it while a note
+  is typed. Reverse: the commits that name 3dz and T-407.

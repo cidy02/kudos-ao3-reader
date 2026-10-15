@@ -1,5 +1,7 @@
 package io.github.cidy02.kudos.reader
 
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
@@ -59,10 +61,19 @@ internal fun ReaderNoteEditor(
     onCancel: () -> Unit,
     onDone: (String) -> Unit,
     onColorChange: (String) -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    /** The sheet went away some other way (a swipe, Back, the reader closing): keep the note. */
+    onKeep: (String) -> Unit = {}
 ) {
     val tokens = LocalKudosTokens.current
     var draft by remember(annotation.id) { mutableStateOf(annotation.note) }
+    // Only Cancel throws a typed note away. It was lost to a swipe down or to Back (the
+    // first Back drops the keyboard, the second closed the sheet), on iOS too.
+    val finished = remember(annotation.id) { booleanArrayOf(false) }
+    val saved by rememberUpdatedState(annotation.note)
+    DisposableEffect(annotation.id) {
+        onDispose { if (!finished[0] && draft.trim() != saved) onKeep(draft.trim()) }
+    }
     val focus = remember(annotation.id) { FocusRequester() }
     val color = ReadingAnnotationColor.fromRaw(annotation.colorRaw)
 
@@ -74,7 +85,7 @@ internal fun ReaderNoteEditor(
             Modifier.fillMaxWidth().padding(horizontal = SubjectMetrics.accountGutter),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            TextButton(onClick = onCancel) { Text("Cancel", color = tokens.accent) }
+            TextButton(onClick = { finished[0] = true; onCancel() }) { Text("Cancel", color = tokens.accent) }
             Text(
                 if (annotation.note.isBlank()) "Add Note" else "Edit Note",
                 modifier = Modifier.weight(1f),
@@ -82,7 +93,7 @@ internal fun ReaderNoteEditor(
                 fontSize = 17.sp,
                 fontWeight = FontWeight.SemiBold
             )
-            ToolbarCircleButton(onClick = { onDone(draft.trim()) }, accessibilityName = "Done") {
+            ToolbarCircleButton(onClick = { finished[0] = true; onDone(draft.trim()) }, accessibilityName = "Done") {
                 Icon(Icons.Filled.Check, contentDescription = null)
             }
         }
@@ -142,7 +153,7 @@ internal fun ReaderNoteEditor(
         SettingsSection(footnote = null) {
             // Explicit app red, not the ambient Material error colour over a reader page.
             MaterialTheme(colorScheme = MaterialTheme.colorScheme.copy(error = Ao3Red)) {
-                SettingsActionRow("Delete Highlight", onClick = onDelete,
+                SettingsActionRow("Delete Highlight", onClick = { finished[0] = true; onDelete() },
                     icon = Icons.Filled.Delete, destructive = true)
             }
         }
