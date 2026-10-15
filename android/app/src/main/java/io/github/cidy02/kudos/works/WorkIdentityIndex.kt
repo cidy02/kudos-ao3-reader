@@ -66,7 +66,9 @@ class WorkIdentitySnapshot(works: List<SavedWork>) {
 
     fun index(work: SavedWork) {
         byRecordId[work.id.lowercase()] = work
-        WorkTags.ao3WorkIdFromUrl(work.sourceUrl)?.let { byAo3Id[it] = work }
+        // The stored ID first, as iOS: a work with no URL was never found by it, so a restore
+        // made it a second copy and its history and stars went to that copy (A52).
+        (work.ao3WorkID?.toLong() ?: WorkTags.ao3WorkIdFromUrl(work.sourceUrl))?.let { byAo3Id[it] = work }
         WorkTags.canonicalAO3WorkURL(work.sourceUrl)?.let { byCanonicalUrl[it] = work }
     }
 

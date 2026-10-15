@@ -64,7 +64,8 @@ class ReaderProgressMapper {
         return work.copy(
             lastSpineIndex = progress.spineIndex.coerceAtLeast(0),
             lastScrollFraction = progress.scrollFraction.coerceIn(0.0, 1.0),
-            readiumLocator = progress.locatorJson ?: work.readiumLocator,
+            // A blank locator is no place: `?:` let "" overwrite the saved one (A52).
+            readiumLocator = if (wroteLocator) progress.locatorJson else work.readiumLocator,
             legacyReaderProgress = if (keepLegacy) work.legacyReaderProgress else null,
             lastReadDate = if (shelfStamp) now else work.lastReadDate,
             progressModifiedAt = now,

@@ -107,6 +107,14 @@ class BackupV2ZipDecodeTest {
 
 class BackupV2ZipExportTest {
     @Test
+    fun refusesAnArchiveItsOwnImporterWouldRefuse() {
+        // iOS `exportRefusesArchivesTheReaderWouldReject` (A52): the size an import refuses.
+        val tooBig = runCatching { BackupExporter.exportV2(samplePackage(), maxArchiveBytes = 64) }
+        assertTrue(tooBig.exceptionOrNull() is BackupError.ArchiveTooLarge)
+        BackupExporter.exportV2(samplePackage())
+    }
+
+    @Test
     fun writesV2ZipWithManifestWorksFontsCollectionsAndSavedSearches() {
         val bytes = BackupExporter.exportV2(samplePackage())
         val entries = unzip(bytes)

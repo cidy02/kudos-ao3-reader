@@ -138,8 +138,8 @@ fun BackupScreen(
         scope.launch {
             busy = true
             statusMessage = null
+            var safetyName: String? = null
             try {
-                var safetyName: String? = null
                 if (mode == BackupImportMode.REPLACE_LIBRARY) {
                     val docs = context.getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS)
                         ?: File(context.filesDir, "Documents").also { it.mkdirs() }
@@ -173,7 +173,12 @@ fun BackupScreen(
                 }
             } catch (error: Exception) {
                 statusIsError = true
-                statusMessage = userFacingError("Import failed", error)
+                // A Replace that fails after its records are in leaves the library part replaced
+                // (iOS rolls back; A52). Say so, and where the library as it was is kept.
+                statusMessage = userFacingError("Import failed", error) + (safetyName?.let {
+                    " Part of your library may already have been replaced. It was saved as $it " +
+                        "first: import that file with Replace to go back."
+                } ?: "")
             } finally {
                 busy = false
             }
