@@ -155,7 +155,8 @@ struct CustomizeThemeView: View {
                 }
                 .shadow(color: .black.opacity(0.06), radius: 8, y: 2)
 
-            HStack(spacing: 12) {
+            // Top-aligned, so a swatch whose name took two lines doesn't sit lower than the rest.
+            HStack(alignment: .top, spacing: 12) {
                 ForEach(ReaderTheme.allCases) { swatch($0) }
             }
         }
@@ -206,6 +207,9 @@ struct CustomizeThemeView: View {
                 Text(option.title)
                     .font(.caption2.weight(selected ? .semibold : .regular))
                     .foregroundStyle(selected ? .primary : .secondary)
+                    // A quarter of the row: at the largest sizes a name broke mid-word ("Ligh/t").
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.5)
             }
             .frame(maxWidth: .infinity)
             .contentShape(Rectangle())
@@ -226,7 +230,9 @@ struct CustomizeThemeView: View {
                 Image(systemName: icon)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
-                    .frame(width: 22)
+                    // At least 22 so the titles line up; wider at the largest sizes, where a
+                    // fixed 22 let the icon spill over its title.
+                    .frame(minWidth: 22)
                 Text(title)
                     .font(.subheadline)
                 Spacer()
