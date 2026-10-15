@@ -60,7 +60,9 @@ class SubscriptionsWorksRemovalTest {
                 WorkRepository(database, WorkFileStore(folder)))
             store.put("subscriptions", model)
             backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { model.uiState.collect() }
-            model.uiState.first { it is AccountListUiState.Loaded }
+            val first = model.uiState.first { it is AccountListUiState.Loaded } as AccountListUiState.Loaded
+            // Marked for Later's "synced" reads this, stamped when AO3's answer is accepted (A53 F2).
+            assertNotNull(first.fetchedAt)
             model.load(2)
             model.uiState.first { it is AccountListUiState.Loaded && it.page.currentPage == 2 }
             model.removeSubscription(456, 2)

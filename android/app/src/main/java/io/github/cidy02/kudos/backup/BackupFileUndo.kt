@@ -42,6 +42,9 @@ internal class BackupFileUndo {
         }
     }
 
+    /** True once every file this Replace touched is back as it was (or none were touched). */
+    val isUndone: Boolean get() = previous.isEmpty()
+
     fun discard() {
         // Once Room commits, cleanup cannot turn a successful Replace into an error.
         previous.values.filterNotNull().forEach { runCatching { Files.deleteIfExists(it) } }

@@ -173,7 +173,12 @@ fun BackupScreen(
             } catch (error: Exception) {
                 statusIsError = true
                 statusMessage = userFacingError("Import failed", error) + (safetyName?.let {
-                    " Your library was not replaced. The safety copy is $it."
+                    if (error is BackupError.ReplaceNotUndone) {
+                        " Not every file could be put back. Your library as it was is saved as $it: " +
+                            "import that file with Replace to go back."
+                    } else {
+                        " Your library was not replaced. The safety copy is $it."
+                    }
                 } ?: "")
             } finally {
                 busy = false

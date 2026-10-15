@@ -392,6 +392,10 @@ class BackupRepository(
             }
         } catch (error: Throwable) {
             fileUndo.rollback(error)
+            // The screen promises "not replaced" only when that is so (A53 F1).
+            if (!fileUndo.isUndone && error !is kotlinx.coroutines.CancellationException) {
+                throw BackupError.ReplaceNotUndone(error)
+            }
             throw error
         }
         fileUndo.discard()

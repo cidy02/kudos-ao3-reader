@@ -33,6 +33,10 @@ sealed class BackupError(message: String, cause: Throwable? = null) : Exception(
     class FontValidationUnavailable(cause: Throwable) :
         BackupError("The font could not be validated on this device.", cause)
 
+    /** A Replace failed and not every file it had changed could be put back. */
+    class ReplaceNotUndone(cause: Throwable) :
+        BackupError(cause.message ?: "The import failed.", cause)
+
     class ArchiveTooLarge :
         BackupError("The backup archive is too large.")
 }

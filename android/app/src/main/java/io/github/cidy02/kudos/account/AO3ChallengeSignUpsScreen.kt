@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.cidy02.kudos.app.ProvidePushedShellChrome
 import io.github.cidy02.kudos.auth.isSignedIn
+import io.github.cidy02.kudos.home.HomeFacts
 import io.github.cidy02.kudos.auth.usernameOrNull
 import io.github.cidy02.kudos.network.ao3.account.*
 import io.github.cidy02.kudos.settings.SettingsActionRow
@@ -33,8 +34,29 @@ import io.github.cidy02.kudos.ui.subject.*
 import io.github.cidy02.kudos.writing.writingSuggestionPanel
 import kotlinx.coroutines.launch
 
+/**
+ * A collection's own colour for the challenge pages iOS draws in it (Sign-ups, Assignments, a
+ * sign-up, Prompt Meme: the hue of the title, else the slug), as Moderation and Challenge do here.
+ * They took the theme's scope colour.
+ */
+@Composable
+internal fun ProvideCollectionPalette(slug: String, title: String, content: @Composable () -> Unit) {
+    val tokens = LocalKudosTokens.current
+    val palette = remember(slug, title, tokens.theme) {
+        SubjectPalette.fromHue(HomeFacts.workHue(emptyList(), title.ifEmpty { slug }), tokens.theme)
+    }
+    CompositionLocalProvider(LocalKudosTokens provides tokens.copy(scopePaletteOverride = palette), content = content)
+}
+
 @Composable
 fun AO3ChallengeSignUpsScreen(slug: String, title: String, viewerIsOwner: Boolean,
+    viewerIsMaintainer: Boolean, repository: AO3CollectionDetailRepository, onOpenSignUp: (Int?) -> Unit) =
+    ProvideCollectionPalette(slug, title) {
+        ChallengeSignUpsContent(slug, title, viewerIsOwner, viewerIsMaintainer, repository, onOpenSignUp)
+    }
+
+@Composable
+private fun ChallengeSignUpsContent(slug: String, title: String, viewerIsOwner: Boolean,
     viewerIsMaintainer: Boolean, repository: AO3CollectionDetailRepository, onOpenSignUp: (Int?) -> Unit) {
     val auth = repository.authRepository
     val generation by auth.generation.collectAsState()

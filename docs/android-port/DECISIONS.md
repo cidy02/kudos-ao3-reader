@@ -1964,3 +1964,11 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   their partial apply (sync relies on its pending-file flags). The export says "N books were
   left out because their files are missing: …". No schema or archive change. Reverse: the
   commit that names 3fa.
+- **2026-10-15 · A collection's challenge pages take its colour; A53's two Android fixes (3fc).**
+  Sign-ups, Assignments, a sign-up and Prompt Meme drew in the theme's scope colour; iOS draws
+  them in the collection's (`CoverArt.workHue` of its title, else its slug), as Android's
+  Moderation and Challenge already did. `KudosTokens.scopePaletteOverride` lets a screen hand its
+  colour to everything under it. A53 F1: a Replace that could not put every file back says so
+  (`BackupError.ReplaceNotUndone`) instead of "not replaced". A53 F2: Marked for Later's "synced"
+  is stamped when AO3's answer is accepted (`Loaded.fetchedAt`), not when drawn. Reverse: the
+  commit that names 3fc.

@@ -46,6 +46,15 @@ fun AO3PromptMemeScreen(
     slug: String, title: String, viewerIsOwner: Boolean,
     repository: AO3CollectionDetailRepository, writes: AO3WriteRepository, onOpenWeb: (String) -> Unit,
     onOpenSignUp: () -> Unit = {}
+) = ProvideCollectionPalette(slug, title) {
+    PromptMemeContent(slug, title, viewerIsOwner, repository, writes, onOpenWeb, onOpenSignUp)
+}
+
+@Composable
+private fun PromptMemeContent(
+    slug: String, title: String, viewerIsOwner: Boolean,
+    repository: AO3CollectionDetailRepository, writes: AO3WriteRepository, onOpenWeb: (String) -> Unit,
+    onOpenSignUp: () -> Unit
 ) {
     val auth = repository.authRepository
     val generation by auth.generation.collectAsState()

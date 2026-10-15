@@ -112,13 +112,15 @@ data class KudosTokens(
     val primaryInk: Color,
     val secondaryInk: Color,
     val tertiaryInk: Color,
-    val separator: Color
+    val separator: Color,
+    /** A screen's own subject colour for everything under it (a collection's challenge pages). */
+    val scopePaletteOverride: SubjectPalette? = null
 ) {
     /** Shared favorite star, as on the existing work cards. */
     val favoriteGold: Color get() = Color(0xFFFFC107)
 
     val scopePalette: SubjectPalette
-        get() = theme.scopePalette(accent)
+        get() = scopePaletteOverride ?: theme.scopePalette(accent)
 
     fun glassFill(opacity: Double = 0.12): Color = theme.glassFill(opacity)
 

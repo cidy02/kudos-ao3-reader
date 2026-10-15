@@ -50,7 +50,9 @@ sealed interface AccountListUiState {
     data object AuthRequired : AccountListUiState
     data class Loaded(
         val page: AO3SearchPage,
-        val canonicalWorks: List<CanonicalWork> = emptyList()
+        val canonicalWorks: List<CanonicalWork> = emptyList(),
+        /** When AO3's answer was accepted (iOS `lastSyncedAt`); null for a state built locally. */
+        val fetchedAt: Long? = null
     ) : AccountListUiState
     data class Failed(val message: String) : AccountListUiState
 }
