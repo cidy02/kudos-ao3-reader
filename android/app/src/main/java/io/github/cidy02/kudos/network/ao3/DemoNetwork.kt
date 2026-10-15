@@ -590,6 +590,19 @@ internal class DemoNetworkInterceptor(
                     "<div class='flash error'>Couldn't unsubscribe.</div>").toResponseBody(HTML_TYPE))
                 .build()
         }
+        // Unmark from Marked for Later (3fg): AO3's notice, as the page it redirects to shows it.
+        if (chain.request().method == "POST" && Regex("^/works/\\d+/mark_as_read/?$").matches(path)) {
+            val buffer = Buffer()
+            chain.request().body?.writeTo(buffer)
+            val fields = buffer.readUtf8().split('&')
+            val accepted = "_method=patch" in fields && fields.any { it.startsWith("authenticity_token=") }
+            return Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1)
+                .code(if (accepted) 200 else 422).message(if (accepted) "OK" else "Unprocessable Entity")
+                .body((if (accepted) "<div class=\"flash notice\">This work was removed from your " +
+                    "<a href=\"/users/AO3_Reader/readings?show=to-read\">Marked for Later list</a>.</div>" else
+                    "<div class='flash error'>Couldn't unmark.</div>").toResponseBody(HTML_TYPE))
+                .build()
+        }
         // The demo's whole AO3 history, cleared for this run only (the screen empties itself).
         if (chain.request().method == "POST" && Regex("^/users/[^/]+/readings/clear/?$").matches(path)) {
             val buffer = Buffer()
