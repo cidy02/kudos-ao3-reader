@@ -42,6 +42,11 @@ class AO3WriteFormParser {
 
     fun parseDefaultPseudId(html: String, field: String = "comment[pseud_id]"): String? {
         val document = Jsoup.parse(html)
+        // iOS `parseDefaultPseudID`: a single-pseud account gets a hidden input, not a select, and
+        // it wins over one. Only the select was read, so such a comment went without its pseud,
+        // which AO3 refuses for a signed-in reader (A55).
+        document.selectFirst("input[name=\"$field\"]")?.attr("value")?.trim()
+            ?.takeIf { it.isNotEmpty() }?.let { return it }
         val select = document.selectFirst("select[name=\"$field\"]") ?: return null
         val selected = select.selectFirst("option[selected]")?.attr("value")?.trim()
         if (!selected.isNullOrEmpty()) return selected
@@ -108,9 +113,11 @@ class AO3WriteFormParser {
                 ?.attr("value")
                 ?.trim()
                 .orEmpty(),
-            isPrivate = form.selectFirst("input[name=\"bookmark[private]\"]")
+            // The checkbox itself: AO3 puts a hidden "0" of the same name before it, which is never
+            // checked, so a private bookmark read as public and an edit sent it back public (A55).
+            isPrivate = form.selectFirst("input[type=checkbox][name=\"bookmark[private]\"]")
                 ?.hasAttr("checked") == true,
-            isRecommendation = form.selectFirst("input[name=\"bookmark[rec]\"]")
+            isRecommendation = form.selectFirst("input[type=checkbox][name=\"bookmark[rec]\"]")
                 ?.hasAttr("checked") == true,
             pseudId = parseDefaultPseudId(html, "bookmark[pseud_id]")
         )
