@@ -25,7 +25,7 @@ class AndroidAO3CookieStore(
      */
     override suspend fun captureSession(username: String): AO3Session? {
         val cookies = parseCookieHeader(cookieManager.getCookie(AO3Constants.BASE_URL))
-        return AO3Session(username = username, cookies = cookies)
+        return AO3Session(username = username, cookies = cookies).identityOnly()
             .takeIf { it.hasSessionCookie() }
     }
 

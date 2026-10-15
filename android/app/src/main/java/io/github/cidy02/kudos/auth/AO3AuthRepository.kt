@@ -115,7 +115,7 @@ class AO3AuthRepository(
         // IOException (corrupt/half-written file, disk error) must not crash
         // launch — fall back to signed-out, same as a missing session.
         val restored = try {
-            sessionStore.load()
+            sessionStore.load()?.identityOnly()
         } catch (error: CancellationException) {
             throw error
         } catch (_: Exception) {
@@ -266,7 +266,7 @@ class AO3AuthRepository(
             return AO3Result.Failure(error)
         }
 
-        val session = cookieStore.captureSession(trimmed)
+        val session = cookieStore.captureSession(trimmed)?.identityOnly()
         if (session == null) {
             val error = AO3Error.AuthenticationRequired
             sessionMutex.withLock {
@@ -328,7 +328,8 @@ class AO3AuthRepository(
      * Must be called while [sessionMutex] is held. Writes durable session +
      * installs cookies + updates in-memory state.
      */
-    private suspend fun applyValidSessionLocked(session: AO3Session, markHealthy: Boolean) {
+    private suspend fun applyValidSessionLocked(rawSession: AO3Session, markHealthy: Boolean) {
+        val session = rawSession.identityOnly()
         moveUnnamedDraftsLocked(session, sessionGeneration)
         sessionStore.save(session)
         // save() also clears removal-pending on file stores; call explicitly so

@@ -247,7 +247,8 @@ class AO3RedirectCookieRelayInterceptorTest {
                     .build(),
                 config = config,
                 coordinator = AO3RequestCoordinator(config = config, delay = NoDelay),
-                delay = NoDelay
+                delay = NoDelay,
+                isAllowedUrl = { true }
             )
 
             val result = client.get(
@@ -332,7 +333,8 @@ class AO3RedirectCookieRelayInterceptorTest {
                 .build(),
             config = config,
             coordinator = AO3RequestCoordinator(config = config, delay = NoDelay),
-            delay = NoDelay
+            delay = NoDelay,
+            isAllowedUrl = { true }
         )
     }
 

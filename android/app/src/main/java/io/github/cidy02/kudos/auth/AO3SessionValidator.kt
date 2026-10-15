@@ -89,10 +89,10 @@ class LiveAO3SessionValidator(
                 .filter { it.key.equals("Set-Cookie", ignoreCase = true) }
                 .flatMap { it.value }
                 .mapNotNull { line -> Cookie.parse(responseUrl, line) }
-                .filter { AO3StoredCookie.isAO3Domain(it.domain) }
+                .filter { AO3StoredCookie.isAO3Domain(it.domain) && it.name in AO3StoredCookie.IdentityCookieNames }
 
             if (setCookies.isEmpty()) {
-                return if (username == session.username) session else session.copy(username = username)
+                return session.identityOnly().copy(username = username)
             }
 
             val byKey = linkedMapOf<String, AO3StoredCookie>()
@@ -107,7 +107,10 @@ class LiveAO3SessionValidator(
         }
 
         private fun cookieKey(cookie: AO3StoredCookie): String {
-            return "${cookie.domain.lowercase()}|${cookie.path}|${cookie.name}"
+            // A web-login capture stores ".archiveofourown.org"; AO3's Set-Cookie without a Domain
+            // gives "archiveofourown.org". Keyed apart, a rotated session cookie sat beside the
+            // stale one (sent first) instead of replacing it.
+            return "${cookie.domain.lowercase().removePrefix(".")}|${cookie.path}|${cookie.name}"
         }
     }
 }

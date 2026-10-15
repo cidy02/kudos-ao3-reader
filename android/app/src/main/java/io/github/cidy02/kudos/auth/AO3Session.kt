@@ -66,6 +66,7 @@ data class AO3StoredCookie(
 
     companion object {
         const val SessionCookieName = "_otwarchive_session"
+        val IdentityCookieNames: Set<String> = setOf(SessionCookieName, "user_credentials")
 
         private val HTTP_DATE: DateTimeFormatter = DateTimeFormatter
             .ofPattern("EEE, dd MMM yyyy HH:mm:ss 'GMT'", Locale.US)
@@ -104,7 +105,7 @@ data class AO3StoredCookie(
         fun fromSetCookieHeaders(url: HttpUrl, setCookieLines: List<String>): List<AO3StoredCookie> {
             return setCookieLines
                 .mapNotNull { line -> Cookie.parse(url, line) }
-                .filter { isAO3Domain(it.domain) }
+                .filter { isAO3Domain(it.domain) && it.name in IdentityCookieNames }
                 .map { fromOkHttp(it) }
         }
     }
@@ -117,8 +118,13 @@ data class AO3Session(
     val savedAtEpochMillis: Long = Clock.systemUTC().millis()
 ) {
     fun validCookies(clock: Clock = Clock.systemUTC()): List<AO3StoredCookie> {
-        return cookies.filter { !it.isExpired(clock) && AO3StoredCookie.isAO3Domain(it.domain) }
+        return cookies.filter {
+            it.name in AO3StoredCookie.IdentityCookieNames &&
+                !it.isExpired(clock) && AO3StoredCookie.isAO3Domain(it.domain)
+        }
     }
+
+    fun identityOnly(): AO3Session = copy(cookies = validCookies())
 
     fun hasSessionCookie(clock: Clock = Clock.systemUTC()): Boolean {
         return validCookies(clock).any { it.name == AO3StoredCookie.SessionCookieName }
