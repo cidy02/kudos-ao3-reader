@@ -235,6 +235,22 @@ class AO3ChallengeSettingsEditTest {
         assertEquals("demo-collection-edit-token", client.sent.last().fields.toMap()["authenticity_token"])
     }
 
+    @Test fun aSwitchSavedAfterABasicsSaveKeepsTheNewBasics() = runTest {
+        // A50 F8: the switch POST resent the collection form as first read, undoing a title
+        // saved meanwhile on the collection's own form.
+        val (auth, client, repository) = challengeEditSetup()
+        val model = AO3ChallengeSettingsEditState(client.slug, true, repository, client.writer(auth))
+        model.load()
+        client.replies[client.collectionEdit] = challengeResponse(client.collectionEdit,
+            challengeFixture("ao3_demo_collection_edit").replace("Winter Exchange 2026", "Renamed in Basics"))
+        model.change(AO3CollectionFields.preference("closed"), "1", collection = true)
+        model.save()
+        assertEquals(2, client.sent.size)
+        val switches = client.sent.last().fields.toMap()
+        assertEquals("Renamed in Basics", switches["collection[title]"])
+        assertEquals("1", switches[AO3CollectionFields.preference("closed")])
+    }
+
     @Test fun challengeRefusalSkipsCollectionWriteRefreshKeepsDraftAndDatesDoNotAskToReveal() = runTest {
         val (auth, client, repository) = challengeEditSetup()
         val model = AO3ChallengeSettingsEditState(client.slug, true, repository, client.writer(auth))

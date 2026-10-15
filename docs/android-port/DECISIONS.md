@@ -1891,3 +1891,7 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
 - **2026-10-14 · A49 F9 and F11 fixed; F10 kept as iOS (3eh).** A name two accounts share is
   not a link; Contents' percentages off the main thread; the compact "50k+ words" stays, as
   iOS's spec 1ay. Reverse: the commit that names 3eh.
+- **2026-10-15 · A50 F1, F8, F9, F10, F11 fixed (3ei).** OkHttp no longer resends requests
+  itself (a POST could reach AO3 twice); comment edits go to the comment; comment writes stay
+  in their session; collection switches save onto the current form; the comment field is
+  read-only while sending. Reverse: the commit that names 3ei.

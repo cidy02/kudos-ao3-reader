@@ -145,6 +145,46 @@ class AO3CommentRepositoryTest {
     }
 
     @Test
+    fun anEditReadsTheFormAtEditAndUpdatesTheCommentItself() = runTest {
+        // A50 F11: the update went to /comments/9/edit, the form's own address, and failed.
+        val auth = TrackingAuthenticatedClient(
+            getResults = listOf(success(writeResource("ao3/comments/comments_basic.html"))),
+            postResults = listOf(success("""<div class="flash comment_notice">Comment was successfully updated.</div>"""))
+        )
+        val repository = AO3CommentRepository(publicClient = FakePublicClient(success("")), authenticatedClient = auth)
+        repository.editComment("/comments/9/edit", "Edited")
+        assertEquals("https://archiveofourown.org/comments/9/edit", auth.gets.single())
+        assertEquals("https://archiveofourown.org/comments/9", auth.posts.single().url)
+        assertEquals("https://archiveofourown.org/comments/9/edit", auth.posts.single().headers["Referer"])
+    }
+
+    @Test
+    fun aCommentIsNotSentWhenTheSessionChangedAfterItsFormWasRead() = runTest {
+        // A50 F10: another account (or a sign-out) after the form was read sent the first
+        // reader's comment with the second's cookie.
+        var generation = 1
+        val auth = object : AO3AuthenticatedClient by TrackingAuthenticatedClient(
+            getResults = listOf(success(writeResource("ao3/comments/comments_basic.html"))),
+            postResults = listOf(success("""<div class="flash comment_notice">Comment created!</div>"""))
+        ) {
+            val posted = mutableListOf<String>()
+            override fun sessionGeneration(): Int = generation
+            override suspend fun getAuthenticated(url: String): AO3Result<AO3HttpResponse> {
+                val page = success(writeResource("ao3/comments/comments_basic.html"))
+                generation = 2 // the reader changed while the form was on its way
+                return page
+            }
+            override suspend fun postAuthenticated(
+                url: String, formFields: List<Pair<String, String>>, headers: Map<String, String>
+            ): AO3Result<AO3HttpResponse> { posted += url; return success("") }
+        }
+        val repository = AO3CommentRepository(publicClient = FakePublicClient(success("")), authenticatedClient = auth)
+        val result = repository.submitComment(AO3CommentTarget.Work(123), "Thanks!")
+        assertEquals(AO3Error.AuthenticationRequired, (result as AO3Result.Failure).error)
+        assertEquals(emptyList<String>(), auth.posted)
+    }
+
+    @Test
     fun submitReplyUsesParentThreadForCsrfAndReplyEndpoint() = runTest {
         val parentId = 1_252_794_206L
         val auth = TrackingAuthenticatedClient(

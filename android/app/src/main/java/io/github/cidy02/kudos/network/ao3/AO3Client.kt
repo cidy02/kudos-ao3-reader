@@ -86,6 +86,10 @@ class OkHttpAO3Client(
         fun defaultOkHttpClient(config: AO3NetworkConfig = AO3NetworkConfig()): OkHttpClient {
             return OkHttpClient.Builder()
                 .installDemoNetworkBlock()
+                // OkHttp sends a request again on its own (a 408, a dropped pooled connection),
+                // a POST included, outside the pacing and the session check: a write could reach
+                // AO3 twice for one tap (A50 F1). Only `AO3RetryPolicy` retries, and only a GET.
+                .retryOnConnectionFailure(false)
                 .callTimeout(config.callTimeoutSeconds, TimeUnit.SECONDS)
                 .followRedirects(false)
                 .followSslRedirects(false)

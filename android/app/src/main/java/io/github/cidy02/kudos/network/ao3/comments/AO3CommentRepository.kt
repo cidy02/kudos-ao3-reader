@@ -1,5 +1,9 @@
 package io.github.cidy02.kudos.network.ao3.comments
 
+import io.github.cidy02.kudos.network.ao3.AO3HttpResponse
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.currentCoroutineContext
+import kotlin.coroutines.cancellation.CancellationException
 import io.github.cidy02.kudos.network.ao3.AO3Client
 import io.github.cidy02.kudos.network.ao3.AO3Error
 import io.github.cidy02.kudos.network.ao3.AO3Result
@@ -103,6 +107,7 @@ class AO3CommentRepository(
             // Work page (view_adult) is enough for token/pseud — same as iOS workURL.
             AO3WriteUrls.workUrl(target.workId)
         }
+        val session = authenticatedClient.sessionGeneration()
         val page = when (val result = authenticatedClient.getAuthenticated(csrfSourceUrl)) {
             is AO3Result.Failure -> return result
             is AO3Result.Success -> result.value
@@ -142,10 +147,9 @@ class AO3CommentRepository(
             add("comment[comment_content]" to text)
             if (!preferredPseudId.isNullOrBlank()) add("comment[pseud_id]" to preferredPseudId)
         }
-        return when (val response = authenticatedClient.postAuthenticated(
-            url = submitUrl,
-            formFields = fields,
-            headers = mapOf(
+        return when (val response = postInSession(
+            session, submitUrl, fields,
+            mapOf(
                 "X-CSRF-Token" to token,
                 "Referer" to csrfSourceUrl
             )
@@ -182,7 +186,7 @@ class AO3CommentRepository(
         val text = content.trim()
         if (text.isEmpty()) return AO3Result.Failure(AO3Error.Validation("Comment cannot be empty."))
         val url = AO3WriteUrls.absoluteUrl(path) ?: return AO3Result.Failure(AO3Error.BadRequest)
-        
+        val session = authenticatedClient.sessionGeneration()
         val page = when (val result = authenticatedClient.getAuthenticated(url)) {
             is AO3Result.Failure -> return result
             is AO3Result.Success -> result.value
@@ -194,7 +198,10 @@ class AO3CommentRepository(
             "authenticity_token" to token,
             "comment[comment_content]" to text
         )
-        return when (val response = authenticatedClient.postAuthenticated(url, fields, mapOf("X-CSRF-Token" to token, "Referer" to url))) {
+        // The form is read at /comments/<id>/edit; the update goes to /comments/<id>, as iOS's
+        // `commentThreadURL`. It was sent back to the form's address, and failed (A50 F11).
+        val updateUrl = url.substringBefore('?').removeSuffix("/").removeSuffix("/edit")
+        return when (val response = postInSession(session, updateUrl, fields, mapOf("X-CSRF-Token" to token, "Referer" to url))) {
             is AO3Result.Failure -> response
             is AO3Result.Success -> {
                 val error = formParser.commentWriteFailure(
@@ -211,6 +218,7 @@ class AO3CommentRepository(
 
     suspend fun deleteComment(path: String): AO3Result<Unit> {
         val url = AO3WriteUrls.absoluteUrl(path) ?: return AO3Result.Failure(AO3Error.BadRequest)
+        val session = authenticatedClient.sessionGeneration()
         val page = when (val result = authenticatedClient.getAuthenticated(url)) {
             is AO3Result.Failure -> return result
             is AO3Result.Success -> result.value
@@ -218,7 +226,7 @@ class AO3CommentRepository(
         val token = formParser.parseAuthenticityToken(page.body) ?: return AO3Result.Failure(AO3Error.BadRequest)
         
         val fields = listOf("_method" to "delete", "authenticity_token" to token)
-        return when (val response = authenticatedClient.postAuthenticated(url, fields, mapOf("X-CSRF-Token" to token, "Referer" to url))) {
+        return when (val response = postInSession(session, url, fields, mapOf("X-CSRF-Token" to token, "Referer" to url))) {
             is AO3Result.Failure -> response
             is AO3Result.Success -> {
                 // otwarchive reports a failed delete as `flash[:comment_error]` on a redirected
@@ -251,5 +259,22 @@ class AO3CommentRepository(
         } catch (error: Exception) {
             AO3Result.Failure(AO3Error.Parse(error.message ?: "AO3 comments could not be parsed."))
         }
+    }
+
+    /**
+     * Sent only in the session its form was read in, as iOS's `requireSessionGeneration`: a
+     * sign-out or another account between the form and the send sent the first reader's
+     * comment under the second's cookie (A50 F10).
+     */
+    private suspend fun postInSession(
+        session: Int?,
+        url: String,
+        fields: List<Pair<String, String>>,
+        headers: Map<String, String>
+    ): AO3Result<AO3HttpResponse> = try {
+        authenticatedClient.postAuthenticatedInSession(url, fields, headers, session)
+    } catch (fenced: CancellationException) {
+        currentCoroutineContext().ensureActive()
+        AO3Result.Failure(AO3Error.AuthenticationRequired)
     }
 }

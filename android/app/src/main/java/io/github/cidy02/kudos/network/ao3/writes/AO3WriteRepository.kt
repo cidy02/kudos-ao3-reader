@@ -42,6 +42,11 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 
+
+/** The four collection settings Challenge Settings shows as switches. */
+private val COLLECTION_SWITCHES = listOf("anonymous", "unrevealed", "moderated", "closed")
+    .map(AO3CollectionFields::preference).toSet()
+
 class AO3WriteRepository(
     private val client: AO3AuthenticatedClient,
     private val parser: AO3WriteFormParser = AO3WriteFormParser()
@@ -502,7 +507,14 @@ class AO3WriteRepository(
         requireCollectionSession(expectedGeneration)
         val token = parser.parseAuthenticityToken(html, metaOnly = true)
             ?: return AO3Result.Failure(AO3Error.Validation("Couldn't prepare the request. Try again, or open the collection on AO3."))
-        val posted = checked.copy(token = token)
+        // The switches go onto the collection form as AO3 serves it now, not as this screen first
+        // read it: a Basics edit saved since (name, tagline, introduction) was sent back with its
+        // old values and undone (A50 F8).
+        val base = if (!collectionSwitches) checked else (try {
+            AO3ChallengeSettingsFormParser().parse(html, form.slug, form.kind, true)
+        } catch (_: Exception) { null })?.copy(changes = checked.changes.filterKeys { it in COLLECTION_SWITCHES })
+            ?: return AO3Result.Failure(AO3Error.Parse("Couldn't read AO3's collection form."))
+        val posted = base.copy(token = token)
         if (!AO3RedirectCookieRelay.isTrustedUrl(posted.actionUrl)) return AO3Result.Failure(AO3Error.Parse("Couldn't read AO3's challenge form."))
         currentCoroutineContext().ensureActive()
         val response = withContext(NonCancellable) {
