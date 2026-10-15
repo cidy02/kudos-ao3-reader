@@ -13,6 +13,10 @@ import io.github.cidy02.kudos.network.ao3.comments.AO3CommentAuthor
 import io.github.cidy02.kudos.network.ao3.comments.AO3CommentRepository
 import io.github.cidy02.kudos.network.ao3.comments.AO3CommentTarget
 import io.github.cidy02.kudos.network.ao3.comments.CommentDraftStore
+import io.github.cidy02.kudos.network.ao3.comments.CommentDraftIdentity
+import io.github.cidy02.kudos.network.ao3.comments.CommentSubmissionStore
+import io.github.cidy02.kudos.network.ao3.comments.CommentSubmissionKey
+import io.github.cidy02.kudos.network.ao3.AO3Error
 import io.github.cidy02.kudos.network.ao3.writes.AO3AuthenticatedClient
 import io.github.cidy02.kudos.network.ao3.writes.success
 import io.github.cidy02.kudos.network.ao3.writes.writeResource
@@ -90,10 +94,11 @@ class CommentsViewModelContextTest {
         throw AssertionError("never happened: $what")
     }
 
+    private val submissions = CommentSubmissionStore()
     private val models = mutableListOf<CommentsViewModel>()
     private fun model(session: Session, focused: Long? = null, position: Int? = null) = CommentsViewModel(
         AO3CommentRepository(publicClient = PublicPage(basic), authenticatedClient = session),
-        work, drafts, focused, position, { session.generation }) { session.name }.also { models += it }
+        work, drafts, focused, position, { session.generation }, submissions = submissions) { session.name }.also { models += it }
 
     private fun loaded(viewModel: CommentsViewModel) = viewModel.state.value is CommentsUiState.Loaded
 
@@ -230,6 +235,130 @@ class CommentsViewModelContextTest {
         viewModel.updateDraft("for the chapter"); idle()
         assertEquals("for the chapter", drafts.getDraft(workId, chapterId = 77L, parentId = null, username = "alice"))
         assertEquals("for the work", drafts.getDraft(workId, parentId = null, username = "alice"))
+    }
+
+    @Test fun secondTapWhileInFlightDoesNothingAndSuccessClearsOnlyItsChapterVariants() = runTest(testDispatcher) {
+        val session = Session(basic)
+        val viewModel = model(session)
+        until("the first page") { viewModel.isDraftRestored.value }
+        drafts.saveDraft("chapter variant", workId, chapterId = 77, username = "alice")
+        drafts.saveDraft("another account", workId, chapterId = 77, username = "bob")
+        drafts.saveDraft("another parent", workId, parentId = 101, username = "alice")
+        viewModel.openComposer(); idle()
+        viewModel.updateDraft("single flight body"); idle()
+        val held = CompletableDeferred<Unit>().also { session.postGate = it }
+        viewModel.submitComment()
+        // No scheduler turn between taps: admission must be synchronous.
+        assertEquals(true, viewModel.submitting.value)
+        viewModel.submitComment()
+        until("one held POST") { session.posts.size == 1 }
+        viewModel.submitComment(); idle()
+        assertEquals(1, session.posts.size)
+        held.complete(Unit)
+        until("posted") { !viewModel.submitting.value && !viewModel.composerPresented.value }
+        assertEquals(null, drafts.getDraft(workId, username = "alice"))
+        assertEquals(null, drafts.getDraft(workId, chapterId = 77, username = "alice"))
+        assertEquals("another account", drafts.getDraft(workId, chapterId = 77, username = "bob"))
+        assertEquals("another parent", drafts.getDraft(workId, parentId = 101, username = "alice"))
+    }
+
+    @Test fun lostAnswerSurvivesReopeningAndUnknownCheckNeverPostsAgain() = runTest(testDispatcher) {
+        val session = Session(basic)
+        session.postAnswer = AO3Result.Failure(AO3Error.Network("lost answer"))
+        val first = model(session)
+        until("the first page") { first.isDraftRestored.value }
+        first.openComposer(); idle()
+        first.updateDraft("ambiguous original body"); idle()
+        // The form read before the POST is valid; verification after it gets an interstitial,
+        // never a cache hit. (Set before submitting, the form read got it too and nothing posted.)
+        session.answerAfterPost = success("<p>Maintenance</p>")
+        first.submitComment()
+        until("unknown verification") { session.posts.size == 1 && !first.submitting.value && first.canReverify.value }
+        assertEquals("ambiguous original body", drafts.getDraft(workId, username = "alice"))
+        first.closeComposer(); idle()
+        first.viewModelScope.cancel()
+        val reads = session.urls.size
+        val reopened = model(session)
+        reopened.openComposer()
+        until("reopened verification") { session.urls.size > reads + 1 && !reopened.submitting.value && reopened.canReverify.value }
+        reopened.updateDraft("edited while unresolved"); idle()
+        reopened.reverify()
+        until("rechecked") { !reopened.submitting.value }
+        assertEquals(1, session.posts.size)
+        val original = CommentSubmissionKey.of(work, null, "ambiguous original body", "alice")
+        assertEquals(CommentSubmissionStore.Phase.Ambiguous, submissions.entry(original)?.phase)
+        // A clean authenticated miss releases only the original and never automatically posts.
+        session.getAnswer = basic
+        reopened.reverify()
+        until("authoritative absence") { !reopened.submitting.value && !reopened.canReverify.value }
+        assertEquals(null, submissions.entry(original))
+        assertEquals(1, session.posts.size)
+        reopened.updateDraft("ambiguous original body"); idle()
+        reopened.submitComment()
+        until("explicit second attempt") { session.posts.size == 2 && !reopened.submitting.value }
+        assertEquals(2, session.posts.size)
+    }
+
+    @Test fun definitiveRefusalsAndOfflineFailuresKeepTheDraftAndPermitOnlyAnExplicitRetry() = runTest(testDispatcher) {
+        for ((index, error) in listOf(AO3Error.Network("offline", offline = true), AO3Error.RateLimited(1000),
+            AO3Error.Validation("Rejected")).withIndex()) {
+            val session = Session(basic).also { it.postAnswer = AO3Result.Failure(error) }
+            val model = model(session)
+            until("initial page") { model.isDraftRestored.value }
+            model.openComposer(); idle()
+            model.updateDraft("definitive failure $index"); idle()
+            val reads = session.urls.size
+            model.submitComment()
+            until("definitive refusal") { session.posts.size == 1 && !model.submitting.value }
+            assertEquals(reads + 1, session.urls.size) // CSRF only: no ambiguous verification.
+            assertEquals(false, model.canReverify.value)
+            assertEquals("definitive failure $index", drafts.getDraft(workId, username = "alice"))
+            assertEquals(null, submissions.entry(CommentSubmissionKey.of(work, null, "definitive failure $index", "alice")))
+            model.submitComment()
+            until("explicit retry") { session.posts.size == 2 && !model.submitting.value }
+            model.closeComposer(); idle()
+        }
+    }
+
+    @Test fun anUnnamedSessionsDraftsMoveToItsVerifiedNameWithoutReplacingExistingDrafts() = runTest(testDispatcher) {
+        val session = Session(basic).also { it.name = ""; it.generation = 3 }
+        val unnamed = CommentDraftIdentity.unnamedSession(3)
+        assertEquals(unnamed, CommentDraftIdentity.unnamedSession(3))
+        assertEquals(false, unnamed == CommentDraftIdentity.unnamedSession(4))
+        drafts.saveDraft("old launch", 43, username = "unknown-session:3")
+        drafts.saveDraft("alice's reply", workId, parentId = 101, username = "alice")
+        drafts.saveDraft("bob's reply", workId, parentId = 101, username = "bob")
+        val viewModel = model(session)
+        until("the unnamed page") { viewModel.isDraftRestored.value }
+        viewModel.startReply(reply(101)); idle()
+        viewModel.updateDraft("typed offline")
+        // Even the save queued in this frame must land before the handoff.
+        session.name = "alice"; session.generation = 4
+        viewModel.syncViewer(); idle()
+        assertEquals("typed offline\n\nalice's reply", drafts.getDraft(workId, parentId = 101, username = "alice"))
+        assertEquals(null, drafts.getDraft(workId, parentId = 101, username = unnamed))
+        assertEquals("bob's reply", drafts.getDraft(workId, parentId = 101, username = "bob"))
+        assertEquals("old launch", drafts.getDraft(43, username = "unknown-session:3"))
+        assertEquals(null, drafts.getDraft(43, username = "alice"))
+    }
+
+    @Test fun verifyingAnUnnamedSessionMovesDraftsEvenWhenTheCommentsScreenHasClosed() = runTest(testDispatcher) {
+        var verified = false
+        val auth = io.github.cidy02.kudos.auth.AO3AuthRepository(
+            io.github.cidy02.kudos.auth.MemorySessionStore(io.github.cidy02.kudos.auth.testSession("")),
+            io.github.cidy02.kudos.auth.MemoryCookieStore(),
+            sessionValidator = io.github.cidy02.kudos.auth.AO3SessionValidating { session ->
+                if (!verified) throw java.io.IOException("offline")
+                io.github.cidy02.kudos.auth.AO3SessionValidation.Valid(session.copy(username = "alice"))
+            }, commentDraftStore = drafts
+        )
+        auth.restoreSession()
+        val identity = CommentDraftIdentity.unnamedSession(auth.generation.value)
+        drafts.saveDraft("a closed screen's draft", workId, username = identity)
+        verified = true
+        auth.verifySession()
+        assertEquals("a closed screen's draft", drafts.getDraft(workId, username = "alice"))
+        assertEquals(null, drafts.getDraft(workId, username = identity))
     }
 
     /** iOS `composerContext`: a composer already open keeps the work it was opened for. */
@@ -536,19 +665,24 @@ private class Session(
     val posts = mutableListOf<String>()
     var getGate: (String) -> CompletableDeferred<Unit>? = { null }
     var postGate: CompletableDeferred<Unit>? = null
+    var postAnswer: AO3Result<AO3HttpResponse> = success("<div class='flash comment_notice'>Comment created!</div>")
+    var getAnswer: AO3Result<AO3HttpResponse>? = null
+    /** Becomes [getAnswer] once a POST is sent: what reads after it see. */
+    var answerAfterPost: AO3Result<AO3HttpResponse>? = null
 
     override fun username(): String? = name
     override fun sessionGeneration(): Int? = generation
     override suspend fun getAuthenticated(url: String): AO3Result<AO3HttpResponse> {
         urls += url
         getGate(url)?.await()
-        return page?.invoke(url) ?: fallback
+        return getAnswer ?: page?.invoke(url) ?: fallback
     }
     override suspend fun postAuthenticated(
         url: String, formFields: List<Pair<String, String>>, headers: Map<String, String>
     ): AO3Result<AO3HttpResponse> {
         posts += url
+        answerAfterPost?.let { getAnswer = it; answerAfterPost = null }
         postGate?.await()
-        return success("<div class=\"flash comment_notice\">Comment created!</div>")
+        return postAnswer
     }
 }

@@ -13,7 +13,8 @@ class AO3AuthRepository(
     private val sessionStore: AO3SessionStore,
     private val cookieStore: AO3CookieStore,
     private val cookieJar: AO3CookieJar = AO3CookieJar(),
-    private val sessionValidator: AO3SessionValidating? = null
+    private val sessionValidator: AO3SessionValidating? = null,
+    private val commentDraftStore: io.github.cidy02.kudos.network.ao3.comments.CommentDraftStore? = null
 ) {
     private val mutableState = MutableStateFlow<AO3AuthState>(AO3AuthState.Restoring)
     val state: StateFlow<AO3AuthState> = mutableState.asStateFlow()
@@ -221,6 +222,7 @@ class AO3AuthRepository(
                         if (currentSession != session) return
                         // Bump generation so any other in-flight continuation
                         // that captured the pre-refresh generation goes stale.
+                        moveUnnamedDraftsLocked(validation.session, expectedGeneration)
                         advanceSessionGenerationLocked()
                         applyValidSessionLocked(validation.session, markHealthy = true)
                     }
@@ -327,6 +329,7 @@ class AO3AuthRepository(
      * installs cookies + updates in-memory state.
      */
     private suspend fun applyValidSessionLocked(session: AO3Session, markHealthy: Boolean) {
+        moveUnnamedDraftsLocked(session, sessionGeneration)
         sessionStore.save(session)
         // save() also clears removal-pending on file stores; call explicitly so
         // in-memory / custom stores stay consistent.
@@ -342,12 +345,23 @@ class AO3AuthRepository(
         }
     }
 
+    private suspend fun moveUnnamedDraftsLocked(session: AO3Session, generation: Int) {
+        if (currentSession?.username?.isBlank() == true && session.username.isNotBlank()) {
+            commentDraftStore?.move(
+                io.github.cidy02.kudos.network.ao3.comments.CommentDraftIdentity.unnamedSession(generation), session.username
+            )
+        }
+    }
+
     /**
      * Must be called while [sessionMutex] is held. Advances generation so every
      * in-flight continuation becomes stale, then clears memory + durable store
      * + cookies. Honours delete failure by marking removal pending.
      */
     private suspend fun clearSessionLocked(): Boolean {
+        currentSession?.username?.takeIf { it.isNotBlank() }?.let {
+            io.github.cidy02.kudos.network.ao3.comments.CommentSubmissionStore.shared.clear(it)
+        }
         advanceSessionGenerationLocked()
         currentSession = null
         val deleted = sessionStore.delete()

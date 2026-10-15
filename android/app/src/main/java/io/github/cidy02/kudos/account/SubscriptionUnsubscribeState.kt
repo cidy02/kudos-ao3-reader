@@ -27,6 +27,9 @@ internal class SubscriptionUnsubscribeState(
     suspend fun confirm(path: String, page: Int, onSuccess: () -> Unit) =
         confirmWrite(path, { repository.unsubscribe(path, page) }, onSuccess)
 
+    suspend fun unmarkForLater(workId: Long, onSuccess: () -> Unit) =
+        confirmWrite("unmark:$workId", { repository.unmarkForLater(workId, generation) }, onSuccess)
+
     /** One row of AO3's reading history, by the id its own delete form carries. */
     suspend fun confirmDeleteReading(readingId: Long, page: Int, onSuccess: () -> Unit) =
         confirmWrite("reading:$readingId", { repository.deleteReading(readingId, page) }, onSuccess)

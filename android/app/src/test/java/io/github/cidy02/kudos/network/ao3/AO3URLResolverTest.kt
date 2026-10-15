@@ -32,9 +32,21 @@ class AO3URLResolverTest {
     }
 
     @Test
-    fun upgradesHttpAo3ToHttps() {
-        val url = AO3URLResolver.resolve("http://archiveofourown.org/works/9")
-        assertEquals("https://archiveofourown.org/works/9", url)
+    fun cleartextHTTPAbsoluteAO3URLIsRejected() {
+        for (url in listOf("http://archiveofourown.org", "http://archiveofourown.org/works/1",
+            "http://download.archiveofourown.org/works/1")) {
+            assertNull(AO3URLResolver.resolve(url))
+            assertNull(AO3URLResolver.resolve(url, allowExternalHost = true))
+        }
+    }
+
+    @Test fun subdomainHostIsAllowedByDefaultAndLookalikesAreRejected() {
+        assertEquals("https://download.archiveofourown.org/works/1", AO3URLResolver.resolve("https://download.archiveofourown.org/works/1"))
+        assertEquals("https://archiveofourown.org/works/1?page=2#comments",
+            AO3URLResolver.resolve("//archiveofourown.org/works/1?page=2#comments"))
+        assertNull(AO3URLResolver.resolve("https://archiveofourown.org.evil.example/works/1"))
+        assertNull(AO3URLResolver.resolve("https://notarchiveofourown.org/works/1"))
+        assertEquals("http://example.com/x", AO3URLResolver.resolve("http://example.com/x", allowExternalHost = true))
     }
 
     @Test

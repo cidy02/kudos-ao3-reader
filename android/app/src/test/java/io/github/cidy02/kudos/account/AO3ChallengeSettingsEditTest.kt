@@ -107,7 +107,9 @@ class AO3ChallengeSettingsEditTest {
             val name = noZone.dateField(date)!!
             assertEquals(noZone, noZone.changed(name, "2030-01-01 00:00:00"))
         }
-        assertEquals(browserSubmission(html.replace("value=\"UTC\" selected", "value=\"\" selected"), gift.token), noZone.parameters())
+        assertTrue(noZone.parameters().none { it.first == noZone.field("time_zone") || challengeDateKeys.any { key ->
+            it.first == noZone.field(key) || it.first == noZone.field("${key}_string")
+        } })
         val unreadable = AO3ChallengeSettingsFormParser().parse(html.replace("2026-01-01 00:00:00", "unreadable AO3 date"), gift.slug, gift.kind)
         assertEquals(unreadable, unreadable.changed(unreadable.dateField("signups_open_at")!!, "2030-01-01 00:00:00"))
         // Swift has no past-date guard despite its footnote. An earlier reveal still after due is accepted.
@@ -120,6 +122,18 @@ class AO3ChallengeSettingsEditTest {
         val withRadios = AO3ChallengeSettingsFormParser().parse(radios, gift.slug, gift.kind)
         assertEquals(withRadios, withRadios.changed(withRadios.field("mode"), "b"))
         assertEquals(browserSubmission(radios, gift.token), withRadios.parameters())
+    }
+
+    @Test fun missingTimeZoneMakesScheduleReadOnlyAndOmitsItFromSave() {
+        val form = AO3ChallengeSettingsFormParser().parse("""<form action="/collections/fest/gift_exchange" method="post">
+            <input type="hidden" name="authenticity_token" value="csrf">
+            <input name="gift_exchange[signups_open_at_string]" value="2026-10-01 12:00:00">
+            <input name="gift_exchange[description]" value="keep this">
+            </form>""", "fest", AO3ChallengeKind.GiftExchange)
+        assertFalse(form.scheduleIsEditable)
+        assertFalse(form.editable(form.field("signups_open_at_string")))
+        assertTrue(form.parameters().none { it.first == form.field("time_zone") || it.first.endsWith("_at_string]") })
+        assertTrue(form.parameters().contains(form.field("description") to "keep this"))
     }
 
     @Test fun pickerDatesKeepServedPrecisionAndMissingAndUnknownControlsStayAbsent() {
