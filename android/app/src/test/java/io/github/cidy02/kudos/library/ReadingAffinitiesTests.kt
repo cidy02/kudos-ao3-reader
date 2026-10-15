@@ -38,7 +38,7 @@ class ReadingAffinitiesTests {
         assertNull(rows.getValue("orphan_account").username)
     }
 
-    @Test fun anAO3WorkSavedBeforeAccountsWereKeptReadsItsOneAuthorFromTheByline() {
+    @Test fun anAO3WorkSavedBeforeAccountsWereKeptReadsAnAccountOnlyWhereTheBylinePrintsIt() {
         var id = 100
         fun ao3(author: String) = work(author, author = author, started = true)
             .copy(sourceUrl = "https://archiveofourown.org/works/${id++}")
@@ -48,7 +48,8 @@ class ReadingAffinitiesTests {
             ao3("two").copy(authorIdentitiesJSON =
                 """[{"kind":"registered","username":"a"},{"kind":"registered","username":"b"}]""")
         ), emptyMap()).associateBy { it.name }
-        assertEquals("kestrelmoon", rows.getValue("kestrelmoon").username)
+        // A bare name may be a pseud of somebody else's account: not read as one (A50 F5).
+        assertNull(rows.getValue("kestrelmoon").username)
         assertEquals("SecondAccount", rows.getValue("Second Pseud (SecondAccount)").username)
         assertNull("which of several authors is not said", rows.getValue("alpha, Bee (beta)").username)
         assertNull(rows.getValue("Anonymous").username)

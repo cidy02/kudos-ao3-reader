@@ -1895,3 +1895,7 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   itself (a POST could reach AO3 twice); comment edits go to the comment; comment writes stay
   in their session; collection switches save onto the current form; the comment field is
   read-only while sending. Reverse: the commit that names 3ei.
+- **2026-10-15 · The Authors round reads in the foreground only, from printed accounts only
+  (3ej, A50 F4 to F6).** It stops in the background; a bare byline name is no longer read as
+  an account (narrows 3b: iOS never does); a stale cached page is not an answer. Reverse: the
+  commit that names 3ej.
