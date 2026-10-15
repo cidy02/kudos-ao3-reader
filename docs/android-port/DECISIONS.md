@@ -1918,3 +1918,5 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   the own author page's menus take the app's colours. Reverse: the commit that names 3ep.
 - **2026-10-15 · An author's Works can be narrowed to one fandom, as iOS (3eq).** The Fandom
   chip row on the plain Works list. Reverse: the commit that names 3eq.
+- **2026-10-15 · Challenges compared with iOS (3er).** The same; Challenge Settings' footnote
+  has iOS's whole sentence again. Reverse: the commit that names 3er.
