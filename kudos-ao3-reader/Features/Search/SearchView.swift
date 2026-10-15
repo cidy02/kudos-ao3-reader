@@ -282,19 +282,22 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                     // iPhone gets a sheet, and its grabber, from the modifier.
                     filterPanel
                         .inspectorColumnWidth(min: 280, ideal: 320, max: 380)
-                }
-                // Artboard 1ax. The alert this replaced could take a name and
-                // nothing else, so it asked for a commitment to "the current
-                // search and its filters" while showing neither.
-                .sheet(isPresented: $showingSaveDialog, onDismiss: { saveName = "" }) {
-                    SaveSearchSheet(
-                        filters: filters,
-                        name: $saveName,
-                        onSave: commitSavedSearch
-                    )
-                    // 1ax: a part-height sheet with its grabber.
-                    .presentationDetents([.medium, .large])
-                    .presentationDragIndicator(.visible)
+                        // Artboard 1ax. The alert this replaced could take a name and
+                        // nothing else, so it asked for a commitment to "the current
+                        // search and its filters" while showing neither.
+                        // On the panel, not on this screen: on iPhone the panel is
+                        // itself a sheet of this screen, which cannot present a second
+                        // one over it, so "Save Search…" did nothing there.
+                        .sheet(isPresented: $showingSaveDialog, onDismiss: { saveName = "" }) {
+                            SaveSearchSheet(
+                                filters: filters,
+                                name: $saveName,
+                                onSave: commitSavedSearch
+                            )
+                            // 1ax: a part-height sheet with its grabber.
+                            .presentationDetents([.medium, .large])
+                            .presentationDragIndicator(.visible)
+                        }
                 }
                 .remoteWorkSelectionChrome(bulkSelection)
         }
