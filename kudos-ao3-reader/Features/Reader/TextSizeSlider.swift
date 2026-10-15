@@ -12,7 +12,8 @@ struct TextSizeSlider: View {
             Text("A")
                 .font(.caption2)
                 .foregroundStyle(.secondary)
-                .frame(width: 18)
+                // Its own width: a fixed 18 cut the letter in half at the largest text sizes.
+                .fixedSize()
             Slider(value: $fontSizePt,
                    in: ReaderTextStyle.fontSizeRange,
                    step: ReaderTextStyle.fontSizeStep)
@@ -21,7 +22,7 @@ struct TextSizeSlider: View {
             Text("A")
                 .font(.title3)
                 .foregroundStyle(.secondary)
-                .frame(width: 18)
+                .fixedSize()
         }
         .padding(.vertical, 2)
     }
