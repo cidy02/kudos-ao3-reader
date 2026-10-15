@@ -140,7 +140,11 @@ object ReadingAffinities {
     private fun accountFromAO3Byline(work: SavedWork): String? {
         if (work.authorIdentitiesJSON.isNotBlank() || ',' in work.author ||
             WorkTags.canonicalAO3WorkURL(work.sourceUrl) == null) return null
-        return AO3AuthorRoute.fromByline(work.author).username.takeIf {
+        // Only "pseud (account)", where AO3 printed the account. A bare name may be a pseud of
+        // somebody else's account, whose page would then be read (A50 F5); iOS never reads an
+        // account from a byline's words.
+        if (!work.author.trim().endsWith(")")) return null
+        return AO3AuthorRoute.fromByline(work.author).takeIf { it.pseud != null }?.username?.takeIf {
             accountName.matches(it) && !it.equals("Anonymous", true) && !it.equals("orphan_account", true)
         }
     }

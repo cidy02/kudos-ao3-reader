@@ -50,7 +50,10 @@ class AuthorNewestWorkStore(
         val result = newestFirstPage(username)
         if (sessionScope() != scope) return false
         return when (result) {
-            is AO3Result.Success -> true.also { store(result.value.works.firstOrNull(), username, scope) }
+            // An old copy kept for an outage is not an answer: it ends the round like the outage
+            // it stands in for, and is not stamped as fresh (A50 F6).
+            is AO3Result.Success -> if (result.isStale) false
+                else true.also { store(result.value.works.firstOrNull(), username, scope) }
             // No such page: a byline renamed or deleted. That is an answer (nothing to show),
             // and must not stall every author behind it for the session.
             is AO3Result.Failure -> (result.error == AO3Error.NotFound || result.error is AO3Error.Validation)

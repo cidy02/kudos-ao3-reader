@@ -58,6 +58,15 @@ class AuthorNewestWorkStoreTest {
         assertEquals(listOf("a", "b", "b", "c"), asked)
     }
 
+    @Test fun anOldCopyKeptForAnOutageIsNotAnAnswer() = runTest {
+        // A50 F6: the page cache's stale copy during an outage was stamped as a fresh answer.
+        answers["b"] = AO3Result.Success(AO3SearchPage(listOf(work(9)), 1, 1), isStale = true)
+        val store = store()
+        assertFalse(store.prefetch(listOf("a", "b", "c")))
+        assertEquals("it ends the round like the outage", listOf("a", "b"), asked)
+        assertNull(store.cached("b"))
+    }
+
     @Test fun anAnswerGoesStaleAfterHalfAnHourAndNeverCrossesToAnotherSession() = runTest {
         val store = store()
         store.prefetch(listOf("a"))

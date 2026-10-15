@@ -1,5 +1,7 @@
 package io.github.cidy02.kudos.library
 
+import androidx.lifecycle.repeatOnLifecycle
+import androidx.lifecycle.Lifecycle
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -282,9 +284,12 @@ internal fun FavoriteAffinityList(state: LibraryUiState, onScope: (FavoriteScope
     val round = usernames.map { it.lowercase() }.distinct().sorted().joinToString("\u001F")
     // Null while a round runs; then whether every author answered.
     var complete by remember { mutableStateOf<Boolean?>(null) }
-    LaunchedEffect(store, session, round) {
+    // In the foreground only: the round went on reading author pages after Home or the lock
+    // button (A50 F4). It stops below STARTED and resumes, skipping kept answers, on return.
+    val lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
+    LaunchedEffect(store, session, round, lifecycle) {
         complete = null
-        if (store != null) complete = store.prefetch(usernames)
+        if (store != null) lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) { complete = store.prefetch(usernames) }
     }
     // Both halves: the round settled, and its answers have not gone stale since.
     val ready = store != null && complete == true && usernames.all { store.cached(it) != null }
