@@ -8,40 +8,42 @@
       </h3>
     </div>
   </div>
-  <ol class="thread">
-    <li id="comment_1" class="comment depth-0">
-      <div class="icon">
-        <img class="icon" alt="" src="/images/icons/AO3_Reader.png">
-      </div>
-      <h4 class="heading byline"><a rel="author" href="/users/AO3_Reader">AO3_Reader</a></h4>
-      <p class="datetime">27 Jun 2026</p>
-      <blockquote class="userstuff"><p>Hello, café ☕</p></blockquote>
-      <ol class="thread">
-        <li id="comment_2" class="comment depth-1">
-          <div class="icon">
-            <img class="icon" alt="" src="/images/skins/iconsets/default/icon_user.png">
-          </div>
-          <h4 class="heading byline"><a rel="author" href="/users/ReplyUser">ReplyUser</a></h4>
-          <p class="datetime">28 Jun 2026</p>
-          <blockquote class="userstuff"><p>A nested reply.</p></blockquote>
-        </li>
-      </ol>
-    </li>
-    <li id="comment_3" class="comment depth-0">
-      <h4 class="heading byline">
-        <span>Curious Guest</span><span class="role"> (Guest)</span>
-      </h4>
-      <p class="datetime">29 Jun 2026</p>
-      <blockquote class="userstuff"><p>A guest comment.</p></blockquote>
-    </li>
-    <li id="comment_4" class="comment depth-0">
-      <h4 class="heading byline">
-        <span class="role">Anonymous Creator</span>
-      </h4>
-      <p class="datetime">30 Jun 2026</p>
-      <blockquote class="userstuff"><p>Author speaking anonymously.</p></blockquote>
-    </li>
-  </ol>
+  <div id="comments_placeholder">
+    <ol class="thread">
+      <li id="comment_1" class="comment depth-0">
+        <div class="icon">
+          <img class="icon" alt="" src="/images/icons/AO3_Reader.png">
+        </div>
+        <h4 class="heading byline"><a rel="author" href="/users/AO3_Reader">AO3_Reader</a></h4>
+        <p class="datetime">27 Jun 2026</p>
+        <blockquote class="userstuff"><p>Hello, café ☕</p></blockquote>
+        <ol class="thread">
+          <li id="comment_2" class="comment depth-1">
+            <div class="icon">
+              <img class="icon" alt="" src="/images/skins/iconsets/default/icon_user.png">
+            </div>
+            <h4 class="heading byline"><a rel="author" href="/users/ReplyUser">ReplyUser</a></h4>
+            <p class="datetime">28 Jun 2026</p>
+            <blockquote class="userstuff"><p>A nested reply.</p></blockquote>
+          </li>
+        </ol>
+      </li>
+      <li id="comment_3" class="comment depth-0">
+        <h4 class="heading byline">
+          <span>Curious Guest</span><span class="role"> (Guest)</span>
+        </h4>
+        <p class="datetime">29 Jun 2026</p>
+        <blockquote class="userstuff"><p>A guest comment.</p></blockquote>
+      </li>
+      <li id="comment_4" class="comment depth-0">
+        <h4 class="heading byline">
+          <span class="role">Anonymous Creator</span>
+        </h4>
+        <p class="datetime">30 Jun 2026</p>
+        <blockquote class="userstuff"><p>Author speaking anonymously.</p></blockquote>
+      </li>
+    </ol>
+  </div>
   <form id="new_comment" action="/works/123/comments" method="post">
     <input type="hidden" name="authenticity_token" value="comment-token">
     <select name="comment[pseud_id]">

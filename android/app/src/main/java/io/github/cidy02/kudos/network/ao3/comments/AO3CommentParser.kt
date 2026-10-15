@@ -21,7 +21,8 @@ class AO3CommentParser(
         html: String,
         finalUrl: String,
         target: AO3CommentTarget,
-        page: Int = 1
+        page: Int = 1,
+        isStandaloneThread: Boolean = false
     ): AO3CommentThread {
         if (AO3OverloadDetector.isOverloadPage(html)) throw AO3CommentParseException.Overloaded()
 
@@ -31,7 +32,7 @@ class AO3CommentParser(
         val currentPage = page.coerceAtLeast(1)
         return AO3CommentThread(
             target = target,
-            comments = parseComments(document),
+            comments = parseComments(document, isStandaloneThread),
             form = parseCommentForm(document, html, target),
             commentsLocked = commentsLocked(document),
             workAuthors = parseWorkAuthors(document),
@@ -101,11 +102,22 @@ class AO3CommentParser(
      * Builds a real comment tree from the page's top-level `ol.thread`
      * (iOS `parseThread`). Nested replies hang under [AO3Comment.replies].
      */
-    private fun parseComments(document: Document): List<AO3Comment> {
-        val root = document.selectFirst(
-            "#comments_placeholder ol.thread, #main > ol.thread, main > ol.thread, ol.thread"
-        ) ?: return emptyList()
-        return parseThread(root, depth = 0, parentId = null)
+    private fun parseComments(document: Document, isStandaloneThread: Boolean): List<AO3Comment> {
+        // otwarchive always emits the work/chapter list, even when empty; /comments/<id>
+        // serves a standalone thread instead (iOS parseCommentsPage/parseStandaloneCommentThread).
+        val selector = if (isStandaloneThread) {
+            "#main > ol.thread, main > ol.thread, ol.thread"
+        } else {
+            "#comments_placeholder > ol.thread"
+        }
+        val root = requireNotNull(document.selectFirst(selector)) {
+            "AO3 did not provide the comments list."
+        }
+        val comments = parseThread(root, depth = 0, parentId = null)
+        require(comments.isNotEmpty() || (!isStandaloneThread && root.children().isEmpty())) {
+            "AO3's comments list could not be parsed."
+        }
+        return comments
     }
 
     /**

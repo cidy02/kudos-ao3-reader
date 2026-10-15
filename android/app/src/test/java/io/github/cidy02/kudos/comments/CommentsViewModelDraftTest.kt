@@ -74,10 +74,7 @@ class CommentsViewModelDraftTest {
         val viewModel = createViewModel(AO3CommentTarget.Work(workId))
         
         // Wait for isDraftRestored to become true
-        while (!viewModel.isDraftRestored.value) {
-            testDispatcher.scheduler.advanceTimeBy(100)
-            testDispatcher.scheduler.runCurrent()
-        }
+        awaitDraftRestored(viewModel)
 
         assertEquals(content, viewModel.draft.value)
     }
@@ -95,10 +92,7 @@ class CommentsViewModelDraftTest {
 
         val viewModel = createViewModel(target)
         
-        while (!viewModel.isDraftRestored.value) {
-            testDispatcher.scheduler.advanceTimeBy(100)
-            testDispatcher.scheduler.runCurrent()
-        }
+        awaitDraftRestored(viewModel)
         
         assertEquals("", viewModel.draft.value)
 
@@ -245,6 +239,21 @@ class CommentsViewModelDraftTest {
     private fun threadPage() = writeResource("ao3/comments/comment_thread_reply_form.html").replace(
         "AO3_Reader</a></h4>",
         "AO3_Reader</a> <span class=\"parent\">on <a href=\"/works/123/chapters/77\">Chapter 3</a></span></h4>")
+
+    private fun awaitDraftRestored(viewModel: CommentsViewModel) {
+        // Parsing runs off the test clock. Fail on an error instead of spinning forever.
+        for (attempt in 1..500) {
+            testDispatcher.scheduler.advanceUntilIdle()
+            if (viewModel.isDraftRestored.value) return
+            val state = viewModel.state.value
+            if (state is CommentsUiState.Error || state is CommentsUiState.AuthRequired) {
+                throw AssertionError("Draft restoration failed: $state")
+            }
+            Thread.sleep(10)
+        }
+        throw AssertionError("Draft restoration never completed: ${viewModel.state.value}")
+    }
+
     private fun settle(viewModel: CommentsViewModel, urls: List<String>, reads: Int) {
         // The pages are parsed off the test's clock, so this waits in real time.
         for (attempt in 1..500) {
@@ -264,7 +273,9 @@ class CommentsViewModelDraftTest {
     fun chapterCommentsFromTheInboxPutTheInboxThreadFirstAndReadItOnce() = runTest(testDispatcher) {
         for (alreadyOnThePage in listOf(false, true)) {
             val urls = mutableListOf<String>()
-            val chapterPage = success(if (alreadyOnThePage) threadPage() else writeResource("ao3/comments/comments_basic.html"))
+            val chapterPage = success(if (alreadyOnThePage) threadPage()
+                .replace("  <ol class=\"thread\">", "  <div id=\"comments_placeholder\"><ol class=\"thread\">")
+                .replace("  </ol>", "  </ol></div>") else writeResource("ao3/comments/comments_basic.html"))
             val repo = AO3CommentRepository(
                 publicClient = FakePublicClient(chapterPage),
                 authenticatedClient = FakeAuthenticatedClient(listOf(success(threadPage()), chapterPage), emptyList(), "alice", urls)
@@ -453,10 +464,7 @@ class CommentsViewModelDraftTest {
         testDispatcher.scheduler.advanceUntilIdle()
         val viewModel = createViewModel(target)
         viewModel.startReply(commentStub(101L, "Author A")) // before the page's draft lookup has answered
-        while (!viewModel.isDraftRestored.value) {
-            testDispatcher.scheduler.advanceTimeBy(100)
-            testDispatcher.scheduler.runCurrent()
-        }
+        awaitDraftRestored(viewModel)
         testDispatcher.scheduler.advanceUntilIdle()
         assertEquals("", viewModel.draft.value)
         assertEquals("for the work, not for a reply", draftStore.getDraft(workId, parentId = null, username = null))
@@ -472,10 +480,7 @@ class CommentsViewModelDraftTest {
         draftStore.saveDraft("for the work, not for a reply", workId, parentId = null)
         testDispatcher.scheduler.advanceUntilIdle()
         val viewModel = createViewModel(target)
-        while (!viewModel.isDraftRestored.value) {
-            testDispatcher.scheduler.advanceTimeBy(100)
-            testDispatcher.scheduler.runCurrent()
-        }
+        awaitDraftRestored(viewModel)
         testDispatcher.scheduler.advanceUntilIdle()
 
         viewModel.openComposer() // its draft lookup has not answered yet

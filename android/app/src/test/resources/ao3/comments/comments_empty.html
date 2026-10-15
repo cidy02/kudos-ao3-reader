@@ -1,6 +1,8 @@
 <html>
 <body class="works-show logged-in">
-  <p>No comments yet.</p>
+  <div id="comments_placeholder">
+    <ol class="thread"></ol>
+  </div>
   <form id="new_comment" action="/works/123/comments" method="post">
     <input type="hidden" name="authenticity_token" value="comment-token">
   </form>

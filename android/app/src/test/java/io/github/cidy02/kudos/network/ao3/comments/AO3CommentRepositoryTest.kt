@@ -18,6 +18,30 @@ import org.junit.Test
 
 class AO3CommentRepositoryTest {
     @Test
+    fun a200PageWithoutTheCommentsListIsAParseErrorNotAnEmptyPage() = runTest {
+        val missingLists = listOf(
+            "<html><body><p>This work could have adult content.</p></body></html>",
+            "<div id='comments_placeholder'><p>No comments yet.</p></div>"
+        )
+        for (target in listOf(AO3CommentTarget.Work(123), AO3CommentTarget.Chapter(123, 456))) {
+            for (focusedId in listOf(null, 9L)) {
+                for (html in missingLists) {
+                    val url = if (focusedId == null) target.pageUrl() else AO3CommentUrls.commentThreadUrl(focusedId)
+                    val repository = AO3CommentRepository(
+                        publicClient = FakePublicClient(AO3Result.Failure(AO3Error.Network("should not use public"))),
+                        authenticatedClient = FakeAuthenticatedClient(
+                            getResults = listOf(success(html, status = 200, url = url)),
+                            postResults = emptyList()
+                        )
+                    )
+                    val result = repository.loadThread(target, focusedCommentId = focusedId)
+                    assertTrue("Expected a parse error for $url", result is AO3Result.Failure && result.error is AO3Error.Parse)
+                }
+            }
+        }
+    }
+
+    @Test
     fun publicLoadReadsCommentsWithoutAuthenticatedPost() = runTest {
         val repository = AO3CommentRepository(
             publicClient = FakePublicClient(success(writeResource("ao3/comments/comments_basic.html"))),
