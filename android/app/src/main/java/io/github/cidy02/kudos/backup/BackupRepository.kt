@@ -27,7 +27,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 /**
- * Captures the local library into a `.kudosbackup` ZIP and restores merge-only
+ * Captures the local library into a `.kudosbackup` ZIP and restores
  * from SAF-picked archives. Session/cookie stores are never read or written.
  */
 class BackupRepository(
@@ -49,24 +49,32 @@ class BackupRepository(
 
     // Gated so a manual export/import can never race a background folder sync
     // (SyncRepository.runSync -> this) writing the same local state.
-    suspend fun exportV2ZipBytes(): ByteArray = persistenceGate.withLock {
+    suspend fun exportV2ZipBytes(): ByteArray = exportV2Zip().bytes
+
+    suspend fun exportV2Zip(): BackupExportResult = persistenceGate.withLock {
         withContext(Dispatchers.IO) {
             val snapshot = captureLibrarySnapshot()
             val epubFiles = linkedMapOf<String, ByteArray>()
+            val omittedBooks = mutableListOf<String>()
             snapshot.works.forEach { work ->
                 if (!work.hasEpub) return@forEach
                 val path = workFileStore.workEpubPath(work.id)
-                if (Files.isRegularFile(path)) {
-                    val bytes = Files.readAllBytes(path)
-                    if (bytes.isNotEmpty()) {
-                        epubFiles[BackupPaths.normalizeIdForComparison(work.id)] = bytes
-                    }
+                val bytes = if (Files.isRegularFile(path)) Files.readAllBytes(path) else null
+                if (bytes != null && bytes.isNotEmpty()) {
+                    epubFiles[BackupPaths.normalizeIdForComparison(work.id)] = bytes
+                } else {
+                    omittedBooks += work.title.ifBlank { work.id }
                 }
             }
             val fontFiles = linkedMapOf<String, ByteArray>()
+            val omittedFonts = mutableListOf<String>()
             snapshot.fonts.forEach { font ->
-                val bytes = fontFileStore.readFont(font.fileName) ?: return@forEach
-                if (bytes.isNotEmpty()) fontFiles[font.fileName] = bytes
+                val bytes = fontFileStore.readFont(font.fileName)
+                if (bytes != null && bytes.isNotEmpty()) {
+                    fontFiles[font.fileName] = bytes
+                } else {
+                    omittedFonts += font.name.ifBlank { font.fileName }
+                }
             }
             val originalFiles = linkedMapOf<String, ByteArray>()
             snapshot.works.forEach { work -> originalFiles += originalFilesOf(work.id) }
@@ -76,7 +84,7 @@ class BackupRepository(
                 fontFilesByFileName = fontFiles,
                 originalFilesByName = originalFiles
             )
-            BackupExporter.exportV2(pack)
+            BackupExportResult(BackupExporter.exportV2(pack), omittedBooks, omittedFonts)
         }
     }
 
@@ -92,7 +100,7 @@ class BackupRepository(
     ): BackupRestoreSummary = persistenceGate.withLock {
         withContext(Dispatchers.IO) {
             val pack = BackupImporter.importV2Zip(bytes)
-            TombstoneLocalMigration.runIfNeeded(database, settingsRepository)
+            prepareForImport(mode)
             val current = captureLibrarySnapshot(pack.fontFilesByFileName.keys, pack.fontFilesByFileName)
             val merge = mergePackage(current, pack, mode)
             applyMergeResultLocked(merge, pack.originalFilesByName)
@@ -106,11 +114,31 @@ class BackupRepository(
     ): BackupRestoreSummary = persistenceGate.withLock {
         withContext(Dispatchers.IO) {
             BackupFontValidator.validate(pack.fontFilesByFileName)
-            TombstoneLocalMigration.runIfNeeded(database, settingsRepository)
+            prepareForImport(mode)
             val current = captureLibrarySnapshot(pack.fontFilesByFileName.keys, pack.fontFilesByFileName)
             val merge = mergePackage(current, pack, mode, normalizeQueuePreservation)
             applyMergeResultLocked(merge, pack.originalFilesByName)
         }
+    }
+
+    private suspend fun prepareForImport(mode: BackupImportMode) {
+        // Replace does not need signed local suppressors. Leave migration to launch or
+        // reconcile so a failed Replace cannot change tombstones before its transaction.
+        if (mode == BackupImportMode.REPLACE_LIBRARY) {
+            recoverReplaceFiles()
+        } else {
+            TombstoneLocalMigration.runIfNeeded(database, settingsRepository)
+        }
+    }
+
+    internal suspend fun recoverInterruptedReplace() = persistenceGate.withLock {
+        recoverReplaceFiles()
+    }
+
+    private suspend fun recoverReplaceFiles() = withContext(Dispatchers.IO) {
+        BackupFileUndo.recover(
+            workFileStore.worksDirectory, fontFileStore.fontsDirectory, workFileStore.originalsDirectory
+        )
     }
 
     /**
@@ -164,7 +192,8 @@ class BackupRepository(
         workIdRemap: Map<String, String>,
         blockedWorkIds: Set<String> = emptySet(),
         expectedWorks: Map<String, SavedWork> = emptyMap(),
-        captured: BackupLibrarySnapshot? = null
+        captured: BackupLibrarySnapshot? = null,
+        fileUndo: BackupFileUndo? = null
     ): Set<String> {
         val deferred = mutableSetOf<String>()
         val originalsById = files.mapNotNull { (name, bytes) ->
@@ -206,10 +235,16 @@ class BackupRepository(
                                 BackupPaths.sha256(Files.readAllBytes(local)) == BackupPaths.sha256(originalBytes)
                         }.getOrDefault(false)
                     }
-                    if (matches && !workFileStore.writeConversionRecord(workId, bytes)) {
-                        throw IOException("Could not write conversion record for $workId")
+                    if (matches) {
+                        fileUndo?.beforeWrite(workFileStore.conversionRecordPath(workId))
+                        if (!workFileStore.writeConversionRecord(workId, bytes)) {
+                            throw IOException("Could not write conversion record for $workId")
+                        }
                     }
                 } else if (local == null) {
+                    fileUndo?.beforeWrite(workFileStore.originalPath(workId, name.substringAfterLast('.', "")))
+                    // writeOriginal also removes a conversion record, even an orphaned one.
+                    fileUndo?.beforeWrite(workFileStore.conversionRecordPath(workId))
                     workFileStore.writeOriginal(workId, name.substringAfterLast('.', ""), bytes).orThrow()
                 } else if (captured != null && workId !in captured.originalWorkIds && !runCatching {
                     Files.size(local) == bytes.size.toLong() &&
@@ -331,6 +366,7 @@ class BackupRepository(
         merge: BackupMergeResult,
         originalFiles: Map<String, ByteArray> = emptyMap()
     ): BackupRestoreSummary = persistenceGate.withLock {
+        if (merge.mode == BackupImportMode.REPLACE_LIBRARY) recoverReplaceFiles()
         applyMergeResultLocked(merge, originalFiles)
     }
 
@@ -338,6 +374,34 @@ class BackupRepository(
     private suspend fun applyMergeResultLocked(
         merge: BackupMergeResult,
         originalFiles: Map<String, ByteArray>
+    ): BackupRestoreSummary {
+        if (merge.mode != BackupImportMode.REPLACE_LIBRARY) {
+            return applyMergeResultWithFiles(merge, originalFiles)
+        }
+        val fileUndo = BackupFileUndo()
+        val summary = try {
+            // Nested per-file transactions join this transaction: no rows commit until
+            // every required asset is installed. A failed commit also undoes the files.
+            database.withTransaction {
+                try {
+                    applyMergeResultWithFiles(merge, originalFiles, fileUndo)
+                } catch (error: Throwable) {
+                    fileUndo.rollback(error)
+                    throw error
+                }
+            }
+        } catch (error: Throwable) {
+            fileUndo.rollback(error)
+            throw error
+        }
+        fileUndo.discard()
+        return summary
+    }
+
+    private suspend fun applyMergeResultWithFiles(
+        merge: BackupMergeResult,
+        originalFiles: Map<String, ByteArray>,
+        fileUndo: BackupFileUndo? = null
     ): BackupRestoreSummary {
         val (applied, beforeApply, writtenWorks) = database.withTransaction {
             val stored = captureStoredRows()
@@ -361,8 +425,8 @@ class BackupRepository(
         }.mapTo(mutableSetOf()) { it.id }
 
         applied.epubFilesToWriteByWorkId.forEach { (workId, bytes) ->
-            // One transaction per file closes the DB check/write window. Ordinary file
-            // writers do not hold the gate/transaction; see 5h-result.md for that window.
+            // Each file rechecks inside a transaction (Replace joins the outer one).
+            // Ordinary file writers do not hold it; see 5h-result.md for that window.
             database.withTransaction {
                 val expected = writtenWorks[workId] ?: installedWorks[workId]
                 val entity = database.workDao().getById(workId)
@@ -398,7 +462,10 @@ class BackupRepository(
                 val allowed = !removedMeanwhile && !deletedMeanwhile && mayRestoreEpub(
                     policyLocal, hasFile, mode, applied.epubIncomingModifiedAtByWorkId[workId]
                 )
-                val write = if (allowed) workFileStore.writeWorkEpub(workId, bytes) else null
+                val write = if (allowed) {
+                    fileUndo?.beforeWrite(workFileStore.workEpubPath(workId))
+                    workFileStore.writeWorkEpub(workId, bytes)
+                } else null
                 if (!allowed) {
                     deferredFiles += "work:$workId"
                     if (removedMeanwhile || deletedMeanwhile) blockedWorkIds += workId
@@ -412,7 +479,7 @@ class BackupRepository(
                         else -> entity.remoteEpubPending
                     }
                 ))
-                // Commit accurate flags even on failure, then stop before sync uploads old bytes.
+                // Merge/reconcile commit accurate flags on failure; Replace rolls them back.
                 write
             }?.orThrow()
         }
@@ -430,12 +497,13 @@ class BackupRepository(
                         deferredFiles += deferredKey
                     }
                 } else {
+                    fileUndo?.beforeWrite(fontFileStore.fontPath(fileName))
                     fontFileStore.writeFont(fileName, bytes).orThrow()
                 }
             }
         }
         deferredFiles += restoreOriginals(
-            originalFiles, applied.workIdRemap, blockedWorkIds, installedWorks, merge.capturedSnapshot
+            originalFiles, applied.workIdRemap, blockedWorkIds, installedWorks, merge.capturedSnapshot, fileUndo
         ).map { "work:$it" }
 
         if (applied.mode != BackupImportMode.REPLACE_LIBRARY) {
