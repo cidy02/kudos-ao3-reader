@@ -246,6 +246,21 @@ class AO3ClientStatusMappingTest {
 
 class AO3ClientRetryTest {
     @Test
+    fun aPostAnswered503RetryAfterZeroIsNotSentAgain() = runTest {
+        // A51 F1: OkHttp repeats a request answered 503 with Retry-After: 0, whatever
+        // retryOnConnectionFailure says.
+        withServer { server ->
+            server.enqueue(MockResponse.Builder().code(503).addHeader("Retry-After", "0").body("busy").build())
+            server.enqueue(MockResponse.Builder().code(200).body("ok").build())
+            val config = AO3NetworkConfig(minDelayBetweenRequestsMillis = 0)
+            val client = OkHttpAO3Client(OkHttpAO3Client.defaultOkHttpClient(config), config,
+                delay = RecordingDelay())
+            client.postForm(server.url("/works/1/kudos").toString(), listOf("a" to "1"), emptyMap())
+            assertEquals(1, server.requestCount)
+        }
+    }
+
+    @Test
     fun theAppsClientNeverSendsAPostTwice() = runTest {
         // A50 F1: OkHttp answered a 408 by sending the POST again by itself.
         withServer { server ->

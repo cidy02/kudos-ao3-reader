@@ -90,6 +90,14 @@ class OkHttpAO3Client(
                 // a POST included, outside the pacing and the session check: a write could reach
                 // AO3 twice for one tap (A50 F1). Only `AO3RetryPolicy` retries, and only a GET.
                 .retryOnConnectionFailure(false)
+                // A 503 saying "Retry-After: 0" is sent again by OkHttp itself whatever the line
+                // above says, outside the pacing (A51 F1). As 1 second it is left to
+                // AO3RetryPolicy, which paces it and never retries a write.
+                .addNetworkInterceptor { chain ->
+                    val response = chain.proceed(chain.request())
+                    if (response.code == 503 && response.header("Retry-After")?.trim() == "0")
+                        response.newBuilder().header("Retry-After", "1").build() else response
+                }
                 .callTimeout(config.callTimeoutSeconds, TimeUnit.SECONDS)
                 .followRedirects(false)
                 .followSslRedirects(false)
@@ -265,7 +273,7 @@ class OkHttpAO3Client(
             AO3HttpMethod.GET -> builder.get().build()
             AO3HttpMethod.POST -> {
                 val mediaType = "application/x-www-form-urlencoded; charset=UTF-8".toMediaType()
-                builder.post((formBody ?: "").toRequestBody(mediaType)).build()
+                builder.post(oneShot((formBody ?: "").toRequestBody(mediaType))).build()
             }
             AO3HttpMethod.PUT,
             AO3HttpMethod.PATCH,
@@ -438,4 +446,16 @@ object AO3FormEncoding {
         }
         return builder.toString()
     }
+}
+
+/**
+ * A write's body, which OkHttp may send only once: it never repeats a one-shot body, for any
+ * follow-up (a 503, a 421 on a shared connection, a redirect). A write reaches AO3 at most
+ * once per tap (A50 F1, A51 F1).
+ */
+private fun oneShot(body: okhttp3.RequestBody) = object : okhttp3.RequestBody() {
+    override fun contentType() = body.contentType()
+    override fun contentLength() = body.contentLength()
+    override fun isOneShot() = true
+    override fun writeTo(sink: okio.BufferedSink) = body.writeTo(sink)
 }

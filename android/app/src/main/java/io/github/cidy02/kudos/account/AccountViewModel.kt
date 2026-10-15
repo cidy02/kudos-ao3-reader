@@ -282,6 +282,18 @@ class AccountListViewModel(
         }
     }
 
+    /**
+     * AO3 cleared the reading history: every page of it is empty now. Kept here, not only on
+     * the screen, so a rebuilt screen does not show the cleared rows again (A51 F7).
+     */
+    fun historyCleared() {
+        if (type != AccountListType.History) return
+        val loaded = mutableState.value as? AccountListUiState.Loaded ?: return
+        ++loadRequest
+        loadJob?.cancel()
+        mutableState.value = AccountListUiState.Loaded(loaded.page.copy(works = emptyList(), currentPage = 1, totalPages = 1, summary = null))
+    }
+
     fun removeSubscription(workId: Long, page: Int) {
         val loaded = mutableState.value as? AccountListUiState.Loaded ?: return
         if (type != AccountListType.Subscriptions || loaded.page.currentPage != page) return

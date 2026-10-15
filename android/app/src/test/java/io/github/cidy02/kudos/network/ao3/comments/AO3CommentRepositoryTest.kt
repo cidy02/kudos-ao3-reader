@@ -131,14 +131,14 @@ class AO3CommentRepositoryTest {
         val unconfirmed = AO3Error.Validation(io.github.cidy02.kudos.network.ao3.account.AO3CollectionFields.UNCONFIRMED)
         assertEquals(unconfirmed, (repository(maintenance).submitComment(AO3CommentTarget.Work(123), "Thanks!") as AO3Result.Failure).error)
         assertEquals(unconfirmed, (repository(maintenance).editComment("/comments/9/edit", "Edited") as AO3Result.Failure).error)
-        assertEquals(unconfirmed, (repository(maintenance).deleteComment("/comments/9") as AO3Result.Failure).error)
+        assertEquals(unconfirmed, (repository(maintenance).deleteComment(9L) as AO3Result.Failure).error)
         // otwarchive reports a failed delete as a comment_error flash on a redirected 200.
         val refused = """<div class="flash comment_error">We couldn't delete that comment.</div>"""
         assertEquals(AO3Error.Validation("We couldn't delete that comment."),
-            (repository(refused).deleteComment("/comments/9") as AO3Result.Failure).error)
+            (repository(refused).deleteComment(9L) as AO3Result.Failure).error)
         // AO3's own notice is what "done" means.
         val done = """<div class="flash comment_notice">Comment deleted.</div>"""
-        assertTrue(repository(done).deleteComment("/comments/9") is AO3Result.Success)
+        assertTrue(repository(done).deleteComment(9L) is AO3Result.Success)
     }
 
     @Test
@@ -180,6 +180,20 @@ class AO3CommentRepositoryTest {
         assertEquals("https://archiveofourown.org/comments/9/edit", auth.gets.single())
         assertEquals("https://archiveofourown.org/comments/9", auth.posts.single().url)
         assertEquals("https://archiveofourown.org/comments/9/edit", auth.posts.single().headers["Referer"])
+    }
+
+    @Test
+    fun aDeleteGoesToTheCommentItselfNotItsConfirmationLink() = runTest {
+        // A51 F2: AO3's Delete link is /comments/delete_comment?id=, a confirmation page.
+        val auth = TrackingAuthenticatedClient(
+            getResults = listOf(success(writeResource("ao3/comments/comments_basic.html"))),
+            postResults = listOf(success("""<div class="flash comment_notice">Comment deleted.</div>"""))
+        )
+        val repository = AO3CommentRepository(publicClient = FakePublicClient(success("")), authenticatedClient = auth)
+        assertTrue(repository.deleteComment(9L) is AO3Result.Success)
+        assertEquals("https://archiveofourown.org/comments/9", auth.gets.single())
+        assertEquals("https://archiveofourown.org/comments/9", auth.posts.single().url)
+        assertEquals(listOf("_method" to "delete", "authenticity_token" to "comment-token"), auth.posts.single().fields)
     }
 
     @Test
