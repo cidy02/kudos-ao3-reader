@@ -1876,3 +1876,7 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
 - **2026-10-14 · Read Aloud says what iOS's says (3ea).** Paragraphs kept apart; AO3's
   labels and closing plug dropped; a link said as its site (iOS's `KokoroBoilerplateFilter`).
   Reverse: `speakableParagraphs` in `reader/ReaderContentText.kt`.
+- **2026-10-14 · Links in a work open in the app; a tag's works page is the works page
+  (3eb, 3ec).** An AO3 author, work or tag tapped in a work's text opens its page in the
+  app, as iOS; the tag opens `FandomWorksScreen(isTag = true)` and `TagWorksScreen` is
+  removed. Reverse: the commits that name 3eb and 3ec.

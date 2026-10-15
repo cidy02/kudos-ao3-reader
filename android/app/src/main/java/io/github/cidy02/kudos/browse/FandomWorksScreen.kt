@@ -76,7 +76,10 @@ fun FandomWorksScreen(
     readingQueueRepository: ReadingQueueRepository? = null,
     repository: AO3BrowseRepository = remember { AO3BrowseRepository() },
     settingsRepository: io.github.cidy02.kudos.data.preferences.SettingsRepository? = null,
-    privacyGate: io.github.cidy02.kudos.app.PrivacyGate? = null
+    privacyGate: io.github.cidy02.kudos.app.PrivacyGate? = null,
+    /** Any tag's works (a tag tapped in a work's text), worded for a tag: iOS's `TagWorksView`
+     *  is this page too. It had a page of its own of the old design (3eb). */
+    isTag: Boolean = false
 ) {
     var state by remember(fandomName) { mutableStateOf<FandomWorksState>(FandomWorksState.Loading) }
     // The *browse* baseline, not a bare AO3SearchFilters(): AO3's tag listing has no
@@ -228,9 +231,9 @@ fun FandomWorksScreen(
                     EmptyStateCard(
                         title = if (narrowed) "No matching works" else "No works found",
                         message = if (narrowed) {
-                            "No works in this fandom match your filters."
+                            if (isTag) "No works with this tag match your filters." else "No works in this fandom match your filters."
                         } else {
-                            "AO3 has no works for this fandom right now."
+                            "AO3 has no works for this ${if (isTag) "tag" else "fandom"} right now."
                         },
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
                         primaryActionLabel = if (narrowed) "Clear Filters" else null,

@@ -46,7 +46,6 @@ import io.github.cidy02.kudos.browse.BrowseScreen
 import io.github.cidy02.kudos.browse.FandomVisits
 import io.github.cidy02.kudos.browse.FandomListScreen
 import io.github.cidy02.kudos.browse.FandomWorksScreen
-import io.github.cidy02.kudos.browse.TagWorksScreen
 import io.github.cidy02.kudos.comments.CommentsScreen
 import io.github.cidy02.kudos.core.model.KudosSettings
 import io.github.cidy02.kudos.home.HomeScreen
@@ -458,14 +457,15 @@ fun AppNavHost(
             if (tagName.isNullOrBlank()) {
                 navController.popBackStack()
             } else {
-                TagWorksScreen(
-                    tagName = tagName,
-                    repository = container.searchRepository,
+                FandomWorksScreen(
+                    fandomName = tagName,
+                    isTag = true,
                     workRepository = container.workRepository,
                     settingsRepository = container.settingsRepository,
                     privacyGate = container.privacyGate,
                     workImporter = container.workImporter,
                     readingQueueRepository = container.readingQueueRepository,
+                    repository = container.browseRepository,
                     onOpenWork = { work ->
                         navigateToWorkDetail(WorkDetailSource.RemoteSummary(work))
                     }
