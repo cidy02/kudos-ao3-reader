@@ -29,6 +29,8 @@ class KokoroTTSController(private val context: Context) : TTSService {
     private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
     private var tts: OfflineTts? = null
     @Volatile private var disposed = false
+    /** The pack is here but would not open: not tried again for every stretch (A49 F4). */
+    @Volatile private var failedToOpen = false
     
     private val _status = MutableStateFlow(SpeechStatus.UNAVAILABLE)
     override val status: StateFlow<SpeechStatus> = _status.asStateFlow()
@@ -96,16 +98,20 @@ class KokoroTTSController(private val context: Context) : TTSService {
             _status.value = SpeechStatus.STOPPED
         } catch (e: Exception) {
             Log.e("KokoroTTS", "Failed to initialize engine", e)
+            failedToOpen = true
             _status.value = SpeechStatus.UNAVAILABLE
         }
     }
 
+    /** Opens the pack if it is not open yet; false when it is missing or will not open. */
+    fun ensureReady(): Boolean {
+        if (disposed || failedToOpen) return false
+        if (tts == null) initEngine()
+        return tts != null
+    }
+
     override suspend fun speak(text: String) {
-        if (disposed) return
-        if (tts == null) {
-            initEngine()
-            if (tts == null) return
-        }
+        if (!ensureReady()) return
         
         val previous = synthesisJob
         stop()

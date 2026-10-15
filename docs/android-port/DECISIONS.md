@@ -1885,3 +1885,6 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   "left out". Reverse: the commit that names 3ee.
 - **2026-10-14 · Codex's A49 findings F5, F6, F7, F8, F12, F13 fixed (3ef).** Each read against
   the code first; all six real. Reverse: the commit that names 3ef.
+- **2026-10-14 · Codex's A49 findings F1 to F4 fixed (3eg).** Read Aloud: the speech engine
+  query in the manifest; speech handed over under Stop's lock; one engine per reading;
+  the device's voice when the pack will not open. Reverse: the commit that names 3eg.
