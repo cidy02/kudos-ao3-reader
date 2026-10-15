@@ -214,11 +214,10 @@ private fun PromptMemeCard(prompt: AO3PromptMemePrompt, large: Boolean, inFlight
             if (prompt.title.isNotEmpty()) Text(prompt.title, color = tokens.primaryInk, fontSize = 15.sp,
                 lineHeight = 21.sp, fontWeight = FontWeight.SemiBold)
             Text(prompt.promptText, color = tokens.primaryInk, fontSize = 14.5.sp, lineHeight = 21.sp)
-            if (prompt.tags.isNotEmpty()) CompositionLocalProvider(
-                LocalKudosTokens provides tokens.copy(primaryInk = tokens.secondaryInk.copy(alpha = 0.65f))
-            ) {
-                SubjectChip(prompt.tags.joinToString(", "), maxLines = if (large) Int.MAX_VALUE else 1)
-            }
+            // iOS's caption line, not a chip: the box made the tags look like one tappable tag.
+            if (prompt.tags.isNotEmpty()) Text(prompt.tags.joinToString(", "), color = tokens.secondaryInk.copy(alpha = 0.65f),
+                fontSize = 11.5.sp, lineHeight = 17.sp, maxLines = if (large) Int.MAX_VALUE else 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
             Text(if (prompt.isAnonymous) "Posted anonymously" else prompt.displayedOwner ?: "Unknown poster",
                 color = tokens.secondaryInk, fontSize = 11.5.sp, lineHeight = 17.sp)
             if (prompt.claimedByCurrentUser) {
