@@ -141,8 +141,13 @@ class SettingsRepository(
             rate = ReaderSpeechPreferences.clampRate(
                 prefs[Keys.SpeechRate] ?: ReaderSpeechPreferences.DEFAULT_RATE
             ),
-            voiceIdentifier = prefs[Keys.SpeechVoiceIdentifier]?.takeIf { it.isNotBlank() }
+            voiceIdentifier = prefs[Keys.SpeechVoiceIdentifier]?.takeIf { it.isNotBlank() },
+            readAuthorNotes = prefs[Keys.SpeechReadAuthorNotes] ?: true
         )
+    }
+
+    suspend fun updateSpeechReadAuthorNotes(on: Boolean) {
+        dataStore.edit { it[Keys.SpeechReadAuthorNotes] = on }
     }
 
     suspend fun updateSpeechRate(rate: Float) {
@@ -622,6 +627,7 @@ class SettingsRepository(
         val RecentWritingTags = stringPreferencesKey("writing.recentTags.v1")
         val SpeechRate = floatPreferencesKey("readerSpeechRate")
         val SpeechVoiceIdentifier = stringPreferencesKey("readerSpeechVoiceID")
+        val SpeechReadAuthorNotes = booleanPreferencesKey("readerSpeechReadAuthorNotes")
         val ReaderFontId = stringPreferencesKey("readerFontID")
         val ReaderMode = stringPreferencesKey("readerMode")
         val ReaderTwoPage = booleanPreferencesKey("readerTwoPage")

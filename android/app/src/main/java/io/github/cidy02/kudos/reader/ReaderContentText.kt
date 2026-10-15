@@ -5,6 +5,7 @@ import kotlinx.coroutines.withContext
 import org.readium.r2.shared.ExperimentalReadiumApi
 import org.readium.r2.shared.publication.Locator
 import org.readium.r2.shared.publication.Publication
+import org.readium.r2.shared.publication.services.content.Content
 import org.readium.r2.shared.publication.services.content.content
 
 /**
@@ -21,18 +22,29 @@ object ReaderContentText {
 
     suspend fun paragraphs(
         publication: Publication,
-        from: Locator? = null
+        from: Locator? = null,
+        readAuthorNotes: Boolean = true
     ): List<String> = withContext(Dispatchers.IO) {
         val content = runCatching { publication.content(from) }.getOrNull()
             ?: return@withContext emptyList()
-        val full = runCatching { content.text() }.getOrNull().orEmpty()
-        if (full.isBlank()) return@withContext emptyList()
+        // Each text element is a paragraph; a blockquote is a quote (where AO3 puts a note).
+        val blocks = runCatching { content.elements() }.getOrNull().orEmpty().mapNotNull { element ->
+            val text = (element as? Content.TextualElement)?.text?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+            SpeechBlock(text, (element as? Content.TextElement)?.role is Content.TextElement.Role.Quote)
+        }
+        if (blocks.isEmpty()) return@withContext emptyList()
         // To the end of the work, as iOS reads on. It stopped after 80,000 characters (about an
         // hour and a half), though `text()` had already read the rest in.
         // ponytail: the rest of the work is read in before the first word; walk
         // `content.iterator()` lazily if a very long work is slow to start.
-        speakableParagraphs(full).flatMap(::splitIntoSpeakableChunks)
+        speakableParagraphs(blocks, readAuthorNotes).flatMap(::splitIntoSpeakableChunks)
     }
+
+    internal data class SpeechBlock(val text: String, val isQuote: Boolean = false)
+
+    /** One paragraph per line, none a quote: what the tests give. */
+    internal fun speakableParagraphs(text: String): List<String> =
+        speakableParagraphs(text.split('\n').map { SpeechBlock(it) }, readAuthorNotes = true)
 
     /**
      * iOS's `KokoroBoilerplateFilter` (3ea). Readium gives one paragraph per line; they were
@@ -41,10 +53,29 @@ object ReaderContentText {
      * stretch, a paragraph that is nothing but a label is dropped (a note that only starts
      * with one is read), and a link is said as its site ("tumblr.com.").
      */
-    internal fun speakableParagraphs(text: String): List<String> =
-        text.split('\n').map { it.replace(WHITESPACE, " ").trim() }
-            .filter { it.isNotEmpty() && normalized(it) !in LABELS && normalized(it) != KUDOS_PLUG }
-            .map { paragraph -> URL.replace(paragraph) { host(it.value) } }
+    internal fun speakableParagraphs(blocks: List<SpeechBlock>, readAuthorNotes: Boolean): List<String> {
+        val spoken = mutableListOf<String>()
+        // iOS's rule for "Read author's notes" off: a note runs from its label to the end of the
+        // quotation after it, and anything that is not a quote ends it. A label followed by a
+        // plain paragraph leaves that paragraph spoken: a note read that was meant to be
+        // skipped is far better than a chapter skipped that was meant to be read.
+        var inSkippedNote = false
+        for (block in blocks) {
+            val paragraph = block.text.replace(WHITESPACE, " ").trim()
+            if (paragraph.isEmpty()) continue
+            val plain = normalized(paragraph)
+            if (plain in LABELS || plain == KUDOS_PLUG) {
+                inSkippedNote = !readAuthorNotes && plain in LABELS
+                continue
+            }
+            if (inSkippedNote) {
+                if (block.isQuote) continue
+                inSkippedNote = false
+            }
+            spoken += URL.replace(paragraph) { host(it.value) }
+        }
+        return spoken
+    }
 
     private val WHITESPACE = Regex("\\s+")
     private val URL = Regex("(?:https?://|www\\.)\\S+")

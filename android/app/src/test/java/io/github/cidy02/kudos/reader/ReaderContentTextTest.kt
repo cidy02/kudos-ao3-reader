@@ -47,6 +47,27 @@ class ReaderContentTextTest {
     }
 
     @Test
+    fun withAuthorsNotesOffANoteAndItsLabelAreSkippedButNotTheStory() {
+        val blocks = listOf(
+            ReaderContentText.SpeechBlock("Chapter Notes"),
+            ReaderContentText.SpeechBlock("Content warning: a storm.", isQuote = true),
+            ReaderContentText.SpeechBlock("Still the note.", isQuote = true),
+            ReaderContentText.SpeechBlock("The city was quiet."),
+            ReaderContentText.SpeechBlock("End Notes"),
+            ReaderContentText.SpeechBlock("A label with no quotation after it leaves this spoken.")
+        )
+        assertEquals(
+            listOf("The city was quiet.", "A label with no quotation after it leaves this spoken."),
+            ReaderContentText.speakableParagraphs(blocks, readAuthorNotes = false)
+        )
+        assertEquals(
+            listOf("Content warning: a storm.", "Still the note.", "The city was quiet.",
+                "A label with no quotation after it leaves this spoken."),
+            ReaderContentText.speakableParagraphs(blocks, readAuthorNotes = true)
+        )
+    }
+
+    @Test
     fun aLinkIsSaidAsItsSite() {
         assertEquals(
             listOf("Posted at archiveofourown.org. Updates: wittyy-name.tumblr.com and example.com."),
