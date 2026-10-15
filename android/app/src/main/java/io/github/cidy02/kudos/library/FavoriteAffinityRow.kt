@@ -289,7 +289,11 @@ internal fun FavoriteAffinityList(state: LibraryUiState, onScope: (FavoriteScope
     val lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
     LaunchedEffect(store, session, round, lifecycle) {
         complete = null
-        if (store != null) lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) { complete = store.prefetch(usernames) }
+        // Null first on every return, so answers refreshed meanwhile are read again (A51 F5).
+        if (store != null) lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            complete = null
+            complete = store.prefetch(usernames)
+        }
     }
     // Both halves: the round settled, and its answers have not gone stale since.
     val ready = store != null && complete == true && usernames.all { store.cached(it) != null }

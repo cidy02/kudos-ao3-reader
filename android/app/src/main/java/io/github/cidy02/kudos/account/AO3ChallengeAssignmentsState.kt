@@ -50,7 +50,10 @@ internal data class ChallengeAssignmentsUiState(
      * kept its earlier rows in memory, hidden on screen but still offered to claim or report
      * (A37 F8); iOS starts every load from nothing.
      */
-    private fun usable(list: SignUpAssignmentList) = if (list in errors) emptyList() else rows(list)
+    private fun usable(list: SignUpAssignmentList) = if (list in errors ||
+        // Open is read only after Complete (as iOS groups them): when Complete failed, Open was
+        // not read again and its old rows are not to be written from (A51 F8).
+        list == SignUpAssignmentList.Open && SignUpAssignmentList.Complete in errors) emptyList() else rows(list)
     fun candidates(kind: AssignmentWrite) = if (kind == AssignmentWrite.Default)
         (usable(SignUpAssignmentList.Complete) + usable(SignUpAssignmentList.Open)).filter { !it.fulfilled && !it.defaulted }
     else usable(SignUpAssignmentList.Defaults)

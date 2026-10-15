@@ -217,8 +217,14 @@ class AO3CommentRepository(
         }
     }
 
-    suspend fun deleteComment(path: String): AO3Result<Unit> {
-        val url = AO3WriteUrls.absoluteUrl(path) ?: return AO3Result.Failure(AO3Error.BadRequest)
+    /**
+     * Deleted at the comment itself, `/comments/<id>` with `_method=delete`, as iOS. AO3's Delete
+     * link is a confirmation page (`/comments/delete_comment?id=`), and posting to it deleted
+     * nothing (A51 F2); it still decides whether Delete is offered.
+     */
+    suspend fun deleteComment(commentId: Long): AO3Result<Unit> {
+        val url = runCatching { AO3CommentUrls.commentThreadUrl(commentId) }.getOrNull()
+            ?: return AO3Result.Failure(AO3Error.BadRequest)
         val session = authenticatedClient.sessionGeneration()
         val page = when (val result = authenticatedClient.getAuthenticated(url)) {
             is AO3Result.Failure -> return result

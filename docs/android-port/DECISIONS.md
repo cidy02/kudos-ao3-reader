@@ -1924,3 +1924,6 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   are a caption line, not a chip. Reverse: the commit that names 3es.
 - **2026-10-15 · Queue rows show a chevron (3eu).** As iOS's list rows and Android's other
   opening rows. A37 F3 left open (shared with iOS). Reverse: the commit that names 3eu.
+- **2026-10-15 · A51 fixed: writes are one-shot to OkHttp; comment delete at the comment;
+  and four screen-state fixes (3ev).** F3 not a fault (disclosed); F4 and F6 left. Reverse:
+  the commit that names 3ev.

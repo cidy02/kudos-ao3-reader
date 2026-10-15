@@ -101,7 +101,7 @@ fun SeriesWorksScreen(
         return scope.launch {
             val next = when (val result = seriesRepository.detailPage(seriesUrl, page, bypassCache)) {
                 is AO3Result.Success -> SeriesWorksState.Loaded(result.value, result.isStale)
-                is AO3Result.Failure -> shown?.copy(pageError = result.error.displayMessage() to page)
+                is AO3Result.Failure -> shown?.copy(loadingPage = null, pageError = result.error.displayMessage() to page)
                     ?: SeriesWorksState.Error(result.error.displayMessage(), page)
             }
             if (generation == loadGeneration) state = next

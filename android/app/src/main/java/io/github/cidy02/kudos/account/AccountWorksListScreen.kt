@@ -234,7 +234,7 @@ fun AccountWorksListScreen(
         confirmBeforeDelete = true,
         onConfirm = {
             confirmClearHistory = false
-            clearScope.launch { unsubscribeState.confirmClearHistory { historyCleared = true } }
+            clearScope.launch { unsubscribeState.confirmClearHistory { historyCleared = true; viewModel.historyCleared() } }
         },
         onDismissRequest = { confirmClearHistory = false }
     )

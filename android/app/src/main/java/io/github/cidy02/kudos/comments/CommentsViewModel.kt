@@ -725,12 +725,13 @@ class CommentsViewModel(
     }
 
     fun deleteComment(comment: AO3Comment) {
-        val path = comment.deletePath ?: return
+        if (comment.deletePath == null) return
+        val id = comment.id?.toLongOrNull() ?: return
         if (syncViewer()) return
         val asked = currentViewer()
         viewModelScope.launch {
             _submitting.value = true
-            val result = repository.deleteComment(path)
+            val result = repository.deleteComment(id)
             // The reader changed while AO3 answered: the screen is the new reader's, and stays as it is.
             if (currentViewer() == asked) when (result) {
                 is AO3Result.Success -> {
