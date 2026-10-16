@@ -30,21 +30,27 @@ object ReadiumTocAdapter {
      * Normalize the publication's TOC + reading order into one [ReaderSection]
      * per spine item (kinds + story-chapter numbering for the progress pill).
      */
-    fun sections(publication: Publication): List<ReaderSection> {
-        val spineHrefs = publication.readingOrder.map { it.url().toString() }
+    fun sections(publication: Publication): List<ReaderSection> =
+        sections(publication.tableOfContents, publication.readingOrder)
+
+    internal fun sections(toc: List<Link>, readingOrder: List<Link>): List<ReaderSection> {
+        val spineHrefs = readingOrder.map { it.url().toString() }
         val spineKeyToIndex = LinkedHashMap<String, Int>()
         spineHrefs.forEachIndexed { index, href ->
             val key = ReaderSectionBuilder.hrefKey(href)
-            // First spine win for reverse lookup; TOC→spine still last-wins via build().
+            // First spine wins for reverse lookup.
             if (key !in spineKeyToIndex) spineKeyToIndex[key] = index
         }
 
         val rawEntries = ArrayList<ReaderSectionBuilder.RawTOCEntry>()
-        for (link in publication.tableOfContents.flattenLinks()) {
+        val seen = mutableSetOf<Int>()
+        for (link in toc.flattenLinks()) {
             val href = link.url().toString()
             if (href.isBlank()) continue
             val key = ReaderSectionBuilder.hrefKey(href)
             val spineIndex = spineKeyToIndex[key] ?: continue
+            // Preorder traversal: the outer title owns a shared file, as on iOS.
+            if (!seen.add(spineIndex)) continue
             val title = link.title?.trim().orEmpty().ifEmpty { "Section ${spineIndex + 1}" }
             rawEntries += ReaderSectionBuilder.RawTOCEntry(title = title, spineIndex = spineIndex)
         }

@@ -183,7 +183,7 @@ fun FandomFamilyRow(
     sort: FandomFamilySort,
     library: FandomLibraryIndex,
     palette: SubjectPalette,
-    onOpenFamily: (AO3Fandom) -> Unit,
+    onOpenFamily: (FandomFamily) -> Unit,
     onOpenMember: (AO3Fandom) -> Unit
 ) {
     if (family.memberCount == 1) {
@@ -268,7 +268,7 @@ private fun FamilyBlock(
     sort: FandomFamilySort,
     library: FandomLibraryIndex,
     palette: SubjectPalette,
-    onOpenFamily: (AO3Fandom) -> Unit,
+    onOpenFamily: (FandomFamily) -> Unit,
     onOpenMember: (AO3Fandom) -> Unit
 ) {
     val tokens = LocalKudosTokens.current
@@ -277,7 +277,7 @@ private fun FamilyBlock(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .clickable { onOpenFamily(first.fandom) }
+                .clickable { onOpenFamily(family) }
                 .padding(horizontal = 16.dp, vertical = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(11.dp)
         ) {

@@ -64,7 +64,7 @@ object ReaderProgressDisplay {
             ReaderSectionKind.SUMMARY -> "Summary"
             ReaderSectionKind.AFTERWORD -> "Afterword"
             ReaderSectionKind.CHAPTER -> {
-                val i = section.storyChapterIndex ?: return null
+                val i = section.storyChapterIndex ?: 1
                 val total = maxOf(storyTotal, i)
                 "Chapter $i of $total"
             }

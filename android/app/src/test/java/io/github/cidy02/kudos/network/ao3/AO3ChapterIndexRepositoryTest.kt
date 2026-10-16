@@ -29,6 +29,16 @@ class AO3ChapterIndexRepositoryTest {
             headers: Map<String, String>): AO3Result<AO3HttpResponse> = error("The index never writes")
     }
 
+    // ReaderSectionTests.clampedChapterPositionStaysInRangeOrNilWhenNoChapters.
+    @Test fun chapterPositionsClampToTheFirstOrLastChapter() = runBlocking<Unit> {
+        val repository = AO3ChapterIndexRepository(Anonymous(AO3Result.Success(page)))
+        assertEquals(1001L, repository.chapterForPosition(123, 0)?.chapterId)
+        assertEquals(1002L, repository.chapterForPosition(123, 99)?.chapterId)
+        assertEquals(1001L, repository.chapterForPosition(123, 1)?.chapterId)
+        val empty = page.copy(body = "<ol class='chapter index group'></ol>")
+        assertNull(AO3ChapterIndexRepository(Anonymous(AO3Result.Success(empty))).chapterForPosition(123, 5))
+    }
+
     @Test
     fun `a signed-in reader's index is read once in their session and never without it`() = runBlocking<Unit> {
         val anonymous = Anonymous(AO3Result.Failure(AO3Error.AuthenticationRequired))

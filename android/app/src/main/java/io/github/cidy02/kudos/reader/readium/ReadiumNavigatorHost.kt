@@ -241,10 +241,11 @@ fun ReadiumNavigatorHost(
 }
 
 /** Same scrolling element/axes used by Readium's bundled scrollToPosition. No network. */
-private val SCROLL_EXTENT_SCRIPT = """
+internal val SCROLL_EXTENT_SCRIPT = """
     (function() {
         var e = document.scrollingElement;
-        if (!e || document.readyState !== 'complete') return null;
+        if (!e || document.readyState !== 'complete' || !document.body || !document.body.firstChild ||
+            (window.innerWidth || 0) < 32 || (window.innerHeight || 0) < 32) return null;
         var vertical = getComputedStyle(document.documentElement).writingMode.startsWith('vertical');
         return vertical
             ? {offset: Math.abs(e.scrollLeft), extent: e.clientWidth, range: e.scrollWidth}

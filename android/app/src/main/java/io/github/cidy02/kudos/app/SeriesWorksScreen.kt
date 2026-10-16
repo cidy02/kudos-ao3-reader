@@ -114,7 +114,7 @@ fun SeriesWorksScreen(
     val detail = (state as? SeriesWorksState.Loaded)?.detail
     val title = detail?.title ?: "Series"
     val username = (accountState as? io.github.cidy02.kudos.auth.AO3AuthState.SignedIn)?.username
-    val canEdit = username != null && detail?.creatorUsernames?.any { it.equals(username, true) } == true
+    val canEdit = io.github.cidy02.kudos.network.ao3.author.isSeriesCreator(detail?.creatorUsernames.orEmpty(), username)
     val seriesID = Regex("/series/([0-9]+)").find(seriesUrl)?.groupValues?.get(1)?.toLongOrNull()
     val editMode = editing
     if (editMode != null && seriesID != null && formRepository != null && writes != null) {

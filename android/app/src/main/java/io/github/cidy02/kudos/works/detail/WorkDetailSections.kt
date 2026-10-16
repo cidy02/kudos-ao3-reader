@@ -312,7 +312,7 @@ fun WorkDetailFactsCard(
 
         if (hasHeadline) {
             if (needsDivider) SubjectRowSeparator(inset = 0.dp)
-            val updatedValue = if (updatedDate.isNotBlank()) "upd $updatedDate" else null
+            val updatedValue = if (updatedDate.isNotBlank()) "upd ${WorkDetailDates.displayDate(updatedDate)}" else null
             SubjectFormRow(
                 label = headlineSegments.joinToString(" · "),
                 value = updatedValue
@@ -324,7 +324,7 @@ fun WorkDetailFactsCard(
             if (needsDivider) SubjectRowSeparator(inset = 0.dp)
             SubjectFormRow(
                 label = "Published",
-                value = publishedDate
+                value = WorkDetailDates.displayDate(publishedDate)
             )
         }
     }

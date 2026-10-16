@@ -105,6 +105,16 @@ data class SavedWork(
     /** Repository-derived from the shared AO3 identity matcher. Local imports have no AO3 id. */
     val hasAo3WorkId: Boolean = sourceUrl.isNotBlank()
 ) {
+    /** iOS WorkOriginTests: unavailable metadata is not evidence that a local copy exists. */
+    val preservationBadge: String?
+        get() = if (!ao3Unavailable) null else if (hasEpub) "Last Copy" else "Unavailable"
+
+    /** Non-AO3 imports have no declared unfinished status in the existing format. */
+    val knownCompletion: Boolean?
+        get() = if (isComplete) true
+        else if (io.github.cidy02.kudos.works.WorkIdentityIndex.ao3WorkId(this) != null) false
+        else null
+
     /** iOS `SavedWork.isDownloaded`: a file on-device that the reader chose to keep. */
     val isDownloaded: Boolean
         get() = WorkDownloadSemantics.isDownloaded(

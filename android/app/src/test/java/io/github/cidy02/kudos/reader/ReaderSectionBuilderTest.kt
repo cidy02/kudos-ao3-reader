@@ -10,6 +10,17 @@ class ReaderSectionBuilderTest {
     private fun raw(title: String, spineIndex: Int) =
         ReaderSectionBuilder.RawTOCEntry(title, spineIndex)
 
+    // ReaderSectionTests.unmappableSectionAndOutOfRangeFallBackToChapter1.
+    @Test fun commentsFallbacksKeepAChapterWhenSectionsAreMissing() {
+        val sections = ReaderSectionBuilder.build(emptyList(), listOf("stray.xhtml"))
+        assertEquals(ReaderSectionKind.OTHER, sections.single().kind)
+        assertEquals(1, sections.commentsChapter(0))
+        assertEquals(1, sections.commentsChapter(99))
+        assertEquals(1, emptyList<ReaderSection>().commentsChapter(0))
+        assertEquals(1, emptyList<ReaderSection>().commentsChapter(-1))
+        org.junit.Assert.assertNull(sections.commentsChapter(null))
+    }
+
     @Test
     fun classifiesPrefaceSummaryChapterAfterword() {
         val spine = listOf("p.xhtml", "s.xhtml", "c1.xhtml", "c2.xhtml", "a.xhtml")

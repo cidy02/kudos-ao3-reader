@@ -252,7 +252,7 @@ fun completionStatText(isComplete: Boolean?): String? {
     return when (isComplete) {
         true -> "Complete"
         false -> "In Progress"
-        null -> null
+        null -> "Unknown"
     }
 }
 
@@ -471,7 +471,7 @@ fun statusChips(
             icon = Icons.Outlined.Schedule,
             tint = AO3StatusTint.orange
         )
-        // AO3 omits the marker rather than saying "unknown", so neither do we.
+        // An import with no declared status must not become a WIP.
         null -> WorkStatItem(
             text = "Unknown",
             accessibilityLabel = "Status: unknown",

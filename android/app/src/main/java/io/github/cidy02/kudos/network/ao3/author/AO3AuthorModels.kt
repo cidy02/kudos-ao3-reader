@@ -255,4 +255,12 @@ data class AO3AuthorBookmarksPage(
 internal fun ao3CreatorUsernames(addresses: Iterable<String>): List<String> = addresses.mapNotNull { address ->
     if (!io.github.cidy02.kudos.network.ao3.AO3RedirectCookieRelay.isTrustedUrl(address)) null
     else address.toHttpUrlOrNull()?.pathSegments?.takeIf { it.firstOrNull() == "users" }?.getOrNull(1)
+        ?.trim()?.takeIf { it.isNotEmpty() && !it.equals("orphan_account", ignoreCase = true) }
 }.distinct()
+
+/** iOS SeriesCreatorTests: registered account identity, never a displayed pseud or orphan. */
+internal fun isSeriesCreator(creatorUsernames: Iterable<String>, username: String?): Boolean {
+    val account = username?.trim()?.takeIf { it.isNotEmpty() } ?: return false
+    if (account.equals("orphan_account", ignoreCase = true)) return false
+    return creatorUsernames.any { it.trim().equals(account, ignoreCase = true) }
+}

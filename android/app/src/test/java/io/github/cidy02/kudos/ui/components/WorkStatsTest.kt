@@ -36,7 +36,7 @@ class WorkStatsTest {
     fun completionStatText_matchesHigReviewWording() {
         assertEquals("Complete", completionStatText(true))
         assertEquals("In Progress", completionStatText(false))
-        assertNull(completionStatText(null))
+        assertEquals("Unknown", completionStatText(null))
     }
 
     @Test

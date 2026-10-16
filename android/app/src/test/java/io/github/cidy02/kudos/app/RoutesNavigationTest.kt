@@ -60,6 +60,10 @@ class RoutesNavigationTest {
                 Routes.navArgOf("collectionSlug"), Routes.navArgOf("collectionTitle"),
                 navArgument("tab") { type = NavType.StringType; nullable = true; defaultValue = null }
             )) { }
+            composable(Routes.BrowseWorks, arguments = listOf(
+                Routes.navArgOf("fandomName"),
+                navArgument("fandoms") { type = NavType.StringType; nullable = true; defaultValue = null }
+            )) { }
             composable(Routes.Comments, arguments = listOf(
                 Routes.navArgOf("commentWorkId"),
                 navArgument(Routes.ARG_COMMENT_FOCUSED_ID) { type = NavType.StringType; nullable = true; defaultValue = null },
@@ -67,6 +71,17 @@ class RoutesNavigationTest {
                 navArgument("compose") { type = NavType.BoolType; defaultValue = false }
             )) { }
         }
+    }
+
+    @Test fun familyRouteKeepsEverySiblingAndSingleTagRoutesStillWork() {
+        val names = listOf("Doctor Who (2005)", "A+B / 日本語 & 100%")
+        navController.navigate(Routes.browseWorks("Doctor Who", names))
+        val entry = navController.currentBackStackEntry!!
+        assertEquals("Doctor Who", Routes.routeArg(entry, "fandomName"))
+        assertEquals(names, kotlinx.serialization.json.Json.decodeFromString<List<String>>(Routes.routeArg(entry, "fandoms")!!))
+        navController.navigate(Routes.browseWorks("A+B"))
+        assertEquals("A+B", Routes.routeArg(navController.currentBackStackEntry!!, "fandomName"))
+        org.junit.Assert.assertNull(Routes.routeArg(navController.currentBackStackEntry!!, "fandoms"))
     }
 
     @Test

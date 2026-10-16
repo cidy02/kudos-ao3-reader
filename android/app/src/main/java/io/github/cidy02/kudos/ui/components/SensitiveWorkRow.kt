@@ -756,7 +756,7 @@ fun SensitiveWorkRow(
         warnings = work.workWarnings,
         categories = work.workCategories,
         rating = work.rating,
-        isComplete = work.isComplete,
+        isComplete = work.knownCompletion,
         wordCount = work.wordCount,
         chapters = work.chapters,
         kudos = work.kudos,
