@@ -1173,8 +1173,9 @@ private fun AnnotateDialog(
     var note by remember { mutableStateOf("") }
 
     AlertDialog(
-        onDismissRequest = onDismiss,
-        // A tap beside the dialog no longer throws a typed note away (3dz); Cancel and Back do.
+        // Back keeps a typed note, as iOS's note editor saves its draft on the way out; only
+        // Cancel throws it away (A62 F03). A tap beside the dialog never does (3dz).
+        onDismissRequest = { if (note.isNotBlank()) onConfirm(selectedColor.raw, note) else onDismiss() },
         properties = DialogProperties(dismissOnClickOutside = note.isBlank()),
         title = { Text(if (state.asNote) "Add note" else "Highlight") },
         text = {

@@ -1436,7 +1436,10 @@ private fun WorkDetailContent(
                         )
                     }
 
-                    if (local?.hasEpub == true) {
+                    // Only a copy AO3 can give back: an import's EPUB may be the only one there is,
+                    // and iOS offers no download action for it at all (`WorkDownload.action`; A62 F01).
+                    if (local?.hasEpub == true &&
+                        io.github.cidy02.kudos.works.WorkIdentityIndex.ao3WorkId(local) != null) {
                         DropdownMenuItem(
                             text = { Text("Delete EPUB") },
                             enabled = !busy,

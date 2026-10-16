@@ -61,7 +61,6 @@ import io.github.cidy02.kudos.core.model.ReadingAnnotation
 import io.github.cidy02.kudos.works.WorkTags
 import io.github.cidy02.kudos.reader.readium.ReadiumNavigatorController
 import java.net.URI
-import kotlin.math.abs
 
 /** One labelled menu pill in the fanned-out menu (Contents, Find, Themes…). */
 data class ReaderFanMenuPill(
@@ -153,14 +152,18 @@ internal fun readerOriginalAction(available: Boolean, onOriginal: () -> Unit): R
         action = onOriginal
     ) else null
 
-/** Same near-position condition as AnnotationRepository.removeBookmarkNear. */
+/**
+ * The page's own bookmark: the same Readium position, as iOS's `bookmarkAtCurrentPosition`.
+ * Within 2% of the work, a long book's toggle reached a bookmark pages away (A62 F02).
+ */
 internal fun readerIsBookmarked(bookmarks: List<ReadingAnnotation>, progress: ReaderProgress?): Boolean {
-    if (progress == null || !readerHasBookmarkPosition(progress)) return false
-    val progression = progress.totalProgression ?: progress.scrollFraction
-    return bookmarks.any {
-        it.spineIndex == progress.spineIndex && abs(it.progression - progression) <= 0.02
-    }
+    val position = readerLocatorPosition(progress?.locatorJson) ?: return false
+    return bookmarks.any { readerLocatorPosition(it.locatorString) == position }
 }
+
+/** The Readium position a stored or live locator names, or null. */
+internal fun readerLocatorPosition(raw: String?): Int? =
+    raw?.let { ReadiumNavigatorController.locatorFromJson(it) }?.locations?.position
 
 /** iOS requires an actual locator position, not just fallback spine/scroll progress. */
 internal fun readerHasBookmarkPosition(progress: ReaderProgress?): Boolean =

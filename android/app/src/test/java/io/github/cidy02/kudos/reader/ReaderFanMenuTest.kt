@@ -134,18 +134,17 @@ class ReaderFanMenuTest {
         assertNull(readerShareUrl(work.copy(sourceUrl = "file:///tmp/original.html")))
     }
 
+    /** iOS `bookmarkAtCurrentPosition`: the same Readium position, nothing nearer or farther (A62 F02). */
     @Test
-    fun bookmarkStateMatchesTheExistingNearPositionToggleInsteadOfTheWholeChapter() {
-        val bookmark = ReadingAnnotation(workID = "work", spineIndex = 2, progression = 0.4)
-        val marks = listOf(bookmark)
-        val locator = ReaderLocatorCodec.encodeEnvelope(
-            """{"href":"two.xhtml","type":"application/xhtml+xml","locations":{"position":2}}"""
-        )
+    fun bookmarkStateIsThePagesOwnPosition() {
+        fun at(position: Int) = ReaderLocatorCodec.encodeEnvelope(
+            """{"href":"two.xhtml","type":"application/xhtml+xml","locations":{"position":$position}}"""
+        )!!
+        val marks = listOf(ReadingAnnotation(workID = "work", spineIndex = 2, progression = 0.4, locatorString = at(40)))
         assertFalse(readerIsBookmarked(marks, null))
         assertFalse(readerIsBookmarked(marks, ReaderProgress(2, 0.4)))
-        assertTrue(readerIsBookmarked(marks, ReaderProgress(2, 0.8, locator, totalProgression = 0.41)))
-        assertFalse(readerIsBookmarked(marks, ReaderProgress(2, 0.8, locator, totalProgression = 0.5)))
-        assertFalse(readerIsBookmarked(marks, ReaderProgress(1, 0.4, locator)))
-        assertTrue(readerIsBookmarked(marks, ReaderProgress(2, 0.4, locator)))
+        assertTrue(readerIsBookmarked(marks, ReaderProgress(2, 0.9, at(40), totalProgression = 0.9)))
+        assertFalse("a page away, though within 2% of the work",
+            readerIsBookmarked(marks, ReaderProgress(2, 0.4, at(41), totalProgression = 0.401)))
     }
 }

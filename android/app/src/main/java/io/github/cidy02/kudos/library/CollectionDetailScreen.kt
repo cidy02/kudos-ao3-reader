@@ -599,7 +599,8 @@ fun CollectionDetailScreen(
     if (showReorder && collection != null) {
         CollectionReorderSheet(
             collection = collection!!,
-            works = works,
+            // The reading order the page shows, not newest-added: Done saved that over it (A62 F26).
+            works = orderedWorks,
             workRepository = workRepository,
             onDismiss = { showReorder = false },
             onSaved = {
