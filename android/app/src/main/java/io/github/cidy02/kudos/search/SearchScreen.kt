@@ -9,6 +9,7 @@ import io.github.cidy02.kudos.core.model.PrivacySettings
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -74,12 +75,9 @@ import io.github.cidy02.kudos.network.ao3.search.AO3SearchRepository
 import io.github.cidy02.kudos.network.ao3.search.AO3SearchSort
 import io.github.cidy02.kudos.network.ao3.search.AO3WorkSummary
 import io.github.cidy02.kudos.ui.components.SensitiveWorkRow
-import io.github.cidy02.kudos.ui.components.DestructiveConfirmation
 import io.github.cidy02.kudos.ui.components.GlassFieldBar
 import io.github.cidy02.kudos.ui.components.KudosPaginationBar
 import io.github.cidy02.kudos.ui.components.KudosRefreshBox
-import io.github.cidy02.kudos.ui.components.RemoteWorkSelectionBar
-import io.github.cidy02.kudos.ui.components.RemoteWorkBulkActions
 import io.github.cidy02.kudos.ui.components.SelectableRemoteWorkRow
 import io.github.cidy02.kudos.ui.components.WorkBulkActionBar
 import io.github.cidy02.kudos.ui.components.rememberRemoteWorkSelection
@@ -187,10 +185,10 @@ fun SearchScreen(
     var showFilterSheet by remember { mutableStateOf(false) }
     var showSaveSheet by remember { mutableStateOf(false) }
     var saveName by remember { mutableStateOf("") }
-    var pendingDeleteSearch by remember { mutableStateOf<SavedSearch?>(null) }
+    var pendingDeleteCollection by remember { mutableStateOf<io.github.cidy02.kudos.core.model.WorkCollection?>(null) }
+    var localActionError by remember { mutableStateOf<String?>(null) }
     var expandAllCards by remember { mutableStateOf(false) }
     var moreExpanded by remember { mutableStateOf(false) }
-    var bulkBusy by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val exitSearch = LocalSearchExit.current
     val overlay = LocalShellOverlayState.current
@@ -277,18 +275,6 @@ fun SearchScreen(
         saveName = ""
     }
 
-    DestructiveConfirmation(
-        show = pendingDeleteSearch != null,
-        title = "Delete saved search?",
-        text = "This will permanently remove “${pendingDeleteSearch?.name}” from your device.",
-        confirmBeforeDelete = true,
-        onConfirm = {
-            val id = pendingDeleteSearch?.id ?: return@DestructiveConfirmation
-            pendingDeleteSearch = null
-            viewModel.deleteSavedSearch(id)
-        },
-        onDismissRequest = { pendingDeleteSearch = null }
-    )
 
     val errorState = state as? SearchUiState.Error
     val resultsState = (state as? SearchUiState.Results) ?: errorState?.stale
@@ -391,7 +377,8 @@ fun SearchScreen(
                     },
                     onFilterLibraryFandom = onFilterLibraryFandom,
                     onFilterLibraryTag = onFilterLibraryTag,
-                    onOpenCollection = onOpenCollection
+                    onOpenCollection = onOpenCollection,
+                    onDeleteCollection = { pendingDeleteCollection = it }
                 )
                 state is SearchUiState.Loading -> SearchSkeletonList()
                 resultsState != null -> {
@@ -478,7 +465,7 @@ fun SearchScreen(
                         leaveSelection()
                         viewModel.runSavedSearch(it)
                     },
-                    onDelete = { pendingDeleteSearch = it }
+                    onDelete = { viewModel.deleteSavedSearch(it.id) }
                 )
                 else -> SearchPrompt()
             }
@@ -502,34 +489,34 @@ fun SearchScreen(
                 }
             )
         }
-        if (selectingRemote && workImporter != null && resultsState != null) {
-            RemoteWorkSelectionBar(
-                state = remoteSelection,
-                busy = bulkBusy,
-                onSaveToLibrary = {
-                    val picked = remoteSelection.selectedIn(resultsState.works.map { it.remote })
-                    scope.launch {
-                        bulkBusy = true
-                        RemoteWorkBulkActions.saveToLibrary(picked, workImporter)
-                        bulkBusy = false
-                        remoteSelection.exit()
-                    }
-                },
-                onSaveForLater = {
-                    val queues = queueRepository ?: return@RemoteWorkSelectionBar
-                    val picked = remoteSelection.selectedIn(resultsState.works.map { it.remote })
-                    scope.launch {
-                        bulkBusy = true
-                        RemoteWorkBulkActions.saveForLater(picked, workImporter, queues)
-                        bulkBusy = false
-                        remoteSelection.exit()
-                    }
-                }
-            )
+        if (workImporter != null && resultsState != null) {
+            io.github.cidy02.kudos.ui.components.RemoteWorkSelectionActions(
+                remoteSelection, resultsState.works.map { it.remote }, workImporter, queueRepository)
         }
     }
 
     val context = LocalContext.current
+    pendingDeleteCollection?.let { collection ->
+        io.github.cidy02.kudos.ui.components.DestructiveConfirmation(
+            show = true, title = "Delete “${collection.name}”?",
+            text = "Kudos will move this collection to Recently Deleted for 90 days. Its works will stay in your Library.",
+            confirmText = "Delete", confirmBeforeDelete = true,
+            onConfirm = {
+                pendingDeleteCollection = null
+                scope.launch {
+                    try {
+                        workRepository?.softDeleteCollection(collection.id)
+                        viewModel.refreshLocalCollections()
+                    } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
+                    catch (failure: Exception) { localActionError = failure.message ?: "The collection couldn't be deleted." }
+                }
+            }, onDismissRequest = { pendingDeleteCollection = null })
+    }
+    localActionError?.let { message ->
+        androidx.compose.material3.AlertDialog(onDismissRequest = { localActionError = null },
+            title = { Text("Action Failed") }, text = { Text(message) },
+            confirmButton = { TextButton(onClick = { localActionError = null }) { Text("OK") } })
+    }
     val autocompleteRepository = remember {
         (context.applicationContext as? io.github.cidy02.kudos.KudosApplication)
             ?.container?.tagAutocompleteRepository
@@ -687,6 +674,7 @@ private fun SearchChrome(
                         )
                     }
                     DropdownMenu(expanded = moreExpanded, onDismissRequest = { onMoreExpanded(false) }) {
+                        io.github.cidy02.kudos.ui.components.MatureWorkMenuItem { onMoreExpanded(false) }
                         DropdownMenuItem(
                             text = { Text("Select") },
                             onClick = {
@@ -887,7 +875,8 @@ private fun LocalMatchesList(
     onSearchFandom: (String) -> Unit,
     onFilterLibraryFandom: (String) -> Unit,
     onFilterLibraryTag: (String) -> Unit,
-    onOpenCollection: (String) -> Unit
+    onOpenCollection: (String) -> Unit,
+    onDeleteCollection: (io.github.cidy02.kudos.core.model.WorkCollection) -> Unit
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -906,7 +895,13 @@ private fun LocalMatchesList(
             item { SectionRuleHeader(title = "In Your Library", modifier = Modifier.padding(top = 8.dp)) }
             items(matches.works, key = { it.id }) { work ->
                 val selected = work.id in selection
-                SensitiveWorkRow(
+                val environment = io.github.cidy02.kudos.ui.components.LocalWorkRowEnvironment.current
+                if (!selecting && environment != null) {
+                    Box(Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
+                        io.github.cidy02.kudos.ui.components.LocalActionableWorkRow(
+                            work, environment, onSelect = onSelect, expandAll = false)
+                    }
+                } else SensitiveWorkRow(
                     work = work,
                     onOpenWork = { onOpenWork(work) },
                     selected = selecting && selected,
@@ -969,11 +964,18 @@ private fun LocalMatchesList(
                 SectionRuleHeader(title = "Collections", modifier = Modifier.padding(top = 8.dp))
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     matches.collections.forEach { collection ->
-                        MatchRow(
-                            icon = Icons.Outlined.CollectionsBookmark,
-                            title = collection.name,
-                            onClick = { onOpenCollection(collection.id) }
-                        )
+                        var menu by remember(collection.id) { mutableStateOf(false) }
+                        Box {
+                            MatchRow(
+                                icon = Icons.Outlined.CollectionsBookmark,
+                                title = collection.name,
+                                onClick = { onOpenCollection(collection.id) },
+                                onLongClick = { menu = true }
+                            )
+                            io.github.cidy02.kudos.library.CollectionCardMenu(menu, { menu = false }) {
+                                onDeleteCollection(collection)
+                            }
+                        }
                     }
                 }
             }
@@ -986,7 +988,8 @@ private fun MatchRow(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     title: String,
     onClick: () -> Unit,
-    trailing: String? = null
+    trailing: String? = null,
+    onLongClick: (() -> Unit)? = null
 ) {
     val tokens = LocalKudosTokens.current
     Row(
@@ -994,7 +997,7 @@ private fun MatchRow(
             .padding(horizontal = 16.dp)
             .fillMaxWidth()
             .subjectPanel()
-            .clickable(onClick = onClick)
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
             .padding(horizontal = 14.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -1089,7 +1092,7 @@ private fun SearchResultsList(
                     onPage = onPage
                 )
             }
-            items(works, key = { it.id }) { work ->
+            items(works, key = { it.remote.id }) { work ->
                 if (selecting) {
                     SelectableRemoteWorkRow(
                         work = work.remote,

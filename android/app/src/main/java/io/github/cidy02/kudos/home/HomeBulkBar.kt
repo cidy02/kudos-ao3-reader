@@ -57,7 +57,10 @@ fun HomeBulkBar(
         ) {
             TextButton(
                 enabled = enabled,
-                onClick = { controller.deleteTargets = selectedWorks }
+                onClick = {
+                    controller.deletingSelection = true
+                    controller.deleteTargets = selectedWorks
+                }
             ) {
                 Text("Delete", color = tokens.accent)
             }

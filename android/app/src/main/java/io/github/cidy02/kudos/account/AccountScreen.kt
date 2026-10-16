@@ -344,45 +344,11 @@ fun AccountScreen(
                     )
                     HorizontalDivider(modifier = Modifier.padding(start = 50.dp))
                     
-                    var moreOnAo3MenuOpen by remember { mutableStateOf(false) }
-                    Box {
-                        AccountScopeRow(
-                            title = "More on AO3",
-                            icon = Icons.Outlined.Public,
-                            onClick = { moreOnAo3MenuOpen = true }
-                        )
-                        DropdownMenu(
-                            expanded = moreOnAo3MenuOpen,
-                            onDismissRequest = { moreOnAo3MenuOpen = false }
-                        ) {
-                            val destinations = listOf(
-                                Triple("Drafts", Icons.Outlined.Drafts, "works/drafts"),
-                                Triple("Pseuds", Icons.Outlined.People, "pseuds"),
-                                Triple("Skins and site styles", Icons.Outlined.Palette, "skins"),
-                                Triple("Statistics", Icons.Outlined.BarChart, "stats"),
-                                Triple("Co-Creator Requests", Icons.Outlined.PersonAdd, "creatorships"),
-                                Triple("Sign-ups", Icons.Outlined.EditNote, "signups"),
-                                Triple("Assignments", Icons.AutoMirrored.Outlined.Assignment, "assignments"),
-                                Triple("Claims", Icons.Outlined.Flag, "claims"),
-                                Triple("Related works", Icons.AutoMirrored.Outlined.CallSplit, "related_works"),
-                                Triple("Gifts given and received", Icons.Outlined.CardGiftcard, "gifts")
-                            )
-                            destinations.forEach { (title, icon, pathSuffix) ->
-                                DropdownMenuItem(
-                                    text = { Text(title) },
-                                    leadingIcon = {
-                                        Icon(imageVector = icon, contentDescription = null)
-                                    },
-                                    onClick = {
-                                        moreOnAo3MenuOpen = false
-                                        if (username != null) {
-                                            onOpenWeb("https://archiveofourown.org/users/$username/$pathSuffix")
-                                        }
-                                    }
-                                )
-                            }
-                        }
-                    }
+                    AccountScopeRow(
+                        title = "More on AO3",
+                        icon = Icons.Outlined.Public,
+                        onClick = { onOpenWeb("native:more-on-ao3") }
+                    )
                 }
             }
         } else {

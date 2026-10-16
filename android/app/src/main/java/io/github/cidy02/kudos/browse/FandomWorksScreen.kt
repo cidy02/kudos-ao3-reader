@@ -59,8 +59,6 @@ import io.github.cidy02.kudos.works.WorkImporter
 import io.github.cidy02.kudos.library.ReadingQueueRepository
 import io.github.cidy02.kudos.ui.components.rememberRemoteWorkSelection
 import io.github.cidy02.kudos.ui.components.SelectableRemoteWorkRow
-import io.github.cidy02.kudos.ui.components.RemoteWorkSelectionBar
-import io.github.cidy02.kudos.ui.components.RemoteWorkBulkActions
 import kotlinx.coroutines.launch
 import io.github.cidy02.kudos.search.summaryLabels
 import io.github.cidy02.kudos.search.SearchResultsHero
@@ -95,8 +93,6 @@ fun FandomWorksScreen(
     var showMenu by remember { mutableStateOf(false) }
     var expandAllCards by remember { mutableStateOf(false) }
     val selection = rememberRemoteWorkSelection()
-    var bulkBusy by remember { mutableStateOf(false) }
-    var bulkStatus by remember { mutableStateOf<String?>(null) }
     
     // Guards a fast Previous/Next double-tap from letting the first (older) page's
     // response land after the second (newer) one and overwrite it.
@@ -174,6 +170,7 @@ fun FandomWorksScreen(
                     Icon(Icons.Default.MoreVert, contentDescription = null)
                 }
                 DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+                    io.github.cidy02.kudos.ui.components.MatureWorkMenuItem { showMenu = false }
                     if (workImporter != null) {
                         DropdownMenuItem(
                             text = { Text(if (selection.isSelecting) "Exit selection" else "Select") },
@@ -330,44 +327,12 @@ fun FandomWorksScreen(
                 }
             }
         }
-        if (selection.isSelecting && workImporter != null) {
-            RemoteWorkSelectionBar(
-                state = selection,
-                busy = bulkBusy,
-                onSaveToLibrary = {
-                    val picked = selection.selectedIn((state as? FandomWorksState.Loaded)?.page?.works.orEmpty())
-                    scope.launch {
-                        bulkBusy = true
-                        bulkStatus = RemoteWorkBulkActions.saveToLibrary(picked, workImporter)
-                        bulkBusy = false
-                        selection.exit()
-                    }
-                },
-                onSaveForLater = {
-                    val queues = readingQueueRepository ?: return@RemoteWorkSelectionBar
-                    val picked = selection.selectedIn((state as? FandomWorksState.Loaded)?.page?.works.orEmpty())
-                    scope.launch {
-                        bulkBusy = true
-                        bulkStatus = RemoteWorkBulkActions.saveForLater(picked, workImporter, queues)
-                        bulkBusy = false
-                        selection.exit()
-                    }
-                }
-            )
+        if (workImporter != null) {
+            io.github.cidy02.kudos.ui.components.RemoteWorkSelectionActions(
+                selection, (state as? FandomWorksState.Loaded)?.page?.works.orEmpty(), workImporter, readingQueueRepository)
         }
     }
 
-
-    bulkStatus?.let { message ->
-        androidx.compose.material3.AlertDialog(
-            onDismissRequest = { bulkStatus = null },
-            title = { Text("Selection") },
-            text = { Text(message) },
-            confirmButton = {
-                androidx.compose.material3.TextButton(onClick = { bulkStatus = null }) { Text("OK") }
-            }
-        )
-    }
 
     if (showFilterSheet) {
         SearchFilterSheet(

@@ -11,6 +11,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.click
+import androidx.compose.ui.test.longClick
 import androidx.compose.ui.geometry.Offset
 import io.github.cidy02.kudos.core.model.SavedWork
 import io.github.cidy02.kudos.ui.theme.KudosTheme
@@ -32,6 +33,20 @@ class SensitiveWorkRowPrivacyTest {
         id = "w1", title = "A Private Title", author = "someone",
         rating = "Explicit", workFandoms = listOf("A Fandom")
     )
+
+    @Test fun fallbackRemoteCopyLinkWritesTheActualUrl() {
+        val remote = io.github.cidy02.kudos.network.ao3.search.AO3WorkSummary(
+            id = 123, title = "Remote work", authors = listOf("A"), fandoms = emptyList(),
+            rating = "", warnings = emptyList(), categories = emptyList())
+        var clipboard: androidx.compose.ui.platform.ClipboardManager? = null
+        compose.setContent {
+            clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
+            KudosTheme(KudosThemeMode.Light) { SensitiveWorkRow(remote, onOpenWork = {}) }
+        }
+        compose.onNodeWithText("Remote work").performTouchInput { longClick() }
+        compose.onNodeWithText("Copy Link").performClick()
+        assertEquals(remote.workUrl, clipboard!!.getText()!!.text)
+    }
 
     @Test fun aBlurredRowIsOneRevealButtonThatNamesNothing() {
         var revealed = 0

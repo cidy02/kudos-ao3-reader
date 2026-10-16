@@ -2306,3 +2306,18 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   AO3's own "N more comments in this thread" opens that page in the app's web view (iOS opens
   the website; the in-app view keeps the demo off AO3). The rest go to brief 3fq. Reverse:
   the commit that names A63 F07.
+- **2026-10-16 · Brief 3fq: A63's main differences (Codex, reviewed, corrected and gated by
+  Claude).** F01: Home's bulk Delete always asks. F30, F08, F20: an AO3 result that is also in
+  the Library uses the local work (its blur, its reader, its menu) on author, series, Search
+  and Account lists. F17: Download for a selection of AO3 works fetches the EPUBs (one paced,
+  user-started request each; it stops at an outage). F12: a failed Search bulk action says
+  so and keeps the selection. F10, F11: AO3 result menus offer Read, Comments, Download,
+  Later, Queue, Finished, Collection and Work Details, as iOS (seen on the emulator); Copy
+  Link works where it remains. F05, F02, F03, F04: the shared queue, collection and tag
+  pickers everywhere. F09 (no extra ask for a saved search), F28 (Open on AO3 keeps the
+  pseud), F29 (More on AO3's full page), F06 (Show/Hide mature), F32 (the fandom index adjusts
+  by TalkBack). Claude's corrections: one new test called a suspend function outside a
+  coroutine and used a non-UUID id; the author list's tests tapped a Select button the card
+  now replaces; and the bulk-collection-picker test hung under Robolectric and ran the test
+  JVM out of memory (the dialog runs on a device), so it was removed with a note. Left for
+  3fq part 2: F13, F14, F18, F19, F21 to F24, F26, F27. Reverse: the commit that names 3fq.
