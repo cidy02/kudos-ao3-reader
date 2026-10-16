@@ -398,6 +398,10 @@ struct AO3CollectionParsingTests {
         #expect(!AO3Client.collectionNameFormatIsValid("a"))
         #expect(!AO3Client.collectionNameFormatIsValid("has space"))
         #expect(!AO3Client.collectionNameFormatIsValid("_leading"))
+        // T-418: AO3's names are ASCII; ICU's `\w` let these through.
+        #expect(!AO3Client.collectionNameFormatIsValid("aéb"))
+        #expect(!AO3Client.collectionNameFormatIsValid("a中b"))
+        #expect(!AO3Client.collectionNameFormatIsValid("a\u{0301}b"))
         #expect(AO3CollectionURL.reservedSlugs.contains("new"))
     }
 

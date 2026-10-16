@@ -155,8 +155,10 @@ extension AO3Client {
         }
     }
 
+    /// ASCII spelled out: ICU's `\w` (NSRegularExpression's) is Unicode, so "aéb" passed
+    /// (T-418; Android A60).
     static func collectionNameFormatIsValid(_ name: String) -> Bool {
-        guard let regex = try? NSRegularExpression(pattern: #"^[A-Za-z0-9]\w*[A-Za-z0-9]$"#) else {
+        guard let regex = try? NSRegularExpression(pattern: #"^[A-Za-z0-9][A-Za-z0-9_]*[A-Za-z0-9]$"#) else {
             return false
         }
         let range = NSRange(name.startIndex..<name.endIndex, in: name)
