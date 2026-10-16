@@ -105,7 +105,6 @@ fun AO3CollectionItemsScreen(
     val defaultTab = AO3CollectionItemTab.defaultTab(slug)
     // The scope's own default, unless the caller names a tab (Moderation opens Approved).
     var tab by remember(model) { mutableStateOf(state.tab) }
-    var confirming by remember(slug, generation, authState.isSignedIn) { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val tokens = LocalKudosTokens.current
     val palette = tokens.scopePalette
@@ -125,14 +124,14 @@ fun AO3CollectionItemsScreen(
             ) { Icon(Icons.Filled.Close, contentDescription = null) }
         }
         ToolbarCircleButton(
-            onClick = { if (canSubmit) confirming = true },
+            onClick = { if (canSubmit) scope.launch { model.confirmSubmit() } },
             accessibilityName = if (pending == 0) "Submit staged changes" else "Submit $pending staged changes",
             palette = palette, modifier = Modifier.alpha(if (canSubmit) 1f else 0.45f)
                 .semantics { if (!canSubmit) disabled() }
         ) { Icon(Icons.Filled.Check, contentDescription = null) }
     })
 
-    // The collection page uses AlertDialog. Explicit colours also cover shared pagination/refresh chrome.
+    // Explicit colours also cover shared pagination/refresh chrome.
     MaterialTheme(colorScheme = MaterialTheme.colorScheme.copy(
         primary = palette.accent, onPrimary = SubjectPalette.label(palette.accent),
         secondary = palette.accent, onSecondary = SubjectPalette.label(palette.accent),
@@ -152,25 +151,7 @@ fun AO3CollectionItemsScreen(
         background = tokens.background, onBackground = tokens.primaryInk, outline = tokens.separator,
         outlineVariant = tokens.separator, scrim = tokens.primaryInk.copy(alpha = 0.32f)
     )) {
-        if (confirming) {
-            AlertDialog(
-                onDismissRequest = { confirming = false },
-                containerColor = tokens.cardFill, titleContentColor = tokens.primaryInk,
-                textContentColor = tokens.secondaryInk,
-                title = { Text("Submit staged changes?", lineHeight = 28.sp) },
-                text = { Text("Submit $pending staged change${if (pending == 1) "" else "s"} to AO3?", lineHeight = 22.sp) },
-                confirmButton = {
-                    TextButton(onClick = {
-                        confirming = false
-                        scope.launch { model.confirmSubmit() }
-                    }, enabled = canSubmit) { Text("Submit", color = palette.accent, lineHeight = 20.sp) }
-                },
-                dismissButton = {
-                    TextButton(onClick = { confirming = false }) { Text("Cancel", color = palette.accent, lineHeight = 20.sp) }
-                }
-            )
-        }
-        KudosRefreshBox(onRefresh = { if (!confirming && !state.busy) model.load(tab) },
+        KudosRefreshBox(onRefresh = { if (!state.busy) model.load(tab) },
             modifier = Modifier.fillMaxSize().subjectScreenWash(palette)) {
             LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
                 item {
@@ -191,11 +172,11 @@ fun AO3CollectionItemsScreen(
                         .padding(horizontal = SubjectMetrics.accountGutter), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         AO3CollectionItemTab.entries.forEach { option ->
                             SubjectChip(option.title, style = SubjectChipStyle.Pill(tab == option), palette = palette,
-                                modifier = Modifier.clickable(enabled = !submitting && !confirming) { tab = option })
+                                modifier = Modifier.clickable(enabled = !submitting) { tab = option })
                         }
                         SubjectChip("Reset", style = SubjectChipStyle.Pill(false), leadingIcon = Icons.Filled.Close,
                             modifier = Modifier.alpha(if (tab == defaultTab) 0.45f else 0.7f)
-                                .clickable(enabled = tab != defaultTab && !submitting && !confirming) {
+                                .clickable(enabled = tab != defaultTab && !submitting) {
                                     tab = defaultTab
                                 }.semantics { contentDescription = "Reset filters" })
                     }
@@ -230,13 +211,13 @@ fun AO3CollectionItemsScreen(
                 }
                 items(state.page?.items.orEmpty(), key = { it.id }) { item ->
                     CollectionItemPanel(item, state.staging.shown(item), state.staging.pending(listOf(item)).isNotEmpty(),
-                        enabled = !state.busy && !confirming,
+                        enabled = !state.busy,
                         onStage = { change -> model.stage(item, change) }, onRemove = { model.remove(item) })
                 }
                 state.page?.takeIf { it.totalPages > 1 }?.let { page ->
                     item {
                         KudosPaginationBar(page.currentPage, page.totalPages,
-                            onPageChange = { scope.launch { model.load(tab, it) } }, enabled = !state.busy && !confirming, stacked = isAccessibilityFontScale(),
+                            onPageChange = { scope.launch { model.load(tab, it) } }, enabled = !state.busy, stacked = isAccessibilityFontScale(),
                             modifier = Modifier.padding(top = 14.dp).padding(horizontal = SubjectMetrics.accountGutter).subjectPanel())
                     }
                 }

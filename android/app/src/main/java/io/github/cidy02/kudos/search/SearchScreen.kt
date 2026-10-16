@@ -523,6 +523,7 @@ fun SearchScreen(
     }
     if (showFilterSheet) {
         SearchFilterSheet(
+            fandomContext = AO3SearchFilters.commaSeparatedValues(filters.fandom),
             localTagSuggestions = localTagSuggestions,
             filters = filters,
             onFiltersChange = { viewModel.updateFilters(it) },

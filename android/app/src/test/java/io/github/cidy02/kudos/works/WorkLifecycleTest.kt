@@ -1426,6 +1426,25 @@ class WorkImporterLifecycleTest {
     }
 
     @Test
+    fun websiteEpubImportsItsMetadataAndReusesLocalIdentity() = runTest {
+        val importer = importer(
+            metadata = AO3Result.Failure(AO3Error.NotFound),
+            download = AO3Result.Success(syntheticAo3Epub())
+        )
+        val url = "https://archiveofourown.org/downloads/424242/book.epub?updated=1"
+        val first = (importer.importWebEpub(url) as WorkImportResult.Success).work
+        repository.upsert(first.copy(isFavorite = true, readiumLocator = "kept position"))
+        val again = (importer.importWebEpub(url) as WorkImportResult.Success).work
+        assertEquals(first.id, again.id)
+        assertEquals(424242, again.ao3WorkID)
+        assertTrue(again.hasEpub && again.isSaved && again.isFavorite)
+        assertEquals("kept position", again.readiumLocator)
+        assertTrue(fileStore.workEpubExists(again.id))
+        assertEquals(1, repository.listSavedWorks().size)
+        assertTrue(importer.importWebEpub("https://example.com/book.epub") is WorkImportResult.Failure)
+    }
+
+    @Test
     fun duplicateEpubImportFillsMissingMetadataWithoutOverwritingAndRestores() = runTest {
         repository.upsert(
             SavedWork(

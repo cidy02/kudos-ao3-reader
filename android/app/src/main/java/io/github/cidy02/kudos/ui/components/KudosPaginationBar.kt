@@ -36,11 +36,18 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.material3.Slider
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -147,13 +154,21 @@ private fun PageScrubberSheet(
     onDismiss: () -> Unit
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    var draft by remember(currentPage) { mutableFloatStateOf(currentPage.toFloat()) }
-    val draftPage = draft.roundToInt().coerceIn(1, maxOf(totalPages, 1))
+    var pageInput by remember(currentPage) { mutableStateOf(currentPage.toString()) }
+    val enteredPage = pageInput.trim().toIntOrNull()?.takeIf { it in 1..totalPages }
+    val draftPage = enteredPage ?: currentPage.coerceIn(1, maxOf(totalPages, 1))
+    fun go() {
+        val target = enteredPage ?: return
+        if (target != currentPage) onSelect(target)
+        onDismiss()
+    }
 
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .imePadding()
+                .verticalScroll(rememberScrollState())
                 .padding(horizontal = 24.dp)
                 .padding(bottom = 32.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -171,9 +186,17 @@ private fun PageScrubberSheet(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
 
+            OutlinedTextField(
+                value = pageInput, onValueChange = { pageInput = it }, singleLine = true,
+                label = { Text("Page") }, isError = enteredPage == null,
+                supportingText = { Text("Enter a page from 1 to $totalPages") },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Go),
+                keyboardActions = KeyboardActions(onGo = { go() }), modifier = Modifier.fillMaxWidth()
+            )
+
             Slider(
-                value = draft,
-                onValueChange = { draft = it },
+                value = draftPage.toFloat(),
+                onValueChange = { pageInput = it.roundToInt().coerceIn(1, totalPages).toString() },
                 valueRange = 1f..maxOf(totalPages, 2).toFloat(),
                 // Continuous, *not* `steps = totalPages - 2`. A stepped Material
                 // slider draws a tick per step, and AO3 lists run to 5,000 pages —
@@ -207,7 +230,7 @@ private fun PageScrubberSheet(
                                             if (selected) MaterialTheme.colorScheme.primaryContainer
                                             else MaterialTheme.colorScheme.surfaceVariant
                                         )
-                                        .selectable(selected = selected, role = Role.RadioButton) { draft = page.toFloat() }
+                                        .selectable(selected = selected, role = Role.RadioButton) { pageInput = page.toString() }
                                         .semantics { contentDescription = "Page $page" },
                                     contentAlignment = Alignment.Center
                                 ) {
@@ -231,11 +254,11 @@ private fun PageScrubberSheet(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                TextButton(onClick = { draft = 1f }, enabled = draftPage > 1) {
+                TextButton(onClick = { pageInput = "1" }, enabled = draftPage > 1) {
                     Text("First page", lineHeight = 20.sp)
                 }
                 TextButton(
-                    onClick = { draft = maxOf(totalPages, 1).toFloat() },
+                    onClick = { pageInput = maxOf(totalPages, 1).toString() },
                     enabled = draftPage < totalPages
                 ) {
                     Text("Last (${"%,d".format(totalPages)})", lineHeight = 20.sp)
@@ -250,11 +273,8 @@ private fun PageScrubberSheet(
                     Text("Cancel", lineHeight = 20.sp)
                 }
                 Button(
-                    onClick = {
-                        if (draftPage != currentPage) onSelect(draftPage)
-                        onDismiss()
-                    },
-                    enabled = draftPage != currentPage,
+                    onClick = { go() },
+                    enabled = enteredPage != null && enteredPage != currentPage,
                     modifier = Modifier.weight(1f)
                 ) {
                     Text("Go", lineHeight = 20.sp)

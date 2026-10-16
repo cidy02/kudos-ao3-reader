@@ -70,7 +70,7 @@ class OwnWorksScreenTest {
                             chrome.onBack?.let { back -> androidx.compose.material3.TextButton(onClick = back) { androidx.compose.material3.Text("Back") } }
                             chrome.trailingContent?.invoke(this)
                         }
-                        AuthorProfileScreen(username, authorRepository = repo, authRepository = setup.auth, seriesWrites = writes,
+                        AuthorProfileScreen(username, onOpenAbout = {}, authorRepository = repo, authRepository = setup.auth, seriesWrites = writes,
                             workFormRepository = forms, onOpenWork = {})
                     }
                 }

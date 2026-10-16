@@ -76,6 +76,8 @@ class RemoteWorkActionsTest {
     }
 
     @After fun tearDown() {
+        // Writes started from the UI finish before the database closes under them.
+        compose.waitForIdle()
         settingsScope.cancel(); downloadScope.cancel(); database.close()
         directory.toFile().deleteRecursively()
     }
@@ -160,7 +162,7 @@ class RemoteWorkActionsTest {
         compose.onNodeWithText("Add").performClick()
         awaitText("My queue")
         val created = runBlocking { queues.listQueues().single { it.displayName == "My queue" } }
-        assertEquals(1, runBlocking { queues.listWorks(created.id).size })
+        compose.waitUntil(10_000) { runBlocking { queues.listWorks(created.id).size == 1 } }
         // Selecting it again removes membership and keeps the work.
         compose.onNodeWithText("My queue").performClick()
         compose.waitUntil(10_000) { runBlocking { queues.listWorks(created.id).isEmpty() } }

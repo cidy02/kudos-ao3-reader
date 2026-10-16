@@ -23,6 +23,7 @@ fun AO3DashboardScreen(
     username: String?,
     onOpenList: (AccountListType) -> Unit,
     onOpenAO3Collections: () -> Unit,
+    onOpenAbout: (io.github.cidy02.kudos.network.ao3.author.AO3AuthorRoute) -> Unit,
     modifier: Modifier = Modifier,
     /** The session the page is the reader's own in: without it the page did not know it was. */
     authRepository: io.github.cidy02.kudos.auth.AO3AuthRepository? = null,
@@ -41,6 +42,7 @@ fun AO3DashboardScreen(
         initialPseud = null,
         authorRepository = authorRepository,
         onOpenWork = onOpenWork,
+        onOpenAbout = onOpenAbout,
         onOpenSeries = onOpenSeries,
         onOpenWeb = onOpenWeb,
         isDashboard = true,

@@ -336,6 +336,7 @@ fun FandomWorksScreen(
 
     if (showFilterSheet) {
         SearchFilterSheet(
+            fandomContext = if (isTag) AO3SearchFilters.commaSeparatedValues(filters.fandom) else includedFandoms,
             filters = filters,
             allowsRelevanceSort = false,
             showFandomPicker = false,

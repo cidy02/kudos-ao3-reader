@@ -216,6 +216,9 @@ object Routes {
     private const val ARG_AUTHOR_USERNAME = "authorUsername"
     const val AuthorSeries = "author-series/{$ARG_AUTHOR_USERNAME}"
     fun authorSeries(username: String) = "author-series/${encode(username)}"
+    const val AuthorAbout = "author-about/{$ARG_AUTHOR_USERNAME}"
+    fun authorAbout(route: io.github.cidy02.kudos.network.ao3.author.AO3AuthorRoute): String =
+        "author-about/${encode(route.pseud?.let { "${it} (${route.username})" } ?: route.username)}"
     const val AuthorProfile = "author-profile/{$ARG_AUTHOR_USERNAME}"
     fun authorProfile(username: String) = "author-profile/${encode(username)}"
 
@@ -309,6 +312,7 @@ object Routes {
             Collections -> "Collections"
             CollectionDetail -> "Collection"
             AuthorWorks -> "Author"
+            AuthorAbout -> "About"
             AuthorProfile -> "Author"
             AuthorSeries -> "Series"
             SeriesWorks -> "Series"
@@ -386,7 +390,7 @@ object Routes {
     private val tabBarHiddenBases: Set<String> = listOf(
         AccountShortcuts, AO3Collections, WritingDrafts, WritingWork, WritingWorkNewDemo, WritingWorkDraftDemo, WritingWorkPostedDemo,
         WritingChapterNewDraftDemo, WritingChapterDraftDemo,
-        WritingEditorDemo, WritingEditorFixture, SeriesWorks, AuthorProfile, AuthorSeries, AuthorWorks, Comments, Reader,
+        WritingEditorDemo, WritingEditorFixture, SeriesWorks, AuthorProfile, AuthorAbout, AuthorSeries, AuthorWorks, Comments, Reader,
         WorkDetail, // WorkDetailView
         BrowseFandoms, BrowseWorks, TagWorks, // FandomListView, NativeBrowseView
         Settings, Backup, QueueStorage, AvailabilitySweep, About, BugReport, // SettingsPageForm

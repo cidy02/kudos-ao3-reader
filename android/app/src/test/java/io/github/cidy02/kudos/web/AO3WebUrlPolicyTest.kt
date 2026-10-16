@@ -1,11 +1,57 @@
 package io.github.cidy02.kudos.web
 
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import io.github.cidy02.kudos.network.ao3.*
+import io.github.cidy02.kudos.network.ao3.work.AO3EpubDownloader
+import kotlinx.coroutines.runBlocking
 
 class AO3WebUrlPolicyTest {
+    @Test fun addressAcceptsUrlsAndEncodesSearchTerms() {
+        assertEquals(null, AO3WebUrlPolicy.addressUrl("  "))
+        assertEquals("https://archiveofourown.org/media", AO3WebUrlPolicy.addressUrl(" https://archiveofourown.org/media "))
+        val parsed = AO3WebUrlPolicy.addressUrl("cats & dogs + space")!!.toHttpUrl()
+        assertEquals("/works/search", parsed.encodedPath)
+        assertEquals("cats & dogs + space", parsed.queryParameter("work_search[query]"))
+        assertEquals(WebNavDecision.Block, AO3WebUrlPolicy.classify(AO3WebUrlPolicy.addressUrl("javascript:alert(1)")!!))
+    }
+
+    @Test fun downloadAllowsOnlyAo3EpubLinks() {
+        val downloader = io.github.cidy02.kudos.network.ao3.work.AO3EpubDownloader
+        assertTrue(downloader.isEpubDownload("https://archiveofourown.org/downloads/123/My%20Book.epub?updated=1"))
+        listOf("https://example.com/downloads/123/book.epub", "http://archiveofourown.org/downloads/123/book.epub",
+            "https://archiveofourown.org.evil.com/downloads/123/book.epub", "https://archiveofourown.org/works/123",
+            "https://archiveofourown.org/downloads/123/book.pdf").forEach {
+            assertFalse(downloader.isEpubDownload(it))
+        }
+    }
+
+    @Test fun websiteDownloadRejectsUntrustedBeforeClientAndFetchesChosenUrlOnce() = runBlocking {
+        val urls = mutableListOf<String>()
+        var html = false
+        val downloader = AO3EpubDownloader(object : AO3Client {
+            override suspend fun get(url: String, headers: Map<String, String>): AO3Result<AO3HttpResponse> =
+                error("No metadata or HTML read is needed")
+            override suspend fun getBytes(url: String, headers: Map<String, String>): AO3Result<AO3BinaryResponse> {
+                urls += url
+                return AO3Result.Success(AO3BinaryResponse(url, 200,
+                    mapOf("Content-Type" to listOf(if (html) "text/html" else "application/epub+zip")),
+                    if (html) "<html>Not an EPUB</html>".encodeToByteArray() else byteArrayOf(0x50, 0x4B, 0x03, 0x04)))
+            }
+        })
+        org.junit.Assert.assertTrue(downloader.downloadUrl("https://evil.example/downloads/123/book.epub") is AO3Result.Failure)
+        assertTrue(urls.isEmpty())
+        val url = "https://archiveofourown.org/downloads/123/Chosen%20Book.epub?updated=42"
+        assertTrue(downloader.downloadUrl(url) is AO3Result.Success)
+        assertEquals(listOf(url), urls)
+        html = true
+        assertTrue(downloader.downloadUrl(url) is AO3Result.Failure)
+        assertEquals(2, urls.size)
+    }
+
     @Test
     fun ao3HttpsStaysInApp() {
         assertEquals(WebNavDecision.Allow, AO3WebUrlPolicy.classify("https://archiveofourown.org/media"))
