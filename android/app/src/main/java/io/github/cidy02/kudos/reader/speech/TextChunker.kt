@@ -1,18 +1,28 @@
 package io.github.cidy02.kudos.reader.speech
 
 object TextChunker {
-    fun chunk(text: String, maxLength: Int = 250): List<String> {
+    fun chunk(text: String, maxLength: Int = 250): List<String> =
+        makeChunks(text, maxLength.coerceAtLeast(1), separateSentences = false)
+
+    fun sentenceChunks(text: String, maxLength: Int = 250): List<String> =
+        makeChunks(text, maxLength.coerceAtLeast(1), separateSentences = true)
+
+    private fun makeChunks(text: String, maxLength: Int, separateSentences: Boolean): List<String> {
         val chunks = mutableListOf<String>()
-        val paragraphs = text.split("\n", "\r\n")
+        val paragraphs = text.split('\n', '\r')
 
         for (paragraph in paragraphs) {
             val paragraphText = paragraph.trim()
             if (paragraphText.isEmpty()) continue
 
-            if (paragraphText.length <= maxLength) {
+            if (!separateSentences && paragraphText.length <= maxLength) {
                 chunks.add(paragraphText)
             } else {
                 val sentences = splitIntoSentences(paragraphText, maxLength)
+                if (separateSentences) {
+                    chunks.addAll(sentences)
+                    continue
+                }
                 var currentChunk = ""
 
                 for (sentence in sentences) {
@@ -34,10 +44,24 @@ object TextChunker {
     }
 
     private fun splitIntoSentences(text: String, maxLength: Int): List<String> {
-        // Regex: split on . ! ? followed by space, keeping punctuation attached
-        // (?<=[.!?])\s+ -> matches whitespace preceded by .!?
-        val regex = Regex("(?<=[.!?])\\s+")
-        val rawSentences = text.split(regex)
+        val rawSentences = mutableListOf<String>()
+        var start = 0
+        var index = 0
+        while (index < text.length) {
+            val char = text[index]
+            if (char in ".!?") {
+                var end = index + 1
+                while (end < text.length && text[end] in ".!?\"'”’)]") end++
+                if ((end == text.length || text[end].isWhitespace()) &&
+                    !(char == '.' && isAbbreviation(text.substring(start, index + 1)))) {
+                    rawSentences.add(text.substring(start, end))
+                    start = end
+                    index = end - 1
+                }
+            }
+            index++
+        }
+        if (start < text.length) rawSentences.add(text.substring(start))
         
         val sentences = mutableListOf<String>()
         for (rawSentence in rawSentences) {
@@ -53,8 +77,18 @@ object TextChunker {
         return sentences
     }
 
+    // English titles and dotted abbreviations must stay attached to their sentence.
+    private fun isAbbreviation(prefix: String): Boolean {
+        val token = prefix.takeLastWhile { !it.isWhitespace() }.trimStart('"', '\'', '“', '‘', '(')
+        val lower = token.lowercase(java.util.Locale.ROOT)
+        val dottedParts = token.removeSuffix(".").split('.')
+        return lower in setOf("dr.", "mr.", "mrs.", "ms.", "prof.", "rev.", "st.", "jr.", "sr.", "vs.", "etc.") ||
+            (token.length == 2 && token.first().isLetter()) ||
+            (dottedParts.size > 1 && dottedParts.all { it.length == 1 && it.first().isLetter() })
+    }
+
     private fun splitByClauses(text: String, maxLength: Int): List<String> {
-        val delimiters = setOf(';', ':', '—', ',', '”', '"')
+        val delimiters = setOf(';', ':', '—', ',')
         val pieces = mutableListOf<String>()
         var currentPiece = StringBuilder()
 
@@ -63,7 +97,7 @@ object TextChunker {
             currentPiece.append(char)
 
             if (delimiters.contains(char)) {
-                if (currentPiece.length >= (maxLength / 2) || char == '”' || char == '"') {
+                if (currentPiece.length >= (maxLength / 2)) {
                     pieces.add(currentPiece.toString().trim())
                     currentPiece.clear()
                 }

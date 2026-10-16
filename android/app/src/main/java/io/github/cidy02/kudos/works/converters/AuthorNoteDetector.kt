@@ -268,7 +268,7 @@ fun paragraphsWithAuthorNotes(blocks: List<String>): String {
             run += blocks[index]
             index += 1
         }
-        lines += """<aside class="author-note">"""
+        lines += """<aside epub:type="note" class="author-note">"""
         lines += run.map { "<p>${escapeXml(it)}</p>" }
         lines += "</aside>"
     }
