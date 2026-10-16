@@ -31,6 +31,8 @@ sealed interface AO3Error {
     companion object {
         const val OFFLINE_MESSAGE =
             "You're offline. Try again when you're back online."
+        const val TIMEOUT_MESSAGE = "AO3 took too long to answer. Try again."
+        const val UNREACHABLE_MESSAGE = "Couldn't reach AO3. Check your connection and try again."
 
         /**
          * Map an OkHttp/IO transport failure into [Network], classifying offline
@@ -39,10 +41,13 @@ sealed interface AO3Error {
         fun networkFromTransport(error: IOException): Network {
             val offline = isOfflineThrowable(error)
             return Network(
-                message = if (offline) {
-                    OFFLINE_MESSAGE
-                } else {
-                    error.message?.takeIf { it.isNotBlank() } ?: "Network request failed."
+                // Sentences, never the exception's own text ("timeout", "unexpected end of
+                // stream"), as iOS's `UserFacingError` (A61 #26).
+                message = when {
+                    offline -> OFFLINE_MESSAGE
+                    generateSequence<Throwable>(error) { it.cause }.take(6).any { it is java.io.InterruptedIOException } ->
+                        TIMEOUT_MESSAGE
+                    else -> UNREACHABLE_MESSAGE
                 },
                 cause = error,
                 offline = offline

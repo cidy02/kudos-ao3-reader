@@ -21,6 +21,18 @@ class AO3ErrorDisplayMessageTest {
         assertEquals("AO3 had a server problem (HTTP 500).", server.displayMessage())
     }
 
+    /** iOS `UserFacingErrorTests.transportFailuresReadAsSentences` (A61 #26). */
+    @Test
+    fun transportFailuresReadAsSentences() {
+        assertEquals(AO3Error.TIMEOUT_MESSAGE,
+            AO3Error.networkFromTransport(java.net.SocketTimeoutException("timeout")).displayMessage())
+        assertEquals(AO3Error.TIMEOUT_MESSAGE,
+            AO3Error.networkFromTransport(java.io.InterruptedIOException("timeout")).displayMessage())
+        val other = AO3Error.networkFromTransport(java.io.IOException("unexpected end of stream on https://…"))
+        assertEquals(AO3Error.UNREACHABLE_MESSAGE, other.displayMessage())
+        assertFalse(other.displayMessage().contains("stream"))
+    }
+
     @Test
     fun displayMessageNeverLooksLikeKotlinDataClassToString() {
         val samples = listOf(

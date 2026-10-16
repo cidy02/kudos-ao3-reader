@@ -2233,3 +2233,11 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   answers locally. #24's sweep swallowed cancellation and returned as if done; it propagates
   now. Deferred by Codex: #9 (Readium gives no visible-spread range), #21 (Read Aloud has no
   position seek). Left for its next run: #25 to #31. Reverse: the commit that names 3fo.
+- **2026-10-16 · Transport failures read as sentences; Unknown has its own mark (A61 #26, #28;
+  Claude).** As iOS's `UserFacingError`, a timeout says "AO3 took too long to answer. Try
+  again." and any other non-offline transport failure "Couldn't reach AO3. Check your
+  connection and try again.", where the exception's own text ("timeout", "unexpected end of
+  stream…") reached the reader. A work of unknown status shows a question-mark icon, not
+  WIP's clock. A61 #30 is not real: the work page already says "Remove from Later"; the label
+  cited is the bulk bar's, which says "Remove from Saved for Later" as iOS's card menus do.
+  Reverse: the commit that names A61 #26.
