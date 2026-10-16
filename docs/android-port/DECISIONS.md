@@ -2205,3 +2205,10 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   binding policy doesn't require the notice for these writes, and iOS's demo answers them
   with plain fixture pages, so tightening iOS would also need demo answers. Left as a known
   difference; revisit if a real AO3 answer is ever seen without the notice.
+- **2026-10-16 · A60: code the JVM passes and a device fails (Codex audit; fixed by Claude).**
+  No other crash: every literal regex compiled under ICU (Codex checked 112 sites, 71 demo
+  routes and the dynamic ones against ICU 78). Two wrong results: Android's `\w` and `\d` are
+  Unicode, the JDK's ASCII, so a collection name like "aéb" passed the client's check on a
+  device, and a release tagged with Arabic-Indic digits would rank as an update. Both
+  patterns now spell out ASCII (`[A-Za-z0-9_]`, `[0-9]`). The JVM tests cannot show the
+  difference, so no test was added for it. Reverse: the commit that names A60.

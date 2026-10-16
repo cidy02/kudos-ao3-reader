@@ -20,7 +20,7 @@ import io.github.cidy02.kudos.network.github.GitHubReleaseAsset
  * of the version comparison — see [AppVersion]).
  */
 object AndroidReleaseMatcher {
-    private val TAG_PATTERN = Regex("""^android-v?\d+\.\d+\.\d+""", RegexOption.IGNORE_CASE)
+    private val TAG_PATTERN = Regex("""^android-v?[0-9]+\.[0-9]+\.[0-9]+""", RegexOption.IGNORE_CASE) // Android's \d is Unicode (A60)
 
     data class Match(
         val release: GitHubRelease,
