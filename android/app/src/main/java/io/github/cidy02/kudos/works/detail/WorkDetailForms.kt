@@ -46,12 +46,13 @@ private fun DetailForm(
     allowDismiss: Boolean = true,
     leading: (@Composable RowScope.() -> Unit)? = null,
     actions: @Composable RowScope.() -> Unit = {},
+    registerShellChrome: Boolean = true,
     content: LazyListScope.() -> Unit
 ) {
     val tokens = LocalKudosTokens.current
     val canDismiss by rememberUpdatedState(allowDismiss)
     // This form takes Detail's place in the route; it owns the shell row registration.
-    ProvidePushedShellChrome(hasSubjectHeader = true, onBack = onClose)
+    if (registerShellChrome) ProvidePushedShellChrome(hasSubjectHeader = true, onBack = onClose)
     BackHandler(onBack = onClose)
     ModalBottomSheet(onDismissRequest = onClose,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true,
@@ -207,9 +208,11 @@ internal fun WorkDetailQueueForm(
     onPreserve: () -> Unit,
     onCancel: () -> Unit,
     onClose: () -> Unit,
-    workingQueueId: String? = null
+    workingQueueId: String? = null,
+    registerShellChrome: Boolean = true
 ) {
-    DetailForm("Add to Queue", onClose, actions = { FormToolbarAction("Done", true, onClose) }) {
+    DetailForm("Add to Queue", onClose, allowDismiss = !working, registerShellChrome = registerShellChrome,
+        actions = { FormToolbarAction("Done", !working, onClose) }) {
         item { SettingsSection(footnote = null) {
             SubjectTextFieldRow("New queue", newName, "New queue", onName, fieldOnly = true, enabled = !working)
             SettingsActionRow("Add", onCreate, enabled = newName.trim().isNotEmpty() && !working)

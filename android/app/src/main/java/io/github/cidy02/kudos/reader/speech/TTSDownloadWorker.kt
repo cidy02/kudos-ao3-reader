@@ -14,6 +14,7 @@ import java.io.IOException
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.ensureActive
 import io.github.cidy02.kudos.network.ao3.installDemoNetworkBlock
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -94,6 +95,7 @@ class TTSDownloadWorker(
                         val buffer = ByteArray(64 * 1024)
                         var readTotal = 0L
                         while (true) {
+                            coroutineContext.ensureActive()
                             val read = input.read(buffer)
                             if (read == -1) break
                             output.write(buffer, 0, read)
@@ -116,6 +118,7 @@ class TTSDownloadWorker(
             TarArchiveInputStream(BZip2CompressorInputStream(BufferedInputStream(tempFile.inputStream()))).use { tarInput ->
                 var entry = tarInput.nextEntry as? TarArchiveEntry
                 while (entry != null) {
+                    coroutineContext.ensureActive()
                     var relativePath = entry.name
                     val prefix = "kokoro-int8-en-v0_19/"
                     if (relativePath.startsWith(prefix)) {
@@ -128,7 +131,13 @@ class TTSDownloadWorker(
                         } else {
                             outFile.parentFile?.mkdirs()
                             outFile.outputStream().use { output ->
-                                tarInput.copyTo(output)
+                                val buffer = ByteArray(64 * 1024)
+                                while (true) {
+                                    coroutineContext.ensureActive()
+                                    val count = tarInput.read(buffer)
+                                    if (count < 0) break
+                                    output.write(buffer, 0, count)
+                                }
                             }
                         }
                     }
@@ -142,6 +151,9 @@ class TTSDownloadWorker(
             }
 
             Result.success()
+        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+            modelDirectory(applicationContext).deleteRecursively()
+            throw cancelled
         } catch (e: Exception) {
             modelDirectory(applicationContext).deleteRecursively()
             Result.failure(workDataOf(KEY_ERROR to (e.message ?: "Unknown error")))

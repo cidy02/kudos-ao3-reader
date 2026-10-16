@@ -169,7 +169,9 @@ fun SensitiveWorkRow(
     onTagClick: ((String) -> Unit)? = null,
     onTagSearch: ((SearchSubjectField, String) -> Unit)? = null,
     onLongClick: (() -> Unit)? = null,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    authorIdentities: String = "",
+    authorNames: List<String> = io.github.cidy02.kudos.works.resolveTappableAuthorNames(null, author)
 ) {
     var expanded by remember(id) { mutableStateOf(expandAll) }
     LaunchedEffect(expandAll) { expanded = expandAll }
@@ -295,13 +297,8 @@ fun SensitiveWorkRow(
                                         maxLines = 2,
                                         overflow = TextOverflow.Ellipsis
                                     )
-                                    Text(
-                                        text = "by ${author.ifBlank { "Anonymous" }}",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        // Two co-authors read "Avery Writes, Second Ps…" at twice the text size.
-                                        maxLines = if (io.github.cidy02.kudos.ui.subject.isAccessibilityFontScale()) 2 else 1,
-                                        overflow = TextOverflow.Ellipsis
+                                    io.github.cidy02.kudos.works.detail.VerifiedAuthorByline(
+                                        author, authorIdentities, authorNames
                                     )
                                 }
                                 if (isFavorite && !selecting) {
@@ -396,7 +393,7 @@ fun SensitiveWorkRow(
                                     )
                                     MetadataChipRow(
                                         labels = tags,
-                                        maxItems = 16,
+                                        maxItems = tags.size,
                                         onLabelClick = { tag -> tagSearch(field, tag) }
                                     )
                                 }
@@ -619,7 +616,7 @@ private fun LedgerBody(
         tagGroups.forEach { (label, tags, field) ->
             Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
                 Text(text = label, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = tokens.tertiaryInk)
-                MetadataChipRow(labels = tags, maxItems = 16, onLabelClick = { tag -> tagSearch(field, tag) })
+                MetadataChipRow(labels = tags, maxItems = tags.size, onLabelClick = { tag -> tagSearch(field, tag) })
             }
         }
     }
@@ -675,6 +672,7 @@ fun SensitiveWorkRow(
             id = work.id.toString(),
             title = work.title,
             author = work.authorText,
+            authorIdentities = work.authorIdentitiesJSON, authorNames = work.authors,
             fandoms = work.fandoms.filter { it.isNotBlank() },
             summary = work.summary,
             discoveryTags = (work.relationships + work.characters + work.freeforms).filter { it.isNotBlank() },
@@ -747,6 +745,7 @@ fun SensitiveWorkRow(
         id = work.id,
         title = work.title,
         author = work.author,
+        authorIdentities = work.authorIdentitiesJSON,
         fandoms = work.workFandoms,
         summary = remember(work.summary) { work.summary.strippingHtml() },
         discoveryTags = (work.workRelationships + work.workCharacters + work.workFreeforms),

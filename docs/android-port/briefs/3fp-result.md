@@ -91,3 +91,75 @@ without a file and Continue Reading over an existing reader; all three Comments 
 Contents chapter Bookmark/Add Note (Back/Cancel/Done/reopen); full queue/collection
 filters, clear, explicit sorts and no-op Reorder. Human screenshots remain necessary
 for visual approval. Then resume the brief at F11, retaining the F05/F08 limits above.
+
+## Part 2
+
+Status: IN PROGRESS. Continuing at F11 on `android/agent-codex-3fp2`, starting
+from clean HEAD `0eba1d83df9baa2e69bebc609d098291b3743ca0`. F01–F10/F26 are
+already landed. F21/F22 remain excluded. No commit, push, branch switch, sign-in,
+AO3 contact, Gradle execution, TASKS.md edit, Room schema or backup-format change.
+Builds/tests remain assigned to Claude by the brief. Findings, changes and
+verification will be appended here as work proceeds.
+
+### Source changes so far (unbuilt)
+
+- **F11/F12:** QueuePageScreen and CollectionDetailScreen reuse LibraryWorkMenu;
+  queue ledger rows also reuse Library leading swipes. Scoped removal asks and
+  removes membership only. New ScopedWorkActions hosts the existing deletion,
+  rebuild, download and membership operations. Comments/importer are passed from
+  AppNavHost through ReadingQueueBrowserScreen. Blurred/selection/reorder rows
+  do not expose a work menu.
+- **F13:** Library refresh receives the actual section list (including quick
+  filters), or dashboard shelf items; WorkMetadataRefresh deduplicates and refreshes
+  sequentially with cancellation. Queue-count refresh remains. Remote Work Detail
+  refresh now fetches metadata without creating a local work.
+- **F14:** Library dashboard New Collection now mounts CollectionEditorSheet,
+  including description, colour and both behaviour switches.
+- **F15:** Library single/bulk, Home single/bulk and Search bulk queue pickers use
+  WorkDetailQueueForm through QueueMembershipDialog. Full-selection checks toggle
+  memberships, allow queue creation and explicit series addition via the existing
+  sequential preservation service. Work Detail's additive-only rule is retained.
+- **F16:** AddSelectionToCollectionDialog now shows full-selection membership
+  checks and toggles without closing; creates a collection in place. Library bulk
+  uses it too; scoped selection keeps the picker open after each toggle.
+- **F17:** ScopedSelectionBar offers Remove from Saved for Later when every
+  selected work is a member, otherwise Save for Later.
+
+These are implementation notes, not compilation or runtime claims. Further source
+review and regression coverage are still in progress.
+
+### Remaining findings implemented in source (unbuilt)
+
+- **F18:** Library sections can choose Detailed/Ledger and expand/collapse all
+  detailed cards. Queue adds Detailed beside Compact/Ledger, using SensitiveWorkRow
+  and its existing expansion state. Collection adds the same expansion command.
+- **F19:** My copy tag names request the existing Library user-tag filter; the
+  minus remains removal. Failed/missing queue preservation gets Retry, using
+  WorkImporter.preserveQueuedWork and surfacing its failure.
+- **F20:** Work Detail lists other active local works with the same series title,
+  ordered by series position. Hide mode excludes mature works; blur mode presents
+  a reveal action before a work title/link. Uses local observation only.
+- **F23/F24:** Highlight applies immediately using the last chosen colour (a local
+  preference); the same exact locator/colour repeat deletes via the signed
+  tombstone path, a different colour retains identity/note. Annotation deletion is
+  immediate from Contents and the editor. Existing initial-note behavior remains.
+- **F25:** History/Favorites swipe says Remove from Saved for Later.
+- **F27:** Edit tag's Remove row opens the manager's existing scoped confirmation.
+- **F28:** Existing Collection Details fields save as changed; admitted local writes
+  serialize and survive dismissal. Done/Back flush before closing. New collection
+  remains Create/Cancel. Keep downloads still enqueues only on the off→on transition.
+- **F29:** Both reader voice-pack entry points ask before enqueueing. Display sheet
+  shows Cancel during queued/running work, reports failure and offers Retry Download.
+  Cancellation checks were added to download/extraction loops; no pack was downloaded.
+- **F30:** Queue organizer selection adds Select All/Deselect All over visible queues.
+- **F31:** Detailed saved/remote card bylines reuse the existing byline component,
+  enabled only by AO3AuthorIdentities; picker bylines dismiss before native navigation.
+- **F32:** Expanded tag groups render every clickable tag, removing the 16-tag cap.
+- **F33:** Dashboard uses FilterButton's existing long-press clear; section lists
+  pass their clear callback too. Queue already had it at starting HEAD.
+
+Source review caught two additional integration hazards: scoped Saved for Later
+checks now query that specific system queue (isQueuedForLater means *any* queue),
+and refresh merges onto the latest local row after the request, retaining edits
+and deletions that happened while it waited. A visible-page refresh stops after a
+non-404 failure rather than trying the rest of the page through a block/outage.

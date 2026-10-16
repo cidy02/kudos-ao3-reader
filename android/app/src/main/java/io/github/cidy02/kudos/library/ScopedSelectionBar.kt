@@ -25,6 +25,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -83,7 +84,8 @@ internal fun ScopedSelectionBar(
     /** Something about the works changed: read the page again. */
     onChanged: () -> Unit,
     onDone: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    workImporter: io.github.cidy02.kudos.works.WorkImporter? = null
 ) {
     val tokens = LocalKudosTokens.current
     val scope = rememberCoroutineScope()
@@ -97,6 +99,15 @@ internal fun ScopedSelectionBar(
     val hasSelection = selectedWorks.isNotEmpty()
     val missing = SelectionActions.missingCopies(selectedWorks)
     val allFavorited = hasSelection && selectedWorks.all { it.isFavorite }
+    var laterLoaded by remember { mutableStateOf(false) }
+    var laterIds by remember { mutableStateOf(emptySet<String>()) }
+    suspend fun reloadLater() {
+        laterLoaded = false
+        laterIds = selectedWorks.filter { queueRepository?.isInSavedForLater(it.id) == true }.map { it.id }.toSet()
+        laterLoaded = true
+    }
+    LaunchedEffect(selectedWorks, queueRepository) { reloadLater() }
+    val allLater = hasSelection && selectedWorks.all { it.id in laterIds }
     val allFinished = hasSelection && selectedWorks.all { it.isFinished }
     val allDownloaded = hasSelection && selectedWorks.all { it.isDownloaded }
     val queuePage = currentQueueId != null
@@ -104,6 +115,7 @@ internal fun ScopedSelectionBar(
     fun act(change: suspend () -> Unit) {
         scope.launch {
             change()
+            reloadLater()
             onChanged()
         }
     }
@@ -160,8 +172,11 @@ internal fun ScopedSelectionBar(
                             act { selectedWorks.forEach { workRepository.setFavorite(it.id, !allFavorited) } }
                         })
                         if (queueRepository != null) {
-                            add(item("Save for Later") {
-                                act { selectedWorks.forEach { runCatching { queueRepository.addToSavedForLater(it.id) } } }
+                            add(item(if (allLater) "Remove from Saved for Later" else "Save for Later", laterLoaded) {
+                                act { selectedWorks.forEach {
+                                    if (allLater) queueRepository.removeFromSavedForLater(it.id)
+                                    else queueRepository.addToSavedForLater(it.id)
+                                } }
                             })
                             add(item("Add to Queue") { addingToQueue = true })
                         }
@@ -204,17 +219,10 @@ internal fun ScopedSelectionBar(
         )
     }
     if (addingToQueue) {
-        QueuePickerDialog(
-            title = "Add Selection to Queue",
-            queueRepository = queueRepository,
-            excludeQueueId = currentQueueId,
-            onPick = { queue ->
-                addingToQueue = false
-                act { selectedWorks.forEach { runCatching { queueRepository?.addWork(queue.id, it.id) } } }
-            },
-            onDismiss = { addingToQueue = false }
-        )
+        QueueMembershipDialog(works = selectedWorks, repository = queueRepository, importer = workImporter,
+            onChanged = onChanged, onDismiss = { addingToQueue = false })
     }
+
     if (movingToQueue) {
         // Closing the picker without choosing moves nothing (iOS counts memberships to know).
         QueuePickerDialog(
@@ -243,7 +251,7 @@ internal fun ScopedSelectionBar(
         AddSelectionToCollectionDialog(
             selectedWorks = selectedWorks,
             workRepository = workRepository,
-            onAdded = { addingToCollection = false; onChanged() },
+            onAdded = onChanged,
             onDismiss = { addingToCollection = false }
         )
     }

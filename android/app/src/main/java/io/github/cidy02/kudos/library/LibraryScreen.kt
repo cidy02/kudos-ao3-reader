@@ -81,6 +81,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
@@ -181,7 +182,8 @@ fun LibraryScreen(
     onFilterLibraryFandom: (String) -> Unit = {},
     onFilterLibraryTag: (String) -> Unit = {},
     authorNewestWorks: AuthorNewestWorkStore? = null,
-    onOpenRemoteWork: (io.github.cidy02.kudos.network.ao3.search.AO3WorkSummary) -> Unit = {}
+    onOpenRemoteWork: (io.github.cidy02.kudos.network.ao3.search.AO3WorkSummary) -> Unit = {},
+    metadataRefresh: io.github.cidy02.kudos.works.WorkMetadataRefresh? = null
 ) {
     val viewModel: LibraryViewModel = viewModel(
         factory = LibraryViewModel.factory(
@@ -273,6 +275,7 @@ fun LibraryScreen(
                 ?.let { io.github.cidy02.kudos.home.HomeFacts.workHue(it.workFandoms, it.title) }
             libraryChrome.actions.onNewCollection = { createCollectionName = "" }
             libraryChrome.actions.onShowFilters = { showFilters = true }
+            libraryChrome.actions.onClearFilters = { viewModel.clearFilters(); viewModel.updateSearchQuery(""); viewModel.updateSort(LibrarySort.Natural) }
             libraryChrome.actions.onSelectAll = {
                 viewModel.setSelection(if (allSelected) emptySet() else selectableIds)
             }
@@ -313,73 +316,18 @@ fun LibraryScreen(
     }
 
     if (bulkAddToQueueOpen) {
-        AlertDialog(
-            onDismissRequest = { bulkAddToQueueOpen = false },
-            title = { Text("Add Selection to Queue") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    if (state.readingQueues.isEmpty()) {
-                        Text("No custom queues yet.", style = MaterialTheme.typography.bodyMedium)
-                    } else {
-                        state.readingQueues.forEach { queue ->
-                            TextButton(
-                                onClick = {
-                                    bulkAddToQueueOpen = false
-                                    viewModel.bulkAddToQueue(queue.id)
-                                },
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Text(queue.name, modifier = Modifier.fillMaxWidth())
-                            }
-                        }
-                    }
-                }
-            },
-            confirmButton = { TextButton(onClick = { bulkAddToQueueOpen = false }) { Text("Close") } }
+        QueueMembershipDialog(
+            works = state.collectionMembers.filter { it.item.work.id in state.selectedWorkIds }.map { it.item.work },
+            repository = queueRepository, importer = workImporter,
+            onChanged = { scope.launch { viewModel.refresh() } },
+            onDismiss = { bulkAddToQueueOpen = false }
         )
     }
-
     if (bulkAddToCollectionOpen) {
-        var newName by remember { mutableStateOf("") }
-        AlertDialog(
-            onDismissRequest = { bulkAddToCollectionOpen = false },
-            title = { Text("Add Selection to Collection") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(
-                        value = newName,
-                        onValueChange = { newName = it },
-                        label = { Text("New or existing collection") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    if (state.collections.isNotEmpty()) {
-                        Text("Existing collections:", style = MaterialTheme.typography.labelMedium)
-                        state.collections.forEach { col ->
-                            TextButton(
-                                onClick = {
-                                    bulkAddToCollectionOpen = false
-                                    viewModel.bulkAddToCollection(col.name)
-                                },
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Text(col.name, modifier = Modifier.fillMaxWidth())
-                            }
-                        }
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(
-                    enabled = newName.trim().isNotEmpty(),
-                    onClick = {
-                        val name = newName.trim()
-                        bulkAddToCollectionOpen = false
-                        viewModel.bulkAddToCollection(name)
-                    }
-                ) { Text("Add") }
-            },
-            dismissButton = { TextButton(onClick = { bulkAddToCollectionOpen = false }) { Text("Cancel") } }
+        io.github.cidy02.kudos.ui.components.AddSelectionToCollectionDialog(
+            selectedWorks = state.collectionMembers.filter { it.item.work.id in state.selectedWorkIds }.map { it.item.work },
+            workRepository = workRepository,
+            onAdded = {}, onDismiss = { bulkAddToCollectionOpen = false }
         )
     }
 
@@ -481,46 +429,19 @@ fun LibraryScreen(
         )
     }
 
-    createCollectionName?.let { draft ->
-        AlertDialog(
-            onDismissRequest = { createCollectionName = null },
-            title = { Text("New Collection") },
-            text = {
-                OutlinedTextField(
-                    value = draft,
-                    onValueChange = { createCollectionName = it },
-                    label = { Text("Collection name") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-            },
-            confirmButton = {
-                TextButton(
-                    enabled = draft.trim().isNotEmpty(),
-                    onClick = {
-                        val name = draft.trim()
-                        createCollectionName = null
-                        viewModel.createCollection(name) { id -> onOpenCollection(id) }
-                    }
-                ) { Text("Create") }
-            },
-            dismissButton = {
-                TextButton(onClick = { createCollectionName = null }) { Text("Cancel") }
-            }
+    if (createCollectionName != null) {
+        CollectionEditorSheet(
+            workRepository = workRepository, existing = null, downloadQueue = downloadQueue,
+            onDismiss = { createCollectionName = null },
+            onSaved = { createCollectionName = null; onOpenCollection(it.id) }
         )
     }
 
     addToQueueWorkId?.let { workId ->
-        AddToQueueDialog(
-            queues = state.readingQueues,
-            onAdd = { queueId ->
-                addToQueueWorkId = null
-                viewModel.addToQueue(workId, queueId)
-            },
-            onManageQueues = {
-                addToQueueWorkId = null
-                onOpenReadingQueues()
-            },
+        QueueMembershipDialog(
+            works = state.collectionMembers.filter { it.item.work.id == workId }.map { it.item.work },
+            repository = queueRepository, importer = workImporter,
+            onChanged = { scope.launch { viewModel.refresh() } },
             onDismiss = { addToQueueWorkId = null }
         )
     }
@@ -557,7 +478,7 @@ fun LibraryScreen(
         onCompletionFilterChange = { completion ->
             viewModel.updateFilters(state.filters.copy(completion = completion))
         },
-        onClearFilters = viewModel::clearFilters,
+        onClearFilters = { viewModel.clearFilters(); viewModel.updateSearchQuery(""); viewModel.updateSort(LibrarySort.Natural) },
         onOpenWork = onOpenWork,
         onOpenReader = onOpenReader,
         onOpenReadingQueues = onOpenReadingQueues,
@@ -618,7 +539,10 @@ fun LibraryScreen(
         },
         onHistoryGroupingChange = viewModel::updateHistoryGrouping,
         onKeepInProgress = viewModel::keepInProgress,
-        onRefresh = { viewModel.refresh() }
+        onRefresh = { visible ->
+            viewModel.refresh()
+            metadataRefresh?.refresh(visible)
+        }
     )
 
     if (showFilters) {
@@ -701,7 +625,7 @@ private fun LibraryContent(
     onOpenAffinity: (FavoriteScope, ReadingAffinities.Row) -> Unit,
     onHistoryGroupingChange: (LibraryHistoryGrouping) -> Unit,
     onKeepInProgress: (String) -> Unit,
-    onRefresh: suspend () -> Unit
+    onRefresh: suspend (List<SavedWork>) -> Unit
 ) {
     val tokens = LocalKudosTokens.current
     val collapsed = io.github.cidy02.kudos.ui.components.rememberCollapsedSections()
@@ -772,7 +696,12 @@ private fun LibraryContent(
     Box(
         modifier = Modifier.fillMaxSize()
     ) {
-        KudosRefreshBox(onRefresh = onRefresh, modifier = Modifier.fillMaxSize()) {
+        KudosRefreshBox(onRefresh = {
+            val visible = if (state.selectionMode) state.items else
+                (state.continueReading.take(ShelfLimit) + state.savedForLater.take(ShelfLimit) +
+                    state.finished.take(ShelfLimit) + state.downloaded.take(ShelfLimit))
+            onRefresh(visible.map { it.item.work })
+        }, modifier = Modifier.fillMaxSize()) {
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(
@@ -1059,7 +988,8 @@ internal fun LibrarySubjectLedgerRow(
     showsZeroStats: Boolean = true,
     expandAll: Boolean = false,
     abandoned: Boolean = false,
-    onKeepInProgress: (String) -> Unit = {}
+    onKeepInProgress: (String) -> Unit = {},
+    ledger: Boolean = kind.defaultsToLedgerRows
 ) {
     val work = display.item.work
     val obscured = display.privacyVisibility == LibraryPrivacyVisibility.Obscured
@@ -1071,7 +1001,7 @@ internal fun LibrarySubjectLedgerRow(
                 work = work,
                 showsZeroStats = showsZeroStats,
                 mutedHistory = abandoned,
-                ledger = kind.defaultsToLedgerRows,
+                ledger = ledger,
                 onOpenWork = {
                     if (work.hasEpub) actions.onOpenReader(work.id) else actions.onOpenWork(work.id)
                 },
@@ -1112,7 +1042,7 @@ internal fun leadingSwipeActions(
         if (kind == LibrarySectionKind.History || kind == LibrarySectionKind.Favorites) {
             add(
                 SwipeAction(
-                    if (work.isQueuedForLater) "Unsave" else "Save for Later",
+                    if (work.isQueuedForLater) "Remove from Saved for Later" else "Save for Later",
                     Icons.Outlined.Schedule,
                     tokens.accent
                 ) { actions.onToggleSavedForLater(work.id, work.isQueuedForLater) }
@@ -1179,15 +1109,19 @@ internal fun LibraryWorkMenu(
     expanded: Boolean,
     onDismiss: () -> Unit,
     work: SavedWork,
-    actions: LibraryCardActions
+    actions: LibraryCardActions,
+    scopedRemovalLabel: String? = null,
+    onScopedRemove: () -> Unit = {}
 ) {
-    val ao3Id = WorkTags.ao3WorkIdFromUrl(work.sourceUrl)
+    val ao3Id = io.github.cidy02.kudos.works.WorkIdentityIndex.ao3WorkId(work)
+    var inSavedForLater by remember(work.id, work.isQueuedForLater) { mutableStateOf(work.isQueuedForLater) }
     var canRebuild by remember(work.id) { mutableStateOf(false) }
     LaunchedEffect(expanded, work.id) {
         canRebuild = expanded && actions.canRebuildFromOriginal(work)
+        if (expanded) actions.isInSavedForLater?.let { inSavedForLater = it(work.id) }
     }
     DropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
-        if (work.hasEpub) {
+        if (work.hasEpub || (actions.canReadWithoutCopy && work.hasAo3WorkId)) {
             ContextMenuItem(Icons.AutoMirrored.Outlined.MenuBook, "Read", {
                 onDismiss(); actions.onOpenReader(work.id)
             })
@@ -1222,7 +1156,7 @@ internal fun LibraryWorkMenu(
             if (work.isFavorite) "Unfavorite" else "Favorite",
             { onDismiss(); actions.onToggleFavorite(work.id) }
         )
-        ContextMenuItem(Icons.Outlined.Schedule, if (work.isQueuedForLater) "Remove from Saved for Later" else "Save for Later", {
+        ContextMenuItem(Icons.Outlined.Schedule, if (inSavedForLater) "Remove from Saved for Later" else "Save for Later", {
             onDismiss(); actions.onToggleSavedForLater(work.id, work.isQueuedForLater)
         })
         ContextMenuItem(Icons.AutoMirrored.Outlined.List, "Add to Queue", {
@@ -1242,6 +1176,11 @@ internal fun LibraryWorkMenu(
         ContextMenuItem(Icons.Outlined.Info, "Work Details", {
             onDismiss(); actions.onOpenWork(work.id)
         })
+        if (scopedRemovalLabel != null) {
+            ContextMenuItem(Icons.Outlined.RemoveCircleOutline, scopedRemovalLabel, {
+                onDismiss(); onScopedRemove()
+            }, destructive = true)
+        }
         ContextMenuItem(Icons.Outlined.Delete, "Delete", {
             onDismiss(); actions.onRemove(work.id)
         }, destructive = true)
@@ -1287,7 +1226,7 @@ private fun LibrarySectionContent(
     onBulkRemoveFromSaveForLater: () -> Unit,
     onRemoveFromHistory: (String) -> Unit,
     onRemoveFromAllQueues: (String) -> Unit,
-    onRefresh: suspend () -> Unit,
+    onRefresh: suspend (List<SavedWork>) -> Unit,
     onFavoriteScopeChange: (FavoriteScope) -> Unit,
     onFavoriteOrderChange: (ReadingAffinities.Order) -> Unit,
     onTagsUnreadChange: (Boolean) -> Unit,
@@ -1378,6 +1317,8 @@ private fun LibrarySectionContent(
 
     BackHandler(enabled = state.selectionMode) { onExitSelection() }
 
+    var ledger by rememberSaveable(kind) { mutableStateOf(kind.defaultsToLedgerRows) }
+    var expandAll by rememberSaveable(kind) { mutableStateOf(false) }
     var showMenu by remember { mutableStateOf(false) }
 
     ProvidePushedShellChrome(
@@ -1398,7 +1339,8 @@ private fun LibrarySectionContent(
                 if (!showsFavoriteScopes || hasWorkContent) FilterButton(
                     filtersActive = state.hasActiveQueryOrFilters,
                     badgeCount = state.filters.activeCount + if (state.searchQuery.isBlank()) 0 else 1,
-                    onClick = onShowFilters
+                    onClick = onShowFilters,
+                    onClearFilters = onClearFilters
                 )
                 if (!showsFavoriteScopes || hasWorkContent || hasPrivacyMenu) Box {
                     ToolbarCircleButton(
@@ -1413,6 +1355,12 @@ private fun LibrarySectionContent(
                                 text = { Text(if (state.revealAllActive) "Hide mature works" else "Show mature works") },
                                 onClick = { showMenu = false; onTogglePrivacy() }
                             )
+                        }
+                        if (!showsAffinityList) {
+                            DropdownMenuItem(text = { Text(if (ledger) "Display · Ledger" else "Display · Detailed") },
+                                onClick = { ledger = !ledger; showMenu = false })
+                            if (!ledger) DropdownMenuItem(text = { Text(if (expandAll) "Collapse All" else "Expand All") },
+                                onClick = { expandAll = !expandAll; showMenu = false })
                         }
                         if (!showsFavoriteScopes || hasWorkContent) DropdownMenuItem(
                             text = { Text("Select") },
@@ -1433,7 +1381,7 @@ private fun LibrarySectionContent(
         if (showsAffinityList) {
             FavoriteAffinityList(state, onFavoriteScopeChange, onFavoriteOrderChange, onTagsUnreadChange, onOpenAffinity,
                 favoriteAuthors)
-        } else KudosRefreshBox(onRefresh = onRefresh, modifier = Modifier.fillMaxSize()) {
+        } else KudosRefreshBox(onRefresh = { onRefresh(sectionItems.map { it.item.work }) }, modifier = Modifier.fillMaxSize()) {
             val topInset = WindowInsets.systemBars.asPaddingValues().calculateTopPadding()
             LazyColumn(
                 contentPadding = PaddingValues(top = topInset + 56.dp, bottom = if (state.selectionMode) 94.dp else 18.dp),
@@ -1562,6 +1510,7 @@ private fun LibrarySectionContent(
                                 selected = id in state.selectedWorkIds,
                                 selecting = state.selectionMode,
                                 showsZeroStats = state.showsZeroStats,
+                                ledger = ledger, expandAll = expandAll,
                                 abandoned = kind == LibrarySectionKind.History && state.historyGrouping == LibraryHistoryGrouping.State &&
                                     ReadingAbandonment.isAbandoned(display.item.work, now),
                                 onKeepInProgress = onKeepInProgress
@@ -1676,7 +1625,9 @@ data class LibraryCardActions(
     val onAddToCollection: (String) -> Unit,
     val onOpenComments: (Long) -> Unit,
     val canRebuildFromOriginal: suspend (SavedWork) -> Boolean = { false },
-    val onRebuildFromOriginal: (SavedWork) -> Unit = {}
+    val onRebuildFromOriginal: (SavedWork) -> Unit = {},
+    val canReadWithoutCopy: Boolean = false,
+    val isInSavedForLater: (suspend (String) -> Boolean)? = null
 )
 
 /** Compact trailing pill: privacy eye · select · overflow (Insights / Select). */

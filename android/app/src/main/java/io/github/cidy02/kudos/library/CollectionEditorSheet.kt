@@ -45,6 +45,7 @@ import io.github.cidy02.kudos.works.DownloadQueue
 import io.github.cidy02.kudos.works.WorkRepository
 import io.github.cidy02.kudos.works.WorkTags
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.withLock
 
 /**
  * Artboard **1bk** — New Collection and Edit Collection / Details are one sheet,
@@ -74,8 +75,79 @@ fun CollectionEditorSheet(
     val palette = collectionDraftPalette(tokens.theme, tokens.scopePalette, hue, colorHex)
     val canSave = name.isNotBlank() && !saving
 
+    val editMutex = remember { kotlinx.coroutines.sync.Mutex() }
+    var revision by remember { androidx.compose.runtime.mutableIntStateOf(0) }
+    fun save(close: Boolean) {
+        if (name.isBlank() && !editing) return
+        val name = name.ifBlank { existing?.name.orEmpty() }
+        val description = description
+        val hue = hue
+        val colorHex = colorHex
+        val keepsWorksOffline = keepsWorksOffline
+        val showsOnHome = showsOnHome
+        val editRevision = ++revision
+        saving = true
+        // Admit every field change before the sheet can leave; queued writes keep their order.
+        scope.launch(start = kotlinx.coroutines.CoroutineStart.UNDISPATCHED) {
+            kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
+                editMutex.withLock {
+                    val saved = runCatching {
+                        if (editing) {
+                            val wasKeptOffline = workRepository.getCollection(existing!!.id)?.keepsWorksOffline == true
+                            val updated = workRepository.updateCollection(
+                                collectionId = existing.id,
+                                name = name,
+                                description = description,
+                                hue = hue,
+                                colorHex = colorHex,
+                                clearColor = hue == null && colorHex == null,
+                                keepsWorksOffline = keepsWorksOffline,
+                                showsOnHome = showsOnHome
+                            )
+                            if (updated != null) {
+                                if (!wasKeptOffline && keepsWorksOffline && downloadQueue != null) {
+                                    val works = workRepository.worksForCollection(existing.id)
+                                    for (work in works) {
+                                        if (!work.hasEpub) {
+                                            val ao3Id = WorkTags.ao3WorkIdFromUrl(work.sourceUrl)
+                                            if (ao3Id != null) {
+                                                downloadQueue.enqueueLocal(
+                                                    ao3WorkId = ao3Id,
+                                                    title = work.title,
+                                                    sourceUrl = work.sourceUrl,
+                                                    force = false
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                                updated
+                            } else {
+                                error("Could not update collection.")
+                            }
+                        } else {
+                            workRepository.createCollection(
+                                name = name,
+                                hue = hue,
+                                colorHex = colorHex,
+                                description = description,
+                                keepsWorksOffline = keepsWorksOffline,
+                                showsOnHome = showsOnHome
+                            )
+                        }
+                    }
+                    if (editRevision == revision) {
+                        saving = false
+                        error = saved.exceptionOrNull()?.message
+                    }
+                    if (close) saved.getOrNull()?.let(onSaved)
+                }
+            }
+        }
+    }
+
     Dialog(
-        onDismissRequest = { if (!saving) onDismiss() },
+        onDismissRequest = { if (editing) save(close = true) else if (!saving) onDismiss() },
         properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
         Column(
@@ -91,7 +163,7 @@ fun CollectionEditorSheet(
                     .padding(horizontal = 8.dp, vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                TextButton(onClick = onDismiss, enabled = !saving) { Text("Cancel") }
+                if (!editing) TextButton(onClick = onDismiss, enabled = !saving) { Text("Cancel") }
                 Text(
                     text = if (editing) "Details" else "New collection",
                     modifier = Modifier.weight(1f),
@@ -100,64 +172,11 @@ fun CollectionEditorSheet(
                     fontWeight = FontWeight.SemiBold
                 )
                 TextButton(
-                    onClick = {
-                        saving = true
-                        scope.launch {
-                            val saved = runCatching {
-                                if (editing) {
-                                    val wasKeptOffline = existing!!.keepsWorksOffline == true
-                                    val updated = workRepository.updateCollection(
-                                        collectionId = existing.id,
-                                        name = name,
-                                        description = description,
-                                        hue = hue,
-                                        colorHex = colorHex,
-                                        clearColor = hue == null && colorHex == null,
-                                        keepsWorksOffline = keepsWorksOffline,
-                                        showsOnHome = showsOnHome
-                                    )
-                                    if (updated != null) {
-                                        if (!wasKeptOffline && keepsWorksOffline && downloadQueue != null) {
-                                            val works = workRepository.worksForCollection(existing.id)
-                                            for (work in works) {
-                                                if (!work.hasEpub) {
-                                                    val ao3Id = WorkTags.ao3WorkIdFromUrl(work.sourceUrl)
-                                                    if (ao3Id != null) {
-                                                        downloadQueue.enqueueLocal(
-                                                            ao3WorkId = ao3Id,
-                                                            title = work.title,
-                                                            sourceUrl = work.sourceUrl,
-                                                            force = false
-                                                        )
-                                                    }
-                                                }
-                                            }
-                                        }
-                                        updated
-                                    } else {
-                                        error("Could not update collection.")
-                                    }
-                                } else {
-                                    workRepository.createCollection(
-                                        name = name,
-                                        hue = hue,
-                                        colorHex = colorHex,
-                                        description = description,
-                                        keepsWorksOffline = keepsWorksOffline,
-                                        showsOnHome = showsOnHome
-                                    )
-                                }
-                            }
-                            saving = false
-                            saved.getOrNull()?.let(onSaved) ?: run {
-                                error = saved.exceptionOrNull()?.message ?: "Could not save this collection."
-                            }
-                        }
-                    },
+                    onClick = { save(close = true) },
                     enabled = canSave
                 ) {
                     Text(
-                        text = if (editing) "Save" else "Create",
+                        text = if (editing) "Done" else "Create",
                         color = if (canSave) palette.accent else tokens.tertiaryInk
                     )
                 }
@@ -174,7 +193,7 @@ fun CollectionEditorSheet(
                 SubjectFieldLabel("Name", Modifier.padding(top = 4.dp))
                 OutlinedTextField(
                     value = name,
-                    onValueChange = { name = it },
+                    onValueChange = { name = it; if (editing) save(close = false) },
                     modifier = Modifier.fillMaxWidth(),
                     placeholder = { Text("Comfort reads") },
                     singleLine = true
@@ -183,7 +202,7 @@ fun CollectionEditorSheet(
                 SubjectFieldLabel("Description", Modifier.padding(top = 10.dp))
                 OutlinedTextField(
                     value = description,
-                    onValueChange = { description = it },
+                    onValueChange = { description = it; if (editing) save(close = false) },
                     modifier = Modifier.fillMaxWidth(),
                     placeholder = { Text("Optional") },
                     minLines = 2
@@ -196,6 +215,7 @@ fun CollectionEditorSheet(
                     onChange = { nextHue, nextHex ->
                         hue = nextHue
                         colorHex = nextHex
+                        if (editing) save(close = false)
                     }
                 )
                 FormFootnote(
@@ -226,7 +246,7 @@ fun CollectionEditorSheet(
                         )
                         SubjectToggle(
                             checked = keepsWorksOffline,
-                            onCheckedChange = { keepsWorksOffline = it },
+                            onCheckedChange = { keepsWorksOffline = it; if (editing) save(close = false) },
                             accent = palette.accent,
                             contentDescription = "Keep downloads"
                         )
@@ -246,7 +266,7 @@ fun CollectionEditorSheet(
                         )
                         SubjectToggle(
                             checked = showsOnHome,
-                            onCheckedChange = { showsOnHome = it },
+                            onCheckedChange = { showsOnHome = it; if (editing) save(close = false) },
                             accent = palette.accent,
                             contentDescription = "Show on Home"
                         )

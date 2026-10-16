@@ -244,6 +244,31 @@ class AnnotationTombstoneTest {
         assertNotEquals(bookmark.id, fresh.id)
     }
 
+    @Test
+    fun repeatHighlightRemovesOnlyTheExactSameColourPassageAndTombstonesIt() = runTest {
+        database.workDao().upsert(SavedWork(id = WORK_ID, title = "Work", author = "Author").toEntity())
+        annotationRepository.toggleHighlight(WORK_ID, "first", "same words", "pink", 0.1, 1)
+        val first = annotationRepository.observeForWork(WORK_ID).first().single()
+        annotationRepository.toggleHighlight(WORK_ID, "nearby", "same words", "pink", 0.101, 1)
+        annotationRepository.toggleHighlight(WORK_ID, "first", "same words", "pink", 0.1, 1)
+        val marks = annotationRepository.observeForWork(WORK_ID).first()
+        assertEquals(listOf("nearby"), marks.map { it.locatorString })
+        assertTrue(database.syncTombstoneDao().getAll().any { it.recordID == first.id })
+    }
+
+    @Test
+    fun aDifferentHighlightColourReusesThePassageAndKeepsItsNote() = runTest {
+        database.workDao().upsert(SavedWork(id = WORK_ID, title = "Work", author = "Author").toEntity())
+        val first = annotationRepository.addOrRecolorHighlight(WORK_ID, "passage", "words", "yellow",
+            note = "Keep me", progression = 0.1, spineIndex = 1, kind = "note")
+        annotationRepository.toggleHighlight(WORK_ID, "passage", "words", "blue", 0.1, 1)
+        val mark = annotationRepository.observeForWork(WORK_ID).first().single()
+        assertEquals(first.id, mark.id)
+        assertEquals("blue", mark.colorRaw)
+        assertEquals("Keep me", mark.note)
+        assertEquals("note", mark.kindRaw)
+    }
+
     /**
      * iOS `ReadingAnnotationMatching.isSamePassage`: only the same stored locator is the same
      * passage. The same words a few lines down are a second highlight (audit A5-4).

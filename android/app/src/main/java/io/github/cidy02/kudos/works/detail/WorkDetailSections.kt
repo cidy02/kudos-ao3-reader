@@ -44,6 +44,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.cidy02.kudos.home.HomeFacts
+import io.github.cidy02.kudos.core.model.SavedWork
 import io.github.cidy02.kudos.search.LocalTagSearch
 import io.github.cidy02.kudos.search.SearchSubjectField
 import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
@@ -540,7 +541,11 @@ fun WorkDetailSeriesSection(
     queuingSeries: Boolean,
     modifier: Modifier = Modifier,
     onDownloadSeries: () -> Unit,
-    onOpenSeries: (String) -> Unit
+    onOpenSeries: (String) -> Unit,
+    localWorks: List<SavedWork> = emptyList(),
+    isObscured: (SavedWork) -> Boolean = { false },
+    onOpenLocalWork: (String) -> Unit = {},
+    onReveal: (SavedWork) -> Unit = {}
 ) {
     if (seriesTitle.isBlank()) return
     val tokens = LocalKudosTokens.current
@@ -563,6 +568,16 @@ fun WorkDetailSeriesSection(
                 label = seriesTitle,
                 value = partText
             )
+
+            localWorks.forEach { work ->
+                val obscured = isObscured(work)
+                SubjectRowSeparator(inset = 14.dp)
+                SubjectFormRow(
+                    label = if (obscured) "Hidden mature work" else
+                        (if (work.seriesPosition > 0) "${work.seriesPosition}. " else "") + work.title,
+                    onClick = { if (obscured) onReveal(work) else onOpenLocalWork(work.id) }
+                )
+            }
 
             if (seriesUrl.isNotBlank()) {
                 SubjectRowSeparator(inset = 14.dp)

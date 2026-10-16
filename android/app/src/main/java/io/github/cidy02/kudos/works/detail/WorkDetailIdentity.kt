@@ -121,6 +121,23 @@ enum class WorkCompletionStatus(val text: String, val shortText: String) {
     }
 }
 
+/** Native author navigation shared by work bylines, including picker candidates. */
+val LocalOpenAuthor = androidx.compose.runtime.staticCompositionLocalOf<(String) -> Unit> { {} }
+
+@Composable
+internal fun VerifiedAuthorByline(
+    author: String,
+    identities: String,
+    authorNames: List<String> = io.github.cidy02.kudos.works.resolveTappableAuthorNames(null, author),
+    onOpenAuthor: (String) -> Unit = LocalOpenAuthor.current
+) {
+    AuthorBylineRow(authorNames, author, LocalKudosTokens.current.scopePalette.accent,
+        isLinked = { io.github.cidy02.kudos.network.ao3.author.AO3AuthorIdentities.byline(identities, it) != null },
+        onOpenAuthor = { name ->
+            io.github.cidy02.kudos.network.ao3.author.AO3AuthorIdentities.byline(identities, name)?.let(onOpenAuthor)
+        })
+}
+
 /**
  * Artboard 1a's WorkDetailIdentityHeader (`WorkDetailIdentityBlock.swift:26`).
  * Kicker (primary fandom), 32sp title, and tappable author byline underneath.

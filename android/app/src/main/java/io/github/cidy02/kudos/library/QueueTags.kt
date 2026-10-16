@@ -367,6 +367,7 @@ fun QueueTagManager(
             siblings = tags.filter { it.id != tag.id },
             count = counts[tag.id] ?: 0,
             onDismiss = { editing = null },
+            onRemove = { editing = null; pending = tag },
             onChanged = { editing = null; reload += 1 }
         )
     }
@@ -493,6 +494,7 @@ private fun QueueTagEditDialog(
     tag: Tag,
     siblings: List<Tag>,
     count: Int,
+    onRemove: () -> Unit,
     onDismiss: () -> Unit,
     onChanged: () -> Unit
 ) {
@@ -525,6 +527,10 @@ private fun QueueTagEditDialog(
                     fontSize = 12.sp,
                     color = LocalKudosTokens.current.secondaryInk
                 )
+                TextButton(onClick = onRemove) {
+                    Text(if (count == 0) "Remove from this queue" else "Remove tag from $count work${if (count == 1) "" else "s"}",
+                        color = androidx.compose.material3.MaterialTheme.colorScheme.error)
+                }
                 if (siblings.isNotEmpty()) {
                     SubjectFieldLabel("Merge into another tag")
                     siblings.forEach { sibling ->

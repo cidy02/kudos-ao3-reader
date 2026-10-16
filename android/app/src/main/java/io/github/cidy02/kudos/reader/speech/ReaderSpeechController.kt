@@ -55,6 +55,9 @@ class ReaderSpeechController(
     private val _downloadProgress = MutableStateFlow<Float?>(null)
     val downloadProgress: StateFlow<Float?> = _downloadProgress.asStateFlow()
 
+    private val _downloadFailure = MutableStateFlow<String?>(null)
+    val downloadFailure: StateFlow<String?> = _downloadFailure.asStateFlow()
+
     private var currentQueue: List<String> = emptyList()
     private var currentIndex = 0
     private var currentPreferences = ReaderPreferences()
@@ -103,14 +106,20 @@ class ReaderSpeechController(
         
         scope.launch {
             WorkManager.getInstance(appContext)
-                .getWorkInfosForUniqueWorkFlow("TTSDownloadWorker")
+                .getWorkInfosForUniqueWorkFlow(TTSDownloadWorker.WORK_NAME)
                 .collectLatest { infos ->
                     val info = infos.firstOrNull()
                     if (info != null && info.state == WorkInfo.State.RUNNING) {
                         val p = info.progress.getFloat(TTSDownloadWorker.KEY_PROGRESS, -1f)
-                        _downloadProgress.value = if (p >= 0f) p else null
+                        _downloadProgress.value = if (p >= 0f) p else 0f
+                        _downloadFailure.value = null
+                    } else if (info?.state == WorkInfo.State.ENQUEUED || info?.state == WorkInfo.State.BLOCKED) {
+                        _downloadProgress.value = 0f
+                        _downloadFailure.value = null
                     } else if (info != null && info.state.isFinished) {
                         _downloadProgress.value = null
+                        _downloadFailure.value = if (info.state == WorkInfo.State.FAILED)
+                            info.outputData.getString(TTSDownloadWorker.KEY_ERROR) ?: "Could not download the voice pack." else null
                         // Only a player waiting for the pack is ready now; a reading under way
                         // goes on (A49 F3: it was marked stopped while the device spoke).
                         if (TTSDownloadWorker.isModelDownloaded(appContext) &&
@@ -123,7 +132,13 @@ class ReaderSpeechController(
     }
 
     fun enqueueDownload() {
+        _downloadFailure.value = null
+        _downloadProgress.value = 0f
         TTSDownloadWorker.enqueue(appContext)
+    }
+
+    fun cancelDownload() {
+        WorkManager.getInstance(appContext).cancelUniqueWork(TTSDownloadWorker.WORK_NAME)
     }
 
     fun configure(preferences: ReaderPreferences, title: String = workTitle) {

@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.List
-import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
@@ -32,6 +31,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
 import io.github.cidy02.kudos.ui.subject.ToolbarAddButton
+import io.github.cidy02.kudos.ui.subject.FilterButton
 import io.github.cidy02.kudos.ui.subject.ToolbarCircleButton
 import io.github.cidy02.kudos.ui.subject.WorkSectionLayout
 
@@ -67,6 +67,7 @@ class LibraryShellChrome {
         layout = WorkSectionLayout.Shelves
         actions.onNewCollection = {}
         actions.onShowFilters = {}
+        actions.onClearFilters = {}
         actions.onSelectAll = {}
         actions.onEnterSelect = {}
         actions.onTogglePrivacy = {}
@@ -80,6 +81,7 @@ class LibraryShellChrome {
 class LibraryShellActions {
     var onNewCollection: () -> Unit = {}
     var onShowFilters: () -> Unit = {}
+    var onClearFilters: () -> Unit = {}
     var onSelectAll: () -> Unit = {}
     var onEnterSelect: () -> Unit = {}
     var onTogglePrivacy: () -> Unit = {}
@@ -127,14 +129,9 @@ fun LibraryToolbarActions(chrome: LibraryShellChrome) {
                 onClick = { chrome.actions.onNewCollection() },
                 accessibilityName = "New Collection"
             )
-            ToolbarCircleButton(
-                onClick = { chrome.actions.onShowFilters() },
-                accessibilityName = "Filter",
-                isAccented = chrome.filtersActive,
-                badge = if (chrome.filterBadgeCount > 0) chrome.filterBadgeCount.toString() else null
-            ) {
-                Icon(imageVector = Icons.Filled.FilterList, contentDescription = null)
-            }
+            FilterButton(filtersActive = chrome.filtersActive, badgeCount = chrome.filterBadgeCount,
+                onClick = { chrome.actions.onShowFilters() }, onClearFilters = { chrome.actions.onClearFilters() })
+
             var open by remember { mutableStateOf(false) }
             Box {
                 ToolbarCircleButton(onClick = { open = true }, accessibilityName = "More") {

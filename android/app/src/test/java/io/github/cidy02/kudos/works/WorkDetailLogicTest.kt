@@ -12,6 +12,23 @@ import org.junit.Test
 class WorkDetailLogicTest {
 
     @Test
+    fun localSeriesLinksAreOrderedActiveAndRespectMatureHideMode() {
+        val local = io.github.cidy02.kudos.core.model.SavedWork(id = "current", title = "Current", author = "A", seriesTitle = "Series")
+        val early = local.copy(id = "early", seriesPosition = 1)
+        val mature = local.copy(id = "mature", seriesPosition = 2, rating = "Explicit")
+        val later = local.copy(id = "later", seriesPosition = 3)
+        val deleted = local.copy(id = "deleted", isDeleted = true)
+        val other = local.copy(id = "other", seriesTitle = "Other series")
+        val all = listOf(local, later, mature, early, deleted, other)
+        val privacy = io.github.cidy02.kudos.core.model.PrivacySettings(hideMatureContent = false)
+        val reveal = io.github.cidy02.kudos.app.PrivacyRevealState()
+        assertEquals(listOf("early", "mature", "later"), localSeriesWorks(local, all, privacy, reveal).map { it.id })
+        assertEquals(listOf("early", "later"), localSeriesWorks(local, all,
+            privacy.copy(hideMatureContent = true, matureContentMode = io.github.cidy02.kudos.core.model.MatureContentMode.Hide), reveal).map { it.id })
+        assertTrue(localSeriesWorks(local.copy(seriesTitle = ""), all, privacy, reveal).isEmpty())
+    }
+
+    @Test
     fun warningStatusClassification() {
         val none1 = WorkWarningStatus.from(emptyList())
         assertTrue(none1 is WorkWarningStatus.None)
