@@ -2399,3 +2399,20 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   at launch but the session check; the Library's foreground backfill (3fr) now reads what a
   work lacks, 404s included. Removed. Reverse: the block in `KudosApplication.onCreate` before
   this commit.
+- **2026-10-16 · 3fr's walk reads each work when its turn comes (Claude, own review).** It took
+  the whole library once at the start and wrote that copy back as it reached each work, so a
+  favourite, a Finished mark or a tag set in the Library while the walk ran (one paced AO3 read
+  per work, so minutes on a large library) was undone. Each work is now read at its turn and
+  again just before each write; a test favourites one work while the walk reads another.
+- **2026-10-16 · A work is read again after an AO3 read, before it is written (Claude).** Home's
+  WIP update check, Settings' availability sweep and pull-to-refresh (`refreshMetadata`) wrote
+  back the copy of a work they had before the request. Home's check runs on while the reader
+  reads, so a work opened from Home could have its place put back to where it was when the
+  check began; the sweep (up to 150 works, 1.5 s apart) and a refresh could undo a favourite,
+  a Finished mark or a page read meanwhile, and a work deleted during a refresh came back.
+  iOS edits the live record and has none of this. Each now reads the work after the request
+  (as `WorkMetadataRefresh` already did); a test for each writes a reading place during the
+  request. The same in `WorkImporter`: Download and Save looked the work up before reading AO3,
+  and an EPUB download (seconds) wrote back the copy it started with, so a place read or a
+  Finished mark set while an update came down was lost; the work is now looked up after AO3
+  answers and read again after the file is written.

@@ -688,11 +688,12 @@ class WorkRepository(
         val original = getWork(workId) ?: return AO3Result.Failure(AO3Error.NotFound)
         val ao3Id = WorkIdentityIndex.ao3WorkId(original) ?: return AO3Result.Failure(AO3Error.BadRequest)
         val recoveredId = ao3Id.takeIf { it in 1..Int.MAX_VALUE.toLong() }?.toInt()
-        val work = if (original.ao3WorkID == null && recoveredId != null) {
-            upsert(original.copy(ao3WorkID = recoveredId))
-        } else original
+        if (original.ao3WorkID == null && recoveredId != null) upsert(original.copy(ao3WorkID = recoveredId))
 
-        return when (val result = repo.refreshTags(ao3Id)) {
+        val result = repo.refreshTags(ao3Id)
+        // Read again after the request, so a page read meanwhile is not written back over.
+        val work = getWork(workId)?.takeIf { !it.isDeleted } ?: return AO3Result.Failure(AO3Error.NotFound)
+        return when (result) {
             is AO3Result.Failure -> {
                 if (result.error == AO3Error.NotFound) {
                     // A 404 marks the last copy; the EPUB and all reader state stay local.
@@ -735,9 +736,11 @@ class WorkRepository(
      * [readsAO3] is false in the demo, whose answers would mark its works deleted.
      */
     suspend fun backfillFilterMetadata(readsAO3: Boolean) {
-        for (work in workDao.getAll().map { it.toDomain() }) {
+        for (id in workDao.getAll().map { it.id }) {
             currentCoroutineContext().ensureActive()
-            if (work.isQueueOnlyWork) continue
+            // Read each work when its turn comes: a copy taken when the walk began would
+            // write back over whatever the reader changed on it since.
+            val work = getWork(id)?.takeIf { !it.isDeleted && !it.isQueueOnlyWork } ?: continue
             val withEpubTags = backfillTagsFromEpub(work)
             if (readsAO3) backfillTagsFromAO3(withEpubTags)
         }
@@ -752,9 +755,10 @@ class WorkRepository(
         } ?: return work
         val tags = meta.applyTo(work, fillOnly = true).workTags
         if (tags.isEmpty()) return work
-        return upsert(work.copy(
+        val current = getWork(work.id)?.takeIf { !it.isDeleted && it.workTags.isEmpty() } ?: return work
+        return upsert(current.copy(
             workTags = tags,
-            rating = work.rating.ifBlank { meta.rating.trim() },
+            rating = current.rating.ifBlank { meta.rating.trim() },
             lastModifiedAt = clock()
         ))
     }
@@ -770,8 +774,9 @@ class WorkRepository(
         if (!work.needsAO3Refresh(now)) return
         val ao3Id = WorkIdentityIndex.ao3WorkId(work) ?: return
         val previousAttempt = work.lastTagRefreshAttemptAt
-        upsert(work.copy(
-            ao3WorkID = work.ao3WorkID ?: ao3Id.takeIf { it in 1..Int.MAX_VALUE.toLong() }?.toInt(),
+        val stamped = getWork(work.id)?.takeIf { !it.isDeleted } ?: return
+        upsert(stamped.copy(
+            ao3WorkID = stamped.ao3WorkID ?: ao3Id.takeIf { it in 1..Int.MAX_VALUE.toLong() }?.toInt(),
             lastTagRefreshAttemptAt = now
         ))
         val result = try {

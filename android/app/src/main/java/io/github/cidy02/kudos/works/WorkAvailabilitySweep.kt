@@ -95,9 +95,10 @@ class WorkAvailabilitySweep(
             }
 
             val workId = WorkIdentityIndex.ao3WorkId(work) ?: continue
-            val identified = if (work.ao3WorkID == null && workId in 1..Int.MAX_VALUE.toLong()) {
-                workRepository.upsert(work.copy(ao3WorkID = workId.toInt()))
-            } else work
+            if (work.ao3WorkID == null && workId in 1..Int.MAX_VALUE.toLong()) {
+                // The list was read when the sweep began: write onto the work as it is now.
+                workRepository.getWork(work.id)?.let { workRepository.upsert(it.copy(ao3WorkID = workId.toInt())) }
+            }
             val result = try {
                 tagsRepository.refreshTags(workId)
             } catch (_: CancellationException) {
@@ -108,14 +109,17 @@ class WorkAvailabilitySweep(
                 break
             }
             checked++
-            when (result) {
+            // Read again after the request: whatever the reader did meanwhile (a page read,
+            // a favourite) must not be written back over.
+            val identified = workRepository.getWork(work.id)?.takeIf { !it.isDeleted }
+            if (identified != null) when (result) {
                 is AO3Result.Failure -> {
                     if (result.error is AO3Error.NotFound) {
                         workRepository.upsert(
                             identified.copy(
                                 ao3Unavailable = true,
                                 lastAvailabilityCheck = now,
-                                lastModifiedAt = if (!work.ao3Unavailable) now else work.lastModifiedAt
+                                lastModifiedAt = if (!identified.ao3Unavailable) now else identified.lastModifiedAt
                             )
                         )
                         nowUnavailable++
@@ -126,7 +130,7 @@ class WorkAvailabilitySweep(
                     workRepository.upsert(identified.copy(
                         ao3Unavailable = false,
                         lastAvailabilityCheck = now,
-                        lastModifiedAt = if (work.ao3Unavailable) now else work.lastModifiedAt
+                        lastModifiedAt = if (identified.ao3Unavailable) now else identified.lastModifiedAt
                     ))
                     stillAvailable++
                 }

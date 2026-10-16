@@ -178,6 +178,22 @@ class WorkAvailabilitySweepTest {
         }
     }
 
+    /** The sweep reads its list once; a page read while it runs must not be written back over. */
+    @Test
+    fun aPlaceReadWhileTheSweepRunsIsKept() = runTest {
+        val original = workRepository.upsert(work("reading", 1, null).copy(ao3WorkID = 1))
+        val client = object : AO3Client {
+            override suspend fun get(url: String, headers: Map<String, String>): AO3Result<AO3HttpResponse> {
+                workRepository.upsert(workRepository.getWork(original.id)!!.copy(readiumLocator = "read-meanwhile"))
+                return AO3Result.Success(AO3HttpResponse(url, 200, emptyMap(), "<dl class=\"work meta group\"></dl>"))
+            }
+        }
+        WorkAvailabilitySweep(workRepository, WorkTagsRepository(client), clock, RecordingDelay()).sweep()
+        val after = workRepository.getWork(original.id)!!
+        assertEquals("read-meanwhile", after.readiumLocator)
+        assertEquals(now, after.lastAvailabilityCheck)
+    }
+
     @Test
     fun deletedWorksAreCountedAndBadgedAndAReappearingWorkLosesTheFlag() = runTest {
         workRepository.upsert(work("gone", 1, null).copy(hasEpub = true))
