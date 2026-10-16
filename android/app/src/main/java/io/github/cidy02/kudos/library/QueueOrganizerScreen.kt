@@ -158,6 +158,9 @@ fun QueueOrganizerScreen(
                 palette = palette,
                 selecting = selecting,
                 selectedCount = selected.size,
+                allSelected = ordered.isNotEmpty() && ordered.all { it.queue.id in selected },
+                onSelectAll = { selected = if (ordered.isNotEmpty() && ordered.all { it.queue.id in selected }) emptySet()
+                    else ordered.map { it.queue.id }.toSet() },
                 canPin = chosen.isNotEmpty(),
                 pinLabel = if (ReadingQueueFacts.pinTarget(chosen)) "Pin" else "Unpin",
                 canDelete = ReadingQueueFacts.deletable(chosen).isNotEmpty(),
@@ -340,6 +343,8 @@ private fun OrganizerToolbarActions(
     palette: SubjectPalette,
     selecting: Boolean,
     selectedCount: Int,
+    allSelected: Boolean,
+    onSelectAll: () -> Unit,
     canPin: Boolean,
     pinLabel: String,
     canDelete: Boolean,
@@ -356,6 +361,7 @@ private fun OrganizerToolbarActions(
     onDone: () -> Unit
 ) {
     if (selecting) {
+        TextButton(onClick = onSelectAll) { Text(if (allSelected) "Deselect All" else "Select All", color = palette.accent) }
         TextButton(onClick = onPin, enabled = canPin) { Text(pinLabel, color = palette.accent) }
         TextButton(onClick = onTag, enabled = selectedCount > 0) { Text("Tag", color = palette.accent) }
         TextButton(onClick = onDelete, enabled = canDelete) { Text("Delete") }

@@ -76,6 +76,7 @@ internal fun AddLibraryWorksSheet(
 ) {
     var query by remember { mutableStateOf("") }
     var selection by remember { mutableStateOf(emptySet<String>()) }
+    val openAuthor = io.github.cidy02.kudos.works.detail.LocalOpenAuthor.current
     val eligible = remember(candidates, privacy, reveal) { AddLibraryWorks.eligible(candidates, privacy, reveal) }
     val matches = remember(eligible, query) { AddLibraryWorks.matching(eligible, query) }
     val chosen = AddLibraryWorks.chosen(eligible, selection)
@@ -143,8 +144,10 @@ internal fun AddLibraryWorksSheet(
                                     Text(work.title.ifBlank { "Untitled work" }, style = MaterialTheme.typography.bodyLarge,
                                         maxLines = 2, overflow = TextOverflow.Ellipsis)
                                     if (work.author.isNotBlank()) {
-                                        Text(work.author, style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        io.github.cidy02.kudos.works.detail.VerifiedAuthorByline(
+                                            work.author, work.authorIdentitiesJSON,
+                                            onOpenAuthor = { onDismiss(); openAuthor(it) }
+                                        )
                                     }
                                 }
                             }

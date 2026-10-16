@@ -145,7 +145,10 @@ fun WorkDetailScreen(
     onOpenSeries: (String) -> Unit = {},
     onDismiss: () -> Unit = {},
     onOpenChapterComments: (Long) -> Unit = onOpenComments,
-    onComposeComment: (Long) -> Unit = onOpenComments
+    onComposeComment: (Long) -> Unit = onOpenComments,
+    onFilterLibraryTag: (String) -> Unit = {},
+    onOpenLocalWork: (String) -> Unit = {},
+    privacyGate: io.github.cidy02.kudos.app.PrivacyGate = io.github.cidy02.kudos.app.PrivacyGate()
 ) {
     var state by remember(source) { mutableStateOf(WorkDetailUiState()) }
     var newTagName by remember { mutableStateOf("") }
@@ -192,6 +195,10 @@ fun WorkDetailScreen(
     val settingsState = settingsRepository?.settings?.collectAsState(initial = KudosSettings.Defaults)
     val settings = settingsState?.value ?: KudosSettings.Defaults
 
+    val allLocalWorks by remember(workRepository) { workRepository.observeLibraryWorks() }.collectAsState(initial = emptyList())
+    val reveal by privacyGate.state.collectAsState()
+    val activity = LocalContext.current as? androidx.fragment.app.FragmentActivity
+    val seriesWorks = localSeriesWorks(state.local, allLocalWorks, settings.privacy, reveal)
     val downloadingItems by downloadQueue.items.collectAsState(initial = emptyList())
     val isDownloading = remember(downloadingItems, state.ao3WorkId) {
         state.ao3WorkId?.let { id ->
@@ -970,6 +977,19 @@ fun WorkDetailScreen(
         WorkDetailMyCopySheet(
             work = state.local,
             remote = state.remote,
+            onFilterTag = { showingMyCopy = false; onFilterLibraryTag(it) },
+            onRetryPreservation = {
+                val work = state.local
+                if (work != null && !state.working) runWorkAction {
+                    when (val result = workImporter.preserveQueuedWork(work)) {
+                        is WorkImportResult.Success -> refreshLocal(result.work.id, state.remote)
+                        is WorkImportResult.Failure -> {
+                            refreshLocal(work.id, state.remote)
+                            state = state.copy(error = result.error.displayMessage())
+                        }
+                    }
+                }
+            },
             userTags = state.userTags,
             collections = state.collections,
             queueMemberships = state.queueMemberships,
@@ -1095,15 +1115,28 @@ fun WorkDetailScreen(
         onRebuildFromOriginal = { rebuildWork = state.local },
         canRebuildFromOriginal = canRebuild,
         onRefreshMetadata = {
-            val work = state.local
             val repo = metadataRepository
-            if (work != null && repo != null) {
-                scope.launch {
-                    state = state.copy(working = true)
-                    WorkMetadataRefresh(workRepository, repo).refresh(work)
-                    refreshLocal(work.id, state.remote)
-                    state = state.copy(working = false)
-                }
+            if (repo != null) scope.launch {
+                state = state.copy(working = true)
+                try {
+                    val work = state.local
+                    if (work != null) {
+                        WorkMetadataRefresh(workRepository, repo).refresh(work)
+                        refreshLocal(work.id, state.remote)
+                    } else state.ao3WorkId?.let { id ->
+                        when (val result = repo.fetch(id)) {
+                            is AO3Result.Success -> {
+                                val prior = state.remote
+                                state = state.copy(remote = result.value.toRemoteSummary(id).copy(
+                                    seriesTitle = prior?.seriesTitle, seriesPosition = prior?.seriesPosition,
+                                    seriesUrl = prior?.seriesUrl, isRestricted = prior?.isRestricted ?: false,
+                                    bookmarks = prior?.bookmarks
+                                ), error = null)
+                            }
+                            is AO3Result.Failure -> state = state.copy(error = result.error.displayMessage())
+                        }
+                    }
+                } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled } catch (failure: Exception) { state = state.copy(error = failure.message ?: "Could not refresh this work.") } finally { state = state.copy(working = false) }
             }
         },
         onKudos = {
@@ -1197,6 +1230,11 @@ fun WorkDetailScreen(
         },
         onOpenAuthor = onOpenAuthor,
         onOpenSeries = onOpenSeries,
+        seriesWorks = seriesWorks,
+        seriesObscured = { io.github.cidy02.kudos.library.LibraryPrivacy.visibility(it, settings.privacy, reveal) ==
+            io.github.cidy02.kudos.library.LibraryPrivacyVisibility.Obscured },
+        onOpenLocalWork = onOpenLocalWork,
+        onRevealSeriesWork = { privacyGate.reveal(it.id, activity) },
         onOpenMyCopy = { showingMyCopy = true }
     )
 }
@@ -1235,7 +1273,11 @@ private fun WorkDetailContent(
     onResumeClick: () -> Unit,
     onOpenAuthor: (String) -> Unit,
     onOpenSeries: (String) -> Unit,
-    onOpenMyCopy: () -> Unit
+    onOpenMyCopy: () -> Unit,
+    seriesWorks: List<SavedWork>,
+    seriesObscured: (SavedWork) -> Boolean,
+    onOpenLocalWork: (String) -> Unit,
+    onRevealSeriesWork: (SavedWork) -> Unit
 ) {
     val tokens = LocalKudosTokens.current
     val context = LocalContext.current
@@ -1665,7 +1707,9 @@ private fun WorkDetailContent(
                     seriesUrl = state.seriesUrl,
                     queuingSeries = state.queuingSeries,
                     onDownloadSeries = onDownloadSeries,
-                    onOpenSeries = onOpenSeries
+                    onOpenSeries = onOpenSeries,
+                    localWorks = seriesWorks, isObscured = seriesObscured,
+                    onOpenLocalWork = onOpenLocalWork, onReveal = onRevealSeriesWork
                 )
             }
 
@@ -1703,6 +1747,18 @@ internal fun shareWork(context: Context, title: String, url: String) {
  * Prefer discrete remote author list; fall back to splitting a local "A, B" string.
  * Anonymous / blank names are not tappable.
  */
+internal fun localSeriesWorks(
+    local: SavedWork?,
+    works: List<SavedWork>,
+    privacy: io.github.cidy02.kudos.core.model.PrivacySettings,
+    reveal: io.github.cidy02.kudos.app.PrivacyRevealState
+): List<SavedWork> {
+    if (local == null || local.seriesTitle.isBlank()) return emptyList()
+    return works.filter { !it.isDeleted && it.id != local.id && it.seriesTitle == local.seriesTitle }
+        .filter { io.github.cidy02.kudos.library.LibraryPrivacy.visibility(it, privacy, reveal) !=
+            io.github.cidy02.kudos.library.LibraryPrivacyVisibility.Hidden }.sortedBy { it.seriesPosition }
+}
+
 internal fun resolveTappableAuthorNames(
     remoteAuthors: List<String>?,
     localAuthor: String?
@@ -1794,6 +1850,7 @@ internal fun AO3WorkMetadata.toRemoteSummary(workId: Long): AO3WorkSummary {
         id = workId,
         title = title.ifBlank { "AO3 Work $workId" },
         authors = authors,
+        authorIdentitiesJSON = authorIdentitiesJSON,
         fandoms = fandoms,
         rating = rating,
         summary = summary,

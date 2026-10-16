@@ -2276,3 +2276,23 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   comments and Write a comment open their own destinations. F09: Contents' chapter Bookmark
   and Add Note work. F10: a queue's and a collection's filters are the Library's full panel.
   Reverse: the commit that names 3fp.
+- **2026-10-16 · Brief 3fp, second part: A62 F11 to F33 but F21/F22 (Codex to its usage
+  limit; reviewed, corrected and gated by Claude).** Queue and collection pages get the
+  Library's per-work menus and swipes, with scoped Remove (F11, F12); pull-to-refresh
+  refreshes the listed works' metadata, one paced request at a time, as iOS's
+  `WorkMetadataRefresh` (F13); New Collection on the Library dashboard is the full editor
+  (F14); the queue and collection pickers toggle membership for a whole selection and create
+  in place (F15, F16); Remove from Saved for Later for a selection (F17); Layout and Expand All
+  (F18); My copy's tag names filter the Library and a failed preservation can be retried
+  (F19); other local works in the series on Work Detail (F20); Highlight applies at once in
+  the last colour and a repeat removes it, and deleting a mark is immediate, as iOS (F23,
+  F24); wording (F25); Edit tag's Remove (F27); Collection Details saves as it changes (F28);
+  the voice-pack download asks and can be cancelled or retried (F29); Select All in the queue
+  organiser (F30); bylines open authors (F31); every tag shows (F32); long-press clears
+  filters (F33). Claude's corrections: Home's section list was never handed the importer
+  (Codex could not compile); the refresh change stopped saving a work ID recovered from the
+  source URL when AO3 could not be reached (an existing test caught it); the bulk collection
+  picker called `onAdded` on opening, so a caller that reloads on it would reopen it without
+  end; Codex's new picker test never settled under Robolectric (the dialog runs and toggles on
+  the emulator), so its membership rule is tested on its own. Reverse: the commit that names
+  3fp part 2.

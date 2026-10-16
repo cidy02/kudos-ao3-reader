@@ -1,7 +1,10 @@
 package io.github.cidy02.kudos.library
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.material.icons.outlined.RemoveCircleOutline
+import io.github.cidy02.kudos.ui.subject.SwipeAction
+import io.github.cidy02.kudos.ui.subject.SwipeActionRow
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -80,6 +83,8 @@ object QueueShowOnlyTag {
     var name: String? = null
 }
 
+private enum class QueueDisplayMode { Compact, Ledger, Detailed }
+
 @Composable
 fun QueuePageScreen(
     repository: ReadingQueueRepository,
@@ -94,7 +99,9 @@ fun QueuePageScreen(
     onOpenWork: (String) -> Unit,
     onOpenReader: (String) -> Unit,
     onManageQueue: (String) -> Unit,
-    onBackToOrganizer: (() -> Unit)? = null
+    onBackToOrganizer: (() -> Unit)? = null,
+    workImporter: io.github.cidy02.kudos.works.WorkImporter? = null,
+    onOpenComments: (Long) -> Unit = {}
 ) {
     val tokens = LocalKudosTokens.current
     val scope = rememberCoroutineScope()
@@ -114,7 +121,8 @@ fun QueuePageScreen(
     val filtersActive = filters.hasActiveFilters || filterText.isNotBlank() || sort != LibrarySort.Natural
     val filterBadge = filters.activeCount + (if (filterText.isNotBlank()) 1 else 0)
     var onlyTag by remember(queueId) { mutableStateOf<String?>(null) }
-    var compact by rememberSaveable(queueId) { mutableStateOf(true) }
+    var displayMode by rememberSaveable { mutableStateOf(QueueDisplayMode.Compact) }
+    var expandAll by rememberSaveable { mutableStateOf(false) }
     var selecting by remember(queueId) { mutableStateOf(false) }
     var reordering by remember(queueId) { mutableStateOf(false) }
     var selected by remember(queueId) { mutableStateOf<Set<String>>(emptySet()) }
@@ -123,6 +131,7 @@ fun QueuePageScreen(
     var showAdd by remember { mutableStateOf(false) }
     var showEdit by remember { mutableStateOf(false) }
     var showDelete by remember { mutableStateOf(false) }
+    var removeOne by remember(queueId) { mutableStateOf<SavedWork?>(null) }
     var showRemove by remember { mutableStateOf(false) }
     var showTag by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -196,6 +205,16 @@ fun QueuePageScreen(
         else -> "Reorder"
     }
 
+    val workActions = workRepository?.let {
+        scopedWorkActions(
+            it, repository, downloadQueue, workImporter, shownSettings.app.confirmBeforeDelete,
+            onOpenWork, onOpenReader, onOpenComments,
+            onSelect = { id -> selecting = true; selected = setOf(id) },
+            onReveal = { id -> privacyGate?.reveal(id, activity) },
+            onChanged = { reload += 1 }
+        )
+    }
+
     fun activate(work: SavedWork) {
         when {
             selecting -> selected = toggleId(selected, work.id)
@@ -243,8 +262,9 @@ fun QueuePageScreen(
                     onToggleMature = { privacyGate?.toggleRevealAll(activity) },
                     onSelect = { if (works.isNotEmpty()) { selecting = true; reordering = false } },
                     onReorder = { reordering = true; selecting = false; selected = emptySet() },
-                    onDisplay = { compact = !compact; menu = false },
-                    compact = compact,
+                    onDisplay = { displayMode = it; menu = false },
+                    displayMode = displayMode,
+                    expandAll = expandAll, onExpandAll = { expandAll = !expandAll; menu = false },
                     onDetails = { onManageQueue(current.id) },
                     onEdit = { showEdit = true },
                     onDelete = { showDelete = true },
@@ -324,6 +344,9 @@ fun QueuePageScreen(
                                 WorkRow(
                                     work = work,
                                     downloadQueue = downloadQueue,
+                                    actions = workActions,
+                                    detailed = displayMode == QueueDisplayMode.Detailed, expandAll = expandAll,
+                                    onRemove = { removeOne = work },
                                     obscured = isObscuredMature(work, shownSettings, reveal),
                                     selecting = selecting,
                                     selected = work.id in selected,
@@ -346,6 +369,9 @@ fun QueuePageScreen(
                                 WorkRow(
                                     work = work,
                                     downloadQueue = downloadQueue,
+                                    actions = workActions,
+                                    detailed = displayMode == QueueDisplayMode.Detailed, expandAll = expandAll,
+                                    onRemove = { removeOne = work },
                                     obscured = isObscuredMature(work, shownSettings, reveal),
                                     selecting = selecting,
                                     selected = work.id in selected,
@@ -357,21 +383,26 @@ fun QueuePageScreen(
                         }
                         if (inLine.isNotEmpty()) {
                             SectionRuleHeader("In Line", count = inLine.size, modifier = Modifier.padding(top = 8.dp))
-                            if (compact) {
+                            if (displayMode == QueueDisplayMode.Compact) {
                                 Column(Modifier.padding(horizontal = 12.dp)) {
                                     inLine.chunked(2).forEach { row ->
                                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                             row.forEach { work ->
                                                 key(work.id) {
                                                     val downloading = rememberWorkDownloading(work, downloadQueue)
-                                                    SubjectWorkCoverCard(
-                                                        work = work,
-                                                        obscured = isObscuredMature(work, shownSettings, reveal),
-                                                        downloading = downloading,
-                                                        modifier = Modifier.clickable { activate(work) },
-                                                        isSelecting = selecting,
-                                                        isSelected = work.id in selected
-                                                    )
+                                                    QueueWorkItem(
+                                                        work, workActions, selecting || reordering,
+                                                        isObscuredMature(work, shownSettings, reveal),
+                                                        onClick = { activate(work) }, onRemove = { removeOne = work }
+                                                    ) { _ ->
+                                                        SubjectWorkCoverCard(
+                                                            work = work,
+                                                            obscured = isObscuredMature(work, shownSettings, reveal),
+                                                            downloading = downloading,
+                                                            isSelecting = selecting,
+                                                            isSelected = work.id in selected
+                                                        )
+                                                    }
                                                 }
                                             }
                                         }
@@ -383,6 +414,9 @@ fun QueuePageScreen(
                                         WorkRow(
                                             work = work,
                                             downloadQueue = downloadQueue,
+                                            actions = workActions,
+                                            detailed = displayMode == QueueDisplayMode.Detailed, expandAll = expandAll,
+                                            onRemove = { removeOne = work },
                                             obscured = isObscuredMature(work, shownSettings, reveal),
                                             selecting = selecting,
                                             selected = work.id in selected,
@@ -408,6 +442,7 @@ fun QueuePageScreen(
                 removeLabel = "Remove from Queue",
                 scopeName = "queue",
                 workRepository = workRepository,
+                workImporter = workImporter,
                 queueRepository = repository,
                 downloadQueue = downloadQueue,
                 palette = palette,
@@ -487,6 +522,17 @@ fun QueuePageScreen(
             dismissButton = { TextButton(onClick = { showDelete = false }) { Text("Cancel") } }
         )
     }
+    removeOne?.let { work ->
+        AlertDialog(
+            onDismissRequest = { removeOne = null }, title = { Text("Remove this work?") },
+            text = { Text("This work will leave this queue. It will stay in your Library.") },
+            confirmButton = { TextButton(onClick = {
+                removeOne = null
+                scope.launch { repository.removeWork(queueId, work.id); reload += 1 }
+            }) { Text("Remove") } },
+            dismissButton = { TextButton(onClick = { removeOne = null }) { Text("Cancel") } }
+        )
+    }
     if (showRemove) {
         val count = selected.size
         AlertDialog(
@@ -540,8 +586,10 @@ private fun PageToolbarActions(
     onToggleMature: () -> Unit,
     onSelect: () -> Unit,
     onReorder: () -> Unit,
-    onDisplay: () -> Unit,
-    compact: Boolean,
+    onDisplay: (QueueDisplayMode) -> Unit,
+    displayMode: QueueDisplayMode,
+    expandAll: Boolean,
+    onExpandAll: () -> Unit,
     onDetails: () -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
@@ -588,9 +636,12 @@ private fun PageToolbarActions(
                     enabled = canReorder,
                     onClick = { onDismissMenu(); if (canReorder) onReorder() }
                 )
-                DropdownMenuItem(
-                    text = { Text(if (compact) "Display · Compact" else "Display · List") },
-                    onClick = onDisplay
+                QueueDisplayMode.entries.forEach { mode ->
+                    DropdownMenuItem(text = { Text("${if (mode == displayMode) "✓ " else ""}Display · ${mode.name}") },
+                        onClick = { onDisplay(mode) })
+                }
+                if (displayMode == QueueDisplayMode.Detailed) DropdownMenuItem(
+                    text = { Text(if (expandAll) "Collapse All" else "Expand All") }, onClick = onExpandAll
                 )
                 DropdownMenuItem(text = { Text("Queue details") }, onClick = { onDismissMenu(); onDetails() })
                 if (custom) {
@@ -606,6 +657,10 @@ private fun PageToolbarActions(
 private fun WorkRow(
     work: SavedWork,
     downloadQueue: DownloadQueue?,
+    actions: LibraryCardActions?,
+    detailed: Boolean,
+    expandAll: Boolean,
+    onRemove: () -> Unit,
     obscured: Boolean,
     selecting: Boolean,
     selected: Boolean,
@@ -613,18 +668,54 @@ private fun WorkRow(
     onClick: () -> Unit,
     onStep: (Int) -> Unit
 ) {
-    QueueLedgerCard(
-        work = work,
-        downloading = rememberWorkDownloading(work, downloadQueue),
-        obscured = obscured,
-        selecting = selecting,
-        selected = selected,
-        drag = drag,
-        onStep = onStep,
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 4.dp)
-            .clickable(onClick = onClick)
+    QueueWorkItem(work, actions, selecting || drag, obscured, onClick, onRemove) { openMenu ->
+        if (detailed && !drag) io.github.cidy02.kudos.ui.components.SensitiveWorkRow(
+            work = work, onOpenWork = { onClick() }, onLongClick = openMenu,
+            expandAll = expandAll, selecting = selecting, selected = selected, obscured = obscured,
+            onSelect = onClick, onReveal = onClick, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+        ) else QueueLedgerCard(
+            work = work,
+            downloading = rememberWorkDownloading(work, downloadQueue),
+            obscured = obscured,
+            selecting = selecting,
+            selected = selected,
+            drag = drag,
+            onStep = onStep,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 4.dp)
+        )
+    }
+}
+
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+@Composable
+private fun QueueWorkItem(
+    work: SavedWork,
+    actions: LibraryCardActions?,
+    editing: Boolean,
+    obscured: Boolean,
+    onClick: () -> Unit,
+    onRemove: () -> Unit,
+    content: @Composable (() -> Unit) -> Unit
+) {
+    var menuOpen by remember(work.id) { mutableStateOf(false) }
+    val row = @Composable {
+        Box(Modifier.combinedClickable(onClick = onClick,
+            onLongClick = { if (!editing && !obscured) menuOpen = true })) {
+            content { if (!editing && !obscured) menuOpen = true }
+            if (actions != null) LibraryWorkMenu(
+                menuOpen, { menuOpen = false }, work, actions,
+                scopedRemovalLabel = "Remove from Queue", onScopedRemove = onRemove
+            )
+        }
+    }
+    if (editing || obscured || actions == null) row()
+    else SwipeActionRow(
+        leading = leadingSwipeActions(work, LibrarySectionKind.ReadingNow, actions),
+        trailing = listOf(SwipeAction("Remove", Icons.Outlined.RemoveCircleOutline,
+            androidx.compose.material3.MaterialTheme.colorScheme.error, onRemove)),
+        content = row
     )
 }
 

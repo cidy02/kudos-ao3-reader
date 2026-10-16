@@ -262,6 +262,16 @@ class ReaderViewModel(
         }
     }
 
+    fun toggleHighlight(locatorString: String, selectedText: String, color: String,
+                        progression: Double, spineIndex: Int) {
+        val stored = ReaderLocatorCodec.forStorage(locatorString) ?: return
+        viewModelScope.launch {
+            annotationEditMutex.withLock {
+                annotationRepository.toggleHighlight(workId, stored, selectedText, color, progression, spineIndex)
+            }
+        }
+    }
+
     fun addHighlight(
         locatorString: String,
         selectedText: String,

@@ -112,7 +112,9 @@ fun WorkDetailMyCopySheet(
     onSetDownloadedAt: (Instant) -> Unit,
     onRebuildFromOriginal: () -> Unit,
     onDismiss: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onFilterTag: (String) -> Unit = {},
+    onRetryPreservation: () -> Unit = {}
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val tokens = LocalKudosTokens.current
@@ -207,7 +209,8 @@ fun WorkDetailMyCopySheet(
                         palette = palette,
                         onToggleSaved = onToggleSaved,
                         onToggleSavedForLater = onToggleSavedForLater,
-                        onToggleFinished = onToggleFinished
+                        onToggleFinished = onToggleFinished,
+                        onRetryPreservation = onRetryPreservation
                     )
 
                     // Queues group
@@ -270,6 +273,7 @@ fun WorkDetailMyCopySheet(
                     onAddTag = onAddTag,
                     onRemoveTag = onRemoveTag,
                     onSuggestTag = onSuggestTag,
+                    onFilterTag = onFilterTag,
                     palette = palette,
                     isWorking = isWorking
                 )
@@ -323,7 +327,8 @@ private fun MyCopyStatusSection(
     palette: SubjectPalette,
     onToggleSaved: () -> Unit,
     onToggleSavedForLater: () -> Unit,
-    onToggleFinished: () -> Unit
+    onToggleFinished: () -> Unit,
+    onRetryPreservation: () -> Unit
 ) {
     val downloadAction = WorkDownloadSemantics.action(
         work.hasEpub,
@@ -356,6 +361,11 @@ private fun MyCopyStatusSection(
             onClick = onToggleSavedForLater,
             palette = palette
         )
+
+        if (work.isQueuedForLater && work.epubPreservationStatusRaw in setOf("failed", "missingFile")) {
+            MyCopyAddLabel("Retry Queue Preservation", palette = palette, enabled = !isWorking,
+                onClick = onRetryPreservation)
+        }
 
         MyCopyToggleRow(
             title = "Finished",
@@ -654,6 +664,7 @@ private fun MyTagsSection(
     onAddTag: () -> Unit,
     onRemoveTag: (Tag) -> Unit,
     onSuggestTag: (String) -> Unit,
+    onFilterTag: (String) -> Unit,
     palette: SubjectPalette,
     isWorking: Boolean
 ) {
@@ -670,6 +681,7 @@ private fun MyTagsSection(
                 userTags.forEach { tag ->
                     MyTagChip(
                         name = tag.normalizedName,
+                        onClick = { onFilterTag(tag.normalizedName) },
                         onRemove = { onRemoveTag(tag) },
                         palette = palette,
                         enabled = !isWorking
@@ -748,6 +760,7 @@ private fun MyTagsSection(
 @Composable
 private fun MyTagChip(
     name: String,
+    onClick: () -> Unit,
     onRemove: () -> Unit,
     palette: SubjectPalette,
     enabled: Boolean
@@ -766,7 +779,8 @@ private fun MyTagChip(
             text = name,
             fontSize = 13.5.sp,
             fontWeight = FontWeight.Medium,
-            color = palette.accent
+            color = palette.accent,
+            modifier = Modifier.clickable(enabled = enabled, onClick = onClick)
         )
         Box(
             modifier = Modifier

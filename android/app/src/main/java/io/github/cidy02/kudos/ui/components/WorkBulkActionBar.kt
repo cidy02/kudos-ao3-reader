@@ -2,6 +2,11 @@ package io.github.cidy02.kudos.ui.components
 
 import io.github.cidy02.kudos.works.finishedActionLabel
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.material3.Checkbox
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -57,7 +62,8 @@ fun WorkBulkActionBar(
     downloadQueue: DownloadQueue? = null,
     onDeleted: () -> Unit = {},
     onDone: () -> Unit = {},
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    workImporter: io.github.cidy02.kudos.works.WorkImporter? = null
 ) {
     val scope = rememberCoroutineScope()
     var confirmDelete by remember { mutableStateOf(false) }
@@ -209,16 +215,8 @@ fun WorkBulkActionBar(
     )
 
     if (showingAddToQueue) {
-        QueuePickerDialog(
-            title = "Add Selection to Queue",
-            queueRepository = queueRepository,
-            onPick = { queue ->
-                showingAddToQueue = false
-                scope.launch {
-                    selectedWorks.forEach { runCatching { queueRepository?.addWork(queue.id, it.id) } }
-                    onDone()
-                }
-            },
+        io.github.cidy02.kudos.library.QueueMembershipDialog(
+            works = selectedWorks, repository = queueRepository, importer = workImporter,
             onDismiss = { showingAddToQueue = false }
         )
     }
@@ -227,7 +225,7 @@ fun WorkBulkActionBar(
         AddSelectionToCollectionDialog(
             selectedWorks = selectedWorks,
             workRepository = workRepository,
-            onAdded = { showingAddToCollection = false; onDone() },
+            onAdded = {},
             onDismiss = { showingAddToCollection = false }
         )
     }
@@ -298,6 +296,10 @@ internal fun QueuePickerDialog(
     )
 }
 
+/** The memberships every selected work has: checked rows, so a tap adds to all or removes from all. */
+internal fun sharedMemberships(memberships: List<Set<String>>): Set<String> =
+    memberships.reduceOrNull { shared, next -> shared intersect next }.orEmpty()
+
 /** A collection, new or existing, for a selection. */
 @Composable
 internal fun AddSelectionToCollectionDialog(
@@ -308,42 +310,60 @@ internal fun AddSelectionToCollectionDialog(
 ) {
     val scope = rememberCoroutineScope()
     var newName by remember { mutableStateOf("") }
-    var collections by remember { mutableStateOf<List<WorkCollection>?>(null) }
-    LaunchedEffect(Unit) {
+    var collections by remember { mutableStateOf<List<WorkCollection>>(emptyList()) }
+    var memberIds by remember { mutableStateOf(emptySet<String>()) }
+    var working by remember { mutableStateOf(true) }
+    var error by remember { mutableStateOf<String?>(null) }
+    suspend fun reload() {
         collections = workRepository.allCollections()
+        memberIds = sharedMemberships(selectedWorks.map { work -> workRepository.collectionsForWork(work.id).map { it.id }.toSet() })
     }
-    fun add(name: String) {
+    fun change(action: suspend () -> Unit) {
+        working = true
         scope.launch {
-            selectedWorks.forEach { runCatching { workRepository.addToCollection(it.id, name) } }
-            onAdded()
+            try { action(); reload(); onAdded() } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled } catch (failure: Exception) { error = failure.message ?: "Could not change collection membership." } finally { working = false }
         }
     }
+    // Opening only reads; onAdded is for a change made here. Calling it on open let a caller
+    // that reloads on it reopen the read, again and again.
+    LaunchedEffect(selectedWorks.map { it.id }) {
+        working = true
+        try { reload() } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
+        catch (failure: Exception) { error = failure.message ?: "Could not read collections." } finally { working = false }
+    }
     AlertDialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = { if (!working) onDismiss() },
         title = { Text("Add Selection to Collection") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(
-                    value = newName,
-                    onValueChange = { newName = it },
-                    label = { Text("New or existing collection") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                val existing = collections
-                if (!existing.isNullOrEmpty()) {
-                    Text("Existing collections:", style = MaterialTheme.typography.labelMedium)
-                    existing.forEach { col ->
-                        TextButton(onClick = { add(col.name) }, modifier = Modifier.fillMaxWidth()) {
-                            Text(col.name, modifier = Modifier.fillMaxWidth())
+            Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(value = newName, onValueChange = { newName = it },
+                    label = { Text("New collection") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                TextButton(enabled = !working && newName.trim().isNotEmpty(), onClick = {
+                    change {
+                        val collection = workRepository.createCollection(newName.trim())
+                        newName = ""
+                        selectedWorks.forEach { workRepository.addWorkToCollection(it.id, collection.id) }
+                    }
+                }) { Text("Add") }
+                collections.forEach { collection ->
+                    val member = collection.id in memberIds
+                    Row(Modifier.fillMaxWidth().toggleable(value = member,
+                        enabled = !working && selectedWorks.isNotEmpty(), role = androidx.compose.ui.semantics.Role.Checkbox) {
+                        change {
+                            selectedWorks.forEach { work ->
+                                if (member) workRepository.removeFromCollection(work.id, collection.id)
+                                else workRepository.addWorkToCollection(work.id, collection.id)
+                            }
                         }
+                    }, verticalAlignment = Alignment.CenterVertically) {
+                        Text(collection.name, Modifier.weight(1f))
+                        Checkbox(checked = member, onCheckedChange = null, enabled = !working)
                     }
                 }
+                error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             }
         },
-        confirmButton = {
-            TextButton(enabled = newName.trim().isNotEmpty(), onClick = { add(newName.trim()) }) { Text("Add") }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+        confirmButton = { TextButton(onClick = onDismiss, enabled = !working) { Text("Done") } }
     )
 }

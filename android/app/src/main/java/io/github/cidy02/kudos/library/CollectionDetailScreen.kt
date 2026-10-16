@@ -54,6 +54,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -124,7 +125,9 @@ fun CollectionDetailScreen(
     queueRepository: ReadingQueueRepository? = null,
     onOpenWork: (String) -> Unit,
     onOpenReader: (String) -> Unit,
-    onCollectionDeleted: () -> Unit
+    onCollectionDeleted: () -> Unit,
+    onOpenComments: (Long) -> Unit = {},
+    workImporter: io.github.cidy02.kudos.works.WorkImporter? = null
 ) {
     val privacy by (settingsRepository?.settings?.map { it.privacy }
         ?: flowOf(PrivacySettings()))
@@ -142,6 +145,7 @@ fun CollectionDetailScreen(
     var works by remember(collectionId) { mutableStateOf<List<SavedWork>>(emptyList()) }
     // iOS `collection.displayMode`: one choice for every collection, kept between launches.
     var displayMode by rememberStoredChoice("collection.displayMode", CollectionDisplayMode.Detailed)
+    var expandAll by rememberSaveable { mutableStateOf(false) }
     var isSelecting by remember(collectionId) { mutableStateOf(false) }
     var selectedIds by remember(collectionId) { mutableStateOf<Set<String>>(emptySet()) }
     var menuOpen by remember { mutableStateOf(false) }
@@ -195,6 +199,14 @@ fun CollectionDetailScreen(
     }
 
     LaunchedEffect(collectionId) { refresh() }
+
+    val workActions = scopedWorkActions(
+        workRepository, queueRepository, downloadQueue, workImporter, confirmBeforeDelete,
+        onOpenWork, onOpenReader, onOpenComments,
+        onSelect = { isSelecting = true; selectedIds = setOf(it) },
+        onReveal = { privacyGate.reveal(it, activity) },
+        onChanged = { scope.launch { refresh() } }
+    )
 
     val orderedWorks = remember(collection?.workOrderRaw, works) {
         val col = collection
@@ -442,6 +454,10 @@ fun CollectionDetailScreen(
                                         CollectionDisplayMode.Ledger
                                     }
                                 }
+                            )
+                            if (displayMode == CollectionDisplayMode.Detailed) DropdownMenuItem(
+                                text = { Text(if (expandAll) "Collapse All" else "Expand All") },
+                                onClick = { expandAll = !expandAll; menuOpen = false }
                             )
                             HorizontalDivider()
                         }
@@ -727,11 +743,13 @@ fun CollectionDetailScreen(
                                     work = work,
                                     collection = collection!!,
                                     displayMode = displayMode,
+                                    expandAll = expandAll,
                                     isSelecting = isSelecting,
                                     isSelected = work.id in selectedIds,
                                     obscured = LibraryPrivacy.visibility(work, privacy, reveal) ==
                                         LibraryPrivacyVisibility.Obscured,
                                     palette = palette,
+                                    actions = workActions,
                                     onToggleSelection = {
                                         selectedIds = if (work.id in selectedIds) {
                                             selectedIds - work.id
@@ -766,6 +784,7 @@ fun CollectionDetailScreen(
                 removeLabel = "Remove from Collection",
                 scopeName = "collection",
                 workRepository = workRepository,
+                workImporter = workImporter,
                 queueRepository = queueRepository,
                 downloadQueue = downloadQueue,
                 palette = palette,
@@ -790,10 +809,12 @@ private fun CollectionWorkListItem(
     work: SavedWork,
     collection: WorkCollection,
     displayMode: CollectionDisplayMode,
+    expandAll: Boolean,
     isSelecting: Boolean,
     isSelected: Boolean,
     obscured: Boolean,
     palette: SubjectPalette,
+    actions: LibraryCardActions,
     onToggleSelection: () -> Unit,
     onOpenWork: () -> Unit,
     onOpenReader: () -> Unit,
@@ -823,6 +844,7 @@ private fun CollectionWorkListItem(
                     val progress = work.readingProgressFraction() ?: 0.0
                     SensitiveWorkRow(
                         work = work,
+                        expandAll = expandAll,
                         onOpenWork = { 
                             if (work.hasEpub) onOpenReader() else onOpenWork()
                         },
@@ -877,7 +899,7 @@ private fun CollectionWorkListItem(
         }
     }
 
-    if (isSelecting) {
+    if (isSelecting || obscured) {
         rowContent()
     } else {
         SwipeActionRow(
@@ -894,33 +916,8 @@ private fun CollectionWorkListItem(
         )
     }
 
-    DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-        DropdownMenuItem(
-            text = { Text("Open Work") },
-            onClick = {
-                menuOpen = false
-                onOpenWork()
-            }
-        )
-        if (work.hasEpub) {
-            DropdownMenuItem(
-                text = { Text("Read") },
-                onClick = {
-                    menuOpen = false
-                    onOpenReader()
-                }
-            )
-        }
-        HorizontalDivider()
-        DropdownMenuItem(
-            text = { Text("Remove from Collection", color = MaterialTheme.colorScheme.error) },
-            leadingIcon = {
-                Icon(Icons.Outlined.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error)
-            },
-            onClick = {
-                menuOpen = false
-                onRemove()
-            }
-        )
-    }
+    LibraryWorkMenu(
+        expanded = menuOpen, onDismiss = { menuOpen = false }, work = work, actions = actions,
+        scopedRemovalLabel = "Remove from Collection", onScopedRemove = onRemove
+    )
 }

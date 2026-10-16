@@ -113,7 +113,6 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import io.github.cidy02.kudos.core.model.ReaderFontCatalog
-import io.github.cidy02.kudos.core.model.ReadingAnnotation
 import io.github.cidy02.kudos.reader.readium.ReadiumNavigatorController
 import io.github.cidy02.kudos.reader.readium.ReadiumNavigatorHost
 import io.github.cidy02.kudos.reader.readium.ReadiumOpenResult
@@ -128,7 +127,6 @@ import io.github.cidy02.kudos.reader.settings.backgroundColor
 import io.github.cidy02.kudos.reader.settings.ReaderSpeechPreferences
 import io.github.cidy02.kudos.reader.speech.ReaderSpeechController
 import io.github.cidy02.kudos.reader.speech.SpeechStatus
-import io.github.cidy02.kudos.ui.components.DestructiveConfirmation
 import io.github.cidy02.kudos.ui.components.ReaderPageSkeleton
 import io.github.cidy02.kudos.ui.components.workCardZoomDestination
 import io.github.cidy02.kudos.ui.subject.KudosTokens
@@ -248,8 +246,15 @@ private fun ReaderReading(
     var tocInitialTab by remember { mutableIntStateOf(0) }
     var showDisplaySheet by remember { mutableStateOf(false) }
     var showSearchSheet by remember { mutableStateOf(false) }
+    var confirmVoicePack by remember { mutableStateOf(false) }
     var annotateDialog by remember { mutableStateOf<AnnotateDialogState?>(null) }
-    var showDeleteNoteConfirm by remember { mutableStateOf<ReadingAnnotation?>(null) }
+    val annotationPreferences = remember(context) { context.getSharedPreferences("reader-annotations", Context.MODE_PRIVATE) }
+    var lastHighlightColor by remember { mutableStateOf(ReadingAnnotationColor.fromRaw(
+        annotationPreferences.getString("lastHighlightColor", ReadingAnnotationColor.YELLOW.raw).orEmpty()).raw) }
+    fun rememberHighlightColor(color: String) {
+        lastHighlightColor = color
+        annotationPreferences.edit().putString("lastHighlightColor", color).apply()
+    }
     var isOrientationLocked by remember { mutableStateOf(false) }
     var showTtsControls by remember { mutableStateOf(false) }
 
@@ -311,19 +316,13 @@ private fun ReaderReading(
         value = opener.open(state.epubPath.toFile())
     }
 
-    CompositionLocalProvider(LocalKudosTokens provides tokens) {
-        DestructiveConfirmation(
-            show = showDeleteNoteConfirm != null,
-            title = "Delete annotation?",
-            text = "This will permanently remove this bookmark or highlight.",
-            confirmBeforeDelete = settings.app.confirmBeforeDelete,
-            onConfirm = {
-                val id = showDeleteNoteConfirm?.id ?: return@DestructiveConfirmation
-                showDeleteNoteConfirm = null
-                viewModel.deleteAnnotation(id)
-            },
-            onDismissRequest = { showDeleteNoteConfirm = null },
-            palette = tokens.scopePalette
+
+    if (confirmVoicePack) CompositionLocalProvider(LocalKudosTokens provides tokens) {
+        AlertDialog(
+            onDismissRequest = { confirmVoicePack = false }, title = { Text("Download Kokoro Voice Pack?") },
+            text = { Text("This downloads about 45 MB. Read Aloud can use your device's voice while you wait.") },
+            confirmButton = { TextButton(onClick = { confirmVoicePack = false; speechController.enqueueDownload() }) { Text("Download") } },
+            dismissButton = { TextButton(onClick = { confirmVoicePack = false }) { Text("Cancel") } }
         )
     }
 
@@ -425,7 +424,11 @@ private fun ReaderReading(
                     try {
                         val selection = navigatorController.currentSelection() ?: return@launch
                         val locator = selection.locator
-                        annotateDialog = AnnotateDialogState(
+                        if (!asNote) {
+                            viewModel.toggleHighlight(locator.toJSON().toString(), locator.text.highlight.orEmpty(),
+                                lastHighlightColor, locator.locations.totalProgression ?: locator.locations.progression ?: 0.0,
+                                state.liveProgress?.spineIndex ?: 0)
+                        } else annotateDialog = AnnotateDialogState(
                             locatorJson = locator.toJSON().toString(),
                             selectedText = locator.text.highlight.orEmpty(),
                             progression = locator.locations.totalProgression
@@ -724,7 +727,7 @@ private fun ReaderReading(
                             },
                             onSkipNext = { speechController.skipForward() },
                             onSkipPrevious = { speechController.skipBackward() },
-                            onDownloadVoiceModel = { speechController.enqueueDownload() }
+                            onDownloadVoiceModel = { confirmVoicePack = true }
                         )
                     }
 
@@ -779,8 +782,10 @@ private fun ReaderReading(
             annotateDialog?.let { dialog ->
                 AnnotateDialog(
                     state = dialog,
+                    initialColor = lastHighlightColor,
                     onDismiss = { annotateDialog = null },
                     onConfirm = { color, note ->
+                        rememberHighlightColor(color)
                         viewModel.addHighlight(
                             locatorString = dialog.locatorJson,
                             selectedText = dialog.selectedText,
@@ -819,11 +824,11 @@ private fun ReaderReading(
                                 viewModel.updateNote(annotation.id, note)
                                 viewModel.closeNoteEditor()
                             },
-                            onColorChange = { color -> viewModel.recolorHighlight(annotation.id, color) },
+                            onColorChange = { color -> rememberHighlightColor(color); viewModel.recolorHighlight(annotation.id, color) },
                             onKeep = { note -> viewModel.updateNote(annotation.id, note) },
                             onDelete = {
                                 viewModel.closeNoteEditor()
-                                showDeleteNoteConfirm = annotation
+                                viewModel.deleteAnnotation(annotation.id)
                             }
                         )
                     }
@@ -871,7 +876,7 @@ private fun ReaderReading(
                                 }
                             },
                             onDeleteAnnotation = { annotation ->
-                                showDeleteNoteConfirm = annotation
+                                viewModel.deleteAnnotation(annotation.id)
                             },
                             onBookmarkEntry = { bookmarkChapter(it) },
                             onAddNoteToEntry = { entry ->
@@ -915,7 +920,9 @@ private fun ReaderReading(
                             availableVoices = availableVoices,
                             voicePackInstalled = io.github.cidy02.kudos.reader.speech.TTSDownloadWorker.isModelDownloaded(context),
                             voicePackProgress = speechController.downloadProgress.collectAsState().value,
-                            onDownloadVoicePack = speechController::enqueueDownload,
+                            voicePackFailure = speechController.downloadFailure.collectAsState().value,
+                            onCancelVoicePack = speechController::cancelDownload,
+                            onDownloadVoicePack = { confirmVoicePack = true },
                             onDone = { showDisplaySheet = false },
                             onFontSizeChange = viewModel::setFontSizePercent,
                             onThemeChange = viewModel::setColorTheme,
@@ -950,6 +957,8 @@ private fun ReaderDisplaySheet(
     voicePackInstalled: Boolean = true,
     voicePackProgress: Float? = null,
     onDownloadVoicePack: () -> Unit = {},
+    voicePackFailure: String? = null,
+    onCancelVoicePack: () -> Unit = {},
     onDone: () -> Unit = {},
     onFontSizeChange: (Int) -> Unit,
     onThemeChange: (ReaderColorTheme) -> Unit,
@@ -1144,8 +1153,11 @@ private fun ReaderDisplaySheet(
                 SubjectRowSeparator()
                 if (voicePackProgress != null) {
                     SubjectFormRow("Downloading Kokoro Voice Pack", value = "${(voicePackProgress * 100).toInt()}%")
+                    SettingsActionRow("Cancel Download", onClick = onCancelVoicePack)
                 } else {
-                    SettingsActionRow("Download Kokoro Voice Pack (about 45 MB)", onClick = onDownloadVoicePack)
+                    voicePackFailure?.let { Text(it, color = tokens.secondaryInk, modifier = Modifier.padding(13.dp)) }
+                    SettingsActionRow(if (voicePackFailure != null) "Retry Download" else "Download Kokoro Voice Pack (about 45 MB)",
+                        onClick = onDownloadVoicePack)
                 }
             }
         }
@@ -1179,10 +1191,11 @@ private data class AnnotateDialogState(
 @Composable
 private fun AnnotateDialog(
     state: AnnotateDialogState,
+    initialColor: String,
     onDismiss: () -> Unit,
     onConfirm: (color: String, note: String) -> Unit
 ) {
-    var selectedColor by remember { mutableStateOf(ReadingAnnotationColor.YELLOW) }
+    var selectedColor by remember { mutableStateOf(ReadingAnnotationColor.fromRaw(initialColor)) }
     var note by remember { mutableStateOf("") }
 
     AlertDialog(
