@@ -1,23 +1,31 @@
 package io.github.cidy02.kudos.account
 
 import android.content.Intent
+import android.graphics.Bitmap
 import android.net.Uri
 import android.os.Build
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.List
 import androidx.compose.material.icons.outlined.BugReport
+import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
@@ -27,9 +35,14 @@ import io.github.cidy02.kudos.settings.SettingsActionRow
 import io.github.cidy02.kudos.settings.SettingsPage
 import io.github.cidy02.kudos.settings.SettingsPanel
 import io.github.cidy02.kudos.settings.SettingsSection
+import io.github.cidy02.kudos.support.screenshotShareIntent
 import io.github.cidy02.kudos.ui.subject.SubjectFormRow
-import io.github.cidy02.kudos.ui.subject.SubjectRowSeparator
 import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
+import io.github.cidy02.kudos.ui.subject.SubjectRowSeparator
+import io.github.cidy02.kudos.ui.subject.SubjectToggle
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * Version field for bug reports — mirrors iOS `AboutView.versionString`:
@@ -47,6 +60,17 @@ internal fun bugReportVersionString(
     return if (sha.isNotEmpty()) "$base · $sha" else base
 }
 
+/** iOS `BugReportView.issueURL`'s body: the description and the details shown, nothing more. */
+internal fun bugReportIssueBody(
+    summary: String,
+    versionString: String,
+    systemInfo: String,
+    attachingScreenshot: Boolean
+): String = buildString {
+    append("**What happened?**\n\n${summary.trim()}\n\n---\n- App: $versionString\n- System: $systemInfo")
+    if (attachingScreenshot) append("\n- Screenshot: attached below (added separately)")
+}
+
 /**
  * Report a Bug (iOS `BugReportView`). Nothing is sent automatically: the reader writes the
  * report, sees exactly which app and system details go with it, and posts it as a prefilled
@@ -56,10 +80,12 @@ internal fun bugReportVersionString(
  * shake it stands alone over the app, with nothing to leave by: [onCancel] is iOS's Cancel.
  */
 @Composable
-fun BugReportScreen(onCancel: (() -> Unit)? = null) {
+fun BugReportScreen(onCancel: (() -> Unit)? = null, screenshot: Bitmap? = null) {
     val context = LocalContext.current
     val tokens = LocalKudosTokens.current
+    val scope = rememberCoroutineScope()
     var summary by rememberSaveable { mutableStateOf("") }
+    var includeScreenshot by rememberSaveable { mutableStateOf(true) }
     val versionString = bugReportVersionString(
         versionName = BuildConfig.VERSION_NAME,
         versionCode = BuildConfig.VERSION_CODE,
@@ -108,6 +134,49 @@ fun BugReportScreen(onCancel: (() -> Unit)? = null) {
                 )
             }
         }
+        // iOS `screenshotSection`, shown only when a shake opened the report. A prefilled
+        // issue link can't carry an image, so the reader shares it and adds it themselves.
+        if (screenshot != null) {
+            item {
+                SettingsSection(
+                    label = "Screenshot",
+                    footnote = "GitHub can't add the screenshot for you. Save it, then drag or " +
+                        "paste it into the issue."
+                ) {
+                    SubjectFormRow(
+                        "Include a screenshot",
+                        trailing = {
+                            SubjectToggle(checked = includeScreenshot, onCheckedChange = { includeScreenshot = it })
+                        }
+                    )
+                    if (includeScreenshot) {
+                        SubjectRowSeparator()
+                        Image(
+                            bitmap = screenshot.asImageBitmap(),
+                            contentDescription = "Attached screenshot preview",
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(max = 240.dp)
+                                .padding(horizontal = 13.dp, vertical = 10.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                        )
+                        SubjectRowSeparator()
+                        SettingsActionRow(
+                            label = "Save or Share Screenshot",
+                            icon = Icons.Outlined.Share,
+                            onClick = {
+                                scope.launch {
+                                    val intent = withContext(Dispatchers.IO) {
+                                        runCatching { screenshotShareIntent(context, screenshot) }.getOrNull()
+                                    }
+                                    intent?.let(context::startActivity)
+                                }
+                            }
+                        )
+                    }
+                }
+            }
+        }
         item {
             SettingsSection(footnote = null, label = "Included with your report") {
                 // Whole, however long: this is the list of what goes with the report.
@@ -134,15 +203,12 @@ fun BugReportScreen(onCancel: (() -> Unit)? = null) {
                     icon = Icons.Outlined.BugReport,
                     enabled = summary.trim().isNotBlank(),
                     onClick = {
-                        val body = """
-                        **What happened?**
-                        
-                        ${summary.trim()}
-                        
-                        ---
-                        - App: $versionString
-                        - System: $systemInfo
-                    """.trimIndent()
+                        val body = bugReportIssueBody(
+                            summary = summary,
+                            versionString = versionString,
+                            systemInfo = systemInfo,
+                            attachingScreenshot = screenshot != null && includeScreenshot
+                        )
                         val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/cidy02/kudos-ao3-reader/issues/new?title=Bug%20report&body=${Uri.encode(body)}"))
                         context.startActivity(intent)
                     }

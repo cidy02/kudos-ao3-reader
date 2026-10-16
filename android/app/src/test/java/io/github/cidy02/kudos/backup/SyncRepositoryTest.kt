@@ -225,6 +225,20 @@ class SyncRepositoryTest {
         assertTrue(found.findFile("note.txt") == null)
     }
 
+    /** iOS: Auto Sync off (or Replace's "Pause Library Sync") stops automatic runs, not Sync Now. */
+    @Test
+    fun autoSyncOffSkipsAutomaticRunsButNotSyncNow() = runTest {
+        seedLocalWork(WORK_A, "Example A", "epub-a-v1".toByteArray())
+        settingsRepository.updateSyncIsEnabled(false)
+
+        assertNull(syncRepository.runAutoSync())
+        assertNull("paused: nothing written", DocumentFile.fromTreeUri(context, treeUri)!!.findFile("KudosLibrary"))
+
+        assertTrue(syncRepository.runSync() is SyncResult.Success)
+        settingsRepository.updateSyncIsEnabled(true)
+        assertTrue(syncRepository.runAutoSync() is SyncResult.Success)
+    }
+
     // ------------------------------------------------------------------ (A)
 
     @Test

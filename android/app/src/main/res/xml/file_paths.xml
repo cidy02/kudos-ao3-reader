@@ -2,7 +2,9 @@
 <paths xmlns:android="http://schemas.android.com/apk/res/android">
     <!-- Matches AppUpdateInstaller's download destination: filesDir/updates/ -->
     <files-path name="updates" path="updates/" />
-    <!-- Work files only; no database, preferences, cookies, or cache roots. -->
+    <!-- Work files only; no database, preferences, cookies, or the cache root. -->
     <files-path name="works" path="works/" />
     <files-path name="originals" path="originals/" />
+    <!-- The shake-time screenshot a bug report shares; only that folder of the cache. -->
+    <cache-path name="bug-report" path="bug-report/" />
 </paths>

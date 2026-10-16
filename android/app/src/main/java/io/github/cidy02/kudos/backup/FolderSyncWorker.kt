@@ -13,7 +13,9 @@ class FolderSyncWorker(
         val application = applicationContext as KudosApplication
         val syncRepository = application.container.syncRepository
 
-        return when (syncRepository.runSync()) {
+        return when (syncRepository.runAutoSync()) {
+            // Auto Sync is off or no folder is connected.
+            null -> Result.success()
             is SyncResult.Success -> Result.success()
             // Another lifecycle/manual run already covers this window.
             is SyncResult.SkippedAlreadyRunning -> Result.success()

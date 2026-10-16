@@ -64,14 +64,15 @@ import io.github.cidy02.kudos.KudosApplication
 import io.github.cidy02.kudos.auth.AO3AuthRepository
 import io.github.cidy02.kudos.auth.AO3AuthState
 import io.github.cidy02.kudos.backup.PairingCard
+import io.github.cidy02.kudos.backup.SyncResult
 import io.github.cidy02.kudos.core.model.AppThemeSetting
 import io.github.cidy02.kudos.core.model.KudosSettings
 import io.github.cidy02.kudos.core.model.MatureContentMode
 import io.github.cidy02.kudos.data.preferences.SettingsRepository
 import io.github.cidy02.kudos.files.CustomFontRepository
 import io.github.cidy02.kudos.network.ao3.AO3Error
-import io.github.cidy02.kudos.ui.components.LogOutConfirmation
 import io.github.cidy02.kudos.ui.components.DestructiveConfirmation
+import io.github.cidy02.kudos.ui.components.LogOutConfirmation
 import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
 import io.github.cidy02.kudos.ui.subject.SectionRuleHeader
 import io.github.cidy02.kudos.ui.subject.SubjectFormRow
@@ -682,14 +683,27 @@ fun SettingsFolderSyncPage(repository: SettingsRepository, settings: KudosSettin
     var lastSyncFolded by remember { mutableStateOf(0) }
     var syncBusy by remember { mutableStateOf(false) }
 
+    fun syncNow() {
+        if (syncBusy) return
+        syncBusy = true
+        scope.launch {
+            val result = syncRepository?.runSync() as? SyncResult.Success
+            lastSyncFolded = result?.foldedConflicts ?: 0
+            syncBusy = false
+        }
+    }
+
     val syncFolderLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocumentTree()
     ) { uri: Uri? ->
         if (uri != null) {
-            scope.launch { syncRepository?.connect(uri) }
+            // iOS syncs as soon as a folder is connected.
+            scope.launch { syncRepository?.connect(uri); syncNow() }
         }
     }
-    val connected = settings.sync.isEnabled && settings.sync.folderUri != null
+    // Connected is a chosen folder, as on iOS. `sync.isEnabled` is iOS's Auto Sync: off, the
+    // folder stays and only Sync Now runs (Replace's "Pause Library Sync" turns it off too).
+    val connected = settings.sync.folderUri != null
     val folderLabel = settings.sync.folderUri?.let(::syncFolderName)
 
     SettingsPage(title = "Sync Folder") {
@@ -707,60 +721,56 @@ fun SettingsFolderSyncPage(repository: SettingsRepository, settings: KudosSettin
         item {
             Column(Modifier.padding(top = 22.dp)) {
                 SettingsPanel {
-                    SubjectFormRow(
-                        label = "Enable folder sync",
-                        trailing = {
-                            SubjectToggle(
-                                checked = settings.sync.isEnabled,
-                                onCheckedChange = { enabled ->
-                                    scope.launch {
-                                        if (enabled) {
-                                            if (settings.sync.folderUri != null) {
-                                                syncRepository?.connect(Uri.parse(settings.sync.folderUri))
-                                            } else {
-                                                syncFolderLauncher.launch(null)
-                                            }
-                                        } else {
-                                            syncRepository?.disconnect()
-                                        }
-                                    }
-                                }
-                            )
-                        }
-                    )
-                    SubjectRowSeparator()
-                    SettingsActionRow(
-                        label = if (settings.sync.folderUri == null) "Choose Sync Folder" else "Change Folder",
-                        contentDescription = if (settings.sync.folderUri == null) {
-                            "Select sync folder"
-                        } else {
-                            "Change sync folder"
-                        },
-                        onClick = { syncFolderLauncher.launch(null) }
-                    )
                     if (folderLabel != null) {
-                        SubjectRowSeparator()
                         SubjectFormRow("Folder", value = folderLabel)
-                    }
-                    if (connected) {
+                        SubjectRowSeparator()
+                        SubjectFormRow(
+                            label = "Auto Sync",
+                            trailing = {
+                                SubjectToggle(
+                                    checked = settings.sync.isEnabled,
+                                    onCheckedChange = { enabled ->
+                                        scope.launch { syncRepository?.setAutoSync(enabled) }
+                                    }
+                                )
+                            }
+                        )
                         SubjectRowSeparator()
                         SettingsActionRow(
-                            label = if (syncBusy) "Working…" else "Sync Now",
+                            label = "Sync Now",
                             icon = Icons.Outlined.Sync,
                             enabled = !syncBusy,
-                            onClick = {
-                                syncBusy = true
-                                scope.launch {
-                                    val result = syncRepository?.runSync()
-                                    lastSyncFolded = (result as? io.github.cidy02.kudos.backup.SyncResult.Success)?.foldedConflicts ?: 0
-                                    syncBusy = false
-                                }
-                            }
+                            onClick = ::syncNow
+                        )
+                        SubjectRowSeparator()
+                        SettingsActionRow(
+                            label = "Change Folder",
+                            contentDescription = "Change sync folder",
+                            enabled = !syncBusy,
+                            onClick = { syncFolderLauncher.launch(null) }
+                        )
+                        SubjectRowSeparator()
+                        SettingsActionRow(
+                            label = "Disconnect",
+                            destructive = true,
+                            enabled = !syncBusy,
+                            onClick = { scope.launch { syncRepository?.disconnect() } }
+                        )
+                    } else {
+                        SettingsActionRow(
+                            label = "Choose Sync Folder",
+                            contentDescription = "Select sync folder",
+                            enabled = !syncBusy,
+                            onClick = { syncFolderLauncher.launch(null) }
                         )
                     }
                     settings.sync.lastSyncAt?.let { instant ->
                         SubjectRowSeparator()
                         SubjectFormRow("Last Synced", value = formatSyncInstant(instant))
+                    }
+                    if (syncBusy) {
+                        SubjectRowSeparator()
+                        SubjectFormRow("Syncing library…")
                     }
                 }
                 // The stored error covers manual, lifecycle and background worker runs.
@@ -784,7 +794,6 @@ fun SettingsFolderSyncPage(repository: SettingsRepository, settings: KudosSettin
             }
         }
     }
-
 }
 
 @Composable

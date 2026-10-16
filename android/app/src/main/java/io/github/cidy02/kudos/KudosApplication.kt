@@ -160,9 +160,7 @@ class KudosApplication : Application(), Configuration.Provider {
     private fun maybeRunFolderSync() {
         applicationScope.launch {
             runCatching {
-                if (!container.syncRepository.isSyncEnabled()) return@runCatching
-                if (container.syncRepository.getSyncFolderUri() == null) return@runCatching
-                container.syncRepository.runSync()
+                container.syncRepository.runAutoSync()
             }
         }
     }
