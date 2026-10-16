@@ -47,4 +47,18 @@ class BugReportVersionStringTest {
             )
         )
     }
+
+    /** iOS issueURL body; a multi-line description no longer leaves the template's indent in. */
+    @Test
+    fun `issue body notes an attached screenshot only when one goes with the report`() {
+        val plain = bugReportIssueBody(" It froze.\nTwice. ", "0.2.0 (8)", "Android 16 (API 36); Google Pixel", false)
+        assertEquals(
+            "**What happened?**\n\nIt froze.\nTwice.\n\n---\n- App: 0.2.0 (8)\n- System: Android 16 (API 36); Google Pixel",
+            plain
+        )
+        assertEquals(
+            plain + "\n- Screenshot: attached below (added separately)",
+            bugReportIssueBody(" It froze.\nTwice. ", "0.2.0 (8)", "Android 16 (API 36); Google Pixel", true)
+        )
+    }
 }

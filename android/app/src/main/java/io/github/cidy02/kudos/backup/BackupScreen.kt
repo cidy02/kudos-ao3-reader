@@ -172,7 +172,12 @@ fun BackupScreen(
                 }
             } catch (error: Exception) {
                 statusIsError = true
-                statusMessage = userFacingError("Import failed", error) + (safetyName?.let {
+                // iOS's "Could not save an undo copy". Android never offers iOS's second-attempt
+                // "I understand the risks" override: no copy, no Replace (DECISIONS 2026-10-16).
+                statusMessage = if (mode == BackupImportMode.REPLACE_LIBRARY && safetyName == null) {
+                    userFacingError("Could not save an undo copy", error) +
+                        ". Your library was not replaced. Free some space and try again."
+                } else userFacingError("Import failed", error) + (safetyName?.let {
                     if (error is BackupError.ReplaceNotUndone) {
                         " Not every file could be put back. Your library as it was is saved as $it: " +
                             "import that file with Replace to go back."

@@ -17,7 +17,7 @@ class SettingsStringsTest {
         // Import results now come from the app-wide import path (KudosApp), not this page.
         "Check Now",
         "Check library for deleted/hidden works on AO3.",
-        "Enable folder sync", "Select sync folder", "Change sync folder", "Sync Now",
+        "Auto Sync", "Disconnect", "Select sync folder", "Change sync folder", "Sync Now",
         "Require biometric to reveal", "Clear Reading History", "Clear Browse Cache",
         "Reset settings to defaults", "Software Update", "Install Update", "Source on GitHub",
         "Kudos Android is Alpha until it reaches iOS feature parity"

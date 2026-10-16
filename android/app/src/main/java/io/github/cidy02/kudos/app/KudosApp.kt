@@ -25,6 +25,7 @@ import io.github.cidy02.kudos.core.model.KudosSettings
 import io.github.cidy02.kudos.onboarding.WelcomeScreen
 import io.github.cidy02.kudos.onboarding.SyncFolderOnboardingScreen
 import io.github.cidy02.kudos.support.ShakeToReportEffect
+import io.github.cidy02.kudos.support.captureScreen
 import io.github.cidy02.kudos.account.BugReportScreen
 import io.github.cidy02.kudos.ui.theme.KudosTheme
 import io.github.cidy02.kudos.ui.theme.KudosThemeMode
@@ -131,6 +132,8 @@ fun KudosApp(
     val themeMode = sessionThemeState ?: persistedThemeMode
     val scope = rememberCoroutineScope()
     var showBugReport by remember { androidx.compose.runtime.mutableStateOf(false) }
+    // iOS `bugReportScreenshot`: the screen at shake time, offered to attach.
+    var bugReportScreenshot by remember { androidx.compose.runtime.mutableStateOf<android.graphics.Bitmap?>(null) }
     // Survives recomposition but not process death, on purpose: "Not Now" means
     // "not this launch", while the checkbox means "never again" (persisted).
     var syncOnboardingDismissedThisSession by remember { androidx.compose.runtime.mutableStateOf(false) }
@@ -240,7 +243,12 @@ fun KudosApp(
 
         // App-wide shake-to-report (iOS UIWindow.motionEnded parity). Sensor
         // listener is lifecycle-bound to this composition and unregistered on leave.
-        ShakeToReportEffect { showBugReport = true }
+        ShakeToReportEffect {
+            // A shake over the open report would only read the screen under it again.
+            if (!showBugReport) {
+                captureScreen(context) { bugReportScreenshot = it; showBugReport = true }
+            }
+        }
 
         // Restore the AO3 session at launch, as iOS ContentView does; until now only the
         // Account tab restored it, so Work detail and Comments read signed-out before then.
@@ -248,14 +256,17 @@ fun KudosApp(
 
         if (showBugReport) {
             androidx.compose.ui.window.Dialog(
-                onDismissRequest = { showBugReport = false },
+                onDismissRequest = { showBugReport = false; bugReportScreenshot = null },
                 properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
             ) {
                 androidx.compose.material3.Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    BugReportScreen(onCancel = { showBugReport = false })
+                    BugReportScreen(
+                        onCancel = { showBugReport = false; bugReportScreenshot = null },
+                        screenshot = bugReportScreenshot
+                    )
                 }
             }
         }

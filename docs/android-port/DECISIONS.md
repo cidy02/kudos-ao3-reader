@@ -2340,3 +2340,26 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   Previous, the page label with its picker and exact page field, Next, Last, as iOS's Inbox
   uses the shared `SearchPaginationBar`; it had Previous and Next only (seen on the emulator).
   Large text keeps its own stacked pager. A63 is done but for F15 (withdrawn in the audit).
+- **2026-10-16 · Settings, Onboarding, Privacy and Support compared again (iOS 102 labels; 16
+  not on Android by their words; Claude): three changes.** (1) **Sync Folder** takes iOS's
+  rows: Folder, Auto Sync, Sync Now, Change Folder, Disconnect when a folder is chosen, Choose
+  Sync Folder when not. `sync.isEnabled` is iOS's Auto Sync (the hub already showed "Paused");
+  Android's old "Enable folder sync" switch forgot the folder when turned off, and the footnote
+  spoke of an Auto Sync switch Android did not have. Choosing a folder syncs at once, and
+  Disconnect forgets when it last synced, as on iOS (all seen on the emulator; the hub reads
+  "Paused" with Auto Sync off). **Bug fixed with it:** Backup › Replace's "Pause Library Sync" left the background
+  worker scheduled, and the worker did not look at the setting, so it could sync the works
+  Replace removed back in. The worker and the app's own runs now go through
+  `SyncRepository.runAutoSync`, which does nothing while Auto Sync is off. Sync Details stays
+  out (2026-10-11). (2) **Bug report**: a shake grabs the screen first (PixelCopy, so images
+  come out) and the report offers Include a screenshot, its preview and Save or Share
+  Screenshot (the share sheet, from a cache folder of its own), and notes it in the issue
+  body, as iOS (seen on the emulator: a shake opens the report with the screen under it, and the
+  share sheet takes the image). The body is built line by line now: a description of several lines used to
+  keep the template's indent and show on GitHub as code. (3) **Replace** that cannot save its
+  undo copy says "Could not save an undo copy … Your library was not replaced. Free some space
+  and try again." Android never offers iOS's second-attempt "I understand the risks": no copy,
+  no Replace (the more sparing). Platform wording, left: Face ID, Apple devices, Scan a QR
+  Code (generate-only, earlier decision), "Import files" (an iOS spoken label for Android's
+  "Import Files"); "Add Saved Works to Saved for Later" stays out (2026-10-11). Reverse: the
+  commit that names this entry.

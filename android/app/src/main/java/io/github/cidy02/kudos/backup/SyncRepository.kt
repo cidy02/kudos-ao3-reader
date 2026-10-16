@@ -83,6 +83,15 @@ class SyncRepository(
         scheduleWorker()
     }
 
+    /**
+     * iOS `setAutoSyncEnabled`: off keeps the folder and stops the lifecycle and background
+     * runs; Sync Now still works.
+     */
+    suspend fun setAutoSync(enabled: Boolean) {
+        settingsRepository.updateSyncIsEnabled(enabled)
+        if (enabled) scheduleWorker() else WorkManager.getInstance(context).cancelUniqueWork(SYNC_WORK_NAME)
+    }
+
     suspend fun disconnect() {
         getSyncFolderUri()?.let { uri ->
             runCatching {
@@ -95,6 +104,8 @@ class SyncRepository(
         settingsRepository.updateSyncIsEnabled(false)
         settingsRepository.updateSyncFolderUri(null)
         settingsRepository.updateSyncLastError(null)
+        // iOS forgets when the folder last synced too: "Last Synced" no longer names a folder.
+        settingsRepository.updateSyncLastSyncAt(null)
         settingsRepository.updateSyncLastManifestDigest(null)
         WorkManager.getInstance(context).cancelUniqueWork(SYNC_WORK_NAME)
     }
@@ -112,6 +123,16 @@ class SyncRepository(
             ExistingPeriodicWorkPolicy.UPDATE,
             request
         )
+    }
+
+    /**
+     * The lifecycle and background runs. Null, without syncing, while Auto Sync is off
+     * (Settings, or Replace's "Pause Library Sync", which leaves the worker scheduled: a run
+     * would bring the works a Replace removed back from the folder) or no folder is chosen.
+     */
+    suspend fun runAutoSync(): SyncResult? {
+        if (!isSyncEnabled() || getSyncFolderUri() == null) return null
+        return runSync()
     }
 
     suspend fun runSync(): SyncResult = withContext(Dispatchers.IO) {
