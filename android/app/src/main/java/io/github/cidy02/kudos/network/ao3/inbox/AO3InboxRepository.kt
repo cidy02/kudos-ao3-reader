@@ -56,7 +56,9 @@ class AO3InboxRepository(
         action: AO3InboxBulkAction,
         form: AO3InboxBulkForm,
         items: List<AO3InboxItem>,
-        referer: String
+        referer: String,
+        /** The session the tap was made in: a write is never sent in another (iOS; A59). */
+        expectedGeneration: Int? = client.sessionGeneration()
     ): AO3Result<String> {
         if (client.username() == null) {
             return AO3Result.Failure(AO3Error.AuthenticationRequired)
@@ -73,13 +75,14 @@ class AO3InboxRepository(
 
         val viewer = AO3PageCache.scope(client)
         return when (
-            val response = client.postAuthenticated(
+            val response = client.postAuthenticatedInSession(
                 url = form.actionUrl,
                 formFields = parameters,
                 headers = mapOf(
                     "X-CSRF-Token" to form.csrfToken,
                     "Referer" to referer
-                )
+                ),
+                generation = expectedGeneration
             )
         ) {
             is AO3Result.Failure -> response

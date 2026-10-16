@@ -192,7 +192,7 @@ fun AccountWorksListScreen(
         SubscriptionUnsubscribeState(writeRepository, repository.authRepository)
     }
     val historyBusy = unsubscribeState.busyPath.collectAsState().value != null
-    var enrichedSubscriptions by remember(type, pageWorks, authState) {
+    var enrichedSubscriptions by remember(type, pageWorks, authState, generation) {
         mutableStateOf(emptyMap<Long, AO3WorkSummary>())
     }
     val enricher = remember(context) {
@@ -201,11 +201,14 @@ fun AccountWorksListScreen(
     }
     // iOS enriches only the loaded subscriptions page, after it is on screen. Reuse the
     // rows' memoised anonymous lookup, sequentially; changing page/session cancels the walk.
-    LaunchedEffect(type, pageWorks, authState, subscriptionsScope) {
+    LaunchedEffect(type, pageWorks, authState, subscriptionsScope, generation) {
         if (type == AccountListType.Subscriptions && subscriptionsScope == "works" && authState.isSignedIn) {
             for (work in pageWorks) {
                 val known = enricher?.enrich(work) ?: work
                 currentCoroutineContext().ensureActive()
+                // An answer that comes back after the session changed is not recorded, even
+                // before this effect is replaced (iOS `enrichmentFromAnOldGenerationIsNotRecorded`; A59).
+                if (repository.authRepository.generation.value != generation) return@LaunchedEffect
                 enrichedSubscriptions = enrichedSubscriptions + (work.id to known)
                 if (known.hasPostedChapterCount()) {
                     subscriptionWatermarks = SubscriptionWatermarks.baseline(

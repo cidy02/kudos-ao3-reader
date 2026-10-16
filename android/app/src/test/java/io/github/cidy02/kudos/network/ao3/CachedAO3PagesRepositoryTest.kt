@@ -40,8 +40,12 @@ class CachedAO3PagesRepositoryTest {
             return AO3Result.Success(AO3HttpResponse(url, 200, emptyMap(), html))
         }
         override suspend fun getAuthenticated(url: String) = get(url, emptyMap())
+        var posts = 0
         override suspend fun postAuthenticated(url: String, formFields: List<Pair<String, String>>,
-            headers: Map<String, String>) = AO3Result.Success(AO3HttpResponse(url, 200, emptyMap(), postBody))
+            headers: Map<String, String>): AO3Result<AO3HttpResponse> {
+            posts++
+            return AO3Result.Success(AO3HttpResponse(url, 200, emptyMap(), postBody))
+        }
     }
 
     private class Pages(val client: Client = Client()) {
@@ -179,6 +183,21 @@ class CachedAO3PagesRepositoryTest {
             assertTrue(pages.inbox.load() is AO3Result.Failure)
             assertTrue(pages.inbox.load(page = 2) is AO3Result.Failure)
         }
+    }
+
+    /** iOS `queuedATapCannotSubmitTheEquivalentBRow` (A59): a tap's write is never sent in another session. */
+    @Test fun anInboxWriteTappedInOneSessionIsNotSentInTheNext() = runBlocking<Unit> {
+        val pages = Pages()
+        val loaded = (pages.inbox.load() as AO3Result.Success).value
+        val tapped = pages.client.generation
+        pages.client.generation = tapped + 1 // signed out and in again, the same rows on screen
+        val sent = runCatching {
+            pages.inbox.performBulkAction(AO3InboxBulkAction.MarkRead, checkNotNull(loaded.bulkForm),
+                loaded.items.filter { it.bulkSelectionField != null }.take(1), checkNotNull(loaded.pageUrl),
+                expectedGeneration = tapped)
+        }
+        assertTrue(sent.exceptionOrNull() is kotlinx.coroutines.CancellationException)
+        assertEquals(0, pages.client.posts)
     }
 
     @Test fun unconfirmedInboxWriteKeepsTheCopy() = runBlocking<Unit> {
