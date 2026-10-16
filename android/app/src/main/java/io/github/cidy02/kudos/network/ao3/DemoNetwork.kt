@@ -590,6 +590,23 @@ internal class DemoNetworkInterceptor(
                     "<div class='flash error'>Couldn't unsubscribe.</div>").toResponseBody(HTML_TYPE))
                 .build()
         }
+        // An Inbox action and a new comment or reply: AO3's notice, as the page it redirects to
+        // shows it. Without these the demo said every one "wasn't confirmed".
+        if (chain.request().method == "POST" &&
+            (Regex("^/users/[^/]+/inbox/?$").matches(path) || Regex("^/(works|chapters|comments)/\\d+/comments/?$").matches(path))) {
+            val buffer = Buffer()
+            chain.request().body?.writeTo(buffer)
+            val accepted = buffer.readUtf8().split('&').any { it.startsWith("authenticity_token=") }
+            val inbox = path.contains("/inbox")
+            return Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1)
+                .code(if (accepted) 200 else 422).message(if (accepted) "OK" else "Unprocessable Entity")
+                .body((when {
+                    !accepted -> "<div class='flash error'>Couldn't save that.</div>"
+                    inbox -> "<div class='flash notice'>Inbox successfully updated.</div>"
+                    else -> "<div class='flash comment_notice'>Comment created!</div>"
+                }).toResponseBody(HTML_TYPE))
+                .build()
+        }
         // Unmark from Marked for Later (3fg): AO3's notice, as the page it redirects to shows it.
         if (chain.request().method == "POST" && Regex("^/works/\\d+/mark_as_read/?$").matches(path)) {
             val buffer = Buffer()
