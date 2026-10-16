@@ -29,12 +29,15 @@ import io.github.cidy02.kudos.network.ao3.AO3Error
 import io.github.cidy02.kudos.network.ao3.AO3Result
 import io.github.cidy02.kudos.network.ao3.work.WorkTagsRepository
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.withContext
 
 /**
  * Library work persistence. Soft-delete / Recently Deleted follows Apple
@@ -720,6 +723,96 @@ class WorkRepository(
                 )
                 upsert(updated)
                 AO3Result.Success(Unit)
+            }
+        }
+    }
+
+    /**
+     * iOS `LibraryView.backfillFilterMetadata`, run while the Library is open and stopped when it
+     * leaves: every work that is not queue-only, newest first, gets its EPUB's tags when it has
+     * none, then one AO3 read when [SavedWork.needsAO3Refresh] says AO3 would add something.
+     * One work at a time through the paced client. Never a background job (the policy), and
+     * [readsAO3] is false in the demo, whose answers would mark its works deleted.
+     */
+    suspend fun backfillFilterMetadata(readsAO3: Boolean) {
+        for (work in workDao.getAll().map { it.toDomain() }) {
+            currentCoroutineContext().ensureActive()
+            if (work.isQueueOnlyWork) continue
+            val withEpubTags = backfillTagsFromEpub(work)
+            if (readsAO3) backfillTagsFromAO3(withEpubTags)
+        }
+    }
+
+    /** iOS `WorkTags.backfillFromEPUB`: local only, and only for a work with no tags yet. */
+    internal suspend fun backfillTagsFromEpub(work: SavedWork): SavedWork {
+        if (work.workTags.isNotEmpty() || !work.hasEpub) return work
+        val meta = withContext(Dispatchers.IO) {
+            runCatching { EpubImportMetadata.inspect(java.nio.file.Files.readAllBytes(fileStore.workEpubPath(work.id))) }
+                .getOrNull()
+        } ?: return work
+        val tags = meta.applyTo(work, fillOnly = true).workTags
+        if (tags.isEmpty()) return work
+        return upsert(work.copy(
+            workTags = tags,
+            rating = work.rating.ifBlank { meta.rating.trim() },
+            lastModifiedAt = clock()
+        ))
+    }
+
+    /**
+     * iOS `WorkTags.refreshFromAO3`. The attempt is stamped before the read, so a locked or
+     * failing work waits out the cooldown; a cancelled read is no attempt and puts the old
+     * stamp back. A page without tags keeps what the work has; a 404 marks it gone.
+     */
+    internal suspend fun backfillTagsFromAO3(work: SavedWork) {
+        val repo = tagsRepository ?: return
+        val now = clock()
+        if (!work.needsAO3Refresh(now)) return
+        val ao3Id = WorkIdentityIndex.ao3WorkId(work) ?: return
+        val previousAttempt = work.lastTagRefreshAttemptAt
+        upsert(work.copy(
+            ao3WorkID = work.ao3WorkID ?: ao3Id.takeIf { it in 1..Int.MAX_VALUE.toLong() }?.toInt(),
+            lastTagRefreshAttemptAt = now
+        ))
+        val result = try {
+            repo.refreshTags(ao3Id)
+        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+            withContext(kotlinx.coroutines.NonCancellable) {
+                getWork(work.id)?.let { upsert(it.copy(lastTagRefreshAttemptAt = previousAttempt)) }
+            }
+            throw cancelled
+        }
+        // Read again: the reader may have changed or deleted the work during the read.
+        val current = getWork(work.id)?.takeIf { !it.isDeleted } ?: return
+        when (result) {
+            is AO3Result.Failure -> if (result.error == AO3Error.NotFound) {
+                upsert(current.copy(
+                    ao3Unavailable = true,
+                    lastAvailabilityCheck = now,
+                    lastModifiedAt = if (!current.ao3Unavailable) now else current.lastModifiedAt
+                ))
+            }
+            is AO3Result.Success -> {
+                val meta = result.value
+                if (meta.fandoms.isEmpty() && meta.relationships.isEmpty() && meta.characters.isEmpty() &&
+                    meta.freeforms.isEmpty() && meta.warnings.isEmpty() && meta.categories.isEmpty()
+                ) return
+                val merged = WorkMetadataMerger(clock).merge(
+                    summary = null, canonical = meta, existing = current, markSaved = false
+                )
+                // A freeform that is also a fandom, character, warning… came from the EPUB's flat list.
+                val categorized = (merged.workFandoms + merged.workRelationships + merged.workCharacters +
+                    merged.workWarnings + merged.workCategories).mapTo(HashSet()) { it.trim().lowercase() }
+                val freeforms = merged.workFreeforms.filterNot { it.trim().lowercase() in categorized }
+                upsert(merged.copy(
+                    workFreeforms = freeforms,
+                    workTags = WorkTags.flattenedWorkTags(
+                        merged.workFandoms, merged.workRelationships, merged.workCharacters, freeforms
+                    ),
+                    ao3Unavailable = false,
+                    lastAvailabilityCheck = now,
+                    lastModifiedAt = now
+                ))
             }
         }
     }

@@ -197,6 +197,23 @@ fun LibraryScreen(
         )
     )
     val state by viewModel.state.collectAsState()
+    // iOS LibraryView's `.task`: fill in the tags the filters use while the Library is open;
+    // leaving it cancels the walk. Not on a section's page, which iOS does not run it from.
+    if (section == null) {
+        LaunchedEffect(Unit) {
+            val readsAO3 = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                io.github.cidy02.kudos.network.ao3.DemoNetwork.awaitLaunchDecision()
+                !io.github.cidy02.kudos.network.ao3.DemoNetwork.isActive
+            }
+            try {
+                workRepository.backfillFilterMetadata(readsAO3)
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                // Best effort, as on iOS: the works keep the tags they have.
+            }
+        }
+    }
     val filterRequestTick by LibraryFilterRequest.tick.collectAsState()
     LaunchedEffect(filterRequestTick, state.loading, state.userTags, section) {
         if (filterRequestTick == 0 || state.loading) return@LaunchedEffect

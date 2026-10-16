@@ -2443,7 +2443,7 @@ object BackupMergeService {
                 status = "queued"
             }
             var metadata = work.metadataSyncStatusRaw
-            if ((metadata == null || metadata == "unknown") && iosNeedsMetadataRefresh(work, now)) {
+            if ((metadata == null || metadata == "unknown") && work.needsAO3Refresh(now)) {
                 metadata = "pending"
             }
             worksById[id] = work.copy(
@@ -2453,30 +2453,6 @@ object BackupMergeService {
                 metadataSyncStatusRaw = metadata
             )
         }
-    }
-
-    /** Apple `SavedWork.needsAO3Refresh`, used by [normalizeQueuedWorks]. */
-    private fun iosNeedsMetadataRefresh(work: SavedWork, now: Instant): Boolean {
-        if (work.ao3Unavailable) return false
-        val attempt = work.lastTagRefreshAttemptAt
-        if (attempt != null && Duration.between(attempt, now) < Duration.ofHours(24)) return false
-        val hasCategorizedTags = work.workFandoms.isNotEmpty() ||
-            work.workCharacters.isNotEmpty() ||
-            work.workRelationships.isNotEmpty() ||
-            work.workFreeforms.isNotEmpty()
-        val missingCardStats = work.workWarnings.isEmpty() &&
-            work.workCategories.isEmpty() &&
-            work.language.isEmpty() &&
-            work.wordCount == 0
-        val source = work.sourceUrl.lowercase()
-        val hasAo3Source = work.ao3WorkID != null ||
-            source.contains("archiveofourown.org") ||
-            source.contains("ao3.org")
-        return !work.workTagsFetched ||
-            !hasCategorizedTags ||
-            missingCardStats ||
-            work.chapters.isEmpty() ||
-            (work.authorIdentitiesJSON.isEmpty() && hasAo3Source)
     }
 
     /**

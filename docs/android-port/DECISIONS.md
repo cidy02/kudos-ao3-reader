@@ -2378,3 +2378,18 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   tags first, then AO3 once per work that lacks tags, sequential, cancellable, every attempt
   stamped, behind the demo fence); it is a new AO3 read path, so it gets a brief of its own.
   Reverse: restore `WorkTagsRefreshWorker.kt` and its scheduling from `2f00aa6a`.
+- **2026-10-16 · Brief 3fr: iOS's Library tag backfill, in the foreground (Claude, the agents
+  being away).** While the main Library is open (not a section's page), `WorkRepository.
+  backfillFilterMetadata` walks every work that is not queue-only: an untagged work with an
+  EPUB gets its tags from the EPUB (local), then one AO3 read when `SavedWork.needsAO3Refresh`
+  (now iOS's rule, shared with the backup merge) says AO3 would add something. One work at a
+  time through the paced client; leaving the Library cancels it. The attempt is stamped before
+  the read (24-hour cooldown); a cancelled read puts the old stamp back; a page without tags
+  keeps the work's; a 404 marks it gone. The page's data goes through `WorkMetadataMerger`
+  (tags merged, flat tags rebuilt, language, words, chapters, stats, verified authors,
+  `workTagsFetched`), and a freeform that is also a fandom, character, warning or category is
+  dropped, as iOS. Android's EPUB reader also knows the AO3 preface, but only the flat tags and
+  an empty rating are taken, as iOS. **In the demo nothing is read from AO3** (after the launch
+  decision): its local answers would mark the demo's works deleted. Expect one read per work the
+  first time an existing library opens the Library, as on iOS. Reverse: the `LaunchedEffect`
+  in `LibraryScreen.kt`.
