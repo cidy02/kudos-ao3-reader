@@ -128,9 +128,6 @@ data class SavedWork(
     val isProtected: Boolean
         get() = isSaved || isFavorite || isKeptOffline || !hasAo3WorkId || ao3Unavailable
 
-    val needsAO3Refresh: Boolean
-        get() = (System.currentTimeMillis() - (lastTagRefreshAttemptAt?.toEpochMilli() ?: 0)) > 86400000L
-
     /** iOS `SavedWork.isQueueOnlyWork`: queued but not otherwise protected. */
     val isQueueOnlyWork: Boolean
         get() = isQueuedForLater && !isSaved && !isFavorite

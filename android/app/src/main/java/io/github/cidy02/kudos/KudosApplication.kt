@@ -28,8 +28,6 @@ class KudosApplication : Application(), Configuration.Provider {
         get() = Configuration.Builder()
             .setWorkerFactory(
                 KudosWorkerFactory(
-                    tagsRepository = container.tagsRepository,
-                    workRepository = container.workRepository,
                     sweep = WorkAvailabilitySweep(container.workRepository, container.tagsRepository)
                 )
             )
@@ -174,24 +172,9 @@ class KudosApplication : Application(), Configuration.Provider {
         // one-shot / manual trigger.
         workManager.cancelUniqueWork("AvailabilitySweepWorker")
 
-        // Tag enrichment is the sanctioned background refresh path — throttle with
-        // network + battery constraints (shape matches SyncRepository.scheduleWorker).
-        val tagRefreshConstraints = androidx.work.Constraints.Builder()
-            .setRequiredNetworkType(androidx.work.NetworkType.CONNECTED)
-            .setRequiresBatteryNotLow(true)
-            .build()
-        val tagRefreshWork = androidx.work.PeriodicWorkRequestBuilder<io.github.cidy02.kudos.works.WorkTagsRefreshWorker>(
-            1, java.util.concurrent.TimeUnit.DAYS
-        )
-            .setConstraints(tagRefreshConstraints)
-            .build()
-
-        // UPDATE so existing installs pick up the new network/battery constraints
-        // rather than keeping an unconstrained periodic request forever.
-        workManager.enqueueUniquePeriodicWork(
-            "WorkTagsRefreshWorker",
-            androidx.work.ExistingPeriodicWorkPolicy.UPDATE,
-            tagRefreshWork
-        )
+        // Nor is tag enrichment a background job: iOS refreshes tags only while the Library
+        // is open. The daily worker read up to 150 works from AO3 a day, by a "needs refresh"
+        // test that was only a 24-hour gap, and kept nothing it read (DECISIONS 2026-10-16).
+        workManager.cancelUniqueWork("WorkTagsRefreshWorker")
     }
 }
