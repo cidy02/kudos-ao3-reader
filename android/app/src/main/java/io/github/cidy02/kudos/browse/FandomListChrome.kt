@@ -228,7 +228,7 @@ private fun SingleFandomRow(
                 Text(text = member.displayName.qualifier, color = tokens.secondaryInk, fontSize = 13.sp)
             }
             member.aliases.forEach { alias ->
-                Text(text = alias, color = tokens.secondaryInk, fontSize = 12.sp)
+                Text(text = alias, color = tokens.secondaryInk, fontSize = 12.sp, fontStyle = aliasStyle(alias))
             }
         }
         Text(
@@ -289,7 +289,8 @@ private fun FamilyBlock(
                     fontWeight = FontWeight.SemiBold
                 )
                 first.aliases.take(2).forEach { alias ->
-                    Text(text = alias, color = tokens.secondaryInk, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(text = alias, color = tokens.secondaryInk, fontSize = 12.sp, fontStyle = aliasStyle(alias),
+                        maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             }
             Column(horizontalAlignment = Alignment.End) {
@@ -571,3 +572,8 @@ fun indexLetterColor(available: Boolean): Color {
     val ink = LocalKudosTokens.current.secondaryInk
     return if (available) ink else ink.copy(alpha = ink.alpha * 0.28f)
 }
+
+/** An alias in italic where its script has one (iOS `aliasText`; A58 #20). */
+private fun aliasStyle(alias: String): androidx.compose.ui.text.font.FontStyle =
+    if (FandomScript.hasItalicForm(alias)) androidx.compose.ui.text.font.FontStyle.Italic
+    else androidx.compose.ui.text.font.FontStyle.Normal

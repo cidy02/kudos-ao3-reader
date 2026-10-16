@@ -2150,3 +2150,8 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   chips and the cover card's tiles; Dark and OLED keep the yellow. The Other category is black,
   AO3's own coding and iOS's `categoryColor`. Seen on the emulator (Light, the dashboard's
   Teen tile drew `#8C6600`). Reverse: the commit that names this.
+- **2026-10-16 · Fandom aliases in italic where the script has one (A58 #20; Claude).** As
+  iOS's `FandomScript.hasItalicForm`, Browse's fandom rows set an alias in italic when it is
+  Latin or Cyrillic, and leave CJK, kana, Hangul, Thai, Hebrew, Arabic and mixed-script names
+  upright (a skewed CJK glyph blurs at caption size; half a slanted string reads as a fault).
+  Not looked at on screen. Reverse: the commit that names this.

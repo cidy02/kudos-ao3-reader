@@ -203,3 +203,18 @@ object FandomDisplayName {
         return out.trim()
     }
 }
+
+/**
+ * Whether a fandom alias takes italic, as iOS's `FandomScript`: only text with a real italic
+ * form. CJK, kana, Hangul, Thai, Hebrew and Arabic have none, and a name mixing them with
+ * Latin stays upright too (half a slanted string reads as a fault). Cyrillic keeps its italic.
+ */
+object FandomScript {
+    private val noItalicForm = listOf(
+        0x3000..0x303F, 0x3040..0x30FF, 0x3400..0x4DBF, 0x4E00..0x9FFF,
+        0xAC00..0xD7AF, 0xF900..0xFAFF, 0x0E00..0x0E7F, 0x0590..0x05FF, 0x0600..0x06FF
+    )
+
+    fun hasItalicForm(text: String): Boolean =
+        text.codePoints().noneMatch { point -> noItalicForm.any { point in it } }
+}
