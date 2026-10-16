@@ -79,20 +79,9 @@ class KudosApplication : Application(), Configuration.Provider {
             }
             // Paced rebuild of stale library searchText (schema bump / pre-index / restore).
             runCatching { container.workRepository.rebuildSearchIndexIfNeeded() }
-            // Opportunistic background tag refresh (404 detection).
-            // Wait until the activity has said whether this is the demo. A
-            // WorkManager-only process never gets that signal and continues
-            // after a few seconds; it is not the demo.
-            runCatching {
-                DemoNetwork.awaitLaunchDecision()
-                if (DemoNetwork.isActive) return@runCatching
-                val stale = container.workRepository.listSavedWorks()
-                    .filter { it.lastUpdateCheck == null }
-                    .take(5)
-                for (work in stale) {
-                    container.workRepository.refreshMetadata(work.id)
-                }
-            }
+            // No AO3 read here: iOS reads nothing at launch but the session check, and this
+            // also ran in a process only a background worker had started. The Library's own
+            // backfill reads what a work lacks while it is open (DECISIONS 2026-10-16).
         }
         // Throttled GitHub update check (default: at most once/24h). Silent on
         // failure — a broken GitHub check must never affect app startup.

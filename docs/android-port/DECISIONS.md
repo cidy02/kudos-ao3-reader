@@ -2393,3 +2393,9 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   decision): its local answers would mark the demo's works deleted. Expect one read per work the
   first time an existing library opens the Library, as on iOS. Reverse: the `LaunchedEffect`
   in `LibraryScreen.kt`.
+- **2026-10-16 · No AO3 read at app start (Claude).** Every process start read up to five works
+  from AO3 that had never been checked (`KudosApplication`, "opportunistic tag refresh"),
+  including a start made only by the folder-sync worker in the background. iOS reads nothing
+  at launch but the session check; the Library's foreground backfill (3fr) now reads what a
+  work lacks, 404s included. Removed. Reverse: the block in `KudosApplication.onCreate` before
+  this commit.
