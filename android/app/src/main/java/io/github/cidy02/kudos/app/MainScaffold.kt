@@ -279,6 +279,9 @@ fun MainScaffold(
                     LocalShellOverlayState provides overlay,
                     LocalPushedShellChrome provides pushedChrome,
                     LocalSearchExit provides { navController.navigateShellRoot(searchReturnTab) },
+                    io.github.cidy02.kudos.works.detail.LocalOpenAuthor provides { byline ->
+                        navController.navigate(Routes.authorProfile(byline))
+                    },
                     LocalTagSearch provides { field, value ->
                         SearchTagRequests.request(
                             field = field,

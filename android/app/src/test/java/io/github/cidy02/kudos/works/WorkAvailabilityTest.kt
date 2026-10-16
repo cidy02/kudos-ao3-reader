@@ -75,6 +75,53 @@ class WorkAvailabilityTest {
     )
 
     @Test
+    fun visibleRefreshDeduplicatesAO3IdentityAndStopsAfterARefusal() = runTest {
+        val first = repository.upsert(work())
+        val same = repository.upsert(work().copy(id = "second-record"))
+        val other = repository.upsert(work().copy(sourceUrl = "https://archiveofourown.org/works/556", ao3WorkID = 556))
+        val refresh = WorkMetadataRefresh(repository, metadata)
+        refresh.refresh(listOf(first, same, other))
+        assertEquals(listOf(555L, 556L), requested)
+        requested.clear()
+        response = AO3Result.Failure(AO3Error.Forbidden)
+        refresh.refresh(listOf(first, other))
+        assertEquals(listOf(555L), requested)
+        assertFalse(repository.getWork(other.id)!!.isDeleted)
+    }
+
+    @Test
+    fun refreshMergesOntoTheFlagsAndProgressWrittenWhileTheRequestWaits() = runTest {
+        val original = repository.upsert(work())
+        val repo = object : AO3WorkMetadataRepository() {
+            override suspend fun fetch(workId: Long): AO3Result<AO3WorkMetadata> {
+                repository.upsert(repository.getWork(original.id)!!.copy(isFavorite = true,
+                    readiumLocator = "new-location", lastSpineIndex = 9))
+                return AO3Result.Success(AO3WorkMetadata(words = 2000, title = "New title"))
+            }
+        }
+        val updated = WorkMetadataRefresh(repository, repo).refresh(original)
+        assertTrue(updated.isFavorite)
+        assertEquals("new-location", updated.readiumLocator)
+        assertEquals(9, updated.lastSpineIndex)
+        assertEquals(2000, updated.wordCount)
+        assertEquals("New title", updated.title)
+    }
+
+    @Test
+    fun refreshDoesNotReviveAWorkDeletedWhileTheRequestWaits() = runTest {
+        val original = repository.upsert(work())
+        val repo = object : AO3WorkMetadataRepository() {
+            override suspend fun fetch(workId: Long): AO3Result<AO3WorkMetadata> {
+                repository.softDelete(original.id)
+                return AO3Result.Success(AO3WorkMetadata(words = 2000))
+            }
+        }
+        val updated = WorkMetadataRefresh(repository, repo).refresh(original)
+        assertTrue(updated.isDeleted)
+        assertEquals(original.wordCount, updated.wordCount)
+    }
+
+    @Test
     fun a404MarksTheLocalCopyAsTheLastOne() = runTest {
         val original = repository.upsert(work())
         val bytes = "local EPUB must survive".toByteArray()

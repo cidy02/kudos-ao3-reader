@@ -48,7 +48,7 @@ import io.github.cidy02.kudos.app.ProvidePushedShellChrome
 import io.github.cidy02.kudos.core.model.SavedWork
 import io.github.cidy02.kudos.core.model.WorkDownloadAction
 import io.github.cidy02.kudos.library.AddToCollectionDialog
-import io.github.cidy02.kudos.library.AddToQueueDialog
+import io.github.cidy02.kudos.library.QueueMembershipDialog
 import io.github.cidy02.kudos.library.LibraryCardActions
 import io.github.cidy02.kudos.library.LibraryCompletionFilter
 import io.github.cidy02.kudos.library.LibraryDisplayItem
@@ -59,7 +59,6 @@ import io.github.cidy02.kudos.library.LibraryFinishedFilter
 import io.github.cidy02.kudos.library.LibraryPrivacy
 import io.github.cidy02.kudos.library.LibraryPrivacyVisibility
 import io.github.cidy02.kudos.library.LibraryQuery
-import io.github.cidy02.kudos.library.LibraryQueuePreview
 import io.github.cidy02.kudos.library.LibraryRepository
 import io.github.cidy02.kudos.library.LibrarySectionKind
 import io.github.cidy02.kudos.library.LibrarySnapshot
@@ -69,7 +68,6 @@ import io.github.cidy02.kudos.library.LibrarySubjectWorkCard
 import io.github.cidy02.kudos.library.LibraryWorkMenu
 import io.github.cidy02.kudos.library.ReadingQueueRepository
 import io.github.cidy02.kudos.library.leadingSwipeActions
-import io.github.cidy02.kudos.library.queuePreviews
 import io.github.cidy02.kudos.library.readingProgressFraction
 import io.github.cidy02.kudos.library.trailingSwipeActions
 import io.github.cidy02.kudos.network.ao3.search.AO3Rating
@@ -126,6 +124,7 @@ fun HomeSectionListScreen(
     metadataRefresh: WorkMetadataRefresh?,
     queueRepository: ReadingQueueRepository? = null,
     downloadQueue: DownloadQueue? = null,
+    workImporter: io.github.cidy02.kudos.works.WorkImporter? = null,
     initialSelecting: Boolean = false,
     initialSelection: Set<String> = emptySet(),
     onOpenWork: (String) -> Unit,
@@ -481,6 +480,7 @@ fun HomeSectionListScreen(
             WorkBulkActionBar(
                 selectedWorks = selectedWorks,
                 workRepository = workRepository,
+                workImporter = workImporter,
                 queueRepository = queueRepository,
                 downloadQueue = downloadQueue,
                 onDeleted = ::exitSelection,
@@ -492,23 +492,13 @@ fun HomeSectionListScreen(
 
     // The Library's own two dialogs; these menu entries used to do nothing here.
     addToQueueWorkId?.let { workId ->
-        var queues by remember(workId) { mutableStateOf<List<LibraryQueuePreview>>(emptyList()) }
-        LaunchedEffect(workId) {
-            queues = runCatching { queueRepository?.queuePreviews() }.getOrNull().orEmpty()
-        }
-        AddToQueueDialog(
-            queues = queues,
-            onAdd = { queueId ->
-                addToQueueWorkId = null
-                scope.launch { runCatching { queueRepository?.addWork(queueId, workId) } }
-            },
-            onManageQueues = {
-                addToQueueWorkId = null
-                onOpenReadingQueues()
-            },
+        QueueMembershipDialog(
+            works = displayItems.filter { it.item.work.id == workId }.map { it.item.work },
+            repository = queueRepository, importer = workImporter,
             onDismiss = { addToQueueWorkId = null }
         )
     }
+
     addToCollectionWorkId?.let { workId ->
         AddToCollectionDialog(
             workId = workId,

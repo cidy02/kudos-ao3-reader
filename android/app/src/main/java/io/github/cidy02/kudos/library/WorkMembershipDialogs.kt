@@ -30,6 +30,7 @@ import io.github.cidy02.kudos.core.model.WorkCollection
 import io.github.cidy02.kudos.works.WorkRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.ensureActive
 
 /** Every queue with its work count, as the Library's dashboard and its Add to Queue dialog list them. */
 internal suspend fun ReadingQueueRepository.queuePreviews(): List<LibraryQueuePreview> {
@@ -37,49 +38,6 @@ internal suspend fun ReadingQueueRepository.queuePreviews(): List<LibraryQueuePr
     return listQueues().map { queue ->
         LibraryQueuePreview(id = queue.id, name = queue.displayName, workCount = listWorks(queue.id).size)
     }
-}
-
-/**
- * One work into one queue. The Library's dialog, shared with Home's section lists.
- * [onManageQueues] is the "Manage queues" button; pass null where there is nowhere to go.
- */
-@Composable
-internal fun AddToQueueDialog(
-    queues: List<LibraryQueuePreview>,
-    onAdd: (queueId: String) -> Unit,
-    onManageQueues: (() -> Unit)?,
-    onDismiss: () -> Unit
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Add to Queue") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                if (queues.isEmpty()) {
-                    Text(
-                        "No queues yet. Create one from Reading Queues.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                } else {
-                    queues.forEach { queue ->
-                        TextButton(
-                            onClick = { onAdd(queue.id) },
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text(queue.name, modifier = Modifier.fillMaxWidth())
-                        }
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = onDismiss) { Text("Close") }
-        },
-        dismissButton = onManageQueues?.let { manage ->
-            { TextButton(onClick = manage) { Text("Manage queues") } }
-        }
-    )
 }
 
 /**
@@ -203,4 +161,84 @@ internal fun AddToCollectionDialog(
             TextButton(onClick = onDismiss) { Text("Done") }
         }
     )
+}
+
+/** Library and bulk selection use the existing queue form; Work Detail remains additive-only. */
+@Composable
+internal fun QueueMembershipDialog(
+    works: List<io.github.cidy02.kudos.core.model.SavedWork>,
+    repository: ReadingQueueRepository?,
+    importer: io.github.cidy02.kudos.works.WorkImporter? = null,
+    onChanged: () -> Unit = {},
+    onDismiss: () -> Unit
+) {
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    var queues by remember { mutableStateOf(emptyList<io.github.cidy02.kudos.core.model.ReadingQueue>()) }
+    var members by remember { mutableStateOf(emptySet<String>()) }
+    var name by remember { mutableStateOf("") }
+    var working by remember { mutableStateOf(true) }
+    var includeSeries by remember { mutableStateOf(false) }
+    var preserving by remember { mutableStateOf(false) }
+    var result by remember { mutableStateOf<SeriesPreservationResult?>(null) }
+    var seriesJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
+    var error by remember { mutableStateOf<String?>(null) }
+    val series = works.map { it.seriesUrl }.filter { it.isNotBlank() }.distinct()
+    suspend fun reload() {
+        val repo = repository ?: return
+        repo.ensureSavedForLaterQueue()
+        queues = repo.listQueues()
+        members = queues.filter { queue ->
+            val ids = repo.listWorks(queue.id).map { it.membership.workID }.toSet()
+            works.isNotEmpty() && works.all { it.id in ids }
+        }.map { it.id }.toSet()
+    }
+    fun change(action: suspend () -> Unit) {
+        working = true
+        scope.launch {
+            try { action(); reload(); onChanged() } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled } catch (failure: Exception) { error = failure.message ?: "Could not change queue membership." } finally { working = false }
+        }
+    }
+    LaunchedEffect(works.map { it.id }) { change {} }
+    io.github.cidy02.kudos.works.detail.WorkDetailQueueForm(
+        queues, members, name, working || works.isEmpty() || repository == null, series.isNotEmpty() && importer != null,
+        includeSeries, false, null, preserving, result,
+        onName = { name = it },
+        onCreate = { change {
+            val queue = repository!!.createQueue(name.trim())
+            name = ""
+            works.forEach { repository.addWork(queue.id, it.id) }
+        } },
+        onAdd = { queue -> change {
+            val remove = queue.id in members
+            works.forEach { work ->
+                if (remove) repository!!.removeWork(queue.id, work.id)
+                else repository!!.addWork(queue.id, work.id)
+            }
+        } },
+        onIncludeSeries = { includeSeries = it },
+        onPreserve = {
+            val targets = queues.filter { it.id in members }
+            if (!preserving && importer != null && repository != null && targets.isNotEmpty()) {
+                preserving = true
+                seriesJob = scope.launch {
+                    try {
+                        val seriesRepository = io.github.cidy02.kudos.network.ao3.series.AO3SeriesRepository()
+                        for (url in series) {
+                            kotlinx.coroutines.currentCoroutineContext().ensureActive()
+                            result = repository.preserveSeries(url, targets, seriesRepository, importer,
+                                progress = { result = it })
+                        }
+                        reload(); onChanged()
+                    } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled } catch (failure: Exception) { error = failure.message ?: "Could not add the series." } finally { preserving = false }
+                }
+            }
+        },
+        onCancel = { seriesJob?.cancel(); preserving = false },
+        onClose = { if (!working) { seriesJob?.cancel(); onDismiss() } },
+        registerShellChrome = false
+    )
+    error?.let { message ->
+        AlertDialog(onDismissRequest = { error = null }, title = { Text("Queue membership") },
+            text = { Text(message) }, confirmButton = { TextButton(onClick = { error = null }) { Text("OK") } })
+    }
 }

@@ -175,6 +175,9 @@ fun AppNavHost(
             LibraryScreen(
                 repository = container.libraryRepository,
                 workRepository = container.workRepository,
+                metadataRefresh = io.github.cidy02.kudos.works.WorkMetadataRefresh(
+                    container.workRepository, container.metadataRepository
+                ),
                 workImporter = container.workImporter,
                 settingsRepository = container.settingsRepository,
                 queueRepository = container.readingQueueRepository,
@@ -229,6 +232,8 @@ fun AppNavHost(
                     privacyGate = container.privacyGate,
                     downloadQueue = container.downloadQueue,
                     queueRepository = container.readingQueueRepository,
+                    workImporter = container.workImporter,
+                    onOpenComments = { navController.navigate(Routes.comments(it)) },
                     onOpenWork = { workId ->
                         navigateToWorkDetail(WorkDetailSource.LocalWork(workId))
                     },
@@ -252,6 +257,8 @@ fun AppNavHost(
             val initialQueueId = Routes.routeArg(backStackEntry, "queueId")
             ReadingQueueBrowserScreen(
                 repository = container.readingQueueRepository,
+                workImporter = container.workImporter,
+                onOpenComments = { navController.navigate(Routes.comments(it)) },
                 workRepository = container.workRepository,
                 initialQueueId = initialQueueId,
                 onOpenWork = { workId ->
@@ -374,6 +381,7 @@ fun AppNavHost(
                     ),
                     queueRepository = container.readingQueueRepository,
                     downloadQueue = container.downloadQueue,
+                    workImporter = container.workImporter,
                     initialSelecting = isSelecting,
                     initialSelection = selection,
                     onOpenWork = { workId ->
@@ -398,6 +406,9 @@ fun AppNavHost(
                 LibraryScreen(
                     repository = container.libraryRepository,
                     workRepository = container.workRepository,
+                    metadataRefresh = io.github.cidy02.kudos.works.WorkMetadataRefresh(
+                        container.workRepository, container.metadataRepository
+                    ),
                     workImporter = container.workImporter,
                     settingsRepository = container.settingsRepository,
                     queueRepository = container.readingQueueRepository,
@@ -1036,6 +1047,12 @@ fun AppNavHost(
                 ?.let(::resolveWorkDetailSource)
             WorkDetailScreen(
                 source = source,
+                privacyGate = container.privacyGate,
+                onOpenLocalWork = { navigateToWorkDetail(WorkDetailSource.LocalWork(it)) },
+                onFilterLibraryTag = { name ->
+                    LibraryFilterRequest.requestUserTag(name)
+                    navController.navigateShellRoot(Routes.Library)
+                },
                 onDismiss = { navController.popBackStack() },
                 workRepository = container.workRepository,
                 workImporter = container.workImporter,

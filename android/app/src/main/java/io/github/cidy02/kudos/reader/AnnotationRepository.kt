@@ -19,8 +19,8 @@ import kotlinx.coroutines.flow.map
  * existed; this is the in-session repository the reader UI uses.
  *
  * Same-passage recolor (iOS `ReadingAnnotationMatching`): if a new highlight
- * targets the same selected text + similar progression, update color instead of
- * stacking a second row.
+ * targets the exact stored locator, update its colour instead of stacking a second row.
+ * The reader's Highlight action toggles off an exact same-colour repeat.
  *
  * Deletes mint a signed `readingAnnotation` tombstone so folder-sync RECONCILE
  * cannot resurrect the highlight from an older peer snapshot (iOS
@@ -112,6 +112,17 @@ class AnnotationRepository(
                 !existing.kindRaw.equals("bookmark", ignoreCase = true))
         ) return
         saveAnnotation(existing.copy(colorRaw = color))
+    }
+
+    /** iOS: repeating Highlight with the current colour removes that exact passage. */
+    suspend fun toggleHighlight(
+        workId: String, locatorString: String, selectedText: String, color: String,
+        progression: Double, spineIndex: Int
+    ) {
+        val existing = findSamePassage(workId, locatorString)
+        if (existing != null && existing.colorRaw == color) deleteAnnotation(existing.id)
+        else addOrRecolorHighlight(workId, locatorString, selectedText, color,
+            progression = progression, spineIndex = spineIndex, kind = existing?.kindRaw ?: "highlight")
     }
 
     /**

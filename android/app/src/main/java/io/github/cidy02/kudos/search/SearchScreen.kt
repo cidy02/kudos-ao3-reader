@@ -489,6 +489,7 @@ fun SearchScreen(
             WorkBulkActionBar(
                 selectedWorks = selectedWorks,
                 workRepository = workRepository,
+                workImporter = workImporter,
                 queueRepository = queueRepository,
                 downloadQueue = downloadQueue,
                 onDeleted = {
