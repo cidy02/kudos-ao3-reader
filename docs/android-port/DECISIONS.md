@@ -2105,3 +2105,11 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   session changed is not recorded (iOS `enrichmentFromAnOldGenerationIsNotRecorded`).
   `aClearedAccountKeepsNoRowsOrUnsubscribePath` was the History flags, fixed earlier.
   Reverse: the commit that names these rows.
+- **2026-10-15 · Marked for Later: an emptied page loads the nearest page with rows; the
+  download line names its size (3fm item 1, part; Claude).** As iOS's `reloadIfPageEmptied`
+  and `AO3AccountWorksPaging.pageAfterEmptying`, unmarking the last row of a page loads the
+  same page while later ones exist, else the page before; with one page the empty state stays.
+  As iOS's `AO3MarkedForLaterDownloadLine`, a row says "Downloaded · 1.4 MB" only when its
+  EPUB's size can be read (sized with the Storage screen's formatter), and nothing otherwise.
+  Not seen running: the demo has no downloaded work in Marked for Later. The "updated" run as
+  covers stays with 3fm. Reverse: the commit that names this.
