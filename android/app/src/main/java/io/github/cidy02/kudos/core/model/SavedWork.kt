@@ -128,6 +128,25 @@ data class SavedWork(
     val isProtected: Boolean
         get() = isSaved || isFavorite || isKeptOffline || !hasAo3WorkId || ao3Unavailable
 
+    /**
+     * iOS `SavedWork.needsAO3Refresh`: whether one AO3 read would still add what the Library's
+     * filters and cards use. Never for a work gone from AO3, and not twice in 24 hours (every
+     * attempt is stamped, so a locked work does not cost a read each time the Library opens).
+     */
+    fun needsAO3Refresh(now: Instant): Boolean {
+        if (ao3Unavailable) return false
+        val attempt = lastTagRefreshAttemptAt
+        if (attempt != null && java.time.Duration.between(attempt, now) < java.time.Duration.ofHours(24)) return false
+        val hasCategorizedTags = workFandoms.isNotEmpty() || workCharacters.isNotEmpty() ||
+            workRelationships.isNotEmpty() || workFreeforms.isNotEmpty()
+        val missingCardStats = workWarnings.isEmpty() && workCategories.isEmpty() &&
+            language.isEmpty() && wordCount == 0
+        val source = sourceUrl.lowercase()
+        val hasAo3Source = ao3WorkID != null || source.contains("archiveofourown.org") || source.contains("ao3.org")
+        return !workTagsFetched || !hasCategorizedTags || missingCardStats || chapters.isEmpty() ||
+            (authorIdentitiesJSON.isEmpty() && hasAo3Source)
+    }
+
     /** iOS `SavedWork.isQueueOnlyWork`: queued but not otherwise protected. */
     val isQueueOnlyWork: Boolean
         get() = isQueuedForLater && !isSaved && !isFavorite

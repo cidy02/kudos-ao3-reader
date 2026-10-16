@@ -1,5 +1,7 @@
 # 3fr: iOS's Library tag backfill, in the foreground
 
+**Done by Claude on 2026-10-16** (the agents were away): see DECISIONS 2026-10-16 "Brief 3fr".
+
 **Lane:** a Codex worktree off `android/redesign-parity`. Write code and tests; do not commit,
 push, sign in, or contact archiveofourown.org. Claude runs the gate, reviews, and commits.
 Binding: `docs/AO3_NETWORKING_POLICY.md` (no background polling but folder sync; no periodic
