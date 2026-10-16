@@ -59,6 +59,7 @@ import androidx.compose.ui.unit.sp
 import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
 import io.github.cidy02.kudos.ui.subject.SubjectChip
 import io.github.cidy02.kudos.ui.subject.SubjectChipStyle
+import io.github.cidy02.kudos.writing.WritingMarkup
 
 /**
  * AO3 Comment Formatting tags — matching iOS `CommentMarkupTag` (CommentMarkup.swift:30).
@@ -67,28 +68,34 @@ enum class CommentMarkupTag(
     val label: String,
     val element: String,
     val icon: ImageVector,
-    val group: TagGroup,
-    val openTag: String,
-    val closeTag: String = "</$element>"
+    val group: TagGroup
 ) {
     // Text
-    Bold("Bold", "strong", Icons.Outlined.FormatBold, TagGroup.Text, "<strong>", "</strong>"),
-    Italic("Italic", "em", Icons.Outlined.FormatItalic, TagGroup.Text, "<em>", "</em>"),
-    Underline("Underline", "u", Icons.Outlined.FormatUnderlined, TagGroup.Text, "<u>", "</u>"),
-    Strike("Strike", "s", Icons.Outlined.FormatStrikethrough, TagGroup.Text, "<s>", "</s>"),
-    Superscript("Superscript", "sup", Icons.Outlined.Superscript, TagGroup.Text, "<sup>", "</sup>"),
-    Subscript("Subscript", "sub", Icons.Outlined.Subscript, TagGroup.Text, "<sub>", "</sub>"),
-    Small("Small", "small", Icons.Outlined.FormatSize, TagGroup.Text, "<small>", "</small>"),
-    Code("Code", "code", Icons.Outlined.Code, TagGroup.Text, "<code>", "</code>"),
+    Bold("Bold", "strong", Icons.Outlined.FormatBold, TagGroup.Text),
+    Italic("Italic", "em", Icons.Outlined.FormatItalic, TagGroup.Text),
+    Underline("Underline", "u", Icons.Outlined.FormatUnderlined, TagGroup.Text),
+    Strike("Strike", "s", Icons.Outlined.FormatStrikethrough, TagGroup.Text),
+    Superscript("Superscript", "sup", Icons.Outlined.Superscript, TagGroup.Text),
+    Subscript("Subscript", "sub", Icons.Outlined.Subscript, TagGroup.Text),
+    Small("Small", "small", Icons.Outlined.FormatSize, TagGroup.Text),
+    Code("Code", "code", Icons.Outlined.Code, TagGroup.Text),
 
     // Blocks & links
-    Quote("Quote", "blockquote", Icons.Outlined.FormatQuote, TagGroup.Blocks, "<blockquote>", "</blockquote>"),
-    Bullets("Bullets", "ul", Icons.AutoMirrored.Outlined.FormatListBulleted, TagGroup.Blocks, "<ul>\n  <li>", "</li>\n</ul>"),
-    Numbers("Numbers", "ol", Icons.Outlined.FormatListNumbered, TagGroup.Blocks, "<ol>\n  <li>", "</li>\n</ol>"),
-    Heading("Heading", "h3", Icons.Outlined.Title, TagGroup.Blocks, "<h3>", "</h3>"),
-    Divider("Divider", "hr", Icons.Outlined.HorizontalRule, TagGroup.Blocks, "<hr />\n", ""),
-    Link("Link", "a", Icons.Outlined.Link, TagGroup.Blocks, "<a href=\"\">", "</a>"),
-    Spoiler("Spoiler", "details", Icons.Outlined.VisibilityOff, TagGroup.Blocks, "<details><summary>Spoiler</summary>", "</details>");
+    Quote("Quote", "blockquote", Icons.Outlined.FormatQuote, TagGroup.Blocks),
+    Bullets("Bullets", "ul", Icons.AutoMirrored.Outlined.FormatListBulleted, TagGroup.Blocks),
+    Numbers("Numbers", "ol", Icons.Outlined.FormatListNumbered, TagGroup.Blocks),
+    Heading("Heading", "h3", Icons.Outlined.Title, TagGroup.Blocks),
+    Divider("Divider", "hr", Icons.Outlined.HorizontalRule, TagGroup.Blocks),
+    Link("Link", "a", Icons.Outlined.Link, TagGroup.Blocks),
+    Spoiler("Spoiler", "details", Icons.Outlined.VisibilityOff, TagGroup.Blocks);
+
+    /** What the tray prints under the name: Heading's range of levels, the link's attribute (iOS `tagLabel`). */
+    val tagLabel: String
+        get() = when (this) {
+            Heading -> "h1–h6"
+            Link -> "a href"
+            else -> element
+        }
 
     enum class TagGroup(val title: String) {
         // iOS's names for the two groups (`AO3Markup.Group`), as its design draws them.
@@ -142,24 +149,17 @@ object CommentMarkup {
         val after = text.substring(replaceEnd)
 
         val level = headingLevel.takeIf { it in headingLevels } ?: defaultHeadingLevel
-        val open = if (tag == CommentMarkupTag.Heading) "<h$level>" else tag.openTag
-        val close = if (tag == CommentMarkupTag.Heading) "</h$level>" else tag.closeTag
-
-        val newText = before + open + selected + close + after
-        val newSelection = if (selected.isEmpty()) {
-            if (tag == CommentMarkupTag.Link) {
-                // Put caret inside href quotes
-                TextRange(before.length + 9)
-            } else if (close.isEmpty()) {
-                TextRange(before.length + open.length)
-            } else {
-                TextRange(before.length + open.length)
-            }
-        } else {
-            TextRange(before.length + open.length, before.length + open.length + selected.length)
+        // Every other tag is written as the chapter editor writes it, as iOS's `AO3Markup.splice`:
+        // the divider after the words on its own line, one list item per line, the spoiler's
+        // caret in its summary. The tray has nowhere to ask for a URL, so a link's caret goes
+        // inside the empty href with the words as its text (A59).
+        val insertion = when (tag) {
+            CommentMarkupTag.Heading -> WritingMarkup.Insertion("<h$level>$selected</h$level>", "<h$level>".length, selected.length)
+            CommentMarkupTag.Link -> WritingMarkup.Insertion("<a href=\"\">$selected</a>", "<a href=\"".length, 0)
+            else -> WritingMarkup.insertion(tag.element, text, bodyStart, bodyEnd) ?: return value
         }
-
-        return TextFieldValue(newText, newSelection)
+        val start = before.length + insertion.contentOffset
+        return TextFieldValue(before + insertion.text + after, TextRange(start, start + insertion.contentLength))
     }
 }
 
@@ -301,7 +301,7 @@ fun CommentFormattingTray(
                                             color = tokens.primaryInk
                                         )
                                         Text(
-                                            text = tag.element,
+                                            text = tag.tagLabel,
                                             fontSize = 10.sp,
                                             lineHeight = 15.sp,
                                             fontFamily = FontFamily.Monospace,

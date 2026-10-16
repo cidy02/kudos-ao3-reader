@@ -2088,3 +2088,11 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   second, duplicate recording of the same count was removed (the repository records it).
   Seeding counts from the dashboard nav (iOS `record(dashboardActions:)`) goes to brief 3fm.
   Reverse: the commit that names A59 #4.
+- **2026-10-15 · The comment tray writes tags as the chapter editor does (A59 #3; Claude).** As
+  iOS, where both surfaces go through `AO3Markup.splice`, the comment tray now uses Android's
+  existing `WritingMarkup.insertion`: the divider is `<hr>` after the selected words on its own
+  line (it was `<hr />` before them), a list makes one `<li>` per non-empty line (one `<li>`
+  wrapped everything), the spoiler's caret goes in an empty summary (it wrote "Spoiler"), and a
+  link puts the caret inside the empty href with the words as its text. The tray prints
+  "h1–h6" under Heading and "a href" under Link, as iOS. Headings keep their own level rule.
+  Reverse: the commit that names A59 #3.
