@@ -2246,3 +2246,6 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   symbol beside connection errors) would add a symbol Android's error card has never drawn;
   design, not a fault. #25 (tag picker "From your other works") and #27 (Add Chapter's empty
   hint) go to Codex's next run.
+- **2026-10-16 · A61 #27 is not real.** Android's Add Chapter already shows "Empty. This opens
+  the editor with plain text, AO3's HTML tags, or a paste from elsewhere." under an empty
+  Chapter text row, as iOS's `emptyHint`; A61 looked at the work form, where iOS shows none.
