@@ -2249,3 +2249,8 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
 - **2026-10-16 · A61 #27 is not real.** Android's Add Chapter already shows "Empty. This opens
   the editor with plain text, AO3's HTML tags, or a paste from elsewhere." under an empty
   Chapter text row, as iOS's `emptyHint`; A61 looked at the work form, where iOS shows none.
+- **2026-10-16 · A61 #25 was in 3fo's first part.** Codex wrote "From your other works" in the
+  writing tag picker before its limit (`860c39f7`; iOS's `WritingOtherWorkTags`: the author
+  page's already-loaded works, the current work and chosen names left out, no request),
+  though its result file stopped at #24. A61 is closed but for the deferred #2/#5, #9,
+  #11/#12, #21, #22 and the left #29, #31.
