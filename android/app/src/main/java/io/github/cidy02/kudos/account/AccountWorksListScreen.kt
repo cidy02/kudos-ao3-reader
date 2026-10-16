@@ -1341,7 +1341,7 @@ internal fun SubscriptionsBrowser(
                             work = work,
                             expandAll = expandAll,
                             palette = palette,
-                            newCount = SubscriptionWatermarks.newChapterCount(work.remote, watermarks),
+                            newLabel = SubscriptionWatermarks.newChaptersLabel(work.remote, watermarks),
                             onOpenWork = onOpenWork,
                             unsubscribePath = unsubscribePaths[work.remote.id],
                             busyPath = busyPath,
@@ -1359,7 +1359,7 @@ internal fun SubscriptionsBrowser(
                                 work = work,
                                 expandAll = expandAll,
                                 palette = palette,
-                                newCount = 0,
+                                newLabel = null,
                                 onOpenWork = onOpenWork,
                                 unsubscribePath = unsubscribePaths[work.remote.id],
                                 busyPath = busyPath,
@@ -1373,7 +1373,7 @@ internal fun SubscriptionsBrowser(
                             work = work,
                             expandAll = expandAll,
                             palette = palette,
-                            newCount = SubscriptionWatermarks.newChapterCount(work.remote, watermarks),
+                            newLabel = SubscriptionWatermarks.newChaptersLabel(work.remote, watermarks),
                             onOpenWork = onOpenWork,
                             unsubscribePath = unsubscribePaths[work.remote.id],
                             busyPath = busyPath,
@@ -1495,7 +1495,7 @@ private fun SubscriptionWorkRow(
     work: CanonicalWork,
     expandAll: Boolean,
     palette: SubjectPalette,
-    newCount: Int,
+    newLabel: String?,
     onOpenWork: (AO3WorkSummary) -> Unit,
     unsubscribePath: String?,
     busyPath: String?,
@@ -1519,9 +1519,9 @@ private fun SubscriptionWorkRow(
             verticalArrangement = Arrangement.spacedBy(4.dp),
             itemVerticalAlignment = Alignment.CenterVertically
         ) {
-            if (newCount > 0) {
+            if (newLabel != null) {
                 Text(
-                    text = if (newCount == 1) "Chapter new" else "$newCount chapters new",
+                    text = newLabel,
                     color = palette.accent,
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Medium

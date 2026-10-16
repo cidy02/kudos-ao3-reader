@@ -2113,3 +2113,9 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   EPUB's size can be read (sized with the Storage screen's formatter), and nothing otherwise.
   Not seen running: the demo has no downloaded work in Marked for Later. The "updated" run as
   covers stays with 3fm. Reverse: the commit that names this.
+- **2026-10-15 · Subscriptions name the new chapters (3fm item 2; Claude).** A row says
+  "Chapters 13-14 new" (or "Chapter 13 new") from its watermark and the posted count, as
+  iOS's `AO3SubscriptionsChapterRange`, where it said "2 chapters new". No watermark, no count
+  or no growth: no line. Enriched work-page summaries already reach the rows, so an index row
+  becomes updated once enrichment brings its count, as iOS. Seen in the demo: "Chapters 4-5
+  new", "Chapters 6-8 new". Reverse: the commit that names this.
