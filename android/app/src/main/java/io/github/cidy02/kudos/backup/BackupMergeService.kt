@@ -2455,7 +2455,7 @@ object BackupMergeService {
         }
     }
 
-    /** Apple `SavedWork.needsAO3Refresh`, used only by [normalizeQueuedWorks]. */
+    /** Apple `SavedWork.needsAO3Refresh`, used by [normalizeQueuedWorks]. */
     private fun iosNeedsMetadataRefresh(work: SavedWork, now: Instant): Boolean {
         if (work.ao3Unavailable) return false
         val attempt = work.lastTagRefreshAttemptAt

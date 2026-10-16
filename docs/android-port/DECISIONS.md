@@ -2363,3 +2363,18 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   Code (generate-only, earlier decision), "Import files" (an iOS spoken label for Android's
   "Import Files"); "Add Saved Works to Saved for Later" stays out (2026-10-11). Reverse: the
   commit that names this entry.
+- **2026-10-16 · No daily background walk of the library on AO3 (Claude).** Android ran
+  `WorkTagsRefreshWorker` every day: up to 150 saved works read from AO3, chosen by a "needs
+  refresh" test that was only "24 hours since the last attempt" (so every work, in turn), and
+  on success it stamped the attempt and kept nothing it had read. The policy allows no
+  background polling but folder sync and no periodic full-library metadata sweep; iOS refreshes
+  tags only while the Library is open (`LibraryView.backfillFilterMetadata`), for works that
+  lack data. A WorkManager process also does not see the demo's network fence (A18), so the
+  worker was a way for the demo to reach AO3. The August decision (`bb165940`) that kept it
+  read the policy's throttle row as allowing a background job; it did not know the worker
+  saved nothing. Now: the worker, its factory entry and the wrong `SavedWork.needsAO3Refresh`
+  are gone, and each launch cancels a scheduled run left by an older build. iOS's predicate
+  stays in `BackupMergeService`. **Not ported yet: iOS's foreground Library backfill** (EPUB
+  tags first, then AO3 once per work that lacks tags, sequential, cancellable, every attempt
+  stamped, behind the demo fence); it is a new AO3 read path, so it gets a brief of its own.
+  Reverse: restore `WorkTagsRefreshWorker.kt` and its scheduling from `2f00aa6a`.

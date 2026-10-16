@@ -6,8 +6,6 @@ import androidx.work.WorkerFactory
 import androidx.work.WorkerParameters
 
 class KudosWorkerFactory(
-    private val tagsRepository: io.github.cidy02.kudos.network.ao3.work.WorkTagsRepository,
-    private val workRepository: io.github.cidy02.kudos.works.WorkRepository,
     private val sweep: WorkAvailabilitySweep
 ) : WorkerFactory() {
     override fun createWorker(
@@ -16,8 +14,6 @@ class KudosWorkerFactory(
         workerParameters: WorkerParameters
     ): ListenableWorker? {
         return when (workerClassName) {
-            WorkTagsRefreshWorker::class.java.name ->
-                WorkTagsRefreshWorker(appContext, workerParameters, tagsRepository, workRepository)
             AvailabilitySweepWorker::class.java.name ->
                 AvailabilitySweepWorker(appContext, workerParameters, sweep)
             else -> null
