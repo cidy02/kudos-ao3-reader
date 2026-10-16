@@ -45,7 +45,8 @@ object AO3CollectionFormUrls {
 
 enum class AO3CollectionNameAvailability { Available, Taken, Invalid, Unknown }
 
-fun collectionNameFormatIsValid(name: String) = Regex("^[A-Za-z0-9]\\w*[A-Za-z0-9]$").matches(name)
+// ASCII spelled out: Android's \w is Unicode, so "aéb" passed on a device (A60).
+fun collectionNameFormatIsValid(name: String) = Regex("^[A-Za-z0-9][A-Za-z0-9_]*[A-Za-z0-9]$").matches(name)
 val reservedCollectionNames = setOf("new", "edit", "list_challenges", "list_ge_challenges", "list_pm_challenges")
 
 data class AO3CollectionForm(

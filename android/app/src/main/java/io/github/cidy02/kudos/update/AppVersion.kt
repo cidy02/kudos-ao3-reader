@@ -22,7 +22,7 @@ data class AppVersion(
     override fun toString(): String = "$major.$minor.$patch"
 
     companion object {
-        private val PATTERN = Regex("""v?(\d+)\.(\d+)\.(\d+)""")
+        private val PATTERN = Regex("""v?([0-9]+)\.([0-9]+)\.([0-9]+)""") // ASCII digits: Android's \d is Unicode (A60)
 
         /** Parses the first `X.Y.Z` run found anywhere in [text], or null. */
         fun parse(text: String): AppVersion? {
