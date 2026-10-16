@@ -2176,3 +2176,14 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   comment success that waits on storage to clear its draft rechecks the session afterwards, so
   an ended session publishes no "Posted." and reloads nothing of the next reader's. Each test
   fails with its guard removed. Reverse: the commit that names the review.
+- **2026-10-16 · A write's POST is never sent twice on a 307/308; author-page writes need
+  AO3's notice (Codex's 3fn review, F1 and F2; Claude).** The redirect relay followed a 307/308
+  with the method and body kept, so a write answered that way was sent a second time, outside
+  the single-shot fence (the shared transport since before these features). It now returns
+  the 307/308 for anything but GET/HEAD, and the write is reported as "AO3 asked for this to be
+  sent again, and it wasn't. Check on AO3 before trying again." AO3 answers its writes with a
+  302 (followed as a GET), so ordinary writes are unchanged. Author Subscribe, Unsubscribe,
+  Mute and Block no longer count a bare redirect as success; History, the subscriptions
+  list's Unsubscribe and Unmark keep iOS's notice-or-redirect rule (`readingsWriteResult`),
+  which the policy names. iOS follows a 307 itself (`AO3RedirectCookieRelay.swift`); that is
+  noted for the iOS lane, not changed tonight. Reverse: the commit that names F1 and F2.

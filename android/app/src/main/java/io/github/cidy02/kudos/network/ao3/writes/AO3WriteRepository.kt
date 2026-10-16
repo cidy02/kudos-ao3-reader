@@ -1108,7 +1108,8 @@ class AO3WriteRepository(
         val leaving = form.isSubscribed
         return indexWrite(expectedGeneration, form.referer, form.actionUrl,
             if (leaving) AO3WriteActionKind.Unsubscribe else AO3WriteActionKind.Subscribe,
-            if (leaving) "Unsubscribed." else "Subscribed.", "AO3 didn't accept the subscription change."
+            if (leaving) "Unsubscribed." else "Subscribed.", "AO3 didn't accept the subscription change.",
+            redirectConfirms = false
         ) { token -> form.fields.filterNot { it.first == "authenticity_token" } + ("authenticity_token" to token) }
     }
 
@@ -1155,7 +1156,7 @@ class AO3WriteRepository(
         val fields = if (form.fields.any { it.first == "authenticity_token" }) form.fields
             else form.fields + ("authenticity_token" to form.csrfToken)
         return postOnce(expectedGeneration, form.csrfToken, form.referer, form.actionUrl, AO3WriteActionKind.Moderation,
-            form.kind.successMessage, "AO3 didn't accept the ${form.kind.word} action.", fields)
+            form.kind.successMessage, "AO3 didn't accept the ${form.kind.word} action.", fields, redirectConfirms = false)
     }
 
     /** iOS unsubscribe(path:page:): captured index action, fresh Works-index CSRF, one POST. */
@@ -1223,7 +1224,7 @@ class AO3WriteRepository(
      */
     private suspend fun indexWrite(
         generation: Int?, referer: String, endpoint: String, kind: AO3WriteActionKind, done: String,
-        fallback: String, fields: (String) -> List<Pair<String, String>>
+        fallback: String, redirectConfirms: Boolean = true, fields: (String) -> List<Pair<String, String>>
     ): AO3Result<AO3WriteOutcome> {
         val html = when (val result = client.getAuthenticated(referer)) {
             is AO3Result.Failure -> return result
@@ -1234,13 +1235,13 @@ class AO3WriteRepository(
             ?: return AO3Result.Failure(
                 AO3Error.Validation("Couldn't prepare the request. Try again, or open the work on AO3.")
             )
-        return postOnce(generation, token, referer, endpoint, kind, done, fallback, fields(token))
+        return postOnce(generation, token, referer, endpoint, kind, done, fallback, fields(token), redirectConfirms)
     }
 
     /** The one POST of [indexWrite], for a caller that already holds the page's token. */
     private suspend fun postOnce(
         generation: Int?, token: String, referer: String, endpoint: String, kind: AO3WriteActionKind,
-        done: String, fallback: String, fields: List<Pair<String, String>>
+        done: String, fallback: String, fields: List<Pair<String, String>>, redirectConfirms: Boolean = true
     ): AO3Result<AO3WriteOutcome> {
         // A view may disappear after sending. Finish that single write; never retry it.
         val response = withContext(NonCancellable) {
@@ -1257,7 +1258,11 @@ class AO3WriteRepository(
                     error != null -> AO3Result.Failure(AO3Error.Validation(error))
                     AO3OverloadDetector.isOverloadPage(body) ->
                         AO3Result.Failure(AO3Error.Overloaded(response.value.statusCode, null))
-                    parser.writeSuccessMessage(body) != null || response.value.statusCode in 300..399 ->
+                    // AO3's notice is the evidence. A bare redirect counts only where iOS's
+                    // `readingsWriteResult` allows one (History, list Unsubscribe, Unmark); the
+                    // author page's writes need the notice (Codex's 3fn review).
+                    parser.writeSuccessMessage(body) != null ||
+                        (redirectConfirms && response.value.statusCode in 300..399) ->
                         success(kind, done)
                     response.value.statusCode in 200..399 -> AO3Result.Failure(AO3Error.Validation(
                         "AO3 replied but didn't confirm the change went through. Check on AO3 before trying again."

@@ -53,7 +53,10 @@ class AO3RedirectCookieRelayInterceptor(
         // redirects so write POSTs still convert to GET on 302/303.
         when (code) {
             HTTP_TEMP_REDIRECT, HTTP_PERM_REDIRECT -> {
-                // Keep method and body.
+                // Keep method and body, but never a write's: following would send its body a
+                // second time. The one POST stands and the 307/308 goes back to the caller
+                // (the policy's single-shot writes; Codex's 3fn review).
+                if (request.method != "GET" && request.method != "HEAD") return null
             }
             HTTP_MULT_CHOICE, HTTP_MOVED_PERM, HTTP_MOVED_TEMP, HTTP_SEE_OTHER -> {
                 requestBuilder.method("GET", null)
