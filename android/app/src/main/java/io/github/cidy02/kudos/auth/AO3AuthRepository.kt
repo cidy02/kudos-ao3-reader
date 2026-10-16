@@ -253,6 +253,23 @@ class AO3AuthRepository(
             mutableState.value = AO3AuthState.SigningIn
             advanceSessionGenerationLocked()
         }
+        return try {
+            acceptWebLogin(username, expectedGeneration)
+        } catch (cancelled: CancellationException) {
+            // The login screen went away mid-capture: nothing was saved, and "Signing in" must
+            // not stay on screen for good (A61 #1).
+            kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
+                sessionMutex.withLock {
+                    if (sessionGeneration == expectedGeneration && mutableState.value == AO3AuthState.SigningIn) {
+                        mutableState.value = AO3AuthState.SignedOut
+                    }
+                }
+            }
+            throw cancelled
+        }
+    }
+
+    private suspend fun acceptWebLogin(username: String, expectedGeneration: Int): AO3Result<AO3Session> {
         val trimmed = username.trim()
         if (trimmed.isBlank()) {
             val error = AO3Error.Validation("AO3 username could not be detected.")
@@ -285,8 +302,21 @@ class AO3AuthRepository(
                 // reinstall this (possibly stale) WebView snapshot.
                 return AO3Result.Failure(AO3Error.AuthenticationRequired)
             }
-            // Fresh login is trusted for gating but has not been re-checked on demand.
-            applyValidSessionLocked(session, markHealthy = false)
+            // Fresh login is trusted for gating but has not been re-checked on demand. Once the
+            // save starts it finishes; a store that cannot save securely is an error shown to
+            // the reader, not an exception out of the login screen (A61 #3).
+            try {
+                kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
+                    applyValidSessionLocked(session, markHealthy = false)
+                }
+            } catch (failure: Exception) {
+                if (failure is CancellationException) throw failure
+                currentSession = null
+                cookieStore.clear()
+                mutableState.value = AO3AuthState.Error("AO3 logged in, but the session could not be saved securely.")
+                mutableSessionHealth.value = AO3SessionHealth.Unknown
+                return AO3Result.Failure(AO3Error.Validation("The session could not be saved securely."))
+            }
         }
         return AO3Result.Success(session)
     }
