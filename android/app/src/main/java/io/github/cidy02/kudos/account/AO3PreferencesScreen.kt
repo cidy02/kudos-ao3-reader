@@ -1,5 +1,13 @@
 package io.github.cidy02.kudos.account
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.material3.Snackbar
+import androidx.compose.material3.TextButton
+import androidx.compose.material.icons.outlined.Close
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.LiveRegionMode
+import kotlinx.coroutines.CancellationException
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Column
@@ -89,9 +97,9 @@ fun AO3PreferencesScreen(
     var error by remember { mutableStateOf<String?>(null) }
     var loading by remember { mutableStateOf(true) }
     var saving by remember { mutableStateOf(false) }
-    var status by remember { mutableStateOf<String?>(null) }
+    var status by remember { mutableStateOf<Pair<String, Boolean>?>(null) }
     var hasEdits by remember { mutableStateOf(false) }
-    
+
     val toggles = remember { mutableStateMapOf<String, Boolean>() }
     val selects = remember { mutableStateMapOf<String, String>() }
     val texts = remember { mutableStateMapOf<String, String>() }
@@ -137,43 +145,51 @@ fun AO3PreferencesScreen(
 
     LaunchedEffect(username) { load() }
 
+    fun save() {
+        val snap = snapshot ?: return
+        if (saving || loading || !hasEdits) return
+        val submittedToggles = toggles.toMap()
+        val submittedSelects = selects.toMap()
+        val submittedTexts = texts.toMap()
+        saving = true
+        status = null
+        scope.launch {
+            try {
+                when (val result = repository.save(snap, submittedToggles, submittedSelects, submittedTexts)) {
+                    is AO3Result.Success -> {
+                        status = "Saved successfully." to true
+                        hasEdits = toggles.toMap() != submittedToggles || selects.toMap() != submittedSelects ||
+                            texts.toMap() != submittedTexts
+                        // A failed refresh cannot turn an already-confirmed save into a failure.
+                        try {
+                            val reloaded = repository.load(username)
+                            if (reloaded is AO3Result.Success) snapshot = reloaded.value
+                        } catch (cancelled: CancellationException) { throw cancelled }
+                        catch (_: Exception) { /* Keep the confirmed save and the existing form. */ }
+                    }
+                    is AO3Result.Failure -> {
+                        status = (if (result.error == AO3Error.AuthenticationRequired) {
+                            "Your AO3 session expired. Sign in again from Account."
+                        } else "Save failed: ${result.error.displayMessage()}") to false
+                    }
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                status = "Couldn't save preferences. Try again." to false
+            } finally { saving = false }
+        }
+    }
+
+    LaunchedEffect(status) {
+        if (status?.second == true) {
+            kotlinx.coroutines.delay(3000)
+            status = null
+        }
+    }
     LaunchedEffect(saving, loading, hasEdits, snapshot) {
         chrome.trailingContent = {
-            Button(
-                onClick = {
-                    saving = true
-                    status = null
-                    scope.launch {
-                        val snap = snapshot ?: return@launch
-                        when (
-                            val result = repository.save(
-                                snap,
-                                toggles.toMap(),
-                                selects.toMap(),
-                                texts.toMap()
-                            )
-                        ) {
-                            is AO3Result.Success -> {
-                                status = "Saved successfully."
-                                hasEdits = false
-                                // Reload to get fresh state
-                                val reloadResult = repository.load(username)
-                                if (reloadResult is AO3Result.Success) {
-                                    snapshot = reloadResult.value
-                                }
-                            }
-                            is AO3Result.Failure -> {
-                                // The authenticated client expires only the session that submitted the form.
-                                status = if (result.error == AO3Error.AuthenticationRequired) {
-                                    "Your AO3 session expired. Sign in again from Account."
-                                } else "Save failed: ${result.error.displayMessage()}"
-                            }
-                        }
-                        saving = false
-                    }
-                },
-                enabled = !saving && !loading && hasEdits && snapshot != null
-            ) {
+            Button(onClick = { save() }, enabled = !saving && !loading && hasEdits && snapshot != null) {
                 Text(if (saving) "Saving…" else "Save")
             }
         }
@@ -181,6 +197,7 @@ fun AO3PreferencesScreen(
 
     // Below the status bar and the shell's floating back row, as the Settings hub does.
     val topInset = WindowInsets.systemBars.asPaddingValues().calculateTopPadding() + 56.dp
+    Box(Modifier.fillMaxSize()) {
     when {
         loading -> Column {
             Spacer(Modifier.height(topInset))
@@ -214,16 +231,7 @@ fun AO3PreferencesScreen(
                         palette = palette,
                         gutter = SubjectMetrics.accountGutter
                     )
-                    
-                    if (status != null) {
-                        Text(
-                            text = status!!,
-                            color = if (status!!.startsWith("Saved")) LocalKudosTokens.current.accent else LocalKudosTokens.current.secondaryInk,
-                            fontSize = 14.sp,
-                            lineHeight = 20.sp,
-                            modifier = Modifier.padding(horizontal = SubjectMetrics.accountGutter, vertical = 8.dp)
-                        )
-                    }
+
                 }
 
                 if (snap.webLinks.isNotEmpty()) item {
@@ -298,7 +306,7 @@ fun AO3PreferencesScreen(
                                             toggle.help?.let { PreferenceHelpButton(it, ::openHelp) }
                                             SubjectToggle(
                                                 checked = toggles[toggle.name] ?: toggle.checked,
-                                                onCheckedChange = { 
+                                                onCheckedChange = {
                                                     toggles[toggle.name] = it
                                                     hasEdits = true
                                                     status = null
@@ -331,7 +339,7 @@ fun AO3PreferencesScreen(
                                     var expanded by remember { mutableStateOf(false) }
                                     val current = selects[select.name] ?: select.selectedValue
                                     val label = select.options.firstOrNull { it.first == current }?.second ?: current
-                                    
+
                                     SubjectFormRow(
                                         label = select.label,
                                         trailing = {
@@ -379,7 +387,7 @@ fun AO3PreferencesScreen(
                                                 field.help?.let { PreferenceHelpButton(it, ::openHelp) }
                                                 OutlinedTextField(
                                                     value = texts[field.name] ?: field.value,
-                                                    onValueChange = { 
+                                                    onValueChange = {
                                                         texts[field.name] = it
                                                         hasEdits = true
                                                         status = null
@@ -407,6 +415,22 @@ fun AO3PreferencesScreen(
                 }
             }
         }
+    }
+    status?.let { (message, success) ->
+        Snackbar(
+            modifier = Modifier.align(Alignment.BottomCenter).padding(16.dp)
+                .semantics { liveRegion = LiveRegionMode.Polite },
+            containerColor = LocalKudosTokens.current.cardFill,
+            contentColor = LocalKudosTokens.current.primaryInk,
+            actionOnNewLine = !success,
+            action = if (success) null else { {
+                TextButton(onClick = { save() }, enabled = !saving && !loading && hasEdits) { Text("Try Again") }
+            } },
+            dismissAction = {
+                IconButton(onClick = { status = null }) { Icon(Icons.Outlined.Close, "Dismiss save result") }
+            }
+        ) { Text(message, lineHeight = 20.sp) }
+    }
     }
     helpRef?.let { ref ->
         PreferenceHelpSheet(

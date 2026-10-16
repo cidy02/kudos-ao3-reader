@@ -2321,3 +2321,18 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   now replaces; and the bulk-collection-picker test hung under Robolectric and ran the test
   JVM out of memory (the dialog runs on a device), so it was removed with a note. Left for
   3fq part 2: F13, F14, F18, F19, F21 to F24, F26, F27. Reverse: the commit that names 3fq.
+- **2026-10-16 · Brief 3fq part 2: A63's smaller items (Codex, to its weekly limit; reviewed,
+  test-corrected and gated by Claude).** F14: an EPUB downloaded in the in-app AO3 web view is
+  imported into the Library (only HTTPS AO3 `/downloads/…epub` links; the paced downloader).
+  F13: the web view has an address/search field, Reload, Add Bookmark and Done (seen on the
+  emulator). F18: author Works, Series and Bookmarks and a series' works append with Load More
+  (seen: page 2 of 3 joins page 1). F21: the page picker takes an exact page number (the
+  Inbox's own pager is left; it is Claude's file). F19: dashboard fandom chips open their
+  works and the list folds at five. F26: Expand/Collapse All on author pages. F27: the
+  dashboard's About. F22: the tag picker offers "Popular in <fandom>" from one read of that
+  fandom's first works page when it opens, as iOS's `popularTags`. F24: Collection Items'
+  Submit no longer asks twice. F23: Preferences' result is a transient message with Try
+  Again. Claude's test corrections: two new tests looked for what the screen does not draw
+  (the fixture's works have nothing to fold; the label is drawn in capitals), and one
+  raced the database close. **Codex is at its weekly limit until 2026-10-22 03:09.**
+  Reverse: the commit that names 3fq part 2.

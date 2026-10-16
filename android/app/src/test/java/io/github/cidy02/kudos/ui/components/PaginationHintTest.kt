@@ -2,6 +2,13 @@ package io.github.cidy02.kudos.ui.components
 
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.getOrNull
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performTextReplacement
+import org.junit.Assert.assertEquals
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -18,6 +25,22 @@ import org.robolectric.annotation.Config
 @Config(sdk = [35])
 class PaginationHintTest {
     @get:Rule val compose = createComposeRule()
+
+    @Test fun exactPageEntryWaitsForGoAndRejectsOutOfRangeOrOverflow() {
+        val loads = mutableListOf<Int>()
+        compose.setContent { KudosPaginationBar(1, 5000, { loads += it }) }
+        compose.onNodeWithText("Page 1 of 5000").performClick()
+        compose.onNode(hasSetTextAction()).performTextReplacement("2731")
+        assertEquals(emptyList<Int>(), loads)
+        compose.onNodeWithText("Go").assertIsEnabled()
+        listOf("0", "5001", "99999999999999999999", "").forEach { invalid ->
+            compose.onNode(hasSetTextAction()).performTextReplacement(invalid)
+            compose.onNodeWithText("Go").assertIsNotEnabled()
+        }
+        compose.onNode(hasSetTextAction()).performTextReplacement("2731")
+        compose.onNodeWithText("Go").performScrollTo().performClick()
+        assertEquals(listOf(2731), loads)
+    }
 
     @Test fun thePageButtonSaysItOpensThePagePickerAndOpensIt() {
         compose.setContent { KudosPaginationBar(currentPage = 2, totalPages = 9, onPageChange = {}) }

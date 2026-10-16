@@ -140,7 +140,7 @@ class CachedAO3PagesScreenTest {
                                 }
                                 Screen.Series -> SeriesWorksScreen("https://archiveofourown.org/series/321", series, onOpenWork = {})
                                 else -> AuthorProfileScreen(if (screen == Screen.Author) "Avery_Archive" else "tester",
-                                    authorRepository = authors, authRepository = auth, onOpenWork = {})
+                                    authorRepository = authors, authRepository = auth, onOpenWork = {}, onOpenAbout = {})
                             }
                         }
                     }

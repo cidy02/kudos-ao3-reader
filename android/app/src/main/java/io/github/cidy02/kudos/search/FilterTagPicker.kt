@@ -62,7 +62,7 @@ import kotlinx.coroutines.delay
 @Composable
 internal fun FilterTagRow(
     title: String, kind: String, included: String, excluded: String, candidates: List<String>,
-    repository: AO3TagAutocompleteRepository?, onChange: (String, String) -> Unit
+    repository: AO3TagAutocompleteRepository?, fandomContext: List<String>, onChange: (String, String) -> Unit
 ) {
     var picking by remember { mutableStateOf(false) }
     val includedTags = AO3SearchFilters.commaSeparatedValues(included)
@@ -89,6 +89,21 @@ internal fun FilterTagRow(
         var query by remember { mutableStateOf("") }
         var remote by remember { mutableStateOf<List<String>>(emptyList()) }
         var searching by remember { mutableStateOf(false) }
+        var popular by remember { mutableStateOf<List<String>>(emptyList()) }
+        var loadingPopular by remember { mutableStateOf(false) }
+        val fandom = fandomContext.firstOrNull()?.takeIf { it.isNotBlank() && kind != "fandom" }
+        LaunchedEffect(fandom, kind, repository) {
+            popular = emptyList()
+            if (fandom != null && repository != null) {
+                loadingPopular = true
+                try {
+                    val result = repository.popularTags(fandom, kind)
+                    currentCoroutineContext().ensureActive()
+                    if (result is AO3Result.Success) popular = result.value
+                } finally { if (currentCoroutineContext().isActive) loadingPopular = false }
+            }
+        }
+        val showingPopular = query.isBlank() && fandom != null && repository != null
         val currentToken = currentTagToken(query)
         LaunchedEffect(currentToken, kind, repository) {
             remote = emptyList()
@@ -109,9 +124,10 @@ internal fun FilterTagRow(
         val needle = WorkSearchIndex.normalize(currentToken)
         // Arbitrary comma-separated entry and library suggestions remain Android extras.
         val typed = AO3SearchFilters.commaSeparatedValues(query)
-        val matches = (typed + candidates.filter {
+        val suggestions = if (showingPopular) popular else typed + candidates.filter {
             needle.isEmpty() || WorkSearchIndex.normalize(it).contains(needle)
-        } + remote).distinct().filter { it !in selected }
+        } + remote
+        val matches = suggestions.distinct().filter { it !in selected }
         ModalBottomSheet(
             onDismissRequest = { picking = false },
             sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
@@ -140,12 +156,13 @@ internal fun FilterTagRow(
                         }
                     }
                     item {
-                        SubjectFieldLabel("Results")
+                        SubjectFieldLabel(if (showingPopular) "Popular in $fandom" else "Results")
                     }
-                    if (searching || matches.isEmpty()) item {
+                    val waiting = searching || (loadingPopular && showingPopular)
+                    if (waiting || matches.isEmpty()) item {
                         Column(Modifier.subjectPanel()) {
-                            if (searching) FilterNote("Searching…", Modifier.padding(13.dp))
-                            if (matches.isEmpty()) FilterNote(
+                            if (waiting) FilterNote(if (showingPopular) "Loading…" else "Searching…", Modifier.padding(13.dp))
+                            if (!waiting && matches.isEmpty()) FilterNote(
                                 if (query.isBlank() && repository != null)
                                     "Type above to search AO3 ${title.lowercase()}."
                                 else if (query.isBlank()) "Search $title"

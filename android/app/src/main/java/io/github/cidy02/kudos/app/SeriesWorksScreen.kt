@@ -50,7 +50,7 @@ import io.github.cidy02.kudos.network.ao3.search.AO3WorkSummary
 import io.github.cidy02.kudos.network.ao3.series.AO3SeriesRepository
 import io.github.cidy02.kudos.ui.components.EmptyStateCard
 import io.github.cidy02.kudos.ui.components.ErrorStateCard
-import io.github.cidy02.kudos.ui.components.KudosPaginationBar
+import io.github.cidy02.kudos.author.AuthorLoadMoreRow
 import io.github.cidy02.kudos.ui.components.KudosSectionHeader
 import io.github.cidy02.kudos.ui.components.LoadingStateCard
 import io.github.cidy02.kudos.ui.components.SelectableRemoteWorkRow
@@ -97,7 +97,12 @@ fun SeriesWorksScreen(
         val generation = ++loadGeneration
         return scope.launch {
             val next = when (val result = seriesRepository.detailPage(seriesUrl, page, bypassCache)) {
-                is AO3Result.Success -> SeriesWorksState.Loaded(result.value, result.isStale)
+                is AO3Result.Success -> {
+                    val detail = result.value
+                    val accumulated = if (page > 1) shown?.page?.works.orEmpty() + detail.page.works else detail.page.works
+                    SeriesWorksState.Loaded(detail.copy(page = detail.page.copy(works = accumulated.distinctBy { it.id })),
+                        result.isStale || (page > 1 && shown?.isStale == true))
+                }
                 is AO3Result.Failure -> shown?.copy(loadingPage = null, pageError = result.error.displayMessage() to page)
                     ?: SeriesWorksState.Error(result.error.displayMessage(), page)
             }
@@ -222,16 +227,6 @@ fun SeriesWorksScreen(
             is SeriesWorksState.Loaded -> {
                 if (current.isStale) io.github.cidy02.kudos.ui.components.CachedAO3DataRow(
                     Modifier.padding(horizontal = 16.dp, vertical = 12.dp))
-                current.loadingPage?.let { LoadingStateCard("Loading page $it…", Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) }
-                current.pageError?.let { (message, failed) ->
-                    ErrorStateCard(
-                        title = "Couldn't load page $failed",
-                        message = message,
-                        primaryActionLabel = "Try Again",
-                        onPrimaryAction = { load(failed, bypassCache = true) },
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
-                    )
-                }
                 if (current.page.works.isEmpty()) {
                     EmptyStateCard(
                         title = "No visible works",
@@ -267,11 +262,6 @@ fun SeriesWorksScreen(
                                 title = "Works",
                                 subtitle = "Page ${current.page.currentPage} of ${current.page.totalPages}"
                             )
-                            KudosPaginationBar(
-                                currentPage = current.page.currentPage,
-                                totalPages = current.page.totalPages,
-                                onPageChange = { load(it) }
-                            )
                         }
                         items(current.page.works, key = { it.id }) { work ->
                             if (selection.isSelecting) {
@@ -289,10 +279,13 @@ fun SeriesWorksScreen(
                             }
                         }
                         item {
-                            KudosPaginationBar(
-                                currentPage = current.page.currentPage,
-                                totalPages = current.page.totalPages,
-                                onPageChange = { load(it) }
+                            AuthorLoadMoreRow(
+                                page = current.page.currentPage,
+                                total = current.page.totalPages,
+                                loading = current.loadingPage != null,
+                                onNext = { load(current.page.currentPage + 1) },
+                                loadMoreError = current.pageError?.first,
+                                onRetry = { load(current.pageError?.second ?: current.page.currentPage + 1) }
                             )
                         }
                     }

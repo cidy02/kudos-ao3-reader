@@ -39,12 +39,15 @@ class AuthorProfileSortScreenTest {
             .map { File("$it/fixtures/$name.html") }.firstOrNull(File::isFile)?.readBytes()
     }
     private val requests = mutableListOf<String>()
+    private var failSecondPage = false
     private var beforeResponse: suspend (String) -> Unit = {}
     private var responseBody: (String, String) -> String = { _, body -> body }
     private val client = object : AO3Client {
         override suspend fun get(url: String, headers: Map<String, String>): AO3Result<AO3HttpResponse> {
             requests += url
             beforeResponse(url)
+            if (failSecondPage && url.toHttpUrl().queryParameter("page") == "2")
+                return AO3Result.Failure(AO3Error.Network("Offline"))
             val fixture = DemoNetwork.webFixture(url.toHttpUrl(), source)?.decodeToString() ?: error("Unbundled test address $url")
             // The real hero uses Coil; strip fixture images so even that independent loader has no URL.
             val html = org.jsoup.Jsoup.parse(fixture).apply { select("img").remove() }.outerHtml()
@@ -52,7 +55,9 @@ class AuthorProfileSortScreenTest {
         }
     }
 
-    private fun show(initialTab: AuthorTab = AuthorTab.Works) {
+    private val openedAbout = mutableListOf<AO3AuthorRoute>()
+    private val openedWeb = mutableListOf<String>()
+    private fun show(initialTab: AuthorTab, dashboard: Boolean) {
         val chrome = PushedShellChrome()
         val repo = AO3AuthorRepository(publicClient = client, parseDispatcher = Dispatchers.Unconfined)
         compose.setContent {
@@ -60,19 +65,65 @@ class AuthorProfileSortScreenTest {
                 CompositionLocalProvider(LocalPushedShellChrome provides chrome) {
                     Column {
                         Row { chrome.trailingContent?.invoke(this) }
-                        AuthorProfileScreen("Avery_Archive", initialTab = initialTab, authorRepository = repo, onOpenWork = {})
+                        AuthorProfileScreen("Avery_Archive", onOpenAbout = { openedAbout += it }, initialTab = initialTab, authorRepository = repo, onOpenWork = {},
+                            isDashboard = dashboard, onOpenWeb = { openedWeb += it })
                     }
                 }
             }
         }
-        awaitText(if (initialTab == AuthorTab.Series) "The Dawn Cycle" else "Two Voices at Dawn")
+        awaitText(when (initialTab) { AuthorTab.Series -> "The Dawn Cycle"; AuthorTab.About -> "Bio"; else -> "Two Voices at Dawn" })
     }
 
     /** The account's Series row asks for the Series tab. The page reset itself to Works as it opened. */
     @Test fun aPageOpenedOnSeriesShowsTheSeriesAndNeverAsksForTheWorks() {
-        show(AuthorTab.Series)
+        show(AuthorTab.Series, false)
         compose.onNodeWithText("The Hidden Cycle").assertExists()
         assertTrue(requests.none { it.toHttpUrl().encodedPath.endsWith("/works") })
+    }
+
+    @Test fun dashboardFandomsPreviewFiveAndOpenAo3sExactLink() {
+        responseBody = { _, body ->
+            org.jsoup.Jsoup.parse(body).apply {
+                selectFirst("#user-fandoms ul")?.let { list ->
+                    (3..6).forEach { list.append("<li><a href='/tags/Fandom$it/works?user_id=4242'>Fandom$it</a> ($it)</li>") }
+                }
+            }.outerHtml()
+        }
+        show(AuthorTab.Works, true)
+        compose.onNodeWithText("Fandom6 (6)").assertDoesNotExist()
+        compose.onNodeWithText("Expand").performClick()
+        compose.onNodeWithText("Fandom6 (6)").assertExists()
+        compose.onNodeWithText("Star Wars (12)").performClick()
+        assertEquals(listOf("https://archiveofourown.org/tags/Star%20Wars/works?user_id=4242"), openedWeb)
+        compose.onNodeWithText("Collapse").performClick()
+        compose.onNodeWithText("Fandom6 (6)").assertDoesNotExist()
+        assertEquals(1, requests.size)
+    }
+
+    /** A63 F26. The fixture's works have nothing to fold, so this checks the menu's own state. */
+    @Test fun expandAllMenuTogglesToCollapseAllAndBack() {
+        show(AuthorTab.Works, false)
+        compose.onNodeWithContentDescription("More").performClick()
+        compose.onNodeWithText("Expand All").performClick()
+        compose.onNodeWithContentDescription("More").performClick()
+        compose.onNodeWithText("Collapse All").performClick()
+        compose.onNodeWithContentDescription("More").performClick()
+        compose.onNodeWithText("Expand All").assertExists()
+    }
+
+    @Test fun dashboardAboutActionOpensTheExactNativeAuthorRoute() {
+        show(AuthorTab.Works, true)
+        compose.onNodeWithContentDescription("More").performClick()
+        compose.onNodeWithText("About").performClick()
+        assertEquals(listOf(AO3AuthorRoute("Avery_Archive")), openedAbout)
+        assertEquals(1, requests.size)
+    }
+
+    @Test fun aboutDestinationLoadsTheNativeProfileWithoutAWorksRead() {
+        show(AuthorTab.About, false)
+        compose.onNodeWithText("Bio").assertExists()
+        assertTrue(requests.any { it.toHttpUrl().encodedPath.endsWith("/profile") })
+        assertTrue(indexReads().isEmpty())
     }
 
     private fun awaitText(text: String) {
@@ -97,10 +148,10 @@ class AuthorProfileSortScreenTest {
     }
 
     @Test fun applyReadsOnlyPageOneOnceDismissDoesNothingAndNextPageKeepsChoice() {
-        show()
+        show(AuthorTab.Works, false)
         assertEquals(1, indexReads().size); assertEquals(2, requests.size) // Dashboard + Works only.
-        compose.onNodeWithTag("Author profile").performScrollToNode(hasText("Next"))
-        compose.onNodeWithText("Next").performClick()
+        compose.onNodeWithTag("Author profile").performScrollToNode(hasText("Load More"))
+        compose.onNodeWithText("Load More").performClick()
         awaitText("Page 2 of 3")
         assertEquals("2", indexReads().last().toHttpUrl().queryParameter("page"))
         val before = requests.size
@@ -125,15 +176,38 @@ class AuthorProfileSortScreenTest {
         assertTrue(first < compose.onNodeWithText("Two Voices at Dawn").fetchSemanticsNode().boundsInRoot.top)
         openSheet(); apply() // Unchanged Apply costs no read, as Swift's sortToCommit.
         assertEquals(before + 1, requests.size)
-        compose.onNodeWithTag("Author profile").performScrollToNode(hasText("Next"))
-        compose.onNodeWithText("Next").performClick()
+        compose.onNodeWithTag("Author profile").performScrollToNode(hasText("Load More"))
+        compose.onNodeWithText("Load More").performClick()
         awaitText("Page 2 of 3")
         assertEquals("title_to_sort_on", indexReads().last().toHttpUrl().queryParameter("work_search[sort_column]"))
         assertEquals("2", indexReads().last().toHttpUrl().queryParameter("page"))
     }
 
+    @Test fun loadMoreKeepsEarlierWorksOnFailureAndAppendsWithoutDuplicatesOnRetry() {
+        responseBody = { url, body ->
+            if (url.toHttpUrl().queryParameter("page") == "2")
+                body.replace("Two Voices at Dawn", "A second page work").replace("1001", "100199") else body
+        }
+        show(AuthorTab.Works, false)
+        failSecondPage = true
+        compose.onNodeWithTag("Author profile").performScrollToNode(hasText("Load More"))
+        compose.onNodeWithText("Load More").performClick()
+        awaitText("Try Loading More")
+        compose.onNodeWithTag("Author profile").performScrollToNode(hasText("Two Voices at Dawn"))
+        compose.onNodeWithText("Two Voices at Dawn").assertExists()
+        failSecondPage = false
+        compose.onNodeWithTag("Author profile").performScrollToNode(hasText("Try Loading More"))
+        compose.onNodeWithText("Try Loading More").performClick()
+        compose.waitForIdle()
+        compose.onNodeWithTag("Author profile").performScrollToNode(hasText("A second page work"))
+        compose.onNodeWithText("A second page work").assertExists()
+        compose.onNodeWithTag("Author profile").performScrollToNode(hasText("Two Voices at Dawn"))
+        compose.onNodeWithText("Two Voices at Dawn").assertExists()
+        assertEquals(listOf("2", "2"), indexReads().drop(1).map { it.toHttpUrl().queryParameter("page") })
+    }
+
     @Test fun completionAndDirectionApplyTogetherResetClearsOnlyLiveFacets() {
-        show(); openSheet()
+        show(AuthorTab.Works, false); openSheet()
         chooseColumn("Title")
         compose.onNodeWithText("Descending").performClick()
         compose.onNode(hasText("Complete") and isSelectable()).performClick()
@@ -156,7 +230,7 @@ class AuthorProfileSortScreenTest {
     }
 
     @Test fun aLateAnswerForAnOlderAppliedSortCannotReplaceTheNewerList() {
-        show()
+        show(AuthorTab.Works, false)
         val gate = CompletableDeferred<Unit>()
         beforeResponse = { url ->
             if (url.toHttpUrl().queryParameter("work_search[sort_column]") == "title_to_sort_on") {
@@ -179,7 +253,7 @@ class AuthorProfileSortScreenTest {
     }
 
     @Test fun funnelOnlyBelongsToWorksAndScopeTapReadsOnceWithoutReloadingHeader() {
-        show()
+        show(AuthorTab.Works, false)
         compose.onNodeWithText("In collections").performClick()
         compose.waitForIdle()
         compose.waitUntil(15_000) { requests.any { it.toHttpUrl().encodedPath.endsWith("/works/collected") } }
@@ -198,7 +272,7 @@ class AuthorProfileSortScreenTest {
             KudosTheme(theme) {
                 val density = LocalDensity.current
                 CompositionLocalProvider(LocalDensity provides Density(density.density, 2f)) {
-                    SearchFilterSheet(AO3SearchFilters(), {}, {}, {}, {}, refine = true, canReset = false,
+                    SearchFilterSheet(AO3SearchFilters(), {}, {}, {}, {}, fandomContext = emptyList(), refine = true, canReset = false,
                         worksSort = AO3AuthorWorksSort())
                 }
             }

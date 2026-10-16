@@ -79,6 +79,7 @@ fun SearchFilterSheet(
     onApply: () -> Unit,
     onClear: () -> Unit,
     onDismiss: () -> Unit,
+    fandomContext: List<String>,
     onSave: (() -> Unit)? = null,
     allowsRelevanceSort: Boolean = true,
     localTagSuggestions: LocalTagSuggestions = LocalTagSuggestions(),
@@ -240,23 +241,27 @@ fun SearchFilterSheet(
                     FilterGroup("Tags", TAG_NOTE) {
                         if (showFandomPicker) {
                             FilterTagRow("Fandoms", "fandom", filters.fandom, filters.excludedFandoms,
-                                localTagSuggestions.fandoms, if (refine) null else autocompleteRepository) { included, excluded ->
+                                localTagSuggestions.fandoms, if (refine) null else autocompleteRepository,
+                                fandomContext = emptyList()) { included, excluded ->
                                 onFiltersChange(filters.copy(fandom = included, excludedFandoms = excluded))
                             }
                             SubjectRowSeparator()
                         }
                         FilterTagRow("Characters", "character", filters.characters, filters.excludedCharacters,
-                            localTagSuggestions.characters, if (refine) null else autocompleteRepository) { included, excluded ->
+                            localTagSuggestions.characters, if (refine) null else autocompleteRepository,
+                            fandomContext = fandomContext) { included, excluded ->
                             onFiltersChange(filters.copy(characters = included, excludedCharacters = excluded))
                         }
                         SubjectRowSeparator()
                         FilterTagRow("Relationships", "relationship", filters.relationships, filters.excludedRelationships,
-                            localTagSuggestions.relationships, if (refine) null else autocompleteRepository) { included, excluded ->
+                            localTagSuggestions.relationships, if (refine) null else autocompleteRepository,
+                            fandomContext = fandomContext) { included, excluded ->
                             onFiltersChange(filters.copy(relationships = included, excludedRelationships = excluded))
                         }
                         SubjectRowSeparator()
                         FilterTagRow("Additional Tags", "freeform", filters.additionalTags, filters.excludedAdditionalTags,
-                            localTagSuggestions.freeforms, if (refine) null else autocompleteRepository) { included, excluded ->
+                            localTagSuggestions.freeforms, if (refine) null else autocompleteRepository,
+                            fandomContext = fandomContext) { included, excluded ->
                             onFiltersChange(filters.copy(additionalTags = included, excludedAdditionalTags = excluded))
                         }
                     }

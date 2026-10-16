@@ -77,6 +77,7 @@ fun AuthorProfileScreen(
     initialTab: AuthorTab = AuthorTab.Works,
     authorRepository: AO3AuthorRepository,
     onOpenWork: (AO3WorkSummary) -> Unit,
+    onOpenAbout: (AO3AuthorRoute) -> Unit,
     onOpenSeries: (String) -> Unit = {},
     onOpenWeb: (String) -> Unit = {},
     isDashboard: Boolean = false,
@@ -113,6 +114,8 @@ fun AuthorProfileScreen(
     var tabStale by remember(sessionGeneration) { mutableStateOf(false) }
     var headerLoading by remember { mutableStateOf(true) }
     
+    var expandAll by remember(route.id, sessionGeneration) { mutableStateOf(false) }
+    var expandsFandoms by remember(route.id, sessionGeneration) { mutableStateOf(false) }
     var tab by remember { mutableStateOf(initialTab) }
     var page by remember { mutableIntStateOf(1) }
     
@@ -220,7 +223,11 @@ fun AuthorProfileScreen(
                         currentCoroutineContext().ensureActive()
                         if (!current()) return@launch
                         when (r) {
-                            is AO3Result.Success -> { works = r.value; tabStale = tabStale || r.isStale }
+                            is AO3Result.Success -> {
+                                val rows = if (pageNum > 1) works?.works.orEmpty() + r.value.works else r.value.works
+                                works = r.value.copy(works = rows.distinctBy { it.id })
+                                tabStale = tabStale || r.isStale
+                            }
                             is AO3Result.Failure -> tabError = r.error.displayMessage()
                         }
                     }
@@ -229,7 +236,11 @@ fun AuthorProfileScreen(
                         currentCoroutineContext().ensureActive()
                         if (!current()) return@launch
                         when (r) {
-                            is AO3Result.Success -> { series = r.value; tabStale = tabStale || r.isStale }
+                            is AO3Result.Success -> {
+                                val rows = if (pageNum > 1) series?.series.orEmpty() + r.value.series else r.value.series
+                                series = r.value.copy(series = rows.distinctBy { it.id })
+                                tabStale = tabStale || r.isStale
+                            }
                             is AO3Result.Failure -> tabError = r.error.displayMessage()
                         }
                     }
@@ -238,7 +249,11 @@ fun AuthorProfileScreen(
                         currentCoroutineContext().ensureActive()
                         if (!current()) return@launch
                         when (r) {
-                            is AO3Result.Success -> { bookmarks = r.value; tabStale = tabStale || r.isStale }
+                            is AO3Result.Success -> {
+                                val rows = if (pageNum > 1) bookmarks?.bookmarks.orEmpty() + r.value.bookmarks else r.value.bookmarks
+                                bookmarks = r.value.copy(bookmarks = rows.distinctBy { it.id })
+                                tabStale = tabStale || r.isStale
+                            }
                             is AO3Result.Failure -> tabError = r.error.displayMessage()
                         }
                     }
@@ -474,6 +489,8 @@ fun AuthorProfileScreen(
                             onClick = { showMenu = false; selection.enter() })
                     }
                     if (isDashboard) {
+                        DropdownMenuItem(text = { Text("About", color = tokens.primaryInk, lineHeight = 22.sp) },
+                            onClick = { showMenu = false; onOpenAbout(route) })
                         DropdownMenuItem(
                             text = { Text("My Works", color = tokens.primaryInk, lineHeight = 22.sp) },
                             onClick = { showMenu = false; onOpenDashboardList?.invoke(AccountListType.MyWorks) }
@@ -508,6 +525,10 @@ fun AuthorProfileScreen(
                         text = { Text("Detailed Mode", color = tokens.primaryInk, lineHeight = 22.sp) },
                         onClick = { displayMode = AuthorDisplayMode.Detailed; showMenu = false }
                     )
+                    if (isDashboard || tab != AuthorTab.About) DropdownMenuItem(
+                        text = { Text(if (expandAll) "Collapse All" else "Expand All", color = tokens.primaryInk, lineHeight = 22.sp) },
+                        onClick = { showMenu = false; expandAll = !expandAll }
+                    )
                     HorizontalDivider()
                     DropdownMenuItem(
                         text = { Text("Open on AO3", color = tokens.primaryInk, lineHeight = 22.sp) },
@@ -534,7 +555,8 @@ fun AuthorProfileScreen(
     if (showingWorksFilters && tab == AuthorTab.Works && !isDashboard) {
         val source = works?.works.orEmpty()
         val visible = source.count { worksFilters.matchesSummary(it) }
-        SearchFilterSheet(filters = worksFilters, onFiltersChange = { worksFilters = it },
+        SearchFilterSheet(fandomContext = AO3SearchFilters.commaSeparatedValues(worksFilters.fandom),
+            filters = worksFilters, onFiltersChange = { worksFilters = it },
             onApply = { showingWorksFilters = false }, onDismiss = { showingWorksFilters = false },
             onClear = { worksFilters = AO3SearchFilters() }, refine = true,
             canReset = worksFilters.activeCountForRefine > 0,
@@ -766,10 +788,17 @@ fun AuthorProfileScreen(
                         Text("No fandoms listed on AO3.", color = tokens.secondaryInk)
                     } else {
                         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            h.fandoms.forEach { fandom ->
-                                // iOS prints how many works each has: "Star Wars (12)".
-                                SubjectChip(text = fandom.workCount?.let { "${fandom.name} ($it)" } ?: fandom.name)
+                            (if (expandsFandoms) h.fandoms else h.fandoms.take(5)).forEach { fandom ->
+                                val name = io.github.cidy02.kudos.browse.FandomDisplayName.bareTitle(fandom.name)
+                                val count = fandom.workCount?.let { " (${it.compactCount()})" }.orEmpty()
+                                SubjectChip(text = name + count, style = SubjectChipStyle.Pill(false),
+                                    modifier = Modifier.heightIn(min = 44.dp).clickable(enabled = fandom.url.isNotBlank()) {
+                                        onOpenWeb(fandom.url)
+                                    })
                             }
+                            if (h.fandoms.size > 5) SubjectChip(
+                                text = if (expandsFandoms) "Collapse" else "Expand",
+                                modifier = Modifier.heightIn(min = 44.dp).clickable { expandsFandoms = !expandsFandoms })
                         }
                     }
                 }
@@ -786,7 +815,7 @@ fun AuthorProfileScreen(
                                 AO3AuthorWorkCard(
                                     work = work,
                                     displayMode = displayMode,
-                                    expandAll = false,
+                                    expandAll = expandAll,
                                     // iOS: the account's own dashboard carries them too.
                                     showsPerformance = isOwnWorks(signedInUsername, route.username),
                                     onOpenWork = onOpenWork
@@ -905,21 +934,21 @@ fun AuthorProfileScreen(
                             } else {
                                 items(visibleWorks, key = { it.id }) { work ->
                                     if (selection.isSelecting) {
-                                        AO3AuthorWorkCard(work, displayMode, false, ownWorks,
+                                        AO3AuthorWorkCard(work, displayMode, expandAll, ownWorks,
                                             onOpenWork = { selection.toggle(work.id) },
                                             selecting = true, selected = selection.isSelected(work.id))
                                     } else if (ownWorks && workFormRepository != null && seriesWrites != null) {
                                         OwnWorkRow(work, onAction = { action ->
                                             if (action == "delete") { heldDelete = deletes; deletes?.ask(listOf(work), multiple = false) }
                                             else rowAction = work to action
-                                        }) { AO3AuthorWorkCard(work, displayMode, false, true, onOpenWork) }
-                                    } else AO3AuthorWorkCard(work, displayMode, false, false, onOpenWork)
+                                        }) { AO3AuthorWorkCard(work, displayMode, expandAll, true, onOpenWork) }
+                                    } else AO3AuthorWorkCard(work, displayMode, expandAll, false, onOpenWork)
                                 }
                                 item {
-                                    PagerRow(
+                                    AuthorLoadMoreRow(
                                         page = pageData.currentPage,
                                         total = pageData.totalPages,
-                                        onPrev = { loadTab(AuthorTab.Works, pageData.currentPage - 1) },
+                                        loading = tabLoading,
                                         onNext = { loadTab(AuthorTab.Works, pageData.currentPage + 1) },
                                         loadMoreError = tabError?.takeIf { page > 1 },
                                         onRetry = { loadTab(tab, page) }
@@ -967,10 +996,10 @@ fun AuthorProfileScreen(
                                         trailingContent = actions)
                                 }
                                 item {
-                                    PagerRow(
+                                    AuthorLoadMoreRow(
                                         page = pageData.currentPage,
                                         total = pageData.totalPages,
-                                        onPrev = { loadTab(AuthorTab.Series, pageData.currentPage - 1) },
+                                        loading = tabLoading,
                                         onNext = { loadTab(AuthorTab.Series, pageData.currentPage + 1) },
                                         loadMoreError = tabError?.takeIf { page > 1 },
                                         onRetry = { loadTab(tab, page) }
@@ -991,7 +1020,7 @@ fun AuthorProfileScreen(
                                         AO3AuthorWorkCard(
                                             work = work,
                                             displayMode = displayMode,
-                                            expandAll = false,
+                                            expandAll = expandAll,
                                             showsPerformance = false,
                                             onOpenWork = onOpenWork,
                                             bookmark = bm.asLedgerBookmark()
@@ -999,10 +1028,10 @@ fun AuthorProfileScreen(
                                     } ?: AO3BookmarkFootnote(bookmark = bm)
                                 }
                                 item {
-                                    PagerRow(
+                                    AuthorLoadMoreRow(
                                         page = pageData.currentPage,
                                         total = pageData.totalPages,
-                                        onPrev = { loadTab(AuthorTab.Bookmarks, pageData.currentPage - 1) },
+                                        loading = tabLoading,
                                         onNext = { loadTab(AuthorTab.Bookmarks, pageData.currentPage + 1) },
                                         loadMoreError = tabError?.takeIf { page > 1 },
                                         onRetry = { loadTab(tab, page) }
@@ -1085,34 +1114,23 @@ fun AuthorProfileScreen(
 }
 
 @Composable
-private fun PagerRow(
-    page: Int, total: Int, onPrev: () -> Unit, onNext: () -> Unit,
-    loadMoreError: String? = null, onRetry: () -> Unit = {}
+internal fun AuthorLoadMoreRow(
+    page: Int, total: Int, loading: Boolean, onNext: () -> Unit,
+    loadMoreError: String? = null, onRetry: () -> Unit = onNext
 ) {
     if (loadMoreError != null) {
         val tokens = LocalKudosTokens.current
         Column(Modifier.subjectPanel()) {
             Text(loadMoreError, color = tokens.secondaryInk, fontSize = 14.sp,
                 lineHeight = 20.sp, modifier = Modifier.padding(16.dp))
-            SubjectFormRow("Try Loading More", onClick = onRetry)
+            TextButton(onClick = onRetry, enabled = !loading) { Text("Try Loading More") }
         }
-        return
-    }
-    if (total <= 1) return
-    if (io.github.cidy02.kudos.ui.subject.isAccessibilityFontScale()) {
-        io.github.cidy02.kudos.ui.components.LargeTextPager(page, total, { if (it < page) onPrev() else onNext() }, Modifier.padding(vertical = 8.dp))
-        return
-    }
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 8.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        OutlinedButton(onClick = onPrev, enabled = page > 1) { Text("Previous") }
-        Text("Page $page of $total", color = LocalKudosTokens.current.secondaryInk, fontSize = 13.sp)
-        OutlinedButton(onClick = onNext, enabled = page < total) { Text("Next") }
+    } else if (page < total || loading) {
+        TextButton(onClick = onNext, enabled = !loading, modifier = Modifier.fillMaxWidth()) {
+            Text(if (loading) "Loading…" else "Load More")
+            Spacer(Modifier.weight(1f))
+            Text("Page $page of $total", color = LocalKudosTokens.current.secondaryInk, fontSize = 13.sp)
+        }
     }
 }
 

@@ -4,15 +4,30 @@ import io.github.cidy02.kudos.network.ao3.AO3Client
 import io.github.cidy02.kudos.network.ao3.AO3Error
 import io.github.cidy02.kudos.network.ao3.AO3Result
 import io.github.cidy02.kudos.network.ao3.OkHttpAO3Client
+import io.github.cidy02.kudos.network.ao3.browse.AO3BrowseUrls
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 
 class AO3EpubDownloader(
     private val client: AO3Client = OkHttpAO3Client(),
     private val urlBuilder: AO3DownloadUrlBuilder = AO3DownloadUrlBuilder()
 ) {
     suspend fun download(workId: Long): AO3Result<ByteArray> {
-        return when (val result = client.getBytes(urlBuilder.epubDownloadUrl(workId))) {
+        return downloadUrl(urlBuilder.epubDownloadUrl(workId))
+    }
+
+    suspend fun downloadUrl(url: String): AO3Result<ByteArray> {
+        if (!isEpubDownload(url)) return AO3Result.Failure(AO3Error.Validation("Not an AO3 EPUB download."))
+        return when (val result = client.getBytes(url)) {
             is AO3Result.Failure -> result
             is AO3Result.Success -> validate(result.value.body, result.value.header("Content-Type"))
+        }
+    }
+
+    companion object {
+        fun isEpubDownload(url: String): Boolean {
+            val parsed = url.toHttpUrlOrNull() ?: return false
+            return AO3BrowseUrls.isAo3Url(url) && parsed.encodedPath.startsWith("/downloads/") &&
+                parsed.pathSegments.lastOrNull()?.endsWith(".epub", ignoreCase = true) == true
         }
     }
 

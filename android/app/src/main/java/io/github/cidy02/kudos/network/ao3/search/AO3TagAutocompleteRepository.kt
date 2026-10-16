@@ -48,6 +48,20 @@ class AO3TagAutocompleteRepository(
         }
     }
 
+    /** One first-page read, only when a fandom-scoped picker is opened. */
+    suspend fun popularTags(fandom: String, kind: String): AO3Result<List<String>> {
+        if (kind !in setOf("character", "relationship", "freeform") || fandom.isBlank())
+            return AO3Result.Success(emptyList())
+        val url = AO3SearchUrlBuilder().buildFandomWorksUrl(fandom, AO3SearchFilters())
+            ?: return AO3Result.Success(emptyList())
+        return when (val result = client.get(url)) {
+            is AO3Result.Failure -> result
+            is AO3Result.Success -> kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+                AO3Result.Success(parsePopularTags(result.value.body, kind))
+            }
+        }
+    }
+
     private fun autocompleteUrl(kind: String, term: String) = AO3Constants.baseHttpUrl.newBuilder()
         .addPathSegment("autocomplete").addPathSegment(kind).addQueryParameter("term", term).build().toString()
 
@@ -74,6 +88,25 @@ class AO3TagAutocompleteRepository(
     }
 
     companion object {
+        internal fun parsePopularTags(html: String, kind: String): List<String> {
+            val field = when (kind) {
+                "character" -> "character_ids"
+                "relationship" -> "relationship_ids"
+                "freeform" -> "freeform_ids"
+                else -> return emptyList()
+            }
+            val target = "include_work_search[$field][]"
+            return org.jsoup.Jsoup.parse(html).select("input[type=checkbox]").mapNotNull { input ->
+                if (input.attr("name") != target) return@mapNotNull null
+                val parent = input.parent() ?: return@mapNotNull null
+                val label = if (parent.tagName() == "label") parent else {
+                    val id = input.id()
+                    parent.select("label").firstOrNull { id.isNotEmpty() && it.attr("for") == id }
+                }
+                label?.text()?.replace(Regex("\\s*\\(\\d[\\d,]*\\)\\s*$"), "")?.trim()?.takeIf { it.isNotEmpty() }
+            }.distinct()
+        }
+
         /**
          * iOS `parseEditorAutocomplete`: name then id; absent metadata means canonical, count
          * unknown. Field by field, so one odd row (a numeric id, a quoted boolean) costs only itself.
