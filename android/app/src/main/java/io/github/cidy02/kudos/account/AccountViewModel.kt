@@ -127,10 +127,11 @@ class AccountViewModel(
                 staleFlow.value = false
                 if (username != null && authRepository.username() == username) {
                     refreshHeader(username)
-                    refreshCounts(username)
-                    if (countsCache?.get(AccountListType.Subscriptions, username) == null && listRepository != null) {
+                    val scope = AO3AccountListCountsCache.scope(username, authRepository.generation.value)
+                    refreshCounts(scope)
+                    if (countsCache?.get(AccountListType.Subscriptions, scope) == null && listRepository != null) {
                         listRepository.load(AccountListType.Subscriptions, 1)
-                        refreshCounts(username)
+                        refreshCounts(scope)
                     }
                 }
             }
@@ -162,7 +163,7 @@ class AccountViewModel(
         try { job.join() } finally { if (job.isActive) job.cancel() }
     }
 
-    private fun refreshCounts(username: String) {
+    private fun refreshCounts(scope: String) {
         val cache = countsCache ?: return
         val map = mutableMapOf<String, AO3AccountListCountsCache.Count>()
         for (entry in AccountListType.hubEntries) {
@@ -171,7 +172,7 @@ class AccountViewModel(
             // coroutine dispatch.  Guard defensively — the cache is best-effort.
             @Suppress("SENSELESS_COMPARISON")
             if (entry == null) continue
-            cache.get(entry, username)?.let { map[entry.listKey] = it }
+            cache.get(entry, scope)?.let { map[entry.listKey] = it }
         }
         countsFlow.value = map
     }
@@ -257,18 +258,7 @@ class AccountListViewModel(
             loadedGeneration.value = generation
             mutableState.value = when (result) {
                 is AO3Result.Success -> {
-                    // Update the counts cache whenever a list page is loaded (Item 9).
-                    val username = repository.authRepository.username()
-                    if (username != null) {
-                        repository.countsCache?.put(
-                            type,
-                            username,
-                            AO3AccountListCountsCache.Count(
-                                itemsOnPage = result.value.works.size,
-                                totalPages = result.value.totalPages
-                            )
-                        )
-                    }
+                    // The repository has recorded its count (Item 9).
                     AccountListUiState.Loaded(result.value, fetchedAt = System.currentTimeMillis())
                 }
                 is AO3Result.Failure -> {

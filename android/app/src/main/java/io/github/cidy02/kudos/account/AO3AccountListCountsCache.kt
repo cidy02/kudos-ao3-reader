@@ -19,9 +19,18 @@ class AO3AccountListCountsCache(
                 else -> null
             }
 
-        constructor(itemsOnPage: Int, totalPages: Int) : this(
-            exact = if (totalPages <= 1) itemsOnPage else null,
-            lowerBound = if (totalPages > 1) itemsOnPage * (totalPages - 1) else null
+        /**
+         * [mayOmitRows]: a list whose page keeps fewer rows than AO3 counts (Bookmarks keeps only
+         * work bookmarks). One page of it is then a floor, so it never replaces AO3's own exact
+         * figure with a smaller one (iOS `AO3AccountListCount(mayOmitRows:)`; A59).
+         */
+        constructor(itemsOnPage: Int, totalPages: Int, mayOmitRows: Boolean = false) : this(
+            exact = if (totalPages <= 1 && !mayOmitRows) itemsOnPage else null,
+            lowerBound = when {
+                totalPages > 1 -> itemsOnPage * (totalPages - 1)
+                mayOmitRows -> itemsOnPage
+                else -> null
+            }
         )
 
         fun isAtLeastAsStrongAs(other: Count): Boolean {
@@ -58,6 +67,14 @@ class AO3AccountListCountsCache(
     fun clearScope(authenticationScope: String) {
         val prefix = "${authenticationScope.lowercase()}|"
         entries.keys.removeAll { it.startsWith(prefix) }
+    }
+
+    companion object {
+        /**
+         * A session's counts are its own: the same name signed in again is another session, as
+         * iOS's `sessionScopedCacheScope` (A59).
+         */
+        fun scope(username: String, generation: Int): String = "$username#session-$generation"
     }
 
     private fun key(kind: AccountListType, scope: String): String =
