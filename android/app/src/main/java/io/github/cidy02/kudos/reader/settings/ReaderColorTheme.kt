@@ -1,6 +1,7 @@
 package io.github.cidy02.kudos.reader.settings
 
 import androidx.compose.ui.graphics.Color
+import io.github.cidy02.kudos.ui.theme.SurfaceDark
 
 /**
  * Engine-agnostic reader colour theme. Mapped to Readium's EPUB theme in the
@@ -17,7 +18,7 @@ enum class ReaderColorTheme { Light, Sepia, Dark, Oled }
 fun ReaderColorTheme.backgroundColor(): Color = when (this) {
     ReaderColorTheme.Light -> Color(0xFFFFFFFF)
     ReaderColorTheme.Sepia -> Color(0xFFFBF0D9)
-    ReaderColorTheme.Dark -> Color(0xFF16161A)
+    ReaderColorTheme.Dark -> SurfaceDark
     ReaderColorTheme.Oled -> Color(0xFF000000)
 }
 

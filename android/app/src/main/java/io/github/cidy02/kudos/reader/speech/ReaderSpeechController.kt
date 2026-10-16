@@ -6,9 +6,12 @@ import android.media.MediaMetadata
 import android.media.session.MediaSession
 import android.media.session.PlaybackState
 import android.os.Build
+import android.os.SystemClock
 import androidx.lifecycle.asFlow
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
+import io.github.cidy02.kudos.reader.ReaderPlaybackClock
+import io.github.cidy02.kudos.reader.ReaderTimeEstimate
 import io.github.cidy02.kudos.reader.settings.ReaderPreferences
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -57,6 +60,10 @@ class ReaderSpeechController(
     private var currentPreferences = ReaderPreferences()
     private var workTitle: String = "Kudos"
     private var currentSpeakJob: Job? = null
+    private var totalPositions = 0
+    private var currentPosition: Int? = null
+    private var playbackState = PlaybackState.STATE_STOPPED
+    private val playbackClock = ReaderPlaybackClock()
 
     private val mediaSession: MediaSession = MediaSession(appContext, "kudos.reader.tts").apply {
         setCallback(object : MediaSession.Callback() {
@@ -124,7 +131,22 @@ class ReaderSpeechController(
         workTitle = title.ifBlank { "Kudos" }
         tts.applySpeechPreferences(preferences)
         updateMetadata()
+        publishPlaybackState(playbackState)
     }
+
+    fun updateReadingPosition(total: Int, position: Int?) {
+        totalPositions = total.coerceAtLeast(0)
+        currentPosition = position
+        playbackClock.reset()
+        updateMetadata()
+        publishPlaybackState(playbackState)
+    }
+
+    private fun timing() = ReaderTimeEstimate.ttsNowPlayingTiming(
+        totalPositions = totalPositions,
+        remainingPositions = totalPositions - (currentPosition ?: 0).coerceIn(0, totalPositions),
+        rate = currentPreferences.speechRate.toDouble()
+    )
 
     fun startReading(paragraphs: List<String>) {
         if (paragraphs.isEmpty()) return
@@ -132,6 +154,7 @@ class ReaderSpeechController(
         
         currentQueue = paragraphs
         currentIndex = 0
+        playbackClock.reset()
         updateMetadata()
         speakCurrent()
     }
@@ -220,10 +243,13 @@ class ReaderSpeechController(
             .putString(MediaMetadata.METADATA_KEY_TITLE, workTitle)
             .putString(MediaMetadata.METADATA_KEY_DISPLAY_TITLE, workTitle)
             .putString(MediaMetadata.METADATA_KEY_ARTIST, "Kudos")
+        timing()?.let { builder.putLong(MediaMetadata.METADATA_KEY_DURATION, (it.duration * 1000).toLong()) }
         mediaSession.setMetadata(builder.build())
     }
 
     private fun publishPlaybackState(state: Int) {
+        playbackState = state
+        val timing = playbackClock.update(timing(), state == PlaybackState.STATE_PLAYING, SystemClock.elapsedRealtime())
         val actions = PlaybackState.ACTION_PLAY or
             PlaybackState.ACTION_PAUSE or
             PlaybackState.ACTION_STOP or
@@ -231,7 +257,11 @@ class ReaderSpeechController(
             PlaybackState.ACTION_SKIP_TO_PREVIOUS
         val playback = PlaybackState.Builder()
             .setActions(actions)
-            .setState(state, PlaybackState.PLAYBACK_POSITION_UNKNOWN, 1f)
+            .setState(
+                state,
+                timing?.let { (it.elapsed * 1000).toLong() } ?: PlaybackState.PLAYBACK_POSITION_UNKNOWN,
+                if (state == PlaybackState.STATE_PLAYING) 1f else 0f
+            )
             .build()
         mediaSession.setPlaybackState(playback)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {

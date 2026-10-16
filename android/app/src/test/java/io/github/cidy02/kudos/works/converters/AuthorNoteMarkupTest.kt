@@ -34,6 +34,7 @@ class AuthorNoteMarkupTest {
         """.trimIndent()
 
         val body = HTMLWorkConverter().sanitizedBody(html)
+        assertTrue(body.contains("""epub:type="note""""))
         assertTrue(
             "notes container must become aside.author-note, got: $body",
             body.contains("""class="author-note"""") || body.contains("class='author-note'")

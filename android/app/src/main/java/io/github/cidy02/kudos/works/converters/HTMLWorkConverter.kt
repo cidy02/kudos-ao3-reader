@@ -83,6 +83,7 @@ class HTMLWorkConverter {
         for (note in notes) {
             note.tagName("aside")
             note.attr("class", "author-note")
+            note.attr("epub:type", "note")
         }
     }
 
@@ -107,6 +108,6 @@ class HTMLWorkConverter {
         fun bodySafelist(): Safelist = Safelist.relaxed()
             .removeTags("img")
             .addTags("aside")
-            .addAttributes("aside", "class")
+            .addAttributes("aside", "class", "epub:type")
     }
 }
