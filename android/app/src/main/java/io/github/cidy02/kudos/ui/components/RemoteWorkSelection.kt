@@ -15,6 +15,12 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.foundation.layout.Box
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
@@ -24,6 +30,13 @@ import io.github.cidy02.kudos.library.ReadingQueueRepository
 import io.github.cidy02.kudos.network.ao3.search.AO3WorkSummary
 import io.github.cidy02.kudos.works.WorkImportResult
 import io.github.cidy02.kudos.works.WorkImporter
+import io.github.cidy02.kudos.network.ao3.AO3Error
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.launch
+import io.github.cidy02.kudos.core.model.SavedWork
+import io.github.cidy02.kudos.library.QueueMembershipDialog
 
 /**
  * Selection state shared by every **remote** work list — Search results,
@@ -110,6 +123,8 @@ fun RemoteWorkSelectionBar(
     busy: Boolean,
     onSaveToLibrary: () -> Unit,
     onSaveForLater: () -> Unit,
+    onAddToCollection: () -> Unit,
+    onAddToQueue: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Surface(
@@ -136,11 +151,15 @@ fun RemoteWorkSelectionBar(
                 style = MaterialTheme.typography.labelLarge
             )
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                TextButton(onClick = onSaveForLater, enabled = state.hasSelection && !busy) {
-                    Text("Save for Later")
-                }
-                TextButton(onClick = onSaveToLibrary, enabled = state.hasSelection && !busy) {
-                    Text("Save")
+                Box {
+                    var menu by remember { mutableStateOf(false) }
+                    TextButton(onClick = { menu = true }, enabled = state.hasSelection && !busy) { Text("Actions") }
+                    DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                        listOf("Download" to onSaveToLibrary, "Save for Later" to onSaveForLater,
+                            "Add to Collection" to onAddToCollection, "Add to Queue" to onAddToQueue).forEach { (label, action) ->
+                            DropdownMenuItem(text = { Text(label) }, onClick = { menu = false; action() })
+                        }
+                    }
                 }
                 TextButton(onClick = state::exit, enabled = !busy) { Text("Cancel") }
             }
@@ -148,49 +167,130 @@ fun RemoteWorkSelectionBar(
     }
 }
 
+/** Host-owned batch, error and membership sheets; they survive leaving selection. */
+@Composable
+fun RemoteWorkSelectionActions(
+    state: RemoteWorkSelectionState,
+    works: List<AO3WorkSummary>,
+    importer: WorkImporter,
+    queues: ReadingQueueRepository?
+) {
+    val scope = rememberCoroutineScope()
+    var busy by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+    var queueWorks by remember { mutableStateOf<List<SavedWork>>(emptyList()) }
+    var collectionWorks by remember { mutableStateOf<List<SavedWork>>(emptyList()) }
+    fun run(action: suspend (List<AO3WorkSummary>) -> RemoteWorkBulkActions.Result) {
+        if (busy) return
+        val picked = state.selectedIn(works)
+        busy = true
+        scope.launch {
+            try {
+                val result = action(picked)
+                if (result.allSucceeded) state.exit() else error = result.message
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (failure: Exception) { error = failure.message ?: "The action couldn't be completed." }
+            finally { busy = false }
+        }
+    }
+    if (state.isSelecting) RemoteWorkSelectionBar(state, busy,
+        onSaveToLibrary = { run { RemoteWorkBulkActions.saveToLibrary(it, importer) } },
+        onSaveForLater = { queues?.let { repository -> run { RemoteWorkBulkActions.saveForLater(it, importer, repository) } } },
+        onAddToCollection = { run { picked ->
+            RemoteWorkBulkActions.resolve(picked, importer) { collectionWorks = it }
+        } },
+        onAddToQueue = { if (queues != null) run { picked ->
+            RemoteWorkBulkActions.resolve(picked, importer) { queueWorks = it }
+        } }
+    )
+    if (queueWorks.isNotEmpty()) QueueMembershipDialog(queueWorks, queues, importer,
+        onDismiss = { queueWorks = emptyList() })
+    if (collectionWorks.isNotEmpty()) AddSelectionToCollectionDialog(collectionWorks, importer.workRepository,
+        onAdded = {}, onDismiss = { collectionWorks = emptyList() })
+    error?.let { message ->
+        AlertDialog(onDismissRequest = { error = null }, title = { Text("Action Failed") },
+            text = { Text(message) }, confirmButton = { TextButton(onClick = { error = null }) { Text("OK") } })
+    }
+}
+
 /**
  * Bulk actions for remote summaries (iOS `RemoteWorkBulkActions`).
  *
- * A remote result is only a search-page blurb, so each one is first resolved
- * into a real local record via [WorkImporter.saveMetadataOnly] — metadata only,
- * no EPUB download, which is what makes bulk-selecting 20 results reasonable.
- * Failures are per-work so one dead link doesn't sink the batch.
+ * Explicit Download obtains one EPUB per missing work, sequentially. Listing
+ * metadata is sufficient; do not read each work page before its download.
  */
 object RemoteWorkBulkActions {
+
+    data class Result(val added: Int, val failed: Int) {
+        val allSucceeded: Boolean get() = added > 0 && failed == 0
+        val message: String get() = when {
+            added == 0 && failed == 0 -> "Nothing selected."
+            failed == 0 -> "Added $added to your Library."
+            added == 0 -> "Couldn't add $failed. Check your connection and try again."
+            else -> "Added $added. $failed couldn't be added."
+        }
+    }
 
     suspend fun saveToLibrary(
         works: List<AO3WorkSummary>,
         importer: WorkImporter
-    ): String = apply(works) { importer.saveMetadataOnly(it, markSaved = true) }
+    ): Result = apply(works) { summary ->
+        when (val result = importer.prepareForReading(summary)) {
+            is WorkImportResult.Failure -> result
+            is WorkImportResult.Success -> {
+                importer.workRepository.setSaved(result.work.id, true)
+                WorkImportResult.Success(importer.workRepository.getWork(result.work.id) ?: result.work)
+            }
+        }
+    }
 
     suspend fun saveForLater(
         works: List<AO3WorkSummary>,
         importer: WorkImporter,
         queues: ReadingQueueRepository
-    ): String = apply(works) { summary ->
-        val result = importer.saveMetadataOnly(summary, markSaved = false, isQueuedForLater = true)
+    ): Result = apply(works) { summary ->
+        val result = importer.saveMetadataOnly(summary, markSaved = false, isQueuedForLater = true, enrichMetadata = false)
         if (result is WorkImportResult.Success) {
             queues.addToSavedForLater(result.work.id)
         }
         result
     }
 
+    suspend fun resolve(
+        works: List<AO3WorkSummary>,
+        importer: WorkImporter,
+        onResolved: (List<SavedWork>) -> Unit
+    ): Result {
+        val resolved = mutableListOf<SavedWork>()
+        val result = apply(works) { summary ->
+            importer.saveMetadataOnly(summary, markSaved = false, enrichMetadata = false).also {
+                if (it is WorkImportResult.Success) resolved += it.work
+            }
+        }
+        if (resolved.isNotEmpty()) onResolved(resolved)
+        return result
+    }
+
     private suspend fun apply(
         works: List<AO3WorkSummary>,
         action: suspend (AO3WorkSummary) -> WorkImportResult
-    ): String {
-        if (works.isEmpty()) return "Nothing selected."
+    ): Result {
         var added = 0
         var failed = 0
         for (summary in works) {
-            val result = runCatching { action(summary) }.getOrNull()
+            currentCoroutineContext().ensureActive()
+            val result = try { action(summary) } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) { null }
             if (result is WorkImportResult.Success) added++ else failed++
+            // A missing work does not prevent the next one; a block/outage does.
+            if (result !is WorkImportResult.Success &&
+                (result !is WorkImportResult.Failure || result.error != AO3Error.NotFound)) {
+                failed = works.size - added
+                break
+            }
         }
-        return when {
-            failed == 0 -> "Added $added to your Library."
-            added == 0 -> "Couldn't add ${works.size}. Check your connection and try again."
-            else -> "Added $added. $failed couldn't be added."
-        }
+        return Result(added, failed)
     }
 }
 

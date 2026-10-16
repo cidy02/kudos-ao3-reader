@@ -6,6 +6,12 @@ import androidx.compose.ui.draw.clip
 import io.github.cidy02.kudos.ui.subject.subjectPanel
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.semantics.progressBarRangeInfo
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
+import androidx.compose.ui.semantics.setProgress
+import kotlin.math.roundToInt
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -378,17 +384,34 @@ fun FandomLetterIndex(
     onPick: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val letters = IndexLetters.filter { it in available }
+    var current by remember(available) { mutableStateOf(letters.firstOrNull()) }
+    fun pickLetter(letter: String) {
+        current = letter
+        onPick(letter)
+    }
     Column(
         modifier
-            // iOS names the strip; here it had no name at all.
-            .semantics { contentDescription = "Fandom index" }
+            .clearAndSetSemantics {
+                contentDescription = "Fandom index"
+                stateDescription = current ?: "No letters available"
+                if (letters.isNotEmpty()) {
+                    progressBarRangeInfo = ProgressBarRangeInfo(
+                        letters.indexOf(current).coerceAtLeast(0).toFloat(),
+                        0f..(letters.size - 1).toFloat(), (letters.size - 2).coerceAtLeast(0))
+                    setProgress { value ->
+                        val letter = letters[value.roundToInt().coerceIn(letters.indices)]
+                        if (letter == current) false else { pickLetter(letter); true }
+                    }
+                }
+            }
             .pointerInput(available) {
                 fun pick(y: Float) {
                     val index = ((y / size.height.coerceAtLeast(1).toFloat()) * IndexLetters.size)
                         .toInt()
                         .coerceIn(IndexLetters.indices)
                     val letter = IndexLetters[index]
-                    if (letter in available) onPick(letter)
+                    if (letter in available) pickLetter(letter)
                 }
                 awaitEachGesture {
                     val down = awaitFirstDown()

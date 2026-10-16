@@ -117,6 +117,14 @@ fun AppNavHost(
         return decoded
     }
 
+    io.github.cidy02.kudos.ui.components.ProvideWorkRowActions(
+        repository = container.workRepository, queues = container.readingQueueRepository,
+        downloads = container.downloadQueue, importer = container.workImporter,
+        settingsRepository = container.settingsRepository, privacyGate = container.privacyGate,
+        openDetails = { navigateToWorkDetail(WorkDetailSource.LocalWork(it)) },
+        openReader = { navController.navigate(Routes.reader(it)) },
+        openComments = { navController.navigate(Routes.comments(it)) }
+    ) {
     SharedTransitionLayout {
         CompositionLocalProvider(LocalSharedTransitionScope provides this) {
             NavHost(
@@ -1378,6 +1386,7 @@ fun AppNavHost(
         }
     }
         }
+    }
     }
 }
 

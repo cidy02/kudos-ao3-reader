@@ -44,8 +44,6 @@ import io.github.cidy02.kudos.works.WorkImporter
 import io.github.cidy02.kudos.library.ReadingQueueRepository
 import io.github.cidy02.kudos.ui.components.rememberRemoteWorkSelection
 import io.github.cidy02.kudos.ui.components.SelectableRemoteWorkRow
-import io.github.cidy02.kudos.ui.components.RemoteWorkSelectionBar
-import io.github.cidy02.kudos.ui.components.RemoteWorkBulkActions
 import kotlinx.coroutines.launch
 import io.github.cidy02.kudos.network.ao3.displayMessage
 
@@ -74,8 +72,6 @@ fun AuthorWorksScreen(
     val savedWorks = io.github.cidy02.kudos.library.rememberShownWorks(allSavedWorks, settingsRepository, privacyGate)
     val savedByUrl = remember(savedWorks) { BrowseLocalIndicators.index(savedWorks) }
     val selection = rememberRemoteWorkSelection()
-    var bulkBusy by remember { mutableStateOf(false) }
-    var bulkStatus by remember { mutableStateOf<String?>(null) }
 
     fun load(page: Int = 1) {
         state = AuthorWorksState.Loading
@@ -162,30 +158,9 @@ fun AuthorWorksScreen(
                         }
                     }
 
-                    if (selection.isSelecting && workImporter != null) {
-                        RemoteWorkSelectionBar(
-                            state = selection,
-                            busy = bulkBusy,
-                            onSaveToLibrary = {
-                                val picked = selection.selectedIn(current.page.works)
-                                scope.launch {
-                                    bulkBusy = true
-                                    bulkStatus = RemoteWorkBulkActions.saveToLibrary(picked, workImporter)
-                                    bulkBusy = false
-                                    selection.exit()
-                                }
-                            },
-                            onSaveForLater = {
-                                val queues = readingQueueRepository ?: return@RemoteWorkSelectionBar
-                                val picked = selection.selectedIn(current.page.works)
-                                scope.launch {
-                                    bulkBusy = true
-                                    bulkStatus = RemoteWorkBulkActions.saveForLater(picked, workImporter, queues)
-                                    bulkBusy = false
-                                    selection.exit()
-                                }
-                            }
-                        )
+                    if (workImporter != null) {
+                        io.github.cidy02.kudos.ui.components.RemoteWorkSelectionActions(
+                            selection, current.page.works, workImporter, readingQueueRepository)
                     }
 
                 }
@@ -193,16 +168,7 @@ fun AuthorWorksScreen(
         }
     }
 
-    bulkStatus?.let { message ->
-        androidx.compose.material3.AlertDialog(
-            onDismissRequest = { bulkStatus = null },
-            title = { Text("Selection") },
-            text = { Text(message) },
-            confirmButton = {
-                androidx.compose.material3.TextButton(onClick = { bulkStatus = null }) { Text("OK") }
-            }
-        )
-    }
+
 }
 
 @Composable

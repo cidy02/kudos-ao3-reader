@@ -4,16 +4,10 @@ import io.github.cidy02.kudos.ui.components.workDeletionMessage
 
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -24,11 +18,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
-import io.github.cidy02.kudos.core.model.ReadingQueue
-import io.github.cidy02.kudos.core.model.ReadingQueueKind
 import io.github.cidy02.kudos.core.model.SavedWork
-import io.github.cidy02.kudos.core.model.WorkCollection
 import io.github.cidy02.kudos.core.model.WorkDownloadAction
 import io.github.cidy02.kudos.core.model.WorkDownloadSemantics
 import io.github.cidy02.kudos.library.ReadingQueueRepository
@@ -46,6 +36,7 @@ class HomeWorkController {
     var collectionTargets by mutableStateOf<List<SavedWork>>(emptyList())
     var tagTargets by mutableStateOf<List<SavedWork>>(emptyList())
     var deleteTargets by mutableStateOf<List<SavedWork>>(emptyList())
+    var deletingSelection by mutableStateOf(false)
     var message by mutableStateOf<String?>(null)
     var onChanged: suspend () -> Unit = {}
 }
@@ -179,6 +170,7 @@ fun HomeLocalWorkFrame(
             }
             MenuItem("Delete", destructive = true) {
                 menuOpen = false
+                controller.deletingSelection = false
                 controller.deleteTargets = listOf(work)
             }
         }
@@ -215,53 +207,27 @@ fun HomeWorkDialogs(
     workRepository: WorkRepository,
     queueRepository: ReadingQueueRepository?,
     confirmBeforeDelete: Boolean,
-    onDeleted: () -> Unit
+    onDeleted: () -> Unit,
+    workImporter: WorkImporter? = null
 ) {
     val scope = rememberCoroutineScope()
     if (controller.queueTargets.isNotEmpty()) {
-        QueueDialog(
-            onDismiss = { controller.queueTargets = emptyList() },
-            queueRepository = queueRepository,
-            onPick = { queue ->
-                val targets = controller.queueTargets
-                controller.queueTargets = emptyList()
-                scope.launch {
-                    targets.forEach { target ->
-                        runCatching { queueRepository?.addWork(queue.id, target.id) }
-                    }
-                    controller.onChanged()
-                }
-            }
-        )
+        io.github.cidy02.kudos.library.QueueMembershipDialog(
+            works = controller.queueTargets, repository = queueRepository, importer = workImporter,
+            onChanged = { scope.launch { controller.onChanged() } },
+            onDismiss = { controller.queueTargets = emptyList() })
     }
     if (controller.collectionTargets.isNotEmpty()) {
-        CollectionDialog(
-            onDismiss = { controller.collectionTargets = emptyList() },
-            workRepository = workRepository,
-            onPick = { name ->
-                val targets = controller.collectionTargets
-                controller.collectionTargets = emptyList()
-                scope.launch {
-                    targets.forEach { target ->
-                        runCatching { workRepository.addToCollection(target.id, name) }
-                    }
-                }
-            }
-        )
+        io.github.cidy02.kudos.ui.components.AddSelectionToCollectionDialog(
+            selectedWorks = controller.collectionTargets, workRepository = workRepository,
+            onAdded = { scope.launch { controller.onChanged() } },
+            onDismiss = { controller.collectionTargets = emptyList() })
     }
     if (controller.tagTargets.isNotEmpty()) {
-        TagDialog(
-            onDismiss = { controller.tagTargets = emptyList() },
-            onApply = { name ->
-                val targets = controller.tagTargets
-                controller.tagTargets = emptyList()
-                scope.launch {
-                    targets.forEach { target ->
-                        runCatching { workRepository.addUserTag(target.id, name) }
-                    }
-                }
-            }
-        )
+        io.github.cidy02.kudos.library.WorkBulkTagSheet(
+            workRepository = workRepository, workIds = controller.tagTargets.map { it.id },
+            palette = io.github.cidy02.kudos.ui.subject.LocalKudosTokens.current.scopePalette,
+            onDismiss = { controller.tagTargets = emptyList() })
     }
     DestructiveConfirmation(
         show = controller.deleteTargets.isNotEmpty(),
@@ -272,7 +238,7 @@ fun HomeWorkDialogs(
         },
         text = workDeletionMessage(controller.deleteTargets),
         confirmText = "Delete",
-        confirmBeforeDelete = confirmBeforeDelete,
+        confirmBeforeDelete = controller.deletingSelection || confirmBeforeDelete,
         onConfirm = {
             val targets = controller.deleteTargets
             controller.deleteTargets = emptyList()
@@ -293,95 +259,6 @@ fun HomeWorkDialogs(
             }
         )
     }
-}
-
-@Composable
-private fun QueueDialog(
-    queueRepository: ReadingQueueRepository?,
-    onDismiss: () -> Unit,
-    onPick: (ReadingQueue) -> Unit
-) {
-    var queues by remember { mutableStateOf<List<ReadingQueue>?>(null) }
-    LaunchedEffect(queueRepository) {
-        queues = queueRepository?.listQueues().orEmpty()
-            .filter { it.kindRaw == ReadingQueueKind.CUSTOM && !it.isDeleted }
-    }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Add to Queue") },
-        text = {
-            Column(Modifier.heightIn(max = 320.dp).verticalScroll(rememberScrollState())) {
-                val loaded = queues
-                when {
-                    loaded == null -> Text("Loading…")
-                    loaded.isEmpty() -> Text("No custom queues yet. Use + on Home to make one.")
-                    else -> loaded.forEach { queue ->
-                        TextButton(onClick = { onPick(queue) }, modifier = Modifier.fillMaxWidth()) {
-                            Text(queue.displayName, modifier = Modifier.fillMaxWidth())
-                        }
-                    }
-                }
-            }
-        },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Close") } }
-    )
-}
-
-@Composable
-private fun CollectionDialog(
-    workRepository: WorkRepository,
-    onDismiss: () -> Unit,
-    onPick: (String) -> Unit
-) {
-    var name by remember { mutableStateOf("") }
-    var collections by remember { mutableStateOf<List<WorkCollection>?>(null) }
-    LaunchedEffect(Unit) { collections = runCatching { workRepository.allCollections() }.getOrDefault(emptyList()) }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Add to Collection") },
-        text = {
-            Column(Modifier.heightIn(max = 320.dp).verticalScroll(rememberScrollState())) {
-                OutlinedTextField(
-                    value = name,
-                    onValueChange = { name = it },
-                    label = { Text("New or existing collection") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                collections.orEmpty().filter { !it.isDeleted }.forEach { collection ->
-                    TextButton(onClick = { onPick(collection.name) }, modifier = Modifier.fillMaxWidth()) {
-                        Text(collection.name, modifier = Modifier.fillMaxWidth())
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(enabled = name.isNotBlank(), onClick = { onPick(name.trim()) }) { Text("Add") }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
-    )
-}
-
-@Composable
-private fun TagDialog(onDismiss: () -> Unit, onApply: (String) -> Unit) {
-    var name by remember { mutableStateOf("") }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Tag") },
-        text = {
-            OutlinedTextField(
-                value = name,
-                onValueChange = { name = it },
-                label = { Text("Tag name") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth()
-            )
-        },
-        confirmButton = {
-            TextButton(enabled = name.isNotBlank(), onClick = { onApply(name.trim()) }) { Text("Add") }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
-    )
 }
 
 @Composable

@@ -1,5 +1,7 @@
 package io.github.cidy02.kudos.account
 
+import androidx.compose.foundation.combinedClickable
+
 import io.github.cidy02.kudos.ui.subject.SubjectWorkCoverCard
 import io.github.cidy02.kudos.library.readingProgressFraction
 import io.github.cidy02.kudos.ui.components.rememberStoredChoice
@@ -671,7 +673,7 @@ private fun MarkedForLaterBrowser(
                         }
                     }
                 } else {
-                    items(section.items, key = { "mfl-${it.id}" }) { work ->
+                    items(section.items, key = { "mfl-${it.remote.id}" }) { work ->
                         MarkedForLaterRow(work, expandAll, palette, onOpenWork,
                             onUnmark = { unmark(work.remote.id) })
                     }
@@ -865,7 +867,7 @@ private fun BookmarksBrowser(
                 )
             }
         } else {
-            items(displayedWorks, key = { "bm-${it.id}" }) { work ->
+            items(displayedWorks, key = { "bm-${it.remote.id}" }) { work ->
                 Column(
                     modifier = Modifier.fillMaxWidth(),
                     verticalArrangement = Arrangement.spacedBy(6.dp)
@@ -1043,7 +1045,7 @@ private fun HistoryBrowser(
                     }
                     if (mode == AccountDisplayMode.Compact) {
                         item(key = "hist-covers-$index") { CompactWorkCovers(group.items, onOpenWork) }
-                    } else items(group.items, key = { "hist-${it.id}" }) { work ->
+                    } else items(group.items, key = { "hist-${it.remote.id}" }) { work ->
                         val reading = readingsByWorkId[work.remote.id]
                         PairedWorkRow(
                             work = work, expandAll = expandAll, onOpenWork = onOpenWork, ledger = mode.ledger,
@@ -1326,7 +1328,7 @@ internal fun SubscriptionsBrowser(
                     item {
                         SectionRuleHeader(title = "New since you last looked", count = updatedWorks.size)
                     }
-                    items(updatedWorks, key = { "sub-up-${it.id}" }) { work ->
+                    items(updatedWorks, key = { "sub-up-${it.remote.id}" }) { work ->
                         SubscriptionWorkRow(
                             work = work,
                             expandAll = expandAll,
@@ -1344,7 +1346,7 @@ internal fun SubscriptionsBrowser(
                         item {
                             SectionRuleHeader(title = "All works", count = otherWorks.size)
                         }
-                        items(otherWorks, key = { "sub-all-${it.id}" }) { work ->
+                        items(otherWorks, key = { "sub-all-${it.remote.id}" }) { work ->
                             SubscriptionWorkRow(
                                 work = work,
                                 expandAll = expandAll,
@@ -1358,7 +1360,7 @@ internal fun SubscriptionsBrowser(
                         }
                     }
                 } else {
-                    items(displayedWorks, key = { "sub-${it.id}" }) { work ->
+                    items(displayedWorks, key = { "sub-${it.remote.id}" }) { work ->
                         SubscriptionWorkRow(
                             work = work,
                             expandAll = expandAll,
@@ -1601,7 +1603,7 @@ private fun GenericAccountWorksBrowser(
 
         if (mode == AccountDisplayMode.Compact) {
             item(key = "gen-covers") { CompactWorkCovers(works, onOpenWork) }
-        } else items(works, key = { "gen-${it.id}" }) { work ->
+        } else items(works, key = { "gen-${it.remote.id}" }) { work ->
             PairedWorkRow(work = work, expandAll = expandAll, onOpenWork = onOpenWork, ledger = mode.ledger)
         }
 
@@ -1640,7 +1642,16 @@ private fun CompactWorkCovers(
             val local = work.local
             val obscured = local != null && privacy.isObscured(local)
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Box(
+                val environment = io.github.cidy02.kudos.ui.components.LocalWorkRowEnvironment.current
+                if (environment != null) {
+                    io.github.cidy02.kudos.ui.components.RemoteWorkActionFrame(work.remote, environment, onOpenWork) {
+                        matched, hidden, click, longClick ->
+                        Box(Modifier.combinedClickable(onClick = click, onLongClick = longClick)) {
+                            SubjectWorkCoverCard(work = matched ?: work.remote.coverFace(), obscured = hidden,
+                                downloading = false, progress = matched?.readingProgressFraction())
+                        }
+                    }
+                } else Box(
                     Modifier.clickable(onClickLabel = if (obscured) "reveal this work" else "open this work") {
                         if (obscured && local != null) privacy.reveal(local) else onOpenWork(work.remote)
                     }
@@ -1724,6 +1735,14 @@ private fun PairedWorkRow(
     /** Drawn last inside the ledger card; told whether the row is blurred. */
     footer: (@Composable (obscured: Boolean) -> Unit)? = null
 ) {
+    val environment = io.github.cidy02.kudos.ui.components.LocalWorkRowEnvironment.current
+    if (environment != null) {
+        val matched = environment.index.findMatch(work.remote)
+        val obscured = matched != null && environment.visibility(matched) == LibraryPrivacyVisibility.Obscured
+        EnrichingWorkRow(work.remote, expandAll, onOpenWork, ledger, bookmark,
+            footer = footer?.let { { it(obscured) } })
+        return
+    }
     val local = work.local
     if (local != null) {
         val privacy = LocalPairedRowPrivacy.current
@@ -1766,9 +1785,10 @@ private fun EnrichingWorkRow(
             ?.container?.sparseWorkEnricher
     }
     var enriched by remember(work.id) { mutableStateOf<AO3WorkSummary?>(null) }
+    val local = io.github.cidy02.kudos.ui.components.LocalWorkRowEnvironment.current?.index?.findMatch(work)
 
-    LaunchedEffect(work.id) {
-        enriched = enricher?.enrich(work)
+    LaunchedEffect(work.id, local?.id) {
+        enriched = if (local == null) enricher?.enrich(work) else null
     }
 
     SensitiveWorkRow(

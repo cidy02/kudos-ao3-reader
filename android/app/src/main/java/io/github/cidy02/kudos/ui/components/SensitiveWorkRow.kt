@@ -471,7 +471,11 @@ fun SensitiveWorkRow(
  * "Private" beside the kicker, the bookmark's own note and tags where the work's summary and
  * tags would be, and the day it was bookmarked closing the line of figures.
  */
-class LedgerBookmark(val badges: List<String>, val date: String, val footnote: @Composable () -> Unit)
+class LedgerBookmark(
+    val badges: List<String>, val date: String,
+    val localFootnote: (@Composable () -> Unit)? = null,
+    val footnote: @Composable () -> Unit
+)
 
 /**
  * iOS `AO3WorkRow.searchLedgerCard`, which Search, Browse and the AO3 lists draw: the fandom
@@ -663,60 +667,78 @@ fun SensitiveWorkRow(
     ledger: Boolean = false,
     bookmark: LedgerBookmark? = null,
     footer: (@Composable () -> Unit)? = null,
-    figuresIncludePerformance: Boolean = true
+    figuresIncludePerformance: Boolean = true,
+    selecting: Boolean = false,
+    selected: Boolean = false
 ) {
-    var showMenu by remember { mutableStateOf(false) }
-    
-    Box(modifier = modifier) {
-        SensitiveWorkRow(
-            id = work.id.toString(),
-            title = work.title,
-            author = work.authorText,
-            authorIdentities = work.authorIdentitiesJSON, authorNames = work.authors,
-            fandoms = work.fandoms.filter { it.isNotBlank() },
-            summary = work.summary,
-            discoveryTags = (work.relationships + work.characters + work.freeforms).filter { it.isNotBlank() },
-            relationships = work.relationships.filter { it.isNotBlank() },
-            characters = work.characters.filter { it.isNotBlank() },
-            freeforms = work.freeforms.filter { it.isNotBlank() },
-            warnings = work.warnings,
-            categories = work.categories,
-            rating = work.rating,
-            isComplete = work.isComplete,
-            wordCount = work.wordCount,
-            chapters = work.chapters,
-            kudos = work.kudos,
-            comments = work.comments,
-            bookmarks = work.bookmarks,
-            hits = work.hits,
-            language = work.language,
-            expandAll = expandAll,
-            ledger = ledger,
-            dateText = work.updatedDate,
-            bookmark = bookmark,
-            footer = footer,
-            showsStatusTray = true,
-            figuresIncludePerformance = figuresIncludePerformance,
-            onClick = { onOpenWork(work) },
-            onTagClick = onTagClick,
-            onTagSearch = onTagSearch,
-            onLongClick = onLongClick ?: { showMenu = true }
-        )
-        
-        DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
-            DropdownMenuItem(
-                text = { Text("Open Work") },
-                onClick = {
-                    showMenu = false
-                    onOpenWork(work)
-                }
+    val environment = LocalWorkRowEnvironment.current
+    val row: @Composable (SavedWork?, Boolean, () -> Unit, () -> Unit) -> Unit = { local, obscured, click, longClick ->
+        if (local != null) {
+            Column {
+                SensitiveWorkRow(work = local, onOpenWork = { click() }, expandAll = expandAll,
+                    ledger = ledger, obscured = obscured, onReveal = click,
+                    onLongClick = longClick, onTagClick = onTagClick, onTagSearch = onTagSearch,
+                    footer = footer)
+                if (bookmark != null && !obscured) (bookmark.localFootnote ?: bookmark.footnote).invoke()
+            }
+        } else {
+            SensitiveWorkRow(
+                id = work.id.toString(),
+                title = work.title,
+                author = work.authorText,
+                authorIdentities = work.authorIdentitiesJSON, authorNames = work.authors,
+                fandoms = work.fandoms.filter { it.isNotBlank() },
+                summary = work.summary,
+                discoveryTags = (work.relationships + work.characters + work.freeforms).filter { it.isNotBlank() },
+                relationships = work.relationships.filter { it.isNotBlank() },
+                characters = work.characters.filter { it.isNotBlank() },
+                freeforms = work.freeforms.filter { it.isNotBlank() },
+                warnings = work.warnings,
+                categories = work.categories,
+                rating = work.rating,
+                isComplete = work.isComplete,
+                wordCount = work.wordCount,
+                chapters = work.chapters,
+                kudos = work.kudos,
+                comments = work.comments,
+                bookmarks = work.bookmarks,
+                hits = work.hits,
+                language = work.language,
+                expandAll = expandAll,
+                ledger = ledger,
+                dateText = work.updatedDate,
+                bookmark = bookmark,
+                footer = footer,
+                showsStatusTray = true,
+                figuresIncludePerformance = figuresIncludePerformance,
+                selecting = selecting,
+                selected = selected,
+                onClick = click,
+                onSelect = { onOpenWork(work) },
+                onTagClick = onTagClick,
+                onTagSearch = onTagSearch,
+                onLongClick = onLongClick ?: longClick
             )
-            DropdownMenuItem(
-                text = { Text("Copy Link") },
-                onClick = {
+        }
+    }
+    Box(modifier) {
+        if (selecting) {
+            row(null, false, { onOpenWork(work) }, {})
+        } else if (environment != null) {
+            RemoteWorkActionFrame(work, environment, onOpenWork, content = row)
+        } else {
+            var showMenu by remember(work.id) { mutableStateOf(false) }
+            val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
+            row(null, false, { onOpenWork(work) }, { showMenu = true })
+            DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+                DropdownMenuItem(text = { Text("Open Work") }, onClick = {
+                    showMenu = false; onOpenWork(work)
+                })
+                DropdownMenuItem(text = { Text("Copy Link") }, onClick = {
                     showMenu = false
-                }
-            )
+                    clipboard.setText(androidx.compose.ui.text.AnnotatedString(work.workUrl))
+                })
+            }
         }
     }
 }

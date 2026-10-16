@@ -111,7 +111,7 @@ class OwnWorksScreenTest {
         val opening = requests.size
         compose.onNodeWithContentDescription("Select Works").performClick()
         compose.onNodeWithText("Delete").assertIsNotEnabled()
-        compose.onNodeWithContentDescription("Select $title").performClick()
+        compose.onNodeWithText(title).performClick() // the card selects (A63: no separate Select button)
         compose.onNodeWithText("Delete").performClick()
         compose.onNodeWithText("Delete “$title”?").assertExists()
         compose.onNodeWithText("Cancel").performClick()
@@ -135,7 +135,7 @@ class OwnWorksScreenTest {
         show(); idleRequests(3)
         val dashboard = requests[0]; val works = requests[1]
         compose.onNodeWithContentDescription("Select Works").performClick()
-        compose.onNodeWithContentDescription("Select $title").performClick()
+        compose.onNodeWithText(title).performClick() // the card selects (A63: no separate Select button)
         compose.onNodeWithText("Edit 1").performClick()
         compose.waitUntil(15_000) { compose.onAllNodesWithContentDescription("Save").fetchSemanticsNodes().isNotEmpty() }
         compose.onNode(hasScrollAction()).performScrollToNode(hasText("Add co-creators"))
