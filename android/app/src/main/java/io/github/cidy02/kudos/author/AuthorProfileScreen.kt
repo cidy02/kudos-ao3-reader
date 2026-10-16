@@ -400,7 +400,7 @@ fun AuthorProfileScreen(
     if (row != null && workFormRepository != null && authRepository != null && seriesWrites != null) {
         WritingOwnWorkScreen(row.first, row.second, workFormRepository, authRepository, seriesWrites,
             autocompleteRepository, settingsRepository, onBack = { rowAction = null },
-            onChanged = { reloadAfterWorksWrite() }, seriesRepository = seriesFormRepository)
+            onChanged = { reloadAfterWorksWrite() }, seriesRepository = seriesFormRepository, loadedWorks = works?.works.orEmpty())
         return
     }
 
@@ -946,6 +946,11 @@ fun AuthorProfileScreen(
                                         fontSize = 11.5.sp, lineHeight = 17.sp)
                                 } else item { EmptyStateCard("No series", "No series by this author are visible to you on AO3.") }
                             } else {
+                                val tally = seriesTallyParts(pageData.series, pageData.totalPages > 1)
+                                if (tally.isNotEmpty()) item {
+                                    Text(tally.joinToString(" · "), color = tokens.secondaryInk,
+                                        fontSize = 12.sp, lineHeight = 18.sp)
+                                }
                                 items(pageData.series, key = { it.id }) { s ->
                                     val canEdit = io.github.cidy02.kudos.network.ao3.author.isSeriesCreator(s.creatorUsernames, signedInUsername) &&
                                         seriesFormRepository != null && seriesWrites != null
@@ -1143,4 +1148,22 @@ private fun DashboardSeeAll(what: String, onClick: () -> Unit) {
     TextButton(onClick = onClick) {
         Text("See all $what", color = LocalKudosTokens.current.scopePalette.accent, fontWeight = FontWeight.Medium)
     }
+}
+
+/** iOS AuthorProfileView.seriesTallyParts; sums apply only to the displayed series page. */
+internal fun seriesTallyParts(
+    series: List<io.github.cidy02.kudos.network.ao3.author.AO3AuthorSeriesSummary>, isPartial: Boolean
+): List<String> {
+    fun count(value: Long) = String.format(java.util.Locale.US, "%,d", value)
+    val parts = buildList {
+        val works = series.mapNotNull { it.workCount }
+        if (works.isNotEmpty()) {
+            val total = works.sumOf { it.toLong() }
+            add("${count(total)} ${if (total == 1L) "work" else "works"}")
+        }
+        val words = series.mapNotNull { it.words }
+        if (words.isNotEmpty()) add("${count(words.sumOf { it.toLong() })} words")
+    }
+    return if (isPartial && parts.isNotEmpty())
+        listOf("${parts.joinToString(", ")} in the ${count(series.size.toLong())} loaded series") else parts
 }

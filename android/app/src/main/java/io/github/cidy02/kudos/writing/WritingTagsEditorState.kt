@@ -28,6 +28,23 @@ internal enum class WritingTagKind(val title: String, val endpoint: String) {
     }
 }
 
+/** iOS WritingOtherWorkTags: only the works already handed to this opening, no repository read. */
+internal fun otherWorkTagNames(
+    kind: WritingTagKind,
+    works: List<io.github.cidy02.kudos.network.ao3.search.AO3WorkSummary>,
+    chosen: List<String>, excludingWorkID: Long?
+): List<String> {
+    val seen = chosen.map { trimWritingTag(it).lowercase(java.util.Locale.ROOT) }.toMutableSet()
+    return works.filter { it.id != excludingWorkID }.flatMap { work ->
+        when (kind) {
+            WritingTagKind.Fandom -> work.fandoms
+            WritingTagKind.Character -> work.characters
+            WritingTagKind.Relationship -> work.relationships
+            WritingTagKind.Freeform -> work.freeforms
+        }
+    }.map(::trimWritingTag).filter { it.isNotEmpty() && seen.add(it.lowercase(java.util.Locale.ROOT)) }
+}
+
 internal const val WritingTagOffer = "AO3 offers its canonical tags as you type"
 internal const val WritingTagFootnote = "AO3 suggests only its canonical tags and doesn't provide work counts here. " +
     "You can still post a tag exactly as you type it, which is how new tags are created."

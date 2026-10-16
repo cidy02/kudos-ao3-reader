@@ -89,8 +89,19 @@ class ReaderSettingsMapper(private val baseFontPt: Double = DEFAULT_BASE_FONT_PT
         customFonts: List<CustomFont>,
         fontPathResolver: ((String) -> String?)?
     ): List<CustomFontDeclaration> {
-        if (fontPathResolver == null) return emptyList()
+        val builtIn = when (selectedFontId.lowercase()) {
+            "nyserif" -> CustomFontDeclaration("nyserif", alternates = listOf("New York", "ui-serif", "Georgia", "serif"))
+            "georgia" -> CustomFontDeclaration("georgia", alternates = listOf("Georgia", "serif"))
+            "palatino" -> CustomFontDeclaration("palatino", alternates = listOf("Palatino", "serif"))
+            "times" -> CustomFontDeclaration("times", alternates = listOf("Times New Roman", "serif"))
+            "helvetica" -> CustomFontDeclaration("helvetica", alternates = listOf("Helvetica Neue", "sans-serif"))
+            "avenir" -> CustomFontDeclaration("avenir", alternates = listOf("Avenir", "sans-serif"))
+            "menlo" -> CustomFontDeclaration("menlo", alternates = listOf("Menlo", "monospace"))
+            else -> null
+        }
+        if (fontPathResolver == null) return listOfNotNull(builtIn)
         val declarations = mutableListOf<CustomFontDeclaration>()
+        builtIn?.let(declarations::add)
         val registeredFontIds = mutableSetOf<String>()
 
         for (font in customFonts) {
@@ -98,7 +109,7 @@ class ReaderSettingsMapper(private val baseFontPt: Double = DEFAULT_BASE_FONT_PT
             val decl = CustomFontDeclaration(
                 fontFamily = font.selectionId,
                 fontPath = path,
-                alternates = listOf(font.name, font.fileName).filter { it.isNotBlank() && it != font.selectionId }
+                alternates = listOf("serif")
             )
             declarations.add(decl)
             registeredFontIds.add(font.selectionId)
@@ -112,7 +123,7 @@ class ReaderSettingsMapper(private val baseFontPt: Double = DEFAULT_BASE_FONT_PT
                     CustomFontDeclaration(
                         fontFamily = selectedFontId,
                         fontPath = path,
-                        alternates = listOf(fileName)
+                        alternates = listOf("serif")
                     )
                 )
             }

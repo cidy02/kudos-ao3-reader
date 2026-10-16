@@ -14,6 +14,19 @@ import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class WritingTagsEditorStateTest {
+    // iOS WritingTagPickerTests.fromYourOtherWorksMakesNoRequest: pure loaded snapshots only.
+    @Test fun otherWorksOfferDistinctUnchosenTagsAndExcludeTheCurrentWork() {
+        fun work(id: Long, fandoms: List<String>, freeforms: List<String>) =
+            io.github.cidy02.kudos.network.ao3.search.AO3WorkSummary(id = id, title = "Work", authors = listOf("Writer"),
+                fandoms = fandoms, freeforms = freeforms, rating = "", warnings = emptyList(), categories = emptyList())
+        val works = listOf(work(1, listOf("Naruto", " ", "Naruto"), listOf("Fluff")),
+            work(2, listOf("Bleach", "Naruto"), listOf("fluff", "Angst")))
+        assertEquals(listOf("Bleach"), otherWorkTagNames(WritingTagKind.Fandom, works, listOf("naruto"), null))
+        assertEquals(listOf("Naruto"), otherWorkTagNames(WritingTagKind.Fandom, works, emptyList(), 2))
+        assertEquals(listOf("Fluff", "Angst"), otherWorkTagNames(WritingTagKind.Freeform, works, emptyList(), null))
+        assertTrue(otherWorkTagNames(WritingTagKind.Relationship, emptyList(), emptyList(), null).isEmpty())
+    }
+
     @Test fun canonicalAndCountSurviveTheReadCacheAndChosenFiltering() = runTest {
         val client = object : AO3Client {
             var reads = 0

@@ -14,17 +14,18 @@ import kotlinx.coroutines.launch
 internal fun WritingOwnWorkScreen(work: AO3WorkSummary, action: String, repository: AO3WorkFormRepository,
     auth: AO3AuthRepository, writes: AO3WriteRepository, autocomplete: AO3TagAutocompleteRepository?,
     settings: SettingsRepository?, onBack: () -> Unit, onChanged: () -> Unit,
-    seriesRepository: io.github.cidy02.kudos.network.ao3.writing.AO3SeriesFormRepository? = null) {
+    seriesRepository: io.github.cidy02.kudos.network.ao3.writing.AO3SeriesFormRepository? = null,
+    loadedWorks: List<AO3WorkSummary> = emptyList()) {
     val scope = rememberCoroutineScope()
     when (action) {
         // A save, a post or a delete AO3 confirmed: the list this was opened from is read again. It
         // went back to the list as it stood, with the old title or a work that no longer exists (the
         // fault found on iOS as T-379; only the chapter form told the list).
         "edit" -> WritingWorkFormScreen(work.id, repository, auth, onBack, autocomplete, settings, writes,
-            onSaved = { onChanged(); onBack() }, seriesRepository = seriesRepository)
+            onSaved = { onChanged(); onBack() }, seriesRepository = seriesRepository, loadedWorks = loadedWorks)
         "tags" -> {
             val model = remember(work.id, action) { WritingWorkFormState(work.id, repository, auth, writes, editTagsOnly = true) }
-            WritingEditTagsScreen(model, work.title, autocomplete, settings, onBack, onSave = {
+            WritingEditTagsScreen(model, work.title, autocomplete, settings, onBack, loadedWorks = loadedWorks, onSave = {
                 scope.launch { model.save(); if (model.state.value.saved) { onChanged(); onBack() } }
             })
         }

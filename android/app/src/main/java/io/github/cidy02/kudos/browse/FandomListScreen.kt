@@ -78,6 +78,7 @@ fun FandomListScreen(
     // Not a work Hide Mature hides (audit A38).
     val shownWorks = io.github.cidy02.kudos.library.rememberShownWorks(libraryWorks, settingsRepository, privacyGate)
     val library = remember(shownWorks) { FandomLibraryIndex.from(shownWorks) }
+    val exactCounts by repository.exactFamilyCounts.totals.collectAsState()
     val source = (phase as? FandomListPhase.Loaded)?.fandoms.orEmpty()
 
     fun webFallback() {
@@ -101,10 +102,11 @@ fun FandomListScreen(
 
     LaunchedEffect(category.name) { loadNow() }
 
-    LaunchedEffect(source, groupsVariants) {
+    LaunchedEffect(source, groupsVariants, exactCounts) {
         if (phase !is FandomListPhase.Loaded) return@LaunchedEffect
         families = withContext(Dispatchers.Default) {
-            if (groupsVariants) FandomFamily.grouped(source) else FandomFamily.ungrouped(source)
+            (if (groupsVariants) FandomFamily.grouped(source) else FandomFamily.ungrouped(source))
+                .map { it.copy(exactWorkCount = exactCounts[it.id]) }
         }
     }
 

@@ -2220,3 +2220,16 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   message, with the web view's login cookies cleared; it was an exception out of the login
   screen that could crash the app. A61 (Codex) settled 181 unsure rows: 80 kept, 19 fixed
   since, 25 not applicable, 57 missing in 31 items. Reverse: the commit that names A61 #1.
+- **2026-10-16 · Brief 3fo, first part (Codex to its usage limit; reviewed, corrected and gated
+  by Claude).** A61 #4 (a collection's staged items survive leaving and returning; a cancelled
+  load restarts without dropping drafts), #6 (PDF imports drop running headers, page numbers
+  and the echoed title, and rejoin split words), #7 (a PDF import is refused when MuPDF cannot
+  read it, instead of scraping every parenthesised string), #8, #10 (restored works are
+  reindexed after their tags are attached), #13 to #20, #23, #24. Claude's corrections:
+  #10's test assumed a merge takes the backup's tags for an existing work (it keeps the
+  local ones, as iOS); rewritten. #15 sent a tag link with a query or sub-listing to the
+  phone's browser, which an earlier fix had stopped for AO3 links (the demo would reach AO3);
+  every AO3 page without a native screen now opens in the app's own web view, which the demo
+  answers locally. #24's sweep swallowed cancellation and returned as if done; it propagates
+  now. Deferred by Codex: #9 (Readium gives no visible-spread range), #21 (Read Aloud has no
+  position seek). Left for its next run: #25 to #31. Reverse: the commit that names 3fo.

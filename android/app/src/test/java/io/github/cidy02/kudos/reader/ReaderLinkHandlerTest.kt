@@ -52,11 +52,23 @@ class ReaderLinkHandlerTest {
     @Test
     fun onlyThePathNamesThePage() {
         // A query or fragment named another page, or became part of the tag (A49 F5).
-        assertEquals(ReaderLinkDestination.TagSearch("Fluff"),
+        assertEquals(ReaderLinkDestination.AO3Page("https://archiveofourown.org/tags/Fluff/works?next=/works/123"),
             handler.classify("https://archiveofourown.org/tags/Fluff?next=/works/123"))
         assertEquals(ReaderLinkDestination.TagSearch("Fluff"), handler.classify("https://archiveofourown.org/tags/Fluff#top"))
         assertEquals(ReaderLinkDestination.WorkDetail(123L),
             handler.classify("https://archiveofourown.org/collections/winter/works/123"))
+    }
+
+    // iOS TagWorksRequestTests: preserve another sublisting, query, raw AO3 escapes and trailing slash.
+    @Test fun tagQueriesAndOtherListingsKeepTheirExactDestination() {
+        val bookmarks = "https://archiveofourown.org/tags/Fluff/bookmarks?page=2"
+        assertEquals(ReaderLinkDestination.AO3Page(bookmarks), handler.classify(bookmarks))
+        assertEquals(ReaderLinkDestination.AO3Page("https://archiveofourown.org/tags/Naruto%20*a*%20Manga/works?page=2"),
+            handler.classify("https://archiveofourown.org/tags/Naruto%20*a*%20Manga/?page=2"))
+        val works = "https://archiveofourown.org/tags/Fluff/works?page=2"
+        assertEquals(ReaderLinkDestination.AO3Page(works), handler.classify(works))
+        val privatePage = "https://archiveofourown.org/users/Alice/readings"
+        assertEquals(ReaderLinkDestination.AO3Page(privatePage), handler.classify(privatePage))
     }
 
     @Test

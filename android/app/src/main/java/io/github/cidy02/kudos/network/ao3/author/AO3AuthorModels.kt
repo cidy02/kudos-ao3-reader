@@ -34,11 +34,23 @@ data class AO3AuthorRoute(
         fun fromUrl(href: String): AO3AuthorRoute? {
             val url = io.github.cidy02.kudos.network.ao3.AO3Constants.baseHttpUrl.resolve(href.trim()) ?: return null
             if (!io.github.cidy02.kudos.network.ao3.AO3RedirectCookieRelay.isTrustedUrl(url.toString())) return null
-            val path = url.pathSegments
+            val path = url.pathSegments.filter { it.isNotEmpty() }
             if (path.firstOrNull() != "users") return null
-            val user = path.getOrNull(1)?.takeIf { it.isNotBlank() && !it.equals("orphan_account", true) } ?: return null
-            val pseud = path.getOrNull(3)?.takeIf { path.getOrNull(2) == "pseuds" && it.isNotBlank() }
-            return AO3AuthorRoute(user, pseud)
+            val user = path.getOrNull(1)?.trim()?.takeIf {
+                it.isNotBlank() && it.lowercase(java.util.Locale.ROOT) !in
+                    setOf("orphan_account", "login", "logout", "new", "password")
+            } ?: return null
+            if (path.size == 2) return AO3AuthorRoute(user)
+            if (path[2] == "pseuds") {
+                if (path.size == 3) return AO3AuthorRoute(user)
+                if (path.size == 4 || (path.size == 5 && path[4] in setOf("works", "series", "bookmarks"))) {
+                    val pseud = path[3].trim().takeIf { it.isNotEmpty() } ?: return null
+                    return AO3AuthorRoute(user, pseud)
+                }
+                return null
+            }
+            if (path.size != 3 || path[2] !in setOf("profile", "works", "series", "bookmarks")) return null
+            return AO3AuthorRoute(user)
         }
 
         private val pseudByline = Regex("""^(.+) \(([A-Za-z0-9_]+)\)$""")

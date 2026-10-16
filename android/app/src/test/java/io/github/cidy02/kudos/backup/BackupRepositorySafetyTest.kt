@@ -9,6 +9,7 @@ import io.github.cidy02.kudos.core.model.CustomFont
 import io.github.cidy02.kudos.core.model.SavedWork
 import io.github.cidy02.kudos.data.local.KudosDatabase
 import io.github.cidy02.kudos.data.local.entity.SyncTombstoneEntity
+import io.github.cidy02.kudos.data.local.entity.toDomain
 import io.github.cidy02.kudos.data.local.entity.toEntity
 import io.github.cidy02.kudos.data.preferences.SettingsRepository
 import io.github.cidy02.kudos.files.FileWriteResult
@@ -130,6 +131,31 @@ class BackupRepositorySafetyTest {
         val summary = device.repository.applyMergeResult(merge)
         assertArrayEquals(localBytes, Files.readAllBytes(device.root.resolve("fonts/reader.ttf")))
         assertEquals(1, summary.concurrentRowsDeferred)
+    }
+
+    // iOS WorkSearchIndexTests: restored metadata and user tags are searchable immediately.
+    /**
+     * A61 #10. In a merge an existing work keeps its own tags (the backup's are for new works),
+     * so A carries a local tag its stored index does not have yet, and B arrives with the
+     * backup's. Both are searchable by their tags after the restore.
+     */
+    @Test fun restoreReindexesNewAndAlreadyCurrentWorksAfterAttachingTags() = runTest {
+        val device = device()
+        val indexed = io.github.cidy02.kudos.works.WorkSearchIndex.reindex(work(A, "Local"))
+        device.database.workDao().upsert(indexed.toEntity())
+        val local = io.github.cidy02.kudos.data.local.entity.TagEntity("local-tag", "Wintër Favorites", NOW)
+        device.database.tagDao().upsert(local)
+        device.database.tagDao().addToWork(io.github.cidy02.kudos.data.local.entity.WorkTagCrossRef(A, local.id))
+        val incoming = listOf(work(A, "Local"), work(B, "Heroine"))
+        val pack = KudosBackupPackage(manifest = BackupLibrarySnapshot(works = incoming,
+            userTagsByWorkId = mapOf(B to listOf("Wintër Favorites"))).toV2Manifest(NOW))
+        device.repository.importPackage(pack, BackupImportMode.MERGE)
+        for (id in listOf(A, B)) {
+            val restored = device.database.workDao().getById(id)!!.toDomain()
+            assertEquals(io.github.cidy02.kudos.works.WorkSearchIndex.CURRENT_VERSION, restored.searchIndexVersion)
+            assertTrue(id, io.github.cidy02.kudos.works.WorkSearchIndex.matches(restored, listOf("winter", "favorites")))
+            assertEquals(NOW, restored.lastModifiedAt)
+        }
     }
 
     @Test

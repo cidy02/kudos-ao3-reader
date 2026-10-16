@@ -11,6 +11,22 @@ import org.junit.Test
 /** Port of `KudosTests/FandomFamilyTests` and the fandom-list tally cases. */
 class FandomFamilyTest {
 
+    // iOS exactCountCacheIsKeyedByFamilyIdNotTitle / eviction / repeated-key assertions.
+    @Test fun exactCountsSurviveFamilyRecreationAndStayBoundedByIdentity() {
+        val cache = FandomFamilyExactCountCache()
+        val id = FandomFamily.id(listOf("Doctor Who (1963)", "Doctor Who (2005)"))
+        cache.store(1500, id)
+        assertEquals(1500, cache.totals.value[FandomFamily.id(listOf("Doctor Who (2005)", "Doctor Who (1963)"))])
+        assertEquals(null, cache.totals.value["Doctor Who"])
+        assertEquals(null, cache.totals.value[FandomFamily.id(listOf("Doctor Who (1996)"))])
+        cache.store(1600, id)
+        assertEquals(1, cache.totals.value.size)
+        for (index in 0 until FandomFamilyExactCountCache.ENTRY_LIMIT + 10) cache.store(index, "family-$index")
+        assertEquals(FandomFamilyExactCountCache.ENTRY_LIMIT, cache.totals.value.size)
+        assertEquals(null, cache.totals.value["family-9"])
+        assertEquals(10, cache.totals.value["family-10"])
+    }
+
     @Test
     fun distinctTitlesStayUngrouped() {
         val families = FandomFamily.grouped(

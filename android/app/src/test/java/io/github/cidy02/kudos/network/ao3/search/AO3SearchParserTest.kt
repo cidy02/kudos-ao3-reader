@@ -11,6 +11,19 @@ import org.junit.Test
 class AO3SearchParserBasicTest {
     private val parser = AO3SearchParser()
 
+    // iOS AO3ClientTests.accountBookmarksPageOfOnlyNonWorkBookmarksIsEmpty.
+    @Test fun bookmarksWithoutPaginationHaveOnePageEvenWhenPageTwoWasRequested() {
+        val html = "<ol class='bookmark index group'><li class='bookmark blurb'><h4 class='heading'>" +
+            "<a href='/series/55'>A Series</a></h4></li></ol>"
+        val parser = AO3SearchParser()
+        val empty = parser.parseWorksListPage(html, 2, "li.bookmark.blurb")
+        assertTrue(empty.works.isEmpty())
+        assertEquals(2, empty.currentPage)
+        assertEquals(1, empty.totalPages)
+        val paged = parser.parseWorksListPage(html + "<ol class='pagination'><li>2</li><li>4</li></ol>", 2, "li.bookmark.blurb")
+        assertEquals(4, paged.totalPages)
+    }
+
     @Test
     fun parsesSearchBlurbFields() {
         val page = parser.parseSearchPage(parserResourceText("ao3/search_basic.html"), page = 1)

@@ -17,6 +17,7 @@ import io.github.cidy02.kudos.files.FontFileStore
 import io.github.cidy02.kudos.files.WorkFileStore
 import io.github.cidy02.kudos.works.WorkIdentityIndex
 import io.github.cidy02.kudos.works.WorkRepository
+import io.github.cidy02.kudos.works.WorkSearchIndex
 import java.io.IOException
 import java.nio.file.Files
 import java.time.Instant
@@ -545,6 +546,12 @@ class BackupRepository(
                     ).also { database.tagDao().upsert(it) }
                 database.tagDao().addToWork(WorkTagCrossRef(workId = workId, tagId = tag.id))
             }
+        }
+
+        // The derived index must include the final metadata and the tags just attached above.
+        snapshot.works.forEach { work ->
+            val tags = database.tagDao().getTagsForWork(work.id).map { it.name }
+            database.workDao().upsert(WorkSearchIndex.reindex(work, tags).toEntity())
         }
 
         if (merge.mode != BackupImportMode.REPLACE_LIBRARY) {
