@@ -2198,3 +2198,10 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   screens are a shade cooler; the washed-card backdrop stays #0B0B0D, as iOS. Not looked at on
   screen: the skeleton and the Dark surfaces. Codex's three write reviews found F1/F2 (landed
   separately). Reverse: the commit that names 3fn.
+- **2026-10-16 · iOS keeps its author-write verdict; Android is stricter (recorded, not
+  changed).** iOS T-417 (`c3eb0bc8`/`04543763`) ports the 307/308 fix. iOS's author Subscribe,
+  Mute and Block still count any 200–399 without an error flash as done
+  (`AO3AuthorProfileService.swift:970`); Android now needs AO3's notice (`42155cc1`). The
+  binding policy doesn't require the notice for these writes, and iOS's demo answers them
+  with plain fixture pages, so tightening iOS would also need demo answers. Left as a known
+  difference; revisit if a real AO3 answer is ever seen without the notice.
