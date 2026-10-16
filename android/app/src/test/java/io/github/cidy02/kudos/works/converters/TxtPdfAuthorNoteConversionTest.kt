@@ -107,28 +107,30 @@ class TxtPdfAuthorNoteConversionTest {
         assertFalse(body.contains("<aside"))
     }
 
-    @Test
-    fun pdfConvertUsesDetectorOnExtractedLiterals() = kotlinx.coroutines.test.runTest {
-        // Minimal uncompressed PDF-ish payload: a text object with two literals.
-        val pdf = """
-            %PDF-1.1
-            1 0 obj<<>>endobj
-            2 0 obj<< /Length 80 >>stream
-            BT (A/N: note from pdf.) Tj (The story continues here without apparatus.) Tj ET
-            endstream
-            endobj
-        """.trimIndent().toByteArray(Charsets.ISO_8859_1)
+    @Test fun pdfParagraphsUseTheAuthorNoteDetector() {
+        val body = PDFWorkConverter().body("PDF Work", listOf(listOf(
+            "A/N: note from pdf.", "The story continues here without apparatus.")))
+        assertTrue(body.contains("author-note"))
+        assertTrue(body.contains("note from pdf"))
+    }
 
-        val paragraphs = PDFWorkConverter().extractParagraphs(pdf)
-        assertNotNull(paragraphs)
-        assertTrue(paragraphs!!.any { it.contains("A/N:") })
+    // iOS PDFWorkConverterTests: dropsRunningHeadersAndPageNumbers, dehyphenatesWordsBrokenAcrossLines,
+    // and theTitleIsNotRepeatedAsTheFirstParagraph.
+    @Test fun pdfDropsRunningHeadersPageNumbersAndOpeningTitleEcho() {
+        val converter = PDFWorkConverter()
+        val pages = (1..6).map { listOf("A Rescued Fic", "Body text for page $it of the story.", "$it") }
+        val body = converter.body("Story", pages)
+        assertTrue(body.contains("Body text for page 1 of the story."))
+        assertFalse(body.contains("<p>A Rescued Fic</p>"))
+        assertFalse(body.contains("<p>3</p>"))
+        val titled = converter.body("Traveling Sword", listOf(listOf("Traveling Sword", "The story itself starts here.")))
+        assertFalse(titled.contains("<p>Traveling Sword</p>"))
+        assertTrue(titled.contains("The story itself starts here"))
+    }
 
-        val epub = PDFWorkConverter().convert("PDF Work", pdf)
-        assertNotNull(epub)
-        val chapter = readZipEntry(epub!!, "OEBPS/content.html")?.toString(Charsets.UTF_8)
-        assertNotNull(chapter)
-        assertTrue(chapter!!.contains("author-note"))
-        assertTrue(chapter.contains("note from pdf"))
+    @Test fun pdfRejoinsWordsAcrossWrappedLines() {
+        val body = PDFWorkConverter().body("Story", listOf(listOf("The corridor was unremark-\nable in every way.")))
+        assertTrue(body.contains("unremarkable in every way."))
     }
 
     private fun assertEqualsOneAside(body: String) {

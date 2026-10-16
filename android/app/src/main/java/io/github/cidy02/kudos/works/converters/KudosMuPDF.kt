@@ -21,8 +21,8 @@ object KudosMuPDF {
     /**
      * One entry per page, each holding that page's paragraphs in reading order.
      *
-     * A paragraph is one MuPDF structured-text *block*, its lines joined with a
-     * single space — those lines are wrapped display lines, not sentences.
+     * A paragraph is one MuPDF structured-text block, retaining newline seams so
+     * PDFWorkConverter can rejoin split hyphenated words before reflowing lines.
      *
      * Null when the document can't be opened, so the caller can fall back.
      */

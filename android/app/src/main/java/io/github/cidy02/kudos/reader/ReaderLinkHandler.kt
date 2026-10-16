@@ -14,6 +14,13 @@ sealed interface ReaderLinkDestination {
     /** An AO3 user or pseud link -> the author's page. */
     data class Author(val username: String) : ReaderLinkDestination
 
+    /**
+     * Any other AO3 page (a tag's bookmarks, a listing with a query) -> the app's own web view,
+     * which keeps the exact address and, in the demo, answers it locally. The phone's browser
+     * would leave the app and, in the demo, reach AO3.
+     */
+    data class AO3Page(val url: String) : ReaderLinkDestination
+
     /** Any other absolute URL -> open externally (browser/custom tab/intent). */
     data class External(val url: String) : ReaderLinkDestination
 
@@ -33,16 +40,32 @@ class ReaderLinkHandler {
         if (url.isAo3Url()) {
             // From the path alone: a query or fragment ("?next=/works/123", "#top") named a
             // different page or became part of a tag (A49 F5).
-            val path = runCatching { URI(url).rawPath }.getOrNull().orEmpty()
+            val uri = runCatching { URI(url) }.getOrNull() ?: return ReaderLinkDestination.Unhandled
+            val path = uri.rawPath.orEmpty()
                 .split('/').filter { it.isNotEmpty() }.map(::decode)
             when (path.firstOrNull()) {
-                "users" -> path.getOrNull(1)?.takeIf { it.isNotBlank() }?.let { return ReaderLinkDestination.Author(it) }
-                "tags" -> path.getOrNull(1)?.let(::unmunge)?.takeIf { it.isNotBlank() }
-                    ?.let { return ReaderLinkDestination.TagSearch(it) }
+                "users" -> io.github.cidy02.kudos.network.ao3.author.AO3AuthorRoute.fromUrl(url)
+                    ?.let { return ReaderLinkDestination.Author(it.username) }
+                "tags" -> {
+                    val tag = path.getOrNull(1)?.let(::unmunge)?.takeIf { it.isNotBlank() }
+                    if (tag != null) {
+                        // The native tag screen has no query/sublisting contract. Keep these
+                        // links intact rather than silently changing what AO3 serves.
+                        if (path.size > 2 && (path.size != 3 || path[2] != "works"))
+                            return ReaderLinkDestination.AO3Page(url)
+                        if (uri.rawQuery != null) {
+                            val listing = if (path.size == 2) url.substringBefore('?').trimEnd('/') + "/works?" +
+                                url.substringAfter('?') else url
+                            return ReaderLinkDestination.AO3Page(listing)
+                        }
+                        return ReaderLinkDestination.TagSearch(tag)
+                    }
+                }
             }
             // A work anywhere in the path ("/collections/x/works/123", "/works/1/chapters/2").
             path.indexOf("works").takeIf { it >= 0 }?.let { path.getOrNull(it + 1)?.toLongOrNull() }
                 ?.let { return ReaderLinkDestination.WorkDetail(it) }
+            return ReaderLinkDestination.AO3Page(url)
         }
 
         return if (url.startsWith("http://", true) || url.startsWith("https://", true)) {

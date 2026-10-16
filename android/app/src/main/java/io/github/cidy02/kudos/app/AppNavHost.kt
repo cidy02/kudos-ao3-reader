@@ -1127,6 +1127,7 @@ fun AppNavHost(
                                 navigateToWorkDetail(WorkDetailSource.Ao3WorkId(destination.workId))
                             is ReaderLinkDestination.TagSearch -> navController.navigate(Routes.tagWorks(destination.tag))
                             is ReaderLinkDestination.Author -> navController.navigate(Routes.authorProfile(destination.username))
+                            is ReaderLinkDestination.AO3Page -> navController.navigate(Routes.webFallback(destination.url))
                             else -> Unit
                         }
                     }

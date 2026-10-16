@@ -377,3 +377,18 @@ object FandomFamilyFilters {
         return true
     }
 }
+
+/** iOS FandomFamilyExactCountCache: bounded by insertion order, keyed by raw-name family identity. */
+class FandomFamilyExactCountCache {
+    private val mutableTotals = kotlinx.coroutines.flow.MutableStateFlow<Map<String, Int>>(emptyMap())
+    val totals: kotlinx.coroutines.flow.StateFlow<Map<String, Int>> = mutableTotals
+
+    @Synchronized fun store(total: Int, familyId: String) {
+        val updated = LinkedHashMap(mutableTotals.value)
+        updated[familyId] = total
+        while (updated.size > ENTRY_LIMIT) updated.remove(updated.keys.first())
+        mutableTotals.value = updated
+    }
+
+    companion object { const val ENTRY_LIMIT = 128 }
+}

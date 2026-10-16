@@ -6,6 +6,17 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 
 class AO3AuthorUrlsTest {
+    // iOS AO3AuthorRoute.init(url:): reserved routes and private/extra tails stay web destinations.
+    @Test fun authorIdentityAcceptsOnlyAuthorProfileRoutes() {
+        for (tail in listOf("login", "logout", "new", "password", "Alice/readings", "Alice/preferences",
+            "Alice/works/extra", "Alice/pseuds/Pen/readings", "Alice/pseuds/Pen/works/extra")) {
+            assertNull(tail, AO3AuthorRoute.fromUrl("/users/$tail"))
+        }
+        assertEquals(AO3AuthorRoute("Alice"), AO3AuthorRoute.fromUrl("/users/Alice/pseuds"))
+        assertEquals(AO3AuthorRoute("Alice", "Pen Name"), AO3AuthorRoute.fromUrl("/users/Alice/pseuds/Pen%20Name/works"))
+        assertEquals(AO3AuthorRoute("Alice"), AO3AuthorRoute.fromUrl("/users/Alice/bookmarks"))
+    }
+
     @Test
     fun worksSearchUrlUsesCreatorsQueryAndPage() {
         val url = AO3AuthorUrls.worksSearchUrl("Alice Writer", page = 2)!!.toHttpUrl()

@@ -64,31 +64,21 @@ class ImportedFileFormatTest {
     private fun converter() = PDFWorkConverter(Files.createTempDirectory("kudos-pdf-tests").toFile())
 
     @Test
-    fun `without the native MuPDF library only uncompressed pdf text converts`() = runTest {
+    fun `without native MuPDF both text literals and metadata are refused`() = runTest {
         // KudosMuPDF.isAvailable is always false here: this is a plain JVM unit
         // test, and libkudosmupdf.so is an Android .so the JVM can't load. That's
-        // exactly the "checkout hasn't run build-mupdf.sh" case: PDFWorkConverter
-        // reads literals from an uncompressed stream and refuses anything
-        // compressed rather than guessing.
+        // exactly the checkout-without-MuPDF case: no guessed prose is imported.
         assertFalse(
             "expected native MuPDF to be unavailable in a JVM unit test",
             KudosMuPDF.isAvailable
         )
         val plain = "%PDF-1.4\nBT (Hello there, reader.) Tj ET".toByteArray(Charsets.ISO_8859_1)
-        assertNotNull(converter().convert("Story", plain))
+        assertNull(converter().convert("Story", plain))
+        val metadata = "%PDF-1.4\n<< /Title (Not document prose) /Author (Metadata only) >>".toByteArray()
+        assertNull(converter().convert("Story", metadata))
         val compressed = "%PDF-1.4\n<< /Filter /FlateDecode >> stream (x\u009cË) endstream"
             .toByteArray(Charsets.ISO_8859_1)
         assertNull(converter().convert("Story", compressed))
     }
 
-    @Test
-    fun `uncompressed pdf text still converts when the native library is present`() = runTest {
-        // Only meaningful on a device/emulator with the real .so — see
-        // android/Scripts/build-mupdf.sh. Skips (not fails) under a plain JVM run.
-        assumeTrue(KudosMuPDF.isAvailable)
-        val simple = "%PDF-1.4\nBT (Hello there, reader.) Tj ET".toByteArray(Charsets.ISO_8859_1)
-        val epub = converter().convert("Story", simple)
-        assertNotNull("plain literal text should still be extractable", epub)
-        assertEquals(ImportedFileFormat.EPUB, ImportedFileFormat.sniff(epub!!, "Story.epub"))
-    }
 }

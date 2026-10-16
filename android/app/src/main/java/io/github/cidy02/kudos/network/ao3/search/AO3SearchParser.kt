@@ -40,7 +40,7 @@ class AO3SearchParser {
         return AO3SearchPage(
             works = works,
             currentPage = currentPage,
-            totalPages = parseTotalPages(document, currentPage),
+            totalPages = parseTotalPages(document, if (blurbSelector == "li.bookmark.blurb") 1 else currentPage),
             summary = parseResultSummary(document)
         )
     }

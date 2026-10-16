@@ -65,9 +65,7 @@ object ReadiumSettingsAdapter {
             val family = FontFamily(decl.fontFamily)
             val alternates = decl.alternates.map { FontFamily(it) }
             config.addFontFamilyDeclaration(fontFamily = family, alternates = alternates) {
-                addFontFace {
-                    addSource(decl.fontPath)
-                }
+                decl.fontPath?.let { path -> addFontFace { addSource(path) } }
             }
         }
     }

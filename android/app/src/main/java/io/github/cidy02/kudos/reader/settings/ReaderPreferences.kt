@@ -7,7 +7,7 @@ data class CustomFontDeclaration(
     /** Selection ID or family name, matching [ReaderPreferences.fontFamily] (e.g. "custom:uuid.ttf"). */
     val fontFamily: String,
     /** Absolute path to the font file on disk. */
-    val fontPath: String,
+    val fontPath: String? = null,
     /** Optional alternate font family identifiers (e.g. display name or raw filename). */
     val alternates: List<String> = emptyList()
 )

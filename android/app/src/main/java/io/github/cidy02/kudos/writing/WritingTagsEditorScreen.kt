@@ -67,7 +67,9 @@ internal fun WritingTagsEditorScreen(
     onValues: (List<String>) -> Unit,
     readValues: () -> List<String>,
     recordScope: CoroutineScope,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    loadedWorks: List<io.github.cidy02.kudos.network.ao3.search.AO3WorkSummary> = emptyList(),
+    excludingWorkID: Long? = null
 ) {
     val currentRead by rememberUpdatedState(readValues)
     val currentEdit by rememberUpdatedState(onValues)
@@ -105,7 +107,9 @@ internal fun WritingTagsEditorScreen(
             val width = maxWidth - SubjectMetrics.accountGutter * 2
             val chosenRows = writingChipRows(values, width, chosen = true)
             val recentRows = writingChipRows(recent, width, chosen = false)
-            val suggestionIndex = 2 + chosenRows.size + if (recentRows.isEmpty()) 0 else recentRows.size + 1
+            val otherRows = writingChipRows(otherWorkTagNames(kind, loadedWorks, values, excludingWorkID), width, chosen = false)
+            val localGroups = listOf("From your other works" to otherRows, "Recently used" to recentRows)
+            val suggestionIndex = 2 + chosenRows.size + localGroups.sumOf { (_, rows) -> if (rows.isEmpty()) 0 else rows.size + 1 }
             // Keep the pinned input and the suggestions in the viewport when the
             // keyboard takes space, even if hundreds of chosen chips precede them.
             LaunchedEffect(state.term, hasRows, fieldHeight) {
@@ -144,10 +148,10 @@ internal fun WritingTagsEditorScreen(
                         }
                     }
                 }
-                if (recentRows.isNotEmpty()) {
-                    item { SubjectFieldLabel("Recently used", lineHeight = 15.sp,
+                localGroups.forEach { (title, rows) -> if (rows.isNotEmpty()) {
+                    item { SubjectFieldLabel(title, lineHeight = 15.sp,
                         modifier = Modifier.padding(horizontal = SubjectMetrics.accountGutter).padding(top = 18.dp)) }
-                    itemsIndexed(recentRows) { _, row ->
+                    itemsIndexed(rows) { _, row ->
                         Row(Modifier.fillMaxWidth().padding(horizontal = SubjectMetrics.accountGutter).padding(top = 8.dp),
                             horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             row.forEach { chip ->
@@ -159,7 +163,7 @@ internal fun WritingTagsEditorScreen(
                             }
                         }
                     }
-                }
+                } }
                 if (hasRows) {
                     item { SubjectFieldLabel("Suggestions", lineHeight = 15.sp,
                         modifier = Modifier.padding(horizontal = SubjectMetrics.accountGutter).padding(top = 20.dp, bottom = 8.dp)) }

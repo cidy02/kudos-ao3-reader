@@ -3,6 +3,10 @@ package io.github.cidy02.kudos.works
 import io.github.cidy02.kudos.core.model.SavedWork
 import io.github.cidy02.kudos.network.ao3.AO3Result
 import io.github.cidy02.kudos.network.ao3.work.AO3WorkMetadataRepository
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.withContext
 import java.time.Duration
 import java.time.Instant
 
@@ -31,25 +35,19 @@ class WorkUpdateChecker(
 
         val now = clock()
         for (work in due) {
+            if (!currentCoroutineContext().isActive) break
             val workId = WorkTags.ao3WorkIdFromUrl(work.sourceUrl) ?: continue
-            when (val result = metadataRepository.fetch(workId)) {
-                is AO3Result.Failure -> {
-                    // Network / parse / locked page — keep what we have, but still
-                    // stamp the check time so a failing work backs off for MinInterval
-                    // like a successful one, instead of retrying on every Home open.
-                    workRepository.upsert(work.copy(lastUpdateCheck = now))
+            // Cancellation propagates: the sweep is not finished, and its caller must know it.
+            val result = metadataRepository.fetch(workId)
+            // A fetch that completed despite cancellation still owns this one result,
+            // as on iOS. Never stamp a work the loop has not fetched.
+            withContext(NonCancellable) {
+                val updated = when (result) {
+                    is AO3Result.Failure -> work.copy(lastUpdateCheck = now)
+                    is AO3Result.Success -> if (result.value.chapters.isBlank()) work.copy(lastUpdateCheck = now)
+                        else applyChapterUpdate(work, result.value.chapters, now)
                 }
-                is AO3Result.Success -> {
-                    val chapters = result.value.chapters
-                    if (chapters.isBlank()) {
-                        // Fetched fine but nothing usable came back (e.g. a locked or
-                        // restricted work) — still stamp the check, same reasoning as
-                        // the Failure branch above.
-                        workRepository.upsert(work.copy(lastUpdateCheck = now))
-                    } else {
-                        workRepository.upsert(applyChapterUpdate(work, chapters, now))
-                    }
-                }
+                workRepository.upsert(updated)
             }
         }
     }

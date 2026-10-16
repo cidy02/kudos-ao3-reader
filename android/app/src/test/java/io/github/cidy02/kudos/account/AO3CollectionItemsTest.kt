@@ -23,6 +23,46 @@ class AO3CollectionItemsTest {
     private val parser = AO3CollectionItemsParser()
     private fun page(html: String = fixture()) = parser.parse(html, "winter_exchange", AO3CollectionItemTab.Unreviewed, 1)
 
+    // iOS AO3CollectionSessionReloadTests: settled reappearance and cancelled-load restart.
+    @Test fun aSettledReappearanceKeepsItsPageFailureAndStagingWithoutARead() = runTest {
+        val (_, client, state) = setup()
+        state.loadOnAppear()
+        val item = state.state.value.page!!.items.first()
+        state.remove(item)
+        state.load(AO3CollectionItemTab.Approved, 2)
+        val settled = state.state.value
+        state.loadOnAppear()
+        assertEquals(settled, state.state.value)
+        assertEquals(2, client.gets.size)
+        client.getError = AO3Error.Network("offline")
+        state.load()
+        val failed = state.state.value
+        state.loadOnAppear()
+        assertEquals(failed, state.state.value)
+        assertEquals(3, client.gets.size)
+        assertTrue(state.state.value.staging.drafts.containsKey(item.id))
+    }
+
+    @Test fun aCancelledLoadRestartsOnReturnWithoutDroppingSameSessionDrafts() = runTest {
+        val (_, client, state) = setup()
+        state.loadOnAppear()
+        val item = state.state.value.page!!.items.first()
+        state.remove(item)
+        client.holdGet = true
+        val read = async { state.load(AO3CollectionItemTab.Approved, 2) }
+        client.getEntered.await()
+        read.cancel()
+        read.join()
+        assertEquals(AO3CollectionItemsUiState.Phase.Loading, state.state.value.phase)
+        client.holdGet = false
+        state.loadOnAppear()
+        assertEquals(3, client.gets.size)
+        assertTrue(client.gets.last().contains("status=approved"))
+        assertEquals(AO3CollectionItemsUiState.Phase.Loaded, state.state.value.phase)
+        assertTrue(state.state.value.staging.drafts.containsKey(item.id))
+        assertTrue(client.posts.isEmpty())
+    }
+
     @Test fun itemWriteRequiresMetaCsrfAsIosFetchCsrfPageDoesEvenWithAnInputToken() = runTest {
         val (_, client, state) = setup()
         state.load()

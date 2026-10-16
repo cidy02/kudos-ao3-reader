@@ -15,13 +15,9 @@ import java.io.File
  * relocated into the wrong paragraph, which is the worst failure mode a
  * preservation app can have.
  *
- * **Fallback: uncompressed text only, else refuse honestly.** When
- * `libkudosmupdf.so` isn't in the APK (`jniLibs/` is not committed — the library
- * is AGPL-3.0 and built locally), only literals inside `( … )` in an
- * *uncompressed* content stream are read, and [convert] returns `null` rather
- * than an EPUB it can't stand behind. An earlier version regexed compressed
- * bytes too; measured on a real PDF, 10 of 18 "paragraphs" were raw binary and
- * none were document text.
+ * Without MuPDF, refuse the import. PDF literals may be document metadata rather
+ * than text streams, so guessing at them can silently import the wrong content.
+ * OCR for scans is not yet available on Android.
  *
  * Either way, [AuthorNoteDetector] marks author's notes the same way as
  * plain-text import (iOS's PDF path uses the same detector via
@@ -34,53 +30,37 @@ class PDFWorkConverter(private val cacheDir: File? = null) {
     // function, so dispatching here once covers all of them rather than
     // relying on each call site to remember Dispatchers.IO itself.
     suspend fun convert(title: String, bytes: ByteArray): ByteArray? = withContext(Dispatchers.IO) {
-        val paragraphs = muPdfParagraphs(bytes) ?: extractParagraphs(bytes)
-        if (paragraphs.isNullOrEmpty()) return@withContext null
-        val body = paragraphsWithAuthorNotes(paragraphs)
+        val pages = muPdfPages(bytes) ?: return@withContext null
+        val body = body(title, pages)
         if (body.isBlank()) null else EpubBuilder.buildEpub(title, body)
     }
 
     /** MuPDF's paragraphs in reading order, or null when MuPDF can't read the file. */
-    private fun muPdfParagraphs(bytes: ByteArray): List<String>? {
+    private fun muPdfPages(bytes: ByteArray): List<List<String>>? {
         if (!KudosMuPDF.isAvailable) return null
         val temp = writeTemp(bytes) ?: return null
         return try {
             KudosMuPDF.paragraphsPerPage(temp.absolutePath)
-                ?.flatten()
-                ?.map { it.trim() }
-                ?.filter { it.isNotEmpty() }
         } finally {
             temp.delete()
         }
     }
 
-    /**
-     * Readable paragraph strings from an uncompressed PDF content stream, or
-     * null when the file is compressed / encrypted / empty. Exposed for tests.
-     */
-    fun extractParagraphs(bytes: ByteArray): List<String>? {
-        val rawData = String(bytes, Charsets.ISO_8859_1)
-
-        // Compressed content streams need an inflater + object parser to read.
-        // Bail before the regex turns compressed bytes into "paragraphs".
-        if (rawData.contains("/FlateDecode") ||
-            rawData.contains("/LZWDecode") ||
-            rawData.contains("/DCTDecode") ||
-            rawData.contains("/Encrypt")
-        ) {
-            return null
-        }
-
-        return Regex("""\((.*?)\)""", RegexOption.DOT_MATCHES_ALL)
-            .findAll(rawData)
-            .map { match ->
-                match.groupValues[1]
-                    .replace("\\(", "(")
-                    .replace("\\)", ")")
-                    .replace("\\\\", "\\")
-            }
-            .filter { it.isNotBlank() && it.isMostlyReadable() && !it.isPdfDateStamp() }
-            .toList()
+    /** iOS withoutRunningHeadersAndFooters / withoutEchoedTitle / line reflow. */
+    internal fun body(title: String, pages: List<List<String>>): String {
+        val normalized = pages.map { page -> page.map { block ->
+            block.replace(Regex("([\\p{L}])-\\s*\\n\\s*(?=[\\p{L}])"), "$1")
+                .replace(Regex("[ \\t]*\\n[ \\t]*"), " ").trim()
+        }.filter { it.isNotEmpty() } }
+        val edgeCounts = normalized.flatMap { page -> listOfNotNull(page.firstOrNull(), page.lastOrNull()).distinct() }
+            .groupingBy { it }.eachCount()
+        val repeated = edgeCounts.filterValues { it >= maxOf(3, pages.size / 3) }.keys
+        val pageNumber = Regex("^[\\-–—\\s]*[0-9]{1,4}[.\\-–—\\s]*$")
+        val paragraphs = normalized.flatMap { page -> page.filter { text ->
+            pages.size < 4 || (text !in repeated && !pageNumber.matches(text))
+        } }.toMutableList()
+        if (paragraphs.firstOrNull() == title) paragraphs.removeAt(0)
+        return paragraphsWithAuthorNotes(paragraphs)
     }
 
     /**
@@ -121,13 +101,4 @@ class PDFWorkConverter(private val cacheDir: File? = null) {
         }.getOrNull()
     }
 
-    /** Rejects binary that happened to sit between parentheses. */
-    private fun String.isMostlyReadable(): Boolean {
-        val readable = count { it.isLetterOrDigit() || it.isWhitespace() || it in ".,;:!?'\"-()[]{}" }
-        return readable.toDouble() / length >= 0.9
-    }
-
-    /** `D:20181013142839-08'00'` is PDF metadata, not prose. */
-    private fun String.isPdfDateStamp(): Boolean = startsWith("D:") && length > 6 &&
-        this[2].isDigit() && this[3].isDigit() && this[4].isDigit() && this[5].isDigit()
 }

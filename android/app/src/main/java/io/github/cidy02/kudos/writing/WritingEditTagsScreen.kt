@@ -34,7 +34,8 @@ internal fun WritingEditTagsScreen(
     autocompleteRepository: AO3TagAutocompleteRepository?,
     settingsRepository: SettingsRepository?,
     onBack: () -> Unit,
-    onSave: () -> Unit
+    onSave: () -> Unit,
+    loadedWorks: List<io.github.cidy02.kudos.network.ao3.search.AO3WorkSummary> = emptyList()
 ) {
     val state by model.state.collectAsState()
     val form = state.form
@@ -52,7 +53,7 @@ internal fun WritingEditTagsScreen(
         WritingTagsEditorScreen(kind, kind.values(form), autocompleteRepository, settingsRepository,
             onValues = { model.writingTags(kind, it) },
             readValues = { model.state.value.form?.let(kind::values).orEmpty() },
-            recordScope = scope, onBack = { addingKind = null })
+            recordScope = scope, onBack = { addingKind = null }, loadedWorks = loadedWorks, excludingWorkID = form.workID)
         return
     }
     BackHandler(onBack = onBack)
