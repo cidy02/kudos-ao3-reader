@@ -148,7 +148,13 @@ class AccountViewModel(
             currentCoroutineContext().ensureActive()
             if (generation != authRepository.generation.value) return@launch
             when (result) {
-                is AO3Result.Success -> { headerFlow.value = generation to result.value; unavailableFlow.value = false; staleFlow.value = result.isStale }
+                is AO3Result.Success -> {
+                    headerFlow.value = generation to result.value; unavailableFlow.value = false; staleFlow.value = result.isStale
+                    // The nav just parsed carries the account's own list sizes (iOS; A59).
+                    val scope = AO3AccountListCountsCache.scope(username, generation)
+                    countsCache?.recordDashboard(result.value.actions, username, scope)
+                    refreshCounts(scope)
+                }
                 is AO3Result.Failure -> {
                     headerFlow.value = null; staleFlow.value = false
                     unavailableFlow.value = result.error == AO3Error.NotFound
@@ -173,6 +179,9 @@ class AccountViewModel(
             @Suppress("SENSELESS_COMPARISON")
             if (entry == null) continue
             cache.get(entry, scope)?.let { map[entry.listKey] = it }
+        }
+        for (key in listOf(AO3AccountListCountsCache.SERIES, AO3AccountListCountsCache.COLLECTIONS)) {
+            cache.get(key, scope)?.let { map[key] = it }
         }
         countsFlow.value = map
     }

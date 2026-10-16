@@ -64,6 +64,15 @@ data class AO3AuthorWebAction(
     val kind: Kind
 ) {
     enum class Kind { Block, Mute, Profile, Pseuds, Works, Preferences, Dashboard, Other }
+
+    /** The list size AO3 prints in a dashboard nav link, "Works (535)" (iOS `listCount`). */
+    val listCount: Int?
+        get() {
+            if (!label.endsWith(")")) return null
+            val inner = label.substring(label.lastIndexOf('(') + 1, label.length - 1)
+            if (inner.none(Char::isDigit) || !inner.all { it.isDigit() || it in ",. " }) return null
+            return inner.filter(Char::isDigit).toIntOrNull()
+        }
 }
 
 /** iOS `AO3AuthorModerationKind`: what AO3's confirm page is asking about. */

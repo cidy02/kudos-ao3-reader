@@ -58,4 +58,26 @@ class AO3AccountListCountsCacheTest {
         assertEquals(Count(lowerBound = page.works.size), cache.get(AccountListType.Bookmarks, scope))
         assertNull(cache.get(AccountListType.Bookmarks, AO3AccountListCountsCache.scope("AO3_Reader", auth.generation.value + 1)))
     }
+
+    @Test fun dashboardNavSeedsCountsWithoutOpeningAnyList() {
+        fun action(label: String, path: String) = io.github.cidy02.kudos.network.ao3.author.AO3AuthorWebAction(
+            label, "https://archiveofourown.org$path", io.github.cidy02.kudos.network.ao3.author.AO3AuthorWebAction.Kind.Other)
+        val cache = AO3AccountListCountsCache()
+        val scope = AO3AccountListCountsCache.scope("astolat", 1)
+        cache.recordDashboard(listOf(
+            action("Works (535)", "/users/astolat/works"),
+            action("Series (40)", "/users/astolat/series"),
+            action("Bookmarks (1,022)", "/users/astolat/bookmarks"),
+            action("Collections (33)", "/users/astolat/collections"),
+            action("Gifts (131)", "/users/astolat/gifts"),
+            action("Works (7)", "/users/astolat/pseuds/other/works"),
+            action("Works (some)", "/users/astolat/works")
+        ), "astolat", scope)
+        assertEquals(535, cache.get(AccountListType.MyWorks, scope)?.exact)
+        assertEquals(1022, cache.get(AccountListType.Bookmarks, scope)?.exact)
+        assertEquals(33, cache.get(AO3AccountListCountsCache.COLLECTIONS, scope)?.exact)
+        assertEquals(40, cache.get(AO3AccountListCountsCache.SERIES, scope)?.exact)
+        assertNull(cache.get(AccountListType.Subscriptions, scope))
+        assertNull(cache.get(AccountListType.History, scope))
+    }
 }

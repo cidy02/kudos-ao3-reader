@@ -280,6 +280,7 @@ fun AccountScreen(
                     AccountScopeRow(
                         title = "Collections",
                         icon = Icons.Outlined.FilterNone,
+                        count = state.counts[AO3AccountListCountsCache.COLLECTIONS]?.displayText,
                         onClick = onOpenAO3Collections
                     )
                     HorizontalDivider(modifier = Modifier.padding(start = 50.dp))
@@ -306,6 +307,7 @@ fun AccountScreen(
                     AccountScopeRow(
                         title = "Series",
                         icon = Icons.Outlined.Layers,
+                        count = state.counts[AO3AccountListCountsCache.SERIES]?.displayText,
                         onClick = { username?.let { onOpenSeries("https://archiveofourown.org/users/$it/series") } }
                     )
                     HorizontalDivider(modifier = Modifier.padding(start = 50.dp))
