@@ -641,6 +641,15 @@ internal class DemoNetworkInterceptor(
                 isDemoCommentThread(path.trimEnd('/')) -> demoCommentThreadPage(bytes, path.trimEnd('/'))
                 else -> demoChallengeCollectionPage(bytes, path.trimEnd('/'))
             }
+            // A tag's works page names its tag's feed, as AO3's does: the fandom-family union (3fl)
+            // reads each sibling's filter ID from it. The shared fixture has none, so every family
+            // failed in the demo. A stable positive ID per tag name; local only.
+            Regex("^/tags/([^/]+)/works/?$").matchEntire(path)?.let { match ->
+                val id = (match.groupValues[1].hashCode().toLong() and 0x7fffffffL) + 1
+                bytes = bytes!!.decodeToString().replaceFirst("<html>",
+                    "<html><head><link rel=\"alternate\" type=\"application/atom+xml\" href=\"/tags/$id/feed.atom\"></head>")
+                    .encodeToByteArray()
+            }
         }
         if (bytes != null && chain.request().method == "GET" &&
             Regex("^/users/[^/]+/subscriptions/?$").matches(path)
