@@ -143,7 +143,9 @@ fun WorkDetailScreen(
     onOpenReader: (String) -> Unit,
     onOpenAuthor: (String) -> Unit = {},
     onOpenSeries: (String) -> Unit = {},
-    onDismiss: () -> Unit = {}
+    onDismiss: () -> Unit = {},
+    onOpenChapterComments: (Long) -> Unit = onOpenComments,
+    onComposeComment: (Long) -> Unit = onOpenComments
 ) {
     var state by remember(source) { mutableStateOf(WorkDetailUiState()) }
     var newTagName by remember { mutableStateOf("") }
@@ -183,6 +185,7 @@ fun WorkDetailScreen(
     var collectionDialogWorking by remember { mutableStateOf(false) }
     var chapterIndexSheetOpen by remember { mutableStateOf(false) }
     var canRebuild by remember { mutableStateOf(false) }
+    var rebuildWork by remember { mutableStateOf<SavedWork?>(null) }
     val scope = rememberCoroutineScope()
     val uriHandler = LocalUriHandler.current
     var downloadWatchJob by remember { mutableStateOf<Job?>(null) }
@@ -1037,18 +1040,17 @@ fun WorkDetailScreen(
                     if (updated != null) refreshLocal(updated.id, state.remote)
                 }
             },
-            onRebuildFromOriginal = {
-                val work = state.local
-                if (work != null) {
-                    scope.launch {
-                        state = state.copy(working = true)
-                        workImporter.rebuildFromOriginal(work)
-                        refreshLocal(work.id, state.remote)
-                        state = state.copy(working = false)
-                    }
-                }
-            },
+            onRebuildFromOriginal = { rebuildWork = state.local },
             onDismiss = { showingMyCopy = false }
+        )
+    }
+
+    rebuildWork?.let { work ->
+        RebuildOriginalDialog(
+            work = work,
+            importer = workImporter,
+            onRebuilt = { rebuilt -> scope.launch { refreshLocal(rebuilt.id, state.remote) } },
+            onDismiss = { rebuildWork = null }
         )
     }
 
@@ -1090,17 +1092,7 @@ fun WorkDetailScreen(
             state.sourceUrl.takeIf { it.isNotBlank() }?.let(uriHandler::openUri)
         },
         onLogin = onLogin,
-        onRebuildFromOriginal = {
-            val work = state.local
-            if (work != null) {
-                scope.launch {
-                    state = state.copy(working = true)
-                    workImporter.rebuildFromOriginal(work)
-                    refreshLocal(work.id, state.remote)
-                    state = state.copy(working = false)
-                }
-            }
-        },
+        onRebuildFromOriginal = { rebuildWork = state.local },
         canRebuildFromOriginal = canRebuild,
         onRefreshMetadata = {
             val work = state.local
@@ -1178,12 +1170,29 @@ fun WorkDetailScreen(
             state.ao3WorkId?.let(onOpenComments)
                 ?: run { state = state.copy(error = "This action needs a canonical AO3 work URL.") }
         },
+        onChapterComments = { state.ao3WorkId?.let(onOpenChapterComments) },
+        onWriteComment = { state.ao3WorkId?.let(onComposeComment) },
         onResumeClick = {
-            val epubWorkId = state.local?.takeIf { it.hasEpub }?.id
-            if (epubWorkId != null) {
-                onOpenReader(epubWorkId)
-            } else {
-                download()
+            if (!state.working) scope.launch {
+                state = state.copy(working = true, error = null)
+                try {
+                    val result = state.local?.let { workImporter.prepareForReading(it) }
+                        ?: state.remote?.let { workImporter.prepareForReading(it) }
+                    when (result) {
+                        is WorkImportResult.Success -> {
+                            refreshLocal(result.work.id, state.remote)
+                            onOpenReader(result.work.id)
+                        }
+                        is WorkImportResult.Failure -> state = state.copy(error = result.error.displayMessage())
+                        null -> state = state.copy(error = "No work selected.")
+                    }
+                } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                    throw cancelled
+                } catch (failure: Exception) {
+                    state = state.copy(error = failure.message ?: "Couldn't open this work.")
+                } finally {
+                    state = state.copy(working = false)
+                }
             }
         },
         onOpenAuthor = onOpenAuthor,
@@ -1221,6 +1230,8 @@ private fun WorkDetailContent(
     onAddToCollection: () -> Unit,
     onBookmark: () -> Unit,
     onComments: () -> Unit,
+    onChapterComments: () -> Unit,
+    onWriteComment: () -> Unit,
     onResumeClick: () -> Unit,
     onOpenAuthor: (String) -> Unit,
     onOpenSeries: (String) -> Unit,
@@ -1627,8 +1638,8 @@ private fun WorkDetailContent(
                     commentsCount = state.commentsCount,
                     chapters = state.chapters,
                     onAllComments = onComments,
-                    onChapterComments = onComments,
-                    onWriteComment = onComments
+                    onChapterComments = onChapterComments,
+                    onWriteComment = onWriteComment
                 )
             }
 

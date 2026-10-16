@@ -14,6 +14,23 @@ import io.github.cidy02.kudos.search.matchesWarningText
 import java.time.Instant
 
 object LibraryQuery {
+    /** Queues and collections keep their reading order until another sort is explicitly chosen. */
+    fun applyScoped(
+        works: List<SavedWork>,
+        index: io.github.cidy02.kudos.works.WorkLibraryIndex,
+        searchQuery: String,
+        filters: LibraryFilterState,
+        sort: LibrarySort
+    ): List<SavedWork> {
+        val filtered = filterOnly(works.map { work ->
+            LibraryDisplayItem(LibraryWorkListItem(work,
+                userTags = index.tagsByWork[work.id].orEmpty(),
+                collections = index.collectionsByWork[work.id].orEmpty(),
+                inSavedForLater = work.id in index.savedForLaterIds))
+        }, searchQuery, filters)
+        return (if (sort == LibrarySort.Natural) filtered else sortDisplayItems(filtered, sort)).map { it.item.work }
+    }
+
     fun buildState(
         snapshot: LibrarySnapshot,
         searchQuery: String,

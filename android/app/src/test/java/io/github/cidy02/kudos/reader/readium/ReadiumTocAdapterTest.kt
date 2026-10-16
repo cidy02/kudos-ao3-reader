@@ -43,4 +43,14 @@ class ReadiumTocAdapterTest {
         )
         assertEquals(listOf("Part One", "Chapter 1", "Chapter 1a"), sections.map { it.title })
     }
+    @Test fun chapterStartUsesHrefWhenAnEarlierResourceHasNoPositionGroup() {
+        fun locator(href: String, position: Int) = org.readium.r2.shared.publication.Locator.fromJSON(
+            org.json.JSONObject("""{"href":"$href","type":"application/xhtml+xml","locations":{"position":$position}}""")
+        )!!
+        val chapter = locator("Text/chapter.xhtml", 4)
+        val positions = listOf(listOf(locator("Text/preface.xhtml", 1)), listOf(chapter, locator("Text/chapter.xhtml", 5)))
+        assertEquals(chapter, ReadiumTocAdapter.chapterStartLocator(positions, "Text/chapter.xhtml#start"))
+        assertEquals(null, ReadiumTocAdapter.chapterStartLocator(positions, "Text/empty.xhtml"))
+    }
+
 }

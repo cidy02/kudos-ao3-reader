@@ -208,6 +208,13 @@ class ReadingQueueRepository(
         }
     }
 
+    /** Library's Remove swipe leaves the work on this device, as removing one membership does. */
+    suspend fun removeFromAllQueues(workId: String) {
+        for (membership in queueDao.getMembershipsForWork(workId)) {
+            removeWork(membership.queueID, workId)
+        }
+    }
+
     // Room serializes concurrent withTransaction calls against the same database (each
     // waits for the prior one to commit before its own body runs), so the second of two
     // racing callers sees the first caller's insert on its own check and returns that

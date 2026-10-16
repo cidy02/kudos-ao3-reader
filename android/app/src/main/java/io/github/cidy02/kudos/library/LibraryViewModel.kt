@@ -378,7 +378,7 @@ class LibraryViewModel(
     fun removeFromAllQueuesOne(workId: String) {
         val queues = queueRepository ?: return
         viewModelScope.launch {
-            queues.removeFromAllQueuesAndDeleteIfQueueOnly(workId)
+            queues.removeFromAllQueues(workId)
             queueRefreshTick.update { it + 1 }
         }
     }

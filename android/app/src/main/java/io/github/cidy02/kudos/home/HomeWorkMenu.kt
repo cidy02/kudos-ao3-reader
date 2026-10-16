@@ -34,8 +34,8 @@ import io.github.cidy02.kudos.core.model.WorkDownloadSemantics
 import io.github.cidy02.kudos.library.ReadingQueueRepository
 import io.github.cidy02.kudos.ui.components.DestructiveConfirmation
 import io.github.cidy02.kudos.works.DownloadQueue
-import io.github.cidy02.kudos.works.WorkImportResult
 import io.github.cidy02.kudos.works.WorkImporter
+import io.github.cidy02.kudos.works.RebuildOriginalDialog
 import io.github.cidy02.kudos.works.WorkRepository
 import io.github.cidy02.kudos.works.WorkTags
 import kotlinx.coroutines.launch
@@ -76,7 +76,13 @@ fun HomeLocalWorkFrame(
 ) {
     var menuOpen by remember(work.id) { mutableStateOf(false) }
     var canRebuild by remember(work.id) { mutableStateOf(false) }
+    var rebuildOpen by remember(work.id) { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+    if (rebuildOpen && workImporter != null) {
+        RebuildOriginalDialog(work, workImporter, onRebuilt = {
+            scope.launch { controller.onChanged() }
+        }, onDismiss = { rebuildOpen = false })
+    }
     LaunchedEffect(menuOpen, work.id) {
         if (menuOpen && workImporter != null) {
             canRebuild = runCatching { workImporter.canRebuildFromOriginal(work) }.getOrDefault(false)
@@ -164,13 +170,7 @@ fun HomeLocalWorkFrame(
             if (canRebuild && workImporter != null) {
                 MenuItem("Rebuild from Original") {
                     menuOpen = false
-                    scope.launch {
-                        when (workImporter.rebuildFromOriginal(work)) {
-                            is WorkImportResult.Success -> Unit
-                            is WorkImportResult.Failure ->
-                                controller.message = "Couldn't rebuild this work from its original file."
-                        }
-                    }
+                    rebuildOpen = true
                 }
             }
             MenuItem("Work Details") {

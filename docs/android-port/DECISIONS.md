@@ -2264,3 +2264,15 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   reading order, so Done no longer saves newest-added order over it (seen). **F03** Back from
   a newly typed note keeps it, as iOS's note editor does; Cancel still discards. Reverse: the
   commit that names A62 F01.
+- **2026-10-16 · Brief 3fp, first part: A62 F04 to F10 (Codex, reviewed and gated by Claude).**
+  F04: Library bulk Delete, a collection's bulk Remove, Queue Storage's Remove and the
+  queue-only Remove swipe always ask, as iOS, whatever the delete-confirmation setting (that
+  setting covers single-work deletes). F05: Rebuild from Original asks first and shows a
+  failure (one shared dialog; Android has no converter-version stamp, so it always asks).
+  F06: Read on a work with no file fetches a reading copy and opens it, without keeping it as
+  a download; a fresh copy resets Finished and the fallback position, as iOS's
+  `restoreReadableEPUB`. F07: Continue Reading from a work page opened over its reader goes
+  back to that reader (seen on the emulator: one reader, Back to Library). F08: Chapter
+  comments and Write a comment open their own destinations. F09: Contents' chapter Bookmark
+  and Add Note work. F10: a queue's and a collection's filters are the Library's full panel.
+  Reverse: the commit that names 3fp.

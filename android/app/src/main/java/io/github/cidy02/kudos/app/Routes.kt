@@ -399,3 +399,13 @@ object Routes {
     fun hidesTabBar(route: String?): Boolean =
         route != null && route.substringBefore("?").substringBefore("/") in tabBarHiddenBases
 }
+
+/** Work Detail presented over this work's reader returns to that live reader. */
+internal fun androidx.navigation.NavController.openReaderFromWorkDetail(workId: String) {
+    val previous = previousBackStackEntry
+    if (previous?.destination?.route == Routes.Reader && Routes.routeArg(previous, "workId") == workId) {
+        popBackStack()
+    } else {
+        navigate(Routes.reader(workId))
+    }
+}
