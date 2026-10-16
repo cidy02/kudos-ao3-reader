@@ -323,6 +323,25 @@ class AO3RedirectCookieRelayInterceptorTest {
         }
     }
 
+    /** Codex's 3fn review: a 307/308 never sends a write's body twice, and is not a success. */
+    @Test
+    fun aWriteAnsweredWithAMethodKeepingRedirectIsSentOnce() = runTest {
+        for (code in listOf(307, 308)) withServer { server ->
+            server.enqueue(MockResponse.Builder().code(code)
+                .addHeader("Location", server.url("/works/1/comments").toString()).build())
+            server.enqueue(MockResponse.Builder().code(200).body("<p class=\"flash notice\">ok</p>").build())
+
+            val result = relayClient { it != null && it.host == server.hostName }.postForm(
+                server.url("/works/1/comments").toString(),
+                formFields = listOf("comment[content]" to "hi"),
+                headers = mapOf("Cookie" to "_otwarchive_session=s")
+            )
+
+            assertTrue("$code", result is AO3Result.Failure && result.error is AO3Error.Validation)
+            assertEquals("$code", 1, server.requestCount)
+        }
+    }
+
     private fun relayClient(trust: (HttpUrl?) -> Boolean): OkHttpAO3Client {
         val config = AO3NetworkConfig(maxRetries = 0, minDelayBetweenRequestsMillis = 0)
         return OkHttpAO3Client(

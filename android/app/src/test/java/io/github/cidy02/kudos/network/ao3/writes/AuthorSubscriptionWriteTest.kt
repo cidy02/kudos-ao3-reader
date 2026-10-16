@@ -20,6 +20,7 @@ class AuthorSubscriptionWriteTest {
         val posts = mutableListOf<Triple<String, List<Pair<String, String>>, Map<String, String>>>()
         var afterGet: () -> Unit = {}
         var reply = "<div class='flash notice'>You are now following this user.</div>"
+        var status = 200
         override fun username() = name
         override fun sessionGeneration(): Int = generation
         override suspend fun getAuthenticated(url: String): AO3Result<AO3HttpResponse> {
@@ -31,7 +32,7 @@ class AuthorSubscriptionWriteTest {
             url: String, formFields: List<Pair<String, String>>, headers: Map<String, String>
         ): AO3Result<AO3HttpResponse> {
             posts += Triple(url, formFields, headers)
-            return AO3Result.Success(AO3HttpResponse(url, 200, emptyMap(), reply))
+            return AO3Result.Success(AO3HttpResponse(url, status, emptyMap(), reply))
         }
     }
 
@@ -99,5 +100,12 @@ class AuthorSubscriptionWriteTest {
         val result = AO3WriteRepository(session).submitAuthorSubscription(join, 1)
         assertTrue(result is AO3Result.Failure)
         assertEquals("one POST, never a second", 1, session.posts.size)
+    }
+
+    /** Codex's 3fn review: a bare redirect is not AO3's notice; only History accepts one. */
+    @Test fun aBareRedirectIsNotASubscription() = runTest {
+        val session = Session().apply { reply = ""; status = 302 }
+        assertTrue(AO3WriteRepository(session).submitAuthorSubscription(join, 1) is AO3Result.Failure)
+        assertEquals(1, session.posts.size)
     }
 }

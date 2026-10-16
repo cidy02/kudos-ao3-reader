@@ -327,6 +327,9 @@ class OkHttpAO3Client(
             403 -> AO3Result.Failure(AO3Error.Forbidden)
             429 -> AO3Result.Failure(AO3Error.RateLimited(retryAfterMillis))
             in 500..599 -> AO3Result.Failure(AO3Error.Server(statusCode))
+            // AO3 asked for the write to be sent again elsewhere; it was not (see the relay).
+            307, 308 -> AO3Result.Failure(AO3Error.Validation(
+                "AO3 asked for this to be sent again, and it wasn't. Check on AO3 before trying again."))
             else -> AO3Result.Success(
                 AO3HttpResponse(
                     url = finalUrl,
