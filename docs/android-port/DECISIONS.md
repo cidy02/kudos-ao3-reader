@@ -2187,3 +2187,14 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   list's Unsubscribe and Unmark keep iOS's notice-or-redirect rule (`readingsWriteResult`),
   which the policy names. iOS follows a 307 itself (`AO3RedirectCookieRelay.swift`); that is
   noted for the iOS lane, not changed tonight. Reverse: the commit that names F1 and F2.
+- **2026-10-16 · Brief 3fn landed: A58's deferred reader items (Codex, reviewed and gated by
+  Claude).** Read Aloud gives the system media controls a duration and elapsed time from iOS's
+  speech estimate (68.75 s per position at 1x, scaled by rate; seen on the emulator: PLAYING at
+  68,750 ms). The sentence chunker with iOS's abbreviation protection exists beside the
+  paragraph chunker, which the engine still uses. Converted author notes carry
+  `epub:type="note"` (new conversions only; the EPUB declares the namespace). The reader's
+  loading skeleton fills its area with bounded prose-shaped paragraphs. **The app's Dark base
+  is now iOS's #16161A** (it was #191817; the reader already used #16161A), so dark unwashed
+  screens are a shade cooler; the washed-card backdrop stays #0B0B0D, as iOS. Not looked at on
+  screen: the skeleton and the Dark surfaces. Codex's three write reviews found F1/F2 (landed
+  separately). Reverse: the commit that names 3fn.

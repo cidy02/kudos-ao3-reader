@@ -8,21 +8,21 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
@@ -53,56 +53,68 @@ fun ReaderPageSkeleton(
             ),
             label = "readerSkeletonAlpha"
         )
-    val screenHeightDp = LocalConfiguration.current.screenHeightDp.coerceAtLeast(400)
-    // Rough paragraph budget: leave room for margins + heading + caption.
-    val bodyLines = ((screenHeightDp - 160) / 28).coerceIn(8, 18)
-
-    Box(
+    BoxWithConstraints(
         modifier = modifier
             .fillMaxSize()
             .background(backgroundColor)
-            .semantics {
-                contentDescription = message
-            }
+            .clipToBounds()
+            .semantics { contentDescription = message }
     ) {
+        val paragraphs = ReaderPageSkeletonLayout.paragraphs((maxHeight.value - 28f).coerceAtLeast(0f))
+        val shortLineLimit = (maxWidth - 56.dp).coerceAtLeast(0.dp) * 0.8f
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 28.dp, vertical = 36.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
+                .padding(start = 28.dp, end = 28.dp, top = 12.dp, bottom = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(ReaderPageSkeletonLayout.paragraphSpacing.dp)
         ) {
             SkeletonLine(
                 widthFraction = 0.62f,
-                height = 18.dp,
+                height = (ReaderPageSkeletonLayout.headingHeight + 4).dp,
                 color = lineColor.copy(alpha = 0.18f * shimmerAlpha + 0.06f)
             )
-            SkeletonLine(
-                widthFraction = 0.38f,
-                height = 12.dp,
-                color = lineColor.copy(alpha = 0.14f * shimmerAlpha + 0.05f)
-            )
-            repeat(bodyLines) { index ->
-                val fraction = when (index % 4) {
-                    0 -> 1f
-                    1 -> 0.94f
-                    2 -> 0.88f
-                    else -> 0.72f
+            paragraphs.forEach { widths ->
+                Column(verticalArrangement = Arrangement.spacedBy(ReaderPageSkeletonLayout.lineSpacing.dp)) {
+                    widths.forEach { width ->
+                        Box(
+                            modifier = (if (width == null) Modifier.fillMaxWidth()
+                                else Modifier.width(width.dp.coerceAtMost(shortLineLimit)))
+                                .height(ReaderPageSkeletonLayout.lineHeight.dp)
+                                .clip(RoundedCornerShape(percent = 50))
+                                .background(lineColor.copy(alpha = 0.16f * shimmerAlpha + 0.05f))
+                        )
+                    }
                 }
-                SkeletonLine(
-                    widthFraction = fraction,
-                    height = 12.dp,
-                    color = lineColor.copy(alpha = 0.16f * shimmerAlpha + 0.05f)
-                )
             }
         }
-        Text(
-            text = message,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .padding(bottom = 32.dp)
-        )
+    }
+}
+
+/** iOS's bounded paragraph budget, in dp; the view clips the tiny-height fallback. */
+internal object ReaderPageSkeletonLayout {
+    const val headingHeight = 22f
+    const val lineHeight = 13f
+    const val lineSpacing = 9f
+    const val paragraphSpacing = 20f
+    private val shortLineEnds = listOf(180f, 120f, 210f, 160f, 140f, 200f)
+
+    fun paragraphHeight(lineCount: Int): Float =
+        lineCount * lineHeight + (lineCount - 1).coerceAtLeast(0) * lineSpacing
+
+    fun paragraphs(height: Float): List<List<Float?>> {
+        var remaining = (height - headingHeight - 4 - paragraphSpacing).coerceAtLeast(0f)
+        val result = mutableListOf<List<Float?>>()
+        while (remaining >= lineHeight) {
+            val spacingBefore = if (result.isEmpty()) 0f else paragraphSpacing
+            val budget = remaining - spacingBefore
+            if (budget < lineHeight) break
+            var lineCount = 1
+            while (lineCount < 5 && paragraphHeight(lineCount + 1) <= budget) lineCount++
+            result += List<Float?>(lineCount - 1) { null } + shortLineEnds[result.size % shortLineEnds.size]
+            remaining -= spacingBefore + paragraphHeight(lineCount)
+            if (result.size > 40) break
+        }
+        return result.ifEmpty { listOf(listOf(null, null, 160f)) }
     }
 }
 

@@ -372,6 +372,10 @@ private fun ReaderReading(
                 )
             }
             val liveLocator = state.liveProgress?.locatorJson?.let(ReadiumNavigatorController::locatorFromJson)
+            val totalPositions = positions.sumOf { it.size }
+            LaunchedEffect(totalPositions, liveLocator?.locations?.position) {
+                speechController.updateReadingPosition(totalPositions, liveLocator?.locations?.position)
+            }
             val workRemainingMinutes = liveLocator?.locations?.position?.takeIf { positions.isNotEmpty() }?.let {
                 ReaderProgressDisplay.minutesForPositions((positions.sumOf { chapter -> chapter.size } - it).coerceAtLeast(0))
             }
