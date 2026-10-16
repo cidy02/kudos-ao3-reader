@@ -74,6 +74,24 @@ class WorkAvailabilityTest {
         dateAdded = Instant.parse("2026-10-01T12:00:00Z")
     )
 
+    /** Pull to refresh: a page read while AO3 answers must not be written back over. */
+    @Test
+    fun refreshMetadataKeepsAPlaceReadDuringTheRequest() = runTest {
+        lateinit var tags: WorkRepository
+        lateinit var id: String
+        val client = object : AO3Client {
+            override suspend fun get(url: String, headers: Map<String, String>): AO3Result<AO3HttpResponse> {
+                tags.upsert(tags.getWork(id)!!.copy(readiumLocator = "read-meanwhile"))
+                return AO3Result.Success(AO3HttpResponse(url, 200, emptyMap(),
+                    """<dl class="work meta group"><dd class="language">English</dd></dl>"""))
+            }
+        }
+        tags = WorkRepository(database, files, tagsRepository = WorkTagsRepository(client), clock = { now })
+        id = tags.upsert(work()).id
+        assertTrue(tags.refreshMetadata(id) is AO3Result.Success)
+        assertEquals("read-meanwhile", tags.getWork(id)!!.readiumLocator)
+    }
+
     @Test
     fun visibleRefreshDeduplicatesAO3IdentityAndStopsAfterARefusal() = runTest {
         val first = repository.upsert(work())

@@ -1218,6 +1218,25 @@ class WorkImporterLifecycleTest {
         assertTrue(fileStore.workEpubExists(work.id))
     }
 
+    /** A page read or a Finished mark set while the EPUB comes down is kept. */
+    @Test
+    fun aPlaceReadWhileTheEpubDownloadsIsKept() = runTest {
+        val existing = repository.upsert(sampleSavedWork().copy(sourceUrl = "https://archiveofourown.org/works/123"))
+        val importer = importer(
+            metadata = AO3Result.Success(AO3WorkMetadata(chapters = "1/1")),
+            download = AO3Result.Success(epubBytes),
+            onDownload = {
+                repository.upsert(repository.getWork(existing.id)!!.copy(readiumLocator = "read-meanwhile", isFinished = true))
+            }
+        )
+
+        val work = (importer.downloadExisting(repository.getWork(existing.id)!!) as WorkImportResult.Success).work
+
+        assertEquals("read-meanwhile", work.readiumLocator)
+        assertTrue(work.isFinished)
+        assertTrue(work.hasEpub)
+    }
+
     @Test
     fun redownloadKeepsTheCapturedDownloadDate() = runTest {
         val originalDate = capturedNow.minusSeconds(86_400)
@@ -1551,9 +1570,11 @@ class WorkImporterLifecycleTest {
 
     private fun importer(
         metadata: AO3Result<AO3WorkMetadata>,
-        download: AO3Result<ByteArray>
+        download: AO3Result<ByteArray>,
+        onDownload: suspend () -> Unit = {}
     ): WorkImporter {
         val client = FakeAO3Client(
+            onDownload = onDownload,
             text = when (metadata) {
                 is AO3Result.Failure -> metadata
                 is AO3Result.Success -> AO3Result.Success(
@@ -1593,7 +1614,8 @@ class WorkImporterLifecycleTest {
 
 private class FakeAO3Client(
     private val text: AO3Result<AO3HttpResponse>,
-    private val bytes: AO3Result<AO3BinaryResponse>
+    private val bytes: AO3Result<AO3BinaryResponse>,
+    private val onDownload: suspend () -> Unit = {}
 ) : AO3Client {
     override suspend fun get(
         url: String,
@@ -1603,7 +1625,10 @@ private class FakeAO3Client(
     override suspend fun getBytes(
         url: String,
         headers: Map<String, String>
-    ): AO3Result<AO3BinaryResponse> = bytes
+    ): AO3Result<AO3BinaryResponse> {
+        onDownload()
+        return bytes
+    }
 }
 
 private const val workUuid = "11111111-1111-1111-1111-111111111111"

@@ -180,6 +180,27 @@ class WorkUpdateCheckerFailureBackoffTest {
         }
     }
 
+    /** Home's check reads the list once; a page read while it runs must not be written back over. */
+    @Test
+    fun aPlaceReadWhileTheCheckRunsIsKept() = runTest {
+        val saved = repository.upsert(
+            work(id = "w3", isComplete = false, sourceUrl = "https://archiveofourown.org/works/789", lastCheck = null)
+        )
+        val metadata = object : AO3WorkMetadataRepository() {
+            override suspend fun fetch(workId: Long): AO3Result<AO3WorkMetadata> {
+                repository.upsert(repository.getWork(saved.id)!!.copy(readiumLocator = "read-meanwhile", lastSpineIndex = 4))
+                return AO3Result.Success(AO3WorkMetadata(chapters = "3/?"))
+            }
+        }
+
+        WorkUpdateChecker(repository, metadata).checkForUpdates(listOf(saved))
+
+        val after = repository.getWork(saved.id)!!
+        assertEquals("read-meanwhile", after.readiumLocator)
+        assertEquals(4, after.lastSpineIndex)
+        assertEquals("3/?", after.chapters)
+    }
+
     @Test
     fun aFailedCheckStillStampsLastUpdateCheckSoItBacksOff() = runTest {
         val saved = repository.upsert(

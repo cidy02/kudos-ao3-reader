@@ -44,6 +44,7 @@ class LibraryTagBackfillTest {
     private val requested = mutableListOf<String>()
     private var answer: AO3Result<AO3HttpResponse> = page()
     private var hang: CompletableDeferred<Unit>? = null
+    private var onRequest: suspend (String) -> Unit = {}
 
     private fun page(html: String = TAGGED_PAGE) =
         AO3Result.Success(AO3HttpResponse("https://archiveofourown.org/works/555", 200, emptyMap(), html))
@@ -57,6 +58,7 @@ class LibraryTagBackfillTest {
         val client = object : AO3Client {
             override suspend fun get(url: String, headers: Map<String, String>): AO3Result<AO3HttpResponse> {
                 requested += url
+                onRequest(url)
                 hang?.let { it.complete(Unit); awaitCancellation() }
                 return answer
             }
@@ -115,6 +117,25 @@ class LibraryTagBackfillTest {
 
         repository.backfillFilterMetadata(readsAO3 = true)
         assertEquals(1, requested.size)
+    }
+
+    @Test
+    fun aChangeMadeWhileTheWalkRunsIsKept() = runTest {
+        val first = repository.upsert(bare())
+        val second = repository.upsert(bare().copy(sourceUrl = "https://archiveofourown.org/works/556",
+            dateAdded = Instant.parse("2026-09-01T12:00:00Z")))
+        var favorited = false
+        onRequest = {
+            if (!favorited) {
+                favorited = true
+                val other = if (it.contains("/works/555?")) second.id else first.id
+                repository.upsert(repository.getWork(other)!!.copy(isFavorite = true))
+            }
+        }
+        repository.backfillFilterMetadata(readsAO3 = true)
+        assertEquals(2, requested.size)
+        val changed = if (requested.first().contains("/works/555?")) second.id else first.id
+        assertTrue("the reader's favourite survives the walk", repository.getWork(changed)!!.isFavorite)
     }
 
     @Test

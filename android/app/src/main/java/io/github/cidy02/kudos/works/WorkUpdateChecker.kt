@@ -42,10 +42,14 @@ class WorkUpdateChecker(
             // A fetch that completed despite cancellation still owns this one result,
             // as on iOS. Never stamp a work the loop has not fetched.
             withContext(NonCancellable) {
+                // Onto the work as it is now, not as the list had it when the check began:
+                // a reader who opened it from Home meanwhile would lose their place (iOS
+                // edits the live record).
+                val current = workRepository.getWork(work.id)?.takeIf { !it.isDeleted } ?: return@withContext
                 val updated = when (result) {
-                    is AO3Result.Failure -> work.copy(lastUpdateCheck = now)
-                    is AO3Result.Success -> if (result.value.chapters.isBlank()) work.copy(lastUpdateCheck = now)
-                        else applyChapterUpdate(work, result.value.chapters, now)
+                    is AO3Result.Failure -> current.copy(lastUpdateCheck = now)
+                    is AO3Result.Success -> if (result.value.chapters.isBlank()) current.copy(lastUpdateCheck = now)
+                        else applyChapterUpdate(current, result.value.chapters, now)
                 }
                 workRepository.upsert(updated)
             }

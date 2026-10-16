@@ -45,10 +45,11 @@ class WorkImporter(
         isQueuedForLater: Boolean = false,
         enrichMetadata: Boolean = true
     ): WorkImportResult {
-        val existing = findExisting(summary)
         // ReadingQueueService.swift:690–731 saves listing metadata before the EPUB.
         // A series batch must not read each work page ahead of preservation.
         val metadata = if (enrichMetadata) fetchCanonical(summary.id) else null
+        // Looked up after AO3 answers, so the merge starts from the work as it is now.
+        val existing = findExisting(summary)
         var work = merger.merge(
             summary = summary,
             canonical = metadata,
@@ -84,8 +85,9 @@ class WorkImporter(
         }
 
     suspend fun download(summary: AO3WorkSummary): WorkImportResult {
-        val existing = findExisting(summary)
         val metadata = fetchCanonical(summary.id)
+        // After AO3 answers: a page read meanwhile is in the work the merge starts from.
+        val existing = findExisting(summary)
         val merged = workRepository.upsert(
             merger.merge(
                 summary = summary,
@@ -100,7 +102,8 @@ class WorkImporter(
         return when (val download = downloader.download(summary.id)) {
             is AO3Result.Failure -> {
                 if (download.error is AO3Error.NotFound) {
-                    val updated = workRepository.upsert(base.copy(ao3Unavailable = true, lastAvailabilityCheck = Instant.now(), lastModifiedAt = Instant.now()))
+                    val current = workRepository.getWork(base.id) ?: base
+                    val updated = workRepository.upsert(current.copy(ao3Unavailable = true, lastAvailabilityCheck = Instant.now(), lastModifiedAt = Instant.now()))
                     WorkImportResult.Failure(updated, download.error)
                 } else {
                     WorkImportResult.Failure(base, download.error)
@@ -171,7 +174,8 @@ class WorkImporter(
         return when (val download = downloader.download(workId)) {
             is AO3Result.Failure -> {
                 if (download.error is AO3Error.NotFound) {
-                    val updated = workRepository.upsert(resolved.copy(ao3Unavailable = true, lastAvailabilityCheck = Instant.now(), lastModifiedAt = Instant.now()))
+                    val current = workRepository.getWork(resolved.id) ?: resolved
+                    val updated = workRepository.upsert(current.copy(ao3Unavailable = true, lastAvailabilityCheck = Instant.now(), lastModifiedAt = Instant.now()))
                     WorkImportResult.Failure(updated, download.error)
                 } else {
                     WorkImportResult.Failure(resolved, download.error)
@@ -417,12 +421,16 @@ class WorkImporter(
                 if (work.isDeleted) {
                     workRepository.restoreFromRecentlyDeleted(work.id)
                 }
+                // Both callers hand in a work already stored; read it again after the
+                // download, so the progress, Finished mark or favourite set while the file
+                // came down is what is kept.
+                val current = workRepository.getWork(work.id) ?: work
                 val now = workRepository.currentInstant()
                 val updated = workRepository.upsert(
-                    work.copy(
+                    current.copy(
                         hasEpub = true,
                         remoteEpubPending = false,
-                        downloadedAt = work.downloadedAt ?: now,
+                        downloadedAt = current.downloadedAt ?: now,
                         isDeleted = false,
                         deletedAt = null,
                         permanentDeletionScheduledAt = null,
