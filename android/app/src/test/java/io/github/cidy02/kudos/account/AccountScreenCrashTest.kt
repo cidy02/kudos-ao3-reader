@@ -27,7 +27,6 @@ class AccountScreenCrashTest {
         composeTestRule.setContent {
             AccountScreen(
                 authRepository = container.authRepository,
-                listRepository = container.accountListRepository,
                 workRepository = container.workRepository,
                 authorRepository = container.authorRepository,
                 countsCache = container.accountListCountsCache,

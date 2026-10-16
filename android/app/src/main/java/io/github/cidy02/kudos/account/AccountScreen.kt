@@ -172,7 +172,6 @@ import java.util.concurrent.TimeUnit
 @Composable
 fun AccountScreen(
     authRepository: AO3AuthRepository,
-    listRepository: AccountListRepository,
     workRepository: WorkRepository,
     onLogin: () -> Unit,
     onOpenList: (AccountListType) -> Unit,
@@ -197,8 +196,7 @@ fun AccountScreen(
         factory = AccountViewModel.factory(
             authRepository,
             authorRepository,
-            countsCache,
-            listRepository
+            countsCache
         )
     )
 ) {

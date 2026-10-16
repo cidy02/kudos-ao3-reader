@@ -2126,3 +2126,12 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   `/users/<name>/<list>` links count, so a pseud's numbers never land there. The hub's
   Collections and Series rows now show a count, as iOS's. Not seen running: the demo's
   dashboard, like iOS's fixture, prints no counts. Reverse: the commit that names this.
+- **2026-10-15 · The dashboard's groups as iOS reads them; the account hub makes no request for
+  a count (3fm item 4; Claude).** A missing Recent works, series or bookmarks group is AO3's
+  empty state ("No recent … visible on AO3."); one blurb that will not parse makes that group
+  "Couldn't read recent …. Open the full list to try again." instead of a silently shorter
+  list, and its siblings stand. "See all" stays under each section, as iOS. **The hub no longer
+  reads Subscriptions page 1 in the background** to show a count (added 10-03 in 3h-fix): iOS's
+  counts cache never makes a request of its own, and the binding networking policy keeps
+  reads to what the reader opened. The count still appears once Home (or the list) has read
+  that page; seen in the demo ("6+"). Reverse: the commit that names this.

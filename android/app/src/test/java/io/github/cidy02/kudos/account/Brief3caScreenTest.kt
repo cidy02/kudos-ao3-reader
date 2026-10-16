@@ -145,7 +145,7 @@ class Brief3caScreenTest {
         val model = AccountViewModel(auth, authorRepo())
         models.put("account", model)
         show {
-            AccountScreen(auth, lists, works, onLogin = { loginTaps++ }, onOpenList = {}, viewModel = model)
+            AccountScreen(auth, works, onLogin = { loginTaps++ }, onOpenList = {}, viewModel = model)
         }
     }
 

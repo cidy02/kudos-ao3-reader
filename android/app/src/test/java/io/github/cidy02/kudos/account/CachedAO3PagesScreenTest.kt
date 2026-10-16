@@ -119,7 +119,6 @@ class CachedAO3PagesScreenTest {
         val app = ApplicationProvider.getApplicationContext<Application>()
         val db = Room.inMemoryDatabaseBuilder(app, KudosDatabase::class.java).allowMainThreadQueries().build()
         val works = WorkRepository(db, WorkFileStore(Files.createTempDirectory("cached-pages-screen")))
-        val lists = AccountListRepository(client, auth)
         val chrome = PushedShellChrome()
         compose.setContent {
             KudosTheme(mode) {
@@ -137,7 +136,7 @@ class CachedAO3PagesScreenTest {
                                 }
                                 Screen.Hub -> {
                                     val vm = remember { AccountViewModel(auth, authors).also { models.put("hub-$visit", it) } }
-                                    AccountScreen(auth, lists, works, onLogin = {}, onOpenList = {}, viewModel = vm)
+                                    AccountScreen(auth, works, onLogin = {}, onOpenList = {}, viewModel = vm)
                                 }
                                 Screen.Series -> SeriesWorksScreen("https://archiveofourown.org/series/321", series, onOpenWork = {})
                                 else -> AuthorProfileScreen(if (screen == Screen.Author) "Avery_Archive" else "tester",
