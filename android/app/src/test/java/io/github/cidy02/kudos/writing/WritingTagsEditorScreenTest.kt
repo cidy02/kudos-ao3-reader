@@ -128,6 +128,22 @@ class WritingTagsEditorScreenTest {
     @Test fun draftRouteFormOpensAllFourEditorsAndHandsChangesBack() = editEveryKind(995001L)
     @Test fun postedRouteFormOpensAllFourEditorsAndHandsChangesBack() = editEveryKind(995006L)
 
+    @Test fun suggestionRowsShowCanonicalOrPostsAsTypedAndTheSuppliedCount() {
+        compose.setContent {
+            KudosTheme(KudosThemeMode.Light) {
+                Column {
+                    WritingSuggestionRow(io.github.cidy02.kudos.network.ao3.search.AO3EditorTag("Hurt/Comfort", true, 9001)) {}
+                    WritingSuggestionRow(io.github.cidy02.kudos.network.ao3.search.AO3EditorTag("not a tag", false)) {}
+                }
+            }
+        }
+        compose.onNodeWithText("Canonical", useUnmergedTree = true).assertExists()
+        compose.onNodeWithText("Posts as typed", useUnmergedTree = true).assertExists()
+        compose.onNodeWithText("%,d".format(9001), useUnmergedTree = true).assertExists()
+        compose.onNodeWithContentDescription("Add Hurt/Comfort").assertHasClickAction()
+        compose.onNodeWithContentDescription("Add not a tag").assertHasClickAction()
+    }
+
     @Test fun typedRowCanonicalBadgesEmptyAndFailedResponsesKeepTheFieldEditable() {
         show(null); open(WritingTagKind.Freeform)
         compose.onNodeWithText("SUGGESTIONS").assertDoesNotExist()

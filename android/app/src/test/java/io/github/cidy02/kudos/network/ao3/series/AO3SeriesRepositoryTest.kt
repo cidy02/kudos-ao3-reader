@@ -89,6 +89,8 @@ class AO3SeriesRepositoryParseTest {
             pageCache = io.github.cidy02.kudos.network.ao3.AO3PageCache()).detailPage(url) as AO3Result.Success).value
         val demo = detail(html)
         assertEquals(listOf("Avery Writes"), demo.creators)
+        assertEquals(io.github.cidy02.kudos.network.ao3.author.AO3AuthorRoute("AO3_Reader", "Avery Writes"),
+            demo.creatorIdentities.single().route)
         assertEquals("Three stories about a difficult sunrise.", demo.summary)
         assertEquals(true, demo.isComplete)
         assertEquals(null, demo.bookmarkCount); assertEquals("", demo.dateUpdated)

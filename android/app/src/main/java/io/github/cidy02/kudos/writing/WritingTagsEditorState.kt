@@ -2,6 +2,7 @@ package io.github.cidy02.kudos.writing
 
 import io.github.cidy02.kudos.network.ao3.AO3Result
 import io.github.cidy02.kudos.network.ao3.search.AO3TagAutocompleteRepository
+import io.github.cidy02.kudos.network.ao3.search.AO3EditorTag
 import io.github.cidy02.kudos.network.ao3.writing.AO3WorkForm
 import io.github.cidy02.kudos.network.ao3.writing.trimWritingTag
 import kotlinx.coroutines.CancellationException
@@ -38,7 +39,9 @@ internal fun excludesWritingSuggestion(name: String, chosen: List<String>): Bool
     return trimmed.isNotEmpty() && chosen.any { it.equals(trimmed, ignoreCase = true) }
 }
 
-internal data class WritingTagSuggestions(val term: String = "", val names: List<String> = emptyList(), val error: String? = null)
+internal data class WritingTagSuggestions(val term: String = "", val tags: List<AO3EditorTag> = emptyList(), val error: String? = null) {
+    val names: List<String> get() = tags.map { it.name }
+}
 
 /** One opening's debounce/cache. Owns no write client and never reads ahead. */
 internal class WritingTagsEditorState(
@@ -51,7 +54,7 @@ internal class WritingTagsEditorState(
 ) {
     private val mutable = MutableStateFlow(WritingTagSuggestions())
     val state = mutable.asStateFlow()
-    private val cache = mutableMapOf<String, List<String>>()
+    private val cache = mutableMapOf<String, List<AO3EditorTag>>()
     private var request: Job? = null
     private var active = true
 
@@ -62,33 +65,33 @@ internal class WritingTagsEditorState(
         val trimmed = trimWritingTag(term)
         val key = trimmed.lowercase(Locale.ROOT)
         if (key.isEmpty()) {
-            mutable.value = state.value.copy(names = emptyList())
+            mutable.value = state.value.copy(tags = emptyList())
             return
         }
         cache[key]?.let { cached ->
-            mutable.value = state.value.copy(names = cached.filterNot { excludesWritingSuggestion(it, values()) })
+            mutable.value = state.value.copy(tags = cached.filterNot { excludesWritingSuggestion(it.name, values()) })
             return
         }
         if (repository == null) return
         request = scope.launch {
             try {
                 delay(300)
-                val result = repository.autocomplete(kind.endpoint, trimmed, minimumTermLength = 1)
+                val result = repository.editorAutocomplete(kind.endpoint, trimmed)
                 currentCoroutineContext().ensureActive()
                 if (!active || state.value.term != term) return@launch
                 when (result) {
                     is AO3Result.Success -> {
-                        val names = result.value.map(::trimWritingTag).filter(String::isNotEmpty)
+                        val names = result.value
                         cache[key] = names
-                        mutable.value = state.value.copy(names = names.filterNot { excludesWritingSuggestion(it, values()) })
+                        mutable.value = state.value.copy(tags = names.filterNot { excludesWritingSuggestion(it.name, values()) })
                     }
-                    is AO3Result.Failure -> mutable.value = state.value.copy(names = emptyList(), error = WritingTagFailure)
+                    is AO3Result.Failure -> mutable.value = state.value.copy(tags = emptyList(), error = WritingTagFailure)
                 }
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (_: Exception) {
                 currentCoroutineContext().ensureActive()
-                if (active && state.value.term == term) mutable.value = state.value.copy(names = emptyList(), error = WritingTagFailure)
+                if (active && state.value.term == term) mutable.value = state.value.copy(tags = emptyList(), error = WritingTagFailure)
             }
         }
     }

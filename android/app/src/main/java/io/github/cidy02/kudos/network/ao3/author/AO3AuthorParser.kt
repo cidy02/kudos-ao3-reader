@@ -175,7 +175,8 @@ class AO3AuthorParser(
         val url = absoluteUrl(titleLink.attr("href")) ?: return null
         val id = Regex("""/series/(\d+)""").find(url)?.groupValues?.getOrNull(1)?.toLongOrNull()
             ?: return null
-        val creators = element.select("h4.heading a[rel=author], h4.heading a[href*=/pseuds/]")
+        val authorLinks = element.select("h4.heading a[rel=author], h4.heading a[href*=/pseuds/]")
+        val creators = authorLinks
             .map { it.normalizedText() }
             .filter { it.isNotBlank() }
             .ifEmpty {
@@ -188,6 +189,10 @@ class AO3AuthorParser(
             id = id,
             title = titleLink.normalizedText(),
             creators = creators,
+            creatorIdentities = if (creators == listOf("Anonymous")) listOf(AO3SeriesCreator("Anonymous", null))
+                else authorLinks.filter { it.normalizedText().isNotBlank() }.map {
+                    AO3SeriesCreator(it.normalizedText(), AO3AuthorRoute.fromUrl(it.attr("href")))
+                },
             fandoms = element.select("h5.fandoms a.tag").map { it.normalizedText() },
             summary = element.selectFirst("blockquote.userstuff.summary")?.normalizedText().orEmpty(),
             words = statInt(element, "words"),
@@ -225,6 +230,7 @@ class AO3AuthorParser(
             work = work,
             notes = notes,
             tags = element.select("div.user.module ul.meta.tags a.tag").map { it.normalizedText() },
+            collections = element.select("div.user.module a[href*=/collections/]").map { it.normalizedText() },
             isRecommendation = element.hasClass("rec") || status.contains("recommend"),
             isPrivate = element.hasClass("private") || status.contains("private"),
             date = element.selectFirst("div.user.module p.datetime")?.normalizedText().orEmpty()
@@ -373,11 +379,7 @@ class AO3AuthorParser(
      * "Avery%2520Writes", which is nobody.
      */
     private fun routeFromPath(href: String): AO3AuthorRoute? {
-        val path = AO3Constants.baseHttpUrl.resolve(href.trim())?.pathSegments ?: return null
-        val at = path.indexOf("users")
-        val user = path.getOrNull(at + 1)?.takeIf { at >= 0 && it.isNotBlank() } ?: return null
-        val pseud = path.getOrNull(at + 3)?.takeIf { path.getOrNull(at + 2) == "pseuds" && it.isNotBlank() }
-        return AO3AuthorRoute(user, pseud)
+        return AO3AuthorRoute.fromUrl(href)
     }
 
     private fun absoluteUrl(href: String?): String? {

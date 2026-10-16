@@ -76,7 +76,8 @@ fun SeriesWorksScreen(
     readingQueueRepository: ReadingQueueRepository? = null,
     onOpenAo3: (String) -> Unit = {},
     formRepository: io.github.cidy02.kudos.network.ao3.writing.AO3SeriesFormRepository? = null,
-    writes: io.github.cidy02.kudos.network.ao3.writes.AO3WriteRepository? = null
+    writes: io.github.cidy02.kudos.network.ao3.writes.AO3WriteRepository? = null,
+    onOpenAuthor: (io.github.cidy02.kudos.network.ao3.author.AO3AuthorRoute) -> Unit = {}
 ) {
     val sessionGeneration by seriesRepository.sessionChanges.collectAsState()
     var editing by remember(seriesUrl) { mutableStateOf<Boolean?>(null) }
@@ -256,12 +257,13 @@ fun SeriesWorksScreen(
                             io.github.cidy02.kudos.author.AO3SeriesRow(
                                 series = io.github.cidy02.kudos.network.ao3.author.AO3AuthorSeriesSummary(
                                     id = 0, title = detail.title, creators = detail.creators,
+                                    creatorIdentities = detail.creatorIdentities,
                                     fandoms = detail.page.works.firstOrNull()?.fandoms.orEmpty().take(1),
                                     summary = detail.summary, words = detail.words, workCount = detail.workCount,
                                     dateUpdated = detail.dateUpdated, isComplete = detail.isComplete, url = seriesUrl,
                                     bookmarkCount = detail.bookmarkCount),
                                 displayMode = io.github.cidy02.kudos.author.AuthorDisplayMode.Ledger,
-                                onOpenSeries = null, showsTitle = false)
+                                onOpenSeries = null, showsTitle = false, onOpenAuthor = onOpenAuthor)
                         }
                         item {
                             KudosSectionHeader(

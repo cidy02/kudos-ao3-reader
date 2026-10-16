@@ -47,6 +47,7 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.contentDescription
@@ -221,6 +222,22 @@ fun CommentFormatBar(
     }
 }
 
+/** iOS `CommentFormattingLayout`, in dp; >1.3 is this app's accessibility threshold. */
+internal object CommentFormattingLayout {
+    const val restingColumnCount = 4
+    const val gridGap = 7
+    const val tileMinHeight = 58
+    const val tilePaddingH = 6
+    const val tilePaddingV = 8
+
+    // 1.5/1.7 stand in for accessibility1/2; 1.8 and above for accessibility3+.
+    fun columnCount(fontScale: Float): Int = when {
+        fontScale >= 1.8f -> 1
+        fontScale > 1.3f -> 2
+        else -> restingColumnCount
+    }
+}
+
 /**
  * Full formatting tray modal bottom sheet (artboard 1bf).
  */
@@ -232,6 +249,7 @@ fun CommentFormattingTray(
     onDismiss: () -> Unit
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)
+    val columns = CommentFormattingLayout.columnCount(LocalDensity.current.fontScale)
     val tokens = LocalKudosTokens.current
 
     ModalBottomSheet(
@@ -266,49 +284,35 @@ fun CommentFormattingTray(
                         color = tokens.secondaryInk
                     )
 
-                    FlowRow(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        for (tag in CommentMarkupTag.entries.filter { it.group == group }) {
-                            Surface(
-                                modifier = Modifier
-                                    .clickable {
-                                        onValueChange(CommentMarkup.applyTag(tag, value))
-                                        if (tag != CommentMarkupTag.Heading) onDismiss()
-                                    },
-                                shape = RoundedCornerShape(10.dp),
-                                color = tokens.glassFill(0.08)
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = tag.icon,
-                                        contentDescription = null,
-                                        tint = tokens.primaryInk,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                    Column {
-                                        Text(
-                                            text = tag.label,
-                                            fontSize = 13.sp,
-                                            lineHeight = 18.sp,
-                                            fontWeight = FontWeight.Medium,
-                                            color = tokens.primaryInk
-                                        )
-                                        Text(
-                                            text = tag.tagLabel,
-                                            fontSize = 10.sp,
-                                            lineHeight = 15.sp,
-                                            fontFamily = FontFamily.Monospace,
-                                            color = tokens.secondaryInk
-                                        )
+                    Column(verticalArrangement = Arrangement.spacedBy(CommentFormattingLayout.gridGap.dp)) {
+                        for (row in CommentMarkupTag.entries.filter { it.group == group }.chunked(columns)) {
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(CommentFormattingLayout.gridGap.dp)) {
+                                for (tag in row) {
+                                    Surface(
+                                        modifier = Modifier.weight(1f).heightIn(min = CommentFormattingLayout.tileMinHeight.dp)
+                                            .clickable {
+                                                onValueChange(CommentMarkup.applyTag(tag, value))
+                                                if (tag != CommentMarkupTag.Heading) onDismiss()
+                                            },
+                                        shape = RoundedCornerShape(11.dp),
+                                        color = tokens.glassFill(0.09)
+                                    ) {
+                                        Column(
+                                            modifier = Modifier.padding(horizontal = CommentFormattingLayout.tilePaddingH.dp,
+                                                vertical = CommentFormattingLayout.tilePaddingV.dp),
+                                            horizontalAlignment = Alignment.CenterHorizontally,
+                                            verticalArrangement = Arrangement.spacedBy(3.dp)
+                                        ) {
+                                            Icon(tag.icon, contentDescription = null, tint = tokens.primaryInk,
+                                                modifier = Modifier.size(19.dp))
+                                            Text(tag.label, fontSize = 11.sp, lineHeight = 16.sp,
+                                                fontWeight = FontWeight.Medium, color = tokens.primaryInk)
+                                            Text(tag.tagLabel, fontSize = 11.sp, lineHeight = 16.sp,
+                                                fontFamily = FontFamily.Monospace, color = tokens.secondaryInk)
+                                        }
                                     }
                                 }
+                                repeat(columns - row.size) { Spacer(Modifier.weight(1f)) }
                             }
                         }
                     }
