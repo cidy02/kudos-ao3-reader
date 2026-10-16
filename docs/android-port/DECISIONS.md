@@ -2080,3 +2080,11 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   `missingApplicableAuthCookieNeverFallsBackToAnonymousReads`. Signed out, reads stay public.
   Two older tests modelled a signed-out reader with the fake's default signed-in name; they now
   have none. Reverse: the commit that names A59 #1.
+- **2026-10-15 · Account-list counts belong to a session; a Bookmarks page is a floor (A59 #4;
+  Claude).** Counts are kept under the name and session generation, as iOS's
+  `sessionScopedCacheScope`, so signing out and in again (even under the same name) starts with
+  no counts. One page of Bookmarks records "at least N", as iOS's `mayOmitRows`, because the
+  page keeps only work bookmarks; it no longer replaces an exact figure. The list screen's
+  second, duplicate recording of the same count was removed (the repository records it).
+  Seeding counts from the dashboard nav (iOS `record(dashboardActions:)`) goes to brief 3fm.
+  Reverse: the commit that names A59 #4.

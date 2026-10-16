@@ -56,10 +56,11 @@ class AccountListRepository(
                 if (parsed is AO3Result.Success) {
                     countsCache?.put(
                         type,
-                        username,
+                        AO3AccountListCountsCache.scope(username, generation),
                         AO3AccountListCountsCache.Count(
                             itemsOnPage = parsed.value.works.size,
-                            totalPages = parsed.value.totalPages
+                            totalPages = parsed.value.totalPages,
+                            mayOmitRows = type == AccountListType.Bookmarks
                         )
                     )
                 }
