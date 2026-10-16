@@ -35,6 +35,7 @@ class RoutesNavigationTest {
         navController.navigatorProvider.addNavigator(androidx.navigation.compose.ComposeNavigator())
         navController.graph = navController.createGraph(startDestination = "start") {
             composable("start") { }
+            composable(Routes.AuthorAbout, arguments = listOf(Routes.navArgOf("authorUsername"))) { }
             composable(Routes.Reader, arguments = listOf(Routes.navArgOf("workId"))) { }
             composable(Routes.WorkDetail, arguments = listOf(Routes.navArgOf("workSource"))) { }
 
@@ -74,6 +75,17 @@ class RoutesNavigationTest {
                 navArgument("compose") { type = NavType.BoolType; defaultValue = false }
             )) { }
         }
+    }
+
+    @Test fun dashboardAboutKeepsAccountAndPseudThroughNativeNavigation() {
+        val author = io.github.cidy02.kudos.network.ao3.author.AO3AuthorRoute("Avery_Archive", "A+B")
+        navController.navigate(Routes.authorAbout(author))
+        val entry = navController.currentBackStackEntry!!
+        assertEquals(Routes.AuthorAbout, entry.destination.route)
+        val decoded = io.github.cidy02.kudos.network.ao3.author.AO3AuthorRoute.fromByline(Routes.routeArg(entry, "authorUsername")!!)
+        assertEquals(author, decoded)
+        assertEquals("About", Routes.titleFor(entry.destination.route))
+        org.junit.Assert.assertTrue(Routes.hidesTabBar(entry.destination.route))
     }
 
     @Test fun familyRouteKeepsEverySiblingAndSingleTagRoutesStillWork() {

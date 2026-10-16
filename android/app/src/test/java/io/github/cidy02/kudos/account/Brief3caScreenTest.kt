@@ -127,7 +127,7 @@ class Brief3caScreenTest {
     private fun showAuthor(error: AO3Error? = null, pseud: String? = null, dashboard: Boolean = false) {
         client.dashboardError = error
         show {
-            AuthorProfileScreen("Avery_Archive", initialPseud = pseud, authorRepository = authorRepo(),
+            AuthorProfileScreen("Avery_Archive", onOpenAbout = {}, initialPseud = pseud, authorRepository = authorRepo(),
                 onOpenWork = {}, onOpenWeb = { opened = it }, isDashboard = dashboard)
         }
     }
@@ -185,7 +185,7 @@ class Brief3caScreenTest {
 
     @Test fun row10SignedOutDashboardHasIosCopyAndNoActionOrRead() {
         setAccount(false)
-        show { AO3DashboardScreen(authorRepo(), {}, {}, {}, null, {}, {}) }
+        show { AO3DashboardScreen(authorRepo(), {}, {}, {}, null, {}, {}, onOpenAbout = {}) }
         awaitText("Not signed in")
         compose.onNodeWithText("Log in to AO3 to open your dashboard.").assertExists()
         noClipping("Log in to AO3 to open your dashboard.")
@@ -217,7 +217,6 @@ class Brief3caScreenTest {
         client.postError = AO3Error.AuthenticationRequired
         compose.onNodeWithText("Save").performClick()
         val message = "Your AO3 session expired. Sign in again from Account."
-        compose.onNodeWithTag("AO3 preferences").performScrollToNode(hasText(message))
         awaitText(message)
         noClipping(message)
         assertTrue(auth.state.value is AO3AuthState.Expired)
@@ -227,6 +226,27 @@ class Brief3caScreenTest {
         compose.onNodeWithText("Save").assertIsEnabled()
         compose.onNodeWithTag("AO3 preferences").performScrollToNode(hasText(toggle.label))
         compose.onNodeWithContentDescription(toggle.label).assertIsOn()
+    }
+
+    @Test fun preferenceFailureStaysOverContentAndTryAgainSavesOnceThenSuccessExpires() {
+        show { AO3PreferencesScreen("Avery_Archive", AO3PreferencesRepository(writer())) }
+        awaitText("AO3 Preferences")
+        val form = io.github.cidy02.kudos.network.ao3.preferences.AO3PreferencesParser().parse(brief3caFixture("ao3_preferences"))
+        val toggle = form.sections.first().toggles.first()
+        compose.onNodeWithTag("AO3 preferences").performScrollToNode(hasText(toggle.label))
+        compose.onNodeWithContentDescription(toggle.label).performClick()
+        client.postError = AO3Error.Network("Offline")
+        compose.onNodeWithText("Save").performClick()
+        awaitText("Try Again")
+        compose.mainClock.advanceTimeBy(4000)
+        compose.onNodeWithText("Try Again").assertExists()
+        assertEquals(1, client.posts.size)
+        client.postError = null
+        compose.onNodeWithText("Try Again").performClick()
+        awaitText("Saved successfully.")
+        assertEquals(2, client.posts.size)
+        compose.onNodeWithText("Try Again").assertDoesNotExist()
+        compose.waitUntil(5_000) { compose.onAllNodesWithText("Saved successfully.").fetchSemanticsNodes().isEmpty() }
     }
 
     @Test fun row13RestoringAccountShowsSkeletonInsteadOfSignedOutHeader() {
@@ -267,8 +287,8 @@ class Brief3caScreenTest {
         // The writer's own page: the dashboard, the works, then the account's totals.
         compose.waitUntil(15_000) { client.gets.size >= 3 }
         assertEquals(3, client.gets.size); assertTrue(client.gets[2].endsWith("/users/Avery_Archive/stats"))
-        compose.onNodeWithTag("Author profile").performScrollToNode(hasText("Next"))
-        compose.onNodeWithText("Next").performClick()
+        compose.onNodeWithTag("Author profile").performScrollToNode(hasText("Load More"))
+        compose.onNodeWithText("Load More").performClick()
         awaitText("Try Loading More")
         compose.onNodeWithText("Page two failed").assertExists(); noClipping("Try Loading More")
         compose.onNodeWithTag("Author profile").performScrollToNode(hasText("Two Voices at Dawn"))

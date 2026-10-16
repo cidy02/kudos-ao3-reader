@@ -206,6 +206,12 @@ class WorkImporter(
         }
     }
 
+    /** One user-selected website download, through the same paced client as native downloads. */
+    suspend fun importWebEpub(url: String): WorkImportResult = when (val result = downloader.downloadUrl(url)) {
+        is AO3Result.Failure -> WorkImportResult.Failure(null, result.error)
+        is AO3Result.Success -> importLocalEpub("work.epub", result.value)
+    }
+
     /** Import a user-picked local file (SAF), including OPF/AO3 metadata for EPUBs. */
     suspend fun importLocalEpub(
         displayName: String?,

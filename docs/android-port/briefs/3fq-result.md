@@ -147,3 +147,106 @@ blur → reveal → reader, author selection, Home Delete with confirmations off
 Download success/partial failure/cancellation, and TalkBack alphabet adjustment;
 then resumes the remaining list at F14. No sign-in or live AO3 request was used
 to verify any of this work.
+
+## Part 2
+
+Status: IN PROGRESS. Continuing on `android/agent-codex-3fq2` at `b5a21a66`
+with an initially clean tree. Requested order: F14, F13, F18, F21, F19,
+F26, F27, F22, F24, F23. User's current lane overrides the original brief's
+branch name. No commits, pushes, branch switches, sign-in, AO3 contact or Gradle
+invocations. `TASKS.md`, `comments/` and `account/AccountInboxPane.kt` remain
+excluded. No Room schema or backup-format changes.
+
+F14 confirmed in `AO3WebViewFallbackScreen`: no download listener/import route.
+Investigating the existing paced downloader and local EPUB importer for reuse.
+
+- F14 addressed: `AO3WebViewFallbackScreen` intercepts main-frame EPUB links and
+  attaches a download listener; `WorkImporter.importWebEpub` uses the paced
+  `AO3EpubDownloader.downloadUrl` then the existing metadata/dedup/revival importer.
+  Download targets are restricted to HTTPS AO3 `/downloads/…/*.epub` URLs before
+  any client call. No enrichment GET or background sweep. Screen exit cancels
+  its coroutine and destroys the WebView. Result/error banners are transient.
+- F13 addressed: address/search + Go, always-available Reload, local page Bookmark
+  and immediate Done are wired in the WebView. `AppNavHost` supplies its existing
+  bookmark DAO and importer; repeated bookmark saves preserve the stored id/date.
+  Address submissions use the same URL policy as ordinary navigation.
+- Added unexecuted coverage in `WorkLifecycleTest` (website import, dedup, flags,
+  locator and file) and `AO3WebUrlPolicyTest` (download trust boundary and encoded
+  address searches). iOS references: `BrowseView.swift`, `WebBrowser.swift`.
+
+Continuing at F18. No compilation/runtime or visual approval claimed.
+
+- F18 addressed: `AuthorProfileScreen.loadTab` appends Works/Series/Bookmarks
+  by stable id for later pages and replaces on page-one resets. Existing
+  selection remains over the accumulated works. `SeriesWorksScreen.load` does
+  the same for series detail; both use `AuthorLoadMoreRow`, disabling duplicate
+  taps and offering explicit retry without discarding earlier rows. No prefetch.
+  Updated `AuthorProfileSortScreenTest` for Load More and added an unexecuted
+  failure/retry/append regression using a fake client. iOS reference:
+  `AuthorProfileContentSections.swift` (`AO3AuthorPaginationRows`).
+
+Continuing at F21. The Inbox-specific portion remains outside this lane because
+`AccountInboxPane.kt` is explicitly excluded.
+
+- F21 shared-picker portion addressed: `PageScrubberSheet` adds exact numeric
+  entry, range/overflow validation, keyboard Go and a scrollable keyboard-safe
+  sheet. Typing/sliding only edits the draft; one Go selects one page. Added
+  unexecuted `PaginationHintTest` coverage for page 2731/5000, invalid values and
+  no request before Go. Inbox pager remains explicitly deferred to Claude.
+
+- F19 addressed: Dashboard fandoms preview five, Expand/Collapse toggles the
+  rest, and chips open AO3's exact fandom URL (including its user filter) through
+  the existing website callback, matching iOS `AO3DashboardSections`. Added an
+  unexecuted fake-client dashboard interaction test; expanding costs no read.
+
+- F26 addressed: profile/dashboard More offers Expand/Collapse All and passes
+  its state to every `AO3AuthorWorkCard` (including bookmark and own-work rows).
+  Cards keep their existing individual disclosure behavior. Added an unexecuted
+  menu/disclosure regression in `AuthorProfileSortScreenTest`. iOS reference:
+  `AuthorProfileView.swift` and `AuthorDashboardSections.swift`.
+
+- F27 addressed: Dashboard More → About now pushes `Routes.AuthorAbout`, which
+  mounts the existing `AuthorProfileScreen` on `AuthorTab.About`. The route carries
+  account/pseud identity, and Back uses the native stack. `onOpenAbout` is passed
+  at all production/test callers of profile and dashboard screens. Added
+  unexecuted tests for the dashboard callback and lazy About loading (no Works
+  read). iOS reference: `AuthorProfileView.swift` dashboard destination.
+
+Continuing at F22.
+
+- F22 addressed: `FilterTagRow` receives fandom context through all
+  `SearchFilterSheet` callers (Browse supplies its scoped fandoms). Opening a
+  non-fandom picker reads the first fandom's first works page through the existing
+  autocomplete repository/client and parses the requested include facet only.
+  Blank-query content is labelled “Popular in …”; typed search and selected-tag
+  cycles retain their existing behavior. Refine keeps its existing local-only
+  contract. No fan-out, prefetch or request while cycling tags. Added unexecuted
+  `AO3PopularTagsTest` and `FilterTagPickerPopularTest`. iOS references:
+  `TagSelectField.swift`, `AO3Client.popularTags`.
+
+- F24 addressed: Collection Items' toolbar Submit directly invokes the existing
+  guarded `confirmSubmit` operation. The extra dialog and its UI-only guards are
+  removed; staging, Discard, disabled/busy state and model double-submit/session
+  fences remain. Existing `AO3CollectionItemsTest` / `AO3UserCollectionItemsTest`
+  cover submission/refusal/double taps; this wiring removal adds no new logic.
+  iOS reference: `AO3CollectionItemsView.swift` toolbar `submit()`.
+
+Continuing at F23.
+
+- F23 addressed: Preferences save results use an over-content Snackbar with an
+  accessible live region and explicit dismiss. Success expires after three
+  seconds; failure stays with a user-started Try Again wired to the same guarded
+  save path. No automatic write retry. Failed saves retain edits, and edits made
+  during a successful save stay dirty. Updated the prior expiry test for the
+  overlay and added an unexecuted failure/retry/success-expiry interaction test
+  in `Brief3caScreenTest`. iOS reference: `AO3PreferencesView.toastOverlay`.
+
+All requested findings have source changes; F21's Inbox-only portion remains
+excluded. Reviewing signatures, changed tests and static syntax now. Builds,
+test execution, emulator interaction and visual approval remain for Claude.
+
+Static review corrections: updated the existing `Brief3caScreenTest` author-page
+retry flow to use Load More; added a real-navigation About/pseud round-trip test
+in `RoutesNavigationTest`; added fake-client assertions that website downloads
+refuse untrusted targets before transport, fetch the exact selected URL once,
+and reject HTML. All of these tests remain unexecuted.

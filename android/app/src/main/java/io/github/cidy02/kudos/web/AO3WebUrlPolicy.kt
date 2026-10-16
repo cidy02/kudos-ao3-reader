@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.web
 
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import io.github.cidy02.kudos.network.ao3.browse.AO3BrowseUrls
 
 /** What the WebView fallback should do with a navigation target. */
@@ -21,6 +22,13 @@ sealed interface WebNavDecision {
  * `javascript:`/`intent:` redirects.
  */
 object AO3WebUrlPolicy {
+    fun addressUrl(input: String): String? {
+        val text = input.trim().takeIf { it.isNotEmpty() } ?: return null
+        if (Regex("^[A-Za-z][A-Za-z0-9+.-]*:").containsMatchIn(text)) return text
+        return "https://archiveofourown.org/works/search".toHttpUrl().newBuilder()
+            .addQueryParameter("work_search[query]", text).build().toString()
+    }
+
     fun classify(url: String): WebNavDecision {
         val trimmed = url.trim()
         if (AO3BrowseUrls.isAo3Url(trimmed)) return WebNavDecision.Allow

@@ -513,6 +513,7 @@ fun AccountWorksListScreen(
             works.count { it.remote.isSubscriptionIndexOnly() }
         } else 0
         SearchFilterSheet(
+            fandomContext = AO3SearchFilters.commaSeparatedValues(filters.fandom),
             filters = filters,
             onFiltersChange = { filters = it },
             onApply = { showingFilters = false },

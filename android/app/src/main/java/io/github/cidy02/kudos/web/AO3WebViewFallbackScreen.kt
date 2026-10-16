@@ -3,6 +3,11 @@ package io.github.cidy02.kudos.web
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.material3.OutlinedTextField
+import io.github.cidy02.kudos.network.ao3.displayMessage
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
@@ -27,6 +32,13 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.DisposableEffect
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.CancellationException
+import io.github.cidy02.kudos.works.WorkImporter
+import io.github.cidy02.kudos.works.WorkImportResult
+import io.github.cidy02.kudos.network.ao3.work.AO3EpubDownloader
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -52,13 +64,55 @@ import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 fun AO3WebViewFallbackScreen(
     url: String,
     appTheme: AppThemeSetting,
+    workImporter: WorkImporter,
+    onBookmark: suspend (title: String, url: String) -> Unit,
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var importing by remember { mutableStateOf(false) }
+    var notice by remember { mutableStateOf<String?>(null) }
+    val importDownload: (String) -> Unit = { target ->
+        if (!importing && AO3EpubDownloader.isEpubDownload(target)) {
+            importing = true
+            scope.launch {
+                try {
+                    val result = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                        workImporter.importWebEpub(target)
+                    }
+                    notice = when (result) {
+                        is WorkImportResult.Success -> "Saved “${result.work.title}” to Library"
+                        is WorkImportResult.Failure -> "Couldn't save EPUB: ${result.error.displayMessage()}"
+                    }
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (error: Exception) {
+                    notice = error.message ?: "Couldn't save EPUB."
+                } finally {
+                    importing = false
+                }
+            }
+        }
+    }
+    var address by remember(url) { mutableStateOf(url) }
+    var bookmarking by remember { mutableStateOf(false) }
     var loading by remember { mutableStateOf(true) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var currentTitle by remember { mutableStateOf(url) }
     var webView by remember { mutableStateOf<WebView?>(null) }
+
+    LaunchedEffect(notice) {
+        if (notice != null) {
+            kotlinx.coroutines.delay(2500)
+            notice = null
+        }
+    }
+    DisposableEffect(webView) {
+        val mounted = webView
+        onDispose { mounted?.stopLoading(); mounted?.destroy() }
+    }
+
+    val currentImportDownload by rememberUpdatedState(importDownload)
 
     // Mirror KudosTheme: System → Dark or Light from the device setting.
     val systemDark = isSystemInDarkTheme()
@@ -100,17 +154,52 @@ fun AO3WebViewFallbackScreen(
                     val wv = webView
                     if (wv != null && wv.canGoBack()) wv.goBack() else onBack()
                 }) { Text("Back") }
-                Text(
-                    text = currentTitle,
-                    style = MaterialTheme.typography.titleSmall,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f)
-                )
+                Text(currentTitle, style = MaterialTheme.typography.titleSmall,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                 TextButton(onClick = { openExternal(context, webView?.url ?: url) }) { Text("Browser") }
+                TextButton(onClick = onBack) { Text("Done") }
             }
         }
 
+        Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+            fun submitAddress() {
+                val target = AO3WebUrlPolicy.addressUrl(address) ?: return
+                when (val decision = AO3WebUrlPolicy.classify(target)) {
+                    WebNavDecision.Allow -> if (AO3EpubDownloader.isEpubDownload(target)) currentImportDownload(target)
+                        else webView?.loadUrl(target)
+                    is WebNavDecision.External -> openExternal(context, decision.url)
+                    WebNavDecision.Block -> Unit
+                }
+            }
+            OutlinedTextField(value = address, onValueChange = { address = it }, singleLine = true,
+                label = { Text("Search AO3 or enter a URL") }, modifier = Modifier.weight(1f),
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Go),
+                keyboardActions = KeyboardActions(onGo = { submitAddress() }))
+            TextButton(onClick = { submitAddress() }) { Text("Go") }
+        }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+            TextButton(onClick = { webView?.reload() }) { Text("Reload") }
+            TextButton(enabled = !bookmarking && AO3WebUrlPolicy.isAllowedInApp(webView?.url.orEmpty()), onClick = {
+                val pageUrl = webView?.url
+                if (pageUrl != null && AO3WebUrlPolicy.isAllowedInApp(pageUrl)) {
+                    val title = webView?.title?.takeIf { it.isNotBlank() } ?: pageUrl
+                    bookmarking = true
+                    scope.launch {
+                        try {
+                            onBookmark(title, pageUrl)
+                            notice = "Bookmarked “$title”"
+                        } catch (cancelled: CancellationException) {
+                            throw cancelled
+                        } catch (error: Exception) {
+                            notice = error.message ?: "Couldn't bookmark this page."
+                        } finally { bookmarking = false }
+                    }
+                }
+            }) { Text("Add Bookmark") }
+        }
+
+        if (importing) Text("Saving EPUB…", modifier = Modifier.padding(16.dp))
+        notice?.let { Text(it, modifier = Modifier.padding(16.dp)) }
         if (loading) {
             LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
         }
@@ -145,6 +234,7 @@ fun AO3WebViewFallbackScreen(
                     webView = this
                     settings.javaScriptEnabled = true
                     settings.domStorageEnabled = true
+                    setDownloadListener { target, _, _, _, _ -> currentImportDownload(target) }
                     webViewClient = object : WebViewClient() {
                         override fun shouldInterceptRequest(view: WebView?, request: WebResourceRequest?): WebResourceResponse? {
                             if (!DemoNetwork.isActive) return super.shouldInterceptRequest(view, request)
@@ -162,6 +252,10 @@ fun AO3WebViewFallbackScreen(
                             request: WebResourceRequest?
                         ): Boolean {
                             val target = request?.url?.toString() ?: return false
+                            if (request.isForMainFrame && request.method == "GET" && AO3EpubDownloader.isEpubDownload(target)) {
+                                currentImportDownload(target)
+                                return true
+                            }
                             return when (val decision = AO3WebUrlPolicy.classify(target)) {
                                 WebNavDecision.Allow -> false
                                 is WebNavDecision.External -> {
@@ -175,11 +269,12 @@ fun AO3WebViewFallbackScreen(
                         override fun onPageStarted(view: WebView?, url2: String?, favicon: android.graphics.Bitmap?) {
                             loading = true
                             errorMessage = null
-                            url2?.let { currentTitle = it }
+                            url2?.let { currentTitle = it; address = it }
                         }
 
                         override fun onPageFinished(view: WebView?, url2: String?) {
                             loading = false
+                            url2?.let { address = it }
                             currentTitle = view?.title?.takeIf { it.isNotBlank() } ?: url2 ?: currentTitle
                             // Always evaluate (including Light / non-AO3 remove branch)
                             // so a prior kudos-app-theme tag is actively cleared when needed.
@@ -204,7 +299,11 @@ fun AO3WebViewFallbackScreen(
                             loading = newProgress < 100
                         }
                     }
-                    if (AO3WebUrlPolicy.isAllowedInApp(url)) loadUrl(url)
+                    if (AO3EpubDownloader.isEpubDownload(url)) {
+                        loading = false
+                        currentImportDownload(url)
+                    }
+                    else if (AO3WebUrlPolicy.isAllowedInApp(url)) loadUrl(url)
                 }
             }
         )

@@ -515,6 +515,14 @@ fun AppNavHost(
                 AO3WebViewFallbackScreen(
                     url = url,
                     appTheme = settings.app.appTheme,
+                    workImporter = container.workImporter,
+                    onBookmark = { title, pageUrl ->
+                        val dao = container.database.bookmarkDao()
+                        val existing = dao.getByUrl(pageUrl)
+                        dao.upsert(io.github.cidy02.kudos.data.local.entity.BookmarkEntity(
+                            id = existing?.id ?: java.util.UUID.randomUUID().toString(),
+                            title = title, urlString = pageUrl, dateAdded = existing?.dateAdded ?: java.time.Instant.now()))
+                    },
                     onBack = { navController.popBackStack() }
                 )
             }
@@ -597,6 +605,7 @@ fun AppNavHost(
             )
             val username = (authState as? AO3AuthState.SignedIn)?.username
             AO3DashboardScreen(
+                onOpenAbout = { navController.navigate(Routes.authorAbout(it)) },
                 authorRepository = container.authorRepository,
                 onOpenWork = { work -> navigateToWorkDetail(WorkDetailSource.RemoteSummary(work)) },
                 onOpenSeries = { seriesUrl -> navController.navigate(Routes.seriesWorks(seriesUrl)) },
@@ -987,6 +996,7 @@ fun AppNavHost(
             } else {
                 if (type == AccountListType.MyWorks && worksUsername != null) {
                     AuthorProfileScreen(
+                        onOpenAbout = { navController.navigate(Routes.authorAbout(it)) },
                         onOpenAuthor = { navController.navigate(Routes.authorProfile(it)) },
                         onNewWork = { navController.navigate(io.github.cidy02.kudos.account.WritingWorkDestination.route()) },
                         username = worksUsername,
@@ -1277,7 +1287,7 @@ fun AppNavHost(
             )
         }
 
-        listOf(Routes.AuthorProfile, Routes.AuthorSeries).forEach { authorRoute -> sharedComposable(
+        listOf(Routes.AuthorProfile, Routes.AuthorSeries, Routes.AuthorAbout).forEach { authorRoute -> sharedComposable(
             authorRoute,
             arguments = listOf(Routes.navArgOf("authorUsername"))
         ) { backStackEntry ->
@@ -1288,12 +1298,16 @@ fun AppNavHost(
                 // Every way in comes through here, and a work's page passes the byline's words.
                 val author = io.github.cidy02.kudos.network.ao3.author.AO3AuthorRoute.fromByline(authorUsername)
                 AuthorProfileScreen(
+                    onOpenAbout = { navController.navigate(Routes.authorAbout(it)) },
                     onOpenAuthor = { navController.navigate(Routes.authorProfile(it)) },
                     onNewWork = { navController.navigate(io.github.cidy02.kudos.account.WritingWorkDestination.route()) },
                     username = author.username,
                     initialPseud = author.pseud,
-                    initialTab = if (authorRoute == Routes.AuthorSeries) io.github.cidy02.kudos.author.AuthorTab.Series
-                        else io.github.cidy02.kudos.author.AuthorTab.Works,
+                    initialTab = when (authorRoute) {
+                        Routes.AuthorSeries -> io.github.cidy02.kudos.author.AuthorTab.Series
+                        Routes.AuthorAbout -> io.github.cidy02.kudos.author.AuthorTab.About
+                        else -> io.github.cidy02.kudos.author.AuthorTab.Works
+                    },
                     authorRepository = container.authorRepository,
                     seriesFormRepository = remember(container) { io.github.cidy02.kudos.network.ao3.writing.AO3SeriesFormRepository(
                         container.authenticatedClient, container.authRepository) },
