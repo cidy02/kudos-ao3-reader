@@ -552,12 +552,7 @@ private fun MyCopyOriginSection(
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         MyCopyGroupHeader(title = "Origin")
 
-        // iOS's sentences: an imported file is not "Imported EPUB file." but what it lacks.
-        val originSentence = if (work.hasAo3WorkId) {
-            "From Archive of Our Own."
-        } else {
-            "This imported work doesn't include the website where it was first posted."
-        }
+        val originSentence = myCopyOriginSentence(work)
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.Top) {
             Icon(
                 Icons.Outlined.Description, contentDescription = null, tint = tokens.secondaryInk,
@@ -942,4 +937,22 @@ internal fun preservationStatusLabel(raw: String?): String = when (raw) {
     "queued" -> "Preservation queued"
     "failed", "missingFile" -> "Needs restore"
     else -> "Not preserved"
+}
+
+/** iOS WorkOrigin.detect and WorkProvenanceSections.originSentence; derived only from the source host. */
+internal fun myCopyOriginSentence(work: SavedWork): String {
+    val source = work.sourceUrl.trim()
+    if (source.isEmpty()) return "This imported work doesn't include the website where it was first posted."
+    val host = runCatching { java.net.URI(source).host?.lowercase(java.util.Locale.ROOT) }.getOrNull().orEmpty()
+    fun matches(site: String) = host == site || host.endsWith(".$site")
+    if (matches("archiveofourown.org") || matches("ao3.org")) return "From Archive of Our Own."
+    if (matches("ao3.satr.dev") || matches("archive.org"))
+        return "This work was first posted on Archive of Our Own and imported through another website."
+    val name = listOf(
+        "fanfiction.net" to "FanFiction.net", "fictionpress.com" to "FictionPress", "wattpad.com" to "Wattpad",
+        "royalroad.com" to "Royal Road", "spacebattles.com" to "SpaceBattles",
+        "sufficientvelocity.com" to "Sufficient Velocity", "squidgeworld.org" to "SquidgeWorld",
+        "tumblr.com" to "Tumblr", "livejournal.com" to "LiveJournal"
+    ).firstOrNull { matches(it.first) }?.second ?: "Other site"
+    return "Imported work, originally posted on $name."
 }

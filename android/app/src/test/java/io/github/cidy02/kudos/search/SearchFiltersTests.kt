@@ -14,6 +14,13 @@ import org.junit.Test
 
 /** Pure iOS FilterRangeSlider, FilterLanguagePicker, and TagSelectField behavior. */
 class SearchFiltersTests {
+    // iOS SearchFiltersTests.rangeSliderClampsExtremeInputAndOffTrackMovement.
+    @Test fun aNaNCallbackKeepsTheCurrentNumericBound() {
+        assertEquals(42L, FilterRangeValues.sliderBound(Float.NaN, 42, 0, 100))
+        assertEquals(100L, FilterRangeValues.sliderBound(Float.POSITIVE_INFINITY, 42, 0, 100))
+        assertEquals(0L, FilterRangeValues.sliderBound(Float.NEGATIVE_INFINITY, 42, 0, 100))
+    }
+
     @Test
     fun languageSearchFiltersByNativeNameAndKeepsAnyFirst() {
         assertEquals(AO3Language.ANY, matchingFilterLanguages("").first())

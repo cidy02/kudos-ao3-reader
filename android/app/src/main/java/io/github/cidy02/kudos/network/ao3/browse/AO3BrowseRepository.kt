@@ -36,6 +36,8 @@ class AO3BrowseRepository(
     private val clock: AO3Clock = SystemAO3Clock,
     private val demoActive: () -> Boolean = { DemoNetwork.isActive }
 ) {
+    val exactFamilyCounts = io.github.cidy02.kudos.browse.FandomFamilyExactCountCache()
+
     suspend fun categories(): AO3Result<List<AO3MediaCategory>> {
         return when (val result = client.get(AO3BrowseUrls.mediaIndexUrl())) {
             is AO3Result.Failure -> result
@@ -132,10 +134,17 @@ class AO3BrowseRepository(
         }
         val base = filters ?: browseBaseline()
         // fandom_names ANDs siblings, so it must not intersect the OR group again.
-        return searchRepository.search(base.copy(
+        val result = searchRepository.search(base.copy(
             fandom = "",
             query = listOf(base.query.trim(), AO3FandomUnion.queryClause(ids)!!).filter { it.isNotEmpty() }.joinToString(" ")
         ), page)
+        val baseline = browseBaseline()
+        if (result is AO3Result.Success && base.copy(sort = baseline.sort, sortDirection = baseline.sortDirection) == baseline) {
+            result.value.summary?.total?.let { total ->
+                exactFamilyCounts.store(total, io.github.cidy02.kudos.browse.FandomFamily.id(names))
+            }
+        }
+        return result
     }
 
     /**

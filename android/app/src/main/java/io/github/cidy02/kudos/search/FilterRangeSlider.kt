@@ -66,12 +66,12 @@ internal fun FilterRangeSlider(
             value = lower.toFloat()..upper.toFloat(),
             onValueChange = { range ->
                 dragMaximum = maximum
-                val nextLower = range.start.toLong().coerceIn(0, maximum)
-                val nextUpper = range.endInclusive.toLong().coerceIn(nextLower, maximum)
+                val nextLower = FilterRangeValues.sliderBound(range.start, lower, 0, maximum)
+                val nextUpper = FilterRangeValues.sliderBound(range.endInclusive, upper, nextLower, maximum)
                 onChange(
-                    if (range.start == lower.toFloat()) from
+                    if (range.start.isNaN() || range.start == lower.toFloat()) from
                     else if (nextLower == 0L) "" else nextLower.toString(),
-                    if (range.endInclusive == upper.toFloat()) to
+                    if (range.endInclusive.isNaN() || range.endInclusive == upper.toFloat()) to
                     else if (range.endInclusive >= maximum.toFloat()) "" else nextUpper.toString()
                 )
             },
@@ -144,6 +144,9 @@ private fun RangeBoundField(title: String, value: String, modifier: Modifier, on
 
 /** Pure equivalents of iOS FilterRangeSlider's numeric helpers, saturating at Long.maxValue. */
 internal object FilterRangeValues {
+    fun sliderBound(value: Float, current: Long, minimum: Long, maximum: Long): Long =
+        (if (value.isNaN()) current else value.toLong()).coerceIn(minimum, maximum)
+
     fun digitsOnly(text: String): String = text.filter { it in '0'..'9' }
     fun integer(text: String): Long? = digitsOnly(text).toLongOrNull()
 

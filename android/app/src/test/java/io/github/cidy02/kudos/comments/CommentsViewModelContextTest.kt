@@ -299,6 +299,34 @@ class CommentsViewModelContextTest {
         assertEquals(2, session.posts.size)
     }
 
+    // iOS guardAdoptShowsIdleForAKeyTheStoreHasNoEntryFor: unrelated drafts have no Check Again target.
+    @Test fun adoptingAFreshReplyClearsTheOldVerificationWithoutReleasingItsDuplicateBlock() = runTest(testDispatcher) {
+        val session = Session(basic)
+        session.postAnswer = AO3Result.Failure(AO3Error.Network("lost answer"))
+        val viewModel = model(session)
+        until("initial page") { viewModel.isDraftRestored.value }
+        viewModel.openComposer(); idle()
+        viewModel.updateDraft("original unresolved body"); idle()
+        session.answerAfterPost = success("<p>Maintenance</p>")
+        viewModel.submitComment()
+        until("unknown verification") { !viewModel.submitting.value && viewModel.canReverify.value }
+        val key = CommentSubmissionKey.of(work, null, "original unresolved body", "alice")
+        viewModel.closeComposer(); idle()
+        assertEquals(false, viewModel.canReverify.value)
+        viewModel.startReply(AO3Comment(id = "comment_101", author = AO3CommentAuthor(name = "Other"),
+            date = "2026-08-03", body = "Another comment", canReply = true))
+        idle()
+        assertEquals(false, viewModel.canReverify.value)
+        val reads = session.urls.size
+        viewModel.reverify(); idle()
+        assertEquals(reads, session.urls.size)
+        assertEquals(1, session.posts.size)
+        assertEquals(CommentSubmissionStore.Phase.Ambiguous, submissions.entry(key)?.phase)
+        viewModel.closeComposer(); idle()
+        viewModel.openComposer()
+        until("original adopted again") { !viewModel.submitting.value && viewModel.canReverify.value }
+    }
+
     @Test fun definitiveRefusalsAndOfflineFailuresKeepTheDraftAndPermitOnlyAnExplicitRetry() = runTest(testDispatcher) {
         for ((index, error) in listOf(AO3Error.Network("offline", offline = true), AO3Error.RateLimited(1000),
             AO3Error.Validation("Rejected")).withIndex()) {

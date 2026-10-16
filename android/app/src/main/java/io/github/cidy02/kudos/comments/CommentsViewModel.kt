@@ -650,6 +650,7 @@ class CommentsViewModel(
         _replyTarget.value = null
         _editTarget.value = null
         _composerParent.value = null
+        if (!_submitting.value) pendingVerification = null
     }
 
     fun saveDraft(): Job? {
@@ -720,6 +721,7 @@ class CommentsViewModel(
         if (syncViewer()) return
         val target = _currentTarget.value ?: return
         composer = Composer(target, currentViewer(), edit = comment)
+        if (!_submitting.value) pendingVerification = null
         _editTarget.value = comment
         _replyTarget.value = null
         _composerParent.value = null
@@ -780,6 +782,8 @@ class CommentsViewModel(
     )
 
     private fun checkUnresolved(sent: Composer) {
+        if (_submitting.value) return
+        pendingVerification = null
         if (sent.edit != null || _draft.value.isBlank()) return
         val key = submissionKey(sent, _draft.value)
         if (submissions.entry(key)?.phase == CommentSubmissionStore.Phase.Ambiguous) verify(sent, key)

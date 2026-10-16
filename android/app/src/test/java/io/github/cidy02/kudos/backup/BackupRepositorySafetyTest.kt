@@ -9,6 +9,7 @@ import io.github.cidy02.kudos.core.model.CustomFont
 import io.github.cidy02.kudos.core.model.SavedWork
 import io.github.cidy02.kudos.data.local.KudosDatabase
 import io.github.cidy02.kudos.data.local.entity.SyncTombstoneEntity
+import io.github.cidy02.kudos.data.local.entity.toDomain
 import io.github.cidy02.kudos.data.local.entity.toEntity
 import io.github.cidy02.kudos.data.preferences.SettingsRepository
 import io.github.cidy02.kudos.files.FileWriteResult
@@ -130,6 +131,25 @@ class BackupRepositorySafetyTest {
         val summary = device.repository.applyMergeResult(merge)
         assertArrayEquals(localBytes, Files.readAllBytes(device.root.resolve("fonts/reader.ttf")))
         assertEquals(1, summary.concurrentRowsDeferred)
+    }
+
+    // iOS WorkSearchIndexTests: restored metadata and user tags are searchable immediately.
+    @Test fun restoreReindexesNewAndAlreadyCurrentWorksAfterAttachingTags() = runTest {
+        val device = device()
+        val indexed = io.github.cidy02.kudos.works.WorkSearchIndex.reindex(work(A, "Local"))
+        device.database.workDao().upsert(indexed.toEntity())
+        val incoming = listOf(work(A, "Local").copy(workFreeforms = listOf("Hurt/Comfort")), work(B, "Heroine"))
+        val pack = KudosBackupPackage(manifest = BackupLibrarySnapshot(works = incoming,
+            userTagsByWorkId = incoming.associate { it.id to listOf("Wintër Favorites") }).toV2Manifest(NOW))
+        device.repository.importPackage(pack, BackupImportMode.MERGE)
+        for (id in listOf(A, B)) {
+            val restored = device.database.workDao().getById(id)!!.toDomain()
+            assertEquals(io.github.cidy02.kudos.works.WorkSearchIndex.CURRENT_VERSION, restored.searchIndexVersion)
+            assertTrue(io.github.cidy02.kudos.works.WorkSearchIndex.matches(restored, listOf("winter", "favorites")))
+            assertEquals(NOW, restored.lastModifiedAt)
+        }
+        val merged = device.database.workDao().getById(A)!!.toDomain()
+        assertTrue(io.github.cidy02.kudos.works.WorkSearchIndex.matches(merged, listOf("comfort")))
     }
 
     @Test

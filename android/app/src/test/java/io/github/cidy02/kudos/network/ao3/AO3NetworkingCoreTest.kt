@@ -432,6 +432,24 @@ class AO3ClientUserAgentTest {
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class AO3ClientCoalescingTest {
+    // iOS AO3ClientPolicyTests: cancellation must precede reserving a pacing slot.
+    @Test fun cancelledBinaryDownloadDoesNotReserveAPacingSlot() = runTest {
+        withServer { server ->
+            val waits = RecordingDelay()
+            val coordinator = AO3RequestCoordinator(AO3NetworkConfig(), FakeClock(), waits)
+            val client = OkHttpAO3Client(OkHttpClient(), coordinator = coordinator, isAllowedUrl = { true })
+            val download = async {
+                kotlinx.coroutines.currentCoroutineContext()[kotlinx.coroutines.Job]!!.cancel()
+                client.getBytes(server.url("/download.epub").toString())
+            }
+            download.join()
+            assertTrue(download.isCancelled)
+            coordinator.coordinate { Unit }
+            assertTrue(waits.delays.isEmpty())
+            assertEquals(0, server.requestCount)
+        }
+    }
+
     @Test
     fun lastWaiterLeavingDuringPacingPreventsDispatch() = runTest {
         withServer { server ->

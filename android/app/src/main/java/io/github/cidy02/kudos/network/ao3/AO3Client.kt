@@ -247,7 +247,9 @@ class OkHttpAO3Client(
     ): AO3Result<AO3BinaryResponse> {
         var retryNumber = 0
         while (true) {
+            currentCoroutineContext().ensureActive()
             val result = coordinator.coordinate {
+                currentCoroutineContext().ensureActive()
                 performBinaryOnce(method, url, headers)
             }
             if (result is AO3Result.Success) return result

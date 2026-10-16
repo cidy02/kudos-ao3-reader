@@ -92,11 +92,19 @@ fun AO3CollectionItemsScreen(
     val generation by auth.generation.collectAsState()
     val authState by auth.state.collectAsState()
     // Key the state on auth before rendering: replacement sessions never see old private rows/forms.
-    val model = remember(slug, generation, authState.isSignedIn) { AO3CollectionItemsState(slug, repository, writes) }
+    val model: AO3CollectionItemsState = androidx.lifecycle.viewmodel.compose.viewModel(
+        key = "collection-items:$slug:$generation:${authState.isSignedIn}",
+        factory = object : androidx.lifecycle.ViewModelProvider.Factory {
+            @Suppress("UNCHECKED_CAST")
+            override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T =
+                AO3CollectionItemsState(slug, repository, writes,
+                    initialTab ?: AO3CollectionItemTab.defaultTab(slug)) as T
+        }
+    )
     val state by model.state.collectAsState()
     val defaultTab = AO3CollectionItemTab.defaultTab(slug)
     // The scope's own default, unless the caller names a tab (Moderation opens Approved).
-    var tab by remember(slug, initialTab) { mutableStateOf(initialTab ?: defaultTab) }
+    var tab by remember(model) { mutableStateOf(state.tab) }
     var confirming by remember(slug, generation, authState.isSignedIn) { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val tokens = LocalKudosTokens.current
@@ -105,7 +113,7 @@ fun AO3CollectionItemsScreen(
     val canSubmit = pending > 0 && !state.busy && authState.isSignedIn
     val submitting = state.phase == AO3CollectionItemsUiState.Phase.Submitting
     val loadError = state.loadError ?: AO3CollectionItemsState.SIGNED_OUT.takeIf { !authState.isSignedIn }
-    LaunchedEffect(model, tab) { model.load(tab, 1) }
+    LaunchedEffect(model, tab) { model.loadOnAppear(tab) }
 
     ProvidePushedShellChrome(hasSubjectHeader = true, trailingContent = {
         if (pending > 0) {

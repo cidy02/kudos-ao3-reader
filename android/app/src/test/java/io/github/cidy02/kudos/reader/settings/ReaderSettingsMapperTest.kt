@@ -103,8 +103,7 @@ class ReaderSettingsMapperTest {
         val decl = prefs.fontDeclarations.first()
         assertEquals("custom:abc-123.ttf", decl.fontFamily)
         assertEquals("/data/user/0/app/files/fonts/abc-123.ttf", decl.fontPath)
-        assertTrue(decl.alternates.contains("Literata"))
-        assertTrue(decl.alternates.contains("abc-123.ttf"))
+        assertEquals(listOf("serif"), decl.alternates)
     }
 
     @Test
@@ -124,6 +123,15 @@ class ReaderSettingsMapperTest {
         val decl = prefs.fontDeclarations.first()
         assertEquals("custom:xyz-789.otf", decl.fontFamily)
         assertEquals("/data/user/0/app/files/fonts/xyz-789.otf", decl.fontPath)
+    }
+
+    // iOS builtInFontsKeepFallbacksAndImportedFontsInjectFontFace.
+    @Test fun builtInFontsKeepGenericFallbacksWithoutRequiringAFile() {
+        val serif = mapper.map(ReaderSettings(readerFontId = "nyserif"), AppSettings()).fontDeclarations.single()
+        assertEquals(listOf("New York", "ui-serif", "Georgia", "serif"), serif.alternates)
+        assertEquals(null, serif.fontPath)
+        val mono = mapper.map(ReaderSettings(readerFontId = "menlo"), AppSettings()).fontDeclarations.single()
+        assertEquals(listOf("Menlo", "monospace"), mono.alternates)
     }
 
     @Test

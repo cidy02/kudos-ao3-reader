@@ -29,17 +29,18 @@ internal data class AO3CollectionItemsUiState(
     val busy: Boolean get() = phase == Phase.Loading || phase == Phase.Submitting
 }
 
-/** Owned by one visible screen/session; no jobs or requests survive it. */
+/** Navigation-entry state; requests still belong to the visible composition. */
 internal class AO3CollectionItemsState(
     private val slug: String?,
     private val repository: AO3CollectionDetailRepository,
-    private val writes: AO3WriteRepository
-) {
+    private val writes: AO3WriteRepository,
+    initialTab: AO3CollectionItemTab = AO3CollectionItemTab.defaultTab(slug)
+) : androidx.lifecycle.ViewModel() {
     private val auth = repository.authRepository
     private val generation = auth.generation.value
     private val username = auth.username()
     private var loadGeneration = 0
-    private val mutableState = MutableStateFlow(AO3CollectionItemsUiState(tab = AO3CollectionItemTab.defaultTab(slug)))
+    private val mutableState = MutableStateFlow(AO3CollectionItemsUiState(tab = initialTab))
     val state = mutableState.asStateFlow()
     private fun ownsSession() = generation == auth.generation.value && auth.state.value.isSignedIn
 
@@ -60,6 +61,13 @@ internal class AO3CollectionItemsState(
     fun discard() {
         if (mutableState.value.phase == AO3CollectionItemsUiState.Phase.Submitting) return
         mutableState.value = mutableState.value.copy(staging = AO3CollectionItemStaging())
+    }
+
+    /** iOS itemsTask: settled reappearance keeps its page, failure and same-session drafts. */
+    suspend fun loadOnAppear(tab: AO3CollectionItemTab = state.value.tab) {
+        val previous = state.value
+        if (previous.tab != tab || previous.phase == AO3CollectionItemsUiState.Phase.Idle ||
+            previous.phase == AO3CollectionItemsUiState.Phase.Loading) load(tab, 1)
     }
 
     suspend fun load(tab: AO3CollectionItemTab = state.value.tab, page: Int = state.value.page?.currentPage ?: 1) {
@@ -117,7 +125,8 @@ internal class AO3CollectionItemsState(
             // Also verify a partial batch: earlier writes may have succeeded before the refusal.
             load(previous.tab, previous.page?.currentPage ?: 1)
         } catch (_: CancellationException) {
-            // Results from a departed screen/session do not clear or install anything.
+            // A same-session return verifies again, never resumes an uncertain POST.
+            if (ownsSession()) mutableState.value = mutableState.value.copy(phase = AO3CollectionItemsUiState.Phase.Loading)
         }
     }
 

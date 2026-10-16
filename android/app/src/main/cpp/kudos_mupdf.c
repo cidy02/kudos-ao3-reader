@@ -146,12 +146,12 @@ static jobjectArray kudos_extract(JNIEnv *env, jstring jpath, KudosGranularity g
                         }
                     } else {
                         // One block is one paragraph; its lines are wrapped
-                        // display lines and join with a single space.
+                        // display lines; Kotlin reflows them after dehyphenation.
                         fz_buffer *buf = fz_new_buffer(ctx, 512);
                         int first = 1;
                         for (fz_stext_line *line = block->u.t.first_line;
                              line != NULL; line = line->next) {
-                            if (!first) kudos_append_utf16(ctx, buf, ' ');
+                            if (!first) kudos_append_utf16(ctx, buf, '\n');
                             first = 0;
                             kudos_append_line(line, buf, ctx);
                         }

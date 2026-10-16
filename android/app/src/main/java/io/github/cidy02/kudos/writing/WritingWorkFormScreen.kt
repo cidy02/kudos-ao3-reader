@@ -56,7 +56,8 @@ fun WritingWorkFormScreen(
     settingsRepository: SettingsRepository? = null,
     writeRepository: AO3WriteRepository,
     onSaved: () -> Unit = onClose,
-    seriesRepository: AO3SeriesFormRepository? = null
+    seriesRepository: AO3SeriesFormRepository? = null,
+    loadedWorks: List<io.github.cidy02.kudos.network.ao3.search.AO3WorkSummary> = emptyList()
 ) {
     val generation by auth.generation.collectAsState()
     val accountState by auth.state.collectAsState()
@@ -71,13 +72,14 @@ fun WritingWorkFormScreen(
     DisposableEffect(model) { onDispose { model.close() } }
     WritingWorkFormContent(model, model.account, if (workID == null) "New work" else "Edit work", onClose,
         autocompleteRepository, settingsRepository, onSaved = onSaved, onSaving = { savingModel = model },
-        seriesRepository = seriesRepository, seriesWrites = writeRepository)
+        seriesRepository = seriesRepository, seriesWrites = writeRepository, loadedWorks = loadedWorks)
 }
 
 @Composable
 internal fun WritingWorkFormContent(model: WritingWorkFormState, account: String, loadingTitle: String, onClose: () -> Unit,
     autocompleteRepository: AO3TagAutocompleteRepository? = null, settingsRepository: SettingsRepository? = null,
-    onSaved: () -> Unit = onClose, onSaving: () -> Unit = {}, seriesRepository: AO3SeriesFormRepository? = null, seriesWrites: AO3WriteRepository? = null) {
+    onSaved: () -> Unit = onClose, onSaving: () -> Unit = {}, seriesRepository: AO3SeriesFormRepository? = null, seriesWrites: AO3WriteRepository? = null,
+    loadedWorks: List<io.github.cidy02.kudos.network.ao3.search.AO3WorkSummary> = emptyList()) {
     val state by model.state.collectAsState()
     val form = state.form
     val tokens = LocalKudosTokens.current
@@ -108,7 +110,7 @@ internal fun WritingWorkFormContent(model: WritingWorkFormState, account: String
     LaunchedEffect(state.tagsNeedRefresh) { if (state.tagsNeedRefresh) model.refreshTags() }
     editingPostedTags?.let { tagsModel ->
         WritingEditTagsScreen(tagsModel, form?.title.orEmpty(), autocompleteRepository, settingsRepository,
-            onBack = { editingPostedTags = null }, onSave = {
+            onBack = { editingPostedTags = null }, loadedWorks = loadedWorks, onSave = {
                 // The work form owns this save, so Back during a dispatched POST cannot leave
                 // its old tags ready to overwrite a confirmed change (iOS's Task also survives Back).
                 scope.launch {
@@ -152,7 +154,7 @@ internal fun WritingWorkFormContent(model: WritingWorkFormState, account: String
         WritingTagsEditorScreen(writingKind, writingKind.values(form), autocompleteRepository, settingsRepository,
             onValues = { model.writingTags(writingKind, it) },
             readValues = { model.state.value.form?.let(writingKind::values).orEmpty() },
-            recordScope = scope, onBack = { writingTags = null })
+            recordScope = scope, onBack = { writingTags = null }, loadedWorks = loadedWorks, excludingWorkID = form.workID)
         return
     }
     val associationKind = association

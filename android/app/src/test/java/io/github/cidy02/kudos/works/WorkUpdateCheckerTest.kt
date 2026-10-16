@@ -12,6 +12,7 @@ import io.github.cidy02.kudos.network.ao3.work.AO3WorkMetadata
 import io.github.cidy02.kudos.network.ao3.work.AO3WorkMetadataRepository
 import java.nio.file.Files
 import java.time.Instant
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -154,6 +155,29 @@ class WorkUpdateCheckerFailureBackoffTest {
 
         val after = repository.getWork(saved.id)
         assertNotNull("a blank-chapters success must still stamp lastUpdateCheck", after?.lastUpdateCheck)
+    }
+
+    // iOS WorkUpdateCheckerTests.aCancelledSweepStopsAfterTheFetchInFlight (both fetch outcomes).
+    @Test fun cancellationStopsTheSweepAndOnlyACompletedFetchIsStamped() = runTest {
+        for (fetchThrows in listOf(true, false)) {
+            val saved = (1..3).map { id -> repository.upsert(work(
+                id = "cancel-$fetchThrows-$id", sourceUrl = "https://archiveofourown.org/works/$id")) }
+            var fetched = 0
+            val metadata = object : AO3WorkMetadataRepository() {
+                override suspend fun fetch(workId: Long): AO3Result<AO3WorkMetadata> {
+                    fetched++
+                    kotlinx.coroutines.currentCoroutineContext()[kotlinx.coroutines.Job]!!.cancel()
+                    if (fetchThrows) throw kotlinx.coroutines.CancellationException()
+                    return AO3Result.Success(AO3WorkMetadata(chapters = "2/?"))
+                }
+            }
+            val sweep = launch { WorkUpdateChecker(repository, metadata).checkForUpdates(saved) }
+            sweep.join()
+            assertEquals(1, fetched)
+            assertEquals(!fetchThrows, repository.getWork(saved[0].id)?.lastUpdateCheck != null)
+            assertEquals(null, repository.getWork(saved[1].id)?.lastUpdateCheck)
+            assertEquals(null, repository.getWork(saved[2].id)?.lastUpdateCheck)
+        }
     }
 
     @Test
