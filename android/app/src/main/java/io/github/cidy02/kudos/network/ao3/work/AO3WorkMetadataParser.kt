@@ -15,6 +15,10 @@ class AO3WorkMetadataParser {
         }
 
         val document = Jsoup.parse(html)
+        val chapters = stat(document, "chapters")
+        val status = document.selectFirst("dd.status")
+        // AO3 classes the value, not its preceding Completed:/Updated: label.
+        val statusLabel = status?.previousElementSibling()?.normalizedText().orEmpty()
         return AO3WorkMetadata(
             rating = document.selectFirst("dd.rating.tags")?.normalizedText().orEmpty(),
             fandoms = tags(document, "fandom"),
@@ -25,7 +29,7 @@ class AO3WorkMetadataParser {
             categories = tags(document, "category"),
             language = document.selectFirst("dd.language")?.normalizedText().orEmpty(),
             words = statInt(document, "words"),
-            chapters = stat(document, "chapters"),
+            chapters = chapters,
             kudos = statInt(document, "kudos"),
             comments = statInt(document, "comments"),
             hits = statInt(document, "hits"),
@@ -40,9 +44,24 @@ class AO3WorkMetadataParser {
             authors = document.selectFirst("h3.byline")?.select("a[rel=author]").orEmpty()
                 .map { it.normalizedText() }.dedupeFirstSeen(),
             // The work's own: a chapter's summary sits in a preface of its own, without the title.
-            summary = document.selectFirst("div.preface:has(h2.title) div.summary blockquote.userstuff")
-                ?.normalizedText().orEmpty()
+            summary = (document.selectFirst("div.preface:has(h2.title) div.summary blockquote.userstuff")
+                ?: document.selectFirst("div.summary blockquote.userstuff, blockquote.userstuff.summary"))
+                ?.normalizedText().orEmpty(),
+            datePublished = stat(document, "published"),
+            dateUpdated = status?.normalizedText()?.takeIf { it.isNotEmpty() } ?: stat(document, "updated"),
+            isComplete = completionStatus(chapters, statusLabel)
         )
+    }
+
+    private fun completionStatus(chapters: String, statusLabel: String): Boolean? {
+        if (statusLabel.contains("completed", ignoreCase = true)) return true
+        if (statusLabel.contains("updated", ignoreCase = true)) return false
+        val parts = chapters.split('/').map(String::trim)
+        if (parts.size != 2) return null
+        val posted = parts[0].toIntOrNull()
+        val total = parts[1].toIntOrNull()
+        if (posted != null && total != null && total > 0) return posted >= total
+        return if (parts[1] == "?") false else null
     }
 
     private fun tags(root: Element, kind: String): List<String> {

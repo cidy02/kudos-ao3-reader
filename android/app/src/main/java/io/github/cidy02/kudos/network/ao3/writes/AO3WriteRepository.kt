@@ -1166,6 +1166,7 @@ class AO3WriteRepository(
             ?.takeIf { AO3RedirectCookieRelay.isTrustedUrl(it) }
             ?: return AO3Result.Failure(AO3Error.Validation("Couldn't build the subscription address."))
         val referer = AO3AccountUrls().url(AccountListType.Subscriptions, username, page.coerceAtLeast(1))
+            ?: return AO3Result.Failure(AO3Error.AuthenticationRequired)
         return indexWrite(generation, referer, endpoint, AO3WriteActionKind.Unsubscribe, "Unsubscribed.",
             "Couldn't unsubscribe.") { token -> listOf("_method" to "delete", "authenticity_token" to token) }
     }
@@ -1181,8 +1182,11 @@ class AO3WriteRepository(
         if (readingId <= 0) return AO3Result.Failure(AO3Error.Validation("Couldn't build the history address."))
         val shown = page.coerceAtLeast(1)
         val referer = AO3AccountUrls().url(AccountListType.History, username, shown)
+            ?: return AO3Result.Failure(AO3Error.AuthenticationRequired)
         // The form passes the page through; page 1 has no query (iOS `deleteReadingURL`).
-        val endpoint = AO3AccountUrls().url(AccountListType.History, username, 1).substringBefore('?') +
+        val readings = AO3AccountUrls().url(AccountListType.History, username, 1)
+            ?: return AO3Result.Failure(AO3Error.AuthenticationRequired)
+        val endpoint = readings.substringBefore('?') +
             "/$readingId" + if (shown > 1) "?page=$shown" else ""
         if (!AO3RedirectCookieRelay.isTrustedUrl(endpoint)) {
             return AO3Result.Failure(AO3Error.Validation("Couldn't build the history address."))
@@ -1202,7 +1206,8 @@ class AO3WriteRepository(
     suspend fun clearReadingHistory(): AO3Result<AO3WriteOutcome> {
         val generation = client.sessionGeneration()
         val username = client.username() ?: return AO3Result.Failure(AO3Error.AuthenticationRequired)
-        val readings = AO3AccountUrls().url(AccountListType.History, username, 1).substringBefore('?')
+        val readings = AO3AccountUrls().url(AccountListType.History, username, 1)
+            ?.substringBefore('?') ?: return AO3Result.Failure(AO3Error.AuthenticationRequired)
         val endpoint = "$readings/clear"
         if (!AO3RedirectCookieRelay.isTrustedUrl(endpoint)) {
             return AO3Result.Failure(AO3Error.Validation("Couldn't build the history address."))

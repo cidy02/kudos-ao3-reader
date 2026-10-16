@@ -20,7 +20,10 @@ data class AO3WorkMetadata(
     /** The work's heading, byline and summary: all a page reached by its id alone has of them. */
     val title: String = "",
     val authors: List<String> = emptyList(),
-    val summary: String = ""
+    val summary: String = "",
+    val datePublished: String = "",
+    val dateUpdated: String = "",
+    val isComplete: Boolean? = null
 ) {
     val flattenedTags: List<String>
         get() = (fandoms + relationships + characters + freeforms).dedupeFirstSeen()
@@ -37,7 +40,10 @@ data class AO3WorkMetadata(
             chapters.isBlank() &&
             kudos == null &&
             comments == null &&
-            hits == null
+            hits == null &&
+            datePublished.isBlank() &&
+            dateUpdated.isBlank() &&
+            isComplete == null
 }
 
 internal fun Iterable<String>.dedupeFirstSeen(): List<String> {

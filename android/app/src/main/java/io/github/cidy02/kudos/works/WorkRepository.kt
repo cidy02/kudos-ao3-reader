@@ -682,21 +682,32 @@ class WorkRepository(
      */
     suspend fun refreshMetadata(workId: String): AO3Result<Unit> {
         val repo = tagsRepository ?: return AO3Result.Failure(AO3Error.Validation("No tags repository."))
-        val work = getWork(workId) ?: return AO3Result.Failure(AO3Error.NotFound)
-        val ao3Id = WorkTags.ao3WorkIdFromUrl(work.sourceUrl) ?: return AO3Result.Failure(AO3Error.BadRequest)
-        
+        val original = getWork(workId) ?: return AO3Result.Failure(AO3Error.NotFound)
+        val ao3Id = WorkIdentityIndex.ao3WorkId(original) ?: return AO3Result.Failure(AO3Error.BadRequest)
+        val recoveredId = ao3Id.takeIf { it in 1..Int.MAX_VALUE.toLong() }?.toInt()
+        val work = if (original.ao3WorkID == null && recoveredId != null) {
+            upsert(original.copy(ao3WorkID = recoveredId))
+        } else original
+
         return when (val result = repo.refreshTags(ao3Id)) {
             is AO3Result.Failure -> {
                 if (result.error == AO3Error.NotFound) {
-                    // Work is gone from AO3 (404). Stamp lastUpdateCheck so we don't
-                    // immediately retry, but keep the record (Kudos preserves works).
-                    upsert(work.copy(lastUpdateCheck = clock()))
+                    // A 404 marks the last copy; the EPUB and all reader state stay local.
+                    upsert(work.copy(
+                        ao3Unavailable = true,
+                        lastAvailabilityCheck = clock(),
+                        lastUpdateCheck = clock(),
+                        lastModifiedAt = if (!work.ao3Unavailable) clock() else work.lastModifiedAt
+                    ))
                     AO3Result.Success(Unit)
                 } else result
             }
             is AO3Result.Success -> {
                 val meta = result.value
                 val updated = work.copy(
+                    ao3Unavailable = false,
+                    lastAvailabilityCheck = clock(),
+                    lastModifiedAt = if (work.ao3Unavailable) clock() else work.lastModifiedAt,
                     rating = if (meta.rating.isNotBlank()) meta.rating else work.rating,
                     workWarnings = if (meta.warnings.isNotEmpty()) meta.warnings else work.workWarnings,
                     workCategories = if (meta.categories.isNotEmpty()) meta.categories else work.workCategories,

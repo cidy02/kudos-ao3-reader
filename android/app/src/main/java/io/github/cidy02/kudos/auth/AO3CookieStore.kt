@@ -2,8 +2,13 @@ package io.github.cidy02.kudos.auth
 
 import android.webkit.CookieManager
 import io.github.cidy02.kudos.network.ao3.AO3Constants
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
 import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrl
+import kotlin.coroutines.resume
+import kotlin.coroutines.suspendCoroutine
 
 interface AO3CookieStore {
     suspend fun captureSession(username: String): AO3Session?
@@ -38,14 +43,10 @@ class AndroidAO3CookieStore(
         cookieManager.flush()
     }
 
-    override suspend fun clear() {
-        parseCookieHeader(cookieManager.getCookie(AO3Constants.BASE_URL)).forEach { cookie ->
-            val expired = cookie.copy(value = "")
-            cookieManager.setCookie(AO3Constants.BASE_URL, expired.toCookieManagerSetCookieHeader(expired = true))
-            cookieManager.setCookie(
-                AO3Constants.BASE_URL,
-                expired.copy(domain = AO3Constants.WORKS_HOST).toCookieManagerSetCookieHeader(expired = true)
-            )
+    override suspend fun clear() = withContext(Dispatchers.Main.immediate + NonCancellable) {
+        // CookieManager cannot enumerate domains/paths; root-URL expiry misses scoped cookies.
+        suspendCoroutine<Unit> { continuation ->
+            cookieManager.removeAllCookies { continuation.resume(Unit) }
         }
         cookieManager.flush()
     }

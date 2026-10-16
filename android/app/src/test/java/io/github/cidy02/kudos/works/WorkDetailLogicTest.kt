@@ -74,3 +74,18 @@ class WorkDetailLogicTest {
         assertEquals("Unknown", unknown.shortText)
     }
 }
+
+class WorkDetailMetadataBridgeTest {
+    @Test
+    fun workPageDatesAndStatusReachTheDetailSummary() {
+        val metadata = io.github.cidy02.kudos.network.ao3.work.AO3WorkMetadataParser().parse(
+            """<dl class="work meta"><dd class="published">01 Jan 2026</dd>
+                <dt>Completed:</dt><dd class="status">02 Jan 2026</dd>
+                <dd class="chapters">5/10</dd></dl>"""
+        )
+        val detail = metadata.toRemoteSummary(12345)
+        assertEquals("01 Jan 2026", detail.publishedDate)
+        assertEquals("02 Jan 2026", detail.updatedDate)
+        assertEquals(true, detail.isComplete)
+    }
+}

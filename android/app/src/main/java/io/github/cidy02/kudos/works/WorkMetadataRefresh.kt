@@ -1,9 +1,9 @@
 package io.github.cidy02.kudos.works
 
 import io.github.cidy02.kudos.core.model.SavedWork
-import io.github.cidy02.kudos.network.ao3.work.AO3WorkMetadataRepository
+import io.github.cidy02.kudos.network.ao3.AO3Error
 import io.github.cidy02.kudos.network.ao3.AO3Result
-import java.time.Instant
+import io.github.cidy02.kudos.network.ao3.work.AO3WorkMetadataRepository
 
 /**
  * Manual full-metadata re-sync for an already-saved work, without re-downloading
@@ -12,20 +12,27 @@ import java.time.Instant
  * refreshes chapters/word count/kudos/comments/hits.
  *
  * Tags are **unioned**, never replaced, so a tag AO3 has since dropped stays on
- * the local record (same rule as [WorkMetadataMerger]). A failed fetch returns
- * the work untouched — refresh never deletes.
+ * the local record (same rule as [WorkMetadataMerger]). A 404 marks the last copy;
+ * inconclusive failures leave availability untouched — refresh never deletes.
  */
 class WorkMetadataRefresh(
     private val workRepository: WorkRepository,
     private val metadataRepository: AO3WorkMetadataRepository
 ) {
-    suspend fun refresh(work: SavedWork): SavedWork {
-        val workId = WorkTags.ao3WorkIdFromUrl(work.sourceUrl) ?: return work
+    suspend fun refresh(original: SavedWork): SavedWork {
+        val workId = WorkIdentityIndex.ao3WorkId(original) ?: return original
+        val recoveredId = workId.takeIf { it in 1..Int.MAX_VALUE.toLong() }?.toInt()
+        val work = if (original.ao3WorkID == null && recoveredId != null) {
+            workRepository.upsert(original.copy(ao3WorkID = recoveredId))
+        } else original
         return when (val result = metadataRepository.fetch(workId)) {
             is AO3Result.Success -> {
                 val md = result.value
                 workRepository.upsert(work.copy(
                     chapters = md.chapters.ifBlank { work.chapters },
+                    datePublished = md.datePublished.ifBlank { work.datePublished },
+                    dateUpdated = md.dateUpdated.ifBlank { work.dateUpdated },
+                    isComplete = md.isComplete ?: work.isComplete,
                     language = md.language.ifBlank { work.language },
                     wordCount = md.words ?: work.wordCount,
                     kudos = md.kudos ?: work.kudos,
@@ -39,12 +46,18 @@ class WorkMetadataRefresh(
                     workCategories = union(work.workCategories, md.categories),
                     // A successful fetch proves the work is back on AO3.
                     ao3Unavailable = false,
-                    lastAvailabilityCheck = Instant.now(),
-                    lastModifiedAt = Instant.now(),
+                    lastAvailabilityCheck = workRepository.currentInstant(),
+                    lastModifiedAt = workRepository.currentInstant(),
                     hasGivenKudos = work.hasGivenKudos || md.kudosGivenByCurrentUser
                 ))
             }
-            is AO3Result.Failure -> work
+            is AO3Result.Failure -> if (result.error == AO3Error.NotFound) {
+                workRepository.upsert(work.copy(
+                    ao3Unavailable = true,
+                    lastAvailabilityCheck = workRepository.currentInstant(),
+                    lastModifiedAt = if (!work.ao3Unavailable) workRepository.currentInstant() else work.lastModifiedAt
+                ))
+            } else work
         }
     }
 

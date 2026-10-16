@@ -1760,8 +1760,8 @@ private data class WorkDetailUiState(
     val commentsCount: Int? = local?.comments ?: remote?.comments
     val kudosCount: Int? = local?.kudos?.takeIf { it > 0 } ?: remote?.kudos
     val hitsCount: Int? = local?.hits ?: remote?.hits
-    val publishedDate: String = remote?.publishedDate.orEmpty()
-    val updatedDate: String = remote?.updatedDate.orEmpty()
+    val publishedDate: String = local?.datePublished?.takeIf { it.isNotBlank() } ?: remote?.publishedDate.orEmpty()
+    val updatedDate: String = local?.dateUpdated?.takeIf { it.isNotBlank() } ?: remote?.updatedDate.orEmpty()
     val seriesUrl: String = local?.seriesUrl?.takeIf { it.isNotBlank() }
         ?: remote?.seriesUrl?.takeIf { !it.isNullOrBlank() }
         ?: ""
@@ -1775,7 +1775,7 @@ private data class WorkDetailUiState(
         )
 }
 
-private fun AO3WorkMetadata.toRemoteSummary(workId: Long): AO3WorkSummary {
+internal fun AO3WorkMetadata.toRemoteSummary(workId: Long): AO3WorkSummary {
     return AO3WorkSummary(
         id = workId,
         title = title.ifBlank { "AO3 Work $workId" },
@@ -1793,6 +1793,9 @@ private fun AO3WorkMetadata.toRemoteSummary(workId: Long): AO3WorkSummary {
         chapters = chapters,
         kudos = kudos,
         comments = comments,
-        hits = hits
+        hits = hits,
+        publishedDate = datePublished,
+        updatedDate = dateUpdated,
+        isComplete = isComplete
     )
 }
