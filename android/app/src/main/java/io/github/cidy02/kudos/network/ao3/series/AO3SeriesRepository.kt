@@ -95,6 +95,13 @@ class AO3SeriesRepository(
                 }?.nextElementSibling()
                 AO3Result.Success(AO3SeriesDetailPage(works.value, title, usernames, stat("works", "Works"), stat("words", "Words"),
                     creators = meta?.select("a[rel=author]").orEmpty().map { it.text().trim() }.filter { it.isNotEmpty() }.distinct(),
+                    creatorIdentities = meta?.select("a[rel=author]").orEmpty().filter { it.text().isNotBlank() }.map {
+                        io.github.cidy02.kudos.network.ao3.author.AO3SeriesCreator(it.text().trim(),
+                            io.github.cidy02.kudos.network.ao3.author.AO3AuthorRoute.fromUrl(it.attr("href")))
+                    }.ifEmpty {
+                        if (after("Creator")?.text()?.contains("Anonymous", true) == true)
+                            listOf(io.github.cidy02.kudos.network.ao3.author.AO3SeriesCreator("Anonymous", null)) else emptyList()
+                    },
                     summary = after("Description")?.text()?.trim().orEmpty(),
                     isComplete = when (figure("complete", "Complete")?.lowercase()) { "yes" -> true; "no" -> false; else -> null },
                     bookmarkCount = stat("bookmarks", "Bookmarks"),
@@ -130,4 +137,5 @@ data class AO3SeriesDetailPage(val page: AO3SearchPage, val title: String, val c
     val workCount: Int? = null, val words: Int? = null,
     /** The series's own facts from its page's header: iOS draws them in a card over the works. */
     val creators: List<String> = emptyList(), val summary: String = "", val isComplete: Boolean? = null,
-    val bookmarkCount: Int? = null, val dateUpdated: String = "")
+    val bookmarkCount: Int? = null, val dateUpdated: String = "",
+    val creatorIdentities: List<io.github.cidy02.kudos.network.ao3.author.AO3SeriesCreator> = emptyList())

@@ -2155,3 +2155,17 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   Latin or Cyrillic, and leave CJK, kana, Hangul, Thai, Hebrew, Arabic and mixed-script names
   upright (a skewed CJK glyph blurs at caption size; half a slanted string reads as a fault).
   Not looked at on screen. Reverse: the commit that names this.
+- **2026-10-16 · Brief 3fm landed (Codex, reviewed and gated by Claude), and a composer crash
+  fixed.** Marked for Later draws its updated run (and the Updated pill) as covers, the rest as
+  the ledger, as iOS. The formatting tray is iOS's grid: four columns, two above font scale 1.3,
+  one from 1.8 (Android's stand-ins for the accessibility sizes). The writing tag picker shows
+  AO3's canonical mark ("Posts as typed" otherwise) and the work count it already sent; Claude
+  made the parser read each field leniently, so one odd row (a numeric id) costs only itself.
+  Series creators keep their pseud routes and link to the author's page, only for AO3's own
+  `/users/` links (anonymous and orphan_account have none); a bookmark's collections are kept,
+  not drawn, as iOS. **Separately, a crash:** `CommentSubmissionKey.normalize` used a regex
+  flag Android's engine rejects, so opening the composer with a saved draft crashed the app
+  (the JVM tests accept the flag); it now splits on `Char.isWhitespace`, and a source check
+  keeps such patterns out. Codex's second review found two session gaps (an Inbox delete
+  confirmation outliving its session; a comment success crossing a session while its draft is
+  cleared), fixed next. Reverse: the commits that name 3fm and the composer crash.

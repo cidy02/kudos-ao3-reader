@@ -30,6 +30,17 @@ data class AO3AuthorRoute(
         get() = AO3AuthorUrls.userBookmarksUrl(username, page = 1, pseud = pseud)!!
 
     companion object {
+        /** Only AO3's linked account/pseud is an identity; never infer one from display text. */
+        fun fromUrl(href: String): AO3AuthorRoute? {
+            val url = io.github.cidy02.kudos.network.ao3.AO3Constants.baseHttpUrl.resolve(href.trim()) ?: return null
+            if (!io.github.cidy02.kudos.network.ao3.AO3RedirectCookieRelay.isTrustedUrl(url.toString())) return null
+            val path = url.pathSegments
+            if (path.firstOrNull() != "users") return null
+            val user = path.getOrNull(1)?.takeIf { it.isNotBlank() && !it.equals("orphan_account", true) } ?: return null
+            val pseud = path.getOrNull(3)?.takeIf { path.getOrNull(2) == "pseuds" && it.isNotBlank() }
+            return AO3AuthorRoute(user, pseud)
+        }
+
         private val pseudByline = Regex("""^(.+) \(([A-Za-z0-9_]+)\)$""")
 
         /**
@@ -220,6 +231,9 @@ data class AO3AuthorAbout(
     val bioHtml: String = ""
 )
 
+/** A series byline can include Anonymous, which has no destination. */
+data class AO3SeriesCreator(val displayName: String, val route: AO3AuthorRoute?)
+
 data class AO3AuthorSeriesSummary(
     val id: Long,
     val title: String,
@@ -235,7 +249,8 @@ data class AO3AuthorSeriesSummary(
     /** Public bookmarks on the series. AO3 leaves the figure out when there are none. */
     val bookmarkCount: Int? = null,
     /** The blue members-only lock beside the title. The red hidden-by-admin lock is not this. */
-    val isRestricted: Boolean = false
+    val isRestricted: Boolean = false,
+    val creatorIdentities: List<AO3SeriesCreator> = emptyList()
 )
 
 data class AO3AuthorSeriesPage(
@@ -251,7 +266,8 @@ data class AO3AuthorBookmark(
     val tags: List<String>,
     val isRecommendation: Boolean,
     val isPrivate: Boolean,
-    val date: String
+    val date: String,
+    val collections: List<String> = emptyList()
 )
 
 data class AO3AuthorBookmarksPage(

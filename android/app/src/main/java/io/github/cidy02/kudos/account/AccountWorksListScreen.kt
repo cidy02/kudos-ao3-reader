@@ -655,51 +655,27 @@ private fun MarkedForLaterBrowser(
                     message = "No works on this page are ${filter}."
                 )
             }
-        } else if (filter == "all" && updatedWorks.isNotEmpty()) {
-            // Group 1: Updated since you looked
-            item {
-                SectionRuleHeader(title = "Updated since you looked", count = updatedWorks.size)
-            }
-            items(updatedWorks, key = { "updated-${it.id}" }) { work ->
-                MarkedForLaterRow(
-                    work = work,
-                    expandAll = expandAll,
-                    palette = palette,
-                    onOpenWork = onOpenWork,
-                    onUnmark = { unmark(work.remote.id) }
-                )
-            }
-
-            // Group 2: Everything else
-            val otherWorks = activeWorks.filter { it !in updatedWorks }
-            if (otherWorks.isNotEmpty()) {
-                item {
-                    SectionRuleHeader(title = "Everything else", count = otherWorks.size)
-                }
-                items(otherWorks, key = { "other-${it.id}" }) { work ->
-                    MarkedForLaterRow(
-                        work = work,
-                        expandAll = expandAll,
-                        palette = palette,
-                        onOpenWork = onOpenWork,
-                        onUnmark = { unmark(work.remote.id) }
-                    )
-                }
-            }
         } else {
-            // On All, iOS heads the run "Everything else" even when nothing is updated
-            // (`AO3MarkedForLaterGrouping.sections`); a narrowed pill is one flat list.
-            if (filter == "all" && displayedWorks.isNotEmpty()) item {
-                SectionRuleHeader(title = "Everything else", count = displayedWorks.size)
-            }
-            items(displayedWorks, key = { "mfl-${it.id}" }) { work ->
-                MarkedForLaterRow(
-                    work = work,
-                    expandAll = expandAll,
-                    palette = palette,
-                    onOpenWork = onOpenWork,
-                    onUnmark = { unmark(work.remote.id) }
-                )
+            markedForLaterSections(activeWorks, filter,
+                isUpdated = { it in updatedWorks }, isDownloaded = { it.local?.isDownloaded == true }
+            ).forEach { section ->
+                section.title?.let { title ->
+                    item { SectionRuleHeader(title = title, count = section.items.size) }
+                }
+                if (section.covers) {
+                    item {
+                        CompactWorkCovers(section.items, onOpenWork) { work ->
+                            SubjectChip("Unmark", style = SubjectChipStyle.Neutral,
+                                leadingIcon = Icons.Outlined.AccessTime, palette = palette,
+                                modifier = Modifier.clickable { unmark(work.remote.id) })
+                        }
+                    }
+                } else {
+                    items(section.items, key = { "mfl-${it.id}" }) { work ->
+                        MarkedForLaterRow(work, expandAll, palette, onOpenWork,
+                            onUnmark = { unmark(work.remote.id) })
+                    }
+                }
             }
         }
 
@@ -719,6 +695,20 @@ private fun MarkedForLaterBrowser(
         }
     }
 }
+
+/** iOS `AO3MarkedForLaterGrouping`: page order within each nonempty run. */
+internal data class MarkedForLaterSection<T>(val title: String?, val items: List<T>, val covers: Boolean)
+
+internal fun <T> markedForLaterSections(
+    works: List<T>, filter: String, isUpdated: (T) -> Boolean, isDownloaded: (T) -> Boolean
+): List<MarkedForLaterSection<T>> = when (filter) {
+    "updated" -> listOf(MarkedForLaterSection(null, works.filter(isUpdated), covers = true))
+    "downloaded" -> listOf(MarkedForLaterSection(null, works.filter(isDownloaded), covers = false))
+    else -> listOf(
+        MarkedForLaterSection("Updated since you looked", works.filter(isUpdated), covers = true),
+        MarkedForLaterSection("Everything else", works.filterNot(isUpdated), covers = false)
+    )
+}.filter { it.items.isNotEmpty() }
 
 /** iOS `AO3MarkedForLaterDownloadLine`: only with a copy and a size to name (A59). */
 internal fun markedForLaterDownloadLine(hasEpub: Boolean, byteLabel: String?): String? =
@@ -1635,7 +1625,11 @@ private fun GenericAccountWorksBrowser(
  */
 @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
-private fun CompactWorkCovers(works: List<CanonicalWork>, onOpenWork: (AO3WorkSummary) -> Unit) {
+private fun CompactWorkCovers(
+    works: List<CanonicalWork>,
+    onOpenWork: (AO3WorkSummary) -> Unit,
+    footer: (@Composable (CanonicalWork) -> Unit)? = null
+) {
     val privacy = LocalPairedRowPrivacy.current
     androidx.compose.foundation.layout.FlowRow(
         modifier = Modifier.fillMaxWidth(),
@@ -1645,18 +1639,21 @@ private fun CompactWorkCovers(works: List<CanonicalWork>, onOpenWork: (AO3WorkSu
         works.forEach { work ->
             val local = work.local
             val obscured = local != null && privacy.isObscured(local)
-            Box(
-                Modifier.clickable(onClickLabel = if (obscured) "reveal this work" else "open this work") {
-                    if (obscured && local != null) privacy.reveal(local) else onOpenWork(work.remote)
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Box(
+                    Modifier.clickable(onClickLabel = if (obscured) "reveal this work" else "open this work") {
+                        if (obscured && local != null) privacy.reveal(local) else onOpenWork(work.remote)
+                    }
+                ) {
+                    // The saved copy's own cover, with its place in it; else one drawn from AO3's blurb.
+                    SubjectWorkCoverCard(
+                        work = local ?: work.remote.coverFace(),
+                        obscured = obscured,
+                        downloading = false,
+                        progress = local?.readingProgressFraction()
+                    )
                 }
-            ) {
-                // The saved copy's own cover, with its place in it; else one drawn from AO3's blurb.
-                SubjectWorkCoverCard(
-                    work = local ?: work.remote.coverFace(),
-                    obscured = obscured,
-                    downloading = false,
-                    progress = local?.readingProgressFraction()
-                )
+                footer?.invoke(work)
             }
         }
     }
@@ -1720,7 +1717,7 @@ private fun PairedWorkRow(
     work: CanonicalWork,
     expandAll: Boolean,
     onOpenWork: (AO3WorkSummary) -> Unit,
-    /** iOS draws Marked for Later and Subscriptions as the ledger card, always. */
+    /** The ledger runs of Marked for Later and Subscriptions use the dense card. */
     ledger: Boolean = false,
     /** This row's bookmark, on the Bookmarks list. */
     bookmark: AO3AuthorBookmark? = null,

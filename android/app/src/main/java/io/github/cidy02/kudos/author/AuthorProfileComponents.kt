@@ -234,7 +234,8 @@ internal fun AO3SeriesRow(
     modifier: Modifier = Modifier,
     trailingContent: (@Composable () -> Unit)? = null,
     /** False under a page title that already says it. */
-    showsTitle: Boolean = true
+    showsTitle: Boolean = true,
+    onOpenAuthor: (io.github.cidy02.kudos.network.ao3.author.AO3AuthorRoute) -> Unit = {}
 ) {
     val tokens = LocalKudosTokens.current
     val palette = remember(series.fandoms, series.title, tokens.theme) {
@@ -302,8 +303,18 @@ internal fun AO3SeriesRow(
                 Text(series.dateUpdated, color = tokens.secondaryInk, fontSize = 11.5.sp, maxLines = 1)
             }
         }
-        if (series.creators.isNotEmpty()) {
-            Text("by ${series.creators.joinToString()}", color = tokens.secondaryInk, fontSize = 12.sp)
+        val creators = series.creatorIdentities.ifEmpty {
+            series.creators.map { io.github.cidy02.kudos.network.ao3.author.AO3SeriesCreator(it, null) }
+        }
+        if (creators.isNotEmpty()) FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp), itemVerticalAlignment = Alignment.CenterVertically) {
+            Text("by", color = tokens.secondaryInk, fontSize = 12.sp)
+            creators.forEachIndexed { index, creator ->
+                Text(creator.displayName + if (index < creators.lastIndex) "," else "",
+                    color = if (creator.route != null) palette.accent else tokens.secondaryInk, fontSize = 12.sp,
+                    modifier = if (creator.route != null) Modifier.clickable { onOpenAuthor(creator.route) }
+                        .semantics { contentDescription = "Author: ${creator.displayName}" } else Modifier)
+            }
         }
     }
 }

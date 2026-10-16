@@ -14,6 +14,33 @@ import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class WritingTagsEditorStateTest {
+    @Test fun canonicalAndCountSurviveTheReadCacheAndChosenFiltering() = runTest {
+        val client = object : AO3Client {
+            var reads = 0
+            override suspend fun get(url: String, headers: Map<String, String>): AO3Result<AO3HttpResponse> {
+                reads++
+                return AO3Result.Success(AO3HttpResponse(url, 200, emptyMap(),
+                    """[{"name":"Hurt/Comfort","canonical":true,"work_count":9001},{"name":"not a tag","canonical":false}]"""))
+            }
+        }
+        var chosen = emptyList<String>()
+        val editor = WritingTagsEditorState(WritingTagKind.Freeform, AO3TagAutocompleteRepository(client), this,
+            { chosen }, { chosen = it })
+        editor.type("tag"); advanceTimeBy(300); runCurrent()
+        assertEquals(9001, editor.state.value.tags.first().workCount)
+        assertFalse(editor.state.value.tags.last().isCanonical)
+        editor.add("Hurt/Comfort")
+        editor.type("TAG"); runCurrent()
+        assertEquals(1, client.reads)
+        assertEquals(listOf("not a tag"), editor.suggestions())
+        assertFalse(editor.state.value.tags.single().isCanonical)
+        editor.remove("Hurt/Comfort")
+        editor.type("tag"); runCurrent()
+        assertEquals(9001, editor.state.value.tags.first().workCount)
+        assertEquals(1, client.reads)
+        editor.close()
+    }
+
     @Test fun returnCommaPasteSuggestionRemovalAndReorderKeepEveryOtherFieldForAllThreeForms() = runTest {
         for (id in listOf(null, 995001L, 995006L)) for (kind in WritingTagKind.entries) {
             val setup = workFormSetup()
