@@ -503,7 +503,6 @@ fun AppNavHost(
         sharedComposable(Routes.Account) {
             AccountScreen(
                 authRepository = container.authRepository,
-                listRepository = container.accountListRepository,
                 workRepository = container.workRepository,
                 onLogin = { navController.navigate(Routes.AccountLogin) },
                 onOpenList = { type ->

@@ -131,7 +131,7 @@ data class AO3AuthorHeader(
     val fandoms: List<AO3AuthorFandom>,
     val subscriptionForm: AO3AuthorSubscriptionForm?,
     val actions: List<AO3AuthorWebAction>,
-    /** Null means the dashboard group was absent or unreadable; empty means AO3 showed an empty group. */
+    /** Null means the dashboard group could not be read; empty means AO3 showed none (a missing group, as iOS). */
     val recentWorks: List<AO3WorkSummary>? = null,
     val recentSeries: List<AO3AuthorSeriesSummary>? = null,
     val recentBookmarks: List<AO3AuthorBookmark>? = null

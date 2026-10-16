@@ -776,7 +776,9 @@ fun AuthorProfileScreen(
                 
                 item {
                     SectionRuleHeader(title = "Recent works")
-                    if (h.recentWorks.isNullOrEmpty()) {
+                    if (h.recentWorks == null) {
+                        Text("Couldn't read recent works. Open the full list to try again.", color = tokens.secondaryInk)
+                    } else if (h.recentWorks.isEmpty()) {
                         Text("No recent works visible on AO3.", color = tokens.secondaryInk)
                     } else {
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -791,14 +793,17 @@ fun AuthorProfileScreen(
                                 )
                             }
                         }
-                        // iOS 1y: each section's "See all" sits below its cards.
-                        onOpenDashboardList?.let { open -> DashboardSeeAll("works") { open(AccountListType.MyWorks) } }
                     }
+                    // iOS 1y: each section's "See all" sits below its cards, and stays when
+                    // there are none or they could not be read.
+                    onOpenDashboardList?.let { open -> DashboardSeeAll("works") { open(AccountListType.MyWorks) } }
                 }
                 
                 item {
                     SectionRuleHeader(title = "Recent series")
-                    if (h.recentSeries.isNullOrEmpty()) {
+                    if (h.recentSeries == null) {
+                        Text("Couldn't read recent series. Open the full list to try again.", color = tokens.secondaryInk)
+                    } else if (h.recentSeries.isEmpty()) {
                         Text("No recent series visible on AO3.", color = tokens.secondaryInk)
                     } else {
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -811,15 +816,17 @@ fun AuthorProfileScreen(
                                 )
                             }
                         }
-                        DashboardSeeAll("series") {
-                            onOpenSeries("https://archiveofourown.org/users/${route.username}/series")
-                        }
+                    }
+                    DashboardSeeAll("series") {
+                        onOpenSeries("https://archiveofourown.org/users/${route.username}/series")
                     }
                 }
                 
                 item {
                     SectionRuleHeader(title = "Recent bookmarks")
-                    if (h.recentBookmarks.isNullOrEmpty()) {
+                    if (h.recentBookmarks == null) {
+                        Text("Couldn't read recent bookmarks. Open the full list to try again.", color = tokens.secondaryInk)
+                    } else if (h.recentBookmarks.isEmpty()) {
                         Text("No recent bookmarks visible on AO3.", color = tokens.secondaryInk)
                     } else {
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -832,8 +839,8 @@ fun AuthorProfileScreen(
                                 )
                             }
                         }
-                        onOpenDashboardList?.let { open -> DashboardSeeAll("bookmarks") { open(AccountListType.Bookmarks) } }
                     }
+                    onOpenDashboardList?.let { open -> DashboardSeeAll("bookmarks") { open(AccountListType.Bookmarks) } }
                 }
             } else if (!isDashboard) {
                 if (tabLoading && page == 1) {

@@ -69,28 +69,20 @@ class AO3AuthorParser(
             fandoms = fandoms,
             subscriptionForm = subscription,
             actions = actions,
-            recentWorks = parseDashboardGroup(doc, "#user-works") { group ->
-                group.select("li.work.blurb").mapNotNull { item ->
-                    runCatching { searchParser.parseWorkSummary(item) }.getOrNull()
-                }
+            recentWorks = parseDashboardGroup(doc, "#user-works li.work.blurb") {
+                runCatching { searchParser.parseWorkSummary(it) }.getOrNull()
             },
-            recentSeries = parseDashboardGroup(doc, "#user-series") { group ->
-                group.select("li.series").mapNotNull(::parseSeriesBlurb)
-            },
-            recentBookmarks = parseDashboardGroup(doc, "#user-bookmarks") { group ->
-                group.select("li.bookmark.blurb").mapNotNull(::parseBookmark)
-            }
+            recentSeries = parseDashboardGroup(doc, "#user-series li.series.blurb", ::parseSeriesBlurb),
+            recentBookmarks = parseDashboardGroup(doc, "#user-bookmarks li.bookmark.blurb", ::parseBookmark)
         )
     }
 
-    private fun <T> parseDashboardGroup(
-        doc: Document,
-        selector: String,
-        parse: (Element) -> List<T>
-    ): List<T>? {
-        val group = doc.selectFirst(selector) ?: return null
-        return parse(group)
-    }
+    /**
+     * As iOS: a missing group is AO3's empty state (an empty list); one blurb that will not
+     * parse makes that group unreadable (null), never a shorter list, and its siblings stand.
+     */
+    private fun <T> parseDashboardGroup(doc: Document, selector: String, parse: (Element) -> T?): List<T>? =
+        doc.select(selector).map { parse(it) ?: return null }
 
     fun parseAbout(html: String, route: AO3AuthorRoute): AO3AuthorAbout {
         val doc = Jsoup.parse(html, AO3Constants.BASE_URL)
