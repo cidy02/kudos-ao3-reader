@@ -2070,3 +2070,13 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   chapter count instead of recording zero. History's Clear confirmation and "cleared" state are
   keyed to the session. A59 #1, #3, #4 and the remaining missing rows go to brief 3fm.
   Reverse: the commit that names A59.
+- **2026-10-15 · Comments opened from the Inbox belong to that session; a signed-in comment read
+  is never retried publicly (A59 #1; Claude).** The Inbox's (and the account hub's) links to
+  Comments carry the session generation they were opened under; when it has ended the screen
+  closes and reads nothing, as iOS's `belongsToCurrentSession` dismisses. Other ways into
+  Comments (reader, work page) are not fenced, as iOS. Signed in, a comments page is read as the
+  account or not at all: a failed read shows the failure (or this account's kept copy when AO3
+  could not be reached) instead of asking again publicly, as iOS's
+  `missingApplicableAuthCookieNeverFallsBackToAnonymousReads`. Signed out, reads stay public.
+  Two older tests modelled a signed-out reader with the fake's default signed-in name; they now
+  have none. Reverse: the commit that names A59 #1.

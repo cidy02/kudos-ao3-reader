@@ -64,7 +64,8 @@ class AO3CommentRepositoryTest {
             // Signed-out path: authenticated GET fails, repository falls back to public HTML.
             authenticatedClient = FakeAuthenticatedClient(
                 getResults = listOf(AO3Result.Failure(AO3Error.AuthenticationRequired)),
-                postResults = emptyList()
+                postResults = emptyList(),
+                username = null
             )
         )
 
@@ -73,6 +74,19 @@ class AO3CommentRepositoryTest {
         // Tree model: 3 top-level (registered w/ nested reply, guest, anonymous creator).
         assertEquals(3, thread.comments.size)
         assertEquals(1, thread.comments[0].replies.size)
+    }
+
+    /** iOS `missingApplicableAuthCookieNeverFallsBackToAnonymousReads` (A59). */
+    @Test
+    fun aSignedInReadThatFailsIsNotAskedAgainPublicly() = runTest {
+        for (error in listOf(AO3Error.AuthenticationRequired, AO3Error.Network("offline", offline = true))) {
+            val public = RecordingPublicClient(success(writeResource("ao3/comments/comments_basic.html")))
+            val repository = AO3CommentRepository(public, FakeAuthenticatedClient(
+                getResults = listOf(AO3Result.Failure(error)), postResults = emptyList()))
+            val result = repository.loadThread(AO3CommentTarget.Work(123))
+            assertEquals(AO3Result.Failure(error), result)
+            assertTrue(public.urls.isEmpty())
+        }
     }
 
     @Test
@@ -104,7 +118,8 @@ class AO3CommentRepositoryTest {
                     AO3Result.Failure(AO3Error.AuthenticationRequired),
                     AO3Result.Failure(AO3Error.AuthenticationRequired)
                 ),
-                postResults = emptyList()
+                postResults = emptyList(),
+                username = null
             )
         )
 
