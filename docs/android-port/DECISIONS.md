@@ -2119,3 +2119,10 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   or no growth: no line. Enriched work-page summaries already reach the rows, so an index row
   becomes updated once enrichment brings its count, as iOS. Seen in the demo: "Chapters 4-5
   new", "Chapters 6-8 new". Reverse: the commit that names this.
+- **2026-10-15 · The account hub's counts are seeded from the dashboard nav (3fm item 3;
+  Claude).** As iOS's `record(dashboardActions:)`, the Works, Series, Bookmarks and
+  Collections sizes AO3 prints in the nav of the dashboard page the hub already reads ("Works
+  (535)") are kept for the session, with no request of their own; only exact
+  `/users/<name>/<list>` links count, so a pseud's numbers never land there. The hub's
+  Collections and Series rows now show a count, as iOS's. Not seen running: the demo's
+  dashboard, like iOS's fixture, prints no counts. Reverse: the commit that names this.
