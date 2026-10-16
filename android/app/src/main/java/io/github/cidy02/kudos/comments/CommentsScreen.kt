@@ -132,8 +132,10 @@ fun CommentsScreen(
 
     LaunchedEffect(viewModel, initialComposes) {
         // With a comment named too it is the Inbox's Reply: an answer to that comment, once its
-        // thread is on screen. Without one, a new comment on the work.
-        if (initialComposes) focusedCommentId?.let(viewModel::replyWhenLoaded) ?: viewModel.openComposer()
+        // thread is on screen. Without one, a new comment on the work. Signed out it does nothing,
+        // as iOS's `consumeInitialComposeIfNeeded` (A59).
+        if (initialComposes && currentUsername != null)
+            focusedCommentId?.let(viewModel::replyWhenLoaded) ?: viewModel.openComposer()
     }
 
     // Deep link focus (e.g. Inbox notification)

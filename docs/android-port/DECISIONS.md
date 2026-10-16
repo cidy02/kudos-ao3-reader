@@ -2096,3 +2096,12 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   link puts the caret inside the empty href with the words as its text. The tray prints
   "h1–h6" under Heading and "a href" under Link, as iOS. Headings keep their own level rule.
   Reverse: the commit that names A59 #3.
+- **2026-10-15 · A59's last account-safety rows (Claude).** An Inbox action is sent only in the
+  session it was tapped in (the client's fenced `postAuthenticatedInSession`, with the
+  generation captured at the tap), as iOS's `queuedATapCannotSubmitTheEquivalentBRow`; Android
+  already captured it at the first suspension, so this makes it explicit rather than closing a
+  seen leak. "Write a comment" opened while signed out does nothing, as iOS's
+  `consumeInitialComposeIfNeeded`. A subscription row's enrichment that answers after the
+  session changed is not recorded (iOS `enrichmentFromAnOldGenerationIsNotRecorded`).
+  `aClearedAccountKeepsNoRowsOrUnsubscribePath` was the History flags, fixed earlier.
+  Reverse: the commit that names these rows.

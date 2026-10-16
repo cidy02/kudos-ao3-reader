@@ -306,7 +306,8 @@ class AccountInboxViewModel(
                         action = action,
                         form = form,
                         items = items,
-                        referer = referer
+                        referer = referer,
+                        expectedGeneration = expectedViewer.generation
                     )
                 ) {
                     is AO3Result.Success -> {
