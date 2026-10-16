@@ -66,6 +66,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.runtime.produceState
 import androidx.fragment.app.FragmentActivity
 import io.github.cidy02.kudos.app.PrivacyGate
 import io.github.cidy02.kudos.app.PrivacyRevealState
@@ -572,6 +573,11 @@ private fun MarkedForLaterBrowser(
     val activeWorks = remember(works, unmarkedIds) {
         works.filter { it.remote.id !in unmarkedIds }
     }
+    // Unmark took the last row off this page: AO3's later rows move up and a last page can go,
+    // so the page that now has rows loads instead of an empty state (iOS `reloadIfPageEmptied`).
+    LaunchedEffect(activeWorks.isEmpty(), unmarkedIds) {
+        if (works.isNotEmpty() && activeWorks.isEmpty()) pageAfterEmptying(currentPage, totalPages)?.let(onLoadPage)
+    }
 
     val updatedWorks = remember(activeWorks, watermarks) {
         activeWorks.filter { SubscriptionWatermarks.newChapterCount(it.remote, watermarks) > 0 }
@@ -714,6 +720,17 @@ private fun MarkedForLaterBrowser(
     }
 }
 
+/** iOS `AO3MarkedForLaterDownloadLine`: only with a copy and a size to name (A59). */
+internal fun markedForLaterDownloadLine(hasEpub: Boolean, byteLabel: String?): String? =
+    if (hasEpub && !byteLabel.isNullOrEmpty()) "Downloaded · $byteLabel" else null
+
+/**
+ * iOS `AO3AccountWorksPaging.pageAfterEmptying`: nil with one page (the list is empty now);
+ * otherwise the same page while later ones exist, else the page before.
+ */
+internal fun pageAfterEmptying(currentPage: Int, totalPages: Int): Int? =
+    if (totalPages <= 1) null else if (currentPage < totalPages) maxOf(currentPage, 1) else totalPages - 1
+
 @Composable
 private fun MarkedForLaterRow(
     work: CanonicalWork,
@@ -728,6 +745,15 @@ private fun MarkedForLaterRow(
         verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
         PairedWorkRow(work = work, expandAll = expandAll, onOpenWork = onOpenWork, ledger = true)
+        val context = LocalContext.current
+        val local = work.local
+        val byteLabel by produceState<String?>(null, local?.id, local?.isDownloaded) {
+            value = local?.takeIf { it.isDownloaded }?.let { saved ->
+                (context.applicationContext as? io.github.cidy02.kudos.KudosApplication)
+                    ?.container?.workFileStore?.workEpubSize(saved.id)
+            }?.let(io.github.cidy02.kudos.settings.LocalStorageFootprint::formatted)
+        }
+        val downloadLine = markedForLaterDownloadLine(local?.isDownloaded == true, byteLabel)
 
         Row(
             modifier = Modifier
@@ -736,9 +762,9 @@ private fun MarkedForLaterRow(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            if (work.local?.isDownloaded == true) {
+            if (downloadLine != null) {
                 Text(
-                    text = "Downloaded",
+                    text = downloadLine,
                     color = tokens.secondaryInk,
                     fontSize = 12.sp,
                     fontFamily = FontFamily.Monospace
