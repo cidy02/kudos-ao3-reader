@@ -3,7 +3,13 @@ package io.github.cidy02.kudos.network.ao3.comments
 /** Chapter scope is presentation: AO3 identifies a submission by work and parent. */
 data class CommentSubmissionKey(val workId: Long, val parentId: Long?, val body: String, val identity: String) {
     companion object {
-        fun normalize(body: String) = body.trim().split(Regex("(?U)\\s+")).joinToString(" ")
+        /**
+         * Runs of whitespace become one space, as iOS's `isWhitespace` split. No regex: Android's
+         * engine rejects the Unicode-class flag, and a pattern with it crashed the composer on a device.
+         */
+        fun normalize(body: String): String =
+            String(body.map { if (it.isWhitespace()) ' ' else it }.toCharArray())
+                .split(' ').filter(String::isNotEmpty).joinToString(" ")
         fun of(target: AO3CommentTarget, parentId: Long?, body: String, identity: String) =
             CommentSubmissionKey(target.workId, parentId, normalize(body), identity)
     }
