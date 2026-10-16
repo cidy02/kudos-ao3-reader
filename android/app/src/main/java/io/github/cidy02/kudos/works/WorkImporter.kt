@@ -181,6 +181,31 @@ class WorkImporter(
         }
     }
 
+    /** Read acquires a reading copy; Download is the separate action that keeps it. */
+    suspend fun prepareForReading(summary: AO3WorkSummary): WorkImportResult =
+        when (val result = saveMetadataOnly(summary, markSaved = false, enrichMetadata = false)) {
+            is WorkImportResult.Failure -> result
+            is WorkImportResult.Success -> prepareForReading(result.work)
+        }
+
+    suspend fun prepareForReading(work: SavedWork): WorkImportResult {
+        val current = workRepository.resolveLocalWork(work.id)
+            ?: return WorkImportResult.Failure(null, AO3Error.Validation("This local work no longer exists."))
+        return if (current.hasEpub && fileStore.workEpubExists(current.id)) {
+            WorkImportResult.Success(current)
+        } else {
+            when (val result = downloadExisting(current)) {
+                is WorkImportResult.Failure -> result
+                is WorkImportResult.Success -> WorkImportResult.Success(workRepository.upsert(result.work.copy(
+                    // iOS WorkReaderPreparation: a fresh file resets the paired fallback coordinates.
+                    isFinished = false, lastSpineIndex = 0, lastScrollFraction = 0.0, legacyReaderProgress = null,
+                    epubPreservationStatusRaw = if (result.work.isQueuedForLater) "preserved" else result.work.epubPreservationStatusRaw,
+                    preservedAt = if (result.work.isQueuedForLater) workRepository.currentInstant() else result.work.preservedAt
+                )))
+            }
+        }
+    }
+
     /** Import a user-picked local file (SAF), including OPF/AO3 metadata for EPUBs. */
     suspend fun importLocalEpub(
         displayName: String?,
@@ -346,9 +371,13 @@ class WorkImporter(
 
         return when (val write = fileStore.writeWorkEpub(work.id, rebuilt)) {
             is FileWriteResult.Failure -> WorkImportResult.Failure(work, AO3Error.Validation(write.message))
-            is FileWriteResult.Success -> WorkImportResult.Success(
-                workRepository.upsert(work.copy(hasEpub = true, remoteEpubPending = false, lastModifiedAt = Instant.now()))
-            )
+            is FileWriteResult.Success -> {
+                val current = workRepository.getWork(work.id)
+                    ?: return WorkImportResult.Failure(null, AO3Error.Validation("This local work no longer exists."))
+                WorkImportResult.Success(workRepository.upsert(
+                    current.copy(hasEpub = true, remoteEpubPending = false, lastModifiedAt = Instant.now())
+                ))
+            }
         }
     }
 

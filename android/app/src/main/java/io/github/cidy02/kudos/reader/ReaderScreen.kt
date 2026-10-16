@@ -351,12 +351,14 @@ private fun ReaderReading(
                 ReadiumProgressAdapter.initialLocator(state.restoreTarget, publication)
             }
             val tocEntries = remember(publication) { ReadiumTocAdapter.entries(publication) }
-            val chapterStarts by androidx.compose.runtime.produceState(emptyMap<String, Int>(), publication) {
-                value = ReadiumTocAdapter.startPercents(publication)
-            }
             val sections = remember(publication) { ReadiumTocAdapter.sections(publication) }
             val progressLabel = ReaderProgressDisplay.label(state.liveProgress, sections, state.work.chapters)
             var positions by remember(publication) { mutableStateOf<List<List<Locator>>>(emptyList()) }
+            fun bookmarkChapter(entry: ReaderTocEntry, editNote: Boolean = false) {
+                val locator = ReadiumTocAdapter.chapterStartLocator(positions, entry.href) ?: return
+                val progress = ReadiumProgressAdapter.toReaderProgress(publication, locator)
+                viewModel.addBookmarkAtProgress(progress, progress.locatorJson.orEmpty(), entry.title, editNote)
+            }
             var scrubOriginLocator by remember(publication) { mutableStateOf<Locator?>(null) }
             var scrubViewport by remember(publication) { mutableStateOf<ReaderViewport?>(null) }
             var scrubValue by remember(publication) { mutableStateOf<Float?>(null) }
@@ -793,7 +795,7 @@ private fun ReaderReading(
                 )
             }
 
-            state.highlights.firstOrNull { it.id == state.editingAnnotationId }?.let { annotation ->
+            (state.highlights + state.bookmarks).firstOrNull { it.id == state.editingAnnotationId }?.let { annotation ->
                 // A swatch writes straight to the highlight so the page shows it at once.
                 // Cancel takes that back (audit A12-6). Dismissing the sheet keeps the colour
                 // and a typed note, as iOS's swipe does (3dz): only Cancel throws work away.
@@ -871,13 +873,24 @@ private fun ReaderReading(
                             onDeleteAnnotation = { annotation ->
                                 showDeleteNoteConfirm = annotation
                             },
+                            onBookmarkEntry = { bookmarkChapter(it) },
+                            onAddNoteToEntry = { entry ->
+                                scope.launch {
+                                    sheetState.hide()
+                                    showTocSheet = false
+                                    bookmarkChapter(entry, editNote = true)
+                                }
+                            },
                             onDone = {
                                 scope.launch {
                                     sheetState.hide()
                                     showTocSheet = false
                                 }
                             },
-                            startPercent = { chapterStarts[ReaderSectionBuilder.hrefKey(it.href)] }
+                            startPercent = { entry ->
+                                ReadiumTocAdapter.chapterStartLocator(positions, entry.href)
+                                    ?.locations?.totalProgression?.let { (it * 100).roundToInt() }
+                            }
                         )
                     }
                 }

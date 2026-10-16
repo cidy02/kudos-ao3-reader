@@ -238,6 +238,25 @@ class ReadingQueueRepositoryTest {
         assertTrue("last queue membership dropped for a queue-only work -> soft-deleted", afterLastRemoval.isDeleted)
     }
 
+    @Test fun removingFromAllQueuesForTheLibrarySwipeKeepsTheReadingCopy() = runTest {
+        val work = savedWork("queue-only-swipe", "Reading copy").copy(
+            isSaved = false, hasEpub = true, readiumLocator = "kept place")
+        val repo = ReadingQueueRepository(database, clock = { now }, epubOnDisk = { it == work.id })
+        database.workDao().upsert(work.toEntity())
+        val first = repo.createQueue("First")
+        val second = repo.createQueue("Second")
+        repo.addWork(first.id, work.id)
+        repo.addWork(second.id, work.id)
+        repo.removeFromAllQueues(work.id)
+        val retained = database.workDao().getById(work.id)!!
+        assertFalse(retained.isDeleted)
+        assertFalse(retained.isQueuedForLater)
+        assertTrue(retained.hasEpub)
+        assertEquals("kept place", retained.readiumLocator)
+        assertTrue(database.readingQueueDao().getMembershipsForWork(work.id).isEmpty())
+        assertTrue(database.syncTombstoneDao().getByRecord(work.id, "savedWork").isEmpty())
+    }
+
     /** ReadingQueueTests.removeLastQueueMembershipDoesNotDeleteWorkByDefault. */
     @Test
     fun removeLastQueueMembershipDoesNotDeleteWorkByDefault() = runTest {

@@ -108,7 +108,8 @@ class AnnotationRepository(
         val existing = dao.getById(id)?.toDomain() ?: return
         if (existing.isPendingDeletion ||
             (!existing.kindRaw.equals("highlight", ignoreCase = true) &&
-                !existing.kindRaw.equals("note", ignoreCase = true))
+                !existing.kindRaw.equals("note", ignoreCase = true) &&
+                !existing.kindRaw.equals("bookmark", ignoreCase = true))
         ) return
         saveAnnotation(existing.copy(colorRaw = color))
     }
