@@ -209,6 +209,7 @@ private object EpubMetadataReader {
         try {
             file.writeBytes(bytes)
             ZipFile(file).use { zip ->
+                if (!hasSafeEntries(zip)) return@use false
                 fun text(name: String) = zip.getEntry(name)
                     ?.let { zip.getInputStream(it).use { input -> input.readBounded(MAX_ENTRY_BYTES) } }
                     ?.let(TextDecoding::decode)
@@ -222,6 +223,33 @@ private object EpubMetadataReader {
             file.delete()
         }
     }.getOrDefault(false)
+
+    /** iOS MiniZip.Limits.epub; validate even entries the package never references. */
+    private fun hasSafeEntries(zip: ZipFile): Boolean {
+        if (zip.size() !in 1..10_000) return false
+        val names = mutableSetOf<String>()
+        var totalExpanded = 0L
+        val entries = zip.entries()
+        while (entries.hasMoreElements()) {
+            val entry = entries.nextElement()
+            val name = entry.name
+            val path = name.trimEnd('/')
+            if (!names.add(name) || path.isEmpty() || '\\' in name || '\u0000' in name ||
+                name.indexOf(':') in 0..2 || path.split('/').any { it.isEmpty() || it == ".." }
+            ) return false
+            val expanded = entry.size
+            val compressed = entry.compressedSize
+            if (expanded !in 0L..200_000_000L || compressed < 0 ||
+                entry.method !in listOf(0, 8) ||
+                (entry.method == 0 && compressed != expanded) ||
+                (compressed == 0L && expanded > 0) ||
+                (compressed > 0 && expanded / compressed > 1100)
+            ) return false
+            totalExpanded += expanded
+            if (totalExpanded > 500_000_000L) return false
+        }
+        return true
+    }
 
     private fun readOpf(bytes: ByteArray): String? = runCatching {
         ZipInputStream(ByteArrayInputStream(bytes)).use { zip ->

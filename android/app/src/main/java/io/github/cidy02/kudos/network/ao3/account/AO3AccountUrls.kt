@@ -4,7 +4,7 @@ import io.github.cidy02.kudos.account.AccountListType
 import io.github.cidy02.kudos.network.ao3.AO3Constants
 
 class AO3AccountUrls {
-    fun url(type: AccountListType, username: String, page: Int = 1): String {
+    fun url(type: AccountListType, username: String, page: Int = 1): String? {
         return when (type) {
             is AccountListType.Collection -> collectionWorksUrl(type.name, page)
             else -> userScopedUrl(type, username, page)
@@ -45,7 +45,8 @@ class AO3AccountUrls {
         return builder.build().toString()
     }
 
-    private fun userScopedUrl(type: AccountListType, username: String, page: Int): String {
+    private fun userScopedUrl(type: AccountListType, username: String, page: Int): String? {
+        if (username.isBlank()) return null
         val builder = AO3Constants.baseHttpUrl.newBuilder()
             .addPathSegment("users")
             .addPathSegment(username.trim())

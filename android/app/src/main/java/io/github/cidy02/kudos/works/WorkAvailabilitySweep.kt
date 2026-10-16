@@ -94,7 +94,10 @@ class WorkAvailabilitySweep(
                 }
             }
 
-            val workId = WorkTags.ao3WorkIdFromUrl(work.sourceUrl) ?: continue
+            val workId = WorkIdentityIndex.ao3WorkId(work) ?: continue
+            val identified = if (work.ao3WorkID == null && workId in 1..Int.MAX_VALUE.toLong()) {
+                workRepository.upsert(work.copy(ao3WorkID = workId.toInt()))
+            } else work
             val result = try {
                 tagsRepository.refreshTags(workId)
             } catch (_: CancellationException) {
@@ -104,24 +107,27 @@ class WorkAvailabilitySweep(
                 remaining += batch.size - index
                 break
             }
+            checked++
             when (result) {
                 is AO3Result.Failure -> {
                     if (result.error is AO3Error.NotFound) {
                         workRepository.upsert(
-                            work.copy(
+                            identified.copy(
                                 ao3Unavailable = true,
                                 lastAvailabilityCheck = now,
-                                lastModifiedAt = now
+                                lastModifiedAt = if (!work.ao3Unavailable) now else work.lastModifiedAt
                             )
                         )
-                        checked++
                         nowUnavailable++
                     }
                     // Inconclusive (timeout, 5xx, parse…): leave stamps alone.
                 }
                 is AO3Result.Success -> {
-                    workRepository.upsert(work.copy(lastAvailabilityCheck = now))
-                    checked++
+                    workRepository.upsert(identified.copy(
+                        ao3Unavailable = false,
+                        lastAvailabilityCheck = now,
+                        lastModifiedAt = if (work.ao3Unavailable) now else work.lastModifiedAt
+                    ))
                     stillAvailable++
                 }
             }
@@ -142,7 +148,7 @@ class WorkAvailabilitySweep(
         val works = workRepository.listSavedWorks()
         return Counts(
             pending = pending(works, Instant.ofEpochMilli(clock.nowMillis())).first.size,
-            unverifiable = works.count { WorkTags.ao3WorkIdFromUrl(it.sourceUrl) == null }
+            unverifiable = works.count { WorkIdentityIndex.ao3WorkId(it) == null }
         )
     }
 
@@ -150,9 +156,7 @@ class WorkAvailabilitySweep(
     private fun pending(works: List<SavedWork>, now: Instant): Pair<List<SavedWork>, Int> {
         val recheckCutoff = now.minus(RECHECK_INTERVAL)
         val verifiable = works.filter { work ->
-            work.sourceUrl.isNotBlank() &&
-                !work.ao3Unavailable &&
-                WorkTags.ao3WorkIdFromUrl(work.sourceUrl) != null
+            !work.isDeleted && WorkIdentityIndex.ao3WorkId(work) != null
         }
         val pending = verifiable.filter { work ->
             val last = work.lastAvailabilityCheck
