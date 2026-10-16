@@ -100,7 +100,9 @@ data class CommentThreadHandlers(
     val onCopyLink: (AO3Comment) -> Unit,
     val onFocusThread: (Long) -> Unit,
     val onRequestLogin: () -> Unit,
-    val onOpenAuthor: (String) -> Unit
+    val onOpenAuthor: (String) -> Unit,
+    /** Signed out, no row offers Reply and none keeps its band (iOS `showsLeadingReply`; A59). */
+    val isSignedIn: Boolean = true
 )
 
 /**
@@ -759,7 +761,7 @@ fun CommentActionRowLayout(
     val clipboard = LocalClipboardManager.current
     var showMenu by remember { mutableStateOf(false) }
     val tokens = LocalKudosTokens.current
-    val canReply = comment.canReply && comment.numericId != null
+    val canReply = handlers.isSignedIn && comment.canReply && comment.numericId != null
 
     Row(
         modifier = Modifier

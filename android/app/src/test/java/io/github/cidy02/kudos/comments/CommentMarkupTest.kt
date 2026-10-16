@@ -87,6 +87,22 @@ class CommentMarkupTest {
         assertEquals("<details><summary>Chapter 4</summary>he dies</details>", typing("Chapter 4", spoiler))
     }
 
+    /** iOS `AO3MarkupTests.bothSurfacesSelectTheSameSpanForTheSameInput`; Link aside, as the tray has no URL. */
+    @Test fun bothSurfacesSelectTheSameSpanForTheSameInput() {
+        for (tag in CommentMarkupTag.entries.filter { it != CommentMarkupTag.Link }) {
+            for (text in listOf("", "keep", "one\ntwo", "the coat", "done\n\nmore")) {
+                for ((lower, upper) in listOf(0 to 0, 0 to text.length, text.length to text.length)) {
+                    val writing = io.github.cidy02.kudos.writing.WritingMarkup.insertion(tag.element, text, lower, upper)!!
+                    val comment = apply(tag, text, lower, upper)
+                    val label = "<${tag.element}> in \"$text\" over $lower..$upper"
+                    assertEquals(label, text.substring(0, lower) + writing.text + text.substring(upper), comment.text)
+                    assertEquals(label, TextRange(lower + writing.contentOffset, lower + writing.contentOffset + writing.contentLength),
+                        comment.selection)
+                }
+            }
+        }
+    }
+
     @Test fun onlyTheTagsAO3KeepsAreOfferedAndHeadingPrintsItsRange() {
         assertEquals(15, CommentMarkupTag.entries.size)
         assertEquals(listOf("strong", "em", "u", "s", "sup", "sub", "small", "code"),
