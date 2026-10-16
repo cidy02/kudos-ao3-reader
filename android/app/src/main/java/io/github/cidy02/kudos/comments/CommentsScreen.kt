@@ -199,7 +199,7 @@ fun CommentsScreen(
         SubjectPalette.fromHue(workHue, tokens.theme)
     }
 
-    val handlers = remember(viewModel, onLogin, onOpenAuthor) {
+    val handlers = remember(viewModel, onLogin, onOpenAuthor, currentUsername) {
         CommentThreadHandlers(
             onReply = { comment -> viewModel.openComposer(replyingTo = comment) },
             onEdit = { comment -> viewModel.openComposer(editing = comment) },
@@ -213,7 +213,8 @@ fun CommentsScreen(
                 pushedThreadRootId = commentId
             },
             onRequestLogin = onLogin,
-            onOpenAuthor = onOpenAuthor
+            onOpenAuthor = onOpenAuthor,
+            isSignedIn = currentUsername != null
         )
     }
 

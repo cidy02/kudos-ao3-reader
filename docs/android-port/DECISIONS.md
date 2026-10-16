@@ -2135,3 +2135,12 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   counts cache never makes a request of its own, and the binding networking policy keeps
   reads to what the reader opened. The count still appears once Home (or the list) has read
   that page; seen in the demo ("6+"). Reverse: the commit that names this.
+- **2026-10-15 · Signed out, comment rows offer no Reply; More on AO3's links as iOS builds
+  them (3fm items 6 to 8, part; Claude).** AO3 shows guests a reply link where a work allows
+  guest comments, but the app posts only signed in: as iOS's `showsLeadingReply`, a signed-out
+  row has no Reply and keeps no reply band (its menu still says "Log in to Reply"). Seen in the
+  demo: no Reply signed out, six signed in. More on AO3's site paths get exactly one slash and
+  the account's root has none after it, as iOS's `siteWideURL`/`userURL` (the rows in use
+  already had them). A test pins the comment tray to the chapter editor's markup for every tag
+  but Link. Left to 3fm: the tray as a four-column grid, series creators' pseud links, bookmark
+  collections, tag autocomplete's canonical mark and count. Reverse: the commit that names this.

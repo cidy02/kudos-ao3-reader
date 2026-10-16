@@ -199,10 +199,11 @@ internal object MoreOnAO3 {
 
     /** The full address, or null for a page of the reader's own when nobody is signed in. */
     fun url(target: Target, username: String?): String? = when (target) {
-        is Target.Site -> "https://archiveofourown.org${target.path}"
+        // As iOS's `siteWideURL` and `userURL`: one slash before a path, none after the account's root.
+        is Target.Site -> "https://archiveofourown.org/${target.path.removePrefix("/")}"
         is Target.User -> username?.trim()?.takeIf { it.isNotEmpty() }?.let { name ->
             val encoded = java.net.URLEncoder.encode(name, "UTF-8").replace("+", "%20")
-            "https://archiveofourown.org/users/$encoded/${target.suffix}"
+            "https://archiveofourown.org/users/$encoded" + target.suffix.takeIf { it.isNotEmpty() }?.let { "/$it" }.orEmpty()
         }
     }
 }

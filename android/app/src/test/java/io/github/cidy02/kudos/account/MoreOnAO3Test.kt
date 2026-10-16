@@ -25,6 +25,16 @@ class MoreOnAO3Test {
         assertEquals("https://archiveofourown.org/abuse_reports/new", url("Report abuse"))
     }
 
+    /** iOS `AccountMoreOnAO3Tests` (A59). */
+    @Test fun siteWidePathsGetOneSlashAndTheAccountRootNone() {
+        assertEquals("https://archiveofourown.org/support", MoreOnAO3.url(MoreOnAO3.Target.Site("support"), null))
+        assertEquals("https://archiveofourown.org/support", MoreOnAO3.url(MoreOnAO3.Target.Site("/support"), null))
+        assertEquals("https://archiveofourown.org/users/testuser/works/drafts",
+            MoreOnAO3.url(MoreOnAO3.Target.User("works/drafts"), "testuser"))
+        assertEquals("https://archiveofourown.org/users/testuser", MoreOnAO3.url(MoreOnAO3.Target.User(""), "testuser"))
+        assertNull(MoreOnAO3.url(MoreOnAO3.Target.User("works/drafts"), null))
+    }
+
     @Test fun aPageOfTheReadersOwnHasNoAddressWhenSignedOut() {
         val own = rows.filter { it.target is MoreOnAO3.Target.User }
         val site = rows.filter { it.target is MoreOnAO3.Target.Site }
