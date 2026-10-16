@@ -2212,3 +2212,11 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   device, and a release tagged with Arabic-Indic digits would rank as an update. Both
   patterns now spell out ASCII (`[A-Za-z0-9_]`, `[0-9]`). The JVM tests cannot show the
   difference, so no test was added for it. Reverse: the commit that names A60.
+- **2026-10-16 · A web login that is left, or cannot be saved, leaves no half-signed-in state
+  (A61 #1, #3; Claude).** Leaving the login screen while AO3's cookies are being read put the
+  app back to signed out, where it stayed on "Signing in". Once the session's save starts it
+  finishes (iOS's cancel lands before the save too). A secure store that cannot save (a
+  keystore fault) is now the "AO3 logged in, but the session could not be saved securely"
+  message, with the web view's login cookies cleared; it was an exception out of the login
+  screen that could crash the app. A61 (Codex) settled 181 unsure rows: 80 kept, 19 fixed
+  since, 25 not applicable, 57 missing in 31 items. Reverse: the commit that names A61 #1.
