@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.comments
 
+import kotlinx.coroutines.launch
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -64,12 +65,25 @@ fun CommentThreadScreen(
         }
     }
 
+    // iOS `focus(_:proxy:)`: a comment already in this thread is scrolled to, not opened as a
+    // narrower thread; one above it (Parent Thread) leaves for the list, which opens it (A63 F25).
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    val threadHandlers = remember(handlers, rows) {
+        handlers.copy(onFocusThread = { target ->
+            val index = rows.indexOfFirst { it.item.actionableComment?.numericId == target }
+            if (index >= 0) scope.launch { listState.animateScrollToItem(index + 1) }
+            else handlers.onFocusThread(target)
+        })
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
             .subjectScreenWash(palette, 480.dp)
     ) {
         LazyColumn(
+            state = listState,
             modifier = Modifier.fillMaxSize()
         ) {
             item {
@@ -101,7 +115,7 @@ fun CommentThreadScreen(
                         workAuthors = workAuthors,
                         workAuthorUsernames = workAuthorUsernames,
                         palette = palette,
-                        handlers = handlers,
+                        handlers = threadHandlers,
                         swipeTracker = swipeTracker,
                         onExpand = {},
                         onContinueThread = {},

@@ -152,7 +152,8 @@ fun AccountInboxPane(
                 "Your works in Kudos aren't deleted."
         },
         confirmText = "Delete From Inbox",
-        confirmBeforeDelete = settings.app.confirmBeforeDelete,
+        // Always asked, as iOS: a notification deleted from AO3's Inbox has no undo (A63 F16).
+        confirmBeforeDelete = true,
         onConfirm = {
             val pending = pendingDelete ?: return@DestructiveConfirmation
             pendingDelete = null

@@ -2296,3 +2296,13 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   end; Codex's new picker test never settled under Robolectric (the dialog runs and toggles on
   the emulator), so its membership rule is tested on its own. Reverse: the commit that names
   3fp part 2.
+- **2026-10-16 · A63 (Codex: every action on Home, Search, Browse, Account, Bookmarks,
+  Comments and author pages; 31 differences) and Claude's four (F07, F16, F25, F31).** F16:
+  Delete From Inbox always asks, as iOS (a deleted notification has no undo). F07: Reply,
+  Edit and Delete inside an open comment thread now show their composer and confirmation
+  (they set state the thread view never drew; seen on the emulator). F25: Thread and Parent
+  Thread inside an open thread scroll to a comment it already shows, as iOS's
+  `focus(_:proxy:)`, instead of narrowing it; one above the thread still opens there. F31:
+  AO3's own "N more comments in this thread" opens that page in the app's web view (iOS opens
+  the website; the in-app view keeps the demo off AO3). The rest go to brief 3fq. Reverse:
+  the commit that names A63 F07.

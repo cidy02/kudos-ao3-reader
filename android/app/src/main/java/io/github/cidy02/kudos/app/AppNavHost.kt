@@ -1188,6 +1188,7 @@ fun AppNavHost(
                 currentUsername = commentsAuthState.usernameOrNull,
                 sessionGeneration = commentsSession,
                 onLogin = { navController.navigate(Routes.AccountLogin) },
+                onOpenWeb = { url -> navController.navigate(Routes.webFallback(url)) },
                 onOpenAuthor = { username ->
                     navController.navigate(Routes.authorProfile(username))
                 },

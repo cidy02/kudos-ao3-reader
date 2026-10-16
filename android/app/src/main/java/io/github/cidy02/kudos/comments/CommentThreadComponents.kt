@@ -102,7 +102,9 @@ data class CommentThreadHandlers(
     val onRequestLogin: () -> Unit,
     val onOpenAuthor: (String) -> Unit,
     /** Signed out, no row offers Reply and none keeps its band (iOS `showsLeadingReply`; A59). */
-    val isSignedIn: Boolean = true
+    val isSignedIn: Boolean = true,
+    /** AO3's own "N more comments in this thread": its page, in the app's web view (A63 F31). */
+    val onOpenWebPage: (String) -> Unit = {}
 )
 
 /**
@@ -622,9 +624,15 @@ fun CommentPostRow(
                 val cutoffText = comment.cutoffCount?.let {
                     "$it more ${if (it == 1) "comment" else "comments"} in this thread"
                 } ?: "More comments in this thread"
+                val cutoffUrl = comment.cutoffThreadPath?.let {
+                    io.github.cidy02.kudos.network.ao3.writes.AO3WriteUrls.absoluteUrl(it)
+                }
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .then(if (cutoffUrl != null) Modifier.clickable(
+                            onClickLabel = "open the rest of this thread on AO3"
+                        ) { handlers.onOpenWebPage(cutoffUrl) } else Modifier)
                         .padding(vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(6.dp)

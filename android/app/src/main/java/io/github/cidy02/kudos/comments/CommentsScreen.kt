@@ -104,6 +104,8 @@ fun CommentsScreen(
     target: AO3CommentTarget?,
     repository: AO3CommentRepository,
     onLogin: () -> Unit,
+    /** An AO3 page with no native screen (a thread AO3 cut off), in the app's web view. */
+    onOpenWeb: (String) -> Unit = {},
     currentUsername: String? = null,
     /** The session's count beside the name: the same name signed in again is another reader. */
     sessionGeneration: Int = 0,
@@ -214,7 +216,72 @@ fun CommentsScreen(
             },
             onRequestLogin = onLogin,
             onOpenAuthor = onOpenAuthor,
-            isSignedIn = currentUsername != null
+            isSignedIn = currentUsername != null,
+            onOpenWebPage = onOpenWeb
+        )
+    }
+
+    // Before the isolated thread's early return: Reply, Edit and Delete there set this state,
+    // and without these the thread view showed nothing for them (A63 F07).
+    // Delete confirmation dialog
+    if (pendingDeleteComment != null) {
+        AlertDialog(
+            onDismissRequest = { pendingDeleteComment = null },
+            title = { Text("Delete this comment?") },
+            text = { Text("This removes the comment on AO3. It cannot be undone.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val toDelete = pendingDeleteComment
+                        pendingDeleteComment = null
+                        if (toDelete != null) viewModel.deleteComment(toDelete)
+                    }
+                ) {
+                    Text("Delete", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingDeleteComment = null }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    // Action banner message dialog
+    if (message != null) {
+        AlertDialog(
+            onDismissRequest = { viewModel.clearMessage() },
+            title = { Text("AO3") },
+            text = { Text(message.orEmpty()) },
+            dismissButton = {
+                if (canReverify) TextButton(onClick = {
+                    viewModel.clearMessage()
+                    viewModel.reverify()
+                }, enabled = !submitting) { Text("Check Again") }
+            },
+            confirmButton = {
+                TextButton(onClick = { viewModel.clearMessage() }) {
+                    Text("OK")
+                }
+            }
+        )
+    }
+
+    // Composer modal sheet
+    if (composerPresented) {
+        CommentComposerSheet(
+            replyTarget = composerParent,
+            editTarget = editTarget,
+            draft = draft,
+            onDraftChange = viewModel::updateDraft,
+            submitting = submitting,
+            currentUsername = currentUsername,
+            isScopeByChapter = composerTarget is AO3CommentTarget.Chapter,
+            palette = palette,
+            onDismiss = viewModel::closeComposer,
+            onSubmit = viewModel::submitComment,
+            onOpenAuthor = onOpenAuthor
         )
     }
 
@@ -263,51 +330,6 @@ fun CommentsScreen(
         } else null
     )
 
-    // Delete confirmation dialog
-    if (pendingDeleteComment != null) {
-        AlertDialog(
-            onDismissRequest = { pendingDeleteComment = null },
-            title = { Text("Delete this comment?") },
-            text = { Text("This removes the comment on AO3. It cannot be undone.") },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        val toDelete = pendingDeleteComment
-                        pendingDeleteComment = null
-                        if (toDelete != null) viewModel.deleteComment(toDelete)
-                    }
-                ) {
-                    Text("Delete", color = MaterialTheme.colorScheme.error)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { pendingDeleteComment = null }) {
-                    Text("Cancel")
-                }
-            }
-        )
-    }
-
-    // Action banner message dialog
-    if (message != null) {
-        AlertDialog(
-            onDismissRequest = { viewModel.clearMessage() },
-            title = { Text("AO3") },
-            text = { Text(message.orEmpty()) },
-            dismissButton = {
-                if (canReverify) TextButton(onClick = {
-                    viewModel.clearMessage()
-                    viewModel.reverify()
-                }, enabled = !submitting) { Text("Check Again") }
-            },
-            confirmButton = {
-                TextButton(onClick = { viewModel.clearMessage() }) {
-                    Text("OK")
-                }
-            }
-        )
-    }
-
     // Chapter picker modal sheet
     if (showingChapterPicker) {
         val chaptersLoading by viewModel.chaptersLoading.collectAsState()
@@ -328,23 +350,6 @@ fun CommentsScreen(
                 showingChapterPicker = false
             },
             onDismiss = { showingChapterPicker = false }
-        )
-    }
-
-    // Composer modal sheet
-    if (composerPresented) {
-        CommentComposerSheet(
-            replyTarget = composerParent,
-            editTarget = editTarget,
-            draft = draft,
-            onDraftChange = viewModel::updateDraft,
-            submitting = submitting,
-            currentUsername = currentUsername,
-            isScopeByChapter = composerTarget is AO3CommentTarget.Chapter,
-            palette = palette,
-            onDismiss = viewModel::closeComposer,
-            onSubmit = viewModel::submitComment,
-            onOpenAuthor = onOpenAuthor
         )
     }
 
