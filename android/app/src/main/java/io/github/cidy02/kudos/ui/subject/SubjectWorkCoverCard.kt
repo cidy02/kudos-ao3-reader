@@ -345,7 +345,7 @@ fun HomeStatusTray(
     val tokens = LocalKudosTokens.current
     val fontScale = LocalDensity.current.fontScale
     val scaledTileSize = tileSize * fontScale
-    val ratingTint = AO3StatusTint.rating(rating) ?: AO3StatusTint.gray
+    val ratingTint = AO3StatusTint.forAppearance(AO3StatusTint.rating(rating) ?: AO3StatusTint.gray, tokens.theme.isDarkFamily)
     val category = categories.firstOrNull { AO3StatusTint.category(it) != null }
     val categoryTint = category?.let { AO3StatusTint.category(it) } ?: AO3StatusTint.gray
     val warningTint = if (HomeFacts.hasRealArchiveWarning(warnings)) AO3StatusTint.orange else AO3StatusTint.gray

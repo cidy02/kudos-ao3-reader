@@ -1,5 +1,7 @@
 package io.github.cidy02.kudos.ui.components
 
+import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
+
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -178,9 +180,17 @@ object AO3StatusTint {
         "Gen" -> green
         "M/M" -> blue
         "Multi" -> purple
-        "Other" -> gray
+        // AO3's own coding is black for Other (iOS `categoryColor`; A58).
+        "Other" -> Color.Black
         else -> null
     }
+
+    /**
+     * Teen's yellow on a light card was about 1.3:1 and the "T" vanished: light appearances get
+     * iOS's dark mustard (about 4.5:1), dark ones keep the yellow (iOS `teenYellow`; A58).
+     */
+    fun forAppearance(tint: Color, isDark: Boolean): Color =
+        if (tint == yellow && !isDark) Color(0xFF8C6600) else tint
 }
 
 object WorkStatIcons {
@@ -520,7 +530,7 @@ fun WorkStatusChipRow(
             // hue just goes muddy. Tinted, not filled — "Explicit" is red and four
             // solid blocks of that beside the cover art would read as an error.
             Surface(
-                color = stat.tint?.copy(alpha = 0.22f)
+                color = stat.tint?.let { AO3StatusTint.forAppearance(it, LocalKudosTokens.current.theme.isDarkFamily) }?.copy(alpha = 0.22f)
                     ?: MaterialTheme.colorScheme.surfaceContainerHighest,
                 shape = MaterialTheme.shapes.small
             ) {
