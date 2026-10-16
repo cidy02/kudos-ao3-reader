@@ -42,6 +42,46 @@ import org.robolectric.annotation.Config
 class WorkDetailShareTest {
     @get:Rule val compose = createComposeRule()
 
+    @Test fun rebuildAsksBeforeWritingAndShowsTheImporterFailure() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val database = Room.inMemoryDatabaseBuilder(context, KudosDatabase::class.java)
+            .allowMainThreadQueries().build()
+        val store = WorkFileStore(java.nio.file.Files.createTempDirectory("rebuild-dialog"))
+        val repository = WorkRepository(database, store)
+        val offline = object : AO3Client {
+            override suspend fun get(url: String, headers: Map<String, String>): AO3Result<AO3HttpResponse> =
+                error("A local rebuild must not request the network")
+        }
+        val importer = WorkImporter(repository, AO3WorkMetadataRepository(offline), AO3EpubDownloader(offline),
+            store, context.cacheDir)
+        val work = SavedWork(title = "An imported work", author = "A")
+        var showing by mutableStateOf(true)
+        var rebuilt = false
+        try {
+            runBlocking { repository.upsert(work) }
+            compose.setContent {
+                MaterialTheme {
+                    if (showing) RebuildOriginalDialog(work, importer, onRebuilt = { rebuilt = true },
+                        onDismiss = { showing = false })
+                }
+            }
+            compose.onNodeWithText("Rebuild this work?").assertExists()
+            org.junit.Assert.assertFalse(rebuilt)
+            compose.onNodeWithText("Rebuild").performClick()
+            compose.waitUntil(5_000) {
+                compose.onAllNodesWithText("Couldn't Rebuild").fetchSemanticsNodes().isNotEmpty()
+            }
+            compose.onNodeWithText("No archived original for this work.").assertExists()
+            org.junit.Assert.assertFalse(rebuilt)
+            compose.onNodeWithText("OK").performClick()
+            compose.onNodeWithText("Couldn't Rebuild").assertDoesNotExist()
+        } finally {
+            compose.runOnIdle { showing = false }
+            compose.waitForIdle()
+            database.close()
+        }
+    }
+
     @Test
     fun linklessImportStillHasNeitherShareNorOriginalViewerOnTheActualWorkPage() {
         val context = ApplicationProvider.getApplicationContext<Context>()

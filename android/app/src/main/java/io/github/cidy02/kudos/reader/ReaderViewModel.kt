@@ -114,9 +114,6 @@ class ReaderViewModel(
             annotationRepository.observeForWork(workId).collect { annotations ->
                 updateReading { state ->
                     state.copy(
-                        editingAnnotationId = state.editingAnnotationId?.takeIf { id ->
-                            annotations.any { it.id == id }
-                        },
                         bookmarks = annotations.filter {
                             it.kindRaw.equals("bookmark", ignoreCase = true)
                         },
@@ -235,15 +232,24 @@ class ReaderViewModel(
         viewModelScope.launch { repository.markEpubMissing(workId) }
     }
 
-    fun addBookmarkAtProgress(progress: ReaderProgress, locatorString: String, chapterTitle: String = "") {
+    fun addBookmarkAtProgress(
+        progress: ReaderProgress, locatorString: String, chapterTitle: String = "", editNote: Boolean = false
+    ) {
         viewModelScope.launch {
-            annotationRepository.addBookmark(
+            val annotation = annotationRepository.addBookmark(
                 workId = workId,
                 locatorString = locatorString.ifBlank { progress.locatorJson.orEmpty() },
                 progression = progress.totalProgression ?: progress.scrollFraction,
                 spineIndex = progress.spineIndex,
                 chapterTitle = chapterTitle
             )
+            // Room's list emission may follow this write; retain the bookmark while opening its editor.
+            if (editNote) updateReading { reading ->
+                reading.copy(
+                    bookmarks = reading.bookmarks.filterNot { it.id == annotation.id } + annotation,
+                    editingAnnotationId = annotation.id
+                )
+            }
         }
     }
 
@@ -286,7 +292,7 @@ class ReaderViewModel(
         }
     }
 
-    /** Page decorations and Contents share the same editor; bookmarks only navigate. */
+    /** Page decorations and Contents share the same editor; bookmark taps only navigate. */
     fun openHighlight(id: String) {
         updateReading { reading ->
             if (reading.highlights.any { it.id == id }) reading.copy(editingAnnotationId = id)

@@ -16,6 +16,22 @@ class LibraryFiltersTest {
         LibraryQuery.filterOnly(works.map { LibraryDisplayItem(LibraryWorkListItem(it)) }, filters = filters)
             .map { it.item.work.title }
 
+    @Test fun scopedFiltersKeepReadingOrderAndUseRealTagAndCollectionMembership() {
+        val first = work("Zulu").copy(hasEpub = true, isSaved = true)
+        val second = work("Alpha").copy(hasEpub = false)
+        val tag = Tag(id = "tag", name = "Reread")
+        val collection = io.github.cidy02.kudos.core.model.WorkCollection(id = "collection", name = "Mine")
+        val index = io.github.cidy02.kudos.works.WorkLibraryIndex(
+            tagsByWork = mapOf(first.id to listOf(tag)),
+            collectionsByWork = mapOf(first.id to listOf(collection)))
+        fun apply(filters: LibraryFilterState = LibraryFilterState(), sort: LibrarySort = LibrarySort.Natural) =
+            LibraryQuery.applyScoped(listOf(first, second), index, "", filters, sort).map { it.title }
+        assertEquals(listOf("Zulu", "Alpha"), apply())
+        assertEquals(listOf("Alpha", "Zulu"), apply(sort = LibrarySort.Title))
+        assertEquals(listOf("Zulu"), apply(LibraryFilterState(userTagIds = setOf("tag"), collectionIds = setOf("collection"))))
+        assertEquals(listOf("Alpha"), apply(LibraryFilterState(download = LibraryDownloadFilter.NotDownloaded)))
+    }
+
     @Test
     fun fandomFacetUsesCategorizedTagsAndFallsBackToFlatTags() {
         val categorized = work("Categorized").copy(workFandoms = listOf("Fandom A"))

@@ -228,6 +228,8 @@ fun LibraryScreen(
     var showFilters by remember { mutableStateOf(false) }
     var confirmRemoveFromHistory by remember { mutableStateOf<String?>(null) }
     var confirmDeleteCollection by remember { mutableStateOf<String?>(null) }
+    var confirmRemoveFromQueues by remember { mutableStateOf<String?>(null) }
+    var rebuildWork by remember { mutableStateOf<SavedWork?>(null) }
     val layoutPreferences = remember {
         localContext.getSharedPreferences(LibraryPreferences, android.content.Context.MODE_PRIVATE)
     }
@@ -289,6 +291,14 @@ fun LibraryScreen(
         }
         DisposableEffect(libraryChrome) {
             onDispose { libraryChrome.reset() }
+        }
+    }
+
+    rebuildWork?.let { work ->
+        workImporter?.let { importer ->
+            io.github.cidy02.kudos.works.RebuildOriginalDialog(
+                work = work, importer = importer, onDismiss = { rebuildWork = null }
+            )
         }
     }
 
@@ -378,12 +388,26 @@ fun LibraryScreen(
         title = if (state.selectedCount == 1) "Delete 1 work?" else "Delete ${state.selectedCount} works?",
         text = workDeletionMessage(state.collectionMembers.filter { it.item.work.id in state.selectedWorkIds }.map { it.item.work }),
         confirmText = "Delete",
-        confirmBeforeDelete = state.confirmBeforeDelete,
+        confirmBeforeDelete = true,
         onConfirm = {
             confirmBulkRemove = false
             viewModel.bulkSoftDelete()
         },
         onDismissRequest = { confirmBulkRemove = false }
+    )
+
+    DestructiveConfirmation(
+        show = confirmRemoveFromQueues != null,
+        title = "Remove this work?",
+        text = "This work will leave every queue it is in. The work stays on this device.",
+        confirmText = "Remove",
+        confirmBeforeDelete = true,
+        onConfirm = {
+            val workId = confirmRemoveFromQueues ?: return@DestructiveConfirmation
+            confirmRemoveFromQueues = null
+            viewModel.removeFromAllQueuesOne(workId)
+        },
+        onDismissRequest = { confirmRemoveFromQueues = null }
     )
 
     DestructiveConfirmation(
@@ -565,7 +589,7 @@ fun LibraryScreen(
         onToggleFinishedOne = viewModel::toggleFinishedOne,
         onRemoveOne = { confirmRemoveOne = it },
         onRemoveFromHistory = { confirmRemoveFromHistory = it },
-        onRemoveFromAllQueues = viewModel::removeFromAllQueuesOne,
+        onRemoveFromAllQueues = { confirmRemoveFromQueues = it },
         onDeleteCollection = { confirmDeleteCollection = it },
         onDownloadAction = viewModel::performDownloadAction,
         onToggleSavedForLaterOne = viewModel::toggleSavedForLaterOne,
@@ -576,11 +600,7 @@ fun LibraryScreen(
         canRebuildFromOriginal = { work ->
             workImporter?.canRebuildFromOriginal(work) == true
         },
-        onRebuildFromOriginal = { work ->
-            workImporter?.let { importer ->
-                scope.launch { importer.rebuildFromOriginal(work) }
-            }
-        },
+        onRebuildFromOriginal = { work -> rebuildWork = work },
         onTogglePrivacy = { viewModel.toggleRevealAll(activity) },
         onFavoriteScopeChange = viewModel::updateFavoriteScope,
         onFavoriteOrderChange = viewModel::updateFavoriteOrder,

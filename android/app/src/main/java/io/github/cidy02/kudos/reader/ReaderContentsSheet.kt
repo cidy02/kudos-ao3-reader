@@ -145,12 +145,12 @@ fun ReaderContentsSheet(
                                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    if (onBookmarkEntry != null) {
+                                    if (onBookmarkEntry != null && startPercent(entry) != null) {
                                         TextButton(onClick = { onBookmarkEntry(entry) }) {
                                             Text("Bookmark", color = tokens.secondaryInk)
                                         }
                                     }
-                                    if (onAddNoteToEntry != null) {
+                                    if (onAddNoteToEntry != null && startPercent(entry) != null) {
                                         TextButton(onClick = { onAddNoteToEntry(entry) }) {
                                             Text("Add Note", color = tokens.secondaryInk)
                                         }

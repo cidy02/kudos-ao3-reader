@@ -8,6 +8,7 @@ import io.github.cidy02.kudos.reader.ReaderTocBuilder
 import io.github.cidy02.kudos.reader.ReaderTocEntry
 import kotlin.math.roundToInt
 import org.readium.r2.shared.publication.Link
+import org.readium.r2.shared.publication.Locator
 import org.readium.r2.shared.publication.Publication
 import org.readium.r2.shared.publication.services.positions
 import org.readium.r2.shared.util.Url
@@ -18,6 +19,13 @@ import org.readium.r2.shared.util.Url
  * [ReaderSection]s for the progress pill (spine-index ↔ TOC kind detection).
  */
 object ReadiumTocAdapter {
+
+    /** Match by href, never by an index into position groups (empty resources can be absent). */
+    fun chapterStartLocator(
+        positions: List<List<Locator>>, href: String
+    ): Locator? = positions.asSequence().flatten().firstOrNull {
+        ReaderSectionBuilder.hrefKey(it.href.toString()) == ReaderSectionBuilder.hrefKey(href)
+    }
 
     fun entries(publication: Publication): List<ReaderTocEntry> {
         return ReaderTocBuilder.build(

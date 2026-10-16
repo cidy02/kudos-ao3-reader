@@ -26,8 +26,6 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -82,29 +80,6 @@ object QueueShowOnlyTag {
     var name: String? = null
 }
 
-private data class QueueExtraFilter(
-    val text: String = "",
-    val rating: String? = null,
-    val completeOnly: Boolean = false
-) {
-    val activeCount: Int
-        get() = listOf(text.isNotBlank(), rating != null, completeOnly).count { it }
-
-    fun matches(work: SavedWork): Boolean {
-        if (text.isNotBlank()) {
-            val query = text.trim()
-            if (!work.title.contains(query, ignoreCase = true) &&
-                !work.author.contains(query, ignoreCase = true)
-            ) {
-                return false
-            }
-        }
-        if (rating != null && work.rating != rating) return false
-        if (completeOnly && !work.isComplete) return false
-        return true
-    }
-}
-
 @Composable
 fun QueuePageScreen(
     repository: ReadingQueueRepository,
@@ -130,7 +105,14 @@ fun QueuePageScreen(
     var userTags by remember(queueId) { mutableStateOf<Map<String, Set<String>>>(emptyMap()) }
     var reload by remember(queueId) { mutableIntStateOf(0) }
     var quick by rememberSaveable(queueId) { mutableStateOf(QueueQuickFilter.All) }
-    var extra by remember(queueId) { mutableStateOf(QueueExtraFilter()) }
+    var filters by remember(queueId) { mutableStateOf(LibraryFilterState()) }
+    var sort by remember(queueId) { mutableStateOf(LibrarySort.Natural) }
+    var filterText by remember(queueId) { mutableStateOf("") }
+    val index by remember(workRepository) { workRepository?.observeLibraryIndex()
+        ?: flowOf(io.github.cidy02.kudos.works.WorkLibraryIndex()) }
+        .collectAsState(initial = io.github.cidy02.kudos.works.WorkLibraryIndex())
+    val filtersActive = filters.hasActiveFilters || filterText.isNotBlank() || sort != LibrarySort.Natural
+    val filterBadge = filters.activeCount + (if (filterText.isNotBlank()) 1 else 0)
     var onlyTag by remember(queueId) { mutableStateOf<String?>(null) }
     var compact by rememberSaveable(queueId) { mutableStateOf(true) }
     var selecting by remember(queueId) { mutableStateOf(false) }
@@ -190,12 +172,11 @@ fun QueuePageScreen(
     val current = queue
     val palette = if (current == null) tokens.scopePalette else queuePalette(tokens.theme, current)
     val preservedIds = works.filter { it.hasEpub && (bytes[it.id] ?: 0L) > 0 }.map { it.id }.toSet()
-    val narrowed = quick != QueueQuickFilter.All || extra.activeCount > 0 || onlyTag != null
+    val narrowed = quick != QueueQuickFilter.All || filtersActive || onlyTag != null
     val hidesMature = works.any { isHiddenMature(it, shownSettings, reveal) }
-    val filtered = works.filter { work ->
+    val filtered = LibraryQuery.applyScoped(works, index, filterText, filters, sort).filter { work ->
         !isHiddenMature(work, shownSettings, reveal) &&
             quick.matches(work, work.id in preservedIds) &&
-            extra.matches(work) &&
             (onlyTag == null || onlyTag in userTags[work.id].orEmpty())
     }
     val dragLive = ReadingQueueFacts.isDragLive(reordering && !hidesMature, selecting, narrowed)
@@ -246,8 +227,8 @@ fun QueuePageScreen(
                     selecting = selecting,
                     selectedCount = selected.size,
                     total = shown.size,
-                    filtersActive = extra.activeCount > 0,
-                    badge = extra.activeCount,
+                    filtersActive = filtersActive,
+                    badge = filterBadge,
                     custom = current.kindRaw == ReadingQueueKind.CUSTOM,
                     canReorder = works.size > 1 && !narrowed && !hidesMature,
                     reorderLabel = reorderLabel,
@@ -256,7 +237,7 @@ fun QueuePageScreen(
                     menuOpen = menu,
                     onAdd = { showAdd = true },
                     onFilter = { showFilters = true },
-                    onClearFilters = { extra = QueueExtraFilter(); quick = QueueQuickFilter.All; onlyTag = null },
+                    onClearFilters = { filters = LibraryFilterState(); sort = LibrarySort.Natural; filterText = ""; quick = QueueQuickFilter.All; onlyTag = null },
                     onMenu = { menu = true },
                     onDismissMenu = { menu = false },
                     onToggleMature = { privacyGate?.toggleRevealAll(activity) },
@@ -334,7 +315,7 @@ fun QueuePageScreen(
                         title = "No matching works",
                         message = "Your filters don't match any works in this queue.",
                         action = "Clear Filters",
-                        onAction = { extra = QueueExtraFilter(); quick = QueueQuickFilter.All; onlyTag = null }
+                        onAction = { filters = LibraryFilterState(); sort = LibrarySort.Natural; filterText = ""; quick = QueueQuickFilter.All; onlyTag = null }
                     )
                     dragLive -> {
                         SectionRuleHeader("Queue", count = shown.size, modifier = Modifier.padding(top = 16.dp))
@@ -439,7 +420,14 @@ fun QueuePageScreen(
     }
 
     if (showFilters) {
-        FilterDialog(extra, onDismiss = { showFilters = false }, onChange = { extra = it })
+        LibraryFilterPanel(
+            filters = filters, sort = sort, userTags = index.userTags, collections = index.collections,
+            works = works, searchQuery = filterText, onSearchQueryChange = { filterText = it },
+            onFiltersChange = { filters = it }, onSortChange = { sort = it },
+            onClear = { filters = LibraryFilterState(); sort = LibrarySort.Natural; filterText = "";
+                quick = QueueQuickFilter.All; onlyTag = null },
+            onApply = { showFilters = false }, onDismiss = { showFilters = false }
+        )
     }
     if (showAdd && current != null) {
         var candidates by remember(current.id) { mutableStateOf<List<SavedWork>?>(null) }
@@ -648,43 +636,6 @@ private fun EmptyCopy(title: String, message: String, action: String?, onAction:
         Text(message, color = tokens.secondaryInk, fontSize = 15.sp)
         if (action != null) TextButton(onClick = onAction) { Text(action) }
     }
-}
-
-@Composable
-private fun FilterDialog(
-    filter: QueueExtraFilter,
-    onDismiss: () -> Unit,
-    onChange: (QueueExtraFilter) -> Unit
-) {
-    var text by remember { mutableStateOf(filter.text) }
-    var rating by remember { mutableStateOf(filter.rating) }
-    var complete by remember { mutableStateOf(filter.completeOnly) }
-    val ratings = listOf("General Audiences", "Teen And Up Audiences", "Mature", "Explicit", "Not Rated")
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Filter") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(value = text, onValueChange = { text = it }, label = { Text("Title or author") }, singleLine = true)
-                ratings.forEach { name ->
-                    TextButton(onClick = { rating = if (rating == name) null else name }) {
-                        Text(if (rating == name) "✓ $name" else name)
-                    }
-                }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("Complete", modifier = Modifier.weight(1f))
-                    Switch(checked = complete, onCheckedChange = { complete = it })
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = {
-                onChange(QueueExtraFilter(text, rating, complete))
-                onDismiss()
-            }) { Text("Done") }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
-    )
 }
 
 private fun isHiddenMature(

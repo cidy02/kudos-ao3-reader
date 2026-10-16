@@ -231,6 +231,13 @@ class AnnotationTombstoneTest {
         val again = annotationRepository.addBookmark(WORK_ID, envelope, 0.6, 4, "Chapter 5")
         assertEquals(bookmark.id, again.id)
         assertEquals(1, annotationRepository.observeForWork(WORK_ID).first().size)
+        // Contents' Add Note uses this bookmark in the shared editor, including its swatches.
+        annotationRepository.updateNote(bookmark.id, "Remember this chapter")
+        annotationRepository.addOrRecolorHighlight(bookmark.id, "blue")
+        val withNote = database.annotationDao().getById(bookmark.id)!!
+        assertEquals("bookmark", withNote.kindRaw)
+        assertEquals("Remember this chapter", withNote.note)
+        assertEquals("blue", withNote.colorRaw)
         // A deleted bookmark does not stand in the way of a new one at the same place.
         annotationRepository.deleteAnnotation(bookmark.id)
         val fresh = annotationRepository.addBookmark(WORK_ID, envelope, 0.6, 4, "Chapter 5")

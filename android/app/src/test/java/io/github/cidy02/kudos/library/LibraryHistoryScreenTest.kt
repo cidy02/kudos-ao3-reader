@@ -202,6 +202,21 @@ class LibraryHistoryScreenTest {
         compose.onNodeWithContentDescription("More").assertExists()
     }
 
+    @Test fun bulkDeleteStillAsksWhenSingleWorkDeleteConfirmationIsOff() {
+        runBlocking { settings.updateConfirmBeforeDelete(false) }
+        show()
+        reach("Dusty")
+        compose.onNodeWithContentDescription("Dusty, by A").performTouchInput { longClick() }
+        awaitText("Mark as Finished")
+        compose.onNodeWithText("Select").performClick()
+        awaitText("Select All")
+        compose.onNodeWithText("Delete").performClick()
+        awaitText("Delete 1 work?")
+        assertFalse(runBlocking { works.getWork(dustyId)!!.isDeleted })
+        compose.onNodeWithText("Cancel").performClick()
+        assertFalse(runBlocking { works.getWork(dustyId)!!.isDeleted })
+    }
+
     @Test fun groupedHistoryRetainsItsRemoveSwipe() {
         show()
         selectGrouping("State")

@@ -44,7 +44,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import io.github.cidy02.kudos.core.model.KudosSettings
 import io.github.cidy02.kudos.core.model.SavedWork
 import io.github.cidy02.kudos.data.preferences.SettingsRepository
 import io.github.cidy02.kudos.files.WorkFileStore
@@ -71,7 +70,6 @@ fun QueueStorageScreen(
     settingsRepository: SettingsRepository,
     workFileStore: WorkFileStore
 ) {
-    val settings by settingsRepository.settings.collectAsState(initial = KudosSettings.Defaults)
     val works by workRepository.observeSavedWorks().collectAsState(initial = emptyList())
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -167,7 +165,7 @@ fun QueueStorageScreen(
                 pendingQueueRemoval = null
             },
             onDismissRequest = { pendingQueueRemoval = null },
-            confirmBeforeDelete = settings.app.confirmBeforeDelete
+            confirmBeforeDelete = true
         )
     }
 }

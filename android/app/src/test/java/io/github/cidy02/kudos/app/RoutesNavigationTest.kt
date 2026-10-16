@@ -35,6 +35,9 @@ class RoutesNavigationTest {
         navController.navigatorProvider.addNavigator(androidx.navigation.compose.ComposeNavigator())
         navController.graph = navController.createGraph(startDestination = "start") {
             composable("start") { }
+            composable(Routes.Reader, arguments = listOf(Routes.navArgOf("workId"))) { }
+            composable(Routes.WorkDetail, arguments = listOf(Routes.navArgOf("workSource"))) { }
+
             composable(
                 Routes.AuthorWorks,
                 arguments = listOf(Routes.navArgOf("authorName"))
@@ -154,6 +157,25 @@ class RoutesNavigationTest {
         assertEquals("123", Routes.routeArg(navController.currentBackStackEntry!!, "commentWorkId"))
         assertEquals(true, navController.currentBackStackEntry!!.arguments?.getBoolean("compose"))
         navController.navigate(Routes.comments(124))
+        assertEquals(false, navController.currentBackStackEntry!!.arguments?.getBoolean("compose"))
+    }
+
+    @Test fun continueReadingReturnsToTheSameReaderAndAnotherWorkStillOpensItsOwn() {
+        navController.navigate(Routes.reader("one"))
+        val original = navController.currentBackStackEntry!!.id
+        navController.navigate(Routes.workDetail("local-one"))
+        navController.openReaderFromWorkDetail("one")
+        assertEquals(original, navController.currentBackStackEntry!!.id)
+        assertEquals("start", navController.previousBackStackEntry!!.destination.route)
+        navController.navigate(Routes.workDetail("local-two"))
+        navController.openReaderFromWorkDetail("two")
+        assertEquals("two", Routes.routeArg(navController.currentBackStackEntry!!, "workId"))
+        assertEquals(Routes.WorkDetail, navController.previousBackStackEntry!!.destination.route)
+    }
+
+    @Test fun chapterCommentsRequestsChapterOneWithoutRequestingAComposer() {
+        navController.navigate(Routes.comments(123, chapterPosition = 1))
+        assertEquals("1", Routes.routeArg(navController.currentBackStackEntry!!, "chapterPosition"))
         assertEquals(false, navController.currentBackStackEntry!!.arguments?.getBoolean("compose"))
     }
 }

@@ -1050,8 +1050,14 @@ fun AppNavHost(
                 onOpenComments = { workId ->
                     navController.navigate(Routes.comments(workId))
                 },
+                onOpenChapterComments = { workId ->
+                    navController.navigate(Routes.comments(workId, chapterPosition = 1))
+                },
+                onComposeComment = { workId ->
+                    navController.navigate(Routes.comments(workId, composes = true))
+                },
                 onOpenReader = { workId ->
-                    navController.navigate(Routes.reader(workId))
+                    navController.openReaderFromWorkDetail(workId)
                 },
                 onOpenAuthor = { authorName ->
                     navController.navigate(Routes.authorProfile(authorName))

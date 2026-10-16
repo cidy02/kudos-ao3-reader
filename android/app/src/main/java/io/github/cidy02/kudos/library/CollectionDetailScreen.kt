@@ -154,6 +154,12 @@ fun CollectionDetailScreen(
     var pendingRemoveWork by remember(collectionId) { mutableStateOf<SavedWork?>(null) }
     var confirmBulkRemove by remember(collectionId) { mutableStateOf(false) }
     var filterText by remember(collectionId) { mutableStateOf("") }
+    var filters by remember(collectionId) { mutableStateOf(LibraryFilterState()) }
+    var sort by remember(collectionId) { mutableStateOf(LibrarySort.Natural) }
+    val index by remember(workRepository) { workRepository.observeLibraryIndex() }
+        .collectAsState(initial = io.github.cidy02.kudos.works.WorkLibraryIndex())
+    val filtersActive = filterText.isNotBlank() || filters.hasActiveFilters || sort != LibrarySort.Natural
+    fun clearFilters() { filterText = ""; filters = LibraryFilterState(); sort = LibrarySort.Natural }
     var showFilterDialog by remember(collectionId) { mutableStateOf(false) }
 
     val scope = rememberCoroutineScope()
@@ -204,15 +210,9 @@ fun CollectionDetailScreen(
         }
     }
 
-    val visibleWorks = remember(orderedWorks, filterText, privacy, reveal) {
-        val base = orderedWorks.filter { work ->
+    val visibleWorks = remember(orderedWorks, filterText, filters, sort, index, privacy, reveal) {
+        LibraryQuery.applyScoped(orderedWorks, index, filterText, filters, sort).filter { work ->
             LibraryPrivacy.visibility(work, privacy, reveal) != LibraryPrivacyVisibility.Hidden
-        }
-        if (filterText.isBlank()) base
-        else base.filter {
-            it.title.contains(filterText, ignoreCase = true) ||
-                it.author.contains(filterText, ignoreCase = true) ||
-                it.workFandoms.any { fandom -> fandom.contains(filterText, ignoreCase = true) }
         }
     }
 
@@ -369,10 +369,10 @@ fun CollectionDetailScreen(
                 )
                 if (works.isNotEmpty()) {
                     FilterButton(
-                        filtersActive = filterText.isNotBlank(),
-                        badgeCount = if (filterText.isNotBlank()) 1 else 0,
+                        filtersActive = filtersActive,
+                        badgeCount = filters.activeCount + (if (filterText.isNotBlank()) 1 else 0),
                         onClick = { showFilterDialog = true },
-                        onClearFilters = { filterText = "" }
+                        onClearFilters = ::clearFilters
                     )
                 }
                 Box {
@@ -413,12 +413,12 @@ fun CollectionDetailScreen(
                                 val hidesMature = works.any {
                                     LibraryPrivacy.visibility(it, privacy, reveal) == LibraryPrivacyVisibility.Hidden
                                 }
-                                val canReorder = filterText.isBlank() && !hidesMature
+                                val canReorder = !filtersActive && !hidesMature
                                 DropdownMenuItem(
                                     text = {
                                         Text(when {
                                             canReorder -> "Reorder"
-                                            filterText.isNotBlank() -> "Clear Filters to Reorder"
+                                            filtersActive -> "Clear Filters to Reorder"
                                             else -> "Show Mature to Reorder"
                                         })
                                     },
@@ -507,7 +507,7 @@ fun CollectionDetailScreen(
         title = if (selectedIds.size == 1) "Remove 1 work?" else "Remove ${selectedIds.size} works?",
         text = "Kudos will remove the selected works from this collection. They will stay in your Library.",
         confirmText = "Remove",
-        confirmBeforeDelete = confirmBeforeDelete,
+        confirmBeforeDelete = true,
         onConfirm = {
             confirmBulkRemove = false
             bulkRemove(selectedIds)
@@ -557,28 +557,12 @@ fun CollectionDetailScreen(
     }
 
     if (showFilterDialog) {
-        AlertDialog(
-            onDismissRequest = { showFilterDialog = false },
-            title = { Text("Filter Collection") },
-            text = {
-                OutlinedTextField(
-                    value = filterText,
-                    onValueChange = { filterText = it },
-                    label = { Text("Title, author, or fandom") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = { showFilterDialog = false }) { Text("Done") }
-            },
-            dismissButton = {
-                if (filterText.isNotBlank()) {
-                    TextButton(onClick = { filterText = ""; showFilterDialog = false }) {
-                        Text("Clear")
-                    }
-                }
-            }
+        LibraryFilterPanel(
+            filters = filters, sort = sort, userTags = index.userTags, collections = index.collections,
+            works = orderedWorks, searchQuery = filterText, onSearchQueryChange = { filterText = it },
+            onFiltersChange = { filters = it }, onSortChange = { sort = it },
+            onClear = ::clearFilters, onApply = { showFilterDialog = false },
+            onDismiss = { showFilterDialog = false }
         )
     }
 
@@ -715,7 +699,7 @@ fun CollectionDetailScreen(
                                 modifier = Modifier.padding(top = 4.dp, bottom = 2.dp)
                             )
                         }
-                        if (visibleWorks.isEmpty() && filterText.isBlank() && works.isNotEmpty()) {
+                        if (visibleWorks.isEmpty() && !filtersActive && works.isNotEmpty()) {
                             // Hide Mature has emptied the page on its own; that is not an empty
                             // collection, and the page said nothing (iOS says this since T-394).
                             item {
@@ -727,13 +711,13 @@ fun CollectionDetailScreen(
                                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                                 )
                             }
-                        } else if (visibleWorks.isEmpty() && filterText.isNotBlank()) {
+                        } else if (visibleWorks.isEmpty() && filtersActive) {
                             item {
                                 EmptyStateCard(
                                     title = "No matching works",
                                     message = "Your filters don't match any works in this collection.",
                                     primaryActionLabel = "Clear Filters",
-                                    onPrimaryAction = { filterText = "" },
+                                    onPrimaryAction = ::clearFilters,
                                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                                 )
                             }
