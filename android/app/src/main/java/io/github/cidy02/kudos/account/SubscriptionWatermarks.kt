@@ -104,6 +104,17 @@ object SubscriptionWatermarks {
         return current
     }
 
+    /**
+     * Which chapters are new, as iOS's `AO3SubscriptionsChapterRange`: "Chapters 13-14 new", or
+     * nil with no watermark or no higher posted count (A59).
+     */
+    fun newChaptersLabel(work: AO3WorkSummary, watermarks: Map<Long, SubscriptionWatermark>): String? {
+        val seen = watermarks[work.id]?.postedChapterCount ?: return null
+        val posted = parsePostedCount(work.chapters)?.takeIf { it > seen } ?: return null
+        val first = seen + 1
+        return if (first == posted) "Chapter $first new" else "Chapters $first-$posted new"
+    }
+
     private fun parsePostedCount(chapters: String): Int? =
         chapters.substringBefore('/').trim().toIntOrNull()
 }

@@ -30,4 +30,20 @@ class SubscriptionWatermarksTest {
         assertEquals(12, after[4]?.postedChapterCount)
         assertEquals(2, SubscriptionWatermarks.newChapterCount(work(4, "14/20"), after))
     }
+
+    /** iOS `AO3SubscriptionsScreenTests`' range rules. */
+    @Test fun theRangeIsTheGapAfterTheWatermarkAndAgreesWithTheNewChapterCount() {
+        val seen = mapOf(4L to SubscriptionWatermark(12))
+        assertEquals("Chapters 13-14 new", SubscriptionWatermarks.newChaptersLabel(work(4, "14/20"), seen))
+        assertEquals("Chapter 13 new", SubscriptionWatermarks.newChaptersLabel(work(4, "13/20"), seen))
+        assertEquals("Chapters 1-14 new",
+            SubscriptionWatermarks.newChaptersLabel(work(4, "14/20"), mapOf(4L to SubscriptionWatermark(0))))
+        assertNull(SubscriptionWatermarks.newChaptersLabel(work(4, "14/20"), emptyMap()))
+        assertNull(SubscriptionWatermarks.newChaptersLabel(work(4, "14/20"), mapOf(4L to SubscriptionWatermark(14))))
+        assertNull(SubscriptionWatermarks.newChaptersLabel(work(4), seen))
+        for (chapters in listOf("", "1/1", "7/?", "14/20", "10/20")) {
+            val grew = SubscriptionWatermarks.newChapterCount(work(4, chapters), seen) > 0
+            assertEquals(chapters, grew, SubscriptionWatermarks.newChaptersLabel(work(4, chapters), seen) != null)
+        }
+    }
 }
