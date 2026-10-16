@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.HelpOutline
 import androidx.compose.material.icons.outlined.Book
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.FavoriteBorder
@@ -485,7 +486,8 @@ fun statusChips(
         null -> WorkStatItem(
             text = "Unknown",
             accessibilityLabel = "Status: unknown",
-            icon = Icons.Outlined.Schedule,
+            // Its own mark, as iOS's `questionmark.circle`: WIP's clock said "in progress" (A61 #28).
+            icon = Icons.AutoMirrored.Outlined.HelpOutline,
             tint = AO3StatusTint.gray
         )
     }
