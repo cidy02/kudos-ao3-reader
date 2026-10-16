@@ -302,7 +302,7 @@ fun QueueLedgerCard(
                         rating = work.rating,
                         categories = work.workCategories,
                         warnings = work.workWarnings,
-                        isComplete = work.isComplete,
+                        isComplete = work.knownCompletion,
                         arrangement = HomeStatusArrangement.Grid,
                         tileSize = tile
                     )

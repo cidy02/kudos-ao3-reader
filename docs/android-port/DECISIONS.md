@@ -2049,3 +2049,15 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   inconclusive sweep check counts as checked. A work page's published, updated and status
   fields are read; gift recipients are not (Android shows none). Four of Codex's tests compared
   a microsecond `dateAdded` with Room's milliseconds; fixed. Reverse: the commit that names 3fk-2.
+- **2026-10-15 · A58's reader, Browse and work-detail faults fixed (3fl; Codex, reviewed and
+  gated by Claude).** Browse's "All N tags" opens the family's union (each sibling's filter ID
+  read once, paced and cached, as iOS's `fandomFilterID`, then one `filter_ids:(A OR B)`
+  search; an unresolved sibling is an error, not a partial list). "Last Copy" only with a local
+  EPUB; fresh remote figures win on Work Detail; a nested TOC keeps its outer title and the
+  chapter total; blank or tiny page samples publish nothing; a non-AO3 import without a status
+  shows Unknown; Comments fall back to chapter 1 as iOS's `ao3StoryChapter` (one older Android
+  test asserting the opposite was corrected); removing a source-less work closes its page; the
+  comment budget counts code points; queue and collection labels name their memberships; a
+  malformed chapter falls back to 1; series creators match as iOS; detail dates as iOS. Two
+  ledger rows took `Boolean` where completion is now `Boolean?` (fixed). A58's colour, skeleton,
+  italic, speech-chunking and media-control items are left. Reverse: the commit that names 3fl.

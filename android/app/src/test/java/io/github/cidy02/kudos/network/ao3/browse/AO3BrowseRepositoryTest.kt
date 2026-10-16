@@ -7,6 +7,7 @@ import io.github.cidy02.kudos.network.ao3.AO3HttpResponse
 import io.github.cidy02.kudos.network.ao3.AO3Result
 import io.github.cidy02.kudos.network.ao3.search.AO3SearchPage
 import io.github.cidy02.kudos.network.ao3.search.AO3SearchRepository
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import java.nio.file.Files
 import java.time.Duration
 import kotlinx.coroutines.test.runTest
@@ -126,6 +127,34 @@ class AO3BrowseRepositoryTest {
         assertEquals(123L, page.works.first().id)
         // The search URL carries the fandom filter.
         assertTrue(client.requestedUrls.single().contains("work_search%5Bfandom_names%5D=Naruto"))
+    }
+
+    @Test fun siblingUnionResolvesSequentiallyThenRunsOneSearchAndReusesIDs() = runTest {
+        val client = FakeAO3Client { url ->
+            when {
+                "/tags/First/works" in url -> ok("<head><link rel='alternate' type='application/atom+xml' href='/tags/27785/feed.atom'></head>")
+                "/tags/Second/works" in url -> ok("<head><link rel='alternate' type='application/atom+xml' href='/tags/99117/feed.atom'></head>")
+                else -> ok("<ol class='work index group'></ol>")
+            }
+        }
+        val repository = repoWith(client)
+        val filters = io.github.cidy02.kudos.network.ao3.search.AO3SearchFilters(query = "fluff", wordsFrom = "100")
+        assertTrue(repository.worksForFandoms(listOf("First", "Second"), filters = filters) is AO3Result.Success)
+        assertEquals(3, client.requestedUrls.size)
+        val url = client.requestedUrls.last().toHttpUrl()
+        assertEquals("/works/search", url.encodedPath)
+        assertEquals("fluff filter_ids:(27785 OR 99117)", url.queryParameter("work_search[query]"))
+        assertEquals(null, url.queryParameter("work_search[fandom_names]"))
+        assertEquals("> 100", url.queryParameter("work_search[word_count]"))
+        repository.worksForFandoms(listOf("First", "Second"), page = 2, filters = filters)
+        assertEquals(4, client.requestedUrls.size)
+    }
+
+    @Test fun unresolvedSiblingNeverRunsAPartialSearch() = runTest {
+        val client = FakeAO3Client { ok("<p>No canonical filter ID</p>") }
+        val result = repoWith(client).worksForFandoms(listOf("First", "Second"))
+        assertTrue((result as AO3Result.Failure).error is AO3Error.Parse)
+        assertEquals(1, client.requestedUrls.size)
     }
 
     @Test

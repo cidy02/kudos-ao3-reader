@@ -40,7 +40,7 @@ val List<ReaderSection>.storyChapterCount: Int
 
 /** iOS's chapter-aware Comments mapping, including front/back matter. */
 internal fun List<ReaderSection>.commentsChapter(spineIndex: Int?): Int? {
-    if (spineIndex == null || isEmpty()) return null
+    if (spineIndex == null) return null
     if (spineIndex !in indices) return 1
     return this[spineIndex].storyChapterIndex
         ?: take(spineIndex + 1).lastOrNull { it.kind == ReaderSectionKind.CHAPTER }?.storyChapterIndex

@@ -53,6 +53,7 @@ import kotlinx.coroutines.withContext
 fun FandomListScreen(
     category: AO3MediaCategory,
     onOpenFandom: (AO3Fandom) -> Unit,
+    onOpenFamily: (FandomFamily) -> Unit,
     onOpenWebFallback: (String) -> Unit,
     workRepository: WorkRepository? = null,
     repository: AO3BrowseRepository = remember { AO3BrowseRepository() },
@@ -239,7 +240,7 @@ fun FandomListScreen(
                                         sort = sort,
                                         library = library,
                                         palette = palette,
-                                        onOpenFamily = { open(it) },
+                                        onOpenFamily = onOpenFamily,
                                         onOpenMember = { open(it) }
                                     )
                                 }
@@ -251,7 +252,7 @@ fun FandomListScreen(
                                     sort = sort,
                                     library = library,
                                     palette = palette,
-                                    onOpenFamily = { open(it) },
+                                    onOpenFamily = onOpenFamily,
                                     onOpenMember = { open(it) }
                                 )
                             }

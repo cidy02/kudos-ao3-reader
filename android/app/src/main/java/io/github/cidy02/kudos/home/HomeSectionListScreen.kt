@@ -764,7 +764,7 @@ private fun HomeSectionLedgerRow(
             rating = work.rating,
             categories = work.workCategories,
             warnings = work.workWarnings,
-            isComplete = work.isComplete,
+            isComplete = work.knownCompletion,
             obscured = obscured,
             favorite = work.isFavorite,
             selected = selecting && selected,

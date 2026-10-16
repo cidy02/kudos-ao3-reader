@@ -108,10 +108,12 @@ import io.github.cidy02.kudos.works.detail.WorkDetailAo3ActionChips
 import io.github.cidy02.kudos.works.detail.WorkDetailArchiveStatsStrip
 import io.github.cidy02.kudos.works.detail.WorkDetailCommentsSection
 import io.github.cidy02.kudos.works.detail.WorkDetailFactsCard
+import io.github.cidy02.kudos.works.detail.WorkDetailFigures
 import io.github.cidy02.kudos.works.detail.WorkDetailFigureStrip
 import io.github.cidy02.kudos.works.detail.WorkDetailIdentityHeader
 import io.github.cidy02.kudos.works.detail.WorkDetailMyCopyRow
 import io.github.cidy02.kudos.works.detail.WorkDetailMyCopySheet
+import io.github.cidy02.kudos.works.detail.WorkDetailPresentation
 import io.github.cidy02.kudos.works.detail.WorkDetailPageActions
 import io.github.cidy02.kudos.works.detail.WorkDetailResumeCard
 import io.github.cidy02.kudos.works.detail.WorkDetailSeriesSection
@@ -140,7 +142,8 @@ fun WorkDetailScreen(
     onOpenComments: (Long) -> Unit,
     onOpenReader: (String) -> Unit,
     onOpenAuthor: (String) -> Unit = {},
-    onOpenSeries: (String) -> Unit = {}
+    onOpenSeries: (String) -> Unit = {},
+    onDismiss: () -> Unit = {}
 ) {
     var state by remember(source) { mutableStateOf(WorkDetailUiState()) }
     var newTagName by remember { mutableStateOf("") }
@@ -221,6 +224,28 @@ fun WorkDetailScreen(
             loading = false,
             error = null
         )
+    }
+
+    suspend fun applyRemoval(work: SavedWork, updated: SavedWork?, notice: String? = null) {
+        val remote = state.remote ?: WorkDetailPresentation.summaryFromLocal(work)
+        when (WorkDetailPresentation.postRemovalAction(updated == null || updated.isDeleted, remote != null)) {
+            WorkDetailPresentation.PostRemovalAction.KeepLocal -> {
+                refreshLocal(work.id, state.remote)
+                state = state.copy(ao3Message = notice)
+            }
+            WorkDetailPresentation.PostRemovalAction.ShowRemote -> {
+                state = WorkDetailUiState(remote = remote, ao3Message = notice)
+            }
+            WorkDetailPresentation.PostRemovalAction.Dismiss -> {
+                showingMyCopy = false
+                onDismiss()
+            }
+        }
+    }
+
+    suspend fun removeFromLater(work: SavedWork) {
+        readingQueueRepository.removeFromSavedForLater(work.id)
+        applyRemoval(work, workRepository.getWork(work.id), "Removed from Saved for Later.")
     }
 
     suspend fun hydrateFromAo3WorkId(workId: Long) {
@@ -602,11 +627,10 @@ fun WorkDetailScreen(
         confirmText = "Remove",
         confirmBeforeDelete = settings.app.confirmBeforeDelete,
         onConfirm = {
-            val workId = state.local?.id ?: return@DestructiveConfirmation
+            val work = state.local ?: return@DestructiveConfirmation
             confirmRemove = false
             runWorkAction {
-                workRepository.softDelete(workId)
-                state = WorkDetailUiState(remote = state.remote, loading = false)
+                applyRemoval(work, workRepository.softDelete(work.id))
             }
         },
         onDismissRequest = { confirmRemove = false }
@@ -978,19 +1002,7 @@ fun WorkDetailScreen(
             onToggleSavedForLater = {
                 ensureLocalThen(queueOnly = true) { work ->
                     if (state.inSavedForLater) {
-                        readingQueueRepository.removeFromSavedForLater(work.id)
-                        val stillThere = workRepository.getWork(work.id)
-                        if (stillThere == null || stillThere.isDeleted) {
-                            state = state.copy(
-                                local = null,
-                                inSavedForLater = false,
-                                loading = false,
-                                ao3Message = "Removed from Saved for Later."
-                            )
-                        } else {
-                            refreshLocal(stillThere.id, state.remote)
-                            state = state.copy(ao3Message = "Removed from Saved for Later.")
-                        }
+                        removeFromLater(work)
                     } else {
                         saveForLater(work)
                     }
@@ -1123,19 +1135,7 @@ fun WorkDetailScreen(
         onAddToSavedForLater = {
             ensureLocalThen(queueOnly = true) { work ->
                 if (state.inSavedForLater) {
-                    readingQueueRepository.removeFromSavedForLater(work.id)
-                    val stillThere = workRepository.getWork(work.id)
-                    if (stillThere == null || stillThere.isDeleted) {
-                        state = state.copy(
-                            local = null,
-                            inSavedForLater = false,
-                            loading = false,
-                            ao3Message = "Removed from Saved for Later."
-                        )
-                    } else {
-                        refreshLocal(stillThere.id, state.remote)
-                        state = state.copy(ao3Message = "Removed from Saved for Later.")
-                    }
+                    removeFromLater(work)
                 } else {
                     saveForLater(work)
                 }
@@ -1273,7 +1273,7 @@ private fun WorkDetailContent(
                     onDismissRequest = { menuExpanded = false }
                 ) {
                     DropdownMenuItem(
-                        text = { Text("Add to Queue") },
+                        text = { Text(WorkDetailPresentation.queueLabel(state.queueMemberships.size + if (state.inSavedForLater) 1 else 0)) },
                         enabled = !busy,
                         onClick = {
                             menuExpanded = false
@@ -1281,7 +1281,7 @@ private fun WorkDetailContent(
                         }
                     )
                     DropdownMenuItem(
-                        text = { Text("Add to Collection") },
+                        text = { Text(WorkDetailPresentation.collectionLabel(state.collections.size)) },
                         enabled = !busy,
                         onClick = {
                             menuExpanded = false
@@ -1504,7 +1504,7 @@ private fun WorkDetailContent(
                 warnings = state.warnings,
                 categories = state.categories,
                 chapters = state.chapters,
-                isComplete = state.local?.isComplete ?: state.remote?.isComplete,
+                isComplete = state.local?.let { it.knownCompletion } ?: state.remote?.isComplete,
                 palette = palette
             )
 
@@ -1552,7 +1552,7 @@ private fun WorkDetailContent(
             if (state.local?.ao3Unavailable == true) {
                 Spacer(Modifier.height(8.dp))
                 Box(modifier = Modifier.padding(horizontal = SubjectMetrics.panelGutter)) {
-                    StatusBadge("Unavailable on AO3 (Last Copy)")
+                    StatusBadge(state.local.preservationBadge ?: "Unavailable")
                 }
             }
 
@@ -1610,7 +1610,7 @@ private fun WorkDetailContent(
             WorkDetailArchiveStatsStrip(
                 kudosCount = state.kudosCount,
                 commentsCount = state.commentsCount,
-                bookmarksCount = state.local?.bookmarks ?: state.remote?.bookmarks,
+                bookmarksCount = WorkDetailFigures.preferred(state.local?.bookmarks, state.remote?.bookmarks),
                 hitsCount = state.hitsCount,
                 palette = palette,
                 hasAO3Work = state.ao3WorkId != null,
@@ -1755,11 +1755,11 @@ private data class WorkDetailUiState(
     val freeforms: List<String> = local?.workFreeforms?.takeIf { it.isNotEmpty() }
         ?: remote?.freeforms.orEmpty()
     val language: String = local?.language ?: remote?.language ?: ""
-    val wordCount: Int = local?.wordCount?.takeIf { it > 0 } ?: remote?.wordCount ?: 0
+    val wordCount: Int = WorkDetailFigures.preferred(local?.wordCount, remote?.wordCount) ?: 0
     val chapters: String = local?.chapters?.takeIf { it.isNotBlank() } ?: remote?.chapters ?: ""
-    val commentsCount: Int? = local?.comments ?: remote?.comments
-    val kudosCount: Int? = local?.kudos?.takeIf { it > 0 } ?: remote?.kudos
-    val hitsCount: Int? = local?.hits ?: remote?.hits
+    val commentsCount: Int? = WorkDetailFigures.preferred(local?.comments, remote?.comments)
+    val kudosCount: Int? = WorkDetailFigures.preferred(local?.kudos, remote?.kudos)
+    val hitsCount: Int? = WorkDetailFigures.preferred(local?.hits, remote?.hits)
     val publishedDate: String = local?.datePublished?.takeIf { it.isNotBlank() } ?: remote?.publishedDate.orEmpty()
     val updatedDate: String = local?.dateUpdated?.takeIf { it.isNotBlank() } ?: remote?.updatedDate.orEmpty()
     val seriesUrl: String = local?.seriesUrl?.takeIf { it.isNotBlank() }
