@@ -64,7 +64,7 @@ object SubscriptionWatermarks {
 
     fun newChapterCount(work: AO3WorkSummary, watermarks: Map<Long, SubscriptionWatermark>): Int {
         val seen = watermarks[work.id] ?: return 0
-        val posted = parsePostedCount(work.chapters)
+        val posted = parsePostedCount(work.chapters) ?: return 0
         return maxOf(0, posted - seen.postedChapterCount)
     }
 
@@ -77,7 +77,9 @@ object SubscriptionWatermarks {
         var changed = false
         for (work in works) {
             if (work.id !in current) {
-                val posted = parsePostedCount(work.chapters)
+                // Only a count AO3 gave: the index rows have none, and a zero here would make
+                // every chapter of the work look new (iOS `hasKnownPostedChapterCount`; A59).
+                val posted = parsePostedCount(work.chapters) ?: continue
                 current[work.id] = SubscriptionWatermark(postedChapterCount = posted)
                 changed = true
             }
@@ -95,14 +97,13 @@ object SubscriptionWatermarks {
     ): Map<Long, SubscriptionWatermark> {
         val current = load(context, namespace).toMutableMap()
         for (work in works) {
-            val posted = parsePostedCount(work.chapters)
+            val posted = parsePostedCount(work.chapters) ?: continue
             current[work.id] = SubscriptionWatermark(postedChapterCount = posted)
         }
         save(context, namespace, current)
         return current
     }
 
-    private fun parsePostedCount(chapters: String): Int {
-        return chapters.substringBefore('/').trim().toIntOrNull() ?: 0
-    }
+    private fun parsePostedCount(chapters: String): Int? =
+        chapters.substringBefore('/').trim().toIntOrNull()
 }

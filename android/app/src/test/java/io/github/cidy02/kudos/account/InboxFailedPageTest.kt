@@ -85,4 +85,21 @@ class InboxFailedPageTest {
         assertEquals(AccountInboxUiState.Phase.Failed, now.phase)
         assertNull(now.failedPage)
     }
+
+    /** iOS `aFailedPillRequestKeepsThePillOfTheRowsShown`: the lit pill is the page on screen. */
+    @Test fun aFailedPillRequestKeepsThePillOfTheRowsShown() = runTest {
+        val client = Client()
+        val model = AccountInboxViewModel(AO3InboxRepository(client, pageCache = AO3PageCache()),
+            AO3CommentRepository(client, client)).also { this@InboxFailedPageTest.model = it }
+        model.load(1)!!.join()
+        val shown = model.uiState.value.currentFilterValues
+        assertEquals("all", shown["filters[replied_to]"])
+
+        client.failing = AO3Error.Server(500)
+        model.applyFilters(mapOf("filters[replied_to]" to "true"))
+        val now = model.uiState.value
+        assertTrue("the rows stay", now.items.isNotEmpty())
+        assertEquals("true", now.filterValues["filters[replied_to]"])
+        assertEquals(shown, now.currentFilterValues)
+    }
 }

@@ -821,8 +821,10 @@ class CommentsViewModel(
 
     private suspend fun posted(sent: Composer, key: CommentSubmissionKey?) {
         draftSave?.join()
-        if (sent.edit == null) draftStore?.clearVariants(sent.target.workId, sent.replyTo, sent.viewer.draftIdentity)
+        // A success from a session that has ended touches nothing, its drafts included, as iOS
+        // (`staleSuccessfulSubmitCannotClearOrCloseTheNewAccountsComposer`; A59).
         if (currentViewer() != sent.viewer) return
+        if (sent.edit == null) draftStore?.clearVariants(sent.target.workId, sent.replyTo, sent.viewer.draftIdentity)
         if (pendingVerification?.second == key) pendingVerification = null
         if (composer === sent) {
             composer = null
