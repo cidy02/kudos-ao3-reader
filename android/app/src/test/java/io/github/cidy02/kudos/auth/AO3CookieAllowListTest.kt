@@ -10,6 +10,7 @@ import kotlinx.serialization.json.Json
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -131,6 +132,36 @@ class AO3CookieBridgeAllowListTest {
         assertTrue(manager.getCookie(AO3Constants.BASE_URL).contains("_ga=tracker"))
         val session = AndroidAO3CookieStore(manager).captureSession("AO3_Reader")!!
         assertEquals(AO3StoredCookie.IdentityCookieNames, session.cookies.map { it.name }.toSet())
+    }
+
+    // Port of AO3AuthTests.logoutClearsPersistedAndWebSessions, using the real bridge.
+    @Test
+    fun logoutClearsPersistedAndWebSessions() = runTest {
+        val session = AO3Session("AO3_Reader", listOf(
+            AO3StoredCookie(AO3StoredCookie.SessionCookieName, "session")
+        ))
+        val store = MemorySessionStore(session)
+        val repository = AO3AuthRepository(store, AndroidAO3CookieStore(manager))
+        repository.restoreSession()
+        val scopedUrls = listOf(
+            "${AO3Constants.BASE_URL}/users/AO3_Reader/readings",
+            "https://www.archiveofourown.org/works/123"
+        )
+        manager.setCookie(scopedUrls[0], "user_credentials=path; Path=/users; Secure; HttpOnly")
+        manager.setCookie(scopedUrls[1], "user_credentials=subdomain; Path=/works; Secure; HttpOnly")
+        assertTrue(manager.getCookie(scopedUrls[0]).contains("user_credentials=path"))
+        assertTrue(manager.getCookie(scopedUrls[1]).contains("user_credentials=subdomain"))
+
+        repository.logout()
+
+        assertEquals(AO3AuthState.SignedOut, repository.state.value)
+        assertEquals("Logged out of AO3.", repository.noticeMessage.value)
+        assertNull(store.load())
+        assertFalse(store.isRemovalPending())
+        assertNull(repository.username())
+        for (url in scopedUrls + AO3Constants.BASE_URL) {
+            assertTrue(manager.getCookie(url).isNullOrBlank())
+        }
     }
 
     @Test

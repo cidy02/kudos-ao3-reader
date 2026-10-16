@@ -9,6 +9,7 @@ import io.github.cidy02.kudos.files.WorkFileStore
 import io.github.cidy02.kudos.network.ao3.AO3Client
 import io.github.cidy02.kudos.network.ao3.AO3Clock
 import io.github.cidy02.kudos.network.ao3.AO3Delay
+import io.github.cidy02.kudos.network.ao3.AO3Error
 import io.github.cidy02.kudos.network.ao3.AO3HttpResponse
 import io.github.cidy02.kudos.network.ao3.AO3Result
 import io.github.cidy02.kudos.network.ao3.work.WorkTagsRepository
@@ -17,6 +18,8 @@ import java.time.Duration
 import java.time.Instant
 import kotlinx.coroutines.test.runTest
 import org.junit.After
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -159,6 +162,70 @@ class WorkAvailabilitySweepTest {
         assertTrue(delay.delays.all { it == WorkAvailabilitySweep.REQUEST_SPACING_MILLIS })
     }
 
+    // Ports WorkAvailabilitySweepTests.anInconclusiveCheckCountsAsNeitherOutcome.
+    @Test
+    fun anInconclusiveCheckCountsAsNeitherOutcome() = runTest {
+        for (error in listOf(AO3Error.Network("timeout"), AO3Error.Forbidden, AO3Error.RateLimited(null),
+            AO3Error.Server(503), AO3Error.Parse("changed markup"))) {
+            val original = workRepository.upsert(work("inconclusive", 1, null).copy(ao3WorkID = 1))
+            val client = RecordingAO3Client(failures = mapOf(1L to error))
+            val summary = WorkAvailabilitySweep(workRepository, WorkTagsRepository(client), clock, RecordingDelay()).sweep()
+            assertEquals(1, summary.checked)
+            assertEquals(0, summary.stillAvailable)
+            assertEquals(0, summary.nowUnavailable)
+            assertEquals(0, summary.remaining)
+            assertEquals(original, workRepository.getWork(original.id))
+        }
+    }
+
+    @Test
+    fun deletedWorksAreCountedAndBadgedAndAReappearingWorkLosesTheFlag() = runTest {
+        workRepository.upsert(work("gone", 1, null).copy(hasEpub = true))
+        workRepository.upsert(work("back", 2, null).copy(ao3Unavailable = true))
+        val client = RecordingAO3Client(failures = mapOf(1L to AO3Error.NotFound))
+        val summary = WorkAvailabilitySweep(workRepository, WorkTagsRepository(client), clock, RecordingDelay()).sweep()
+        assertEquals(2, summary.checked)
+        assertEquals(1, summary.nowUnavailable)
+        assertEquals(1, summary.stillAvailable)
+        val gone = workRepository.getWork("gone")!!
+        assertTrue(gone.ao3Unavailable && gone.hasEpub && gone.isProtected)
+        assertEquals(now, gone.lastAvailabilityCheck)
+        assertEquals(1, gone.ao3WorkID)
+        val back = workRepository.getWork("back")!!
+        assertFalse(back.ao3Unavailable)
+        assertEquals(now, back.lastAvailabilityCheck)
+    }
+
+    @Test
+    fun worksInRecentlyDeletedAreLeftAloneAndOnlyAO3WorksAreContacted() = runTest {
+        workRepository.upsert(work("active", 1, null))
+        workRepository.upsert(work("deleted", 2, null))
+        workRepository.softDelete("deleted")
+        workRepository.upsert(work("ffn", 3, null).copy(sourceUrl = "https://www.fanfiction.net/s/9/1/"))
+        workRepository.upsert(work("imported", 4, null).copy(sourceUrl = ""))
+        val client = RecordingAO3Client()
+        val sweep = WorkAvailabilitySweep(workRepository, WorkTagsRepository(client), clock, RecordingDelay())
+        assertEquals(2, sweep.counts().unverifiable)
+        val summary = sweep.sweep()
+        assertEquals(listOf(1L), client.contactedWorkIds)
+        assertEquals(1, summary.checked)
+        assertNull(workRepository.getWork("deleted")!!.lastAvailabilityCheck)
+    }
+
+    @Test
+    fun cancellationStopsAndKeepsWhatItFound() = runTest {
+        for (i in 1..5) workRepository.upsert(work("w$i", i.toLong(), null))
+        val client = RecordingAO3Client()
+        val stop = AO3Delay { throw kotlinx.coroutines.CancellationException("Stopped") }
+        val summary = WorkAvailabilitySweep(workRepository, WorkTagsRepository(client), clock, stop).sweep()
+        assertTrue(summary.cancelled)
+        assertEquals(1, summary.checked)
+        assertEquals(4, summary.remaining)
+        val checked = workRepository.listSavedWorks().filter { it.lastAvailabilityCheck != null }
+        assertEquals(1, checked.size)
+        assertEquals(now, checked.single().lastAvailabilityCheck)
+    }
+
     private fun work(
         id: String,
         workId: Long,
@@ -170,7 +237,9 @@ class WorkAvailabilitySweepTest {
             author = "Author",
             sourceUrl = "https://archiveofourown.org/works/$workId",
             lastAvailabilityCheck = lastCheck,
-            isSaved = true
+            isSaved = true,
+            // Room keeps milliseconds; a default Instant.now() came back unequal by its microseconds.
+            dateAdded = Instant.parse("2026-10-01T12:00:00Z")
         )
     }
 }
@@ -188,7 +257,7 @@ private class RecordingDelay : AO3Delay {
  * Fake AO3 client that records contacted work ids and returns parseable success HTML
  * so [WorkTagsRepository.refreshTags] stamps availability without a network.
  */
-private class RecordingAO3Client : AO3Client {
+private class RecordingAO3Client(private val failures: Map<Long, AO3Error> = emptyMap()) : AO3Client {
     val contactedWorkIds = mutableListOf<Long>()
 
     override suspend fun get(
@@ -197,6 +266,7 @@ private class RecordingAO3Client : AO3Client {
     ): AO3Result<AO3HttpResponse> {
         val workId = WorkTags.ao3WorkIdFromUrl(url)
         if (workId != null) contactedWorkIds += workId
+        failures[workId]?.let { return AO3Result.Failure(it) }
         return AO3Result.Success(
             AO3HttpResponse(
                 url = url,

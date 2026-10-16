@@ -2039,3 +2039,13 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   the stale one sent first; the key now drops the leading dot. **SameSite is not stored:**
   WebView treats a cookie without it as Lax, iOS's value; the session format is unchanged.
   Reverse: the commit that names 3fk.
+- **2026-10-15 · Sign-out clears the WebView's cookies; hostile EPUBs are refused at import;
+  blank usernames build no address; availability as iOS (3fk-2; A57 items 4 to 8; Codex,
+  reviewed and gated by Claude).** Sign-out clears every WebView cookie (`removeAllCookies`;
+  the in-app view only loads AO3), where expiring root cookies missed path- and
+  subdomain-scoped ones. The EPUB preflight rejects unsafe or duplicate entry names, oversize
+  and implausible-ratio entries and an aggregate over budget, at iOS's `MiniZip.Limits.epub`
+  numbers. A one-work refresh's 404 marks the last copy and keeps a recovered work ID; an
+  inconclusive sweep check counts as checked. A work page's published, updated and status
+  fields are read; gift recipients are not (Android shows none). Four of Codex's tests compared
+  a microsecond `dateAdded` with Room's milliseconds; fixed. Reverse: the commit that names 3fk-2.

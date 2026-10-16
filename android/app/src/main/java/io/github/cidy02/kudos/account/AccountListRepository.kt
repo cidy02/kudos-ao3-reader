@@ -34,6 +34,7 @@ class AccountListRepository(
         val username = authRepository.username()
             ?: return AO3Result.Failure(AO3Error.AuthenticationRequired)
         val url = urls.url(type, username, page)
+            ?: return AO3Result.Failure(AO3Error.AuthenticationRequired)
         val headers = when (val result = authRepository.authenticatedHeaders(url)) {
             is AO3Result.Failure -> return result
             is AO3Result.Success -> result.value

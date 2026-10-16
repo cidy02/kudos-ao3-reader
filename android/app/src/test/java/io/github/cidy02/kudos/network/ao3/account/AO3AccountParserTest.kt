@@ -2,6 +2,7 @@ package io.github.cidy02.kudos.network.ao3.account
 
 import io.github.cidy02.kudos.account.AccountListType
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
@@ -20,6 +21,34 @@ class AO3UsernameParserTest {
 
 class AO3AccountUrlsTest {
     private val urls = AO3AccountUrls()
+
+    // Ports AO3ClientTests' three URL assertions, including whitespace-only usernames.
+    @Test
+    fun buildsMarkedForLaterURL() {
+        assertEquals("https://archiveofourown.org/users/alice/readings?show=to-read",
+            urls.url(AccountListType.MarkedForLater, "alice"))
+        assertEquals("https://archiveofourown.org/users/alice/readings?show=to-read&page=3",
+            urls.url(AccountListType.MarkedForLater, "alice", 3))
+        for (name in listOf("", "   ", "\t\n")) assertNull(urls.url(AccountListType.MarkedForLater, name))
+    }
+
+    @Test
+    fun buildsHistoryURL() {
+        assertEquals("https://archiveofourown.org/users/alice/readings",
+            urls.url(AccountListType.History, "alice"))
+        assertEquals("https://archiveofourown.org/users/alice/readings?page=4",
+            urls.url(AccountListType.History, "alice", 4))
+        for (name in listOf("", "   ", "\t\n")) assertNull(urls.url(AccountListType.History, name))
+    }
+
+    @Test
+    fun buildsBookmarksURL() {
+        assertEquals("https://archiveofourown.org/users/carol/bookmarks",
+            urls.url(AccountListType.Bookmarks, "carol"))
+        assertEquals("https://archiveofourown.org/users/carol/bookmarks?page=2",
+            urls.url(AccountListType.Bookmarks, "carol", 2))
+        for (name in listOf("", "   ", "\t\n")) assertNull(urls.url(AccountListType.Bookmarks, name))
+    }
 
     @Test
     fun namedSubscriptionsUseIosTypeAndOnlyPaginateAfterPageOne() {

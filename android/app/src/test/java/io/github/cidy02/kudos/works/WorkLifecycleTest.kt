@@ -50,6 +50,26 @@ import org.robolectric.annotation.Config
 
 class WorkMetadataMergerTest {
     @Test
+    fun workPageDatesAndStatusSurviveSavingAndBlankRefreshes() {
+        val summary = sampleSummary().copy(publishedDate = "listing published", updatedDate = "listing updated",
+            isComplete = false)
+        val canonical = AO3WorkMetadata(datePublished = "01 Jan 2026", dateUpdated = "02 Jan 2026", isComplete = true)
+        val merger = WorkMetadataMerger()
+        val saved = merger.merge(summary, canonical, null, markSaved = true)
+        assertEquals("01 Jan 2026", saved.datePublished)
+        assertEquals("02 Jan 2026", saved.dateUpdated)
+        assertTrue(saved.isComplete)
+        val blank = merger.merge(null, AO3WorkMetadata(), saved, markSaved = true)
+        assertEquals(saved.datePublished, blank.datePublished)
+        assertEquals(saved.dateUpdated, blank.dateUpdated)
+        assertTrue(blank.isComplete)
+        val listingOnly = merger.merge(summary, null, null, markSaved = true)
+        assertEquals("listing published", listingOnly.datePublished)
+        assertEquals("listing updated", listingOnly.dateUpdated)
+        assertFalse(listingOnly.isComplete)
+    }
+
+    @Test
     fun preservesUserLocalStateAndDoesNotEraseWithBlanks() {
         val existing = SavedWork(
             id = workUuid,
