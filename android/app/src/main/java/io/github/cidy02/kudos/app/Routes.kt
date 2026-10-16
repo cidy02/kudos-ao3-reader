@@ -106,18 +106,20 @@ object Routes {
     private const val ARG_COMMENT_CHAPTER_POSITION = "chapterPosition"
     const val Comments =
         "comments/{$ARG_COMMENT_WORK_ID}?focused={$ARG_COMMENT_FOCUSED_ID}" +
-            "&chapter={$ARG_COMMENT_CHAPTER_POSITION}&compose={compose}"
+            "&chapter={$ARG_COMMENT_CHAPTER_POSITION}&compose={compose}&session={session}"
 
     /**
      * [chapterPosition] is a 1-based AO3 story-chapter (iOS
      * `CommentsModel.initialChapterPosition`), sent by the reader's Comments
      * button so the thread opens on the chapter being read.
      */
-    fun comments(workId: Long, focusedCommentId: Long? = null, chapterPosition: Int? = null, composes: Boolean = false): String {
+    fun comments(workId: Long, focusedCommentId: Long? = null, chapterPosition: Int? = null, composes: Boolean = false,
+        session: Int? = null): String {
         val query = buildList {
             focusedCommentId?.let { add("focused=$it") }
             chapterPosition?.let { add("chapter=$it") }
             if (composes) add("compose=true")
+            session?.let { add("session=$it") }
         }
         return "comments/$workId" + if (query.isEmpty()) "" else "?" + query.joinToString("&")
     }

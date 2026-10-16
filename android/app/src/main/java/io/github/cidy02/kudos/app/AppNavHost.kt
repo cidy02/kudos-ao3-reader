@@ -547,7 +547,7 @@ fun AppNavHost(
                 authorRepository = container.authorRepository,
                 countsCache = container.accountListCountsCache,
                 onOpenWorkComments = { workId, focusedId ->
-                    navController.navigate(Routes.comments(workId, focusedId))
+                    navController.navigate(Routes.comments(workId, focusedId, session = container.authRepository.generation.value))
                 },
                 onOpenInbox = { navController.navigate(Routes.AccountInbox) }
             )
@@ -559,13 +559,15 @@ fun AppNavHost(
                 commentRepository = container.commentRepository,
                 currentUsername = (authState as? AO3AuthState.SignedIn)?.username,
                 onOpenWorkComments = { workId, focusedId ->
-                    navController.navigate(Routes.comments(workId, focusedId))
+                    navController.navigate(Routes.comments(workId, focusedId, session = container.authRepository.generation.value))
                 },
                 onOpenChapterComments = { workId, commentId, position ->
-                    navController.navigate(Routes.comments(workId, focusedCommentId = commentId, chapterPosition = position))
+                    navController.navigate(Routes.comments(workId, focusedCommentId = commentId, chapterPosition = position,
+                        session = container.authRepository.generation.value))
                 },
                 onReply = { workId, commentId ->
-                    navController.navigate(Routes.comments(workId, focusedCommentId = commentId, composes = true))
+                    navController.navigate(Routes.comments(workId, focusedCommentId = commentId, composes = true,
+                        session = container.authRepository.generation.value))
                 },
                 onOpenWeb = { url -> navController.navigate(Routes.webFallback(url)) },
                 settingsRepository = container.accountListRepository.settingsRepository
@@ -1137,7 +1139,8 @@ fun AppNavHost(
                 Routes.navArgOf("commentWorkId"),
                 navArgument(Routes.ARG_COMMENT_FOCUSED_ID) { type = NavType.StringType; nullable = true },
                 navArgument("chapterPosition") { type = NavType.StringType; nullable = true },
-                navArgument("compose") { type = NavType.BoolType; defaultValue = false }
+                navArgument("compose") { type = NavType.BoolType; defaultValue = false },
+                navArgument("session") { type = NavType.StringType; nullable = true }
             )
         ) { backStackEntry ->
             val workId = Routes.routeArg(backStackEntry, "commentWorkId")?.toLongOrNull()
@@ -1148,7 +1151,14 @@ fun AppNavHost(
             // made every signed-in reader's comment drafts the guest's (audit A18-2).
             val commentsAuthState by container.authRepository.state.collectAsState()
             val commentsSession by container.authRepository.generation.collectAsState()
-            CommentsScreen(
+            // An Inbox row's comments belong to the session whose Inbox it was: once that session
+            // has ended the screen closes and reads nothing, as iOS's `belongsToCurrentSession` (A59).
+            val openedFor = Routes.routeArg(backStackEntry, "session")?.toIntOrNull()
+            if (openedFor != null && openedFor != commentsSession) {
+                LaunchedEffect(backStackEntry) {
+                    if (navController.currentBackStackEntry?.id == backStackEntry.id) navController.popBackStack()
+                }
+            } else CommentsScreen(
                 target = workId?.let { AO3CommentTarget.Work(it) },
                 repository = container.commentRepository,
                 currentUsername = commentsAuthState.usernameOrNull,

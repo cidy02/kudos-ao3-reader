@@ -50,11 +50,11 @@ class AO3CommentRepository(
         val response = when (authAttempt) {
             is AO3Result.Success -> authAttempt.value
             is AO3Result.Failure -> {
-                // Not signed in (or session expired): fall back to public HTML or cache.
-                if (authAttempt.error != AO3Error.AuthenticationRequired) {
-                    // Still try public — may work for open works.
-                }
-                when (val public = publicClient.get(pageUrl)) {
+                // Signed out, the page is read publicly. Signed in, it is read as the account or
+                // not at all, as iOS: a public copy has no Reply or Edit, and asking again without
+                // the session is a second request for one tap (A59).
+                val public = if (viewer != null) authAttempt else publicClient.get(pageUrl)
+                when (public) {
                     is AO3Result.Failure -> {
                         // Only when AO3 could not be reached, and only this viewer's own copy:
                         // a refusal ("log in", "not found") is AO3's answer, not a reason to
