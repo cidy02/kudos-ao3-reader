@@ -2415,4 +2415,7 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   request. The same in `WorkImporter`: Download and Save looked the work up before reading AO3,
   and an EPUB download (seconds) wrote back the copy it started with, so a place read or a
   Finished mark set while an update came down was lost; the work is now looked up after AO3
-  answers and read again after the file is written.
+  answers and read again after the file is written. Work Detail's Kudos, too, wrote the
+  screen's copy (loaded before a visit to the reader) after AO3 answered; it reads the stored
+  work first now. Checked and fine: the reader (every write reads first), the repository's
+  setters (by id) and the queue code (reads inside its transactions).

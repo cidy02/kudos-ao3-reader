@@ -1145,7 +1145,9 @@ fun WorkDetailScreen(
                 val result = writeRepository.giveKudos(ao3Id)
                 handleWriteResult(result)
                 if (result is AO3Result.Success) {
-                    val local = state.local
+                    // The stored work as it is now, not the screen's copy: a page read since
+                    // this screen loaded must not be written back over.
+                    val local = state.local?.let { workRepository.getWork(it.id) }
                     if (local != null) {
                         val updated = workRepository.upsert(
                             local.copy(hasGivenKudos = true, lastModifiedAt = Instant.now())
