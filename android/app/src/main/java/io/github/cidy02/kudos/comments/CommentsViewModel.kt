@@ -825,6 +825,9 @@ class CommentsViewModel(
         // (`staleSuccessfulSubmitCannotClearOrCloseTheNewAccountsComposer`; A59).
         if (currentViewer() != sent.viewer) return
         if (sent.edit == null) draftStore?.clearVariants(sent.target.workId, sent.replyTo, sent.viewer.draftIdentity)
+        // Clearing waits on storage: a session that ended meanwhile gets no "Posted." and no
+        // reload of the next reader's page (Codex's A59 review).
+        if (currentViewer() != sent.viewer) return
         if (pendingVerification?.second == key) pendingVerification = null
         if (composer === sent) {
             composer = null

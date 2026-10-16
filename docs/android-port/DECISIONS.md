@@ -2169,3 +2169,10 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   keeps such patterns out. Codex's second review found two session gaps (an Inbox delete
   confirmation outliving its session; a comment success crossing a session while its draft is
   cleared), fixed next. Reverse: the commits that name 3fm and the composer crash.
+- **2026-10-16 · Codex's two review findings fixed (Claude).** The Inbox's Delete confirmation
+  belongs to the session that showed it: it closes when the Inbox resets for a new session, and
+  a Confirm from an ended session sends nothing (the view model refuses an action whose
+  confirmation was opened in another session; the dispatch fence then holds the rest). A
+  comment success that waits on storage to clear its draft rechecks the session afterwards, so
+  an ended session publishes no "Posted." and reloads nothing of the next reader's. Each test
+  fails with its guard removed. Reverse: the commit that names the review.

@@ -7,6 +7,7 @@ import io.github.cidy02.kudos.network.ao3.AO3PageCache
 import io.github.cidy02.kudos.network.ao3.AO3Result
 import io.github.cidy02.kudos.network.ao3.comments.AO3CommentRepository
 import io.github.cidy02.kudos.network.ao3.inbox.AO3InboxRepository
+import io.github.cidy02.kudos.network.ao3.inbox.AO3InboxBulkAction
 import io.github.cidy02.kudos.network.ao3.writes.AO3AuthenticatedClient
 import androidx.lifecycle.viewModelScope
 import java.io.File
@@ -31,8 +32,10 @@ import org.junit.Test
 class InboxFailedPageTest {
     private class Client : AO3Client, AO3AuthenticatedClient {
         var failing: AO3Error? = null
+        var generation = 1
+        var posts = 0
         override fun username() = "tester"
-        override fun sessionGeneration() = 1
+        override fun sessionGeneration() = generation
         override suspend fun get(url: String, headers: Map<String, String>): AO3Result<AO3HttpResponse> =
             failing?.let { AO3Result.Failure(it) } ?: AO3Result.Success(AO3HttpResponse(url, 200, emptyMap(),
                 listOf("src/debug/assets", "app/src/debug/assets", "android/app/src/debug/assets")
@@ -40,7 +43,7 @@ class InboxFailedPageTest {
                     .first(File::isFile).readText()))
         override suspend fun getAuthenticated(url: String) = get(url, emptyMap())
         override suspend fun postAuthenticated(url: String, formFields: List<Pair<String, String>>,
-            headers: Map<String, String>) = AO3Result.Failure(AO3Error.NotFound)
+            headers: Map<String, String>): AO3Result<AO3HttpResponse> { posts++; return AO3Result.Failure(AO3Error.NotFound) }
     }
 
     private var model: AccountInboxViewModel? = null
@@ -84,6 +87,20 @@ class InboxFailedPageTest {
         assertTrue(now.items.isEmpty())
         assertEquals(AccountInboxUiState.Phase.Failed, now.phase)
         assertNull(now.failedPage)
+    }
+
+    /** Codex's A59 review: a Delete confirmed after the session changed sends nothing. */
+    @Test fun aConfirmationFromAnEndedSessionSendsNothing() = runTest {
+        val client = Client()
+        val model = AccountInboxViewModel(AO3InboxRepository(client, pageCache = AO3PageCache()),
+            AO3CommentRepository(client, client)).also { this@InboxFailedPageTest.model = it }
+        model.load(1)!!.join()
+        val item = model.uiState.value.items.first { it.bulkSelectionField != null }
+        val openedIn = model.viewerScope()
+        client.generation = 2 // signed out and in again while the dialog was up
+        model.startItemAction(AO3InboxBulkAction.Delete, item, openedIn)
+        assertEquals(0, client.posts)
+        assertEquals(false, model.uiState.value.isPerformingBulkAction)
     }
 
     /** iOS `aFailedPillRequestKeepsThePillOfTheRowsShown`: the lit pill is the page on screen. */
