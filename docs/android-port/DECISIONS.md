@@ -2254,3 +2254,13 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   page's already-loaded works, the current work and chosen names left out, no request),
   though its result file stopped at #24. A61 is closed but for the deferred #2/#5, #9,
   #11/#12, #21, #22 and the left #29, #31.
+- **2026-10-16 · A62's first four: a file, a bookmark, an order and a note no longer lost
+  (Claude).** A62 (Codex; every reader action in iOS's Library, Work Detail and Reader against
+  Android's) found 33 differences. Fixed: **F01** Work Detail's Android-only "Delete EPUB" is
+  offered only for a work AO3 can give back (iOS offers no download action for an import,
+  whose file may be the only copy). **F02** the bookmark button matches the page's exact
+  Readium position, as iOS; within 2% of the work it could remove a bookmark pages away
+  (seen: add, then remove, on the emulator). **F26** a collection's Reorder opens in its
+  reading order, so Done no longer saves newest-added order over it (seen). **F03** Back from
+  a newly typed note keeps it, as iOS's note editor does; Cancel still discards. Reverse: the
+  commit that names A62 F01.

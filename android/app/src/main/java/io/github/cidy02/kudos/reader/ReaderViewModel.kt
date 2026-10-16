@@ -249,11 +249,7 @@ class ReaderViewModel(
 
     fun toggleBookmarkAtProgress(progress: ReaderProgress, locatorString: String, chapterTitle: String = "") {
         viewModelScope.launch {
-            val removed = annotationRepository.removeBookmarkNear(
-                workId = workId,
-                spineIndex = progress.spineIndex,
-                progression = progress.totalProgression ?: progress.scrollFraction
-            )
+            val removed = annotationRepository.removeBookmarkAt(workId, readerLocatorPosition(progress.locatorJson))
             if (!removed) {
                 addBookmarkAtProgress(progress, locatorString, chapterTitle)
             }

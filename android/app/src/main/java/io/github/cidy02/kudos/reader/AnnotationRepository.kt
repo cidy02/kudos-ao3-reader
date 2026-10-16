@@ -92,18 +92,13 @@ class AnnotationRepository(
         return annotation
     }
 
-    suspend fun removeBookmarkNear(
-        workId: String,
-        spineIndex: Int,
-        progression: Double,
-        tolerance: Double = 0.02
-    ): Boolean {
+    /** Removes the bookmark at exactly this Readium [position] (iOS), or returns false. */
+    suspend fun removeBookmarkAt(workId: String, position: Int?): Boolean {
+        if (position == null) return false
         val existing = observeForWork(workId).first()
             .filter { it.kindRaw.equals("bookmark", ignoreCase = true) }
-            .filter { it.spineIndex == spineIndex }
-            .minByOrNull { kotlin.math.abs(it.progression - progression) }
+            .firstOrNull { readerLocatorPosition(it.locatorString) == position }
             ?: return false
-        if (kotlin.math.abs(existing.progression - progression) > tolerance) return false
         deleteAnnotation(existing.id)
         return true
     }
