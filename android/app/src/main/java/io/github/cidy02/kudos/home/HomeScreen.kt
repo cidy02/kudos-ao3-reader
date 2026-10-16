@@ -2,6 +2,7 @@ package io.github.cidy02.kudos.home
 
 import io.github.cidy02.kudos.ui.subject.HomeCoverSkeleton
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -196,6 +197,7 @@ fun HomeScreen(
         workRepository = workRepository,
         queueRepository = queueRepository,
         confirmBeforeDelete = state.confirmBeforeDelete,
+        workImporter = workImporter,
         onDeleted = {
             isSelecting = false
             selection = emptySet()
@@ -603,7 +605,18 @@ private fun SubscriptionsBlock(
                                 )
                             }
                         } else {
-                            HomePress(onClick = { onOpenRemote(entry.remote) }) {
+                            val environment = io.github.cidy02.kudos.ui.components.LocalWorkRowEnvironment.current
+                            if (environment != null) {
+                                io.github.cidy02.kudos.ui.components.RemoteWorkActionFrame(entry.remote, environment, onOpenRemote) {
+                                    matched, obscured, click, longClick ->
+                                    Box(Modifier.combinedClickable(onClick = click, onLongClick = longClick)) {
+                                        if (matched != null && obscured) {
+                                            io.github.cidy02.kudos.ui.subject.SubjectWorkCoverCard(
+                                                work = matched, obscured = true, downloading = false)
+                                        } else SubjectRemoteCoverCard(summary = entry.remote, showsProvenance = true)
+                                    }
+                                }
+                            } else HomePress(onClick = { onOpenRemote(entry.remote) }) {
                                 SubjectRemoteCoverCard(summary = entry.remote, showsProvenance = true)
                             }
                         }

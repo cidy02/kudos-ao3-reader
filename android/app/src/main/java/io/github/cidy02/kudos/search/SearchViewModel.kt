@@ -116,6 +116,10 @@ class SearchViewModel(
         catalog.value = fandoms
     }
 
+    suspend fun refreshLocalCollections() {
+        collections.value = workRepository?.allCollections().orEmpty()
+    }
+
     fun updateFilters(newFilters: AO3SearchFilters) {
         _filters.value = newFilters
     }

@@ -53,8 +53,6 @@ import io.github.cidy02.kudos.ui.components.ErrorStateCard
 import io.github.cidy02.kudos.ui.components.KudosPaginationBar
 import io.github.cidy02.kudos.ui.components.KudosSectionHeader
 import io.github.cidy02.kudos.ui.components.LoadingStateCard
-import io.github.cidy02.kudos.ui.components.RemoteWorkBulkActions
-import io.github.cidy02.kudos.ui.components.RemoteWorkSelectionBar
 import io.github.cidy02.kudos.ui.components.SelectableRemoteWorkRow
 import io.github.cidy02.kudos.ui.components.SensitiveWorkRow
 import io.github.cidy02.kudos.ui.components.rememberRemoteWorkSelection
@@ -88,8 +86,6 @@ fun SeriesWorksScreen(
     var expandAll by remember(seriesUrl) { mutableStateOf(false) }
     var showMenu by remember(seriesUrl) { mutableStateOf(false) }
     val selection = rememberRemoteWorkSelection()
-    var bulkBusy by remember { mutableStateOf(false) }
-    var bulkStatus by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
 
@@ -143,6 +139,7 @@ fun SeriesWorksScreen(
                     Icon(Icons.Default.MoreVert, contentDescription = null)
                 }
                 DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+                    io.github.cidy02.kudos.ui.components.MatureWorkMenuItem { showMenu = false }
                     if (!page?.works.isNullOrEmpty() && workImporter != null) {
                         DropdownMenuItem(
                             text = { Text(if (selection.isSelecting) "Exit selection" else "Select") },
@@ -303,45 +300,15 @@ fun SeriesWorksScreen(
             }
         }
 
-        if (selection.isSelecting && workImporter != null) {
-            RemoteWorkSelectionBar(
-                state = selection,
-                busy = bulkBusy,
-                onSaveToLibrary = {
-                    val picked = selection.selectedIn(page?.works.orEmpty())
-                    scope.launch {
-                        bulkBusy = true
-                        bulkStatus = RemoteWorkBulkActions.saveToLibrary(picked, workImporter)
-                        bulkBusy = false
-                        selection.exit()
-                    }
-                },
-                onSaveForLater = {
-                    val queues = readingQueueRepository ?: return@RemoteWorkSelectionBar
-                    val picked = selection.selectedIn(page?.works.orEmpty())
-                    scope.launch {
-                        bulkBusy = true
-                        bulkStatus = RemoteWorkBulkActions.saveForLater(picked, workImporter, queues)
-                        bulkBusy = false
-                        selection.exit()
-                    }
-                }
-            )
+        if (workImporter != null) {
+            io.github.cidy02.kudos.ui.components.RemoteWorkSelectionActions(
+                selection, page?.works.orEmpty(), workImporter, readingQueueRepository)
         }
     }
 
     }
 
-    bulkStatus?.let { message ->
-        AlertDialog(
-            onDismissRequest = { bulkStatus = null },
-            title = { Text("Selection") },
-            text = { Text(message) },
-            confirmButton = {
-                TextButton(onClick = { bulkStatus = null }) { Text("OK") }
-            }
-        )
-    }
+
 }
 
 private sealed interface SeriesWorksState {

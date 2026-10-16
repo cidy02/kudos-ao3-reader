@@ -155,7 +155,6 @@ fun AuthorProfileScreen(
     val currentDelete = remember(seriesWrites, username, sessionGeneration) { seriesWrites?.let { OwnWorksDeleteState(it, sessionGeneration) } }
     val deletes = heldDelete ?: currentDelete
     val deleteState by (deletes?.state ?: kotlinx.coroutines.flow.flowOf(OwnWorksDeleteUi())).collectAsState(initial = OwnWorksDeleteUi())
-    var readingBusy by remember { mutableStateOf(false) }
     // Subscribe and Unsubscribe on an author's page (iOS `toggleSubscription`). The button opened
     // the form's submit address in the web view, where it does nothing.
     var subscriptionBusy by remember { mutableStateOf(false) }
@@ -167,7 +166,6 @@ fun AuthorProfileScreen(
     var moderationBusy by remember { mutableStateOf(false) }
     var pendingModeration by remember(route.id, sessionGeneration) {
         mutableStateOf<io.github.cidy02.kudos.network.ao3.author.AO3AuthorModerationForm?>(null) }
-    var readingStatus by remember { mutableStateOf<String?>(null) }
 
     fun loadHeader(bypassCache: Boolean = false, afterLoad: (() -> Unit)? = null) {
         val expectedRoute = route
@@ -470,6 +468,7 @@ fun AuthorProfileScreen(
                     // The app's card colour and ink, as its other menus: Material's own fell through
                     // in OLED (A37 F12).
                     containerColor = tokens.cardFill) {
+                    io.github.cidy02.kudos.ui.components.MatureWorkMenuItem { showMenu = false }
                     if (!isDashboard && !ownWorks && tab == AuthorTab.Works && !works?.works.isNullOrEmpty()) {
                         DropdownMenuItem(text = { Text("Select Works", color = tokens.primaryInk, lineHeight = 22.sp) },
                             onClick = { showMenu = false; selection.enter() })
@@ -512,7 +511,7 @@ fun AuthorProfileScreen(
                     HorizontalDivider()
                     DropdownMenuItem(
                         text = { Text("Open on AO3", color = tokens.primaryInk, lineHeight = 22.sp) },
-                        onClick = { showMenu = false; onOpenWeb(AO3AuthorUrls.userProfileUrl(route.username) ?: "") }
+                        onClick = { showMenu = false; onOpenWeb(AO3AuthorUrls.userDashboardUrl(route.username, route.pseud) ?: "") }
                     )
                     // iOS `ShareLink(item: route.dashboardURL)`: the pseud's page when one is chosen.
                     AO3AuthorUrls.userDashboardUrl(route.username, route.pseud)?.let { profileUrl ->
@@ -906,15 +905,9 @@ fun AuthorProfileScreen(
                             } else {
                                 items(visibleWorks, key = { it.id }) { work ->
                                     if (selection.isSelecting) {
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            IconButton(onClick = { selection.toggle(work.id) }) {
-                                                Icon(if (selection.isSelected(work.id)) Icons.Default.Check else Icons.Outlined.Checklist,
-                                                    if (selection.isSelected(work.id)) "Deselect ${work.title}" else "Select ${work.title}",
-                                                    tint = tokens.scopePalette.accent)
-                                            }
-                                            AO3AuthorWorkCard(work, displayMode, false, ownWorks,
-                                                onOpenWork = { selection.toggle(work.id) }, modifier = Modifier.weight(1f))
-                                        }
+                                        AO3AuthorWorkCard(work, displayMode, false, ownWorks,
+                                            onOpenWork = { selection.toggle(work.id) },
+                                            selecting = true, selected = selection.isSelected(work.id))
                                     } else if (ownWorks && workFormRepository != null && seriesWrites != null) {
                                         OwnWorkRow(work, onAction = { action ->
                                             if (action == "delete") { heldDelete = deletes; deletes?.ask(listOf(work), multiple = false) }
@@ -1081,18 +1074,12 @@ fun AuthorProfileScreen(
                 bulkFocus = focus
                 bulkModel = WritingBulkEditState(picked.map { it.id }, seriesWrites, sessionGeneration)
             }, onDelete = { heldDelete = deletes; deletes?.ask(picked) }, modifier = Modifier.padding(16.dp).navigationBarsPadding())
-        else if (workImporter != null && readingQueueRepository != null) {
-            io.github.cidy02.kudos.ui.components.RemoteWorkSelectionBar(selection, readingBusy,
-                onSaveToLibrary = { scope.launch { readingBusy = true
-                    try { readingStatus = io.github.cidy02.kudos.ui.components.RemoteWorkBulkActions.saveToLibrary(picked, workImporter); selection.exit() }
-                    finally { readingBusy = false }
-                } }, onSaveForLater = { scope.launch { readingBusy = true
-                    try { readingStatus = io.github.cidy02.kudos.ui.components.RemoteWorkBulkActions.saveForLater(picked, workImporter, readingQueueRepository); selection.exit() }
-                    finally { readingBusy = false }
-                } })
-        }
     }
-    readingStatus?.let { Text(it, color = tokens.secondaryInk, lineHeight = 20.sp, modifier = Modifier.padding(16.dp)) }
+    if (!ownWorks && workImporter != null) {
+        io.github.cidy02.kudos.ui.components.RemoteWorkSelectionActions(
+            selection, works?.works.orEmpty(), workImporter, readingQueueRepository)
+    }
+
     }
 
 }

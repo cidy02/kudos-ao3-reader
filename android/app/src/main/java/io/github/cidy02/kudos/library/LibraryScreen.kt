@@ -1111,7 +1111,10 @@ internal fun LibraryWorkMenu(
     work: SavedWork,
     actions: LibraryCardActions,
     scopedRemovalLabel: String? = null,
-    onScopedRemove: () -> Unit = {}
+    onScopedRemove: () -> Unit = {},
+    showSelect: Boolean = true,
+    remote: Boolean = false,
+    showDelete: Boolean = true
 ) {
     val ao3Id = io.github.cidy02.kudos.works.WorkIdentityIndex.ao3WorkId(work)
     var inSavedForLater by remember(work.id, work.isQueuedForLater) { mutableStateOf(work.isQueuedForLater) }
@@ -1131,7 +1134,7 @@ internal fun LibraryWorkMenu(
                 onDismiss(); actions.onOpenComments(ao3Id)
             })
         }
-        ContextMenuItem(Icons.Outlined.Checklist, "Select", {
+        if (showSelect) ContextMenuItem(Icons.Outlined.Checklist, "Select", {
             onDismiss(); actions.onSelect(work.id)
         })
         WorkDownloadSemantics.action(
@@ -1151,7 +1154,7 @@ internal fun LibraryWorkMenu(
                 enabled = action !is WorkDownloadAction.KeptBy
             )
         }
-        ContextMenuItem(
+        if (!remote) ContextMenuItem(
             if (work.isFavorite) Icons.Outlined.Star else Icons.Outlined.StarBorder,
             if (work.isFavorite) "Unfavorite" else "Favorite",
             { onDismiss(); actions.onToggleFavorite(work.id) }
@@ -1168,7 +1171,7 @@ internal fun LibraryWorkMenu(
         ContextMenuItem(Icons.Outlined.Folder, "Add to Collection", {
             onDismiss(); actions.onAddToCollection(work.id)
         })
-        if (canRebuild) {
+        if (canRebuild && !remote) {
             ContextMenuItem(Icons.Outlined.Build, "Rebuild from Original", {
                 onDismiss(); actions.onRebuildFromOriginal(work)
             })
@@ -1181,7 +1184,7 @@ internal fun LibraryWorkMenu(
                 onDismiss(); onScopedRemove()
             }, destructive = true)
         }
-        ContextMenuItem(Icons.Outlined.Delete, "Delete", {
+        if (showDelete) ContextMenuItem(Icons.Outlined.Delete, "Delete", {
             onDismiss(); actions.onRemove(work.id)
         }, destructive = true)
     }
@@ -2269,13 +2272,18 @@ private fun CollectionDashboardCard(
             onLongClick = { menuOpen = true }
         )
     }
-    DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+    CollectionCardMenu(menuOpen, { menuOpen = false }) { onDeleteCollection(collection.id) }
+}
+
+@Composable
+internal fun CollectionCardMenu(expanded: Boolean, onDismiss: () -> Unit, onDelete: () -> Unit) {
+    DropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
         DropdownMenuItem(
             text = { Text("Delete Collection", color = MaterialTheme.colorScheme.error) },
             leadingIcon = {
                 Icon(Icons.Outlined.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error)
             },
-            onClick = { menuOpen = false; onDeleteCollection(collection.id) }
+            onClick = { onDismiss(); onDelete() }
         )
     }
 }
