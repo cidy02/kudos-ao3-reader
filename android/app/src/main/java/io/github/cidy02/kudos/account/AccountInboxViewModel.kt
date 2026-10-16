@@ -1,6 +1,7 @@
 package io.github.cidy02.kudos.account
 
 import androidx.lifecycle.ViewModel
+import io.github.cidy02.kudos.network.ao3.AO3PageCache
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import io.github.cidy02.kudos.network.ao3.AO3Error
@@ -277,15 +278,20 @@ class AccountInboxViewModel(
     fun canPerformItemAction(action: AO3InboxBulkAction, item: AO3InboxItem): Boolean =
         mutableState.value.canPerformItemAction(action, item)
 
-    fun startItemAction(action: AO3InboxBulkAction, item: AO3InboxItem) {
-        startAction(action, listOf(item))
+    /** The session a confirmation is opened in, so its Confirm can be refused in another. */
+    fun viewerScope(): AO3PageCache.Scope = repository.viewerScope()
+
+    /** [openedIn]: the session a confirmation was shown in; a Confirm from another sends nothing (A59 review). */
+    fun startItemAction(action: AO3InboxBulkAction, item: AO3InboxItem, openedIn: AO3PageCache.Scope? = null) {
+        startAction(action, listOf(item), openedIn)
     }
 
-    fun startBulkAction(action: AO3InboxBulkAction) {
-        startAction(action, mutableState.value.selectedItems)
+    fun startBulkAction(action: AO3InboxBulkAction, openedIn: AO3PageCache.Scope? = null) {
+        startAction(action, mutableState.value.selectedItems, openedIn)
     }
 
-    private fun startAction(action: AO3InboxBulkAction, items: List<AO3InboxItem>) {
+    private fun startAction(action: AO3InboxBulkAction, items: List<AO3InboxItem>, openedIn: AO3PageCache.Scope? = null) {
+        if (openedIn != null && openedIn != repository.viewerScope()) return
         val state = mutableState.value
         if (state.isPerformingBulkAction) return
         val form = state.bulkForm ?: return

@@ -484,6 +484,29 @@ class CommentsViewModelContextTest {
         assertEquals("Bob draft", drafts.getDraft(workId, parentId = null, username = "bob"))
     }
 
+    /** Codex's A59 review: the session ends while a success is clearing its draft. */
+    @Test
+    fun aSuccessWhoseDraftClearOutlastsTheSessionPublishesNothing() = runTest(testDispatcher) {
+        val session = Session(basic)
+        val viewModel = model(session)
+        until("the first page") { viewModel.isDraftRestored.value }
+        viewModel.openComposer(); idle()
+        viewModel.updateDraft("Alice comment"); idle()
+
+        val held = CompletableDeferred<Unit>().also { store.writeGate = it }
+        viewModel.submitComment()
+        until("the POST") { session.posts.size == 1 }
+        idle() // the success is now clearing the draft, held
+        session.name = "bob"; session.generation = 2
+        assertEquals(true, viewModel.syncViewer()); idle()
+        store.writeGate = null; held.complete(Unit); idle()
+        until("the held clear") { !viewModel.submitting.value }
+
+        assertEquals(1, session.posts.size)
+        assertEquals(null, viewModel.message.value)
+        assertEquals(false, viewModel.composerPresented.value)
+    }
+
     /** An edit has no draft slot: its success must not clear the new comment waiting in the work's. */
     @Test
     fun aSavedEditLeavesTheNewCommentDraftAlone() = runTest(testDispatcher) {
@@ -670,11 +693,15 @@ class CommentsViewModelContextTest {
     }
 }
 
-/** A draft store whose reads can be held after they have begun. Writes are not held. */
+/** A draft store whose reads ([gate]) and writes ([writeGate]) can be held after they have begun. */
 private class GatedStore(private val inner: DataStore<Preferences>) : DataStore<Preferences> {
     var gate: CompletableDeferred<Unit>? = null
+    var writeGate: CompletableDeferred<Unit>? = null
     override val data: Flow<Preferences> get() = flow { gate?.await(); emitAll(inner.data) }
-    override suspend fun updateData(transform: suspend (t: Preferences) -> Preferences) = inner.updateData(transform)
+    override suspend fun updateData(transform: suspend (t: Preferences) -> Preferences): Preferences {
+        writeGate?.await()
+        return inner.updateData(transform)
+    }
 }
 
 private class PublicPage(private val result: AO3Result<AO3HttpResponse>) : AO3Client {

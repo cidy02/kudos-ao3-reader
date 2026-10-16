@@ -43,6 +43,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -126,6 +127,11 @@ fun AccountInboxPane(
     val palette = LocalSubjectPalette.current
     var showingFilters by remember { mutableStateOf(false) }
     var pendingDelete by remember { mutableStateOf<PendingInboxDelete?>(null) }
+    // A confirmation belongs to the session that showed it: the Inbox resets when the session
+    // changes, and the dialog goes with it (Codex's A59 review).
+    LaunchedEffect(state) {
+        if (pendingDelete?.let { it.openedIn != viewModel.viewerScope() } == true) pendingDelete = null
+    }
 
     ProvidePushedShellChrome(
         hasSubjectHeader = true,
@@ -151,9 +157,9 @@ fun AccountInboxPane(
             val pending = pendingDelete ?: return@DestructiveConfirmation
             pendingDelete = null
             if (pending.items.size == 1) {
-                viewModel.startItemAction(AO3InboxBulkAction.Delete, pending.items.first())
+                viewModel.startItemAction(AO3InboxBulkAction.Delete, pending.items.first(), pending.openedIn)
             } else {
-                viewModel.startBulkAction(AO3InboxBulkAction.Delete)
+                viewModel.startBulkAction(AO3InboxBulkAction.Delete, pending.openedIn)
             }
         },
         onDismissRequest = { pendingDelete = null }
@@ -350,7 +356,7 @@ fun AccountInboxPane(
                                 viewModel.startItemAction(AO3InboxBulkAction.MarkUnread, item)
                             },
                             onDelete = {
-                                pendingDelete = PendingInboxDelete(listOf(item))
+                                pendingDelete = PendingInboxDelete(listOf(item), viewModel.viewerScope())
                             }
                         )
                     }
@@ -394,7 +400,7 @@ fun AccountInboxPane(
                 },
                 onBulkDelete = {
                     if (state.selectedItems.isNotEmpty()) {
-                        pendingDelete = PendingInboxDelete(state.selectedItems)
+                        pendingDelete = PendingInboxDelete(state.selectedItems, viewModel.viewerScope())
                     }
                 },
                 modifier = Modifier.align(Alignment.BottomCenter)
@@ -404,7 +410,10 @@ fun AccountInboxPane(
     }
 }
 
-private data class PendingInboxDelete(val items: List<AO3InboxItem>)
+private data class PendingInboxDelete(
+    val items: List<AO3InboxItem>,
+    val openedIn: io.github.cidy02.kudos.network.ao3.AO3PageCache.Scope
+)
 
 private enum class InboxQuickFilter(
     val title: String,
