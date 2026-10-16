@@ -2241,3 +2241,8 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   WIP's clock. A61 #30 is not real: the work page already says "Remove from Later"; the label
   cited is the bulk bar's, which says "Remove from Saved for Later" as iOS's card menus do.
   Reverse: the commit that names A61 #26.
+- **2026-10-16 · A61 #29 and #31 left (recorded).** #29 (iOS's compact P/S/N/M/A section
+  pills in the reader) is reader chrome, which waits on owner question 12. #31 (an offline
+  symbol beside connection errors) would add a symbol Android's error card has never drawn;
+  design, not a fault. #25 (tag picker "From your other works") and #27 (Add Chapter's empty
+  hint) go to Codex's next run.
