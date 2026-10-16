@@ -70,6 +70,14 @@ data class AccountInboxUiState(
     val selectedItems: List<AO3InboxItem>
         get() = items.filter { it.id in selectedItemIds }
 
+    /**
+     * The filters of the page on screen, which light the pill: [filterValues] is what was asked
+     * for, and a failed request would light its pill over the old rows (iOS
+     * `currentFilterValues`; A59).
+     */
+    val currentFilterValues: Map<String, String>
+        get() = filterForm?.selectedValues.orEmpty()
+
     val allCurrentPageSelected: Boolean
         get() = selectableItemIds.isNotEmpty() && selectableItemIds.all { it in selectedItemIds }
 

@@ -230,7 +230,7 @@ fun AccountInboxPane(
                 item {
                     InboxPillRail(
                         pills = pills,
-                        selected = InboxQuickFilter.selected(state.filterValues),
+                        selected = InboxQuickFilter.selected(state.currentFilterValues),
                         enabled = !state.isPerformingBulkAction &&
                             state.phase != AccountInboxUiState.Phase.Loading,
                         palette = palette,
@@ -477,7 +477,7 @@ private fun InboxToolbar(
         } else {
             if (state.canFilter) {
                 FilterButton(
-                    filtersActive = InboxQuickFilter.selected(state.filterValues) !=
+                    filtersActive = InboxQuickFilter.selected(state.currentFilterValues) !=
                         InboxQuickFilter.All,
                     onClick = {
                         if (!state.isPerformingBulkAction) onShowFilters()

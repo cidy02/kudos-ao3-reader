@@ -457,6 +457,33 @@ class CommentsViewModelContextTest {
         assertEquals("a reply, still being typed", drafts.getDraft(workId, parentId = 101L, username = "alice"))
     }
 
+    /** iOS `staleSuccessfulSubmitCannotClearOrCloseTheNewAccountsComposer` (A59). */
+    @Test
+    fun aSuccessThatAnswersAfterAnAccountSwitchTouchesNeitherAccountsDraft() = runTest(testDispatcher) {
+        val session = Session(basic)
+        val viewModel = model(session)
+        until("the first page") { viewModel.isDraftRestored.value }
+        viewModel.openComposer(); idle()
+        viewModel.updateDraft("Alice draft"); idle()
+
+        val held = CompletableDeferred<Unit>().also { session.postGate = it }
+        viewModel.submitComment()
+        until("the POST, held") { session.posts.size == 1 }
+        session.name = "bob"; session.generation = 2
+        assertEquals(true, viewModel.syncViewer()); idle()
+        until("Bob's page") { loaded(viewModel) }
+        viewModel.openComposer(); idle()
+        viewModel.updateDraft("Bob draft"); idle()
+        session.postGate = null; held.complete(Unit)
+        until("the stale answer") { !viewModel.submitting.value }
+        idle()
+
+        assertEquals(true, viewModel.composerPresented.value)
+        assertEquals("Bob draft", viewModel.draft.value)
+        assertEquals("Alice draft", drafts.getDraft(workId, parentId = null, username = "alice"))
+        assertEquals("Bob draft", drafts.getDraft(workId, parentId = null, username = "bob"))
+    }
+
     /** An edit has no draft slot: its success must not clear the new comment waiting in the work's. */
     @Test
     fun aSavedEditLeavesTheNewCommentDraftAlone() = runTest(testDispatcher) {

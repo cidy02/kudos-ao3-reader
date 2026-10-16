@@ -163,12 +163,15 @@ fun AccountWorksListScreen(
     // Opens on Compact, as iOS (`AO3AccountWorksList.displayMode`); Ledger was kept from before
     // Compact was built here (3co step 6).
     var displayMode by rememberStoredChoice("account.displayMode", AccountDisplayMode.Compact)
-    var confirmClearHistory by remember { mutableStateOf(false) }
+    // Both belong to the session that showed them: after an account switch the confirmation
+    // was still up for the new account, and its history read as already cleared (A59).
+    val sessionGeneration by repository.authRepository.generation.collectAsState()
+    var confirmClearHistory by remember(sessionGeneration) { mutableStateOf(false) }
     // The page AO3 confirmed it cleared. The list is emptied here, as on iOS, without a
     // second read; a page loaded afterwards is a different object and shows what AO3 has.
     // Cleared on AO3, so every page of it is empty: not just the page on screen when Clear was
     // confirmed, which left a page opened meanwhile showing what was cleared (A50 F3).
-    var historyCleared by remember { mutableStateOf(false) }
+    var historyCleared by remember(sessionGeneration) { mutableStateOf(false) }
     val clearScope = rememberCoroutineScope()
     var showingFilters by remember(type) { mutableStateOf(false) }
     var filters by remember(type) { mutableStateOf(AO3SearchFilters()) }
