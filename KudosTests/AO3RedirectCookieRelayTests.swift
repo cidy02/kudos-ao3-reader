@@ -8,6 +8,17 @@ import Testing
 /// error flash across the redirect via Rails' `CookieStore`), without disturbing
 /// any other cookie pair on the request.
 struct AO3RedirectCookieRelayTests {
+    /// T-417 (Codex's 3fn review, F1): a 307/308 keeps the method and body, so a
+    /// write is never followed through one; reads and 302/303s still are.
+    @Test func aWriteIsNeverFollowedThroughAMethodKeepingRedirect() {
+        #expect(!AO3RedirectCookieRelay.followsRedirect(statusCode: 307, method: "POST"))
+        #expect(!AO3RedirectCookieRelay.followsRedirect(statusCode: 308, method: "POST"))
+        #expect(AO3RedirectCookieRelay.followsRedirect(statusCode: 302, method: "POST"))
+        #expect(AO3RedirectCookieRelay.followsRedirect(statusCode: 303, method: "POST"))
+        #expect(AO3RedirectCookieRelay.followsRedirect(statusCode: 307, method: "GET"))
+        #expect(AO3RedirectCookieRelay.followsRedirect(statusCode: 308, method: "HEAD"))
+    }
+
     private let url = URL(string: "https://archiveofourown.org/works/1/comments")!
 
     private func setCookieHeaders(_ pairs: [String]) -> [String: String] {

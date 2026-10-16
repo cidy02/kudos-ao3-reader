@@ -914,6 +914,11 @@ actor AO3Client { // swiftlint:disable:this type_body_length
         if http.statusCode == 429 {
             throw AO3Error.rateLimited(retryAfter: Self.retryAfter(from: http))
         }
+        // AO3 asked for the write to be sent again elsewhere; the relay did not
+        // (T-417). Never a success: the write may or may not have landed.
+        if http.statusCode == 307 || http.statusCode == 308 {
+            throw AO3WriteError.unconfirmed
+        }
         return (http.statusCode, Self.htmlString(from: data))
     }
 
