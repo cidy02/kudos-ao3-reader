@@ -40,6 +40,10 @@ final class AO3RedirectCookieRelay: NSObject, URLSessionTaskDelegate {
         newRequest: URLRequest,
         completionHandler: @escaping (URLRequest?) -> Void
     ) {
+        guard Self.followsRedirect(statusCode: response.statusCode, method: task.originalRequest?.httpMethod) else {
+            completionHandler(nil)
+            return
+        }
         var request = newRequest
         switch Self.redirectCookieAction(
             currentHeader: task.currentRequest?.value(forHTTPHeaderField: "Cookie"),
@@ -55,6 +59,15 @@ final class AO3RedirectCookieRelay: NSObject, URLSessionTaskDelegate {
             request.setValue(nil, forHTTPHeaderField: "Cookie")
         }
         completionHandler(request)
+    }
+
+    /// A 307/308 keeps the method and body, so following one for a write would
+    /// send its POST a second time, outside `submitWrite`'s single-shot fence.
+    /// The one POST stands and the 307/308 comes back to the caller (T-417;
+    /// Android `42155cc1`). AO3 answers its writes with a 302, followed as a GET.
+    static func followsRedirect(statusCode: Int, method: String?) -> Bool {
+        guard statusCode == 307 || statusCode == 308 else { return true }
+        return method == nil || method == "GET" || method == "HEAD"
     }
 
     /// What this redirect should do with the Cookie header — a three-way
