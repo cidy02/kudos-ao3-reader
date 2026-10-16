@@ -2336,3 +2336,7 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   (the fixture's works have nothing to fold; the label is drawn in capitals), and one
   raced the database close. **Codex is at its weekly limit until 2026-10-22 03:09.**
   Reverse: the commit that names 3fq part 2.
+- **2026-10-16 · The Inbox uses the shared pager (A63 F21, Inbox part; Claude).** First,
+  Previous, the page label with its picker and exact page field, Next, Last, as iOS's Inbox
+  uses the shared `SearchPaginationBar`; it had Previous and Next only (seen on the emulator).
+  Large text keeps its own stacked pager. A63 is done but for F15 (withdrawn in the audit).

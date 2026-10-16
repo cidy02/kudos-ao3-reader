@@ -1120,42 +1120,19 @@ private fun InboxPaginationControls(
     enabled: Boolean,
     onLoadPage: (Int) -> Unit
 ) {
-    val tokens = LocalKudosTokens.current
     if (io.github.cidy02.kudos.ui.subject.isAccessibilityFontScale()) {
         io.github.cidy02.kudos.ui.components.LargeTextPager(page, totalPages, onLoadPage, Modifier.subjectPanel().padding(horizontal = 8.dp, vertical = 8.dp), enabled)
         return
     }
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .subjectPanel()
-            .padding(horizontal = 8.dp, vertical = 4.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        TextButton(
-            enabled = enabled && page > 1,
-            onClick = { onLoadPage(page - 1) },
-            modifier = Modifier.weight(1f)
-        ) {
-            Text("Previous")
-        }
-        Text(
-            text = "Page $page of $totalPages",
-            color = tokens.secondaryInk,
-            fontSize = 13.sp,
-            fontWeight = FontWeight.Medium,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.weight(1f)
-        )
-        TextButton(
-            enabled = enabled && page < totalPages,
-            onClick = { onLoadPage(page + 1) },
-            modifier = Modifier.weight(1f)
-        ) {
-            Text("Next")
-        }
-    }
+    // The shared pager, with its page picker and exact page field, as iOS's Inbox uses the
+    // shared `SearchPaginationBar` (A63 F21); Previous and Next alone were all the Inbox had.
+    io.github.cidy02.kudos.ui.components.KudosPaginationBar(
+        currentPage = page,
+        totalPages = totalPages,
+        onPageChange = onLoadPage,
+        modifier = Modifier.subjectPanel(),
+        enabled = enabled
+    )
 }
 
 private fun inboxTally(state: AccountInboxUiState): String? {
