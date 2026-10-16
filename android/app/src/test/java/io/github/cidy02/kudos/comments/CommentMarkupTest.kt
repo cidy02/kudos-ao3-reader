@@ -49,8 +49,51 @@ class CommentMarkupTest {
             selection = TextRange(6, 6)
         )
         val result = CommentMarkup.applyTag(CommentMarkupTag.Divider, initial)
-        assertEquals("Above\n<hr />\n", result.text)
-        assertEquals(TextRange(6 + "<hr />\n".length), result.selection)
+        assertEquals("Above\n<hr>\n", result.text)
+        assertEquals(TextRange(6 + "<hr>\n".length), result.selection)
+    }
+
+    // iOS `CommentMarkupTests` (A59): the tray writes as the chapter editor does.
+    private fun apply(tag: CommentMarkupTag, text: String, start: Int, end: Int) =
+        CommentMarkup.applyTag(tag, TextFieldValue(text, TextRange(start, end)))
+    private fun typing(typed: String, into: TextFieldValue) =
+        into.text.replaceRange(into.selection.start, into.selection.end, typed)
+    private fun selected(value: TextFieldValue) = value.text.substring(value.selection.start, value.selection.end)
+
+    @Test fun theDividerStandsAloneOnItsOwnLineKeepsTheWordsAndDoesNotDoubleABreak() {
+        val done = apply(CommentMarkupTag.Divider, "done", 4, 4)
+        assertEquals("done\n<hr>\n", done.text)
+        assertEquals("done\n<hr>\nand then", typing("and then", done))
+        assertEquals("keep me\n<hr>\n", apply(CommentMarkupTag.Divider, "keep me", 0, 7).text)
+        assertEquals("done\n<hr>\nmore", apply(CommentMarkupTag.Divider, "done\n\nmore", 5, 5).text)
+    }
+
+    @Test fun listsMakeOneItemPerNonEmptyLineOrOneEmptyItem() {
+        val bullets = apply(CommentMarkupTag.Bullets, "one\n\ntwo", 0, 8)
+        assertEquals("<ul>\n<li>one</li>\n<li>two</li>\n</ul>", bullets.text)
+        assertEquals("<li>one</li>\n<li>two</li>", selected(bullets))
+        val empty = apply(CommentMarkupTag.Numbers, "", 0, 0)
+        assertEquals("<ol>\n<li></li>\n</ol>", empty.text)
+        assertEquals("<ol>\n<li>first</li>\n</ol>", typing("first", empty))
+        assertEquals("<ul>\n<li></li>\n</ul>", apply(CommentMarkupTag.Bullets, "  \n  ", 0, 5).text)
+    }
+
+    @Test fun theLinkAndSpoilerPutTheCaretWhereTheTagIsUnfinished() {
+        val link = apply(CommentMarkupTag.Link, "the coat", 0, 8)
+        assertEquals("<a href=\"\">the coat</a>", link.text)
+        assertEquals("<a href=\"https://example.com\">the coat</a>", typing("https://example.com", link))
+        val spoiler = apply(CommentMarkupTag.Spoiler, "he dies", 0, 7)
+        assertEquals("<details><summary></summary>he dies</details>", spoiler.text)
+        assertEquals("<details><summary>Chapter 4</summary>he dies</details>", typing("Chapter 4", spoiler))
+    }
+
+    @Test fun onlyTheTagsAO3KeepsAreOfferedAndHeadingPrintsItsRange() {
+        assertEquals(15, CommentMarkupTag.entries.size)
+        assertEquals(listOf("strong", "em", "u", "s", "sup", "sub", "small", "code"),
+            CommentMarkupTag.entries.filter { it.group == CommentMarkupTag.TagGroup.Text }.map { it.tagLabel })
+        assertEquals(listOf("blockquote", "ul", "ol", "h1–h6", "hr", "a href", "details"),
+            CommentMarkupTag.entries.filter { it.group == CommentMarkupTag.TagGroup.Blocks }.map { it.tagLabel })
+        assertEquals("<h3>Part two</h3>", apply(CommentMarkupTag.Heading, "Part two", 0, 8).text)
     }
 
     /**
