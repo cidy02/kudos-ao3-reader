@@ -2144,3 +2144,9 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   already had them). A test pins the comment tray to the chapter editor's markup for every tag
   but Link. Left to 3fm: the tray as a four-column grid, series creators' pseud links, bookmark
   collections, tag autocomplete's canonical mark and count. Reverse: the commit that names this.
+- **2026-10-16 · Teen's mark is mustard on light themes; Other is black (A58 #13; Claude).** As
+  iOS's `teenYellow`, the Teen rating's yellow (about 1.3:1 on a light card, where the "T"
+  vanished) becomes a dark mustard (`#8C6600`, about 4.5:1) on Light and Sepia, on the status
+  chips and the cover card's tiles; Dark and OLED keep the yellow. The Other category is black,
+  AO3's own coding and iOS's `categoryColor`. Seen on the emulator (Light, the dashboard's
+  Teen tile drew `#8C6600`). Reverse: the commit that names this.
