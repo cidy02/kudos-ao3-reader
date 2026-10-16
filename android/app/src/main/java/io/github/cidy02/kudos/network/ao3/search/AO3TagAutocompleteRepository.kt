@@ -8,6 +8,7 @@ import io.github.cidy02.kudos.network.ao3.writing.trimWritingTag
 import io.github.cidy02.kudos.network.ao3.writing.AO3CollectionOffer
 import io.github.cidy02.kudos.network.ao3.writing.AO3CollectionAccess
 import kotlinx.coroutines.CancellationException
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -15,7 +16,7 @@ import kotlinx.serialization.json.jsonPrimitive
 
 /**
  * Live tag search via AO3's autocomplete endpoints.
- * Returns canonical tag strings for the given term and category.
+ * Retains optional canonical/count metadata without making additional requests.
  */
 class AO3TagAutocompleteRepository(
     private val client: AO3Client = OkHttpAO3Client()
@@ -50,28 +51,44 @@ class AO3TagAutocompleteRepository(
     private fun autocompleteUrl(kind: String, term: String) = AO3Constants.baseHttpUrl.newBuilder()
         .addPathSegment("autocomplete").addPathSegment(kind).addQueryParameter("term", term).build().toString()
 
-    suspend fun autocomplete(kind: String, term: String, minimumTermLength: Int = 2): AO3Result<List<String>> {
-        val trimmed = trimWritingTag(term)
-        // Search filters retain their two-character gate; the writing picker, like iOS,
-        // asks for any nonblank term. Both use this same address and parser.
-        if (trimmed.isEmpty() || trimmed.length < minimumTermLength) return AO3Result.Success(emptyList())
-
-        val url = autocompleteUrl(kind, trimmed)
-
-        return when (val result = client.get(url)) {
+    suspend fun autocomplete(kind: String, term: String, minimumTermLength: Int = 2): AO3Result<List<String>> =
+        when (val result = editorAutocomplete(kind, term, minimumTermLength)) {
+            is AO3Result.Success -> AO3Result.Success(result.value.map { it.name })
             is AO3Result.Failure -> result
-            is AO3Result.Success -> {
-                runCatching {
-                    val root = json.parseToJsonElement(result.value.body).jsonArray
-                    val tags = root.mapNotNull { 
-                        it.jsonObject["name"]?.jsonPrimitive?.content 
-                    }
-                    AO3Result.Success(tags)
-                }.getOrElse { 
-                    if (it is CancellationException) throw it
-                    AO3Result.Failure(io.github.cidy02.kudos.network.ao3.AO3Error.Parse("Could not parse autocomplete response."))
-                }
+        }
+
+    suspend fun editorAutocomplete(kind: String, term: String, minimumTermLength: Int = 1): AO3Result<List<AO3EditorTag>> {
+        val trimmed = trimWritingTag(term)
+        // Search keeps its two-character gate; writing asks for any nonblank term.
+        if (trimmed.isEmpty() || trimmed.length < minimumTermLength) return AO3Result.Success(emptyList())
+        return when (val result = client.get(autocompleteUrl(kind, trimmed))) {
+            is AO3Result.Failure -> result
+            is AO3Result.Success -> try {
+                AO3Result.Success(parseEditorAutocomplete(result.value.body))
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                AO3Result.Failure(io.github.cidy02.kudos.network.ao3.AO3Error.Parse("Could not parse autocomplete response."))
             }
         }
     }
+
+    companion object {
+        /**
+         * iOS `parseEditorAutocomplete`: name then id; absent metadata means canonical, count
+         * unknown. Field by field, so one odd row (a numeric id, a quoted boolean) costs only itself.
+         */
+        internal fun parseEditorAutocomplete(body: String): List<AO3EditorTag> =
+            Json.parseToJsonElement(body).jsonArray.mapNotNull { element ->
+                val row = element as? kotlinx.serialization.json.JsonObject ?: return@mapNotNull null
+                fun text(key: String) = (row[key] as? kotlinx.serialization.json.JsonPrimitive)?.contentOrNull
+                val name = trimWritingTag(text("name") ?: text("id").orEmpty())
+                if (name.isEmpty()) null else AO3EditorTag(name,
+                    (text("canonical") ?: text("is_canonical"))?.toBooleanStrictOrNull() ?: true,
+                    (text("work_count") ?: text("count"))?.toIntOrNull())
+            }
+    }
 }
+
+/** Transient autocomplete metadata; not a stored work or a backup field. */
+data class AO3EditorTag(val name: String, val isCanonical: Boolean = true, val workCount: Int? = null)

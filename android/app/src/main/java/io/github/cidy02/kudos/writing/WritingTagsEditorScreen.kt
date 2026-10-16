@@ -49,6 +49,8 @@ import androidx.compose.ui.unit.sp
 import io.github.cidy02.kudos.app.ProvidePushedShellChrome
 import io.github.cidy02.kudos.data.preferences.SettingsRepository
 import io.github.cidy02.kudos.network.ao3.search.AO3TagAutocompleteRepository
+import io.github.cidy02.kudos.network.ao3.search.AO3EditorTag
+import androidx.compose.ui.text.font.FontFamily
 import io.github.cidy02.kudos.settings.SubjectTextFieldRow
 import io.github.cidy02.kudos.ui.subject.*
 import kotlinx.coroutines.CoroutineScope
@@ -84,7 +86,7 @@ internal fun WritingTagsEditorScreen(
     val recent = byKind[kind.endpoint].orEmpty().filterNot { excludesWritingSuggestion(it, values) }
     // Through the collected state, so an answer that arrives after the last keystroke redraws the list;
     // model.suggestions() reads the flow's value without subscribing, and the names waited for the next key.
-    val suggestions = state.names
+    val suggestions = state.tags
     val typed = model.typedTerm()
     val hasRows = typed != null || suggestions.isNotEmpty() || state.error != null
     val keyboard = LocalSoftwareKeyboardController.current
@@ -161,11 +163,11 @@ internal fun WritingTagsEditorScreen(
                 if (hasRows) {
                     item { SubjectFieldLabel("Suggestions", lineHeight = 15.sp,
                         modifier = Modifier.padding(horizontal = SubjectMetrics.accountGutter).padding(top = 20.dp, bottom = 8.dp)) }
-                    val rows = listOfNotNull(typed?.let { it to false }) + suggestions.map { it to true }
-                    itemsIndexed(rows) { index, (name, canonical) ->
+                    val rows = listOfNotNull(typed?.let { AO3EditorTag(it, isCanonical = false) }) + suggestions
+                    itemsIndexed(rows) { index, tag ->
                         Column(Modifier.padding(horizontal = SubjectMetrics.accountGutter).writingSuggestionPanel(
                             first = index == 0, last = index == rows.lastIndex && state.error == null)) {
-                            WritingSuggestionRow(name, canonical) { model.add(name) }
+                            WritingSuggestionRow(tag) { model.add(tag.name) }
                             if (index != rows.lastIndex || state.error != null) SubjectRowSeparator()
                         }
                     }
@@ -189,7 +191,9 @@ internal fun WritingTagsEditorScreen(
 }
 
 @Composable
-private fun WritingSuggestionRow(name: String, canonical: Boolean, onAdd: () -> Unit) {
+internal fun WritingSuggestionRow(tag: AO3EditorTag, onAdd: () -> Unit) {
+    val name = tag.name
+    val canonical = tag.isCanonical
     val tokens = LocalKudosTokens.current
     val palette = tokens.scopePalette
     Row(Modifier.fillMaxWidth().clickable(role = Role.Button, onClick = onAdd).semantics(mergeDescendants = true) {
@@ -205,6 +209,10 @@ private fun WritingSuggestionRow(name: String, canonical: Boolean, onAdd: () -> 
                 Text(if (canonical) "Canonical" else "Posts as typed", color = badge, fontSize = 10.5.sp, lineHeight = 15.sp,
                     fontWeight = if (canonical) FontWeight.Medium else FontWeight.Normal)
             }
+        }
+        tag.workCount?.let { count ->
+            Text("%,d".format(count), color = tokens.secondaryInk, fontSize = 12.sp,
+                fontFamily = FontFamily.Monospace, fontWeight = FontWeight.SemiBold)
         }
         Icon(Icons.Default.Add, null, tint = palette.accent, modifier = Modifier.size(18.dp))
     }

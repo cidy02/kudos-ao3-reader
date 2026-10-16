@@ -92,7 +92,8 @@ fun AuthorProfileScreen(
     workImporter: io.github.cidy02.kudos.works.WorkImporter? = null,
     readingQueueRepository: io.github.cidy02.kudos.library.ReadingQueueRepository? = null,
     /** Opens the new-work form. Offered on the reader's own Works and Dashboard, as iOS's "+". */
-    onNewWork: (() -> Unit)? = null
+    onNewWork: (() -> Unit)? = null,
+    onOpenAuthor: (AO3AuthorRoute) -> Unit = {}
 ) {
     val account by ((authRepository ?: seriesFormRepository?.auth)?.state?.collectAsState() ?: remember {
         mutableStateOf<io.github.cidy02.kudos.auth.AO3AuthState>(io.github.cidy02.kudos.auth.AO3AuthState.SignedOut) })
@@ -964,6 +965,7 @@ fun AuthorProfileScreen(
                                         }
                                     }
                                     AO3SeriesRow(series = s, displayMode = displayMode, onOpenSeries = onOpenSeries,
+                                        onOpenAuthor = onOpenAuthor,
                                         trailingContent = actions)
                                 }
                                 item {

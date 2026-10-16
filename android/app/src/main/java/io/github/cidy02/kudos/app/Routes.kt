@@ -219,6 +219,10 @@ object Routes {
     const val AuthorProfile = "author-profile/{$ARG_AUTHOR_USERNAME}"
     fun authorProfile(username: String) = "author-profile/${encode(username)}"
 
+    /** Existing author destinations carry AO3's pseud (account) byline through navigation. */
+    fun authorProfile(route: io.github.cidy02.kudos.network.ao3.author.AO3AuthorRoute): String =
+        authorProfile(route.pseud?.let { "$it (${route.username})" } ?: route.username)
+
     private const val ARG_SERIES_URL = "seriesUrl"
     const val SeriesWorks = "series-works/{$ARG_SERIES_URL}"
     fun seriesWorks(seriesUrl: String) = "series-works/${encode(seriesUrl)}"

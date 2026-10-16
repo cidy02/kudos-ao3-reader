@@ -9,6 +9,24 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class DemoTagAutocompleteTest {
+    @Test fun canonicalAndCountAreParsedWhenPresent() {
+        val tags = AO3TagAutocompleteRepository.parseEditorAutocomplete("""
+            [{"id":"Hurt/Comfort","name":"Hurt/Comfort","canonical":true,"work_count":9001},
+             {"id":"not a tag","name":"not a tag","canonical":false},
+             {"id":"Alias","is_canonical":false,"count":0},
+             {"name":"Names only"}]
+        """.trimIndent())
+        assertTrue(tags[0].isCanonical)
+        assertEquals(9001, tags[0].workCount)
+        assertFalse(tags[1].isCanonical)
+        assertNull(tags[1].workCount)
+        assertEquals("Alias", tags[2].name)
+        assertFalse(tags[2].isCanonical)
+        assertEquals(0, tags[2].workCount)
+        assertTrue(tags[3].isCanonical)
+        assertNull(tags[3].workCount)
+    }
+
     @Test fun allFourAddressesShareLocalSeveralEmptyAndFailedAnswersWithoutSockets() = runBlocking {
         val http = OkHttpClient.Builder()
             .addInterceptor(DemoNetworkInterceptor(isActive = { true }, fixtures = { FixtureSource { null } }))
