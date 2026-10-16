@@ -939,7 +939,7 @@ fun AuthorProfileScreen(
                                 } else item { EmptyStateCard("No series", "No series by this author are visible to you on AO3.") }
                             } else {
                                 items(pageData.series, key = { it.id }) { s ->
-                                    val canEdit = signedInUsername != null && s.creatorUsernames.any { it.equals(signedInUsername, true) } &&
+                                    val canEdit = io.github.cidy02.kudos.network.ao3.author.isSeriesCreator(s.creatorUsernames, signedInUsername) &&
                                         seriesFormRepository != null && seriesWrites != null
                                     var menu by remember(s.id) { mutableStateOf(false) }
                                     val actions: (@Composable () -> Unit)? = if (!canEdit) null else {

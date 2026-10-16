@@ -49,6 +49,10 @@ import io.github.cidy02.kudos.ui.subject.SubjectPalette
 
 private const val AO3_COMMENT_CHARACTER_LIMIT = 10_000
 
+/** AO3 uses Ruby String#length: Unicode code points, not UTF-16 units or graphemes. */
+internal fun remainingCommentCharacters(text: String): Int =
+    AO3_COMMENT_CHARACTER_LIMIT - text.codePointCount(0, text.length)
+
 /**
  * Reply / top-level comment sheet — matching iOS `CommentComposerSheet` (CommentsView.swift:1157).
  */
@@ -93,7 +97,7 @@ fun CommentComposerSheet(
     val isReply = replyTarget != null
     val isEdit = editTarget != null
 
-    val remainingCharacters = AO3_COMMENT_CHARACTER_LIMIT - textFieldValue.text.length
+    val remainingCharacters = remainingCommentCharacters(textFieldValue.text)
     val canPost = !submitting &&
         textFieldValue.text.trim().isNotEmpty() &&
         remainingCharacters >= 0 &&

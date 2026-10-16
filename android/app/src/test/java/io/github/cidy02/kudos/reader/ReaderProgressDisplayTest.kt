@@ -19,6 +19,13 @@ class ReaderProgressDisplayTest {
         }
     }
 
+    // ReaderTimeEstimateTests.chapterSectionMissingItsIndexFallsBackToOne.
+    @Test fun malformedChapterSectionFallsBackToChapterOne() {
+        val section = ReaderSection("chapter.xhtml", "Chapter", ReaderSectionKind.CHAPTER, 0, null)
+        val progress = ReaderProgress(spineIndex = 0, scrollFraction = 0.0)
+        assertEquals("Chapter 1 of 10 · 0% of work", ReaderProgressDisplay.label(progress, listOf(section), "1/10"))
+    }
+
     @Test
     fun prefersTotalProgressionForPercent() {
         val progress = ReaderProgress(

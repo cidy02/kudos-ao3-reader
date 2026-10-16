@@ -136,7 +136,8 @@ fun WorkLedgerRow(
     rating: String,
     categories: List<String>,
     warnings: List<String>,
-    isComplete: Boolean,
+    /** Null is Unknown (a non-AO3 import that declares none), as the status tray draws it. */
+    isComplete: Boolean?,
     obscured: Boolean,
     favorite: Boolean,
     selected: Boolean,

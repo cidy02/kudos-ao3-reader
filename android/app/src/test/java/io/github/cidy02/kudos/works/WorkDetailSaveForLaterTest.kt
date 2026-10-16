@@ -58,10 +58,11 @@ class WorkDetailSaveForLaterTest {
     private val storeScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val reads = CopyOnWriteArrayList<String>()
     private val chrome = PushedShellChrome()
+    @Volatile private var dismissed = false
     private fun fixture(name: String) = listOf("src/debug/assets/fixtures", "app/src/debug/assets/fixtures",
         "android/app/src/debug/assets/fixtures").map { File(it, "$name.html") }.first { it.isFile }.readText()
 
-    private fun open(enabled: Boolean, threshold: Int, seriesId: Int = 999, fail: Boolean = false, hasSeries: Boolean = true) = runBlocking {
+    private fun open(enabled: Boolean, threshold: Int, seriesId: Int = 999, fail: Boolean = false, hasSeries: Boolean = true, sourceLess: Boolean = false, queueOnly: Boolean = false) = runBlocking {
         val context = ApplicationProvider.getApplicationContext<Context>()
         database = Room.inMemoryDatabaseBuilder(context, KudosDatabase::class.java).allowMainThreadQueries().build()
         val files = WorkFileStore(Paths.get(folder.root.absolutePath, "works"))
@@ -73,11 +74,13 @@ class WorkDetailSaveForLaterTest {
         // Held copies let auto-preservation complete without any real timer or EPUB request.
         for (summary in parsed.works) {
             val work = works.upsert(SavedWork(title = summary.title, author = summary.authorText,
-                sourceUrl = summary.workUrl, hasEpub = true, isSaved = true,
+                sourceUrl = if (sourceLess) "" else summary.workUrl, hasEpub = true, isSaved = !queueOnly,
+                dateAdded = java.time.Instant.ofEpochMilli(1000),
                 epubPreservationStatusRaw = "preserved", seriesUrl = if (hasSeries) "https://archiveofourown.org/series/$seriesId" else ""))
             files.writeWorkEpub(work.id, EpubBuilder.buildEpub(work.title, "<p>Original local chapter.</p>"))
             if (summary == parsed.works.first()) anchor = work
         }
+        if (queueOnly) queues.addToSavedForLater(anchor.id, enqueueMissingEpub = false)
         val client = object : AO3Client {
             override suspend fun get(url: String, headers: Map<String, String>): AO3Result<AO3HttpResponse> {
                 reads += url
@@ -108,7 +111,8 @@ class WorkDetailSaveForLaterTest {
                         Row { chrome.trailingContent?.invoke(this) }
                         WorkDetailScreen(WorkDetailSource.LocalWork(anchor.id), works, importer, downloads,
                             AO3WriteRepository(auth), queues, settingsRepository = settings, seriesRepository = series,
-                            onLogin = { throw AssertionError("Opened login") }, onOpenComments = {}, onOpenReader = {})
+                            onLogin = { throw AssertionError("Opened login") }, onOpenComments = {}, onOpenReader = {},
+                            onDismiss = { dismissed = true })
                     }
                 }
             }
@@ -126,6 +130,41 @@ class WorkDetailSaveForLaterTest {
     }
     private fun members() = runBlocking { queues.listWorks(queues.ensureSavedForLaterQueue().id) }
     @After fun close() { scope.cancel(); storeScope.cancel(); if (::database.isInitialized) database.close() }
+
+    @Test fun removingSourceLessDetailDismissesAfterSoftDeletion() {
+        open(false, 25, hasSeries = false, sourceLess = true)
+        compose.waitUntil(15_000) { compose.onAllNodesWithContentDescription("More actions").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithContentDescription("More actions").performClick()
+        compose.onNodeWithText("Remove from Library").performClick()
+        // The default setting asks for confirmation before a destructive library action.
+        compose.waitUntil(15_000) { compose.onAllNodesWithText("Remove").fetchSemanticsNodes().isNotEmpty() || dismissed }
+        if (!dismissed) compose.onNodeWithText("Remove").performClick()
+        compose.waitUntil(15_000) { dismissed }
+        assertTrue(runBlocking { works.getWork(anchor.id)!!.isDeleted })
+        assertTrue(reads.isEmpty())
+    }
+
+    @Test fun removingSourceLessQueueOnlyWorkFromLaterDismisses() {
+        open(false, 25, hasSeries = false, sourceLess = true, queueOnly = true)
+        compose.waitUntil(15_000) { compose.onAllNodesWithContentDescription("More actions").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithContentDescription("More actions").performClick()
+        compose.onNodeWithText("Remove from Later").performClick()
+        compose.waitUntil(15_000) { dismissed }
+        assertTrue(runBlocking { works.getWork(anchor.id)!!.isDeleted })
+        assertTrue(reads.isEmpty())
+    }
+
+    @Test fun removingAO3QueueOnlyWorkFromLaterKeepsItsRemoteSummary() {
+        open(false, 25, hasSeries = false, queueOnly = true)
+        compose.waitUntil(15_000) { compose.onAllNodesWithContentDescription("More actions").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithContentDescription("More actions").performClick()
+        compose.onNodeWithText("Remove from Later").performClick()
+        await("Removed from Saved for Later.")
+        assertFalse(dismissed)
+        assertTrue(runBlocking { works.getWork(anchor.id)!!.isDeleted })
+        compose.onAllNodesWithText(anchor.title).fetchSemanticsNodes().let { assertTrue(it.isNotEmpty()) }
+        assertTrue(reads.isEmpty())
+    }
 
     @Test fun noSeriesDoesNotPromptOrMakeASeriesRead() {
         open(true, 25, hasSeries = false); save(); await("Saved for Later.")

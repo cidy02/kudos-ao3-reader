@@ -14,6 +14,8 @@ import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavType
 import androidx.navigation.navArgument
 import java.net.URLEncoder
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 
 data class TopLevelDestination(
     val route: String,
@@ -148,8 +150,11 @@ object Routes {
         "browse-fandoms/${encode(name)}/${encode(fandomsPath)}"
 
     private const val ARG_FANDOM_NAME = "fandomName"
-    const val BrowseWorks = "browse-works/{$ARG_FANDOM_NAME}"
-    fun browseWorks(fandomName: String) = "browse-works/${encode(fandomName)}"
+    const val BrowseWorks = "browse-works/{$ARG_FANDOM_NAME}?fandoms={fandoms}"
+    fun browseWorks(fandomName: String, includedFandoms: List<String> = emptyList()): String {
+        val route = "browse-works/${encode(fandomName)}"
+        return if (includedFandoms.isEmpty()) route else "$route?fandoms=${encode(Json.encodeToString(includedFandoms))}"
+    }
 
     private const val ARG_WEB_URL = "url"
     const val WebFallback = "web-fallback/{$ARG_WEB_URL}"

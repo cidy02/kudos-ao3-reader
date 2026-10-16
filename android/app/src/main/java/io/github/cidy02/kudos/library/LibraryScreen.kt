@@ -1993,7 +1993,7 @@ fun LibraryCarouselCard(
                 coverCardStats(
                     rating = work.rating,
                     chapters = work.chapters,
-                    isComplete = work.isComplete,
+                    isComplete = work.knownCompletion,
                     wordCount = work.wordCount.takeIf { it > 0 },
                     kudos = null
                 )

@@ -96,7 +96,9 @@ class ReaderFanMenuTest {
             listOf("preface.xhtml", "summary.xhtml", "one.xhtml", "two.xhtml", "afterword.xhtml")
         )
         assertNull(sections.commentsChapter(null))
-        assertNull(emptyList<ReaderSection>().commentsChapter(0))
+        // iOS `ao3StoryChapter`: no sections, or a position out of range, is chapter 1 (A58 #8);
+        // only a missing position means every chapter's comments.
+        assertEquals(1, emptyList<ReaderSection>().commentsChapter(0))
         assertEquals(listOf(1, 1, 1, 2, 2), sections.indices.map { sections.commentsChapter(it) })
         assertEquals(1, sections.commentsChapter(-1))
         assertEquals(1, sections.commentsChapter(99))

@@ -79,7 +79,8 @@ fun FandomWorksScreen(
     privacyGate: io.github.cidy02.kudos.app.PrivacyGate? = null,
     /** Any tag's works (a tag tapped in a work's text), worded for a tag: iOS's `TagWorksView`
      *  is this page too. It had a page of its own of the old design (3eb). */
-    isTag: Boolean = false
+    isTag: Boolean = false,
+    includedFandoms: List<String> = listOf(fandomName)
 ) {
     var state by remember(fandomName) { mutableStateOf<FandomWorksState>(FandomWorksState.Loading) }
     // The *browse* baseline, not a bare AO3SearchFilters(): AO3's tag listing has no
@@ -124,7 +125,7 @@ fun FandomWorksScreen(
     }
 
     suspend fun fetch(page: Int, with: AO3SearchFilters) =
-        if (isTag) repository.worksForTag(fandomName, page, with) else repository.worksForFandom(fandomName, page, with)
+        if (isTag) repository.worksForTag(fandomName, page, with) else repository.worksForFandoms(includedFandoms, page, with)
 
     fun load(page: Int = 1) {
         loadedFilters = filters

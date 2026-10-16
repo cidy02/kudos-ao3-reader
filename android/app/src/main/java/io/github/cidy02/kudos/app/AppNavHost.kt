@@ -337,6 +337,10 @@ fun AppNavHost(
                         rememberVisit(fandom.name)
                         navController.navigate(Routes.browseWorks(fandom.name))
                     },
+                    onOpenFamily = { family ->
+                        family.includedFilterNames.forEach { rememberVisit(it) }
+                        navController.navigate(Routes.browseWorks(family.parsedTitle, family.includedFilterNames))
+                    },
                     onOpenWebFallback = { url ->
                         navController.navigate(Routes.webFallback(url))
                     }
@@ -429,7 +433,10 @@ fun AppNavHost(
 
         sharedComposable(
             Routes.BrowseWorks,
-            arguments = listOf(Routes.navArgOf("fandomName"))
+            arguments = listOf(
+                Routes.navArgOf("fandomName"),
+                navArgument("fandoms") { type = NavType.StringType; nullable = true; defaultValue = null }
+            )
         ) { backStackEntry ->
             val fandomName = Routes.routeArg(backStackEntry, "fandomName")
             if (fandomName.isNullOrBlank()) {
@@ -437,6 +444,9 @@ fun AppNavHost(
             } else {
                 FandomWorksScreen(
                     fandomName = fandomName,
+                    includedFandoms = Routes.routeArg(backStackEntry, "fandoms")?.let {
+                        kotlinx.serialization.json.Json.decodeFromString<List<String>>(it)
+                    } ?: listOf(fandomName),
                     workRepository = container.workRepository,
                     settingsRepository = container.settingsRepository,
                     privacyGate = container.privacyGate,
@@ -1024,6 +1034,7 @@ fun AppNavHost(
                 ?.let(::resolveWorkDetailSource)
             WorkDetailScreen(
                 source = source,
+                onDismiss = { navController.popBackStack() },
                 workRepository = container.workRepository,
                 workImporter = container.workImporter,
                 downloadQueue = container.downloadQueue,

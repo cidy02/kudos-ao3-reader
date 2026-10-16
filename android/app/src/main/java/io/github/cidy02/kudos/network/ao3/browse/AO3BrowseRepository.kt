@@ -7,6 +7,8 @@ import io.github.cidy02.kudos.network.ao3.AO3Result
 import io.github.cidy02.kudos.network.ao3.DemoNetwork
 import io.github.cidy02.kudos.network.ao3.OkHttpAO3Client
 import io.github.cidy02.kudos.network.ao3.SystemAO3Clock
+import io.github.cidy02.kudos.network.ao3.search.AO3FandomUnion
+import io.github.cidy02.kudos.network.ao3.search.AO3SearchUrlBuilder
 import io.github.cidy02.kudos.network.ao3.search.AO3SearchFilters
 import io.github.cidy02.kudos.network.ao3.search.AO3SearchPage
 import io.github.cidy02.kudos.network.ao3.search.AO3SearchRepository
@@ -94,6 +96,46 @@ class AO3BrowseRepository(
         }
         val searchFilters = (filters ?: browseBaseline()).copy(fandom = trimmed)
         return searchRepository.searchTagWorks(trimmed, searchFilters, page)
+    }
+
+    private val fandomFilterIDs = java.util.Collections.synchronizedMap(LinkedHashMap<String, Long>())
+
+    /** Resolve siblings sequentially through the paced client, then ask for one union page. */
+    suspend fun worksForFandoms(
+        fandomNames: List<String>,
+        page: Int = 1,
+        filters: AO3SearchFilters? = null
+    ): AO3Result<AO3SearchPage> {
+        val names = fandomNames.map { it.trim() }.filter { it.isNotEmpty() }.distinct()
+        if (names.isEmpty()) return AO3Result.Failure(AO3Error.Validation("No fandom selected."))
+        if (names.size == 1) return worksForFandom(names.single(), page, filters)
+        val ids = mutableListOf<Long>()
+        for (name in names) {
+            val cached = fandomFilterIDs[name]
+            if (cached != null) {
+                ids += cached
+                continue
+            }
+            val url = AO3SearchUrlBuilder().buildFandomWorksUrl(name, browseBaseline())!!
+            when (val result = client.get(url)) {
+                is AO3Result.Failure -> return result
+                is AO3Result.Success -> {
+                    val id = AO3FandomUnion.filterID(result.value.body, name)
+                        ?: return AO3Result.Failure(AO3Error.Parse("Couldn't resolve every fandom in this family. Try again."))
+                    synchronized(fandomFilterIDs) {
+                        if (fandomFilterIDs.size >= 128) fandomFilterIDs.remove(fandomFilterIDs.keys.first())
+                        fandomFilterIDs[name] = id
+                    }
+                    ids += id
+                }
+            }
+        }
+        val base = filters ?: browseBaseline()
+        // fandom_names ANDs siblings, so it must not intersect the OR group again.
+        return searchRepository.search(base.copy(
+            fandom = "",
+            query = listOf(base.query.trim(), AO3FandomUnion.queryClause(ids)!!).filter { it.isNotEmpty() }.joinToString(" ")
+        ), page)
     }
 
     /**

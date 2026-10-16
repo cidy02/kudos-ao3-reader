@@ -15,7 +15,7 @@ data class ReaderViewport(
     companion object {
         fun scrolled(spineIndex: Int, offset: Double, extent: Double, range: Double): ReaderViewport? {
             if (!offset.isFinite() || !extent.isFinite() || !range.isFinite() ||
-                offset < 0 || extent <= 0 || range <= 0
+                offset < 0 || extent < 32 || range <= 0
             ) return null
             // iOS's swipe-scale readout rounds both measurements. A displayed
             // last page is not itself a scrolled end; completion uses the extent.
