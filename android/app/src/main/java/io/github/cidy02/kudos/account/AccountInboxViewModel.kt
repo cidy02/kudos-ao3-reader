@@ -127,7 +127,7 @@ class AccountInboxViewModel(
         loadJob = viewModelScope.launch {
             mutableState.update {
                 it.copy(
-                    phase = if (it.items.isEmpty()) {
+                    phase = if (it.pageUrl == null) {
                         AccountInboxUiState.Phase.Loading
                     } else {
                         AccountInboxUiState.Phase.Loaded
@@ -147,6 +147,12 @@ class AccountInboxViewModel(
                 )
             ) {
                 is AO3Result.Success -> {
+                    if (result.isStale && previous.pageUrl != null && bypassCache) {
+                        mutableState.update { it.copy(phase = AccountInboxUiState.Phase.Loaded,
+                            isShowingStaleCache = true, failedPage = page,
+                            failedPageMessage = "Couldn't refresh your inbox. Showing the page already loaded.") }
+                        return@launch
+                    }
                     val pageData = result.value
                     mutableState.update {
                         it.copy(
@@ -177,7 +183,7 @@ class AccountInboxViewModel(
                         // A page that failed while another was on screen does not take that one
                         // away: the reader lost page 1 because page 2 would not load (iOS T91-RF8).
                         // A session that ended still clears everything: nothing of it stays.
-                        if (it.items.isNotEmpty() && result.error != AO3Error.AuthenticationRequired) {
+                        if (it.pageUrl != null && result.error != AO3Error.AuthenticationRequired) {
                             it.copy(phase = AccountInboxUiState.Phase.Loaded, failedPage = page,
                                 failedPageMessage = result.error.displayMessage())
                         } else it.copy(phase = AccountInboxUiState.Phase.Failed,

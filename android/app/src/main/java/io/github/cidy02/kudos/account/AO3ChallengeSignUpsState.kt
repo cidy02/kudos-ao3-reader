@@ -31,7 +31,7 @@ internal data class ChallengeSignUpsUiState(
 
 /** One visible, generation-scoped pager. Optional failures are attempts, not reasons to probe again. */
 internal class AO3ChallengeSignUpsState(private val slug: String, private val viewerIsOwner: Boolean,
-    private val viewerIsMaintainer: Boolean, private val repository: AO3CollectionDetailRepository) {
+    private val viewerIsMaintainer: Boolean, private val repository: AO3CollectionDetailRepository) : androidx.lifecycle.ViewModel() {
     private val auth = repository.authRepository
     private val generation = auth.generation.value
     private var active = true
@@ -39,7 +39,19 @@ internal class AO3ChallengeSignUpsState(private val slug: String, private val vi
     private var job: Job? = null
     private val mutable = MutableStateFlow(ChallengeSignUpsUiState())
     val state = mutable.asStateFlow()
-    fun close() { active = false; job?.cancel() }
+    private var seenChange = repository.collectionRevision(slug)
+    override fun onCleared() { close() }
+    suspend fun loadOnAppear() {
+        active = true
+        val changed = seenChange != repository.collectionRevision(slug)
+        seenChange = repository.collectionRevision(slug)
+        if (changed || (!attempted)) load(refresh = changed)
+    }
+
+    fun close() { active = false; job?.cancel()
+        if (state.value.loading) attempted = false
+        mutable.value = state.value.copy(loading = false)
+    }
     private fun checkSession() {
         if (!active || generation != auth.generation.value) throw CancellationException()
     }

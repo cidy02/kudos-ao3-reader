@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.account
 
+import androidx.lifecycle.viewmodel.initializer
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -57,7 +58,12 @@ fun AO3CollectionFormScreen(
     onChanged: () -> Unit = {}
 ) {
     val scope = rememberCoroutineScope()
-    val model = remember(slug, repository, writes) { AO3CollectionFormState(slug, repository, writes, scope) }
+    val model: AO3CollectionFormState = androidx.lifecycle.viewmodel.compose.viewModel(
+        key = "collection-form:$slug",
+        factory = androidx.lifecycle.viewmodel.viewModelFactory {
+            initializer { AO3CollectionFormState(slug, repository, writes) }
+        }
+    )
     val state by model.state.collectAsState()
     val tokens = LocalKudosTokens.current
     val palette = tokens.scopePalette
@@ -66,7 +72,7 @@ fun AO3CollectionFormScreen(
     var typed by remember(model) { mutableStateOf("") }
     var challengeMenu by remember(model) { mutableStateOf(false) }
     val close = { model.close(); onClose() }
-    LaunchedEffect(model) { model.load() }
+    LaunchedEffect(model) { model.loadOnAppear() }
     // Before `onDeleted` leaves: the list must hear of the delete that sends the reader back to it.
     LaunchedEffect(state.changes) { if (state.changes > 0) onChanged() }
     LaunchedEffect(state.deleted) { if (state.deleted) onDeleted() }

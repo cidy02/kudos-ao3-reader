@@ -238,9 +238,28 @@ class AO3CollectionMaintainersTest {
             val before = state.state.value
             if (logout) auth.logout() else state.close()
             client.postRelease.complete(Unit); request.await()
-            assertEquals(before, state.state.value)
+            // A retained, hidden model releases write admission after the original operation ends.
+            assertEquals(if (logout) before else before.copy(inviting = false, leaving = false), state.state.value)
             assertEquals(1, client.posts.size); assertEquals(2, client.gets.size)
         }
+    }
+
+    @Test fun returningWhileAnInviteIsInFlightDoesNotAdmitAnotherWrite() = runTest {
+        val (_, client, model) = setup()
+        model.loadOnAppear()
+        model.changeUsername("another_reader")
+        client.holdPost = true
+        val invite = async { model.invite() }
+        client.postEntered.await()
+        model.close()
+        model.loadOnAppear()
+        assertTrue(model.state.value.inviting)
+        model.invite()
+        assertEquals(1, client.posts.size)
+        client.postRelease.complete(Unit)
+        invite.await()
+        assertFalse(model.state.value.inviting)
+        assertEquals(1, client.posts.size)
     }
 
     @Test fun loadingFailureEmptySignedOutAndStaleInitialReads() = runTest {

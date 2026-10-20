@@ -35,7 +35,7 @@ internal class AO3PromptMemeState(
     private val repository: AO3CollectionDetailRepository,
     private val viewerIsOwner: Boolean,
     private val writes: AO3WriteRepository
-) {
+) : androidx.lifecycle.ViewModel() {
     private var scheduleAttempted = false
     private val auth = repository.authRepository
     private val generation = auth.generation.value
@@ -46,7 +46,18 @@ internal class AO3PromptMemeState(
     val state = mutable.asStateFlow()
 
     private fun ownsSession() = active && generation == auth.generation.value
-    fun close() { active = false; loadJob?.cancel(); actionJob?.cancel() }
+    private var seenChange = repository.collectionRevision(slug)
+    override fun onCleared() { close() }
+    suspend fun loadOnAppear() {
+        active = true
+        val changed = seenChange != repository.collectionRevision(slug)
+        seenChange = repository.collectionRevision(slug)
+        if (changed || (state.value.data == null && state.value.failure == null)) load(readSchedule = true)
+    }
+
+    fun close() { active = false; loadJob?.cancel(); actionJob?.cancel()
+        mutable.value = state.value.copy(loading = false)
+    }
     fun dismissActionError() { if (ownsSession()) mutable.value = state.value.copy(actionError = null) }
 
     suspend fun claim(promptID: Int) = changeClaim(promptID, release = false)
@@ -64,12 +75,15 @@ internal class AO3PromptMemeState(
             currentCoroutineContext().ensureActive()
             if (!ownsSession()) return
             when (result) {
-                is AO3Result.Success -> loadPage(state.value.data?.currentPage ?: 1, readSchedule = false)
+                is AO3Result.Success -> {
+                    repository.collectionChanged(slug)
+                    loadPage(state.value.data?.currentPage ?: 1, readSchedule = false)
+                }
                 is AO3Result.Failure -> mutable.value = state.value.copy(actionError =
                     "Couldn't ${if (release) "release" else "claim"} that prompt: ${result.error.moderationMessage()}")
             }
         } finally {
-            if (ownsSession()) mutable.value = state.value.copy(promptInFlight = null)
+            if (generation == auth.generation.value) mutable.value = state.value.copy(promptInFlight = null)
             actionJob = null
         }
     }

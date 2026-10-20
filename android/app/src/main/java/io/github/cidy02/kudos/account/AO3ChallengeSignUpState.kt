@@ -20,7 +20,7 @@ internal data class SignUpUiState(
 )
 
 internal class AO3ChallengeSignUpState(private val slug: String, private val id: Int?,
-    private val repository: AO3CollectionDetailRepository, private val writes: AO3WriteRepository) {
+    private val repository: AO3CollectionDetailRepository, private val writes: AO3WriteRepository) : androidx.lifecycle.ViewModel() {
     private val auth = repository.authRepository
     private val generation = auth.generation.value
     private val mutable = MutableStateFlow(SignUpUiState())
@@ -33,7 +33,16 @@ internal class AO3ChallengeSignUpState(private val slug: String, private val id:
     private var saveJob: Job? = null
     private var withdrawJob: Job? = null
     private fun ownsSession() = active && generation == auth.generation.value
-    fun close() { active = false; loadJob?.cancel(); saveJob?.cancel(); withdrawJob?.cancel() }
+    override fun onCleared() { close() }
+    suspend fun loadOnAppear() {
+        active = true
+        if (!attempted) load()
+    }
+
+    fun close() { active = false; loadJob?.cancel(); saveJob?.cancel(); withdrawJob?.cancel()
+        if (state.value.loading) attempted = false
+        mutable.value = state.value.copy(loading = false)
+    }
 
     suspend fun load(refresh: Boolean = false) {
         if (!ownsSession() || state.value.loading || state.value.saving || state.value.withdrawing || state.value.withdrawn || state.value.terminal || attempted && !refresh) return
@@ -103,6 +112,7 @@ internal class AO3ChallengeSignUpState(private val slug: String, private val id:
                     is AO3SignUpSaveOutcome.Invalid -> state.value.copy(saving = false, form = outcome.form)
                     is AO3SignUpSaveOutcome.Saved -> {
                         loadedForm = outcome.form
+                        repository.collectionChanged(slug)
                         state.value.copy(saving = false, form = outcome.form,
                             notice = "Sign-up submitted successfully!")
                     }
@@ -110,7 +120,10 @@ internal class AO3ChallengeSignUpState(private val slug: String, private val id:
             }
         } catch (_: CancellationException) {
             if (ownsSession()) mutable.value = state.value.copy(saving = false)
-        } finally { saveJob = null }
+        } finally {
+            if (generation == auth.generation.value) mutable.value = state.value.copy(saving = false)
+            saveJob = null
+        }
     }
 
     suspend fun withdraw() {
@@ -126,7 +139,10 @@ internal class AO3ChallengeSignUpState(private val slug: String, private val id:
             val result = writes.withdrawSignUp(slug, signUpID, generation)
             if (!active) return
             mutable.value = when (result) {
-                is AO3Result.Success -> state.value.copy(withdrawn = true, notice = "Sign-up withdrawn.")
+                is AO3Result.Success -> {
+                    repository.collectionChanged(slug)
+                    state.value.copy(withdrawn = true, notice = "Sign-up withdrawn.")
+                }
                 is AO3Result.Failure -> state.value.copy(
                     terminal = result.error == AO3Error.Forbidden || result.error == AO3Error.AuthenticationRequired,
                     form = form.copy(generalErrors = listOf(result.error.moderationMessage())))
@@ -134,7 +150,7 @@ internal class AO3ChallengeSignUpState(private val slug: String, private val id:
         } catch (_: CancellationException) {
             // This cancellation is only before dispatch; an in-flight POST is NonCancellable.
         } finally {
-            if (active) mutable.value = state.value.copy(withdrawing = false)
+            if (generation == auth.generation.value) mutable.value = state.value.copy(withdrawing = false)
             withdrawJob = null
         }
     }

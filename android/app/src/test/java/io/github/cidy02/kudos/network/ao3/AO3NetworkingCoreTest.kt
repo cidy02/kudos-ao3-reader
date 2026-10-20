@@ -305,6 +305,30 @@ class AO3ClientStatusMappingTest {
 
 class AO3ClientRetryTest {
     @Test
+    fun a503ReadRetryReentersCoordinatorSpacingForHtmlAndBytes() = runTest {
+        for (binary in listOf(false, true)) withServer { server ->
+            server.enqueue(MockResponse.Builder().code(503).addHeader("Retry-After", "0").body("busy").build())
+            server.enqueue(MockResponse.Builder().code(200).body("ok").build())
+            val clock = FakeClock()
+            val waits = AdvancingDelay(clock)
+            val starts = mutableListOf<Long>()
+            val config = AO3NetworkConfig(minDelayBetweenRequestsMillis = 600, maxConcurrentRequests = 1)
+            val stack = OkHttpAO3Client.defaultOkHttpClient(config).newBuilder()
+                .addInterceptor { chain -> starts += clock.now; chain.proceed(chain.request()) }.build()
+            val client = OkHttpAO3Client(stack, config,
+                coordinator = AO3RequestCoordinator(config, clock, waits),
+                // Backoff is separate from request spacing: don't advance the coordinator's clock.
+                delay = RecordingDelay(), isAllowedUrl = { true })
+            val url = server.url("/works/123").toString()
+            val result = if (binary) client.getBytes(url) else client.get(url)
+            assertTrue(result is AO3Result.Success)
+            assertEquals(2, server.requestCount)
+            assertEquals(listOf(0L, 600L), starts)
+            assertEquals(listOf(600L), waits.delays)
+        }
+    }
+
+    @Test
     fun aPostAnswered503RetryAfterZeroIsNotSentAgain() = runTest {
         // A51 F1: OkHttp repeats a request answered 503 with Retry-After: 0, whatever
         // retryOnConnectionFailure says.

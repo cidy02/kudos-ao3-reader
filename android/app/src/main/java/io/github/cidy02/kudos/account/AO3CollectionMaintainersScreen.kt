@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.account
 
+import androidx.lifecycle.viewmodel.initializer
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
@@ -40,9 +41,12 @@ fun AO3CollectionMaintainersScreen(
     val auth = repository.authRepository
     val generation by auth.generation.collectAsState()
     val authState by auth.state.collectAsState()
-    val model = remember(slug, repository, writes, generation, authState.isSignedIn) {
-        AO3CollectionMaintainersState(slug, repository, writes)
-    }
+    val model: AO3CollectionMaintainersState = androidx.lifecycle.viewmodel.compose.viewModel(
+        key = "AO3CollectionMaintainers:$slug:$generation:${authState.isSignedIn}",
+        factory = androidx.lifecycle.viewmodel.viewModelFactory {
+            initializer { AO3CollectionMaintainersState(slug, repository, writes) }
+        }
+    )
     val state by model.state.collectAsState()
     val scope = rememberCoroutineScope()
     val tokens = LocalKudosTokens.current
@@ -52,7 +56,7 @@ fun AO3CollectionMaintainersScreen(
     }
     val red = SubjectPalette.fromHue(0.0, tokens.theme).accent
     var roleMenu by remember(model) { mutableStateOf(false) }
-    LaunchedEffect(model) { model.load() }
+    LaunchedEffect(model) { model.loadOnAppear() }
     LaunchedEffect(model, state.left) { if (state.left && authState.isSignedIn) onLeft() }
     DisposableEffect(model) { onDispose { model.close() } }
     ProvidePushedShellChrome(hasSubjectHeader = true)

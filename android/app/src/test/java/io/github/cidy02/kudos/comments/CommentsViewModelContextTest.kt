@@ -94,6 +94,52 @@ class CommentsViewModelContextTest {
         throw AssertionError("never happened: $what")
     }
 
+    @Test fun chapterOpeningResolvesBeforeItsOnlyCommentsReadAndReturnDoesNotReadAll() {
+        val gate = CompletableDeferred<Unit>()
+        val session = Session(basic)
+        val index = object : AO3Client {
+            var reads = 0
+            override suspend fun get(url: String, headers: Map<String, String>): AO3Result<AO3HttpResponse> {
+                reads++
+                gate.await()
+                return success("<ol class='chapter index'><li><a href='/works/123/chapters/77'>1. First</a></li></ol>")
+            }
+        }
+        val model = CommentsViewModel(AO3CommentRepository(PublicPage(basic), session), work,
+            initialChapterPosition = 1, chapterIndexRepository = AO3ChapterIndexRepository(index),
+            sessionGeneration = { session.generation }, currentUsername = { session.name }).also { models += it }
+        idle()
+        assertEquals(1, index.reads)
+        assertEquals(emptyList<String>(), session.urls)
+        gate.complete(Unit)
+        until("chapter comments loaded") { loaded(model) }
+        assertEquals(chapter, model.currentTarget.value)
+        assertEquals(CommentScope.ByChapter, model.scope.value)
+        assertEquals(1, session.urls.size)
+        org.junit.Assert.assertTrue(session.urls.single().contains("/chapters/77"))
+        model.syncViewer() // Reappearing in the same session.
+        idle()
+        assertEquals(1, session.urls.size)
+    }
+
+    @Test fun unavailableInitialChapterIndexFallsBackToExactlyOneAllCommentsRead() {
+        val session = Session(basic)
+        var indexes = 0
+        val index = object : AO3Client {
+            override suspend fun get(url: String, headers: Map<String, String>): AO3Result<AO3HttpResponse> {
+                indexes++
+                return AO3Result.Failure(AO3Error.NotFound)
+            }
+        }
+        val model = CommentsViewModel(AO3CommentRepository(PublicPage(basic), session), work,
+            initialChapterPosition = 2, chapterIndexRepository = AO3ChapterIndexRepository(index),
+            currentUsername = { session.name }).also { models += it }
+        until("fallback comments loaded") { loaded(model) }
+        assertEquals(1, indexes)
+        assertEquals(1, session.urls.size)
+        assertEquals(work, model.currentTarget.value)
+    }
+
     private val submissions = CommentSubmissionStore()
     private val models = mutableListOf<CommentsViewModel>()
     private fun model(session: Session, focused: Long? = null, position: Int? = null) = CommentsViewModel(

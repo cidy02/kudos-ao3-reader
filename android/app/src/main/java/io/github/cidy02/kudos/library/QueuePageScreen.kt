@@ -43,6 +43,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import io.github.cidy02.kudos.ui.components.rememberStoredChoice
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -121,7 +122,7 @@ fun QueuePageScreen(
     val filtersActive = filters.hasActiveFilters || filterText.isNotBlank() || sort != LibrarySort.Natural
     val filterBadge = filters.activeCount + (if (filterText.isNotBlank()) 1 else 0)
     var onlyTag by remember(queueId) { mutableStateOf<String?>(null) }
-    var displayMode by rememberSaveable { mutableStateOf(QueueDisplayMode.Compact) }
+    var displayMode by rememberStoredChoice("library.readingQueueBrowser.displayMode.$queueId", QueueDisplayMode.Compact)
     var expandAll by rememberSaveable { mutableStateOf(false) }
     var selecting by remember(queueId) { mutableStateOf(false) }
     var reordering by remember(queueId) { mutableStateOf(false) }

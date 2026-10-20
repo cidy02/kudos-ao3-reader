@@ -80,16 +80,29 @@ internal class AO3CollectionModerationState(
     val viewerIsOwner: Boolean,
     private val repository: AO3CollectionDetailRepository,
     private val writes: AO3WriteRepository
-) {
+) : androidx.lifecycle.ViewModel() {
     private val auth = repository.authRepository
     private val generation = auth.generation.value
     private var loadGeneration = 0
     private val mutable = MutableStateFlow(ModerationUiState())
     val state = mutable.asStateFlow()
-    private fun ownsSession() = generation == auth.generation.value && auth.state.value.isSignedIn
+    private fun ownsSession() = active && generation == auth.generation.value && auth.state.value.isSignedIn
     val showsReveal get() = viewerIsOwner && state.value.data?.unrevealed == true
     val showsUnanon get() = viewerIsOwner && state.value.data?.anonymous == true
 
+    private var active = true
+    private var seenChange = repository.collectionRevision(slug)
+    override fun onCleared() { close() }
+    suspend fun loadOnAppear() {
+        active = true
+        val changed = seenChange != repository.collectionRevision(slug)
+        seenChange = repository.collectionRevision(slug)
+        if (changed || (state.value.data == null && state.value.failure == null)) load()
+    }
+
+    fun close() { active = false; ++loadGeneration
+        mutable.value = state.value.copy(loading = false, paging = false)
+    }
     suspend fun load() {
         if (state.value.inFlight != null) return
         if (!ownsSession()) {
@@ -172,6 +185,7 @@ internal class AO3CollectionModerationState(
                         else state.value.copy(actionError = "Failed to ${decision.action.verb}: $error")
                 }
                 is AO3Result.Success -> {
+                    repository.collectionChanged(slug)
                     val data = previous.data ?: return
                     when (decision.action) {
                         ModerationAction.Approve, ModerationAction.Reject -> {
@@ -188,6 +202,8 @@ internal class AO3CollectionModerationState(
             }
         } catch (_: CancellationException) {
             // Old session/screen continuations never install a response or an error.
+        } finally {
+            if (generation == auth.generation.value) mutable.value = state.value.copy(inFlight = null)
         }
     }
 }

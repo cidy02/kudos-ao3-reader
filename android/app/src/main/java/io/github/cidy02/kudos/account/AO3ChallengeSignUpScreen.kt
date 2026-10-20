@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.account
 
+import androidx.lifecycle.viewmodel.initializer
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -48,9 +49,12 @@ private fun ChallengeSignUpContent(slug: String, title: String, existingID: Int?
     val auth = repository.authRepository
     val generation by auth.generation.collectAsState()
     val authState by auth.state.collectAsState()
-    val model = remember(slug, existingID, repository, writes, generation, authState.isSignedIn) {
-        AO3ChallengeSignUpState(slug, existingID, repository, writes)
-    }
+    val model: AO3ChallengeSignUpState = androidx.lifecycle.viewmodel.compose.viewModel(
+        key = "AO3ChallengeSignUp:$slug:$existingID:$generation:${authState.isSignedIn}",
+        factory = androidx.lifecycle.viewmodel.viewModelFactory {
+            initializer { AO3ChallengeSignUpState(slug, existingID, repository, writes) }
+        }
+    )
     val state by model.state.collectAsState()
     val scope = rememberCoroutineScope()
     val tokens = LocalKudosTokens.current
@@ -59,7 +63,7 @@ private fun ChallengeSignUpContent(slug: String, title: String, existingID: Int?
     var confirmingWithdraw by remember(model) { mutableStateOf(false) }
     LaunchedEffect(model, state.withdrawn) { if (state.withdrawn) onWithdrawn("Sign-up withdrawn.") }
     var editing by remember(model) { mutableStateOf<Pair<SignUpPromptKind, Int>?>(null) }
-    LaunchedEffect(model) { model.load() }
+    LaunchedEffect(model) { model.loadOnAppear() }
     DisposableEffect(model) { onDispose { model.close() } }
     val edit = editing
     val prompt = if (edit == null) null else form?.live(edit.first)?.firstOrNull { it.id == edit.second }

@@ -34,13 +34,23 @@ class InboxFailedPageTest {
         var failing: AO3Error? = null
         var generation = 1
         var posts = 0
+        var empty = false
+        var inboxReads = 0
         override fun username() = "tester"
         override fun sessionGeneration() = generation
-        override suspend fun get(url: String, headers: Map<String, String>): AO3Result<AO3HttpResponse> =
-            failing?.let { AO3Result.Failure(it) } ?: AO3Result.Success(AO3HttpResponse(url, 200, emptyMap(),
-                listOf("src/debug/assets", "app/src/debug/assets", "android/app/src/debug/assets")
-                    .map { File("$it/fixtures/${if (url.contains("show_comments=true")) "ao3_comments_empty" else "ao3_inbox_manage"}.html") }
-                    .first(File::isFile).readText()))
+        override suspend fun get(url: String, headers: Map<String, String>): AO3Result<AO3HttpResponse> {
+            if (url.contains("/inbox")) inboxReads++
+            failing?.let { return AO3Result.Failure(it) }
+            val name = if (url.contains("show_comments=true")) "ao3_comments_empty" else "ao3_inbox_manage"
+            var html = listOf("src/debug/assets", "app/src/debug/assets", "android/app/src/debug/assets")
+                .map { File("$it/fixtures/$name.html") }.first(File::isFile).readText()
+            if (empty && url.contains("/inbox")) {
+                val doc = org.jsoup.Jsoup.parse(html)
+                doc.select("li.comment").remove()
+                html = doc.outerHtml()
+            }
+            return AO3Result.Success(AO3HttpResponse(url, 200, emptyMap(), html))
+        }
         override suspend fun getAuthenticated(url: String) = get(url, emptyMap())
         override suspend fun postAuthenticated(url: String, formFields: List<Pair<String, String>>,
             headers: Map<String, String>): AO3Result<AO3HttpResponse> { posts++; return AO3Result.Failure(AO3Error.NotFound) }
@@ -87,6 +97,49 @@ class InboxFailedPageTest {
         assertTrue(now.items.isEmpty())
         assertEquals(AccountInboxUiState.Phase.Failed, now.phase)
         assertNull(now.failedPage)
+    }
+
+    @Test fun firstAndLaterFailedPullsKeepBothNonemptyAndEmptyShownPages() = runTest {
+        for (empty in listOf(false, true)) {
+            val client = Client().also { it.empty = empty }
+            // No stale fallback: exercise a real failure while a page is on screen.
+            val cache = AO3PageCache(ttlMillis = 0, staleMillis = 0)
+            val model = AccountInboxViewModel(AO3InboxRepository(client, pageCache = cache),
+                AO3CommentRepository(client, client)).also { this@InboxFailedPageTest.model = it }
+            model.load(1)!!.join()
+            val shown = model.uiState.value
+            assertEquals(AccountInboxUiState.Phase.Loaded, shown.phase)
+            assertEquals(empty, shown.items.isEmpty())
+            client.failing = AO3Error.Network("offline", offline = true)
+            repeat(2) {
+                val before = client.inboxReads
+                model.refresh()
+                val now = model.uiState.value
+                assertEquals(before + 1, client.inboxReads)
+                assertEquals(shown.items, now.items)
+                assertEquals(shown.pageUrl, now.pageUrl)
+                assertEquals(shown.bulkForm, now.bulkForm)
+                assertEquals(AccountInboxUiState.Phase.Loaded, now.phase)
+                assertEquals(1, now.failedPage)
+                assertNull(now.actionError)
+            }
+            model.viewModelScope.coroutineContext[Job]!!.cancelAndJoin()
+        }
+    }
+
+    @Test fun aFailedFirstPullWithAStaleFallbackAlsoReportsRefreshFailure() = runTest {
+        val client = Client()
+        val model = AccountInboxViewModel(AO3InboxRepository(client, pageCache = AO3PageCache()),
+            AO3CommentRepository(client, client)).also { this@InboxFailedPageTest.model = it }
+        model.load(1)!!.join()
+        val shown = model.uiState.value
+        client.failing = AO3Error.Network("offline", offline = true)
+        val before = client.inboxReads
+        model.refresh()
+        assertEquals(before + 1, client.inboxReads)
+        assertEquals(shown.items, model.uiState.value.items)
+        assertEquals(AccountInboxUiState.Phase.Loaded, model.uiState.value.phase)
+        assertEquals(1, model.uiState.value.failedPage)
     }
 
     /** Codex's A59 review: a Delete confirmed after the session changed sends nothing. */

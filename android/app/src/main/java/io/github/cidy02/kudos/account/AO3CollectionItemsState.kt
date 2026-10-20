@@ -116,6 +116,7 @@ internal class AO3CollectionItemsState(
                 else AO3Result.Failure(AO3Error.AuthenticationRequired)
             currentCoroutineContext().ensureActive()
             if (!ownsSession()) return
+            if (result is AO3Result.Success) slug?.let(repository::collectionChanged)
             val state = mutableState.value
             mutableState.value = state.copy(
                 phase = AO3CollectionItemsUiState.Phase.Loaded,

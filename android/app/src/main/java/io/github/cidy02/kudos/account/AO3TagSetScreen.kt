@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.account
 
+import androidx.lifecycle.viewmodel.initializer
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
@@ -46,7 +47,12 @@ fun AO3TagSetScreen(
     val auth = repository.authRepository
     val generation by auth.generation.collectAsState()
     val authState by auth.state.collectAsState()
-    val model = remember(id, repository, writes, generation, authState.isSignedIn) { AO3TagSetState(id, repository, writes) }
+    val model: AO3TagSetState = androidx.lifecycle.viewmodel.compose.viewModel(
+        key = "AO3TagSet:$id:$generation:${authState.isSignedIn}",
+        factory = androidx.lifecycle.viewmodel.viewModelFactory {
+            initializer { AO3TagSetState(id, repository, writes) }
+        }
+    )
     val state by model.state.collectAsState()
     val scope = rememberCoroutineScope()
     var editing by remember(model) { mutableStateOf(false) }
@@ -56,7 +62,7 @@ fun AO3TagSetScreen(
     val data = state.data
     val effectiveTitle = title.ifEmpty { data?.title?.ifEmpty { "Tag Set $id" } ?: "Tag Set $id" }
     val total = data?.totalTagCount ?: 0
-    LaunchedEffect(model) { model.load() }
+    LaunchedEffect(model) { model.loadOnAppear() }
     DisposableEffect(model) { onDispose { model.close() } }
     BackHandler(enabled = editing) { editing = false }
     ProvidePushedShellChrome(hasSubjectHeader = true, onBack = if (editing) ({ editing = false }) else null)

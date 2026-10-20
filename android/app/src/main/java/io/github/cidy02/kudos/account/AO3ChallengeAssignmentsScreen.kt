@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.account
 
+import androidx.lifecycle.viewmodel.initializer
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -55,19 +56,22 @@ private fun ChallengeAssignmentsContent(slug: String, title: String, viewerIsOwn
     val auth = repository.authRepository
     val generation by auth.generation.collectAsState()
     val authState by auth.state.collectAsState()
-    val admittedGeneration = remember(slug, repository) { generation }
-    val model = remember(slug, repository, writes, generation, authState.isSignedIn, viewerIsOwner, viewerIsMaintainer, knownClosed) {
-        AO3ChallengeAssignmentsState(slug, viewerIsOwner, viewerIsMaintainer && admittedGeneration == generation,
-            knownClosed, repository, writes)
-    }
+    val admittedGeneration = androidx.compose.runtime.saveable.rememberSaveable(slug) { generation }
+    val model: AO3ChallengeAssignmentsState = androidx.lifecycle.viewmodel.compose.viewModel(
+        key = "AO3ChallengeAssignments:$slug:$generation:${authState.isSignedIn}:$viewerIsOwner:$viewerIsMaintainer:$knownClosed",
+        factory = androidx.lifecycle.viewmodel.viewModelFactory {
+            initializer { AO3ChallengeAssignmentsState(slug, viewerIsOwner, viewerIsMaintainer && admittedGeneration == generation,
+            knownClosed, repository, writes) }
+        }
+    )
     val state by model.state.collectAsState()
     val scope = rememberCoroutineScope()
     val tokens = LocalKudosTokens.current
     val palette = tokens.scopePalette
     val large = isAccessibilityFontScale()
     val disabled = state.busy || state.loading || state.terminal
-    var segment by remember(model) { mutableStateOf(AssignmentSegment.Unmatched) }
-    LaunchedEffect(model) { model.load() }
+    var segment by androidx.compose.runtime.saveable.rememberSaveable(model) { mutableStateOf(AssignmentSegment.Unmatched) }
+    LaunchedEffect(model) { model.loadOnAppear() }
     DisposableEffect(model) { onDispose { model.close() } }
     ProvidePushedShellChrome(hasSubjectHeader = true, trailingContent = if (!state.loaded || state.terminal) null else { {
         IconButton(onClick = { scope.launch { model.load(refresh = true) } }, enabled = !disabled) {

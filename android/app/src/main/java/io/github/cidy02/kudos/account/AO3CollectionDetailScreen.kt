@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.account
 
+import androidx.lifecycle.viewmodel.initializer
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -99,16 +100,23 @@ fun AO3CollectionDetailScreen(
     onOpenSignUps: (Boolean) -> Unit = {},
     onOpenAssignments: (Boolean) -> Unit = {}
 ) {
-    var show by remember(slug) { mutableStateOf<AO3CollectionShow?>(null) }
-    var segment by remember(slug) { mutableStateOf(AO3CollectionSegment.Works) }
-    var worksPage by remember(slug) { mutableStateOf<AO3SearchPage?>(null) }
-    var bookmarksPage by remember(slug) { mutableStateOf<AO3SearchPage?>(null) }
-    var peoplePage by remember(slug) { mutableStateOf<AO3CollectionPeoplePage?>(null) }
-    var loadedSegments by remember(slug) { mutableStateOf(emptySet<AO3CollectionSegment>()) }
-    var phase by remember(slug) { mutableStateOf<AO3CollectionDetailPhase>(AO3CollectionDetailPhase.Idle) }
-    var loadGeneration by remember(slug) { mutableIntStateOf(0) }
-    var showMenu by remember(slug) { mutableStateOf(false) }
     val signedIn by repository.authRepository.state.collectAsState()
+    val generation by repository.authRepository.generation.collectAsState()
+    val model: AO3CollectionDetailViewModel = androidx.lifecycle.viewmodel.compose.viewModel(
+        key = "collection-detail:$slug:$generation:${signedIn.isSignedIn}",
+        factory = androidx.lifecycle.viewmodel.viewModelFactory {
+            initializer { AO3CollectionDetailViewModel(slug, repository) }
+        }
+    )
+    val changes by repository.collectionChanges.collectAsState()
+    val changedRevision = changes[slug] ?: 0
+    val show = model.show
+    var segment by model.segment
+    val worksPage = model.worksPage
+    val bookmarksPage = model.bookmarksPage
+    val peoplePage = model.peoplePage
+    val phase = model.phase
+    var showMenu by remember(model) { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val settings by settingsRepository.settings.collectAsState(initial = KudosSettings.Defaults)
     val reveal by privacyGate.state.collectAsState()
@@ -119,75 +127,7 @@ fun AO3CollectionDetailScreen(
         SubjectPalette.fromHue(HomeFacts.workHue(emptyList(), paletteTitle), tokens.theme)
     }
 
-    fun currentPage(target: AO3CollectionSegment): Int = when (target) {
-        AO3CollectionSegment.Works -> worksPage?.currentPage ?: 1
-        AO3CollectionSegment.Bookmarks -> bookmarksPage?.currentPage ?: 1
-        AO3CollectionSegment.People -> peoplePage?.currentPage ?: 1
-    }
-
-    suspend fun load(target: AO3CollectionSegment, page: Int = currentPage(target)) {
-        val generation = ++loadGeneration
-        phase = AO3CollectionDetailPhase.Loading
-        if (show == null) {
-            when (val result = repository.getCollectionShow(slug)) {
-                is AO3Result.Success -> {
-                    if (generation != loadGeneration) return
-                    show = result.value
-                }
-                is AO3Result.Failure -> {
-                    if (generation == loadGeneration) {
-                        phase = AO3CollectionDetailPhase.Failed(result.error.displayMessage())
-                    }
-                    return
-                }
-            }
-        }
-
-        when (target) {
-            AO3CollectionSegment.Works -> when (val result = repository.getCollectionWorks(slug, page)) {
-                is AO3Result.Success -> if (generation == loadGeneration) worksPage = result.value
-                is AO3Result.Failure -> {
-                    if (generation == loadGeneration) {
-                        phase = AO3CollectionDetailPhase.Failed(result.error.displayMessage())
-                    }
-                    return
-                }
-            }
-            AO3CollectionSegment.Bookmarks -> when (
-                val result = repository.getCollectionBookmarks(slug, page)
-            ) {
-                is AO3Result.Success -> if (generation == loadGeneration) bookmarksPage = result.value
-                is AO3Result.Failure -> {
-                    if (generation == loadGeneration) {
-                        phase = AO3CollectionDetailPhase.Failed(result.error.displayMessage())
-                    }
-                    return
-                }
-            }
-            AO3CollectionSegment.People -> when (val result = repository.getCollectionPeople(slug, page)) {
-                is AO3Result.Success -> if (generation == loadGeneration) peoplePage = result.value
-                is AO3Result.Failure -> {
-                    if (generation == loadGeneration) {
-                        phase = AO3CollectionDetailPhase.Failed(result.error.displayMessage())
-                    }
-                    return
-                }
-            }
-        }
-
-        if (generation == loadGeneration) {
-            loadedSegments = loadedSegments + target
-            phase = AO3CollectionDetailPhase.Loaded
-        }
-    }
-
-    LaunchedEffect(slug, segment) {
-        if (segment in loadedSegments) {
-            phase = AO3CollectionDetailPhase.Loaded
-        } else {
-            load(segment)
-        }
-    }
+    LaunchedEffect(model, segment, changedRevision) { model.loadOnAppear(changedRevision) }
 
     ProvidePushedShellChrome(
         hasSubjectHeader = true,
@@ -228,14 +168,14 @@ fun AO3CollectionDetailScreen(
 
     KudosRefreshBox(
         onRefresh = {
-            loadedSegments = loadedSegments - segment
-            load(segment)
+            model.refresh()
         },
         modifier = Modifier
             .fillMaxSize()
             .subjectScreenWash(palette)
     ) {
         LazyColumn(
+            state = model.listState,
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(bottom = 24.dp)
         ) {
@@ -342,7 +282,7 @@ fun AO3CollectionDetailScreen(
                 is AO3CollectionDetailPhase.Failed -> item {
                     CollectionFailureCard(
                         message = currentPhase.message,
-                        onRetry = { scope.launch { load(segment) } },
+                        onRetry = { scope.launch { model.load(segment) } },
                         modifier = Modifier
                             .padding(top = 14.dp)
                             .padding(horizontal = SubjectMetrics.accountGutter)
@@ -367,10 +307,10 @@ fun AO3CollectionDetailScreen(
             if (phase !is AO3CollectionDetailPhase.Failed && totalPages > 1) {
                 item {
                     KudosPaginationBar(
-                        currentPage = currentPage(segment),
+                        currentPage = model.currentPage(segment),
                         totalPages = totalPages,
                         enabled = phase != AO3CollectionDetailPhase.Loading,
-                        onPageChange = { page -> scope.launch { load(segment, page) } },
+                        onPageChange = { page -> scope.launch { model.load(segment, page) } },
                         modifier = Modifier
                             .padding(top = 14.dp)
                             .padding(horizontal = SubjectMetrics.accountGutter)
@@ -640,13 +580,13 @@ private fun collectionManageActions(
 
 private data class AO3CollectionManageAction(val label: String, val url: String)
 
-private enum class AO3CollectionSegment(val title: String) {
+internal enum class AO3CollectionSegment(val title: String) {
     Works("Works"),
     Bookmarks("Bookmarks"),
     People("People")
 }
 
-private sealed interface AO3CollectionDetailPhase {
+internal sealed interface AO3CollectionDetailPhase {
     data object Idle : AO3CollectionDetailPhase
     data object Loading : AO3CollectionDetailPhase
     data object Loaded : AO3CollectionDetailPhase

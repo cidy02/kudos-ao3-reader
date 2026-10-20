@@ -70,7 +70,7 @@ internal data class ChallengeAssignmentsUiState(
 /** One opening, first pages only. Session/role/closed-state admission precedes every list read. */
 internal class AO3ChallengeAssignmentsState(private val slug: String, private val owner: Boolean,
     private val maintainer: Boolean, private val knownClosed: Boolean?, private val repository: AO3CollectionDetailRepository,
-    private val writes: AO3WriteRepository) {
+    private val writes: AO3WriteRepository) : androidx.lifecycle.ViewModel() {
     private val auth = repository.authRepository
     private val generation = auth.generation.value
     private var active = true
@@ -83,7 +83,16 @@ internal class AO3ChallengeAssignmentsState(private val slug: String, private va
     private var job: Job? = null
     private val mutable = MutableStateFlow(ChallengeAssignmentsUiState())
     val state = mutable.asStateFlow()
-    fun close() { active = false; job?.cancel() }
+    override fun onCleared() { close() }
+    suspend fun loadOnAppear() {
+        active = true
+        if (!attempted) load()
+    }
+
+    fun close() { active = false; job?.cancel()
+        if (state.value.loading) attempted = false
+        mutable.value = state.value.copy(loading = false)
+    }
     private fun checkSession() { if (!active || auth.generation.value != generation) throw CancellationException() }
     fun dismissError() { mutable.value = state.value.copy(actionError = null) }
     fun pick(kind: AssignmentWrite?) {
@@ -187,14 +196,14 @@ internal class AO3ChallengeAssignmentsState(private val slug: String, private va
             else writes.markAssignmentDefaulted(slug, write.assignment.id, generation)
             if (!active) return
             when (answer) {
-                is AO3Result.Success -> { confirmed = true; mutable.value = state.value.copy(pending = null) }
+                is AO3Result.Success -> { repository.collectionChanged(slug); confirmed = true; mutable.value = state.value.copy(pending = null) }
                 is AO3Result.Failure -> mutable.value = state.value.copy(actionError = answer.error.moderationMessage(), pending = null,
                     terminal = answer.error == AO3Error.Forbidden || answer.error == AO3Error.AuthenticationRequired)
             }
         } catch (e: CancellationException) {
             // No POST was dispatched. Never manufacture a failure prefix for an answer already received.
         } finally {
-            if (active) mutable.value = state.value.copy(busy = false)
+            if (generation == auth.generation.value) mutable.value = state.value.copy(busy = false)
             job = null
         }
         if (confirmed && active && generation == auth.generation.value) load(refresh = true)

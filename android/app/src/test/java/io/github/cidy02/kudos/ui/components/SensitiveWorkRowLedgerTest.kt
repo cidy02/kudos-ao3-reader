@@ -15,6 +15,7 @@ import io.github.cidy02.kudos.search.SearchSubjectField
 import io.github.cidy02.kudos.ui.theme.KudosTheme
 import io.github.cidy02.kudos.ui.theme.KudosThemeMode
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -103,5 +104,38 @@ class SensitiveWorkRowLedgerTest {
         compose.onNodeWithText("English  ·  1,200 words  ·  1/1").assertExists()
         // Nothing is folded away on a bookmark's card.
         compose.onAllNodesWithText("Show more").assertCountEquals(0)
+    }
+
+    @Test fun unfoldControlSitsAtTheFootOfLedgerCard() {
+        show()
+        val titleBounds = compose.onNodeWithText("Sodium Lights").fetchSemanticsNode().boundsInRoot
+        val unfoldBounds = compose.onNodeWithContentDescription("Show more").fetchSemanticsNode().boundsInRoot
+        assertTrue(
+            "Ledger card unfold control top (${unfoldBounds.top}) should be below title bottom (${titleBounds.bottom})",
+            unfoldBounds.top >= titleBounds.bottom
+        )
+    }
+
+    @Test fun unfoldControlSitsAtTheFootOfDetailedCard() {
+        compose.setContent {
+            KudosTheme(KudosThemeMode.Light) {
+                SensitiveWorkRow(
+                    id = "2", title = "Detailed Sodium Lights", author = "nine_of_wands",
+                    fandoms = listOf("Doctor Who (2005)"), summary = "A city that never sleeps with long details.",
+                    discoveryTags = listOf("Rose Tyler/Tenth Doctor"), relationships = emptyList(),
+                    warnings = listOf("No Archive Warnings Apply"), categories = listOf("F/M"),
+                    rating = "Teen And Up Audiences", isComplete = true, wordCount = 1200, chapters = "1/1",
+                    kudos = 3, language = "English", showsZeroStats = false, obscured = false,
+                    ledger = false, dateText = "09 Jul 2026",
+                    onClick = {}
+                )
+            }
+        }
+        val titleBounds = compose.onNodeWithText("Detailed Sodium Lights").fetchSemanticsNode().boundsInRoot
+        val unfoldBounds = compose.onNodeWithContentDescription("Show more").fetchSemanticsNode().boundsInRoot
+        assertTrue(
+            "Detailed card unfold control top (${unfoldBounds.top}) should be below title bottom (${titleBounds.bottom})",
+            unfoldBounds.top >= titleBounds.bottom
+        )
     }
 }

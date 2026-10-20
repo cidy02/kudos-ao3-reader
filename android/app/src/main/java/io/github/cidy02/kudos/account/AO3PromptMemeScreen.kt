@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.account
 
+import androidx.lifecycle.viewmodel.initializer
 import androidx.compose.foundation.background
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.clickable
@@ -59,11 +60,14 @@ private fun PromptMemeContent(
     val auth = repository.authRepository
     val generation by auth.generation.collectAsState()
     val authState by auth.state.collectAsState()
-    val model = remember(slug, repository, writes, generation, authState.isSignedIn, viewerIsOwner) {
-        AO3PromptMemeState(slug, repository, viewerIsOwner, writes)
-    }
+    val model: AO3PromptMemeState = androidx.lifecycle.viewmodel.compose.viewModel(
+        key = "AO3PromptMeme:$slug:$generation:${authState.isSignedIn}:$viewerIsOwner",
+        factory = androidx.lifecycle.viewmodel.viewModelFactory {
+            initializer { AO3PromptMemeState(slug, repository, viewerIsOwner, writes) }
+        }
+    )
     val state by model.state.collectAsState()
-    var filter by remember(model) { mutableStateOf(AO3PromptMemeFilter.All) }
+    var filter by androidx.compose.runtime.saveable.rememberSaveable(model) { mutableStateOf(AO3PromptMemeFilter.All) }
     val scope = rememberCoroutineScope()
     val tokens = LocalKudosTokens.current
     val palette = tokens.scopePalette
@@ -77,7 +81,7 @@ private fun PromptMemeContent(
         if (totalPages > 1) append(" on page $currentPage of $totalPages")
         if (state.closeDateText.isNotEmpty()) append(" · ${state.closeDateText}")
     }
-    LaunchedEffect(model) { model.load(readSchedule = true) }
+    LaunchedEffect(model) { model.loadOnAppear() }
     DisposableEffect(model) { onDispose { model.close() } }
     ProvidePushedShellChrome(hasSubjectHeader = true)
     MaterialTheme(colorScheme = MaterialTheme.colorScheme.copy(

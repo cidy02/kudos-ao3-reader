@@ -23,6 +23,7 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
+import io.github.cidy02.kudos.ui.components.navigationEntryState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -80,23 +81,23 @@ fun FandomWorksScreen(
     isTag: Boolean = false,
     includedFandoms: List<String> = listOf(fandomName)
 ) {
-    var state by remember(fandomName) { mutableStateOf<FandomWorksState>(FandomWorksState.Loading) }
+    var state by navigationEntryState<FandomWorksState>("tag:$fandomName:state") { FandomWorksState.Loading }
     // The *browse* baseline, not a bare AO3SearchFilters(): AO3's tag listing has no
     // relevance ordering, so RELEVANCE would send no sort_column, AO3 would sort by
     // revised_at, and the sheet would sit there claiming "Best Match".
-    var filters by remember { mutableStateOf(AO3BrowseRepository.browseBaseline()) }
+    var filters by navigationEntryState("tag:$fandomName:filters") { AO3BrowseRepository.browseBaseline() }
     // The filters the page on screen was asked for. The sheet edits `filters` itself, so closing
     // it without Apply left edits that the next page then sent: page 7 of a filter nobody
     // applied (audit A20-3, the same on iOS).
-    var loadedFilters by remember { mutableStateOf(filters) }
+    var loadedFilters by navigationEntryState("tag:$fandomName:loadedFilters") { filters }
     var showFilterSheet by remember { mutableStateOf(false) }
     var showMenu by remember { mutableStateOf(false) }
-    var expandAllCards by remember { mutableStateOf(false) }
+    var expandAllCards by navigationEntryState("tag:$fandomName:expandAllCards") { false }
     val selection = rememberRemoteWorkSelection()
     
     // Guards a fast Previous/Next double-tap from letting the first (older) page's
     // response land after the second (newer) one and overwrite it.
-    var loadGeneration by remember(fandomName) { mutableIntStateOf(0) }
+    var loadGeneration by navigationEntryState("tag:$fandomName:loadGeneration") { 0 }
     val scope = rememberCoroutineScope()
     // The badge on a result you already have, and the filter's tag suggestions, are drawn from
     // the Library: not from a work Hide Mature hides (audit A38; iOS leaves it out of the pairing).
@@ -150,7 +151,7 @@ fun FandomWorksScreen(
         if (generation == loadGeneration) state = result
     }
 
-    LaunchedEffect(fandomName) { load() }
+    LaunchedEffect(fandomName) { if (state == FandomWorksState.Loading) load() }
 
     ProvidePushedShellChrome(
         hasSubjectHeader = true,

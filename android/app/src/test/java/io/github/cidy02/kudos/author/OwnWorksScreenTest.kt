@@ -12,6 +12,8 @@ import io.github.cidy02.kudos.app.LocalPushedShellChrome
 import io.github.cidy02.kudos.app.PushedShellChrome
 import io.github.cidy02.kudos.network.ao3.*
 import io.github.cidy02.kudos.network.ao3.author.AO3AuthorRepository
+import io.github.cidy02.kudos.network.ao3.author.AO3AuthorSeriesSummary
+import io.github.cidy02.kudos.network.ao3.author.AO3UserStats
 import io.github.cidy02.kudos.network.ao3.writing.AO3WorkFormRepository
 import io.github.cidy02.kudos.network.ao3.writing.workFixture
 import io.github.cidy02.kudos.network.ao3.writes.*
@@ -227,5 +229,41 @@ class OwnWorksScreenTest {
                 layouts.forEach { assertFalse(it.didOverflowHeight); assertFalse(it.isLineEllipsized(it.lineCount - 1)) }
             }
         }
+    }
+
+    @Test fun ownWorksShapeShowsTotalsLineAndHidesFourProfileTabs() {
+        show("AO3_Reader", signedIn = true)
+        idleRequests(3) // the dashboard, the works, and the account's totals
+        // Header block verifies "AO3 Account" kicker and "Works" title
+        compose.onNodeWithText("AO3 Account").assertExists()
+        compose.onNodeWithText("Works").assertExists()
+        // Subtitle shows the writer's totals line (words and kudos)
+        compose.onNode(hasText("works", substring = true).and(hasText("words", substring = true))).assertExists()
+        // The four profile tabs (Works, Series, Bookmarks, About) segmented control is hidden on own works
+        compose.onAllNodesWithText("Bookmarks").assertCountEquals(0)
+        compose.onAllNodesWithText("About").assertCountEquals(0)
+    }
+
+    @Test fun ownWorksTotalsLineMatchesExpectedFormatting() {
+        val stats = AO3UserStats(wordCount = 248400, kudos = 3812)
+        val formatted = ownWorksLine("AO3_Reader", 12, stats)
+        assertEquals("12 works · 248,400 words · 3,812 kudos", formatted)
+        // With count alone
+        assertEquals("1 work · AO3_Reader", ownWorksLine("AO3_Reader", 1, null))
+        // With no count
+        assertEquals("AO3_Reader", ownWorksLine("AO3_Reader", null, stats))
+    }
+
+    @Test fun ownSeriesTallyPartsSumsExpectedTotals() {
+        val series1 = AO3AuthorSeriesSummary(
+            id = 1L, title = "First Series", creators = listOf("AO3_Reader"), fandoms = listOf("Fandom"),
+            summary = "", words = 5000, workCount = 2, dateUpdated = "2026-01-01", isComplete = true, url = ""
+        )
+        val series2 = AO3AuthorSeriesSummary(
+            id = 2L, title = "Second Series", creators = listOf("AO3_Reader"), fandoms = listOf("Fandom"),
+            summary = "", words = 7000, workCount = 3, dateUpdated = "2026-01-02", isComplete = true, url = ""
+        )
+        val tally = seriesTallyParts(listOf(series1, series2), isPartial = false)
+        assertEquals(listOf("5 works", "12,000 words"), tally)
     }
 }

@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.account
 
+import androidx.lifecycle.viewmodel.initializer
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -53,9 +54,12 @@ fun AO3CollectionModerationScreen(
     val auth = repository.authRepository
     val generation by auth.generation.collectAsState()
     val authState by auth.state.collectAsState()
-    val model = remember(slug, generation, authState.isSignedIn, viewerIsOwner) {
-        AO3CollectionModerationState(slug, viewerIsOwner, repository, writes)
-    }
+    val model: AO3CollectionModerationState = androidx.lifecycle.viewmodel.compose.viewModel(
+        key = "AO3CollectionModeration:$slug:$generation:${authState.isSignedIn}:$viewerIsOwner",
+        factory = androidx.lifecycle.viewmodel.viewModelFactory {
+            initializer { AO3CollectionModerationState(slug, viewerIsOwner, repository, writes) }
+        }
+    )
     val state by model.state.collectAsState()
     val scope = rememberCoroutineScope()
     val tokens = LocalKudosTokens.current
@@ -63,7 +67,8 @@ fun AO3CollectionModerationScreen(
     val palette = SubjectPalette.fromHue(HomeFacts.workHue(emptyList(), effectiveTitle), tokens.theme)
     val errorColor = SubjectPalette.fromHue(0.0, tokens.theme).accent
     val large = isAccessibilityFontScale()
-    LaunchedEffect(model) { model.load() }
+    LaunchedEffect(model) { model.loadOnAppear() }
+    DisposableEffect(model) { onDispose { model.close() } }
     ProvidePushedShellChrome(hasSubjectHeader = true)
 
     MaterialTheme(colorScheme = MaterialTheme.colorScheme.copy(
