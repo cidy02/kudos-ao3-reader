@@ -2419,3 +2419,24 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   screen's copy (loaded before a visit to the reader) after AO3 answered; it reads the stored
   work first now. Checked and fine: the reader (every write reads first), the repository's
   setters (by id) and the queue code (reads inside its transactions).
+- **2026-10-20 · The owner answered four questions (§11: 19, 24/25, 27, 29/30), all "match iPhone"
+  or the recommended fix.** Asked in chat at 12:50. (Q29/Q30) Android's reader follows iOS:
+  Highlight marks the selection at once in the last colour used (the same colour again on the
+  same passage takes it off, another colour recolours it: iOS `createAnnotationFromSelection`,
+  `ReadiumReaderView.swift`), Add Note marks it and opens the full note editor, and
+  "Customize Theme…" opens iOS's one reading-text sheet (`Features/Reader/CustomizeThemeView.swift`);
+  Android's chrome stays Material (owner, 2026-10-04). Brief 3fs. (Q24/Q25) Own Works and Series
+  as the iPhone's list with fandom chips, the unfold control at a card's foot, History,
+  Bookmarks and the works lists opening on Compact; Android's own-works totals line stays (the
+  owner's rule: no information lost). Brief 3fu. (Q19) On Dark and OLED, accent-coloured
+  text and icons are lightened to 4.5:1 against the page on both apps; fills keep the exact
+  accent (T-348 stands for controls). (Q27) Reading Insights' words per hour counts what was
+  read in each sitting on both apps. Reverse: each brief's commit.
+- **2026-10-20 · Screens without a mockup get a best-effort redesign (owner, 2026-10-20).**
+  Each is written up in `REDESIGNED-WITHOUT-MOCKUP.md`: what it was, what it is, the iOS screen
+  it matches and what was kept. Where iOS already restyled the screen Android follows iOS.
+- **2026-10-20 · Read Aloud's pronunciation corrections are a gap, not a decision.** iOS keeps a
+  word → respelling list (`KokoroPronunciationStore`, Settings and "Fix Pronunciation" in the
+  selection menu, backed up as the manifest's `pronunciations`); Android carried the key through
+  backups and sync untouched but had no store, no editor and no menu item. Brief 3ft ports it,
+  reading and writing the same key.
