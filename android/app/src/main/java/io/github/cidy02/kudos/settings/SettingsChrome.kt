@@ -347,7 +347,9 @@ fun SubjectSliderRow(
     steps: Int,
     formatValue: (Float) -> String,
     onValueChangeFinished: (Float) -> Unit,
-    accessibilityLabel: String = label
+    accessibilityLabel: String = label,
+    enabled: Boolean = true,
+    onValueChange: ((Float) -> Unit)? = null
 ) {
     val tokens = LocalKudosTokens.current
     var sliderValue by remember(value) { mutableStateOf(value) }
@@ -358,7 +360,8 @@ fun SubjectSliderRow(
         }
         Slider(
             value = sliderValue,
-            onValueChange = { sliderValue = it },
+            onValueChange = { sliderValue = it; onValueChange?.invoke(it) },
+            enabled = enabled,
             onValueChangeFinished = { onValueChangeFinished(sliderValue) },
             valueRange = valueRange,
             steps = steps.coerceAtLeast(0),

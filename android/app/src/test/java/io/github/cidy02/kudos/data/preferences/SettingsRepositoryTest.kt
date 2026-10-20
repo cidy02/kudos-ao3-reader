@@ -74,6 +74,41 @@ class SettingsRepositoryTest {
         assertEquals(store.defaults, repository.accountShortcuts.first())
     }
 
+    @Test fun resetThemeRestoresIosDefaultsAndPreservesTextSizeThemeAndOtherSettings() = runBlocking {
+        repository.updateReaderFontPt(27.0)
+        repository.updateReaderMode(ReaderMode.Paged)
+        repository.updateReaderTheme(ReaderThemeSetting.Sepia)
+        repository.updateAppTheme(AppThemeSetting.Dark)
+        repository.updateAccentColor("#123456")
+        repository.updateReaderCustomize(true)
+        repository.updateReaderBoldText(true)
+        repository.updateReaderFontId("georgia")
+        repository.updateReaderLineHeight(2.4)
+        repository.updateReaderLetterSpacing(0.12)
+        repository.updateReaderWordSpacing(0.6)
+        repository.updateReaderMargin(64.0)
+        repository.updateReaderJustify(true)
+        val before = repository.snapshot()
+        repository.resetReaderTheme()
+        val after = SettingsRepository(dataStore).snapshot()
+        // CustomizeThemeView.reset, ReaderStyle.swift:236–252: 1.65 / 28 / zero spacing.
+        assertEquals(before.copy(reader = before.reader.copy(
+            readerCustomize = false, readerBoldText = false, readerFontId = "system",
+            readerLineHeight = 1.65, readerLetterSpacing = 0.0, readerWordSpacing = 0.0,
+            readerMargin = 28.0, readerJustify = false)), after)
+    }
+
+    @Test fun themeSwatchesRespectTheAppReaderLink() = runBlocking {
+        repository.updateEffectiveReaderTheme(ReaderThemeSetting.Oled)
+        assertEquals(AppThemeSetting.Oled, repository.snapshot().app.appTheme)
+        assertTrue(repository.snapshot().reader.matchAppReaderTheme)
+        repository.updateMatchAppReaderTheme(false)
+        repository.updateEffectiveReaderTheme(ReaderThemeSetting.Sepia)
+        assertEquals(AppThemeSetting.Oled, repository.snapshot().app.appTheme)
+        assertEquals(ReaderThemeSetting.Sepia, repository.snapshot().reader.readerTheme)
+        assertFalse(repository.snapshot().reader.matchAppReaderTheme)
+    }
+
     @After
     fun tearDown() {
         scope.cancel()

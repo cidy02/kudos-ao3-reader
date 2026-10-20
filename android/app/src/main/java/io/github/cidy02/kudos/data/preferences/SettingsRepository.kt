@@ -259,6 +259,31 @@ class SettingsRepository(
         dataStore.edit { it[Keys.ReaderTheme] = theme.storageValue }
     }
 
+    /** iOS ThemeManager.readerTheme: swatches write to the app too while linked. */
+    suspend fun updateEffectiveReaderTheme(theme: ReaderThemeSetting) {
+        dataStore.edit { prefs ->
+            if (prefs[Keys.MatchAppReaderTheme] ?: KudosSettings.Defaults.reader.matchAppReaderTheme) {
+                prefs[Keys.AppTheme] = theme.storageValue
+            } else {
+                prefs[Keys.ReaderTheme] = theme.storageValue
+            }
+        }
+    }
+
+    /** iOS CustomizeThemeView.reset: text size, selected theme and reading mode stay put. */
+    suspend fun resetReaderTheme() {
+        dataStore.edit { prefs ->
+            prefs[Keys.ReaderCustomize] = false
+            prefs[Keys.ReaderBoldText] = false
+            prefs[Keys.ReaderFontId] = "system"
+            prefs[Keys.ReaderLineHeight] = 1.65
+            prefs[Keys.ReaderLetterSpacing] = 0.0
+            prefs[Keys.ReaderWordSpacing] = 0.0
+            prefs[Keys.ReaderMargin] = 28.0
+            prefs[Keys.ReaderJustify] = false
+        }
+    }
+
     /** Persist reader font size in points (settings-contract field). */
     suspend fun updateReaderFontPt(fontPt: Double) {
         dataStore.edit { it[Keys.ReaderFontPt] = fontPt }
@@ -266,15 +291,14 @@ class SettingsRepository(
 
     /**
      * When true, [ReaderSettingsMapper] prefers app theme over [updateReaderTheme].
-     * Display-sheet theme picks must set this false so the choice survives reopen.
+     * Theme picks use updateEffectiveReaderTheme so linked app/reader themes stay linked.
      */
     suspend fun updateMatchAppReaderTheme(match: Boolean) {
         dataStore.edit { it[Keys.MatchAppReaderTheme] = match }
     }
 
     /**
-     * When true, reader applies user style overrides (`publisherStyles = false`).
-     * Display-sheet font/theme changes set this true.
+     * Gates spacing, margins and justification. Font, bold and text size always apply.
      */
     suspend fun updateReaderCustomize(customize: Boolean) {
         dataStore.edit { it[Keys.ReaderCustomize] = customize }

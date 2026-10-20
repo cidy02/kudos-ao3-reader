@@ -59,7 +59,7 @@ fun SettingsScreen(
                 fontName = io.github.cidy02.kudos.core.model.ReaderFontCatalog.name(settings.reader.readerFontId, importedFonts))
         }
         composable("appearance") {
-            SettingsAppearancePage(repository, settings)
+            SettingsAppearancePage(repository, settings, customFontRepository)
         }
         composable("font") {
             SettingsFontPage(repository, settings, customFontRepository)

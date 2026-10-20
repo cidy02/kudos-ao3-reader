@@ -20,7 +20,7 @@ class ReaderSettingsMapperTest {
         assertTrue(prefs.scroll)
         assertEquals(1, prefs.columnCount)
         assertEquals(100, prefs.fontSizePercent)
-        assertTrue(prefs.publisherStyles) // customize defaults off -> keep publisher styles
+        assertFalse(prefs.publisherStyles) // iOS applies comfortable defaults with Customize off
         assertFalse(prefs.justify)
     }
 
@@ -82,6 +82,30 @@ class ReaderSettingsMapperTest {
         assertTrue(prefs.justify)
     }
 
+    @Test fun customizeOffResolvesLayoutOnlyAndRetainsTheSavedChoices() {
+        val saved = ReaderSettings(readerCustomize = false, readerBoldText = true, readerFontId = "georgia",
+            readerFontPt = 27.0, readerLineHeight = 2.4, readerLetterSpacing = 0.12,
+            readerWordSpacing = 0.6, readerMargin = 64.0, readerJustify = true)
+        val off = mapper.map(saved, AppSettings())
+        assertEquals(1.65, off.lineHeight, 0.0)
+        assertEquals(0.0, off.letterSpacingEm, 0.0)
+        assertEquals(0.0, off.wordSpacingEm, 0.0)
+        assertEquals(1.0, off.pageMarginsFactor, 0.0)
+        assertFalse(off.justify)
+        assertTrue(off.bold)
+        assertEquals("georgia", off.fontFamily)
+        assertEquals(150, off.fontSizePercent)
+        assertFalse(off.publisherStyles)
+        val on = mapper.map(saved.copy(readerCustomize = true), AppSettings())
+        assertEquals(2.4, on.lineHeight, 0.0)
+        assertEquals(0.12, on.letterSpacingEm, 0.0)
+        assertEquals(0.6, on.wordSpacingEm, 0.0)
+        assertEquals(64.0 / 28.0, on.pageMarginsFactor, 0.0)
+        assertTrue(on.justify)
+        assertEquals(8.0 / 28.0,
+            mapper.map(saved.copy(readerCustomize = true, readerMargin = 8.0), AppSettings()).pageMarginsFactor, 0.0)
+    }
+
     @Test
     fun customFontMappedToFontFamilyAndDeclarations() {
         val customFont = io.github.cidy02.kudos.core.model.CustomFont(
@@ -99,8 +123,8 @@ class ReaderSettingsMapperTest {
         )
 
         assertEquals("custom:abc-123.ttf", prefs.fontFamily)
-        assertEquals(1, prefs.fontDeclarations.size)
-        val decl = prefs.fontDeclarations.first()
+        assertEquals(1, prefs.fontDeclarations.count { it.fontPath != null })
+        val decl = prefs.fontDeclarations.single { it.fontPath != null }
         assertEquals("custom:abc-123.ttf", decl.fontFamily)
         assertEquals("/data/user/0/app/files/fonts/abc-123.ttf", decl.fontPath)
         assertEquals(listOf("serif"), decl.alternates)
@@ -119,30 +143,34 @@ class ReaderSettingsMapperTest {
         )
 
         assertEquals("custom:xyz-789.otf", prefs.fontFamily)
-        assertEquals(1, prefs.fontDeclarations.size)
-        val decl = prefs.fontDeclarations.first()
+        assertEquals(1, prefs.fontDeclarations.count { it.fontPath != null })
+        val decl = prefs.fontDeclarations.single { it.fontPath != null }
         assertEquals("custom:xyz-789.otf", decl.fontFamily)
         assertEquals("/data/user/0/app/files/fonts/xyz-789.otf", decl.fontPath)
     }
 
     // iOS builtInFontsKeepFallbacksAndImportedFontsInjectFontFace.
     @Test fun builtInFontsKeepGenericFallbacksWithoutRequiringAFile() {
-        val serif = mapper.map(ReaderSettings(readerFontId = "nyserif"), AppSettings()).fontDeclarations.single()
+        val serif = mapper.map(ReaderSettings(readerFontId = "nyserif"), AppSettings()).fontDeclarations.single { it.fontFamily == "nyserif" }
         assertEquals(listOf("New York", "ui-serif", "Georgia", "serif"), serif.alternates)
         assertEquals(null, serif.fontPath)
-        val mono = mapper.map(ReaderSettings(readerFontId = "menlo"), AppSettings()).fontDeclarations.single()
+        val mono = mapper.map(ReaderSettings(readerFontId = "menlo"), AppSettings()).fontDeclarations.single { it.fontFamily == "menlo" }
         assertEquals(listOf("Menlo", "monospace"), mono.alternates)
     }
 
     @Test
-    fun systemFontProducesNullFontFamilyAndEmptyDeclarations() {
+    fun fontDeclarationsStayStableAcrossEveryBuiltInChoice() {
         val prefs = mapper.map(
             reader = ReaderSettings(readerFontId = "system"),
             app = AppSettings()
         )
 
         assertEquals(null, prefs.fontFamily)
-        assertTrue(prefs.fontDeclarations.isEmpty())
+        assertTrue(prefs.fontDeclarations.isNotEmpty())
+        io.github.cidy02.kudos.core.model.ReaderFontCatalog.builtIns.forEach { option ->
+            assertEquals(prefs.fontDeclarations,
+                mapper.map(ReaderSettings(readerFontId = option.id), AppSettings()).fontDeclarations)
+        }
     }
 }
 

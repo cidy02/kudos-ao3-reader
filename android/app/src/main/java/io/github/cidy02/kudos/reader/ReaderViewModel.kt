@@ -6,12 +6,12 @@ import kotlinx.coroutines.CoroutineStart
 import android.content.Context
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.distinctUntilChanged
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
-import io.github.cidy02.kudos.core.model.ReadingAnnotation
 import io.github.cidy02.kudos.core.model.ReaderMode
 import io.github.cidy02.kudos.data.preferences.SettingsRepository
 import io.github.cidy02.kudos.network.ao3.AO3Result
@@ -70,6 +70,9 @@ class ReaderViewModel(
     private var spineCountForEof = 0
     private var isScrubbing = false
     private var sessionLifecycleJob: Job? = null
+    private var settingsJob: Job? = null
+
+    internal val readerSettingsRepository: SettingsRepository get() = settingsRepository
 
     /** iOS KeepScreenAwakeModifier: the screen stays lit while a book is open, if asked. */
     val keepScreenAwake: kotlinx.coroutines.flow.StateFlow<Boolean> = settingsRepository.settings
@@ -90,6 +93,7 @@ class ReaderViewModel(
     }
 
     fun load() {
+        settingsJob?.cancel()
         _state.value = ReaderUiState.Loading
         viewModelScope.launch {
             _state.value = when (val result = repository.open(workId)) {
@@ -105,6 +109,16 @@ class ReaderViewModel(
             }
             if (_state.value is ReaderUiState.Reading) {
                 observeAnnotations()
+                settingsJob?.cancel()
+                settingsJob = viewModelScope.launch {
+                    settingsRepository.settings.distinctUntilChanged().collect { settings ->
+                        val mapped = repository.preferencesFor(settings)
+                        updatePreferences { current -> mapped.copy(
+                            speechRate = current.speechRate, speechPitch = current.speechPitch,
+                            speechVoiceIdentifier = current.speechVoiceIdentifier
+                        ) }
+                    }
+                }
             }
         }
     }
@@ -262,50 +276,38 @@ class ReaderViewModel(
         }
     }
 
-    fun toggleHighlight(locatorString: String, selectedText: String, color: String,
-                        progression: Double, spineIndex: Int) {
+    fun annotateSelection(
+        locatorString: String, selectedText: String, color: String,
+        progression: Double, spineIndex: Int, withNote: Boolean
+    ) {
         val stored = ReaderLocatorCodec.forStorage(locatorString) ?: return
         viewModelScope.launch {
             annotationEditMutex.withLock {
-                annotationRepository.toggleHighlight(workId, stored, selectedText, color, progression, spineIndex)
+                val result = annotationRepository.annotateSelection(
+                    workId, stored, selectedText, color, progression, spineIndex, withNote
+                )
+                updateReading { reading ->
+                    val annotation = result.annotation
+                    reading.copy(
+                        // Publish the saved row now; don't wait for Room before opening its editor.
+                        highlights = if (annotation == null) reading.highlights else
+                            reading.highlights.filterNot { it.id == annotation.id } + annotation,
+                        editingAnnotationId = annotation?.id?.takeIf { withNote },
+                        colorBarAnnotationId = annotation?.id?.takeIf { !withNote && result.created }
+                    )
+                }
             }
         }
     }
 
-    fun addHighlight(
-        locatorString: String,
-        selectedText: String,
-        color: String,
-        note: String = "",
-        progression: Double,
-        spineIndex: Int,
-        chapterTitle: String = "",
-        asNote: Boolean = false
-    ) {
-        // A selection hands over a bare Readium locator; a bookmark already hands over the
-        // envelope. Stored bare, the highlight could not be drawn or gone to.
-        val stored = ReaderLocatorCodec.forStorage(locatorString) ?: return
-        viewModelScope.launch {
-            annotationEditMutex.withLock {
-                annotationRepository.addOrRecolorHighlight(
-                    workId = workId,
-                    locatorString = stored,
-                    selectedText = selectedText,
-                    color = color,
-                    note = note,
-                    progression = progression,
-                    spineIndex = spineIndex,
-                    chapterTitle = chapterTitle,
-                    kind = if (asNote) "note" else "highlight"
-                )
-            }
-        }
+    fun dismissHighlightColorBar() {
+        updateReading { it.copy(colorBarAnnotationId = null) }
     }
 
     /** Page decorations and Contents share the same editor; bookmark taps only navigate. */
     fun openHighlight(id: String) {
         updateReading { reading ->
-            if (reading.highlights.any { it.id == id }) reading.copy(editingAnnotationId = id)
+            if (reading.highlights.any { it.id == id }) reading.copy(editingAnnotationId = id, colorBarAnnotationId = null)
             else reading
         }
     }
@@ -323,7 +325,10 @@ class ReaderViewModel(
     }
 
     fun deleteAnnotation(id: String) {
-        updateReading { if (it.editingAnnotationId == id) it.copy(editingAnnotationId = null) else it }
+        updateReading { it.copy(
+            editingAnnotationId = it.editingAnnotationId?.takeUnless { editor -> editor == id },
+            colorBarAnnotationId = it.colorBarAnnotationId?.takeUnless { bar -> bar == id }
+        ) }
         viewModelScope.launch {
             annotationEditMutex.withLock { annotationRepository.deleteAnnotation(id) }
         }
@@ -394,7 +399,6 @@ class ReaderViewModel(
             settingsRepository.updateReaderFontPt(
                 ReaderSettingsMapper.fontPtFromPercent(clamped)
             )
-            settingsRepository.updateReaderCustomize(true)
         }
     }
 
@@ -403,11 +407,7 @@ class ReaderViewModel(
             prefs.copy(theme = theme, publisherStyles = false)
         }
         viewModelScope.launch {
-            settingsRepository.updateReaderTheme(
-                ReaderSettingsMapper.toReaderThemeSetting(theme)
-            )
-            settingsRepository.updateMatchAppReaderTheme(false)
-            settingsRepository.updateReaderCustomize(true)
+            settingsRepository.updateEffectiveReaderTheme(ReaderSettingsMapper.toReaderThemeSetting(theme))
         }
     }
 
@@ -419,7 +419,6 @@ class ReaderViewModel(
         updatePreferences { it.copy(scroll = scroll, publisherStyles = false) }
         viewModelScope.launch {
             settingsRepository.updateReaderMode(if (scroll) ReaderMode.Scroll else ReaderMode.Paged)
-            settingsRepository.updateReaderCustomize(true)
         }
     }
 
@@ -430,7 +429,6 @@ class ReaderViewModel(
         viewModelScope.launch {
             settingsRepository.updateReaderMode(ReaderMode.Paged)
             settingsRepository.updateReaderTwoPage(twoPage)
-            settingsRepository.updateReaderCustomize(true)
         }
     }
 
@@ -438,7 +436,6 @@ class ReaderViewModel(
         updatePreferences { it.copy(bold = bold, publisherStyles = false) }
         viewModelScope.launch {
             settingsRepository.updateReaderBoldText(bold)
-            settingsRepository.updateReaderCustomize(true)
         }
     }
 
@@ -480,7 +477,6 @@ class ReaderViewModel(
         updatePreferences { it.copy(fontFamily = family, publisherStyles = false) }
         viewModelScope.launch {
             settingsRepository.updateReaderFontId(family ?: "system")
-            settingsRepository.updateReaderCustomize(true)
         }
     }
 

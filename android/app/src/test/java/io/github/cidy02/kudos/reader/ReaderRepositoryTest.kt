@@ -293,8 +293,8 @@ class ReaderRepositoryTest {
 
         val result = customRepository.open(WORK_UUID) as ReaderOpenResult.Success
         assertEquals("custom:opendyslexic.ttf", result.preferences.fontFamily)
-        assertEquals(1, result.preferences.fontDeclarations.size)
-        assertEquals("/tmp/fonts/opendyslexic.ttf", result.preferences.fontDeclarations.first().fontPath)
+        assertEquals(1, result.preferences.fontDeclarations.count { it.fontPath != null })
+        assertEquals("/tmp/fonts/opendyslexic.ttf", result.preferences.fontDeclarations.single { it.fontPath != null }.fontPath)
     }
 
     @Test

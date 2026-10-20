@@ -13,7 +13,7 @@ import kotlin.math.roundToInt
  * [ReaderPreferences]. Documented fallbacks:
  * - `appTheme = System` resolves to Light (Readium has no "follow system" EPUB theme here).
  * - `readerFontPt` becomes a percentage of an 18pt base.
- * - `readerMargin` becomes a multiplier of a 28pt base, clamped to [0.5, 2.0].
+ * - `readerMargin` becomes a multiplier of a 28pt base, covering the iOS 8–64pt range.
  * - Custom font ids other than system/default are passed through by name and registered
  *   with disk font paths via [CustomFontDeclaration]s for Readium font loading.
  */
@@ -27,19 +27,21 @@ class ReaderSettingsMapper(private val baseFontPt: Double = DEFAULT_BASE_FONT_PT
     ): ReaderPreferences {
         val scroll = reader.readerMode == ReaderMode.Scroll
         val fontDeclarations = buildFontDeclarations(reader.readerFontId, customFonts, fontPathResolver)
+        val layout = if (reader.readerCustomize) reader else ReaderSettings()
         return ReaderPreferences(
             theme = resolveTheme(reader, app),
             scroll = scroll,
             columnCount = if (!scroll && reader.readerTwoPage) 2 else 1,
             fontSizePercent = fontSizePercent(reader.readerFontPt),
-            lineHeight = reader.readerLineHeight.coerceIn(MIN_LINE_HEIGHT, MAX_LINE_HEIGHT),
-            letterSpacingEm = reader.readerLetterSpacing.coerceAtLeast(0.0),
-            wordSpacingEm = reader.readerWordSpacing.coerceAtLeast(0.0),
-            pageMarginsFactor = marginsFactor(reader.readerMargin),
-            justify = reader.readerJustify,
+            lineHeight = layout.readerLineHeight.coerceIn(MIN_LINE_HEIGHT, MAX_LINE_HEIGHT),
+            letterSpacingEm = layout.readerLetterSpacing.coerceAtLeast(0.0),
+            wordSpacingEm = layout.readerWordSpacing.coerceAtLeast(0.0),
+            pageMarginsFactor = marginsFactor(layout.readerMargin),
+            justify = layout.readerJustify,
             bold = reader.readerBoldText,
             fontFamily = fontFamily(reader.readerFontId, fontDeclarations),
-            publisherStyles = !reader.readerCustomize,
+            // iOS always applies font, bold, text size and its comfortable layout defaults.
+            publisherStyles = false,
             fontDeclarations = fontDeclarations
         )
     }
@@ -89,19 +91,20 @@ class ReaderSettingsMapper(private val baseFontPt: Double = DEFAULT_BASE_FONT_PT
         customFonts: List<CustomFont>,
         fontPathResolver: ((String) -> String?)?
     ): List<CustomFontDeclaration> {
-        val builtIn = when (selectedFontId.lowercase()) {
-            "nyserif" -> CustomFontDeclaration("nyserif", alternates = listOf("New York", "ui-serif", "Georgia", "serif"))
-            "georgia" -> CustomFontDeclaration("georgia", alternates = listOf("Georgia", "serif"))
-            "palatino" -> CustomFontDeclaration("palatino", alternates = listOf("Palatino", "serif"))
-            "times" -> CustomFontDeclaration("times", alternates = listOf("Times New Roman", "serif"))
-            "helvetica" -> CustomFontDeclaration("helvetica", alternates = listOf("Helvetica Neue", "sans-serif"))
-            "avenir" -> CustomFontDeclaration("avenir", alternates = listOf("Avenir", "sans-serif"))
-            "menlo" -> CustomFontDeclaration("menlo", alternates = listOf("Menlo", "monospace"))
-            else -> null
-        }
-        if (fontPathResolver == null) return listOfNotNull(builtIn)
-        val declarations = mutableListOf<CustomFontDeclaration>()
-        builtIn?.let(declarations::add)
+        // Stable declarations keep a font pick from rebuilding the navigator at the old restore locator.
+        val declarations = io.github.cidy02.kudos.core.model.ReaderFontCatalog.builtIns.mapNotNull { option ->
+            when (option.id) {
+                "nyserif" -> CustomFontDeclaration("nyserif", alternates = listOf("New York", "ui-serif", "Georgia", "serif"))
+                "georgia" -> CustomFontDeclaration("georgia", alternates = listOf("Georgia", "serif"))
+                "palatino" -> CustomFontDeclaration("palatino", alternates = listOf("Palatino", "serif"))
+                "times" -> CustomFontDeclaration("times", alternates = listOf("Times New Roman", "serif"))
+                "helvetica" -> CustomFontDeclaration("helvetica", alternates = listOf("Helvetica Neue", "sans-serif"))
+                "avenir" -> CustomFontDeclaration("avenir", alternates = listOf("Avenir", "sans-serif"))
+                "menlo" -> CustomFontDeclaration("menlo", alternates = listOf("Menlo", "monospace"))
+                else -> null
+            }
+        }.toMutableList()
+        if (fontPathResolver == null) return declarations
         val registeredFontIds = mutableSetOf<String>()
 
         for (font in customFonts) {
@@ -137,8 +140,8 @@ class ReaderSettingsMapper(private val baseFontPt: Double = DEFAULT_BASE_FONT_PT
         const val DEFAULT_MARGIN_PT = 28.0
         const val MIN_FONT_PERCENT = 50
         const val MAX_FONT_PERCENT = 250
-        const val MIN_MARGIN_FACTOR = 0.5
-        const val MAX_MARGIN_FACTOR = 2.0
+        const val MIN_MARGIN_FACTOR = 8.0 / DEFAULT_MARGIN_PT
+        const val MAX_MARGIN_FACTOR = 64.0 / DEFAULT_MARGIN_PT
         const val MIN_LINE_HEIGHT = 1.0
         const val MAX_LINE_HEIGHT = 3.0
 

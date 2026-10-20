@@ -120,35 +120,7 @@ internal fun ReaderNoteEditor(
             )
         }
         SettingsSection(footnote = null, label = "Colour") {
-            Row(
-                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(9.dp),
-                horizontalArrangement = Arrangement.spacedBy(2.dp)
-            ) {
-                ReadingAnnotationColor.entries.forEach { option ->
-                    val selected = color == option
-                    Box(
-                        Modifier.size(44.dp)
-                            .selectable(selected = selected, role = Role.RadioButton,
-                                onClick = { onColorChange(option.raw) })
-                            .semantics { contentDescription = option.displayName },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Box(
-                            Modifier.size(32.dp)
-                                .then(if (option == ReadingAnnotationColor.UNDERLINE) Modifier
-                                    else Modifier.background(option.color, CircleShape))
-                                .border(if (selected) 3.dp else 1.dp,
-                                    if (selected) tokens.accent else tokens.primaryInk.copy(alpha = 0.12f),
-                                    CircleShape),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            if (option == ReadingAnnotationColor.UNDERLINE) {
-                                Box(Modifier.size(width = 20.dp, height = 3.dp).background(option.color))
-                            }
-                        }
-                    }
-                }
-            }
+            ReadingAnnotationColorPicker(color, onColorChange)
         }
         SettingsSection(footnote = null) {
             // Explicit app red, not the ambient Material error colour over a reader page.
@@ -159,4 +131,39 @@ internal fun ReaderNoteEditor(
         }
     }
     LaunchedEffect(annotation.id) { focus.requestFocus() }
+}
+
+/** Shared by the immediate Highlight refinement bar and the full note editor. */
+@Composable
+internal fun ReadingAnnotationColorPicker(selectedColor: ReadingAnnotationColor, onColorChange: (String) -> Unit) {
+    val tokens = LocalKudosTokens.current
+    Row(
+        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(9.dp),
+        horizontalArrangement = Arrangement.spacedBy(2.dp)
+    ) {
+        ReadingAnnotationColor.entries.forEach { option ->
+            val selected = selectedColor == option
+            Box(
+                Modifier.size(44.dp)
+                    .selectable(selected = selected, role = Role.RadioButton,
+                        onClick = { onColorChange(option.raw) })
+                    .semantics { contentDescription = option.displayName },
+                contentAlignment = Alignment.Center
+            ) {
+                Box(
+                    Modifier.size(32.dp)
+                        .then(if (option == ReadingAnnotationColor.UNDERLINE) Modifier
+                            else Modifier.background(option.color, CircleShape))
+                        .border(if (selected) 3.dp else 1.dp,
+                            if (selected) tokens.accent else tokens.primaryInk.copy(alpha = 0.12f),
+                            CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (option == ReadingAnnotationColor.UNDERLINE) {
+                        Box(Modifier.size(width = 20.dp, height = 3.dp).background(option.color))
+                    }
+                }
+            }
+        }
+    }
 }
