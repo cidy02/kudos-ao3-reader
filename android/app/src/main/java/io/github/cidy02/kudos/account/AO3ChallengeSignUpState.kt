@@ -27,6 +27,8 @@ internal class AO3ChallengeSignUpState(private val slug: String, private val id:
     val state = mutable.asStateFlow()
     private var active = true
     private var attempted = false
+    /** The form as AO3 last served it: a refresh replaces an unedited form (A64 F02). */
+    private var loadedForm: AO3ChallengeSignUpForm? = null
     private var loadJob: Job? = null
     private var saveJob: Job? = null
     private var withdrawJob: Job? = null
@@ -47,10 +49,20 @@ internal class AO3ChallengeSignUpState(private val slug: String, private val id:
             currentCoroutineContext().ensureActive()
             if (!ownsSession()) return
             mutable.value = when (result) {
-                is AO3Result.Success -> state.value.copy(form = state.value.form ?: result.value.withMinimumPrompts(), loading = false)
+                // iOS replaces the form with what AO3 serves on every read, a pull included
+                // (`ChallengeSignUpView.loadSignUp`). Android kept the first form for good, so a
+                // clean screen never showed a change made on AO3 (A64 F02). Edits the reader has
+                // not saved are kept rather than overwritten.
+                is AO3Result.Success -> {
+                    val fresh = result.value.withMinimumPrompts()
+                    val edited = state.value.form?.takeIf { it != loadedForm }
+                    loadedForm = fresh
+                    state.value.copy(form = edited ?: fresh, loading = false)
+                }
+                // A refusal or a lost session stays final; a page that could not be read can be
+                // tried again, as iOS's "Try Again" offers for every failure (A64 F03).
                 is AO3Result.Failure -> state.value.copy(loading = false, failure = result.error.moderationMessage(),
-                    terminal = result.error == AO3Error.Forbidden || result.error == AO3Error.AuthenticationRequired ||
-                        result.error is AO3Error.Parse || result.error is AO3Error.Validation)
+                    terminal = result.error == AO3Error.Forbidden || result.error == AO3Error.AuthenticationRequired)
             }
         } catch (e: CancellationException) {
             if (ownsSession()) mutable.value = state.value.copy(loading = false)
@@ -89,8 +101,11 @@ internal class AO3ChallengeSignUpState(private val slug: String, private val id:
                     form = checked.copy(generalErrors = listOf(result.error.moderationMessage())))
                 is AO3Result.Success -> when (val outcome = result.value) {
                     is AO3SignUpSaveOutcome.Invalid -> state.value.copy(saving = false, form = outcome.form)
-                    is AO3SignUpSaveOutcome.Saved -> state.value.copy(saving = false, form = outcome.form,
-                        notice = "Sign-up submitted successfully!")
+                    is AO3SignUpSaveOutcome.Saved -> {
+                        loadedForm = outcome.form
+                        state.value.copy(saving = false, form = outcome.form,
+                            notice = "Sign-up submitted successfully!")
+                    }
                 }
             }
         } catch (_: CancellationException) {

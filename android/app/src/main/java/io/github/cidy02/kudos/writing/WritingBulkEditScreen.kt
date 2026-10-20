@@ -21,23 +21,27 @@ import io.github.cidy02.kudos.network.ao3.search.AO3TagAutocompleteRepository
 import io.github.cidy02.kudos.network.ao3.writing.*
 import io.github.cidy02.kudos.settings.SubjectTextFieldRow
 import io.github.cidy02.kudos.ui.subject.*
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
 private data class BulkPicker(val title: String, val field: String, val mode: String)
 
 @Composable
 fun WritingBulkEditScreen(model: WritingBulkEditState, focus: String?, onBack: () -> Unit,
-    onSaved: () -> Unit, autocomplete: AO3TagAutocompleteRepository? = null, settings: SettingsRepository? = null) {
+    onSaved: () -> Unit, autocomplete: AO3TagAutocompleteRepository? = null, settings: SettingsRepository? = null,
+    saveScope: CoroutineScope? = null) {
     val state by model.state.collectAsState()
     val form = state.form
     val changes = state.changes
     val tokens = LocalKudosTokens.current
     val palette = tokens.scopePalette
     val scope = rememberCoroutineScope()
+    // A started Save finishes and reaches the opener after Cancel (A64 F04): the opener's scope.
+    val saveIn = saveScope ?: scope
     var picker by remember(model) { mutableStateOf<BulkPicker?>(null) }
     val list = rememberLazyListState()
     LaunchedEffect(model) { model.load() }
-    LaunchedEffect(state.saved) { if (state.saved) onSaved() }
+    LaunchedEffect(state.saved) { if (state.saved && saveScope == null) onSaved() }
     DisposableEffect(model) { onDispose { model.close() } }
     LaunchedEffect(form, focus) {
         if (form != null) when (focus) {
@@ -70,7 +74,7 @@ fun WritingBulkEditScreen(model: WritingBulkEditState, focus: String?, onBack: (
     ProvidePushedShellChrome(hasSubjectHeader = true, hideTabBar = true, onBack = onBack,
         trailingContent = if (form == null) null else {
             {
-                IconButton(enabled = !state.saving && !state.saved, onClick = { scope.launch { model.save() } }) {
+                IconButton(enabled = !state.saving && !state.saved, onClick = { saveIn.launch { if (model.save() && saveScope != null) onSaved() } }) {
                     Icon(Icons.Default.Check, "Save", tint = palette.accent)
                 }
                 IconButton(onClick = onBack) { Icon(Icons.Default.Close, "Cancel", tint = tokens.secondaryInk) }

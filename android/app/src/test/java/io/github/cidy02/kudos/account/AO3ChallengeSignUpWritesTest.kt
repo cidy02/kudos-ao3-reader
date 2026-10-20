@@ -76,7 +76,7 @@ class AO3ChallengeSignUpWritesTest {
     }
 
     @Test fun signedOutRefusedAndClosedLoadsRememberAttemptsAndNeverProbeAgain() = runTest {
-        for (failure in listOf<AO3Error?>(null, AO3Error.Forbidden, AO3Error.Parse("Sign-ups closed"), AO3Error.Validation("Sign-ups closed"))) {
+        for (failure in listOf<AO3Error?>(null, AO3Error.Forbidden)) {
             val (auth, client, repo) = promptMemeSetup(signedIn = failure != null)
             val url = AO3ChallengeSignUpUrls.form("winter_exchange")
             if (failure != null) client.replies[url] = AO3Result.Failure(failure)
@@ -87,6 +87,43 @@ class AO3ChallengeSignUpWritesTest {
             assertTrue(model.state.value.terminal)
             assertNotNull(model.state.value.failure)
         }
+    }
+
+    @Test fun anUnreadableFormIsReadAgainOnlyWhenTheReaderAsks() = runTest {
+        // A64 F03: iOS's failure card offers Try Again for every failure; a refusal stays final.
+        for (failure in listOf<AO3Error>(AO3Error.Parse("Sign-ups closed"), AO3Error.Validation("Sign-ups closed"))) {
+            val (auth, client, repo) = promptMemeSetup()
+            val url = AO3ChallengeSignUpUrls.form("winter_exchange")
+            client.replies[url] = AO3Result.Failure(failure)
+            val model = AO3ChallengeSignUpState("winter_exchange", null, repo, promptMemeWrites(client, auth))
+            model.load(); model.load()
+            assertEquals(listOf(url), client.gets) // an opening reads once
+            model.load(refresh = true); model.save()
+            assertEquals(listOf(url, url), client.gets)
+            assertEquals(0, client.posts)
+            assertFalse(model.state.value.terminal)
+            assertNotNull(model.state.value.failure)
+        }
+    }
+
+    @Test fun aPullShowsAO3sFormUnlessTheReaderHasEditedIt() = runTest {
+        // A64 F02: iOS replaces the form on every read; typed edits are not overwritten here.
+        val (auth, client, repo) = promptMemeSetup()
+        val url = AO3ChallengeSignUpUrls.form("winter_exchange")
+        client.replies[url] = challengeResponse(url, challengeFixture(signUpFixtures[0]))
+        val model = AO3ChallengeSignUpState("winter_exchange", null, repo, promptMemeWrites(client, auth))
+        model.load()
+        val first = model.state.value.form!!
+        client.replies[url] = challengeResponse(url, challengeFixture(signUpFixtures[1]))
+        model.load(refresh = true)
+        val served = model.state.value.form!!
+        assertNotEquals(first, served)
+        model.update(served.requests[0].copy(description = "Typed, not saved"))
+        val edited = model.state.value.form!!
+        client.replies[url] = challengeResponse(url, challengeFixture(signUpFixtures[0]))
+        model.load(refresh = true)
+        assertEquals(edited, model.state.value.form)
+        assertEquals(3, client.gets.size)
     }
 
     @Test fun eachLocalValidationBlocksTokenAndPostWithIosWords() = runTest {
