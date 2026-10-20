@@ -36,7 +36,7 @@ artboard (`INVENTORY.md`, the rows marked "—").
 | Availability sweep | `AvailabilitySweepView` | `settings/AvailabilitySweepScreen.kt` | compared (T-330 card rows) |
 | Reader chrome, position card, scrub | `ReadiumReaderView`, `ReaderChromeTopBar`, `ReaderPositionCard`, `ReaderChapterScrub` | `reader/*` | compared 3dk–3dm; owner asked for the reader's controls to match the app (3dk, T-403) |
 | Reader Contents, Find in Work, notes | `ReaderContentsSheet`, `ReaderSearchView`, `ReaderNoteEditor` | `reader/*` | compared 3dl, 3dz |
-| Read Aloud settings, pronunciation, fan menu, Customize Theme | `ReaderSpeechSettingsSheet`, `ReaderPronunciationSettingsView`, `ReaderFanMenu`, `CustomizeThemeView` | `reader/*`, `settings/SettingsListeningPage.kt` | Customize Theme: brief 3fs; pronunciation: brief 3ft (missing on Android) |
+| Read Aloud settings, pronunciation, fan menu, Customize Theme | `ReaderSpeechSettingsSheet`, `ReaderPronunciationSettingsView`, `ReaderFanMenu`, `CustomizeThemeView` | `reader/*`, `settings/SettingsListeningPage.kt` | Customize Theme: iOS's sheet on Android since 3fs (`c6b0576a`), seen on the emulator; pronunciation: brief 3ft (missing on Android) |
 | In-app web view | `WebBrowser` | `web/AO3WebViewFallbackScreen.kt` | to look at |
 
 ## Redesigned screens
