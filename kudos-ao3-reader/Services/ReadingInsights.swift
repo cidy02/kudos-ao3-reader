@@ -20,6 +20,9 @@ nonisolated struct ReadingSessionFacts: Equatable, Sendable {
     var wordCount: Int
     var didFinish: Bool
     var fandom: String = ""
+    /// What this sitting read, in words (owner Q27, 2026-10-20): see
+    /// `ReadingLogService.wordsRead(sessions:)`.
+    var wordsRead: Int = 0
 }
 
 /// What the log knows about one work, for a history or favourites row.
@@ -181,12 +184,13 @@ nonisolated struct ReadingInsights: Equatable, Sendable {
 
     /// Words per hour over the whole period, weighted by time rather than
     /// averaged across sessions. Zero-length rows are dropped so one cannot
-    /// divide by zero or dilute the rate.
+    /// divide by zero or dilute the rate. Counts the words each sitting read,
+    /// not the whole work's (owner Q27, 2026-10-20).
     static func wordsPerHour(of facts: [ReadingSessionFacts]) -> Double {
         let usable = facts.filter { $0.durationSeconds > 0 }
         let totalSeconds = usable.reduce(0) { $0 + $1.durationSeconds }
         guard totalSeconds > 0 else { return 0 }
-        let totalWords = usable.reduce(0) { $0 + $1.wordCount }
+        let totalWords = usable.reduce(0) { $0 + $1.wordsRead }
         return Double(totalWords) / (totalSeconds / 3600)
     }
 

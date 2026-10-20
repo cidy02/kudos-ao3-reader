@@ -39,7 +39,8 @@ struct ReadingInsightsTests {
             durationSeconds: minutes * 60,
             wordCount: words,
             didFinish: didFinish,
-            fandom: fandom
+            fandom: fandom,
+            wordsRead: words
         )
     }
 
