@@ -140,7 +140,7 @@ fun AO3NativeLoginScreen(
                 modifier = if (largeType) Modifier.fillMaxWidth() else Modifier.weight(1f)
             )
             TextButton(
-                colors = ButtonDefaults.textButtonColors(contentColor = tokens.accent),
+                colors = ButtonDefaults.textButtonColors(contentColor = tokens.accentInk),
                 onClick = { useWebFallback = false },
                 modifier = Modifier.padding(16.dp)
             ) {
@@ -215,7 +215,7 @@ fun AO3NativeLoginScreen(
             SettingsPanel {
                 TextButton(
                     onClick = { if (networkAllowed) onOpenAO3(SignUpUrl) },
-                    colors = ButtonDefaults.textButtonColors(contentColor = tokens.accent)
+                    colors = ButtonDefaults.textButtonColors(contentColor = tokens.accentInk)
                 ) {
                     Icon(Icons.Outlined.PersonAdd, contentDescription = null)
                     Spacer(Modifier.width(8.dp))
@@ -224,7 +224,7 @@ fun AO3NativeLoginScreen(
                 SubjectRowSeparator()
                 TextButton(
                     onClick = { if (networkAllowed) onOpenAO3(PasswordResetUrl) },
-                    colors = ButtonDefaults.textButtonColors(contentColor = tokens.accent)
+                    colors = ButtonDefaults.textButtonColors(contentColor = tokens.accentInk)
                 ) {
                     Icon(Icons.Outlined.Key, contentDescription = null)
                     Spacer(Modifier.width(8.dp))
@@ -235,7 +235,7 @@ fun AO3NativeLoginScreen(
         }
         // Keep the existing explicit fallback entry; it changes no requests.
         TextButton(onClick = { useWebFallback = true },
-            colors = ButtonDefaults.textButtonColors(contentColor = tokens.accent),
+            colors = ButtonDefaults.textButtonColors(contentColor = tokens.accentInk),
             modifier = Modifier.padding(horizontal = 16.dp)) {
             Text("Use alternative method", lineHeight = 22.sp)
         }
@@ -369,7 +369,7 @@ private fun LoginHeader(onCancel: () -> Unit) {
     val tokens = LocalKudosTokens.current
     val cancel: @Composable () -> Unit = {
         TextButton(onClick = onCancel,
-            colors = ButtonDefaults.textButtonColors(contentColor = tokens.accent)) {
+            colors = ButtonDefaults.textButtonColors(contentColor = tokens.accentInk)) {
             Text("Cancel", lineHeight = 20.sp)
         }
     }

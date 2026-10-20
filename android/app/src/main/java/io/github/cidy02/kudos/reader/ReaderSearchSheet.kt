@@ -204,7 +204,7 @@ fun ReaderSearchSheet(
                         "Find in Work", "Search the text of this work. Tap a result to jump to that passage."
                     )
                     ReaderSearchPhase.Searching -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(color = tokens.accent)
+                        CircularProgressIndicator(color = tokens.accentInk)
                     }
                     ReaderSearchPhase.Failed -> SearchEmptyState("Couldn't Search", state.error, failed = true)
                     ReaderSearchPhase.Done -> {
@@ -221,7 +221,7 @@ fun ReaderSearchSheet(
                                             verticalAlignment = Alignment.CenterVertically,
                                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                                         ) {
-                                            CircularProgressIndicator(Modifier.size(16.dp), color = tokens.accent, strokeWidth = 2.dp)
+                                            CircularProgressIndicator(Modifier.size(16.dp), color = tokens.accentInk, strokeWidth = 2.dp)
                                             Text("Searching…", color = tokens.secondaryInk)
                                         }
                                     }
@@ -243,7 +243,7 @@ fun ReaderSearchSheet(
                                 if (state.isLoadingMore) {
                                     item(key = "loading") {
                                         Box(Modifier.fillMaxWidth().padding(12.dp), contentAlignment = Alignment.Center) {
-                                            CircularProgressIndicator(Modifier.size(24.dp), color = tokens.accent)
+                                            CircularProgressIndicator(Modifier.size(24.dp), color = tokens.accentInk)
                                         }
                                     }
                                 }
@@ -354,7 +354,7 @@ private fun SearchResultRow(hit: ReaderSearchHit, onGo: () -> Unit, onBookmark: 
             if (hit.chapterTitle.isNotEmpty()) {
                 Text(
                     hit.chapterTitle, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold,
-                    color = tokens.accent, maxLines = 1, overflow = TextOverflow.Ellipsis
+                    color = tokens.accentInk, maxLines = 1, overflow = TextOverflow.Ellipsis
                 )
             }
             Text(

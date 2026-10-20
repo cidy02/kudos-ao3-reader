@@ -289,7 +289,7 @@ fun SettingsLinkRow(
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         if (icon != null) {
-            Icon(icon, contentDescription = null, tint = tokens.accent, modifier = Modifier.size(22.dp))
+            Icon(icon, contentDescription = null, tint = tokens.accentInk, modifier = Modifier.size(22.dp))
         }
         Text(
             text = label,

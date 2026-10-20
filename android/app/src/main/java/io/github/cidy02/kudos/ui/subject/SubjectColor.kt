@@ -69,3 +69,30 @@ fun Color.relativeLuminance(): Double {
     }
     return 0.2126 * channel(red) + 0.7152 * channel(green) + 0.0722 * channel(blue)
 }
+
+/** WCAG contrast ratio between two opaque colours, 1 to 21. */
+fun contrastRatio(a: Color, b: Color): Double {
+    val (hi, lo) = a.relativeLuminance().let { la ->
+        val lb = b.relativeLuminance()
+        if (la >= lb) la to lb else lb to la
+    }
+    return (hi + 0.05) / (lo + 0.05)
+}
+
+/**
+ * This colour, mixed toward white in 5% steps until it reads at [minimum] on [page] (owner Q19,
+ * 2026-10-20). Keeps the hue; returns the colour itself when it already reads.
+ */
+fun Color.readableOn(page: Color, minimum: Double = 4.5): Color {
+    var mixed = this
+    var step = 0
+    while (contrastRatio(mixed, page) < minimum && step < 20) {
+        step++
+        val t = step / 20f
+        mixed = Color(
+            red = red + (1f - red) * t, green = green + (1f - green) * t,
+            blue = blue + (1f - blue) * t, alpha = alpha
+        )
+    }
+    return mixed
+}

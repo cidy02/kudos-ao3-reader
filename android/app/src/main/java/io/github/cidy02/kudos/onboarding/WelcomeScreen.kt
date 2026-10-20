@@ -66,7 +66,7 @@ fun WelcomeScreen(
                     context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(RepositoryUrl)))
                 }
             },
-            colors = ButtonDefaults.textButtonColors(contentColor = tokens.accent),
+            colors = ButtonDefaults.textButtonColors(contentColor = tokens.accentInk),
             modifier = Modifier.semantics {
                 contentDescription = "View on GitHub. Opens the project's source code in your browser"
             }

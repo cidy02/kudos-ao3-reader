@@ -114,7 +114,13 @@ data class KudosTokens(
     val tertiaryInk: Color,
     val separator: Color,
     /** A screen's own subject colour for everything under it (a collection's challenge pages). */
-    val scopePaletteOverride: SubjectPalette? = null
+    val scopePaletteOverride: SubjectPalette? = null,
+    /**
+     * [accent] for text and icons (owner Q19, 2026-10-20, both apps): on Dark and OLED it is
+     * lifted toward white until it reads at 4.5:1 on the page (AO3 red was 1.8:1). Fills and
+     * filled controls keep [accent] exactly (T-348). Light and Sepia use [accent] as it is.
+     */
+    val accentInk: Color = accent
 ) {
     /** Shared favorite star, as on the existing work cards. */
     val favoriteGold: Color get() = Color(0xFFFFC107)
@@ -132,6 +138,7 @@ data class KudosTokens(
             return KudosTokens(
                 theme = theme,
                 accent = accent,
+                accentInk = if (theme.isDarkFamily) accent.readableOn(theme.cardBackdrop) else accent,
                 background = theme.cardBackdrop,
                 panelFill = theme.glassFill(0.09),
                 cardFill = theme.cardSurface,

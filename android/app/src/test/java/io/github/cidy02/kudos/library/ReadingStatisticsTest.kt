@@ -1,6 +1,7 @@
 package io.github.cidy02.kudos.library
 
 import io.github.cidy02.kudos.core.model.SavedWork
+import io.github.cidy02.kudos.data.local.entity.ReadingSessionEntity
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
@@ -240,6 +241,37 @@ class ReadingStatisticsTest {
     }
 
     @Test
+    fun aSittingCountsWhatItReadNotTheWholeWork() {
+        // Owner Q27 (2026-10-20): a 22-second look at an 18,000-word work was 2,977,444 an hour.
+        fun row(id: String, work: String, day: Int, progress: Double, finished: Boolean = false) =
+            ReadingSessionEntity(
+                id = id, workID = work,
+                startedAt = LocalDate.of(2026, 8, day).atTime(12, 0).toInstant(ZoneOffset.UTC),
+                endedAt = LocalDate.of(2026, 8, day).atTime(13, 0).toInstant(ZoneOffset.UTC),
+                durationSeconds = 3_600.0, endingProgress = progress, wordCount = 100_000,
+                didFinish = finished, lastModifiedAt = Instant.EPOCH
+            )
+        val read = ReadingInsights.wordsRead(
+            listOf(
+                row("c", "w", day = 3, progress = 1.0, finished = true),
+                row("a", "w", day = 1, progress = 0.1),
+                row("b", "w", day = 2, progress = 0.4),
+                row("d", "w", day = 4, progress = 0.2), // a reread starts from the beginning
+                row("e", "w", day = 5, progress = 0.1), // went back: nothing read
+                row("f", "w", day = 6, progress = 0.3),
+                row("x", "other", day = 1, progress = 0.05)
+            )
+        )
+        assertEquals(
+            mapOf("a" to 10_000, "b" to 30_000, "c" to 60_000, "d" to 20_000, "e" to 0,
+                "f" to 20_000, "x" to 5_000),
+            read
+        )
+        val facts = ReadingInsights.facts(listOf(row("a", "w", 1, 0.1), row("b", "w", 2, 0.4)), emptyList())
+        assertEquals(20_000.0, ReadingInsights.wordsPerHour(facts), 0.0)
+    }
+
+    @Test
     fun aFirstPeriodHasNoDeltaRatherThanADeltaAgainstZero() {
         val insights = ReadingInsights.make(
             facts = listOf(fact(day = 1, minutes = 60.0)),
@@ -308,6 +340,7 @@ class ReadingStatisticsTest {
         durationSeconds = minutes * 60,
         wordCount = words,
         didFinish = didFinish,
+        wordsRead = words,
         fandom = fandom
     )
 

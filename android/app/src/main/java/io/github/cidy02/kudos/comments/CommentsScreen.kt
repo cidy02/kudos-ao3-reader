@@ -810,14 +810,14 @@ fun ChapterPickerSheet(
                         Icon(
                             imageVector = Icons.Outlined.ChatBubbleOutline,
                             contentDescription = null,
-                            tint = if (isScopeAll) tokens.accent else tokens.secondaryInk,
+                            tint = if (isScopeAll) tokens.accentInk else tokens.secondaryInk,
                             modifier = Modifier.size(18.dp)
                         )
                         Text(
                             text = "All Comments",
                             fontSize = 15.sp,
                             fontWeight = if (isScopeAll) FontWeight.SemiBold else FontWeight.Normal,
-                            color = if (isScopeAll) tokens.accent else tokens.primaryInk
+                            color = if (isScopeAll) tokens.accentInk else tokens.primaryInk
                         )
                     }
                     if (totalComments != null) {
@@ -847,7 +847,7 @@ fun ChapterPickerSheet(
                     } else {
                         androidx.compose.material3.CircularProgressIndicator(
                             modifier = Modifier.size(22.dp).semantics { contentDescription = "Loading chapters" },
-                            strokeWidth = 2.dp, color = tokens.accent)
+                            strokeWidth = 2.dp, color = tokens.accentInk)
                     }
                 }
             }
@@ -874,14 +874,14 @@ fun ChapterPickerSheet(
                             Icon(
                                 imageVector = Icons.Outlined.Book,
                                 contentDescription = null,
-                                tint = if (isSelected) tokens.accent else tokens.secondaryInk,
+                                tint = if (isSelected) tokens.accentInk else tokens.secondaryInk,
                                 modifier = Modifier.size(18.dp)
                             )
                             Text(
                                 text = chapter.displayName,
                                 fontSize = 15.sp,
                                 fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
-                                color = if (isSelected) tokens.accent else tokens.primaryInk,
+                                color = if (isSelected) tokens.accentInk else tokens.primaryInk,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
@@ -890,7 +890,7 @@ fun ChapterPickerSheet(
                             Icon(
                                 imageVector = Icons.Default.Check,
                                 contentDescription = null,
-                                tint = tokens.accent,
+                                tint = tokens.accentInk,
                                 modifier = Modifier.size(16.dp)
                             )
                         }

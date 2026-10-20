@@ -72,7 +72,7 @@ fun AO3WebLoginScreen(
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedButton(onClick = onCancel,
                 border = BorderStroke(1.dp, tokens.accent),
-                colors = ButtonDefaults.outlinedButtonColors(contentColor = tokens.accent)) {
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = tokens.accentInk)) {
                 Text("Cancel", lineHeight = 20.sp)
             }
             Button(onClick = { if (networkAllowed) webViewRef?.loadUrl(LoginUrl) },
@@ -80,7 +80,7 @@ fun AO3WebLoginScreen(
                     contentColor = SubjectPalette.label(tokens.accent))) {
                 Text("Reload", lineHeight = 20.sp)
             }
-            if (loading) CircularProgressIndicator(color = tokens.accent)
+            if (loading) CircularProgressIndicator(color = tokens.accentInk)
         }
         if (networkAllowed) AndroidView(
             modifier = Modifier

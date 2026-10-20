@@ -153,14 +153,14 @@ fun SyncFolderOnboardingContent(
             if (isConnecting) {
                 CircularProgressIndicator(
                     modifier = Modifier.size(24.dp),
-                    color = tokens.accent
+                    color = tokens.accentInk
                 )
             } else {
                 Text("Choose Sync Folder", style = MaterialTheme.typography.titleMedium, lineHeight = 24.sp)
             }
         }
         TextButton(onClick = onNotNow, enabled = !isConnecting,
-            colors = ButtonDefaults.textButtonColors(contentColor = tokens.accent,
+            colors = ButtonDefaults.textButtonColors(contentColor = tokens.accentInk,
                 disabledContentColor = tokens.secondaryInk)) {
             Text("Not Now", lineHeight = 20.sp)
         }

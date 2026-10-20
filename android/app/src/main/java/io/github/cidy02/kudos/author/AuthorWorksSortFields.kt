@@ -55,7 +55,7 @@ internal fun AuthorWorksSortFields(draft: AO3AuthorWorksSort, onChange: (AO3Auth
                     }, modifier = Modifier.semantics { selected = column == draft.column }, onClick = {
                         onChange(draft.select(column)); columnsOpen = false
                     }, trailingIcon = {
-                        if (column == draft.column) Icon(Icons.Outlined.Check, null, tint = tokens.accent)
+                        if (column == draft.column) Icon(Icons.Outlined.Check, null, tint = tokens.accentInk)
                     })
                 }
             }

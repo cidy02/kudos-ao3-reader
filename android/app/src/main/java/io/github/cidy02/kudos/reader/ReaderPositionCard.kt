@@ -209,7 +209,7 @@ fun ReaderPositionCard(
                                 fontSize = 15.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 style = TextStyle(fontFeatureSettings = "tnum"), // iOS .monospacedDigit()
-                                color = if (scrubValuesEmphasized) tokens.accent else tokens.primaryInk
+                                color = if (scrubValuesEmphasized) tokens.accentInk else tokens.primaryInk
                             )
                             Text(
                                 text = " of $pageCount",
@@ -228,7 +228,7 @@ fun ReaderPositionCard(
                                 text = ReaderProgressDisplay.durationLabel(chapterRemainingMinutes),
                                 fontSize = 13.sp,
                                 style = TextStyle(fontFeatureSettings = "tnum"), // iOS .monospacedDigit()
-                                color = if (scrubValuesEmphasized) tokens.accent else tokens.secondaryInk
+                                color = if (scrubValuesEmphasized) tokens.accentInk else tokens.secondaryInk
                             )
                             Text(
                                 text = " left in chapter",
@@ -339,7 +339,7 @@ private fun PositionMiniPlayer(
             if (downloadProgress != null) {
                 LinearProgressIndicator(
                     progress = { downloadProgress },
-                    color = tokens.accent,
+                    color = tokens.accentInk,
                     trackColor = tokens.glassStroke(0.3),
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -379,7 +379,7 @@ private fun PositionMiniPlayer(
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.VolumeUp,
                     contentDescription = null,
-                    tint = tokens.accent,
+                    tint = tokens.accentInk,
                     modifier = Modifier.size(24.dp)
                 )
 

@@ -270,7 +270,7 @@ fun HomeSectionListScreen(
                         selection = if (allSelected) emptySet() else visibleIds
                     }
                 ) {
-                    Text(if (allSelected) "Deselect All" else "Select All", color = tokens.accent)
+                    Text(if (allSelected) "Deselect All" else "Select All", color = tokens.accentInk)
                 }
             } else if (showsWorkControls || hideMature) {
                 if (showsWorkControls) {
@@ -332,7 +332,7 @@ fun HomeSectionListScreen(
                             DropdownMenuItem(
                                 text = { Text(mode.title) },
                                 trailingIcon = {
-                                    if (mode == displayMode) Text("✓", color = tokens.accent)
+                                    if (mode == displayMode) Text("✓", color = tokens.accentInk)
                                 },
                                 onClick = {
                                     displayMode = mode

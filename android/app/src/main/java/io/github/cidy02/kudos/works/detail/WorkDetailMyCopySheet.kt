@@ -515,7 +515,7 @@ private fun MyCopyActivitySection(
                 LinearProgressIndicator(
                     progress = { progress.toFloat().coerceIn(0f, 1f) },
                     modifier = Modifier.fillMaxWidth(),
-                    color = tokens.accent,
+                    color = tokens.accentInk,
                     trackColor = tokens.glassStroke(0.18)
                 )
             }

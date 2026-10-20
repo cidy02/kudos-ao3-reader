@@ -226,7 +226,7 @@ fun BackupScreen(
                 if (busy) {
                     LinearProgressIndicator(
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 13.dp),
-                        color = tokens.accent,
+                        color = tokens.accentInk,
                         trackColor = tokens.glassFill(0.12)
                     )
                     Text(
@@ -335,12 +335,12 @@ private fun ImportBackupDialog(
                             reviewingReplace = false
                             acknowledgeRemoval = false
                         },
-                        colors = ButtonDefaults.textButtonColors(contentColor = tokens.accent)
+                        colors = ButtonDefaults.textButtonColors(contentColor = tokens.accentInk)
                     ) { Text("Back") }
                 }
                 TextButton(
                     onClick = onDismiss,
-                    colors = ButtonDefaults.textButtonColors(contentColor = tokens.accent)
+                    colors = ButtonDefaults.textButtonColors(contentColor = tokens.accentInk)
                 ) { Text("Cancel") }
             }
             Column(
