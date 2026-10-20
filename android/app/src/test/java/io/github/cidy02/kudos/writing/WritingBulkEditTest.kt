@@ -66,6 +66,24 @@ class WritingBulkEditTest {
         assertEquals(2, client.requests.size); assertEquals(1, client.posts.size) // one read, one refused POST
     }
 
+    @Test fun aSaveStartedRunsToTheLastWorkWhenItsScreenCloses() = runBlocking<Unit> {
+        // A64 F04: iOS's save goes on after Cancel; Android stopped after the first work.
+        val client = BulkRecordingClient(listOf(11, 22))
+        val model = WritingBulkEditState(client.ids, AO3WriteRepository(client), 7)
+        model.load()
+        model.change { it.copy(added = mapOf("work[freeform_string]" to listOf("Fluff"))) }
+        val firstPost = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val release = kotlinx.coroutines.CompletableDeferred<Unit>()
+        client.beforePostReply = { if (!firstPost.isCompleted) { firstPost.complete(Unit); release.await() } }
+        val screen = launch { model.save() }
+        firstPost.await()
+        screen.cancel(); model.close() // the screen is closed while the first work's write is out
+        release.complete(Unit)
+        screen.join()
+        assertEquals(listOf("POST https://archiveofourown.org/works/11/update_tags", "POST https://archiveofourown.org/works/22/update_tags"),
+            client.requests.filter { it.contains("update_tags") })
+    }
+
     @Test fun formChoicesComeOnlyFromServedHtmlAndBlankChoicesAreNotInvented() {
         val form = AO3BulkEditParser.parse(BulkRecordingClient(listOf(11L)).bulkPage(), "https://archiveofourown.org/users/AO3_Reader/works/edit_multiple", listOf(11))
         assertEquals(listOf("The Weight of Water", "Salt and Static", "Long Way from Home"), form.titles)

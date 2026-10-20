@@ -406,7 +406,7 @@ fun AuthorProfileScreen(
         // page would have gone on saying so for five minutes.
         WritingBulkEditScreen(bulk, bulkFocus, onBack = { bulkModel = null },
             onSaved = { bulkModel = null; reloadAfterWorksWrite() },
-            autocomplete = autocompleteRepository, settings = settingsRepository)
+            autocomplete = autocompleteRepository, settings = settingsRepository, saveScope = scope)
         return
     }
     val row = rowAction

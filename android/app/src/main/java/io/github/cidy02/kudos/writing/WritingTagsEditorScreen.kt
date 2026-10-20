@@ -108,7 +108,7 @@ internal fun WritingTagsEditorScreen(
             val chosenRows = writingChipRows(values, width, chosen = true)
             val recentRows = writingChipRows(recent, width, chosen = false)
             val otherRows = writingChipRows(otherWorkTagNames(kind, loadedWorks, values, excludingWorkID), width, chosen = false)
-            val localGroups = listOf("From your other works" to otherRows, "Recently used" to recentRows)
+            val localGroups = listOf("Recently used" to recentRows, "From your other works" to otherRows) // iOS order (A64 F01)
             val suggestionIndex = 2 + chosenRows.size + localGroups.sumOf { (_, rows) -> if (rows.isEmpty()) 0 else rows.size + 1 }
             // Keep the pinned input and the suggestions in the viewport when the
             // keyboard takes space, even if hundreds of chosen chips precede them.
