@@ -83,7 +83,9 @@ class ReaderSettingsMapper(private val baseFontPt: Double = DEFAULT_BASE_FONT_PT
         if (fontId.startsWith("custom:")) {
             return fontId.takeIf { id -> fontDeclarations.any { it.fontFamily == id } }
         }
-        return fontId
+        // iOS's built-ins (New York, Georgia, …) are not on Android: each reads as the generic
+        // family it belongs to, which Readium writes into the page's CSS as is.
+        return BUILT_IN_GENERIC_FAMILY[fontId.lowercase()] ?: fontId
     }
 
     private fun buildFontDeclarations(
@@ -91,19 +93,11 @@ class ReaderSettingsMapper(private val baseFontPt: Double = DEFAULT_BASE_FONT_PT
         customFonts: List<CustomFont>,
         fontPathResolver: ((String) -> String?)?
     ): List<CustomFontDeclaration> {
-        // Stable declarations keep a font pick from rebuilding the navigator at the old restore locator.
-        val declarations = io.github.cidy02.kudos.core.model.ReaderFontCatalog.builtIns.mapNotNull { option ->
-            when (option.id) {
-                "nyserif" -> CustomFontDeclaration("nyserif", alternates = listOf("New York", "ui-serif", "Georgia", "serif"))
-                "georgia" -> CustomFontDeclaration("georgia", alternates = listOf("Georgia", "serif"))
-                "palatino" -> CustomFontDeclaration("palatino", alternates = listOf("Palatino", "serif"))
-                "times" -> CustomFontDeclaration("times", alternates = listOf("Times New Roman", "serif"))
-                "helvetica" -> CustomFontDeclaration("helvetica", alternates = listOf("Helvetica Neue", "sans-serif"))
-                "avenir" -> CustomFontDeclaration("avenir", alternates = listOf("Avenir", "sans-serif"))
-                "menlo" -> CustomFontDeclaration("menlo", alternates = listOf("Menlo", "monospace"))
-                else -> null
-            }
-        }.toMutableList()
+        // Only fonts with a file are declared: Readium refuses a family with no face ("Check
+        // failed." in toFontFamilyDeclaration; opening the reader crashed once 3fs declared
+        // every built-in). Built-ins resolve to Android's generic family in [fontFamily], so
+        // the list stays the same across built-in picks and the navigator is not rebuilt.
+        val declarations = mutableListOf<CustomFontDeclaration>()
         if (fontPathResolver == null) return declarations
         val registeredFontIds = mutableSetOf<String>()
 
@@ -137,6 +131,10 @@ class ReaderSettingsMapper(private val baseFontPt: Double = DEFAULT_BASE_FONT_PT
 
     companion object {
         const val DEFAULT_BASE_FONT_PT = 18.0
+        val BUILT_IN_GENERIC_FAMILY = mapOf(
+            "nyserif" to "serif", "georgia" to "serif", "palatino" to "serif", "times" to "serif",
+            "helvetica" to "sans-serif", "avenir" to "sans-serif", "menlo" to "monospace"
+        )
         const val DEFAULT_MARGIN_PT = 28.0
         const val MIN_FONT_PERCENT = 50
         const val MAX_FONT_PERCENT = 250

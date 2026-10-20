@@ -349,7 +349,7 @@ class ReaderHighlightEditorTest {
         settings.updateReaderLineHeight(2.4)
         settings.updateReaderCustomize(true)
         awaitReading { it.preferences.lineHeight == 2.4 && it.preferences.bold &&
-            it.preferences.fontFamily == "georgia" && it.preferences.fontSizePercent == 150 }
+            it.preferences.fontFamily == "serif" && it.preferences.fontSizePercent == 150 }
         val declarations = reading().preferences.fontDeclarations
         settings.resetReaderTheme()
         awaitReading { it.preferences.lineHeight == 1.65 && !it.preferences.bold && it.preferences.fontFamily == null }

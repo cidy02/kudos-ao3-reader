@@ -62,10 +62,12 @@ object ReadiumSettingsAdapter {
         declarations: List<CustomFontDeclaration>
     ) {
         for (decl in declarations) {
+            // Readium refuses a family declared with no font face (it throws "Check failed.").
+            val path = decl.fontPath ?: continue
             val family = FontFamily(decl.fontFamily)
             val alternates = decl.alternates.map { FontFamily(it) }
             config.addFontFamilyDeclaration(fontFamily = family, alternates = alternates) {
-                decl.fontPath?.let { path -> addFontFace { addSource(path) } }
+                addFontFace { addSource(path) }
             }
         }
     }
