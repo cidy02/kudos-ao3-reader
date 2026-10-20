@@ -1,10 +1,5 @@
 package io.github.cidy02.kudos.reader
 
-import androidx.compose.ui.window.DialogProperties
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.Role
-import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.verticalScroll
@@ -40,14 +35,11 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
@@ -58,10 +50,8 @@ import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBars
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.Bookmark
@@ -79,7 +69,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Snackbar
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -101,14 +90,12 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalView
 import io.github.cidy02.kudos.ui.theme.setLightSystemBars
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
@@ -156,7 +143,8 @@ fun ReaderScreen(
     onOpenWorkDetail: (String) -> Unit,
     settingsRepository: io.github.cidy02.kudos.data.preferences.SettingsRepository? = null,
     /** An AO3 work, tag or author link tapped in the text: opened in the app, as iOS. */
-    onOpenAo3Link: (ReaderLinkDestination) -> Unit = {}
+    onOpenAo3Link: (ReaderLinkDestination) -> Unit = {},
+    customFontRepository: io.github.cidy02.kudos.files.CustomFontRepository? = null
 ) {
     val uiState by viewModel.state.collectAsState()
     val settingsState = settingsRepository?.settings?.collectAsState(initial = io.github.cidy02.kudos.core.model.KudosSettings.Defaults)
@@ -197,7 +185,10 @@ fun ReaderScreen(
                     null
                 }
             )
-            is ReaderUiState.Reading -> ReaderReading(state, viewModel, onBack, onOpenComments, onOpenWorkDetail, settings, onOpenAo3Link)
+            is ReaderUiState.Reading -> ReaderReading(
+                state, viewModel, onBack, onOpenComments, onOpenWorkDetail, settings,
+                onOpenAo3Link, settingsRepository, customFontRepository
+            )
         }
     }
 }
@@ -211,7 +202,9 @@ private fun ReaderReading(
     onOpenComments: (Long, Int?) -> Unit,
     onOpenWorkDetail: (String) -> Unit,
     settings: io.github.cidy02.kudos.core.model.KudosSettings,
-    onOpenAo3Link: (ReaderLinkDestination) -> Unit
+    onOpenAo3Link: (ReaderLinkDestination) -> Unit,
+    settingsRepository: io.github.cidy02.kudos.data.preferences.SettingsRepository?,
+    customFontRepository: io.github.cidy02.kudos.files.CustomFontRepository?
 ) {
     val context = LocalContext.current
     val workActions = remember(context) { ReaderWorkActions(context) }
@@ -247,7 +240,6 @@ private fun ReaderReading(
     var showDisplaySheet by remember { mutableStateOf(false) }
     var showSearchSheet by remember { mutableStateOf(false) }
     var confirmVoicePack by remember { mutableStateOf(false) }
-    var annotateDialog by remember { mutableStateOf<AnnotateDialogState?>(null) }
     val annotationPreferences = remember(context) { context.getSharedPreferences("reader-annotations", Context.MODE_PRIVATE) }
     var lastHighlightColor by remember { mutableStateOf(ReadingAnnotationColor.fromRaw(
         annotationPreferences.getString("lastHighlightColor", ReadingAnnotationColor.YELLOW.raw).orEmpty()).raw) }
@@ -424,17 +416,14 @@ private fun ReaderReading(
                     try {
                         val selection = navigatorController.currentSelection() ?: return@launch
                         val locator = selection.locator
-                        if (!asNote) {
-                            viewModel.toggleHighlight(locator.toJSON().toString(), locator.text.highlight.orEmpty(),
-                                lastHighlightColor, locator.locations.totalProgression ?: locator.locations.progression ?: 0.0,
-                                state.liveProgress?.spineIndex ?: 0)
-                        } else annotateDialog = AnnotateDialogState(
-                            locatorJson = locator.toJSON().toString(),
+                        viewModel.annotateSelection(
+                            locatorString = locator.toJSON().toString(),
                             selectedText = locator.text.highlight.orEmpty(),
+                            color = lastHighlightColor,
                             progression = locator.locations.totalProgression
                                 ?: locator.locations.progression ?: 0.0,
                             spineIndex = state.liveProgress?.spineIndex ?: 0,
-                            asNote = asNote
+                            withNote = asNote
                         )
                         navigatorController.clearSelection()
                     } finally {
@@ -470,6 +459,7 @@ private fun ReaderReading(
                             if (fanMenuOpen) {
                                 fanMenuOpen = false
                             } else {
+                                viewModel.dismissHighlightColorBar()
                                 chromeVisible = !chromeVisible
                             }
                         },
@@ -665,70 +655,88 @@ private fun ReaderReading(
                         )
                     }
 
-                    // Floating Position Card
-                    AnimatedVisibility(
-                        visible = chromeVisible,
-                        enter = fadeIn() + slideInVertically { it },
-                        exit = fadeOut() + slideOutVertically { it },
-                        modifier = Modifier
-                            .align(Alignment.BottomCenter)
-                            .fillMaxWidth()
+                    // The colour bar clears the position card without a fixed-height offset (iOS).
+                    Column(
+                        Modifier.align(Alignment.BottomCenter).fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        val downloadProgress by speechController.downloadProgress.collectAsState()
-                        val showsMiniPlayer = speechStatus == SpeechStatus.PLAYING ||
-                            speechStatus == SpeechStatus.PAUSED ||
-                            (showTtsControls && speechStatus == SpeechStatus.MODEL_NOT_DOWNLOADED)
+                        state.highlights.firstOrNull { it.id == state.colorBarAnnotationId }?.let { annotation ->
+                            ReaderHighlightColorBar(
+                                selected = ReadingAnnotationColor.fromRaw(annotation.colorRaw),
+                                onSelect = { color ->
+                                    rememberHighlightColor(color)
+                                    viewModel.recolorHighlight(annotation.id, color)
+                                    viewModel.dismissHighlightColorBar()
+                                },
+                                onDismiss = viewModel::dismissHighlightColorBar,
+                                modifier = Modifier.padding(bottom = if (chromeVisible) 0.dp else 8.dp)
+                            )
+                        }
 
-                        ReaderPositionCard(
-                            page = page,
-                            pageCount = pageCount,
-                            chapterRemainingMinutes = chapterRemainingMinutes,
-                            workLine = bottomLabel,
-                            sliderValue = currentProgress,
-                            sliderEnabled = pageCount > 1 && liveLocator != null,
-                            onSeek = { seekInChapter(it) },
-                            onSeekEnd = {
-                                scrubValue?.let { seekInChapter(it, commit = true) }
-                                scrubOriginLocator = null
-                                scrubViewport = null
-                                viewModel.setScrubbing(false)
-                            },
-                            showsMiniPlayer = showsMiniPlayer,
-                            speechStatus = speechStatus,
-                            speechDownloadProgress = downloadProgress,
-                            spokenText = spokenText,
-                            onPlay = {
-                                if (speechStatus == SpeechStatus.PAUSED) {
-                                    speechController.resume()
-                                } else {
-                                    scope.launch {
-                                        val from = state.liveProgress?.locatorJson
-                                            ?.let { ReadiumNavigatorController.locatorFromJson(it) }
-                                        val paragraphs = ReaderContentText.paragraphs(publication, from, viewModel.readsAuthorNotes())
-                                            .ifEmpty {
-                                                buildList {
-                                                    if (state.work.title.isNotBlank()) add(state.work.title)
-                                                    tocEntries.forEach { e ->
-                                                        if (e.title.isNotBlank()) add(e.title)
+                        // Floating Position Card
+                        AnimatedVisibility(
+                            visible = chromeVisible,
+                            enter = fadeIn() + slideInVertically { it },
+                            exit = fadeOut() + slideOutVertically { it },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            val downloadProgress by speechController.downloadProgress.collectAsState()
+                            val showsMiniPlayer = speechStatus == SpeechStatus.PLAYING ||
+                                speechStatus == SpeechStatus.PAUSED ||
+                                (showTtsControls && speechStatus == SpeechStatus.MODEL_NOT_DOWNLOADED)
+
+                            ReaderPositionCard(
+                                page = page,
+                                pageCount = pageCount,
+                                chapterRemainingMinutes = chapterRemainingMinutes,
+                                workLine = bottomLabel,
+                                sliderValue = currentProgress,
+                                sliderEnabled = pageCount > 1 && liveLocator != null,
+                                onSeek = { seekInChapter(it) },
+                                onSeekEnd = {
+                                    scrubValue?.let { seekInChapter(it, commit = true) }
+                                    scrubOriginLocator = null
+                                    scrubViewport = null
+                                    viewModel.setScrubbing(false)
+                                },
+                                showsMiniPlayer = showsMiniPlayer,
+                                speechStatus = speechStatus,
+                                speechDownloadProgress = downloadProgress,
+                                spokenText = spokenText,
+                                onPlay = {
+                                    if (speechStatus == SpeechStatus.PAUSED) {
+                                        speechController.resume()
+                                    } else {
+                                        scope.launch {
+                                            val from = state.liveProgress?.locatorJson
+                                                ?.let { ReadiumNavigatorController.locatorFromJson(it) }
+                                            val paragraphs = ReaderContentText.paragraphs(publication, from, viewModel.readsAuthorNotes())
+                                                .ifEmpty {
+                                                    buildList {
+                                                        if (state.work.title.isNotBlank()) add(state.work.title)
+                                                        tocEntries.forEach { e ->
+                                                            if (e.title.isNotBlank()) add(e.title)
+                                                        }
                                                     }
                                                 }
-                                            }
-                                            .ifEmpty {
-                                                listOf(state.work.title.ifBlank { "No text available." })
-                                            }
-                                        speechController.startReading(paragraphs)
+                                                .ifEmpty {
+                                                    listOf(state.work.title.ifBlank { "No text available." })
+                                                }
+                                            speechController.startReading(paragraphs)
+                                        }
                                     }
-                                }
-                            },
-                            onPause = { speechController.pause() },
-                            onStopSpeech = {
-                                speechController.stop()
-                                showTtsControls = false
-                            },
-                            onSkipNext = { speechController.skipForward() },
-                            onSkipPrevious = { speechController.skipBackward() },
-                            onDownloadVoiceModel = { confirmVoicePack = true }
-                        )
+                                },
+                                onPause = { speechController.pause() },
+                                onStopSpeech = {
+                                    speechController.stop()
+                                    showTtsControls = false
+                                },
+                                onSkipNext = { speechController.skipForward() },
+                                onSkipPrevious = { speechController.skipBackward() },
+                                onDownloadVoiceModel = { confirmVoicePack = true }
+                            )
+                        }
+
                     }
 
                     // Toast message
@@ -775,27 +783,6 @@ private fun ReaderReading(
                             locatorString = progress.locatorJson.orEmpty(),
                             chapterTitle = section?.title ?: hit.chapterTitle
                         )
-                    }
-                )
-            }
-
-            annotateDialog?.let { dialog ->
-                AnnotateDialog(
-                    state = dialog,
-                    initialColor = lastHighlightColor,
-                    onDismiss = { annotateDialog = null },
-                    onConfirm = { color, note ->
-                        rememberHighlightColor(color)
-                        viewModel.addHighlight(
-                            locatorString = dialog.locatorJson,
-                            selectedText = dialog.selectedText,
-                            color = color,
-                            note = note,
-                            progression = dialog.progression,
-                            spineIndex = dialog.spineIndex,
-                            asNote = dialog.asNote
-                        )
-                        annotateDialog = null
                     }
                 )
             }
@@ -916,6 +903,8 @@ private fun ReaderReading(
                     ) {
                         ReaderDisplaySheet(
                             preferences = state.preferences,
+                            settingsRepository = settingsRepository ?: viewModel.readerSettingsRepository,
+                            customFontRepository = customFontRepository,
                             keepScreenAwake = keepScreenAwake,
                             availableVoices = availableVoices,
                             voicePackInstalled = io.github.cidy02.kudos.reader.speech.TTSDownloadWorker.isModelDownloaded(context),
@@ -929,9 +918,6 @@ private fun ReaderReading(
                             onScrollModeChange = viewModel::setScrollMode,
                             onTwoPageChange = viewModel::setTwoPage,
                             onKeepScreenAwakeChange = viewModel::setKeepScreenAwake,
-                            onBoldChange = viewModel::setBold,
-                            onLetterSpacingChange = viewModel::setLetterSpacing,
-                            onWordSpacingChange = viewModel::setWordSpacing,
                             onSpeechRateChange = viewModel::setSpeechRate,
                             onSpeechPitchChange = viewModel::setSpeechPitch,
                             onSpeechVoiceChange = viewModel::setSpeechVoiceIdentifier,
@@ -950,8 +936,10 @@ private fun ReaderReading(
  * the Settings pages write, and the open book follows at once.
  */
 @Composable
-private fun ReaderDisplaySheet(
+internal fun ReaderDisplaySheet(
     preferences: ReaderPreferences,
+    settingsRepository: io.github.cidy02.kudos.data.preferences.SettingsRepository,
+    customFontRepository: io.github.cidy02.kudos.files.CustomFontRepository? = null,
     keepScreenAwake: Boolean,
     availableVoices: List<io.github.cidy02.kudos.reader.speech.TTSVoice> = emptyList(),
     voicePackInstalled: Boolean = true,
@@ -965,16 +953,16 @@ private fun ReaderDisplaySheet(
     onScrollModeChange: (Boolean) -> Unit = {},
     onTwoPageChange: (Boolean) -> Unit = {},
     onKeepScreenAwakeChange: (Boolean) -> Unit = {},
-    onBoldChange: (Boolean) -> Unit = {},
-    onLetterSpacingChange: (Double) -> Unit = {},
-    onWordSpacingChange: (Double) -> Unit = {},
     onSpeechRateChange: (Float) -> Unit = {},
     onSpeechPitchChange: (Float) -> Unit = {},
     onSpeechVoiceChange: (String?) -> Unit = {},
     onFontFamilyChange: (String?) -> Unit = {}
 ) {
+    var showCustomizeTheme by remember { mutableStateOf(false) }
+    if (showCustomizeTheme) {
+        CustomizeThemeSheet(settingsRepository, customFontRepository, onDismiss = { showCustomizeTheme = false })
+    }
     val tokens = LocalKudosTokens.current
-    var showCustomize by remember { mutableStateOf(false) }
     val twoPage = !preferences.scroll && preferences.columnCount >= 2
     // iOS offers the two-page spread on iPad and Mac, never on a phone. It also shows here while
     // it is on, so a phone that has it on can turn it off.
@@ -1021,33 +1009,8 @@ private fun ReaderDisplaySheet(
             SettingsActionRow(
                 label = "Customize Theme…",
                 icon = Icons.Outlined.Tune,
-                onClick = { showCustomize = !showCustomize }
+                onClick = { showCustomizeTheme = true }
             )
-            if (showCustomize) {
-                SubjectRowSeparator()
-                SubjectFormRow(
-                    "Bold Text",
-                    trailing = { SubjectToggle(checked = preferences.bold, onCheckedChange = onBoldChange) }
-                )
-                SubjectRowSeparator()
-                SubjectSliderRow(
-                    label = "Letter spacing",
-                    value = preferences.letterSpacingEm.toFloat(),
-                    valueRange = 0f..0.5f,
-                    steps = 0,
-                    formatValue = { "%.2f em".format(it) },
-                    onValueChangeFinished = { onLetterSpacingChange(it.toDouble()) }
-                )
-                SubjectRowSeparator()
-                SubjectSliderRow(
-                    label = "Word spacing",
-                    value = preferences.wordSpacingEm.toFloat(),
-                    valueRange = 0f..1f,
-                    steps = 0,
-                    formatValue = { "%.2f em".format(it) },
-                    onValueChangeFinished = { onWordSpacingChange(it.toDouble()) }
-                )
-            }
         }
 
         SettingsGroupLabel("Text Size", Modifier.padding(top = 22.dp))
@@ -1178,99 +1141,6 @@ private fun ReaderDisplaySheet(
             }
         }
     }
-}
-
-private data class AnnotateDialogState(
-    val locatorJson: String,
-    val selectedText: String,
-    val progression: Double,
-    val spineIndex: Int,
-    val asNote: Boolean
-)
-
-@Composable
-private fun AnnotateDialog(
-    state: AnnotateDialogState,
-    initialColor: String,
-    onDismiss: () -> Unit,
-    onConfirm: (color: String, note: String) -> Unit
-) {
-    var selectedColor by remember { mutableStateOf(ReadingAnnotationColor.fromRaw(initialColor)) }
-    var note by remember { mutableStateOf("") }
-
-    AlertDialog(
-        // Back keeps a typed note, as iOS's note editor saves its draft on the way out; only
-        // Cancel throws it away (A62 F03). A tap beside the dialog never does (3dz).
-        onDismissRequest = { if (note.isNotBlank()) onConfirm(selectedColor.raw, note) else onDismiss() },
-        properties = DialogProperties(dismissOnClickOutside = note.isBlank()),
-        title = { Text(if (state.asNote) "Add note" else "Highlight") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                if (state.selectedText.isNotBlank()) {
-                    Text(
-                        state.selectedText,
-                        style = MaterialTheme.typography.bodyMedium,
-                        maxLines = 4,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-
-                Text("Colour", style = MaterialTheme.typography.labelLarge)
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    ReadingAnnotationColor.entries.forEach { swatch ->
-                        val isSelected = selectedColor == swatch
-                        Box(
-                            modifier = Modifier
-                                .size(32.dp)
-                                .clip(CircleShape)
-                                .background(swatch.color)
-                                .then(
-                                    if (isSelected) {
-                                        Modifier.border(2.dp, MaterialTheme.colorScheme.primary, CircleShape)
-                                    } else Modifier
-                                )
-                                // Named and stateful whether chosen or not: only the chosen
-                                // swatch had a name, on its tick (audits A7 and A13).
-                                .selectable(selected = isSelected, role = Role.RadioButton,
-                                    onClick = { selectedColor = swatch })
-                                .semantics { contentDescription = swatch.displayName },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            if (isSelected) {
-                                Icon(
-                                    imageVector = Icons.Filled.Check,
-                                    contentDescription = null,
-                                    tint = androidx.compose.ui.graphics.Color.Black,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                            }
-                        }
-                    }
-                }
-
-                if (state.asNote) {
-                    OutlinedTextField(
-                        value = note,
-                        onValueChange = { note = it },
-                        label = { Text("Note") },
-                        modifier = Modifier.fillMaxWidth(),
-                        minLines = 2
-                    )
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = { onConfirm(selectedColor.raw, note) }) {
-                Text(if (state.asNote) "Save note" else "Highlight")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
-        }
-    )
 }
 
 @Composable

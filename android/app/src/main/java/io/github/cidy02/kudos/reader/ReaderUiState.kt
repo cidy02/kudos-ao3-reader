@@ -23,6 +23,7 @@ sealed interface ReaderUiState {
         val bookmarks: List<ReadingAnnotation> = emptyList(),
         val highlights: List<ReadingAnnotation> = emptyList(),
         /** Resolve against live highlights so colour/note changes do not leave an old snapshot. */
-        val editingAnnotationId: String? = null
+        val editingAnnotationId: String? = null,
+        val colorBarAnnotationId: String? = null
     ) : ReaderUiState
 }

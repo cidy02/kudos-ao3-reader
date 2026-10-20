@@ -114,15 +114,35 @@ class AnnotationRepository(
         saveAnnotation(existing.copy(colorRaw = color))
     }
 
+    /** Result also drives the iOS post-selection editor/colour-bar routing. */
+    data class SelectionResult(val annotation: ReadingAnnotation?, val created: Boolean)
+
+    suspend fun annotateSelection(
+        workId: String, locatorString: String, selectedText: String, color: String,
+        progression: Double, spineIndex: Int, withNote: Boolean
+    ): SelectionResult {
+        val existing = findSamePassage(workId, locatorString)
+        if (existing != null) {
+            // Add Note never toggles or recolours an existing mark, including its saved note.
+            if (withNote) return SelectionResult(existing, created = false)
+            if (existing.colorRaw == color) {
+                deleteAnnotation(existing.id)
+                return SelectionResult(null, created = false)
+            }
+        }
+        val annotation = addOrRecolorHighlight(
+            workId, locatorString, selectedText, color, progression = progression,
+            spineIndex = spineIndex, kind = existing?.kindRaw ?: "highlight"
+        )
+        return SelectionResult(annotation, created = existing == null)
+    }
+
     /** iOS: repeating Highlight with the current colour removes that exact passage. */
     suspend fun toggleHighlight(
         workId: String, locatorString: String, selectedText: String, color: String,
         progression: Double, spineIndex: Int
     ) {
-        val existing = findSamePassage(workId, locatorString)
-        if (existing != null && existing.colorRaw == color) deleteAnnotation(existing.id)
-        else addOrRecolorHighlight(workId, locatorString, selectedText, color,
-            progression = progression, spineIndex = spineIndex, kind = existing?.kindRaw ?: "highlight")
+        annotateSelection(workId, locatorString, selectedText, color, progression, spineIndex, withNote = false)
     }
 
     /**

@@ -6,6 +6,7 @@ import io.github.cidy02.kudos.core.model.SavedWork
 import io.github.cidy02.kudos.files.CustomFontRepository
 import io.github.cidy02.kudos.files.WorkFileStore
 import io.github.cidy02.kudos.reader.settings.ReaderSettingsMapper
+import io.github.cidy02.kudos.reader.settings.ReaderPreferences
 import io.github.cidy02.kudos.works.WorkRepository
 import java.time.Instant
 
@@ -54,27 +55,7 @@ class ReaderRepository(
         if (settings.app.keepsWorksYouRead && !openedWork.isSaved) {
             openedWork = workRepository.setSaved(workId, true) ?: openedWork
         }
-        val customFonts = customFontsProvider?.invoke()
-            ?: customFontRepository?.listImported()
-            ?: emptyList()
-        val pathResolver = fontPathResolver
-            ?: customFontRepository?.let { repo ->
-                { fileName ->
-                    val fontPath = runCatching { repo.fontPath(fileName) }.getOrNull()
-                    if (fontPath != null && java.nio.file.Files.isRegularFile(fontPath)) fontPath.toAbsolutePath().toString() else null
-                }
-            }
-            ?: { fileName ->
-                val fontPath = runCatching { fileStore.fontPath(fileName) }.getOrNull()
-                if (fontPath != null && java.nio.file.Files.isRegularFile(fontPath)) fontPath.toAbsolutePath().toString() else null
-            }
-
-        val preferences = settingsMapper.map(
-            reader = settings.reader,
-            app = settings.app,
-            customFonts = customFonts,
-            fontPathResolver = pathResolver
-        )
+        val preferences = preferencesFor(settings)
 
         // iOS `ReadiumSessionStamp.noteOpened`: Continue Reading dates only.
         // The stored fraction (including a macOS percent) stays put.
@@ -94,6 +75,31 @@ class ReaderRepository(
             epubPath = path,
             restoreTarget = progressMapper.restoreTarget(stamped),
             preferences = preferences
+        )
+    }
+
+    /** Same mapper and font files on open and while Customize Theme is visible. */
+    suspend fun preferencesFor(settings: KudosSettings): ReaderPreferences {
+        val customFonts = customFontsProvider?.invoke()
+            ?: customFontRepository?.listImported()
+            ?: emptyList()
+        val pathResolver = fontPathResolver
+            ?: customFontRepository?.let { repo ->
+                { fileName ->
+                    val fontPath = runCatching { repo.fontPath(fileName) }.getOrNull()
+                    if (fontPath != null && java.nio.file.Files.isRegularFile(fontPath)) fontPath.toAbsolutePath().toString() else null
+                }
+            }
+            ?: { fileName ->
+                val fontPath = runCatching { fileStore.fontPath(fileName) }.getOrNull()
+                if (fontPath != null && java.nio.file.Files.isRegularFile(fontPath)) fontPath.toAbsolutePath().toString() else null
+            }
+
+        return settingsMapper.map(
+            reader = settings.reader,
+            app = settings.app,
+            customFonts = customFonts,
+            fontPathResolver = pathResolver
         )
     }
 

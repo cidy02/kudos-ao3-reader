@@ -40,10 +40,14 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 @Composable
-fun SettingsAppearancePage(repository: SettingsRepository, settings: KudosSettings) {
+fun SettingsAppearancePage(
+    repository: SettingsRepository, settings: KudosSettings,
+    customFontRepository: io.github.cidy02.kudos.files.CustomFontRepository? = null
+) {
     val scope = rememberCoroutineScope()
     val tokens = LocalKudosTokens.current
-    var showCustomize by remember { mutableStateOf(false) }
+    var showAccentPresets by remember { mutableStateOf(false) }
+    var showCustomizeTheme by remember { mutableStateOf(false) }
     val matched = settings.reader.matchAppReaderTheme
     val themeFootnote = (if (matched) {
         "Choose Light, Sepia, Dark, or OLED for Kudos and the reader."
@@ -96,9 +100,15 @@ fun SettingsAppearancePage(repository: SettingsRepository, settings: KudosSettin
                 SubjectRowSeparator()
                 SubjectFormRow(
                     label = "Accent Color",
-                    onClick = { showCustomize = !showCustomize },
+                    onClick = { showAccentPresets = !showAccentPresets },
                     trailing = { AccentColorWell(color = accentColorOrFallback(settings.app.accentColorHex)) }
                 )
+                if (showAccentPresets) {
+                    AccentCustomizeBlock(
+                        accentHex = settings.app.accentColorHex,
+                        onCommit = { hex -> scope.launch { repository.updateAccentColor(hex) } }
+                    )
+                }
                 SubjectRowSeparator()
                 SettingsActionRow(
                     label = "Reset to AO3 Red",
@@ -109,21 +119,14 @@ fun SettingsAppearancePage(repository: SettingsRepository, settings: KudosSettin
                 SettingsActionRow(
                     label = "Customize Theme…",
                     icon = Icons.Outlined.Tune,
-                    onClick = { showCustomize = !showCustomize }
+                    onClick = { showCustomizeTheme = true }
                 )
-                if (showCustomize) {
-                    AccentCustomizeBlock(
-                        accentHex = settings.app.accentColorHex,
-                        onCommit = { hex -> scope.launch { repository.updateAccentColor(hex) } }
-                    )
-                }
                 SubjectRowSeparator()
                 TextSizeSlider(
                     value = settings.reader.readerFontPt.toFloat().coerceIn(12f, 28f),
                     onValueChangeFinished = { value ->
                         scope.launch {
                             repository.updateReaderFontPt(kotlin.math.round(value).toDouble())
-                            repository.updateReaderCustomize(true)
                         }
                     }
                 )
@@ -191,6 +194,11 @@ fun SettingsAppearancePage(repository: SettingsRepository, settings: KudosSettin
             }
         }
     }
+    if (showCustomizeTheme) {
+        io.github.cidy02.kudos.reader.CustomizeThemeSheet(repository, customFontRepository,
+            onDismiss = { showCustomizeTheme = false })
+    }
+
 }
 
 @Composable
@@ -218,7 +226,6 @@ fun SettingsReaderPage(repository: SettingsRepository, settings: KudosSettings) 
                             onCheckedChange = {
                                 scope.launch {
                                     repository.updateReaderBoldText(it)
-                                    repository.updateReaderCustomize(true)
                                 }
                             }
                         )

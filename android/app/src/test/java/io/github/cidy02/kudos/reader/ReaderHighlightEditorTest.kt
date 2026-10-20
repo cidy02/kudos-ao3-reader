@@ -73,6 +73,7 @@ class ReaderHighlightEditorTest {
     @get:Rule val compose = createComposeRule()
     private lateinit var database: KudosDatabase
     private lateinit var recording: RecordingAnnotations
+    private lateinit var settings: SettingsRepository
     private lateinit var model: ReaderViewModel
     private val directory = Files.createTempDirectory("kudos-highlight-editor-test").toFile()
     private val annotation = ReadingAnnotation(
@@ -101,9 +102,10 @@ class ReaderHighlightEditorTest {
             override suspend fun updateData(transform: suspend (Preferences) -> Preferences): Preferences =
                 transform(data.value).also { data.value = it }
         }
+        settings = SettingsRepository(preferences)
         model = ReaderViewModel(
             ReaderRepository(works, files, settingsProvider = { KudosSettings.Defaults }),
-            ReadingLogService(database.readingLogDao()), SettingsRepository(preferences),
+            ReadingLogService(database.readingLogDao()), settings,
             AnnotationRepository(recording, database.syncTombstoneDao()), annotation.workID
         )
         awaitReading { it.highlights.any { mark -> mark.id == annotation.id } }
@@ -267,6 +269,93 @@ class ReaderHighlightEditorTest {
         repository.addOrRecolorHighlight(id = annotation.id, color = "purple")
         assertEquals(listOf(annotation.id), recording.reads)
         assertTrue(recording.writes.isEmpty())
+    }
+
+    @Test
+    fun selectionHighlightRecoloursInPlaceThenSameColourTogglesOff() = runBlocking<Unit> {
+        model.annotateSelection(annotation.locatorString, annotation.selectedText, "blue", 0.1, 0, withNote = false)
+        awaitReading { it.highlights.singleOrNull()?.colorRaw == "blue" }
+        assertEquals(annotation.id, reading().highlights.single().id)
+        assertNull(reading().editingAnnotationId)
+        assertNull(reading().colorBarAnnotationId)
+        model.annotateSelection(annotation.locatorString, annotation.selectedText, "blue", 0.1, 0, withNote = false)
+        awaitReading { it.highlights.isEmpty() }
+        assertTrue(database.annotationDao().getAll().isEmpty())
+        assertEquals(annotation.id, database.syncTombstoneDao().getAll().single().recordID)
+    }
+
+    @Test
+    fun newSelectionMarksImmediatelyAndOffersOneTapColourRefinement() = runBlocking<Unit> {
+        val locator = annotation.locatorString.replace("one.xhtml", "two.xhtml")
+        model.annotateSelection(locator, annotation.selectedText, "purple", 0.2, 1, withNote = false)
+        awaitReading { it.colorBarAnnotationId != null }
+        val mark = reading().highlights.single { it.id == reading().colorBarAnnotationId }
+        assertEquals("purple", mark.colorRaw)
+        assertEquals(locator, mark.locatorString)
+        assertEquals("highlight", mark.kindRaw)
+        assertNull(reading().editingAnnotationId)
+        // Same words at a different locator never recolour/delete the original.
+        assertEquals("yellow", database.annotationDao().getById(annotation.id)!!.colorRaw)
+        model.recolorHighlight(mark.id, "green")
+        model.dismissHighlightColorBar()
+        awaitReading { it.highlights.any { row -> row.id == mark.id && row.colorRaw == "green" } }
+        assertNull(reading().colorBarAnnotationId)
+    }
+
+    @Test
+    fun addNoteOnNewPassageCreatesHighlightAndRoutesToFullEditor() = runBlocking<Unit> {
+        model.annotateSelection(annotation.locatorString.replace("one.xhtml", "new.xhtml"),
+            "New passage", "pink", 0.3, 2, withNote = true)
+        awaitReading { it.editingAnnotationId != null }
+        val mark = reading().highlights.single { it.id == reading().editingAnnotationId }
+        assertEquals("highlight", mark.kindRaw)
+        assertEquals("pink", mark.colorRaw)
+        assertEquals("New passage", mark.selectedText)
+        assertNull(reading().colorBarAnnotationId)
+        model.updateNote(mark.id, "Kept draft")
+        model.closeNoteEditor()
+        awaitReading { it.highlights.any { row -> row.id == mark.id && row.note == "Kept draft" } }
+    }
+
+    @Test
+    fun addNoteOnExistingPassageKeepsItsIdColourAndNoteAndRoutesToEditor() = runBlocking<Unit> {
+        database.annotationDao().upsert(annotation.copy(note = "Saved note").toEntity())
+        awaitReading { it.highlights.single().note == "Saved note" }
+        recording.clear()
+        model.annotateSelection(annotation.locatorString, annotation.selectedText, "blue", 0.1, 0, withNote = true)
+        awaitReading { it.editingAnnotationId == annotation.id }
+        assertEquals(annotation.id, reading().highlights.single().id)
+        assertEquals("yellow", reading().highlights.single().colorRaw)
+        assertEquals("Saved note", reading().highlights.single().note)
+        assertNull(reading().colorBarAnnotationId)
+        assertTrue(recording.writes.isEmpty())
+        assertTrue(recording.deletes.isEmpty())
+    }
+
+    @Test
+    fun emptyLocatorNeverMatchesAnExistingPassage() = runBlocking<Unit> {
+        val repository = AnnotationRepository(recording, database.syncTombstoneDao())
+        database.annotationDao().upsert(annotation.copy(id = "empty", locatorString = "").toEntity())
+        val result = repository.annotateSelection(annotation.workID, "", "words", "yellow", 0.0, 0, withNote = false)
+        assertTrue(result.created)
+        assertTrue(result.annotation?.id != "empty")
+        assertTrue(recording.deletes.isEmpty())
+    }
+
+    @Test fun sharedThemeSettingsApplyToTheOpenBookAndResetWithoutReopeningIt() = runBlocking<Unit> {
+        settings.updateReaderFontPt(27.0)
+        settings.updateReaderBoldText(true)
+        settings.updateReaderFontId("georgia")
+        settings.updateReaderLineHeight(2.4)
+        settings.updateReaderCustomize(true)
+        awaitReading { it.preferences.lineHeight == 2.4 && it.preferences.bold &&
+            it.preferences.fontFamily == "georgia" && it.preferences.fontSizePercent == 150 }
+        val declarations = reading().preferences.fontDeclarations
+        settings.resetReaderTheme()
+        awaitReading { it.preferences.lineHeight == 1.65 && !it.preferences.bold && it.preferences.fontFamily == null }
+        assertEquals(150, reading().preferences.fontSizePercent)
+        assertEquals(declarations, reading().preferences.fontDeclarations)
+        assertEquals(annotation.id, reading().highlights.single().id)
     }
 
     private fun reading() = model.state.value as ReaderUiState.Reading

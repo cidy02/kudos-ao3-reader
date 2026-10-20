@@ -1162,6 +1162,7 @@ fun AppNavHost(
                         )
                     },
                     settingsRepository = container.settingsRepository,
+                    customFontRepository = container.customFontRepository,
                     onOpenAo3Link = { destination ->
                         when (destination) {
                             is ReaderLinkDestination.WorkDetail ->
