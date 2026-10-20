@@ -256,7 +256,8 @@ enum ReadingLogService {
         return buckets.keys.sorted().map { (weekStart: $0, seconds: buckets[$0] ?? 0) }
     }
 
-    /// Uses each session's stored `wordCount` and `durationSeconds`. Sessions
+    /// Uses the words each session read (`wordsRead(sessions:)`, from its stored
+    /// `wordCount` and `endingProgress`) and its `durationSeconds`. Sessions
     /// with `durationSeconds <= 0` are ignored so a zero-length row cannot
     /// divide-by-zero or dilute the rate.
     ///
@@ -273,13 +274,19 @@ enum ReadingLogService {
     /// dropped: the log is deliberately keyed by UUID with a denormalised title
     /// so deleting a work does not rewrite your history, and the hours are still
     /// hours you read. They land in `Everything else`.
+    ///
+    /// `history` is every session the words read are measured against (each
+    /// sitting is measured from the one before it, which may lie outside a
+    /// period); it defaults to `sessions`.
     static func facts(
         from sessions: [ReadingSession],
-        works: [SavedWork]
+        works: [SavedWork],
+        history: [ReadingSession]? = nil
     ) -> [ReadingSessionFacts] {
         let worksByID = Dictionary(
             works.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first }
         )
+        let read = wordsRead(sessions: history ?? sessions)
         return sessions.map { session in
             ReadingSessionFacts(
                 workID: session.workID,
@@ -288,9 +295,31 @@ enum ReadingLogService {
                 wordCount: session.wordCount,
                 didFinish: session.didFinish,
                 fandom: worksByID[session.workID]?
-                    .workFandoms.first(where: { !$0.isEmpty }) ?? ""
+                    .workFandoms.first(where: { !$0.isEmpty }) ?? "",
+                wordsRead: read[session.id] ?? 0
             )
         }
+    }
+
+    /// Words each sitting read (owner Q27, 2026-10-20, both apps): the move in
+    /// position since the work's sitting before (from the start for its first
+    /// sitting, or after a sitting that finished it), times the work's words. A
+    /// sitting that went back reads nothing and is where the next one starts
+    /// from. Android `ReadingInsights.wordsRead`.
+    static func wordsRead(sessions: [ReadingSession]) -> [UUID: Int] {
+        var read: [UUID: Int] = [:]
+        for rows in Dictionary(grouping: sessions, by: \.workID).values {
+            var start = 0.0
+            let ordered = rows.sorted {
+                ($0.startedAt, $0.id.uuidString) < ($1.startedAt, $1.id.uuidString)
+            }
+            for session in ordered {
+                let end = min(1, max(0, session.endingProgress))
+                read[session.id] = Int((max(0, end - start) * Double(session.wordCount)).rounded())
+                start = session.didFinish ? 0 : end
+            }
+        }
+        return read
     }
 
     /// Everything artboard 1bi prints, for one period and the one before it.
@@ -305,9 +334,15 @@ enum ReadingLogService {
         calendar: Calendar = .current,
         context: ModelContext
     ) -> ReadingInsights {
-        let current = facts(from: sessions(in: context, interval: period), works: works)
-        let previous = previousPeriod.map {
-            facts(from: sessions(in: context, interval: $0), works: works)
+        let history = (try? context.fetch(FetchDescriptor<ReadingSession>())) ?? []
+        let current = facts(
+            from: history.filter { period.contains($0.startedAt) }, works: works, history: history
+        )
+        let previous = previousPeriod.map { interval in
+            facts(
+                from: history.filter { interval.contains($0.startedAt) }, works: works,
+                history: history
+            )
         } ?? []
         return ReadingInsights.make(
             facts: current, previousPeriodFacts: previous, calendar: calendar

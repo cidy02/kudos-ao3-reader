@@ -278,11 +278,13 @@ struct ReadingLogTests {
     }
 
     @Test func wordsPerHourUsesStoredWordCount() throws {
+        // Each is its work's first sitting and reads it to the end, so it read all of it.
         let slow = ReadingSession(
             workID: UUID(),
             startedAt: Date(timeIntervalSince1970: 0),
             endedAt: Date(timeIntervalSince1970: 3600),
             durationSeconds: 3600,
+            endingProgress: 1,
             wordCount: 10_000
         )
         let fast = ReadingSession(
@@ -290,6 +292,7 @@ struct ReadingLogTests {
             startedAt: Date(timeIntervalSince1970: 0),
             endedAt: Date(timeIntervalSince1970: 1800),
             durationSeconds: 1800,
+            endingProgress: 1,
             wordCount: 20_000
         )
         let ignored = ReadingSession(
@@ -302,6 +305,26 @@ struct ReadingLogTests {
         // 30_000 words / 1.5 hours = 20_000. The live work's wordCount is not consulted.
         #expect(ReadingLogService.wordsPerHour(sessions: [slow, fast, ignored]) == 20_000)
         #expect(ReadingLogService.wordsPerHour(sessions: []) == 0)
+    }
+
+    @Test func aSittingCountsWhatItReadNotTheWholeWork() {
+        // Owner Q27 (2026-10-20): a 22-second look at an 18,000-word work was 2,977,444 an hour.
+        let work = UUID()
+        func row(_ day: Double, _ progress: Double, finished: Bool = false, of id: UUID = work) -> ReadingSession {
+            ReadingSession(
+                workID: id,
+                startedAt: Date(timeIntervalSince1970: day * 86_400),
+                endedAt: Date(timeIntervalSince1970: day * 86_400 + 3600),
+                durationSeconds: 3600, endingProgress: progress, wordCount: 100_000,
+                didFinish: finished
+            )
+        }
+        let c = row(3, 1.0, finished: true), a = row(1, 0.1), b = row(2, 0.4)
+        let d = row(4, 0.2), e = row(5, 0.1), f = row(6, 0.3), x = row(1, 0.05, of: UUID())
+        let read = ReadingLogService.wordsRead(sessions: [c, a, b, d, e, f, x])
+        // A reread starts from the beginning (d); going back reads nothing (e).
+        #expect([a, b, c, d, e, f, x].map { read[$0.id] } == [10_000, 30_000, 60_000, 20_000, 0, 20_000, 5_000])
+        #expect(ReadingLogService.wordsPerHour(sessions: [a, b]) == 20_000)
     }
 
     @Test func hoursByWeekBucketsBySessionStart() throws {
