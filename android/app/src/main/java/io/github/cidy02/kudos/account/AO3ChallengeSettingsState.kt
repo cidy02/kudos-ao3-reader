@@ -17,7 +17,7 @@ internal data class ChallengeSettingsUiState(
 )
 
 /** Foreground read owned by one visible screen and one authentication generation. */
-internal class AO3ChallengeSettingsState(private val slug: String, private val repository: AO3CollectionDetailRepository) {
+internal class AO3ChallengeSettingsState(private val slug: String, private val repository: AO3CollectionDetailRepository) : androidx.lifecycle.ViewModel() {
     private val auth = repository.authRepository
     private val generation = auth.generation.value
     private var active = true
@@ -25,7 +25,18 @@ internal class AO3ChallengeSettingsState(private val slug: String, private val r
     private val mutable = MutableStateFlow(ChallengeSettingsUiState())
     val state = mutable.asStateFlow()
 
-    fun close() { active = false; loadJob?.cancel() }
+    private var seenChange = repository.collectionRevision(slug)
+    override fun onCleared() { close() }
+    suspend fun loadOnAppear() {
+        active = true
+        val changed = seenChange != repository.collectionRevision(slug)
+        seenChange = repository.collectionRevision(slug)
+        if (changed || (state.value.data == null && state.value.failure == null)) load()
+    }
+
+    fun close() { active = false; loadJob?.cancel()
+        mutable.value = state.value.copy(loading = false)
+    }
 
     suspend fun load() {
         if (!active || generation != auth.generation.value || state.value.loading) return

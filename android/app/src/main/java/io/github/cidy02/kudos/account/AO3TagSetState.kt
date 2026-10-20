@@ -27,7 +27,7 @@ internal data class TagSetUiState(
 
 /** One foreground page load, fenced to its opening session even when it is public. */
 internal class AO3TagSetState(private val id: Int, private val repository: AO3CollectionDetailRepository,
-    private val writes: AO3WriteRepository) {
+    private val writes: AO3WriteRepository) : androidx.lifecycle.ViewModel() {
     private val auth = repository.authRepository
     private val generation = auth.generation.value
     private var active = true
@@ -38,7 +38,15 @@ internal class AO3TagSetState(private val id: Int, private val repository: AO3Co
     val state = mutable.asStateFlow()
 
     private fun ownsSession() = active && generation == auth.generation.value
-    fun close() { active = false; loadJob?.cancel(); saveJob?.cancel(); rejectJob?.cancel() }
+    override fun onCleared() { close() }
+    suspend fun loadOnAppear() {
+        active = true
+        if (state.value.data == null && state.value.failure == null) load()
+    }
+
+    fun close() { active = false; loadJob?.cancel(); saveJob?.cancel(); rejectJob?.cancel()
+        mutable.value = state.value.copy(loading = false)
+    }
 
     fun change(field: AO3TagSetField, text: String) {
         if (ownsSession()) mutable.value = state.value.copy(fields = state.value.fields + (field to text))
@@ -60,7 +68,10 @@ internal class AO3TagSetState(private val id: Int, private val repository: AO3Co
             }
         } catch (_: CancellationException) {
             if (ownsSession()) mutable.value = state.value.copy(saving = false)
-        } finally { saveJob = null }
+        } finally {
+            if (generation == auth.generation.value) mutable.value = state.value.copy(saving = false)
+            saveJob = null
+        }
     }
 
     suspend fun reject(nomination: AO3TagNomination) {
@@ -85,7 +96,10 @@ internal class AO3TagSetState(private val id: Int, private val repository: AO3Co
             }
         } catch (_: CancellationException) {
             if (ownsSession()) mutable.value = state.value.copy(nominationInFlight = null)
-        } finally { rejectJob = null }
+        } finally {
+            if (generation == auth.generation.value) mutable.value = state.value.copy(nominationInFlight = null)
+            rejectJob = null
+        }
     }
 
     suspend fun load() {

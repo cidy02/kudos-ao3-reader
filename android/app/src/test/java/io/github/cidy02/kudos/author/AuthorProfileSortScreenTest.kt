@@ -55,23 +55,37 @@ class AuthorProfileSortScreenTest {
         }
     }
 
+    private var visible by mutableStateOf(true)
     private val openedAbout = mutableListOf<AO3AuthorRoute>()
     private val openedWeb = mutableListOf<String>()
     private fun show(initialTab: AuthorTab, dashboard: Boolean) {
         val chrome = PushedShellChrome()
-        val repo = AO3AuthorRepository(publicClient = client, parseDispatcher = Dispatchers.Unconfined)
+        val repo = AO3AuthorRepository(publicClient = client, parseDispatcher = Dispatchers.Unconfined,
+            pageCache = AO3PageCache(ttlMillis = 0, staleMillis = 0))
         compose.setContent {
             KudosTheme(KudosThemeMode.Light) {
                 CompositionLocalProvider(LocalPushedShellChrome provides chrome) {
                     Column {
                         Row { chrome.trailingContent?.invoke(this) }
-                        AuthorProfileScreen("Avery_Archive", onOpenAbout = { openedAbout += it }, initialTab = initialTab, authorRepository = repo, onOpenWork = {},
+                        if (visible) AuthorProfileScreen("Avery_Archive", onOpenAbout = { openedAbout += it }, initialTab = initialTab, authorRepository = repo, onOpenWork = {},
                             isDashboard = dashboard, onOpenWeb = { openedWeb += it })
                     }
                 }
             }
         }
         awaitText(when (initialTab) { AuthorTab.Series -> "The Dawn Cycle"; AuthorTab.About -> "Bio"; else -> "Two Voices at Dawn" })
+    }
+
+    @Test fun returningFromAChildKeepsSeriesWithoutEvenAnExpiredCacheRead() {
+        show(AuthorTab.Series, false)
+        val before = requests.size
+        compose.runOnIdle { visible = false }
+        compose.waitForIdle()
+        compose.runOnIdle { visible = true }
+        awaitText("The Dawn Cycle")
+        compose.onNodeWithText("The Hidden Cycle").assertExists()
+        assertEquals(before, requests.size)
+        assertTrue(requests.none { it.toHttpUrl().encodedPath.endsWith("/works") })
     }
 
     /** The account's Series row asks for the Series tab. The page reset itself to Works as it opened. */

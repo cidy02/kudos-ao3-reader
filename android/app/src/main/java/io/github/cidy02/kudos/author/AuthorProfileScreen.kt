@@ -28,6 +28,7 @@ import kotlinx.coroutines.ensureActive
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.material3.*
+import io.github.cidy02.kudos.ui.components.navigationEntryState
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -74,7 +75,7 @@ private fun AuthorAboutSection(title: String, content: @Composable ColumnScope.(
 fun AuthorProfileScreen(
     username: String,
     initialPseud: String? = null,
-    initialTab: AuthorTab = AuthorTab.Works,
+    initialTab: AuthorTab? = AuthorTab.Works,
     authorRepository: AO3AuthorRepository,
     onOpenWork: (AO3WorkSummary) -> Unit,
     onOpenAbout: (AO3AuthorRoute) -> Unit,
@@ -99,49 +100,52 @@ fun AuthorProfileScreen(
     val account by ((authRepository ?: seriesFormRepository?.auth)?.state?.collectAsState() ?: remember {
         mutableStateOf<io.github.cidy02.kudos.auth.AO3AuthState>(io.github.cidy02.kudos.auth.AO3AuthState.SignedOut) })
     val signedInUsername = (account as? io.github.cidy02.kudos.auth.AO3AuthState.SignedIn)?.username
-    val ownSeriesList = isOwnWorks(signedInUsername, username)
+    val ownAccount = isOwnWorks(signedInUsername, username)
+    val isContentDestination = initialTab != null
+    val usesAccountHeader = isDashboard || (ownAccount && isContentDestination)
+    val showsTabs = !isDashboard && (!ownAccount || !isContentDestination)
     var editingSeries by remember(username) { mutableStateOf<Pair<AO3AuthorSeriesSummary, Boolean>?>(null) }
-    var route by remember(username, initialPseud) {
-        mutableStateOf(AO3AuthorRoute(username.trim(), initialPseud?.trim()?.takeIf { it.isNotBlank() }))
+    var route by navigationEntryState("profile-route:$username:$initialPseud") {
+        AO3AuthorRoute(username.trim(), initialPseud?.trim()?.takeIf { it.isNotBlank() })
     }
+
     val sessionGeneration by (authRepository?.generation ?: authorRepository.sessionChanges).collectAsState()
-    var header by remember(sessionGeneration) { mutableStateOf<AO3AuthorHeader?>(null) }
+    var header by navigationEntryState<AO3AuthorHeader?>("profile:$username:${route.id}:$sessionGeneration:header") { null }
     // The account's own totals, for the line under "Works" (iOS 1u). Asked once per opening.
-    var stats by remember(route, sessionGeneration) { mutableStateOf<io.github.cidy02.kudos.network.ao3.author.AO3UserStats?>(null) }
-    var statsAsked by remember(route, sessionGeneration) { mutableStateOf(false) }
-    var headerError by remember(sessionGeneration) { mutableStateOf<AO3Error?>(null) }
-    var headerStale by remember(sessionGeneration) { mutableStateOf(false) }
-    var tabStale by remember(sessionGeneration) { mutableStateOf(false) }
-    var headerLoading by remember { mutableStateOf(true) }
+    var stats by navigationEntryState<io.github.cidy02.kudos.network.ao3.author.AO3UserStats?>("profile:$username:${route.id}:$sessionGeneration:stats") { null }
+    var statsAsked by navigationEntryState("profile:$username:${route.id}:$sessionGeneration:statsAsked") { false }
+    var headerError by navigationEntryState<AO3Error?>("profile:$username:${route.id}:$sessionGeneration:headerError") { null }
+    var headerStale by navigationEntryState("profile:$username:${route.id}:$sessionGeneration:headerStale") { false }
+    var tabStale by navigationEntryState("profile:$username:${route.id}:$sessionGeneration:tabStale") { false }
+    var headerLoading by navigationEntryState("profile:$username:${route.id}:$sessionGeneration:headerLoading") { true }
     
-    var expandAll by remember(route.id, sessionGeneration) { mutableStateOf(false) }
-    var expandsFandoms by remember(route.id, sessionGeneration) { mutableStateOf(false) }
-    var tab by remember { mutableStateOf(initialTab) }
-    var page by remember { mutableIntStateOf(1) }
+    var expandAll by navigationEntryState("profile:$username:${route.id}:$sessionGeneration:expandAll") { false }
+    var expandsFandoms by navigationEntryState("profile:$username:${route.id}:$sessionGeneration:expandsFandoms") { false }
+    var tab by navigationEntryState("profile:$username:${route.id}:$sessionGeneration:tab") { initialTab ?: AuthorTab.Works }
+    var page by navigationEntryState("profile:$username:${route.id}:$sessionGeneration:page") { 1 }
     
-    var works by remember(sessionGeneration) { mutableStateOf<AO3SearchPage?>(null) }
-    var series by remember(sessionGeneration) { mutableStateOf<AO3AuthorSeriesPage?>(null) }
-    var bookmarks by remember(sessionGeneration) { mutableStateOf<AO3AuthorBookmarksPage?>(null) }
-    var about by remember(sessionGeneration) { mutableStateOf<AO3AuthorAbout?>(null) }
+    var works by navigationEntryState<AO3SearchPage?>("profile:$username:${route.id}:$sessionGeneration:works") { null }
+    var series by navigationEntryState<AO3AuthorSeriesPage?>("profile:$username:${route.id}:$sessionGeneration:series") { null }
+    var bookmarks by navigationEntryState<AO3AuthorBookmarksPage?>("profile:$username:${route.id}:$sessionGeneration:bookmarks") { null }
+    var about by navigationEntryState<AO3AuthorAbout?>("profile:$username:${route.id}:$sessionGeneration:about") { null }
     
-    var tabLoading by remember { mutableStateOf(false) }
-    var tabError by remember { mutableStateOf<String?>(null) }
+    var tabLoading by navigationEntryState("profile:$username:${route.id}:$sessionGeneration:tabLoading") { false }
+    var tabError by navigationEntryState<String?>("profile:$username:${route.id}:$sessionGeneration:tabError") { null }
     
-    var scopeState by remember { mutableStateOf(AO3AuthorWorksScope.Works) }
+    var scopeState by navigationEntryState("profile:$username:${route.id}:$sessionGeneration:scopeState") { AO3AuthorWorksScope.Works }
     // iOS `AO3AuthorFandomFilterSection`: one of the author's fandoms, from the list AO3 prints
     // beside the plain works list. Android read that list and never offered it.
-    var selectedFandom by remember(route.id, sessionGeneration) {
-        mutableStateOf<io.github.cidy02.kudos.network.ao3.author.AO3AuthorFandom?>(null) }
+    var selectedFandom by navigationEntryState<io.github.cidy02.kudos.network.ao3.author.AO3AuthorFandom?>("profile:$username:${route.id}:$sessionGeneration:selectedFandom") { null }
     // iOS `authorProfile.displayMode`: the ledger first, and the choice kept. It opened on
     // the detailed card and forgot.
     var displayMode by rememberStoredChoice("authorProfile.displayMode", AuthorDisplayMode.Ledger)
     
-    var worksSort by remember(route.id, sessionGeneration) { mutableStateOf(AO3AuthorWorksSort()) }
-    var worksFilters by remember(route.id, sessionGeneration) { mutableStateOf(AO3SearchFilters()) }
+    var worksSort by navigationEntryState("profile:$username:${route.id}:$sessionGeneration:worksSort") { AO3AuthorWorksSort() }
+    var worksFilters by navigationEntryState("profile:$username:${route.id}:$sessionGeneration:worksFilters") { AO3SearchFilters() }
     var showingWorksFilters by remember(route.id, sessionGeneration) { mutableStateOf(false) }
     // Same generation fence as AuthorWorksScreen, shared by tab/page/scope/sort changes.
-    var loadGeneration by remember { mutableIntStateOf(0) }
-    var headerGeneration by remember { mutableIntStateOf(0) }
+    var loadGeneration by navigationEntryState("profile:$username:${route.id}:$sessionGeneration:loadGeneration") { 0 }
+    var headerGeneration by navigationEntryState("profile:$username:${route.id}:$sessionGeneration:headerGeneration") { 0 }
     var refreshingProfile by remember { mutableStateOf(false) }
     var tabTask by remember { mutableStateOf<Job?>(null) }
     var headerTask by remember { mutableStateOf<Job?>(null) }
@@ -272,13 +276,10 @@ fun AuthorProfileScreen(
     }
 
     LaunchedEffect(route.id, sessionGeneration) {
-        scopeState = AO3AuthorWorksScope.Works
-        // The tab the page was opened on. This said Works, and it runs on the first
-        // composition too, so the account's Series row opened the reader's works.
-        tab = initialTab
-        headerStale = false; tabStale = false
-        header = null; works = null; series = null; bookmarks = null; about = null
-        loadHeader()
+        if (header == null && headerError == null) loadHeader()
+    }
+    DisposableEffect(route.id, sessionGeneration) {
+        onDispose { headerLoading = false; tabLoading = false }
     }
 
     fun submitSubscription(form: io.github.cidy02.kudos.network.ao3.author.AO3AuthorSubscriptionForm) {
@@ -392,7 +393,7 @@ fun AuthorProfileScreen(
     var showMenu by remember { mutableStateOf(false) }
 
     val workHue = remember(route.displayName) { HomeFacts.workHue(emptyList(), route.displayName) }
-    val palette = if (ownSeriesList) tokens.scopePalette else remember(workHue, tokens.theme) { SubjectPalette.fromHue(workHue, tokens.theme) }
+    val palette = if (ownAccount) tokens.scopePalette else remember(workHue, tokens.theme) { SubjectPalette.fromHue(workHue, tokens.theme) }
 
     LaunchedEffect(route.id, sessionGeneration, tab, scopeState) { selection.exit() }
     LaunchedEffect(deleteState.confirmed) {
@@ -686,7 +687,7 @@ fun AuthorProfileScreen(
             if (h != null) {
                 item {
                     Column(modifier = Modifier.padding(top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 56.dp)) {
-                        if (isDashboard || ownSeriesList) {
+                        if (usesAccountHeader) {
                             SubjectHeaderBlock(
                                 kicker = "AO3 Account",
                                 title = if (isDashboard) route.displayName else tab.label,
@@ -698,11 +699,20 @@ fun AuthorProfileScreen(
                                         selectedFandom == null &&
                                         worksSort.completion == io.github.cidy02.kudos.network.ao3.author.AO3AuthorWorksCompletion.Any ->
                                         ownWorksLine(route.displayName, works?.summary?.total, stats)
+                                    tab == AuthorTab.Series -> {
+                                        val s = series
+                                        if (s != null && s.series.isEmpty()) {
+                                            "No series yet"
+                                        } else {
+                                            val tally = seriesTallyParts(s?.series.orEmpty(), (s?.totalPages ?: 1) > 1)
+                                            if (tally.isNotEmpty()) tally.joinToString(" · ") else route.displayName
+                                        }
+                                    }
                                     else -> route.displayName
                                 },
                                 palette = palette
                             )
-                            if (isDashboard && h.pseuds.size > 1) {
+                            if (h.pseuds.size > 1) {
                                 Spacer(Modifier.size(8.dp))
                                 LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                     item {
@@ -741,7 +751,7 @@ fun AuthorProfileScreen(
                     }
                 }
 
-                if (!isDashboard && h.pseuds.size > 1) {
+                if (!usesAccountHeader && h.pseuds.size > 1) {
                     item {
                         LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             item {
@@ -762,7 +772,7 @@ fun AuthorProfileScreen(
                     }
                 }
 
-                if (!isDashboard) {
+                if (showsTabs) {
                     item {
                         SubjectSegmentedControl(
                             items = AuthorTab.entries,
@@ -959,7 +969,7 @@ fun AuthorProfileScreen(
                         AuthorTab.Series -> {
                             val pageData = series
                             if (pageData == null || pageData.series.isEmpty()) {
-                                if (pageData != null && ownSeriesList) item {
+                                if (pageData != null && ownAccount) item {
                                     EmptyStateCard("You have not made a series.",
                                         "A series groups your works in reading order. Create one on AO3, then refresh this page to see it here.")
                                     SubjectFormRow("New series on AO3", showsDisclosure = true,

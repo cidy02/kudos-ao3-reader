@@ -15,6 +15,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import io.github.cidy02.kudos.ui.components.navigationEntryState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -61,10 +62,10 @@ fun AuthorWorksScreen(
     settingsRepository: io.github.cidy02.kudos.data.preferences.SettingsRepository? = null,
     privacyGate: io.github.cidy02.kudos.app.PrivacyGate? = null
 ) {
-    var state by remember(authorName) { mutableStateOf<AuthorWorksState>(AuthorWorksState.Loading) }
+    var state by navigationEntryState<AuthorWorksState>("author:$authorName:state") { AuthorWorksState.Loading }
     // Guards a fast Previous/Next double-tap from letting the first (older) page's
     // response land after the second (newer) one and overwrite it.
-    var loadGeneration by remember(authorName) { mutableIntStateOf(0) }
+    var loadGeneration by navigationEntryState("author:$authorName:loadGeneration") { 0 }
     val scope = rememberCoroutineScope()
     // The badge on a result you already have, and the filter's tag suggestions, are drawn from
     // the Library: not from a work Hide Mature hides (audit A38; iOS leaves it out of the pairing).
@@ -85,7 +86,7 @@ fun AuthorWorksScreen(
         }
     }
 
-    LaunchedEffect(authorName) { load() }
+    LaunchedEffect(authorName) { if (state == AuthorWorksState.Loading) load() }
 
     Column(
         modifier = Modifier

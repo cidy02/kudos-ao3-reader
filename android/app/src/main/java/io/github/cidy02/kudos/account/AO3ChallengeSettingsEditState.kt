@@ -99,6 +99,7 @@ internal class AO3ChallengeSettingsEditState(private val slug: String, private v
                     is AO3ChallengeSettingsSaveOutcome.Invalid -> mutable.value = state.value.copy(
                         data = state.value.data?.copy(form = outcome.form))
                     is AO3ChallengeSettingsSaveOutcome.Saved -> {
+                        repository.collectionChanged(slug)
                         mutable.value = state.value.copy(data = state.value.data?.copy(form = outcome.form), notice = outcome.message)
                         val collection = data.collection
                         val changed = collection != null && listOf("anonymous", "unrevealed", "moderated", "closed").any {

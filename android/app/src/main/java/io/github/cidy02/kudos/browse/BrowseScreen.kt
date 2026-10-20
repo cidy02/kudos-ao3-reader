@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Text
+import io.github.cidy02.kudos.ui.components.navigationEntryState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -62,8 +63,8 @@ fun BrowseScreen(
     settingsRepository: io.github.cidy02.kudos.data.preferences.SettingsRepository? = null,
     privacyGate: io.github.cidy02.kudos.app.PrivacyGate? = null
 ) {
-    var state by remember { mutableStateOf<BrowseCategoriesState>(BrowseCategoriesState.Loading) }
-    var fandomLists by remember { mutableStateOf<Map<String, List<AO3Fandom>>>(emptyMap()) }
+    var state by navigationEntryState<BrowseCategoriesState>("browse:state") { BrowseCategoriesState.Loading }
+    var fandomLists by navigationEntryState<Map<String, List<AO3Fandom>>>("browse:fandomLists") { emptyMap() }
     val scope = rememberCoroutineScope()
     val libraryFlow = remember(workRepository) {
         workRepository?.observeLibraryWorks() ?: flowOf(emptyList())
@@ -141,7 +142,7 @@ fun BrowseScreen(
         onOpenFandom(name)
     }
 
-    LaunchedEffect(Unit) { loadNow() }
+    LaunchedEffect(Unit) { if (state == BrowseCategoriesState.Loading) loadNow() }
 
     KudosRefreshBox(onRefresh = { loadNow() }, modifier = Modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize()) {

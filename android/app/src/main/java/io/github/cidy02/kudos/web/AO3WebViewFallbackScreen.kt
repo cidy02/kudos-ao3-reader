@@ -164,7 +164,7 @@ fun AO3WebViewFallbackScreen(
         Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
             fun submitAddress() {
                 val target = AO3WebUrlPolicy.addressUrl(address) ?: return
-                when (val decision = AO3WebUrlPolicy.classify(target)) {
+                when (val decision = AO3WebUrlPolicy.navigationVerdict(target, isMainFrame = true, isDemo = DemoNetwork.isActive)) {
                     WebNavDecision.Allow -> if (AO3EpubDownloader.isEpubDownload(target)) currentImportDownload(target)
                         else webView?.loadUrl(target)
                     is WebNavDecision.External -> openExternal(context, decision.url)
@@ -256,7 +256,9 @@ fun AO3WebViewFallbackScreen(
                                 currentImportDownload(target)
                                 return true
                             }
-                            return when (val decision = AO3WebUrlPolicy.classify(target)) {
+                            return when (val decision = AO3WebUrlPolicy.navigationVerdict(
+                                target, isMainFrame = request.isForMainFrame, isDemo = DemoNetwork.isActive
+                            )) {
                                 WebNavDecision.Allow -> false
                                 is WebNavDecision.External -> {
                                     openExternal(ctx, decision.url)
@@ -318,6 +320,8 @@ private fun injectTheme(webView: WebView, theme: AppThemeSetting, pageUrl: Strin
 }
 
 private fun openExternal(context: Context, url: String) {
+    // All entry points (Browser, error fallback, address bar and page links) share this guard.
+    if (!AO3WebUrlPolicy.mayOpenExternal(url, isDemo = DemoNetwork.isActive)) return
     runCatching {
         context.startActivity(
             Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)

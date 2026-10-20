@@ -1000,6 +1000,7 @@ fun AppNavHost(
                         onOpenAuthor = { navController.navigate(Routes.authorProfile(it)) },
                         onNewWork = { navController.navigate(io.github.cidy02.kudos.account.WritingWorkDestination.route()) },
                         username = worksUsername,
+                        initialTab = io.github.cidy02.kudos.author.AuthorTab.Works,
                         authorRepository = container.authorRepository,
                         authRepository = container.authRepository,
                         seriesFormRepository = remember(container) { io.github.cidy02.kudos.network.ao3.writing.AO3SeriesFormRepository(
@@ -1307,7 +1308,7 @@ fun AppNavHost(
                     initialTab = when (authorRoute) {
                         Routes.AuthorSeries -> io.github.cidy02.kudos.author.AuthorTab.Series
                         Routes.AuthorAbout -> io.github.cidy02.kudos.author.AuthorTab.About
-                        else -> io.github.cidy02.kudos.author.AuthorTab.Works
+                        else -> null
                     },
                     authorRepository = container.authorRepository,
                     seriesFormRepository = remember(container) { io.github.cidy02.kudos.network.ao3.writing.AO3SeriesFormRepository(

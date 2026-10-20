@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.account
 
+import androidx.lifecycle.viewmodel.initializer
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -61,19 +62,22 @@ private fun ChallengeSignUpsContent(slug: String, title: String, viewerIsOwner: 
     val auth = repository.authRepository
     val generation by auth.generation.collectAsState()
     val authState by auth.state.collectAsState()
-    val admissionGeneration = remember(slug, repository) { generation }
+    val admissionGeneration = androidx.compose.runtime.saveable.rememberSaveable(slug) { generation }
     val admitted = viewerIsMaintainer && generation == admissionGeneration
-    val model = remember(slug, repository, generation, authState.isSignedIn, viewerIsOwner, viewerIsMaintainer) {
-        AO3ChallengeSignUpsState(slug, viewerIsOwner, admitted, repository)
-    }
+    val model: AO3ChallengeSignUpsState = androidx.lifecycle.viewmodel.compose.viewModel(
+        key = "AO3ChallengeSignUps:$slug:$generation:${authState.isSignedIn}:$viewerIsOwner:$admitted",
+        factory = androidx.lifecycle.viewmodel.viewModelFactory {
+            initializer { AO3ChallengeSignUpsState(slug, viewerIsOwner, admitted, repository) }
+        }
+    )
     val state by model.state.collectAsState()
     val scope = rememberCoroutineScope()
     val tokens = LocalKudosTokens.current
     val palette = tokens.scopePalette
     val effectiveTitle = title.ifEmpty { slug }
-    var filter by remember(model) { mutableStateOf(SignUpFilter.All) }
+    var filter by androidx.compose.runtime.saveable.rememberSaveable(model) { mutableStateOf(SignUpFilter.All) }
     var participant by remember(model) { mutableStateOf<AO3ListedSignUp?>(null) }
-    LaunchedEffect(model) { model.load() }
+    LaunchedEffect(model) { model.loadOnAppear() }
     DisposableEffect(model) { onDispose { model.close() } }
     val detail = participant
     if (detail != null) {

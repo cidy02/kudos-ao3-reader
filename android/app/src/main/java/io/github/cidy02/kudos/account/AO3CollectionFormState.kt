@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.account
 
+import androidx.lifecycle.viewModelScope
 import io.github.cidy02.kudos.auth.isSignedIn
 import io.github.cidy02.kudos.network.ao3.AO3Result
 import io.github.cidy02.kudos.network.ao3.account.AO3CollectionFields
@@ -41,8 +42,9 @@ internal class AO3CollectionFormState(
     private val slug: String?,
     private val repository: AO3CollectionDetailRepository,
     private val writes: AO3WriteRepository,
-    private val scope: CoroutineScope
-) {
+    scope: CoroutineScope? = null
+) : androidx.lifecycle.ViewModel() {
+    private val scope = scope ?: viewModelScope
     private val auth = repository.authRepository
     private val mutable = MutableStateFlow(AO3CollectionFormUiState())
     val state = mutable.asStateFlow()
@@ -52,6 +54,12 @@ internal class AO3CollectionFormState(
     private var nameJob: Job? = null
     private var nameRevision = 0
     private fun owns(generation: Int) = active && generation == auth.generation.value
+
+    override fun onCleared() { close() }
+    suspend fun loadOnAppear() {
+        active = true
+        if (state.value.form == null && state.value.loadError == null) load()
+    }
 
     suspend fun load() {
         if (!active || state.value.loading || state.value.saving) return
@@ -125,8 +133,11 @@ internal class AO3CollectionFormState(
             mutable.value = when (result) {
                 is AO3Result.Failure -> failed(result.error.displayMessage())
                 is AO3Result.Success -> when (val outcome = result.value) {
-                    is AO3CollectionSaveOutcome.Saved -> state.value.copy(form = outcome.form, notice = outcome.message, saving = false,
-                        changes = state.value.changes + 1)
+                    is AO3CollectionSaveOutcome.Saved -> {
+                        repository.collectionChanged(slug ?: outcome.form[AO3CollectionFields.NAME])
+                        state.value.copy(form = outcome.form, notice = outcome.message, saving = false,
+                            changes = state.value.changes + 1)
+                    }
                     is AO3CollectionSaveOutcome.Invalid -> state.value.copy(saving = false,
                         // Keep the exact typed buffer while taking AO3's errors and fresh form evidence.
                         form = outcome.form.copy(values = form.values),
@@ -140,7 +151,7 @@ internal class AO3CollectionFormState(
         } catch (_: CancellationException) {
             // The whole sentence, as the check before the request gives it (iOS says it for both).
             if (active) mutable.value = failed(sessionChangedMessage())
-        }
+        } finally { mutable.value = state.value.copy(saving = false) }
     }
 
     suspend fun confirmDelete(typed: String) {
@@ -153,12 +164,15 @@ internal class AO3CollectionFormState(
             currentCoroutineContext().ensureActive()
             if (!owns(generation)) { sentUnderAnEarlierSession(); return }
             mutable.value = when (result) {
-                is AO3Result.Success -> state.value.copy(saving = false, deleted = true, changes = state.value.changes + 1)
+                is AO3Result.Success -> {
+                    slug?.let(repository::collectionChanged)
+                    state.value.copy(saving = false, deleted = true, changes = state.value.changes + 1)
+                }
                 is AO3Result.Failure -> failed(result.error.displayMessage())
             }
         } catch (_: CancellationException) {
             if (active) mutable.value = failed("Not deleted: your AO3 session changed since this form opened.")
-        }
+        } finally { mutable.value = state.value.copy(saving = false) }
     }
 
     private fun saveGeneration(): Int? {
@@ -188,5 +202,8 @@ internal class AO3CollectionFormState(
         form = state.value.form?.copy(generalErrors = listOf(message)))
 
     /** Cancel/back/disposal is local and retires pending probes and UI continuations. */
-    fun close() { active = false; ++nameRevision; nameJob?.cancel() }
+    fun close() {
+        active = false; ++nameRevision; nameJob?.cancel()
+        mutable.value = state.value.copy(loading = false)
+    }
 }

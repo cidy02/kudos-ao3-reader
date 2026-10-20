@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.account
 
+import androidx.lifecycle.viewmodel.initializer
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
@@ -44,7 +45,12 @@ fun AO3ChallengeSettingsScreen(
     val auth = repository.authRepository
     val generation by auth.generation.collectAsState()
     val authState by auth.state.collectAsState()
-    val model = remember(slug, repository, generation, authState.isSignedIn) { AO3ChallengeSettingsState(slug, repository) }
+    val model: AO3ChallengeSettingsState = androidx.lifecycle.viewmodel.compose.viewModel(
+        key = "AO3ChallengeSettings:$slug:$generation:${authState.isSignedIn}",
+        factory = androidx.lifecycle.viewmodel.viewModelFactory {
+            initializer { AO3ChallengeSettingsState(slug, repository) }
+        }
+    )
     val state by model.state.collectAsState()
     val scope = rememberCoroutineScope()
     val tokens = LocalKudosTokens.current
@@ -54,7 +60,7 @@ fun AO3ChallengeSettingsScreen(
     }
     val kind = state.data?.settings?.kind ?: AO3ChallengeKind.GiftExchange
     val large = isAccessibilityFontScale()
-    LaunchedEffect(model) { model.load() }
+    LaunchedEffect(model) { model.loadOnAppear() }
     DisposableEffect(model) { onDispose { model.close() } }
     ProvidePushedShellChrome(hasSubjectHeader = true)
     CompositionLocalProvider(LocalKudosTokens provides tokens.copy(accent = palette.accent)) {

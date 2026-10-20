@@ -49,6 +49,7 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -65,6 +66,15 @@ class AO3CollectionDetailRepository(
      */
     private val parseDispatcher: CoroutineDispatcher = Dispatchers.Default
 ) {
+    // Confirmed foreground writes invalidate kept navigation entries; this never starts a read.
+    private val mutableCollectionChanges = kotlinx.coroutines.flow.MutableStateFlow<Map<String, Int>>(emptyMap())
+    internal val collectionChanges = mutableCollectionChanges.asStateFlow()
+    internal fun collectionChanged(slug: String) {
+        val changes = mutableCollectionChanges.value
+        mutableCollectionChanges.value = changes + (slug to ((changes[slug] ?: 0) + 1))
+    }
+    internal fun collectionRevision(slug: String): Int = collectionChanges.value[slug] ?: 0
+
     /** Foreground page reads; the visible list owns role/closed-state admission and pagination. */
     suspend fun getChallengeSignUps(slug: String, page: Int = 1): AO3Result<AO3SignUpsPage> =
         fetch(AO3ChallengeSignUpsUrls.page(slug, page)) {

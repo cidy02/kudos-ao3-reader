@@ -79,6 +79,7 @@ class CommentsViewModel(
      */
     initialOrder: CommentOrder = CommentOrder.NewestFirst,
     private val submissions: CommentSubmissionStore = CommentSubmissionStore.shared,
+    private val chapterIndexRepository: AO3ChapterIndexRepository? = null,
     /**
      * Read at each save and load, never kept: the screen's first frame did not yet know who
      * was signed in, the name was captured then, and every signed-in reader's drafts were
@@ -229,6 +230,16 @@ class CommentsViewModel(
             loadChapterComments(initialFocusedCommentId, initialChapterPosition)
         } else if (initialFocusedCommentId != null) {
             load(1, initialFocusedCommentId)
+        } else if (initialTarget is AO3CommentTarget.Work && initialChapterPosition != null && chapterIndexRepository != null) {
+            // iOS `loadInitial`: resolve the chapter before asking for any comments.
+            loadJob?.cancel()
+            loadJob = viewModelScope.launch {
+                _state.value = CommentsUiState.Loading
+                val workId = initialTarget?.workId ?: return@launch
+                val chapter = chapterIndexRepository.chapterForPosition(workId, initialChapterPosition)
+                ensureActive()
+                if (chapter != null) openOnChapter(chapter) else loadStart()
+            }
         } else {
             loadStart()
         }
@@ -953,11 +964,13 @@ class CommentsViewModel(
             initialFocusedCommentId: Long? = null,
             initialChapterPosition: Int? = null,
             sessionGeneration: () -> Int = { 0 },
+            chapterIndexRepository: AO3ChapterIndexRepository? = null,
             currentUsername: () -> String? = { null }
         ): ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 CommentsViewModel(repository, initialTarget, draftStore, initialFocusedCommentId,
-                    initialChapterPosition, sessionGeneration, currentUsername = currentUsername)
+                    initialChapterPosition, sessionGeneration, chapterIndexRepository = chapterIndexRepository,
+                    currentUsername = currentUsername)
             }
         }
     }

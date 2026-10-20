@@ -22,6 +22,18 @@ sealed interface WebNavDecision {
  * `javascript:`/`intent:` redirects.
  */
 object AO3WebUrlPolicy {
+    /** iOS BrowserThemeStyle.navigationVerdict; demo AO3 loads are served by local interception. */
+    fun navigationVerdict(url: String, isMainFrame: Boolean, isDemo: Boolean): WebNavDecision {
+        if (url.trim().startsWith("about:", ignoreCase = true)) return WebNavDecision.Allow
+        val decision = classify(url)
+        if (decision == WebNavDecision.Block) return decision
+        if (isDemo) return if (decision == WebNavDecision.Allow) decision else WebNavDecision.Block
+        return if (isMainFrame) decision else WebNavDecision.Allow
+    }
+
+    fun mayOpenExternal(url: String, isDemo: Boolean): Boolean =
+        !isDemo && classify(url) != WebNavDecision.Block
+
     fun addressUrl(input: String): String? {
         val text = input.trim().takeIf { it.isNotEmpty() } ?: return null
         if (Regex("^[A-Za-z][A-Za-z0-9+.-]*:").containsMatchIn(text)) return text

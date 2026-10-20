@@ -38,7 +38,7 @@ internal class AO3CollectionMaintainersState(
     private val slug: String,
     private val repository: AO3CollectionDetailRepository,
     private val writes: AO3WriteRepository
-) {
+) : androidx.lifecycle.ViewModel() {
     private val auth = repository.authRepository
     private val generation = auth.generation.value
     private val reader = auth.username()?.trim().orEmpty()
@@ -49,7 +49,18 @@ internal class AO3CollectionMaintainersState(
     val isOwner get() = currentParticipant?.role == AO3CollectionParticipantRole.Owner.title
     fun isReader(pseud: String) = reader.isNotEmpty() && pseud.equals(reader, true)
     private fun ownsSession() = active && generation == auth.generation.value && auth.state.value.isSignedIn
-    fun close() { active = false }
+    private var seenChange = repository.collectionRevision(slug)
+    override fun onCleared() { close() }
+    suspend fun loadOnAppear() {
+        active = true
+        val changed = seenChange != repository.collectionRevision(slug)
+        seenChange = repository.collectionRevision(slug)
+        if (changed || (!state.value.loaded && state.value.loadError == null)) load()
+    }
+
+    fun close() { active = false
+        mutable.value = state.value.copy(loading = false)
+    }
 
     fun changeUsername(value: String) {
         if (ownsSession()) mutable.value = state.value.copy(username = value)
@@ -83,12 +94,14 @@ internal class AO3CollectionMaintainersState(
             if (!ownsSession()) return
             when (result) {
                 is AO3Result.Success -> {
+                    repository.collectionChanged(slug)
                     mutable.value = state.value.copy(inviting = false, username = "", notice = "Invitation sent to $username.")
                     load()
                 }
                 is AO3Result.Failure -> mutable.value = state.value.copy(inviting = false, inviteError = result.error.displayMessage())
             }
         } catch (_: CancellationException) { /* Departed screens/sessions never receive a write result. */ }
+        finally { if (generation == auth.generation.value) mutable.value = state.value.copy(inviting = false) }
     }
 
     fun leaveTap() {
@@ -119,9 +132,13 @@ internal class AO3CollectionMaintainersState(
             currentCoroutineContext().ensureActive()
             if (!ownsSession()) return
             mutable.value = when (result) {
-                is AO3Result.Success -> state.value.copy(left = true)
+                is AO3Result.Success -> {
+                    repository.collectionChanged(slug)
+                    state.value.copy(left = true)
+                }
                 is AO3Result.Failure -> state.value.copy(leaving = false, leaveError = result.error.displayMessage())
             }
         } catch (_: CancellationException) { /* The POST may finish; its stale response cannot change this screen. */ }
+        finally { if (generation == auth.generation.value) mutable.value = state.value.copy(leaving = false) }
     }
 }

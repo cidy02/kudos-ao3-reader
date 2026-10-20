@@ -126,7 +126,7 @@ fun CommentsScreen(
     val viewModel: CommentsViewModel = viewModel(
         key = target?.workId?.toString(),
         factory = CommentsViewModel.factory(repository, target, draftStore, focusedCommentId,
-            initialChapterPosition.takeIf { focusedCommentId != null }, { latestGeneration }) { latestUsername }
+            initialChapterPosition, { latestGeneration }, chapterIndexRepository) { latestUsername }
     )
 
     // Before the effects below: a new reader gets the screen read again, and nothing of the last one's.
@@ -147,18 +147,6 @@ fun CommentsScreen(
         if (focusedCommentId != null && initialChapterPosition == null && viewModel.focusedCommentId.value != focusedCommentId) {
             viewModel.load(focusedId = focusedCommentId)
         }
-    }
-
-    // Reader's chapter-aware comments button
-    // Keyed by the reader too: an index asked for as a guest that answers after sign-in is the
-    // guest's, and this starts again for the reader who is here now.
-    LaunchedEffect(initialChapterPosition, target?.workId, currentUsername, sessionGeneration) {
-        val workId = target?.workId ?: return@LaunchedEffect
-        val position = initialChapterPosition ?: return@LaunchedEffect
-        // The Inbox's "Chapter Comments" names its comment too: the view model takes the chapter from
-        // that comment's own page and needs no index.
-        if (focusedCommentId != null) return@LaunchedEffect
-        chapterIndexRepository?.chapterForPosition(workId, position)?.let { viewModel.openOnChapter(it) }
     }
 
     val state by viewModel.state.collectAsState()

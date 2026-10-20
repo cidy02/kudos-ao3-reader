@@ -19,6 +19,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import io.github.cidy02.kudos.ui.components.navigationEntryState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -60,14 +61,14 @@ fun FandomListScreen(
     settingsRepository: io.github.cidy02.kudos.data.preferences.SettingsRepository? = null,
     privacyGate: io.github.cidy02.kudos.app.PrivacyGate? = null
 ) {
-    var phase by remember(category.name) { mutableStateOf<FandomListPhase>(FandomListPhase.Loading) }
+    var phase by navigationEntryState<FandomListPhase>("fandom-list:${category.name}:phase") { FandomListPhase.Loading }
     var families by remember(category.name) { mutableStateOf<List<FandomFamily>>(emptyList()) }
     var shown by remember(category.name) { mutableStateOf<List<FandomFamily>>(emptyList()) }
-    var query by remember(category.name) { mutableStateOf("") }
-    var debouncedQuery by remember(category.name) { mutableStateOf("") }
-    var sort by remember(category.name) { mutableStateOf(FandomFamilySort.FamilyTotal) }
-    var groupsVariants by remember(category.name) { mutableStateOf(true) }
-    var options by remember(category.name) { mutableStateOf(FandomListFilterOptions()) }
+    var query by navigationEntryState("fandom-list:${category.name}:query") { "" }
+    var debouncedQuery by navigationEntryState("fandom-list:${category.name}:debouncedQuery") { "" }
+    var sort by navigationEntryState("fandom-list:${category.name}:sort") { FandomFamilySort.FamilyTotal }
+    var groupsVariants by navigationEntryState("fandom-list:${category.name}:groupsVariants") { true }
+    var options by navigationEntryState("fandom-list:${category.name}:options") { FandomListFilterOptions() }
     var showFilters by remember(category.name) { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
@@ -100,7 +101,7 @@ fun FandomListScreen(
         onOpenFandom(fandom)
     }
 
-    LaunchedEffect(category.name) { loadNow() }
+    LaunchedEffect(category.name) { if (phase == FandomListPhase.Loading) loadNow() }
 
     LaunchedEffect(source, groupsVariants, exactCounts) {
         if (phase !is FandomListPhase.Loaded) return@LaunchedEffect

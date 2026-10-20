@@ -276,16 +276,6 @@ fun SensitiveWorkRow(
                                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                                 verticalAlignment = Alignment.Top
                             ) {
-                                if (expandable) {
-                                    IconButton(
-                                        onClick = { expanded = !expanded }
-                                    ) {
-                                        Icon(
-                                            imageVector = if (expanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
-                                            contentDescription = if (expanded) "Show less" else "Show more"
-                                        )
-                                    }
-                                }
                                 Column(
                                     modifier = Modifier.weight(1f),
                                     verticalArrangement = Arrangement.spacedBy(2.dp)
@@ -423,14 +413,36 @@ fun SensitiveWorkRow(
                                     showsZeroStats = showsZeroStats
                                 )
                             )
-                            // iOS's standard card closes with the day AO3 gives the work. The
-                            // ledger card had it and this one did not.
-                            if (dateText.isNotBlank()) CardMetaLine(
-                                text = dateText,
-                                icon = androidx.compose.material.icons.Icons.Outlined.Event,
-                                accessibilityLabel = "Updated $dateText",
-                                color = if (mutedHistory) tokens.secondaryInk else MaterialTheme.colorScheme.onSurfaceVariant
-                            )
+                            // iOS's standard card closes with the day AO3 gives the work and the unfold control at the foot.
+                            if (dateText.isNotBlank() || expandable) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    if (dateText.isNotBlank()) {
+                                        CardMetaLine(
+                                            text = dateText,
+                                            icon = androidx.compose.material.icons.Icons.Outlined.Event,
+                                            accessibilityLabel = "Updated $dateText",
+                                            color = if (mutedHistory) tokens.secondaryInk else MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    } else {
+                                        Spacer(Modifier.weight(1f))
+                                    }
+                                    if (expandable) {
+                                        IconButton(
+                                            onClick = { expanded = !expanded }
+                                        ) {
+                                            Icon(
+                                                imageVector = if (expanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
+                                                contentDescription = if (expanded) "Show less" else "Show more",
+                                                tint = palette.accent
+                                            )
+                                        }
+                                    }
+                                }
+                            }
                         }
                         footer?.invoke()
                     }
@@ -514,7 +526,7 @@ private fun LedgerBody(
         Column(modifier, verticalArrangement = Arrangement.spacedBy(5.dp)) {
             // The badges too: a private bookmark of a work that names no fandom had no line to
             // say "Private" on, and said nothing.
-            if (named.isNotEmpty() || expandable || badges.isNotEmpty()) {
+            if (named.isNotEmpty() || badges.isNotEmpty()) {
                 Row(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalAlignment = Alignment.Top) {
                     named.firstOrNull()?.let { fandom ->
                         SubjectKicker(
@@ -541,18 +553,6 @@ private fun LedgerBody(
                             modifier = Modifier
                                 .border(0.5.dp, tokens.secondaryInk.copy(alpha = 0.5f), RoundedCornerShape(4.dp))
                                 .padding(horizontal = 5.dp, vertical = 1.dp)
-                        )
-                    }
-                    if (expandable) {
-                        // A bare glyph beside the kicker, as on iOS. Compose widens a small
-                        // control's touch area to the minimum by itself, without the layout.
-                        Icon(
-                            imageVector = if (expanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
-                            contentDescription = if (expanded) "Show less" else "Show more",
-                            tint = palette.accent,
-                            modifier = Modifier
-                                .size(20.dp)
-                                .clickable(role = Role.Button, onClick = onToggleExpanded)
                         )
                     }
                 }
@@ -626,7 +626,7 @@ private fun LedgerBody(
     }
 
     val line = figures.joinToString("  ·  ")
-    if (line.isNotEmpty() || dateText.isNotBlank()) {
+    if (line.isNotEmpty() || dateText.isNotBlank() || expandable) {
         val date: @Composable () -> Unit = {
             if (dateText.isNotBlank()) {
                 Text(
@@ -639,17 +639,41 @@ private fun LedgerBody(
                 )
             }
         }
+        val unfold: @Composable () -> Unit = {
+            if (expandable) {
+                Icon(
+                    imageVector = if (expanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
+                    contentDescription = if (expanded) "Show less" else "Show more",
+                    tint = palette.accent,
+                    modifier = Modifier
+                        .size(20.dp)
+                        .clickable(role = Role.Button, onClick = onToggleExpanded)
+                )
+            }
+        }
         // The date may not wrap; beside the figures at a large size it left them a column a
         // few letters wide (iOS T-386), so there it goes under them.
         if (accessibility) {
             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 if (line.isNotEmpty()) Text(line, fontSize = 11.5.sp, lineHeight = 17.sp, color = tokens.secondaryInk)
-                date()
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    date()
+                    unfold()
+                }
             }
         } else {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Bottom) {
-                Text(line, fontSize = 11.5.sp, lineHeight = 16.sp, color = tokens.secondaryInk, modifier = Modifier.weight(1f))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                if (line.isNotEmpty()) {
+                    Text(line, fontSize = 11.5.sp, lineHeight = 16.sp, color = tokens.secondaryInk, modifier = Modifier.weight(1f))
+                } else {
+                    Spacer(Modifier.weight(1f))
+                }
                 date()
+                unfold()
             }
         }
     }

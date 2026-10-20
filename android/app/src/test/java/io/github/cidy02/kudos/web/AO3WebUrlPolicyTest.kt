@@ -10,6 +10,25 @@ import io.github.cidy02.kudos.network.ao3.work.AO3EpubDownloader
 import kotlinx.coroutines.runBlocking
 
 class AO3WebUrlPolicyTest {
+    @Test fun onlyMainFrameWebLinksLeaveTheAppAndDemoNeverLaunchesABrowser() {
+        val ao3 = "https://archiveofourown.org/works/123"
+        val outside = "https://example.com/video"
+        assertEquals(WebNavDecision.External(outside), AO3WebUrlPolicy.navigationVerdict(outside, true, false))
+        assertEquals(WebNavDecision.Allow, AO3WebUrlPolicy.navigationVerdict(outside, false, false))
+        assertEquals(WebNavDecision.Allow, AO3WebUrlPolicy.navigationVerdict("about:blank", false, false))
+        for (main in listOf(false, true)) {
+            assertEquals(WebNavDecision.Block, AO3WebUrlPolicy.navigationVerdict(outside, main, true))
+            // Android's demo loads AO3 fixtures locally through shouldInterceptRequest.
+            assertEquals(WebNavDecision.Allow, AO3WebUrlPolicy.navigationVerdict(ao3, main, true))
+            assertEquals(WebNavDecision.Block, AO3WebUrlPolicy.navigationVerdict("intent://app", main, false))
+        }
+        for (url in listOf(ao3, outside, "http://archiveofourown.org/")) {
+            assertFalse(AO3WebUrlPolicy.mayOpenExternal(url, isDemo = true))
+            assertTrue(AO3WebUrlPolicy.mayOpenExternal(url, isDemo = false))
+        }
+        assertFalse(AO3WebUrlPolicy.mayOpenExternal("javascript:alert(1)", false))
+    }
+
     @Test fun addressAcceptsUrlsAndEncodesSearchTerms() {
         assertEquals(null, AO3WebUrlPolicy.addressUrl("  "))
         assertEquals("https://archiveofourown.org/media", AO3WebUrlPolicy.addressUrl(" https://archiveofourown.org/media "))

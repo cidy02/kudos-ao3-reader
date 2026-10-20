@@ -29,6 +29,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.collectAsState
+import io.github.cidy02.kudos.ui.components.navigationEntryState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -81,9 +82,9 @@ fun SeriesWorksScreen(
     var editing by remember(seriesUrl) { mutableStateOf<Boolean?>(null) }
     val accountState by (formRepository?.auth?.state?.collectAsState() ?: remember {
         mutableStateOf<io.github.cidy02.kudos.auth.AO3AuthState>(io.github.cidy02.kudos.auth.AO3AuthState.SignedOut) })
-    var state by remember(seriesUrl, sessionGeneration) { mutableStateOf<SeriesWorksState>(SeriesWorksState.Loading) }
-    var loadGeneration by remember(seriesUrl) { mutableIntStateOf(0) }
-    var expandAll by remember(seriesUrl) { mutableStateOf(false) }
+    var state by navigationEntryState<SeriesWorksState>("series:$seriesUrl:$sessionGeneration:state") { SeriesWorksState.Loading }
+    var loadGeneration by navigationEntryState("series:$seriesUrl:$sessionGeneration:loadGeneration") { 0 }
+    var expandAll by navigationEntryState("series:$seriesUrl:$sessionGeneration:expandAll") { false }
     var showMenu by remember(seriesUrl) { mutableStateOf(false) }
     val selection = rememberRemoteWorkSelection()
     val scope = rememberCoroutineScope()
@@ -110,7 +111,11 @@ fun SeriesWorksScreen(
         }
     }
 
-    LaunchedEffect(seriesUrl, sessionGeneration) { editing = null; selection.exit(); load() }
+    LaunchedEffect(seriesUrl, sessionGeneration) { editing = null; selection.exit(); if (state == SeriesWorksState.Loading) load() }
+
+    androidx.compose.runtime.DisposableEffect(seriesUrl, sessionGeneration) {
+        onDispose { state = (state as? SeriesWorksState.Loaded)?.copy(loadingPage = null) ?: state }
+    }
 
     val page = (state as? SeriesWorksState.Loaded)?.page
     val detail = (state as? SeriesWorksState.Loaded)?.detail
