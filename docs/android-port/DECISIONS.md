@@ -2440,3 +2440,10 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   selection menu, backed up as the manifest's `pronunciations`); Android carried the key through
   backups and sync untouched but had no store, no editor and no menu item. Brief 3ft ports it,
   reading and writing the same key.
+- **2026-10-20 · iOS's built-in reading fonts read as Android's generic families (Claude).**
+  New York, Georgia, Palatino and Times read as `serif`, Helvetica Neue and Avenir as
+  `sans-serif`, Menlo as `monospace`. Android has none of iOS's faces, and Readium refuses a font
+  family declared without a file: once 3fs declared every built-in the reader crashed on opening
+  (seen on the emulator), and before it, picking any built-in font crashed it too (the JVM tests
+  never ran Readium). Only imported fonts (with a file) are declared. Reverse:
+  `ReaderSettingsMapper.BUILT_IN_GENERIC_FAMILY`.

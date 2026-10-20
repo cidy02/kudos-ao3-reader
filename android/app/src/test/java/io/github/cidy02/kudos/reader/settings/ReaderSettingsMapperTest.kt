@@ -93,7 +93,7 @@ class ReaderSettingsMapperTest {
         assertEquals(1.0, off.pageMarginsFactor, 0.0)
         assertFalse(off.justify)
         assertTrue(off.bold)
-        assertEquals("georgia", off.fontFamily)
+        assertEquals("serif", off.fontFamily)
         assertEquals(150, off.fontSizePercent)
         assertFalse(off.publisherStyles)
         val on = mapper.map(saved.copy(readerCustomize = true), AppSettings())
@@ -149,13 +149,17 @@ class ReaderSettingsMapperTest {
         assertEquals("/data/user/0/app/files/fonts/xyz-789.otf", decl.fontPath)
     }
 
-    // iOS builtInFontsKeepFallbacksAndImportedFontsInjectFontFace.
-    @Test fun builtInFontsKeepGenericFallbacksWithoutRequiringAFile() {
-        val serif = mapper.map(ReaderSettings(readerFontId = "nyserif"), AppSettings()).fontDeclarations.single { it.fontFamily == "nyserif" }
-        assertEquals(listOf("New York", "ui-serif", "Georgia", "serif"), serif.alternates)
-        assertEquals(null, serif.fontPath)
-        val mono = mapper.map(ReaderSettings(readerFontId = "menlo"), AppSettings()).fontDeclarations.single { it.fontFamily == "menlo" }
-        assertEquals(listOf("Menlo", "monospace"), mono.alternates)
+    // iOS builtInFontsKeepFallbacksAndImportedFontsInjectFontFace. iOS's built-ins are not on
+    // Android, and Readium refuses a family declared with no face (the reader crashed on open
+    // once every built-in was declared), so each reads as its generic family instead.
+    @Test fun builtInFontsReadAsTheirGenericFamilyAndDeclareNoFace() {
+        assertEquals("serif", mapper.map(ReaderSettings(readerFontId = "nyserif"), AppSettings()).fontFamily)
+        assertEquals("sans-serif", mapper.map(ReaderSettings(readerFontId = "avenir"), AppSettings()).fontFamily)
+        assertEquals("monospace", mapper.map(ReaderSettings(readerFontId = "menlo"), AppSettings()).fontFamily)
+        io.github.cidy02.kudos.core.model.ReaderFontCatalog.builtIns.forEach { option ->
+            assertTrue(mapper.map(ReaderSettings(readerFontId = option.id), AppSettings())
+                .fontDeclarations.all { it.fontPath != null })
+        }
     }
 
     @Test
@@ -166,7 +170,6 @@ class ReaderSettingsMapperTest {
         )
 
         assertEquals(null, prefs.fontFamily)
-        assertTrue(prefs.fontDeclarations.isNotEmpty())
         io.github.cidy02.kudos.core.model.ReaderFontCatalog.builtIns.forEach { option ->
             assertEquals(prefs.fontDeclarations,
                 mapper.map(ReaderSettings(readerFontId = option.id), AppSettings()).fontDeclarations)
