@@ -75,7 +75,7 @@ fun OnboardingPoint(icon: ImageVector, title: String, body: String) {
         Modifier.fillMaxWidth().semantics(mergeDescendants = true) {},
         horizontalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        Icon(icon, contentDescription = null, tint = tokens.accent,
+        Icon(icon, contentDescription = null, tint = tokens.accentInk,
             modifier = Modifier.size(28.dp).padding(top = 2.dp))
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(title, style = MaterialTheme.typography.titleMedium,

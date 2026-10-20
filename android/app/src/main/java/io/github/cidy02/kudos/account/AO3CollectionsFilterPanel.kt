@@ -69,7 +69,7 @@ fun AO3CollectionsFilterPanel(
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = { finish(AO3CollectionsFilterDraft.Resolution.Cancel) }) {
-                    Icon(Icons.Default.Close, "Cancel", tint = tokens.accent)
+                    Icon(Icons.Default.Close, "Cancel", tint = tokens.accentInk)
                 }
                 Text(
                     "Sort and filter", modifier = Modifier.weight(1f),
@@ -81,7 +81,7 @@ fun AO3CollectionsFilterPanel(
                 ) {
                     Icon(
                         Icons.Default.Check, "Apply",
-                        tint = if (draft != editor.initial) tokens.accent else tokens.tertiaryInk
+                        tint = if (draft != editor.initial) tokens.accentInk else tokens.tertiaryInk
                     )
                 }
             }
@@ -96,7 +96,7 @@ fun AO3CollectionsFilterPanel(
                         SubjectFormRow("Order by", onClick = { sortMenuOpen = true }, trailing = {
                             Box {
                                 TextButton(onClick = { sortMenuOpen = true }) {
-                                    Text(draft.sort.title, color = tokens.accent)
+                                    Text(draft.sort.title, color = tokens.accentInk)
                                 }
                                 DropdownMenu(
                                     expanded = sortMenuOpen,
@@ -162,7 +162,7 @@ fun AO3CollectionsFilterPanel(
                 onClick = { editor.reset(); draft = editor.draft },
                 enabled = draft != AO3CollectionsFilter()
             ) {
-                Text("Reset", color = if (draft != AO3CollectionsFilter()) tokens.accent else tokens.tertiaryInk)
+                Text("Reset", color = if (draft != AO3CollectionsFilter()) tokens.accentInk else tokens.tertiaryInk)
             }
         }
     }

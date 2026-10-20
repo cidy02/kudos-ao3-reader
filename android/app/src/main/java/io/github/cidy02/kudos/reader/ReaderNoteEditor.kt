@@ -85,7 +85,7 @@ internal fun ReaderNoteEditor(
             Modifier.fillMaxWidth().padding(horizontal = SubjectMetrics.accountGutter),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            TextButton(onClick = { finished[0] = true; onCancel() }) { Text("Cancel", color = tokens.accent) }
+            TextButton(onClick = { finished[0] = true; onCancel() }) { Text("Cancel", color = tokens.accentInk) }
             Text(
                 if (annotation.note.isBlank()) "Add Note" else "Edit Note",
                 modifier = Modifier.weight(1f),

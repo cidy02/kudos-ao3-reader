@@ -101,7 +101,7 @@ fun LibraryToolbarActions(chrome: LibraryShellChrome) {
         ) {
             Text(
                 text = if (chrome.allSelected) "Deselect All" else "Select All",
-                color = tokens.accent,
+                color = tokens.accentInk,
                 fontSize = 15.sp,
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier

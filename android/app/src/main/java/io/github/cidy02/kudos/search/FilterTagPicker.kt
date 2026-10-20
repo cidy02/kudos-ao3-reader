@@ -141,7 +141,7 @@ internal fun FilterTagRow(
                     Text(title, Modifier.weight(1f), color = tokens.primaryInk,
                         fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
                     IconButton(onClick = { picking = false }) {
-                        Icon(Icons.Outlined.Check, "Done", tint = tokens.accent)
+                        Icon(Icons.Outlined.Check, "Done", tint = tokens.accentInk)
                     }
                 }
                 GlassFieldBar(query, { query = it }, "Search $title", Modifier.fillMaxWidth())

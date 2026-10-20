@@ -99,7 +99,7 @@ fun LibraryFilterPanel(
                     },
                     enabled = canReset
                 ) {
-                    Icon(Icons.Outlined.Refresh, "Reset filters", tint = if (canReset) tokens.accent else tokens.tertiaryInk)
+                    Icon(Icons.Outlined.Refresh, "Reset filters", tint = if (canReset) tokens.accentInk else tokens.tertiaryInk)
                 }
                 Text(
                     "Filters", Modifier.weight(1f), color = tokens.primaryInk,
@@ -324,7 +324,7 @@ private fun LibraryMultiSelectRow(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(title, Modifier.weight(1f), color = tokens.primaryInk, fontSize = 18.sp,
                         fontWeight = FontWeight.SemiBold)
-                    IconButton(onClick = { picking = false }) { Icon(Icons.Outlined.Check, "Done", tint = tokens.accent) }
+                    IconButton(onClick = { picking = false }) { Icon(Icons.Outlined.Check, "Done", tint = tokens.accentInk) }
                 }
                 GlassFieldBar(query, { query = it }, "Filter $title", Modifier.fillMaxWidth())
                 if (options.isEmpty()) {

@@ -69,7 +69,7 @@ internal fun FilterLanguageRow(selection: AO3Language, value: String = selection
                     Text("Language", Modifier.weight(1f), color = tokens.primaryInk,
                         fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
                     IconButton(onClick = { picking = false }) {
-                        Icon(Icons.Outlined.Check, "Done", tint = tokens.accent)
+                        Icon(Icons.Outlined.Check, "Done", tint = tokens.accentInk)
                     }
                 }
                 GlassFieldBar(query, { query = it }, "Search ${AO3Language.entries.size - 1} languages",
@@ -82,7 +82,7 @@ internal fun FilterLanguageRow(selection: AO3Language, value: String = selection
                             modifier = Modifier.semantics { selected = isSelected },
                             onClick = { onChange(language) },
                             trailing = {
-                                if (isSelected) Icon(Icons.Outlined.Check, null, tint = tokens.accent)
+                                if (isSelected) Icon(Icons.Outlined.Check, null, tint = tokens.accentInk)
                             })
                     }
                 }

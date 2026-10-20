@@ -106,7 +106,9 @@ data class ReadingSessionFacts(
     val durationSeconds: Double,
     val wordCount: Int,
     val didFinish: Boolean,
-    val fandom: String = ""
+    val fandom: String = "",
+    /** What this sitting read, in words (owner Q27, 2026-10-20): see `wordsRead`. */
+    val wordsRead: Int = 0
 )
 
 /** iOS Reading Insights' session-derived figures. */
@@ -160,6 +162,7 @@ data class ReadingInsights(
             works: List<SavedWork>
         ): List<ReadingSessionFacts> {
             val worksByID = works.associateBy { it.id }
+            val read = wordsRead(sessions)
             return sessions.map { session ->
                 ReadingSessionFacts(
                     workID = session.workID,
@@ -169,9 +172,29 @@ data class ReadingInsights(
                     didFinish = session.didFinish,
                     fandom = worksByID[session.workID]?.workFandoms
                         ?.firstOrNull { it.isNotEmpty() }
-                        .orEmpty()
+                        .orEmpty(),
+                    wordsRead = read[session.id] ?: 0
                 )
             }
+        }
+
+        /**
+         * Words each sitting read (owner Q27, 2026-10-20, both apps): the move in position since
+         * the work's sitting before (from the start for its first sitting, or after a sitting
+         * that finished it), times the work's words. A sitting that went back reads nothing and
+         * is where the next one starts from. iOS `ReadingLogService.wordsRead(sessions:)`.
+         */
+        fun wordsRead(sessions: List<ReadingSessionEntity>): Map<String, Int> {
+            val read = HashMap<String, Int>()
+            sessions.groupBy { it.workID }.values.forEach { rows ->
+                var start = 0.0
+                rows.sortedWith(compareBy({ it.startedAt }, { it.id })).forEach { session ->
+                    val end = session.endingProgress.coerceIn(0.0, 1.0)
+                    read[session.id] = ((end - start).coerceAtLeast(0.0) * session.wordCount).roundToInt()
+                    start = if (session.didFinish) 0.0 else end
+                }
+            }
+            return read
         }
 
         fun make(
@@ -240,7 +263,7 @@ data class ReadingInsights(
             val usable = facts.filter { it.durationSeconds > 0 }
             val totalSeconds = usable.sumOf { it.durationSeconds }
             if (totalSeconds <= 0) return 0.0
-            return usable.sumOf { it.wordCount }.toDouble() / (totalSeconds / 3_600)
+            return usable.sumOf { it.wordsRead }.toDouble() / (totalSeconds / 3_600)
         }
 
         fun finishRate(facts: List<ReadingSessionFacts>): Double? {

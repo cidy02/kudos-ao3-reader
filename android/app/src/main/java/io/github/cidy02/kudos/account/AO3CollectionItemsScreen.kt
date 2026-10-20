@@ -363,7 +363,7 @@ private fun ItemApprovalRow(label: String, value: AO3CollectionItemApproval, edi
                 }
             }
         }, confirmButton = {
-            TextButton(onClick = { choosing = false }) { Text("Cancel", color = tokens.accent, lineHeight = 20.sp) }
+            TextButton(onClick = { choosing = false }) { Text("Cancel", color = tokens.accentInk, lineHeight = 20.sp) }
         })
 }
 

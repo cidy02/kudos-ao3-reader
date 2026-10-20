@@ -270,7 +270,7 @@ fun AccountWorksListScreen(
                             AccountDisplayMode.entries.forEach { mode ->
                                 DropdownMenuItem(
                                     text = { Text(mode.title) },
-                                    trailingIcon = { if (mode == displayMode) Text("✓", color = tokens.accent) },
+                                    trailingIcon = { if (mode == displayMode) Text("✓", color = tokens.accentInk) },
                                     onClick = {
                                         displayMode = mode
                                         showLayoutMenu = false

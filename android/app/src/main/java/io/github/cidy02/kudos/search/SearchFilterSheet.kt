@@ -108,7 +108,7 @@ fun SearchFilterSheet(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = onClear, enabled = canReset) {
                     Icon(Icons.Outlined.Refresh, "Reset filters",
-                        tint = if (canReset) tokens.accent else tokens.tertiaryInk)
+                        tint = if (canReset) tokens.accentInk else tokens.tertiaryInk)
                 }
                 Text(
                     if (worksSort != null) "Sort and filter" else if (refine) "Refine" else "Filters", Modifier.weight(1f),

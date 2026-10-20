@@ -176,4 +176,22 @@ class SubjectPaletteTest {
         assertEquals("$message green", expected.green, actual.green, 0.002f)
         assertEquals("$message blue", expected.blue, actual.blue, 0.002f)
     }
+
+    @Test
+    fun accentTextReadsOnDarkPagesAndFillsKeepTheExactAccent() {
+        // Owner Q19 (2026-10-20): AO3 red text was about 1.8 to 1 on Dark and OLED.
+        val red = Color(0xFF990000)
+        for (theme in listOf(ReaderTheme.Dark, ReaderTheme.Oled)) {
+            val tokens = KudosTokens.of(theme, red)
+            assertEquals(red, tokens.accent)
+            assertTrue(contrastRatio(tokens.accentInk, theme.cardBackdrop) >= 4.5)
+            assertTrue(tokens.accentInk.red > tokens.accentInk.green) // still red
+        }
+        for (theme in listOf(ReaderTheme.Light, ReaderTheme.Sepia)) {
+            val tokens = KudosTokens.of(theme, red)
+            assertEquals(tokens.accent, tokens.accentInk)
+        }
+        val alreadyReadable = Color(0xFFFFD54F)
+        assertEquals(alreadyReadable, KudosTokens.of(ReaderTheme.Dark, alreadyReadable).accentInk)
+    }
 }

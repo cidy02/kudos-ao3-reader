@@ -600,7 +600,7 @@ fun SettingsFontPage(
                                         Icon(
                                             imageVector = Icons.Filled.Check,
                                             contentDescription = "Selected",
-                                            tint = tokens.accent,
+                                            tint = tokens.accentInk,
                                             modifier = Modifier.size(18.dp)
                                         )
                                     }

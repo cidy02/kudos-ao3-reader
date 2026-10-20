@@ -1171,7 +1171,7 @@ private fun ReaderDisplaySheet(
                     onClick = { onFontFamilyChange(if (option.id == "system") null else option.id) },
                     trailing = {
                         if (currentFontId == option.id) {
-                            Icon(Icons.Filled.Check, contentDescription = "Selected", tint = tokens.accent)
+                            Icon(Icons.Filled.Check, contentDescription = "Selected", tint = tokens.accentInk)
                         }
                     }
                 )

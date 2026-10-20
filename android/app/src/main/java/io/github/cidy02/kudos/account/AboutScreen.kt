@@ -56,7 +56,7 @@ fun AboutScreen(onReportBug: () -> Unit) {
                     Icon(
                         imageVector = Icons.Filled.Book,
                         contentDescription = null,
-                        tint = tokens.accent,
+                        tint = tokens.accentInk,
                         modifier = Modifier.size(42.dp)
                     )
                     Text("Kudos", color = tokens.primaryInk, fontSize = 22.sp, fontWeight = FontWeight.Bold)
@@ -177,7 +177,7 @@ private fun CreditRow(name: String, license: String, detail: String, url: String
         Text(
             text = url.removePrefix("https://"),
             modifier = Modifier.clickable { openUrl(context, url) },
-            color = tokens.accent,
+            color = tokens.accentInk,
             fontSize = 12.sp
         )
     }

@@ -146,7 +146,7 @@ fun AvailabilitySweepScreen(
                         LinearProgressIndicator(
                             progress = { completed.toFloat() / maxOf(total, 1) },
                             modifier = Modifier.fillMaxWidth(),
-                            color = tokens.accent,
+                            color = tokens.accentInk,
                             trackColor = tokens.glassStroke(0.13)
                         )
                         Caption("Checked ${completed.formatted()} of ${total.formatted()}")
@@ -278,7 +278,7 @@ private fun Caption(text: String) {
 private fun ResultLine(icon: ImageVector, text: String) {
     val tokens = LocalKudosTokens.current
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Icon(icon, contentDescription = null, tint = tokens.accent, modifier = Modifier.size(18.dp))
+        Icon(icon, contentDescription = null, tint = tokens.accentInk, modifier = Modifier.size(18.dp))
         Text(text, color = tokens.primaryInk, fontSize = 15.sp)
     }
 }

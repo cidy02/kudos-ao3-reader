@@ -227,7 +227,7 @@ private fun PreservedWorkRow(
                     imageVector = if (inSavedForLater) Icons.Filled.Schedule else Icons.AutoMirrored.Outlined.ListAlt,
                     contentDescription = null,
                     modifier = Modifier.size(24.dp),
-                    tint = tokens.accent
+                    tint = tokens.accentInk
                 )
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(

@@ -71,7 +71,7 @@ fun WhatsNewContent(entries: List<ChangelogEntry>, onDone: () -> Unit, modifier:
             Text("What's New", color = tokens.primaryInk, fontSize = 20.sp, lineHeight = 28.sp,
                 modifier = Modifier.weight(1f))
             IconButton(onClick = onDone,
-                colors = IconButtonDefaults.iconButtonColors(contentColor = tokens.accent)) {
+                colors = IconButtonDefaults.iconButtonColors(contentColor = tokens.accentInk)) {
                 Icon(Icons.Filled.Check, contentDescription = "Done")
             }
         }
