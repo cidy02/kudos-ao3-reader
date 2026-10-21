@@ -357,7 +357,7 @@ object Routes {
         if (route == null) return false
         val base = route.substringBefore("?").substringBefore("/")
         return base == ReadingQueues.substringBefore("?").substringBefore("/") ||
-            base == AccountShortcuts || base == WritingDrafts || base == WritingWork.substringBefore("?") || base == WritingWorkNewDemo || base == WritingWorkDraftDemo ||
+            base == Backup || base == AccountShortcuts || base == WritingDrafts || base == WritingWork.substringBefore("?") || base == WritingWorkNewDemo || base == WritingWorkDraftDemo ||
             base == WritingWorkPostedDemo || base == WritingChapterNewDraftDemo || base == WritingChapterDraftDemo || base == WritingEditorDemo || base == WritingEditorFixture ||
             base == QueueDetail.substringBefore("?").substringBefore("/") ||
             base == Collections.substringBefore("?").substringBefore("/") ||
@@ -392,6 +392,7 @@ object Routes {
         WritingChapterNewDraftDemo, WritingChapterDraftDemo,
         WritingEditorDemo, WritingEditorFixture, SeriesWorks, AuthorProfile, AuthorAbout, AuthorSeries, AuthorWorks, Comments, Reader,
         WorkDetail, // WorkDetailView
+        Search, // SearchView explicitly hides its tab bar
         BrowseFandoms, BrowseWorks, TagWorks, // FandomListView, NativeBrowseView
         Settings, Backup, QueueStorage, AvailabilitySweep, About, BugReport, // SettingsPageForm
         AO3Preferences, AO3Dashboard, AccountList, AccountMoreOnAO3, AccountInbox, AO3CollectionDetail, AO3CollectionItems, AO3ChallengeSettings, AO3ChallengeAssignments, AO3ChallengeSignUps, AO3ChallengeSignUp, AO3PromptMeme, AO3TagSet, AO3CollectionMaintainers, AO3UserCollectionItems, AO3CollectionModeration, AO3CollectionForm, // Account screens and AO3 lists

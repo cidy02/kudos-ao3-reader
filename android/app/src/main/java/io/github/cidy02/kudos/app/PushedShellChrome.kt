@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.app
 
+import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -20,6 +21,7 @@ class PushedShellChrome {
     var hideTabBar by mutableStateOf(false)
     var hasSubjectHeader by mutableStateOf<Boolean?>(null)
     var customTitle by mutableStateOf<String?>(null)
+    var pageBackground by mutableStateOf<Color?>(null)
     var onBack by mutableStateOf<(() -> Unit)?>(null)
     var trailingContent by mutableStateOf<(@Composable RowScope.() -> Unit)?>(null)
     /**
@@ -68,6 +70,7 @@ class PushedShellChrome {
         hideTabBar = false
         hasSubjectHeader = null
         customTitle = null
+        pageBackground = null
         onBack = null
         trailingContent = null
         scrollKey = null
@@ -84,7 +87,8 @@ fun ProvidePushedShellChrome(
     customTitle: String? = null,
     onBack: (() -> Unit)? = null,
     trailingContent: (@Composable RowScope.() -> Unit)? = null,
-    scrollKey: String? = null
+    scrollKey: String? = null,
+    pageBackground: Color? = null
 ) {
     val screen = remember { Any() }
     SideEffect {
@@ -93,6 +97,7 @@ fun ProvidePushedShellChrome(
             chrome.hideTabBar = hideTabBar
             chrome.hasSubjectHeader = hasSubjectHeader
             chrome.customTitle = customTitle
+            chrome.pageBackground = pageBackground
             chrome.onBack = onBack
             chrome.trailingContent = trailingContent
             chrome.scrollKey = scrollKey

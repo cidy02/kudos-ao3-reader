@@ -45,6 +45,15 @@ class BackupRepository(
         io.github.cidy02.kudos.reader.speech.KokoroPronunciationStore(workFileStore.worksDirectory.parent.toFile()),
     private val cacheDirectory: File? = null
 ) {
+    val metadataCheck = SyncMetadataCheck(now = clock) {
+        persistenceGate.withLock {
+            withContext(Dispatchers.IO) {
+                val manifest = captureLibrarySnapshot().toV2Manifest(exportedAt = clock(), appVersion = appVersion)
+                BackupValidator.validateManifest(manifest, now = clock())
+            }
+        }
+    }
+
     fun suggestedExportFileName(now: Instant = clock()): String {
         val day = DateTimeFormatter.ofPattern("yyyy-MM-dd")
             .withZone(ZoneOffset.systemDefault())

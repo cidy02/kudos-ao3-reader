@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.settings
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.width
@@ -56,7 +57,7 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import io.github.cidy02.kudos.app.LocalPushedShellChrome
+import io.github.cidy02.kudos.app.ProvidePushedShellChrome
 import io.github.cidy02.kudos.ui.subject.LocalSubjectPalette
 import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
 import io.github.cidy02.kudos.ui.subject.SubjectHeaderBlock
@@ -66,10 +67,9 @@ import io.github.cidy02.kudos.ui.subject.SubjectPalette
 import io.github.cidy02.kudos.ui.subject.isAccessibilityFontScale
 import io.github.cidy02.kudos.ui.subject.spokenAs
 import io.github.cidy02.kudos.ui.subject.subjectPanel
-import io.github.cidy02.kudos.ui.subject.subjectScreenWash
 
 /**
- * The frame every Settings page shares with the hub: no bar title (the header
+ * The frame for Settings sub-pages: no bar title (the header
  * names the page), then a status-bar inset plus 56.dp, then the kicker and title.
  */
 @Composable
@@ -79,16 +79,16 @@ fun SettingsPage(
     subtitle: String? = null,
     content: LazyListScope.() -> Unit
 ) {
-    val chrome = LocalPushedShellChrome.current
-    LaunchedEffect(Unit) {
-        chrome.customTitle = null
-        chrome.hasSubjectHeader = true
-    }
+    val tokens = LocalKudosTokens.current
+    val background = if (tokens.theme == io.github.cidy02.kudos.ui.subject.ReaderTheme.Dark) {
+        io.github.cidy02.kudos.ui.theme.SurfaceDark
+    } else tokens.background
+    ProvidePushedShellChrome(hasSubjectHeader = true, scrollKey = title, pageBackground = background)
     val palette = LocalSubjectPalette.current
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
-            .subjectScreenWash(palette),
+            .background(background),
         contentPadding = PaddingValues(bottom = 32.dp)
     ) {
         item {

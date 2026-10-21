@@ -26,6 +26,10 @@ import androidx.compose.material.icons.outlined.BugReport
 import androidx.compose.material.icons.outlined.Code
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.Folder
+import androidx.compose.material.icons.outlined.FolderOpen
+import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.material.icons.outlined.Cancel
 import androidx.compose.material.icons.outlined.NoteAdd
 import androidx.compose.material.icons.outlined.PanTool
 import androidx.compose.material.icons.outlined.Storage
@@ -46,7 +50,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -629,6 +632,14 @@ fun SettingsFolderSyncPage(repository: SettingsRepository, settings: KudosSettin
     val context = LocalContext.current
     val container = (context.applicationContext as? KudosApplication)?.container
     val syncRepository = container?.syncRepository
+    val metadataCheck = container?.backupRepository?.metadataCheck
+    val metadataFlow = remember(metadataCheck) {
+        metadataCheck?.status ?: kotlinx.coroutines.flow.MutableStateFlow(io.github.cidy02.kudos.backup.SyncMetadataCheck.Status())
+    }
+    val metadata by metadataFlow.collectAsState()
+    LaunchedEffect(metadataCheck) {
+        if (metadata.lastChecked == null) metadataCheck?.run()
+    }
     var lastSyncFolded by remember { mutableStateOf(0) }
     var syncBusy by remember { mutableStateOf(false) }
 
@@ -670,11 +681,14 @@ fun SettingsFolderSyncPage(repository: SettingsRepository, settings: KudosSettin
         item {
             Column(Modifier.padding(top = 22.dp)) {
                 SettingsPanel {
+                    SubjectFormRow("Metadata", value = metadata.title, leadingIcon = Icons.Outlined.Storage)
+                    SubjectRowSeparator()
                     if (folderLabel != null) {
-                        SubjectFormRow("Folder", value = folderLabel)
+                        SubjectFormRow("Folder", value = folderLabel, leadingIcon = Icons.Outlined.Folder)
                         SubjectRowSeparator()
                         SubjectFormRow(
                             label = "Auto Sync",
+                            leadingIcon = Icons.Outlined.Sync,
                             trailing = {
                                 SubjectToggle(
                                     checked = settings.sync.isEnabled,
@@ -688,40 +702,55 @@ fun SettingsFolderSyncPage(repository: SettingsRepository, settings: KudosSettin
                         SettingsActionRow(
                             label = "Sync Now",
                             icon = Icons.Outlined.Sync,
-                            enabled = !syncBusy,
+                            enabled = !syncBusy && !metadata.checking,
                             onClick = ::syncNow
                         )
                         SubjectRowSeparator()
                         SettingsActionRow(
                             label = "Change Folder",
+                            icon = Icons.Outlined.FolderOpen,
                             contentDescription = "Change sync folder",
-                            enabled = !syncBusy,
+                            enabled = !syncBusy && !metadata.checking,
                             onClick = { syncFolderLauncher.launch(null) }
                         )
                         SubjectRowSeparator()
                         SettingsActionRow(
                             label = "Disconnect",
+                            icon = Icons.Outlined.Cancel,
                             destructive = true,
-                            enabled = !syncBusy,
+                            enabled = !syncBusy && !metadata.checking,
                             onClick = { scope.launch { syncRepository?.disconnect() } }
                         )
                     } else {
                         SettingsActionRow(
                             label = "Choose Sync Folder",
+                            icon = Icons.Outlined.FolderOpen,
                             contentDescription = "Select sync folder",
-                            enabled = !syncBusy,
+                            enabled = !syncBusy && !metadata.checking,
                             onClick = { syncFolderLauncher.launch(null) }
                         )
+                    }
+                    metadata.lastChecked?.let { instant ->
+                        SubjectRowSeparator()
+                        SubjectFormRow("Last Checked", value = formatSyncInstant(instant))
                     }
                     settings.sync.lastSyncAt?.let { instant ->
                         SubjectRowSeparator()
                         SubjectFormRow("Last Synced", value = formatSyncInstant(instant))
                     }
-                    if (syncBusy) {
+                    SubjectRowSeparator()
+                    SettingsActionRow(
+                        label = metadata.action,
+                        icon = Icons.Outlined.Refresh,
+                        enabled = metadataCheck != null && !metadata.checking && !syncBusy,
+                        onClick = { scope.launch { metadataCheck?.run() } }
+                    )
+                    if (syncBusy || metadata.checking) {
                         SubjectRowSeparator()
-                        SubjectFormRow("Syncing library…")
+                        SubjectFormRow(if (syncBusy) "Syncing library…" else "Preparing your library…")
                     }
                 }
+                metadata.error?.let { SettingsFootnote(it) }
                 // The stored error covers manual, lifecycle and background worker runs.
                 settings.sync.lastError?.takeIf { connected && it.isNotBlank() }?.let { SettingsFootnote(it) }
                 if (connected && lastSyncFolded > 0) {
@@ -746,11 +775,10 @@ fun SettingsFolderSyncPage(repository: SettingsRepository, settings: KudosSettin
 }
 
 @Composable
-private fun SeriesLimitStepper(value: Int, enabled: Boolean, onChange: (Int) -> Unit) {
+internal fun SeriesLimitStepper(value: Int, enabled: Boolean, onChange: (Int) -> Unit) {
     val tokens = LocalKudosTokens.current
     Row(
         Modifier
-            .alpha(if (enabled) 1f else 0.4f)
             .clip(RoundedCornerShape(8.dp))
             .background(tokens.glassFill(0.16))
     ) {
@@ -776,7 +804,7 @@ private fun StepButton(label: String, enabled: Boolean, onClick: () -> Unit) {
     ) {
         Text(
             text = label,
-            color = if (enabled) tokens.primaryInk else tokens.tertiaryInk,
+            color = if (enabled) tokens.primaryInk else tokens.secondaryInk,
             fontSize = 18.sp
         )
     }

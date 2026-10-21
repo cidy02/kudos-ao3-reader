@@ -48,6 +48,25 @@ class BackupRepositorySafetyTest {
     }
 
     @Test
+    fun metadataCheckValidatesTheRealSnapshotWithoutChangingRowsOrAssets() = runTest {
+        val device = device()
+        device.seed()
+        val rows = device.database.workDao().getAllIncludingDeleted()
+        val assets = device.assetFiles()
+        device.repository.metadataCheck.run()
+        assertEquals("Ready", device.repository.metadataCheck.status.value.title)
+        assertEquals(rows, device.database.workDao().getAllIncludingDeleted())
+        assertEquals(assets, device.assetFiles())
+        assertEquals(0, device.workFiles.attempts)
+        device.database.workDao().upsert(work("not-a-uuid", "Broken metadata").toEntity())
+        device.repository.metadataCheck.run()
+        assertEquals("Needs Retry", device.repository.metadataCheck.status.value.title)
+        device.database.workDao().deleteById("not-a-uuid")
+        device.repository.metadataCheck.run()
+        assertEquals("Ready", device.repository.metadataCheck.status.value.title)
+    }
+
+    @Test
     fun secondEpubFailureRestoresOverwrittenBytesAndEveryRow() = runTest {
         assertSecondEpubFailure(firstId = A)
     }

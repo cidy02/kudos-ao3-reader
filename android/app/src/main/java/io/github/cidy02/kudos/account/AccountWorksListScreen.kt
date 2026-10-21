@@ -725,47 +725,45 @@ internal fun pageAfterEmptying(currentPage: Int, totalPages: Int): Int? =
     if (totalPages <= 1) null else if (currentPage < totalPages) maxOf(currentPage, 1) else totalPages - 1
 
 @Composable
-private fun MarkedForLaterRow(
+internal fun MarkedForLaterRow(
     work: CanonicalWork,
     expandAll: Boolean,
     palette: SubjectPalette,
     onOpenWork: (AO3WorkSummary) -> Unit,
-    onUnmark: () -> Unit
+    onUnmark: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val tokens = LocalKudosTokens.current
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(6.dp)
-    ) {
+    val context = LocalContext.current
+    val local = work.local
+    val byteLabel by produceState<String?>(null, local?.id, local?.isDownloaded) {
+        value = local?.takeIf { it.isDownloaded }?.let { saved ->
+            (context.applicationContext as? io.github.cidy02.kudos.KudosApplication)
+                ?.container?.workFileStore?.workEpubSize(saved.id)
+        }?.let(io.github.cidy02.kudos.settings.LocalStorageFootprint::formatted)
+    }
+    val downloadLine = markedForLaterDownloadLine(local?.isDownloaded == true, byteLabel)
+    val cardPalette = SubjectPalette.fromHue(
+        io.github.cidy02.kudos.home.HomeFacts.workHue(local?.workFandoms ?: work.remote.fandoms, local?.title ?: work.remote.title),
+        tokens.theme
+    )
+    // iOS wraps the sensitive row and its action in one card; Unmark stays reachable before reveal.
+    Column(modifier.fillMaxWidth()
+        .background(tokens.cardFill, MaterialTheme.shapes.medium)
+        .background(cardPalette.cardWash, MaterialTheme.shapes.medium)) {
         PairedWorkRow(work = work, expandAll = expandAll, onOpenWork = onOpenWork, ledger = true)
-        val context = LocalContext.current
-        val local = work.local
-        val byteLabel by produceState<String?>(null, local?.id, local?.isDownloaded) {
-            value = local?.takeIf { it.isDownloaded }?.let { saved ->
-                (context.applicationContext as? io.github.cidy02.kudos.KudosApplication)
-                    ?.container?.workFileStore?.workEpubSize(saved.id)
-            }?.let(io.github.cidy02.kudos.settings.LocalStorageFootprint::formatted)
-        }
-        val downloadLine = markedForLaterDownloadLine(local?.isDownloaded == true, byteLabel)
-
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 8.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 13.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            if (downloadLine != null) {
-                Text(
-                    text = downloadLine,
-                    color = tokens.secondaryInk,
-                    fontSize = 12.sp,
-                    fontFamily = FontFamily.Monospace
-                )
-            } else {
-                Spacer(modifier = Modifier.width(1.dp))
-            }
-
+            Text(
+                text = downloadLine.orEmpty(),
+                color = tokens.secondaryInk,
+                fontSize = 12.sp,
+                fontFamily = FontFamily.Monospace,
+                modifier = Modifier.weight(1f)
+            )
             SubjectChip(
                 text = "Unmark",
                 style = SubjectChipStyle.Neutral,
@@ -1673,10 +1671,10 @@ private fun CompactWorkCovers(
 
 // ponytail: a SavedWork made only so the cover card can draw AO3's blurb; it is never stored.
 // If a second screen needs a cover for a work not in the Library, give the card plain fields.
-private fun AO3WorkSummary.coverFace() = SavedWork(
+internal fun AO3WorkSummary.coverFace() = SavedWork(
     id = "ao3-$id",
     title = title,
-    author = authorText,
+    author = if (authors.any { it.isNotBlank() }) authorText else "",
     rating = rating,
     isComplete = isComplete == true,
     workFandoms = fandoms.filter { it.isNotBlank() },

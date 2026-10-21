@@ -56,6 +56,7 @@ class NavigationRoutesTest {
 
     @Test
     fun pushedRoutesWithSubjectHeaderBlockAreIdentified() {
+        assertTrue(Routes.hasSubjectHeader(Routes.Backup))
         assertTrue(Routes.hasSubjectHeader(Routes.ReadingQueues))
         assertTrue(Routes.hasSubjectHeader(Routes.readingQueues("test-queue")))
         assertTrue(Routes.hasSubjectHeader(Routes.readingQueues()))
@@ -98,6 +99,7 @@ class NavigationRoutesTest {
         assertTrue(Routes.hidesTabBar(Routes.Collections))
         assertTrue(Routes.hidesTabBar(Routes.About))
         assertTrue(Routes.hidesTabBar(Routes.Backup))
+        assertTrue(Routes.hidesTabBar(Routes.Search))
         assertTrue(Routes.hidesTabBar(Routes.BrowseWorks))
         assertTrue(Routes.hidesTabBar(Routes.ReadingStatistics))
         assertTrue(Routes.hidesTabBar(Routes.AccountList))

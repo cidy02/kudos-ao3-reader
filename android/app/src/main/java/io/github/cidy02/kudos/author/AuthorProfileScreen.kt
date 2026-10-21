@@ -850,7 +850,7 @@ fun AuthorProfileScreen(
                                 AO3DashboardCompactCard(
                                     fandoms = s.fandoms,
                                     title = s.title,
-                                    meta = "${s.workCount ?: 0} works",
+                                    meta = seriesTallyParts(listOf(s), isPartial = false).joinToString(" · "),
                                     onClick = { onOpenSeries(s.url) }
                                 )
                             }
@@ -936,8 +936,12 @@ fun AuthorProfileScreen(
                             
                             val pageData = works
                             val visibleWorks = pageData?.works.orEmpty().filter { worksFilters.matchesSummary(it) }
-                            if (selection.isSelecting) item {
-                                SectionRuleHeader(if (ownWorks) "Your works" else "Works", countText = "${selection.selectedIn(pageData?.works.orEmpty()).size} / ${pageData?.works.orEmpty().size}")
+                            item {
+                                SectionRuleHeader(
+                                    if (selection.isSelecting && ownWorks) "Your works" else "Works",
+                                    count = visibleWorks.size.takeIf { !selection.isSelecting && it > 0 },
+                                    countText = if (selection.isSelecting) "${selection.selectedIn(pageData?.works.orEmpty()).size} / ${pageData?.works.orEmpty().size}" else null
+                                )
                             }
                             if (pageData == null || visibleWorks.isEmpty()) {
                                 item { EmptyStateCard("No works", "No works by this author are visible to you on AO3.") }
@@ -951,7 +955,7 @@ fun AuthorProfileScreen(
                                         OwnWorkRow(work, onAction = { action ->
                                             if (action == "delete") { heldDelete = deletes; deletes?.ask(listOf(work), multiple = false) }
                                             else rowAction = work to action
-                                        }) { AO3AuthorWorkCard(work, displayMode, expandAll, true, onOpenWork) }
+                                        }) { actions -> AO3AuthorWorkCard(work, displayMode, expandAll, true, onOpenWork, actions = actions) }
                                     } else AO3AuthorWorkCard(work, displayMode, expandAll, false, onOpenWork)
                                 }
                                 item {

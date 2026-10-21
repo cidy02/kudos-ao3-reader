@@ -176,7 +176,8 @@ internal fun AO3AuthorWorkCard(
     modifier: Modifier = Modifier,
     bookmark: io.github.cidy02.kudos.ui.components.LedgerBookmark? = null,
     selecting: Boolean = false,
-    selected: Boolean = false
+    selected: Boolean = false,
+    actions: (@Composable () -> Unit)? = null
 ) {
     // iOS `showsPerformance`: on the writer's own works the kudos, comments and hits are a
     // strip inside the ledger card, and its line of figures leaves them out. They were
@@ -191,7 +192,12 @@ internal fun AO3AuthorWorkCard(
         // A bookmark is iOS's one card in every layout (1q).
         ledger = displayMode != AuthorDisplayMode.Detailed || bookmark != null,
         bookmark = bookmark,
-        footer = if (strip) { { AO3AuthorPerformanceStrip(work) } } else null,
+        footer = if (strip || actions != null) { {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                if (strip) AO3AuthorPerformanceStrip(work)
+                if (actions != null) Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) { actions() }
+            }
+        } } else null,
         figuresIncludePerformance = !strip,
         selecting = selecting,
         selected = selected
@@ -427,7 +433,8 @@ internal fun AO3DashboardCompactCard(
     Column(
         modifier
             .fillMaxWidth()
-            .subjectPanel(cornerRadius = 16.dp)
+            .background(palette.cardWash, RoundedCornerShape(16.dp))
+            .subjectPanel(cornerRadius = 16.dp, isFilled = false)
             .clickable(onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 13.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp)
