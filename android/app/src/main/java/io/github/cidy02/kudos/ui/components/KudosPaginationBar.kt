@@ -1,5 +1,9 @@
 package io.github.cidy02.kudos.ui.components
 
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.layout.size
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.onClick
@@ -19,8 +23,6 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
-import androidx.compose.material.icons.automirrored.outlined.LastPage
-import androidx.compose.material.icons.outlined.FirstPage
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -85,13 +87,26 @@ fun KudosPaginationBar(
     }
 
     val leading: @Composable () -> Unit = {
-        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            IconButton(onClick = { onPageChange(1) }, enabled = enabled && currentPage > 1) {
-                Icon(Icons.Outlined.FirstPage, contentDescription = "First Page")
-            }
-            IconButton(onClick = { onPageChange(currentPage - 1) }, enabled = enabled && currentPage > 1) {
-                Icon(Icons.AutoMirrored.Outlined.KeyboardArrowLeft, contentDescription = "Previous Page")
-            }
+        val navEnabled = enabled && currentPage > 1
+        Box(
+            modifier = Modifier
+                .minimumInteractiveComponentSize()
+                .size(40.dp)
+                .clip(CircleShape)
+                .combinedClickable(
+                    enabled = navEnabled,
+                    role = Role.Button,
+                    onClick = { onPageChange(navigationPage(PaginationDirection.BACKWARD, false, currentPage, totalPages)) },
+                    onLongClick = { onPageChange(navigationPage(PaginationDirection.BACKWARD, true, currentPage, totalPages)) },
+                    onLongClickLabel = "First page"
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                Icons.AutoMirrored.Outlined.KeyboardArrowLeft,
+                contentDescription = "Previous Page",
+                tint = if (navEnabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+            )
         }
     }
     val position: @Composable () -> Unit = {
@@ -110,13 +125,26 @@ fun KudosPaginationBar(
         }
     }
     val trailing: @Composable () -> Unit = {
-        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            IconButton(onClick = { onPageChange(currentPage + 1) }, enabled = enabled && currentPage < totalPages) {
-                Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, contentDescription = "Next Page")
-            }
-            IconButton(onClick = { onPageChange(totalPages) }, enabled = enabled && currentPage < totalPages) {
-                Icon(Icons.AutoMirrored.Outlined.LastPage, contentDescription = "Last Page")
-            }
+        val navEnabled = enabled && currentPage < totalPages
+        Box(
+            modifier = Modifier
+                .minimumInteractiveComponentSize()
+                .size(40.dp)
+                .clip(CircleShape)
+                .combinedClickable(
+                    enabled = navEnabled,
+                    role = Role.Button,
+                    onClick = { onPageChange(navigationPage(PaginationDirection.FORWARD, false, currentPage, totalPages)) },
+                    onLongClick = { onPageChange(navigationPage(PaginationDirection.FORWARD, true, currentPage, totalPages)) },
+                    onLongClickLabel = "Last page"
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                Icons.AutoMirrored.Outlined.KeyboardArrowRight,
+                contentDescription = "Next Page",
+                tint = if (navEnabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+            )
         }
     }
     if (stacked) {
@@ -282,6 +310,22 @@ private fun PageScrubberSheet(
             }
         }
     }
+}
+
+enum class PaginationDirection { BACKWARD, FORWARD }
+
+/**
+ * Port of iOS SearchPaginationBar.navigationPage.
+ * Arrow taps go adjacent; long presses jump to the first/last page.
+ */
+internal fun navigationPage(
+    direction: PaginationDirection,
+    longPress: Boolean,
+    currentPage: Int,
+    totalPages: Int
+): Int = when (direction) {
+    PaginationDirection.BACKWARD -> if (longPress) 1 else maxOf(1, currentPage - 1)
+    PaginationDirection.FORWARD -> if (longPress) totalPages else minOf(totalPages, currentPage + 1)
 }
 
 /**

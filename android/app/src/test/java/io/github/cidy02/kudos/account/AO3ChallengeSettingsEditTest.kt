@@ -283,6 +283,71 @@ class AO3ChallengeSettingsEditTest {
         model.change(form.dateField("works_reveal_at")!!, "2026-03-20 00:00:00")
         assertFalse(model.revealsSomething())
     }
+
+    @Test fun undrawnRestrictionBoxesKeepTheirTickOnSave() {
+        val base = "gift_exchange[offer_restriction_attributes]"
+        fun box(field: String, on: Boolean, disabled: Boolean = false): String {
+            val off = if (disabled) " disabled=\"disabled\"" else ""
+            val chk = if (on) " checked=\"checked\"" else ""
+            return "<input name=\"$base[$field]\" type=\"hidden\" value=\"0\"$off>" +
+                "<input type=\"checkbox\" value=\"1\" name=\"$base[$field]\"$chk$off>"
+        }
+        val html = """
+        <form action="/collections/fest/gift_exchange" method="post">
+          <input type="hidden" name="_method" value="put">
+          <input type="hidden" name="authenticity_token" value="csrf">
+          ${box("character_restrict_to_fandom", on = true)}
+          ${box("relationship_restrict_to_tag_set", on = false)}
+          ${box("character_restrict_to_tag_set", on = true, disabled = true)}
+        </form>
+        """.trimIndent()
+        val form = AO3ChallengeSettingsFormParser().parse(html, "fest", AO3ChallengeKind.GiftExchange)
+        val params = form.parameters()
+        fun posted(field: String): List<String> =
+            params.filter { it.first == "$base[$field]" }.map { it.second }
+        // A browser posts the hidden "0" and then the ticked box's "1"; Rails keeps the last (A65 #102).
+        assertEquals("1", posted("character_restrict_to_fandom").last())
+        assertEquals(listOf("0"), posted("relationship_restrict_to_tag_set"))
+        assertTrue(posted("character_restrict_to_tag_set").isEmpty())
+    }
+
+    @Test fun disabledAndAbsentRestrictionFieldsAreNotPosted() {
+        val base = "gift_exchange[request_restriction_attributes]"
+        val html = """
+        <form action="/collections/fest/gift_exchange" method="post">
+          <input type="hidden" name="authenticity_token" value="csrf">
+          <input name="$base[fandom_num_required]" value="2" disabled>
+          <input name="$base[url_allowed]" type="hidden" value="0" disabled>
+          <input type="checkbox" name="$base[url_allowed]" value="1" checked disabled>
+          <input name="$base[description_required]" type="hidden" value="0">
+          <input type="checkbox" name="$base[description_required]" value="1" checked>
+        </form>
+        """.trimIndent()
+        val form = AO3ChallengeSettingsFormParser().parse(html, "fest", AO3ChallengeKind.GiftExchange)
+        val params = form.parameters()
+        val names = params.map { it.first }.toSet()
+        assertFalse(names.contains("$base[fandom_num_required]"))
+        assertFalse(names.contains("$base[url_allowed]"))
+        assertFalse(names.contains("$base[optional_tags_allowed]"))
+        assertEquals("1", params.last { it.first == "$base[description_required]" }.second)
+    }
+
+    @Test fun enabledHiddenInputWithDisabledCheckboxPostsZero() {
+        // When only the checkbox is disabled, iOS submittedHiddenFields and a browser both post "0".
+        // The hidden input is enabled, so it must not be skipped.
+        val base = "gift_exchange[offer_restriction_attributes]"
+        val html = """
+        <form action="/collections/fest/gift_exchange" method="post">
+          <input type="hidden" name="authenticity_token" value="csrf">
+          <input name="$base[fandom_restrict_to_tag_set]" type="hidden" value="0">
+          <input type="checkbox" name="$base[fandom_restrict_to_tag_set]" value="1" disabled>
+        </form>
+        """.trimIndent()
+        val form = AO3ChallengeSettingsFormParser().parse(html, "fest", AO3ChallengeKind.GiftExchange)
+        val params = form.parameters()
+        val posted = params.filter { it.first == "$base[fandom_restrict_to_tag_set]" }.map { it.second }
+        assertEquals(listOf("0"), posted)
+    }
 }
 
 internal fun fixtureForm(kind: AO3ChallengeKind): Pair<String, AO3ChallengeSettingsForm> {

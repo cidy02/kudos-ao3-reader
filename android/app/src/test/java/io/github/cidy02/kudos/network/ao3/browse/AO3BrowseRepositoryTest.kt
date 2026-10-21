@@ -129,6 +129,35 @@ class AO3BrowseRepositoryTest {
         assertTrue(client.requestedUrls.single().contains("work_search%5Bfandom_names%5D=Naruto"))
     }
 
+    @Test
+    fun worksForTagSendsViewAdultTrue() = runTest {
+        val searchHtml = """
+            <ol class="work index group">
+              <li id="work_456" class="work blurb group">
+                <h4 class="heading">
+                  <a href="/works/456">Tag Work</a>
+                  <a rel="author" href="/users/bob">Bob</a>
+                </h4>
+              </li>
+            </ol>
+        """.trimIndent()
+        val client = FakeAO3Client { ok(searchHtml) }
+
+        val result = repoWith(client).worksForTag("Fluff")
+
+        assertTrue(result is AO3Result.Success)
+        val requestedUrl = client.requestedUrls.single().toHttpUrl()
+        assertEquals("/tags/Fluff/works", requestedUrl.encodedPath)
+        assertEquals("true", requestedUrl.queryParameter("view_adult"))
+        assertEquals(null, requestedUrl.queryParameter("work_search[fandom_names]"))
+
+        // In contrast, worksForFandom does not send view_adult.
+        val fandomClient = FakeAO3Client { ok(searchHtml) }
+        repoWith(fandomClient).worksForFandom("Naruto")
+        val fandomUrl = fandomClient.requestedUrls.single().toHttpUrl()
+        assertEquals(null, fandomUrl.queryParameter("view_adult"))
+    }
+
     @Test fun siblingUnionResolvesSequentiallyThenRunsOneSearchAndReusesIDs() = runTest {
         val client = FakeAO3Client { url ->
             when {

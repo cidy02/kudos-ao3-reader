@@ -459,9 +459,15 @@ internal fun WorkFormControlRow(label: String, control: @Composable () -> Unit) 
 }
 
 @Composable
-internal fun WorkFormToggle(label: String, checked: Boolean, enabled: Boolean = true, onChange: (Boolean) -> Unit) {
+internal fun WorkFormToggle(
+    label: String,
+    checked: Boolean,
+    enabled: Boolean = true,
+    spokenLabel: String = label,
+    onChange: (Boolean) -> Unit
+) {
     WorkFormControlRow(label) {
-        SubjectToggle(checked, onChange, enabled = enabled, accent = LocalKudosTokens.current.scopePalette.accent, contentDescription = label)
+        SubjectToggle(checked, onChange, enabled = enabled, accent = LocalKudosTokens.current.scopePalette.accent, contentDescription = spokenLabel)
     }
 }
 

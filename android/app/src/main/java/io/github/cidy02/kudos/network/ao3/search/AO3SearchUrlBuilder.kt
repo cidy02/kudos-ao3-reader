@@ -1,6 +1,7 @@
 package io.github.cidy02.kudos.network.ao3.search
 
 import io.github.cidy02.kudos.network.ao3.AO3Constants
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 
 class AO3SearchUrlBuilder {
     /** The Search tab's endpoint: AO3's `/works/search`. */
@@ -39,6 +40,41 @@ class AO3SearchUrlBuilder {
             .build()
             .toString()
     }
+
+    /**
+     * Builds the URL for a filtered works listing from a tapped or arbitrary tag URL,
+     * matching iOS `AO3Client.filteredWorksURL(url, filters: filters, page: page)`.
+     *
+     * The incoming URL is whatever was tapped, and may already carry query items.
+     * Its own `work_search[...]`, `page` and `view_adult` are dropped in favour of
+     * the panel's, so applying a filter twice can't accumulate two conflicting
+     * values for the same parameter; anything else it carries is preserved (e.g. `utf8`, `commit`).
+     * `view_adult=true` is sent unconditionally.
+     */
+    fun filteredWorksUrl(url: String, filters: AO3SearchFilters, page: Int = 1): String {
+        val httpUrl = url.toHttpUrlOrNull() ?: (buildFandomWorksUrl(url, filters, page)?.toHttpUrlOrNull() ?: return url)
+        val preserved = mutableListOf<Pair<String, String>>()
+        for (i in 0 until httpUrl.querySize) {
+            val name = httpUrl.queryParameterName(i)
+            val value = httpUrl.queryParameterValue(i).orEmpty()
+            if (!name.startsWith("work_search[") && name != "page" && name != "view_adult") {
+                preserved.add(name to value)
+            }
+        }
+        val builder = httpUrl.newBuilder()
+        for (name in httpUrl.queryParameterNames) {
+            builder.removeAllQueryParameters(name)
+        }
+        for ((name, value) in preserved) {
+            builder.addQueryParameter(name, value)
+        }
+        builder.addQueryParameter("view_adult", "true")
+        appendWorkSearchParams(builder, filters, page)
+        return builder.build().toString()
+    }
+
+    fun buildFilteredWorksUrl(url: String, filters: AO3SearchFilters, page: Int = 1): String =
+        filteredWorksUrl(url, filters, page)
 
     /**
      * AO3 writes a handful of characters as `*x*` escapes inside a tag's URL path

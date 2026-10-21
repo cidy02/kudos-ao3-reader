@@ -1262,7 +1262,7 @@ class AO3WriteRepository(
                     // `readingsWriteResult` allows one (History, list Unsubscribe, Unmark); the
                     // author page's writes need the notice (Codex's 3fn review).
                     parser.writeSuccessMessage(body) != null ||
-                        (redirectConfirms && response.value.statusCode in 300..399) ->
+                        (redirectConfirms && response.value.statusCode in 300..399 && response.value.statusCode !in setOf(307, 308)) ->
                         success(kind, done)
                     response.value.statusCode in 200..399 -> AO3Result.Failure(AO3Error.Validation(
                         "AO3 replied but didn't confirm the change went through. Check on AO3 before trying again."

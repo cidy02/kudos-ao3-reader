@@ -2476,3 +2476,9 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   (`kokoro-int8-en-v0_19`, sherpa-onnx 1.13.6) ignores a lexicon, so a correction does not yet
   change Android's speech; the page says so. A later pack that reads the lexicon picks them up
   with no data change. Reverse: drop the Listening row; the key would pass through as before.
+- **2026-10-21 · A ticked challenge-settings box is posted as a browser posts it (Claude; closes
+  A65 #102).** A browser sends AO3's hidden "0" and then the box's "1"; iOS sends the box once.
+  Rails keeps the last value, so AO3 ends with the same setting either way. Android keeps the
+  browser's exact body, which its tests pin ("untouched bodies equal a browser's, field for
+  field"), and owner question 17 covers the general choice. 3fx's change to drop the "0" was
+  taken back; its tests now assert the value Rails keeps.

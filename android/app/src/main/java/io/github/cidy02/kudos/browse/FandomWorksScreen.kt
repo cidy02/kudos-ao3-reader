@@ -112,7 +112,7 @@ fun FandomWorksScreen(
     }
     val savedByUrl = remember(savedWorks) { BrowseLocalIndicators.index(savedWorks) }
     val browseDefault = remember { AO3BrowseRepository.browseBaseline() }
-    val activeFilters = remember(filters) { activeFilterCount(filters) }
+    val activeFilters = remember(filters, fandomName) { activeFilterCount(filters, excluding = fandomName) }
     val narrowed = filters != browseDefault
     val palette = fandomListPalette(fandomName)
     

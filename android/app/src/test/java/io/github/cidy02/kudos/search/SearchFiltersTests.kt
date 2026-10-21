@@ -84,7 +84,13 @@ class SearchFiltersTests {
         newFacets.forEach {
             assertTrue(it.hasActiveFilters)
             assertTrue(it.isSearchable)
-            assertTrue(activeFilterCount(it) > 0)
+            val isSortOnly = it.sort != AO3SearchSort.RELEVANCE || it.sortDirection != AO3SortDirection.DESCENDING
+            if (isSortOnly) {
+                // Following iOS SearchFilterBadge: sort and sort direction are not narrowing badges
+                assertEquals(0, activeFilterCount(it))
+            } else {
+                assertTrue(activeFilterCount(it) > 0)
+            }
             assertEquals(AO3SearchFilters(), clearedFiltersPreservingQuery(it))
         }
     }

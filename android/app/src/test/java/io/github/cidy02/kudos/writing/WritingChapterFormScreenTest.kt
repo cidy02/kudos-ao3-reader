@@ -86,6 +86,23 @@ class WritingChapterFormScreenTest {
         assertEquals("13", model.state.value.form!!.position)
     }
 
+    @Test fun customPublicationDateSwitchHasSpokenName() {
+        show()
+        reach("Set a different publication date")
+        compose.onNodeWithContentDescription("Custom publication date").assertExists()
+        // The fixture's chapter may already carry a date: start from off, then switch it on.
+        if (model.state.value.form!!.publishedYear.isNotEmpty()) {
+            compose.onNodeWithContentDescription("Custom publication date").performClick()
+            compose.waitForIdle()
+        }
+        assertTrue(model.state.value.form!!.publishedYear.isEmpty())
+        compose.onNodeWithContentDescription("Custom publication date").performClick()
+        compose.waitForIdle()
+        assertTrue(model.state.value.form!!.publishedYear.isNotEmpty())
+        reach("Publication date")
+        compose.onNodeWithText("Publication date").assertExists()
+    }
+
     @Test fun everyTextRowOpensTheCorrectEditorAndBackKeepsItsCheckpointWithoutReads() {
         show("draft", count = 2)
         for (field in ChapterFormText.entries) {
