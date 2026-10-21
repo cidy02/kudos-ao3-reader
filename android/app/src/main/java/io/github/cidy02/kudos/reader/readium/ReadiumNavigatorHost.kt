@@ -150,7 +150,8 @@ fun ReadiumNavigatorHost(
             ReadiumSettingsAdapter.configureFontDeclarations(this, fontDeclarations)
         }
         EpubNavigatorFactory(publication).createFragmentFactory(
-            initialLocator = initialLocator,
+            // New imported fonts need new declarations, without returning to the opening page.
+            initialLocator = controller?.currentLocator ?: initialLocator,
             initialPreferences = preferences,
             listener = listener,
             paginationListener = paginationListener,
@@ -185,14 +186,15 @@ fun ReadiumNavigatorHost(
             fm.beginTransaction()
                 .setReorderingAllowed(true)
                 .add(containerId, EpubNavigatorFragment::class.java, null, FRAGMENT_TAG)
-                .commitAllowingStateLoss()
+                .commitNowAllowingStateLoss()
         }
         onDispose {
             viewportJob?.cancel()
             currentController?.attach(null)
             val fragment = fm.findFragmentByTag(FRAGMENT_TAG)
-            if (fragment != null && !fm.isStateSaved) {
-                fm.beginTransaction().remove(fragment).commitAllowingStateLoss()
+            if (fragment != null && !fm.isDestroyed) {
+                // Finish removal before a changed font factory mounts its replacement.
+                fm.beginTransaction().remove(fragment).commitNowAllowingStateLoss()
             }
         }
     }

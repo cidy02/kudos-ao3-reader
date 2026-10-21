@@ -29,6 +29,18 @@ object ReaderProgressDisplay {
         }
     }
 
+    /** Compact section pill only: P/S/A or chapter/total; absent/other means percent-only. */
+    fun pillLabel(progress: ReaderProgress?, sections: List<ReaderSection>, chapters: String = ""): String? {
+        val section = sections.getOrNull(progress?.spineIndex ?: return null) ?: return null
+        return section.pillLabel(storyTotal(sections, chapters)).takeIf { it.isNotEmpty() }
+    }
+
+    private fun storyTotal(sections: List<ReaderSection>, chapters: String): Int {
+        val parts = chapters.split('/')
+        return if (parts.size == 2) parts[1].trim().toIntOrNull() ?: sections.storyChapterCount
+            else sections.storyChapterCount
+    }
+
     fun minutesForPositions(count: Int): Int = (count.coerceAtLeast(0) * 55.0 / 60).roundToInt()
 
     fun durationLabel(minutes: Int): String {
@@ -56,9 +68,7 @@ object ReaderProgressDisplay {
         if (sections.isEmpty()) return null
         val idx = progress.spineIndex.coerceIn(0, sections.lastIndex)
         val section = sections[idx]
-        val parts = chapters.split('/')
-        val storyTotal = if (parts.size == 2) parts[1].trim().toIntOrNull() ?: sections.storyChapterCount
-            else sections.storyChapterCount
+        val storyTotal = storyTotal(sections, chapters)
         return when (section.kind) {
             ReaderSectionKind.PREFACE -> "Preface"
             ReaderSectionKind.SUMMARY -> "Summary"

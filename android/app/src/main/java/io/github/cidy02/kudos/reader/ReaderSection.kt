@@ -32,7 +32,19 @@ data class ReaderSection(
     val kind: ReaderSectionKind,
     val spineIndex: Int,
     val storyChapterIndex: Int?
-)
+) {
+    /** iOS's compact paged pill; the iPhone position card uses full words instead. */
+    fun pillLabel(storyChapterTotal: Int): String = when (kind) {
+        ReaderSectionKind.PREFACE -> "P"
+        ReaderSectionKind.SUMMARY -> "S"
+        ReaderSectionKind.AFTERWORD -> "A"
+        ReaderSectionKind.CHAPTER -> {
+            val index = storyChapterIndex ?: 0
+            "$index/${maxOf(storyChapterTotal, index)}"
+        }
+        ReaderSectionKind.OTHER -> ""
+    }
+}
 
 /** Count of real story chapters only (excludes preface/summary/afterword/other). */
 val List<ReaderSection>.storyChapterCount: Int

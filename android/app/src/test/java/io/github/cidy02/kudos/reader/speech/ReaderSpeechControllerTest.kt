@@ -15,7 +15,6 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
-import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
@@ -60,65 +59,156 @@ class ReaderSpeechControllerTest {
         }
     }
 
-    @Test fun nextDuringAnIoPullRetainsTheTakenParagraphAndItsQueueIndex() = runTest {
-        skipDuringPull(listOf(1), "P2")
+    @Test fun playerAndMediaSessionDispatchTheSameChapterActions() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val controller = ReaderSpeechController(context, tts = Engine())
+        val calls = mutableListOf<String>()
+        try {
+            controller.onSkipNext = { calls += "next chapter" }
+            controller.onSkipPrevious = { calls += "previous chapter" }
+            controller.skipForward()
+            controller.skipBackward()
+            val session = org.robolectric.util.ReflectionHelpers.getField<android.media.session.MediaSession>(
+                controller, "mediaSession"
+            )
+            val handler = org.robolectric.util.ReflectionHelpers.getField<Any>(session, "mCallback")
+            val remote = org.robolectric.util.ReflectionHelpers.getField<android.media.session.MediaSession.Callback>(
+                handler, "mCallback"
+            )
+            remote.onSkipToNext()
+            remote.onSkipToPrevious()
+            assertEquals(listOf("next chapter", "previous chapter", "next chapter", "previous chapter"), calls)
+        } finally {
+            controller.shutdown()
+        }
     }
 
-    @Test fun previousDuringAnIoPullRetainsTheTakenParagraph() = runTest {
-        skipDuringPull(listOf(-1), "P0")
-    }
-
-    @Test fun repeatedSkipsDuringOnePullRetainEveryParagraph() = runTest {
-        skipDuringPull(listOf(1, 1, -1), "P2")
-    }
-
-    private suspend fun TestScope.skipDuringPull(skips: List<Int>, expected: String) {
+    @Test fun chapterTapDuringAPullReplacesTheOldSourceAndCannotSpeakItsLateParagraph() = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         val engine = Engine()
         val controller = ReaderSpeechController(context, tts = engine)
         val pulling = CompletableDeferred<Unit>()
         val release = CompletableDeferred<Unit>()
-        var index = 0
-        // Its own IO thread, stopped before tearDown resets Main: a pull still returning to Main
-        // from Dispatchers.IO raced the reset ("Dispatchers.Main is used concurrently").
         val ioPool = java.util.concurrent.Executors.newSingleThreadExecutor()
         val io = ioPool.asCoroutineDispatcher()
         val source = ReaderSpeechSource {
             withContext(io) {
-                val taken = index++
-                if (taken == 1) {
-                    // Like Readium: advance the iterator before an IO result returns to Main.
-                    pulling.complete(Unit)
-                    release.await()
-                }
-                if (taken < 4) "P$taken" else null
+                pulling.complete(Unit)
+                release.await()
+                "Late paragraph from the old chapter."
             }
         }
         try {
-            controller.startReading(source)
-            assertEquals("P0", engine.calls.receive().also { it.done.complete(Unit) }.text)
-            pulling.await()
-            skips.forEach { if (it > 0) controller.skipForward() else controller.skipBackward() }
-            runCurrent()
-            release.complete(Unit)
-            assertEquals(expected, engine.calls.receive().text)
-            if (expected == "P2") {
-                controller.skipBackward()
-                assertEquals("P1", engine.calls.receive().text)
-                controller.skipForward()
-                assertEquals("P2", engine.calls.receive().also { it.done.complete(Unit) }.text)
-            } else {
-                engine.finish()
-                assertEquals("P1", engine.calls.receive().also { it.done.complete(Unit) }.text)
-                assertEquals("P2", engine.calls.receive().also { it.done.complete(Unit) }.text)
+            controller.onSkipNext = {
+                controller.beginSeeking()
+                controller.endSeeking(ReaderSpeechSource { "New chapter start." })
             }
-            assertEquals("P3", engine.calls.receive().text)
+            controller.startReading(source)
+            runCurrent()
+            pulling.await()
+            controller.skipForward()
+            assertEquals("New chapter start.", engine.calls.receive().text)
+            release.complete(Unit)
+            runCurrent()
+            assertTrue(engine.calls.tryReceive().isFailure)
         } finally {
             release.complete(Unit)
             controller.shutdown()
             ioPool.shutdown()
             ioPool.awaitTermination(5, java.util.concurrent.TimeUnit.SECONDS)
             advanceUntilIdle()
+        }
+    }
+
+    @Test fun lateOldChapterPullCannotClearTheNewPullsPauseGuard() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val engine = Engine()
+        val controller = ReaderSpeechController(context, tts = engine)
+        val oldRelease = CompletableDeferred<Unit>()
+        val newRelease = CompletableDeferred<Unit>()
+        try {
+            controller.startReading(ReaderSpeechSource {
+                // Models file IO that cannot return to Main immediately on cancellation.
+                withContext(kotlinx.coroutines.NonCancellable) { oldRelease.await(); "Old chapter." }
+            })
+            runCurrent()
+            controller.onSkipNext = {
+                controller.beginSeeking()
+                controller.endSeeking(ReaderSpeechSource { newRelease.await(); "New chapter." })
+            }
+            controller.skipForward()
+            runCurrent()
+            oldRelease.complete(Unit)
+            runCurrent()
+            controller.pause()
+            newRelease.complete(Unit)
+            runCurrent()
+            assertEquals(SpeechStatus.PAUSED, controller.status.value)
+            assertTrue(engine.calls.tryReceive().isFailure)
+            controller.resume()
+            assertEquals("New chapter.", engine.calls.receive().text)
+        } finally {
+            oldRelease.complete(Unit)
+            newRelease.complete(Unit)
+            controller.shutdown()
+            runCurrent()
+        }
+    }
+
+    @Test fun lateOldChapterEndCannotStopTheNewChapterPull() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val engine = Engine()
+        val controller = ReaderSpeechController(context, tts = engine)
+        val oldRelease = CompletableDeferred<Unit>()
+        val newRelease = CompletableDeferred<Unit>()
+        try {
+            controller.startReading(ReaderSpeechSource {
+                withContext(kotlinx.coroutines.NonCancellable) { oldRelease.await(); null }
+            })
+            runCurrent()
+            controller.onSkipNext = {
+                controller.beginSeeking()
+                controller.endSeeking(ReaderSpeechSource { newRelease.await(); "New chapter." })
+            }
+            controller.skipForward()
+            runCurrent()
+            oldRelease.complete(Unit)
+            runCurrent()
+            assertEquals(SpeechStatus.PLAYING, controller.status.value)
+            assertTrue(engine.calls.tryReceive().isFailure)
+            newRelease.complete(Unit)
+            assertEquals("New chapter.", engine.calls.receive().text)
+            assertEquals(SpeechStatus.PLAYING, controller.status.value)
+        } finally {
+            oldRelease.complete(Unit)
+            newRelease.complete(Unit)
+            controller.shutdown()
+            runCurrent()
+        }
+    }
+
+    @Test fun chapterTapWhilePausedWaitsForPlayAtTheNewChapter() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val engine = Engine()
+        val controller = ReaderSpeechController(context, tts = engine)
+        var pulls = 0
+        try {
+            controller.onSkipPrevious = {
+                controller.beginSeeking()
+                controller.endSeeking(ReaderSpeechSource { pulls++; "Previous chapter start." })
+            }
+            controller.startReading(listOf("Current chapter."))
+            engine.calls.receive()
+            controller.pause()
+            controller.skipBackward()
+            runCurrent()
+            assertEquals(SpeechStatus.PAUSED, controller.status.value)
+            assertEquals(0, pulls)
+            assertTrue(engine.calls.tryReceive().isFailure)
+            controller.resume()
+            assertEquals("Previous chapter start.", engine.calls.receive().text)
+        } finally {
+            controller.shutdown()
         }
     }
 

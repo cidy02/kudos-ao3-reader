@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.reader
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -88,6 +89,8 @@ fun ReaderPositionCard(
     onSeekEnd: () -> Unit = {},
     // Mini player parameters
     showsMiniPlayer: Boolean = false,
+    showsPosition: Boolean = true,
+    onPlayerBackgroundTap: (() -> Unit)? = null,
     speechStatus: SpeechStatus = SpeechStatus.STOPPED,
     speechDownloadProgress: Float? = null,
     spokenText: String = "",
@@ -169,11 +172,12 @@ fun ReaderPositionCard(
                     onSeek = onSeekSpeech,
                     onSeekStart = onSpeechSeekStart,
                     onSeekEnd = onSpeechSeekEnd,
+                    onBackgroundTap = onPlayerBackgroundTap,
                     onDownloadStart = onDownloadVoiceModel
                 )
 
-                // Hairline separator inside the same glass surface
-                Box(
+                // Standalone transport has no position-card separator.
+                if (showsPosition) Box(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 18.dp)
@@ -183,7 +187,7 @@ fun ReaderPositionCard(
             }
 
             // Chapter & whole-work reading progress
-            Column(
+            if (showsPosition) Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(
@@ -339,7 +343,8 @@ private fun PositionMiniPlayer(
     onSeek: (Int) -> Unit,
     onSeekStart: () -> Unit,
     onSeekEnd: () -> Unit,
-    onDownloadStart: () -> Unit
+    onDownloadStart: () -> Unit,
+    onBackgroundTap: (() -> Unit)?
 ) {
     val tokens = LocalKudosTokens.current
 
@@ -384,6 +389,7 @@ private fun PositionMiniPlayer(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .then(if (onBackgroundTap != null) Modifier.clickable(onClick = onBackgroundTap) else Modifier)
                 .padding(horizontal = 16.dp, vertical = 10.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
@@ -409,7 +415,7 @@ private fun PositionMiniPlayer(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     SpeechSkipButton(
-                        icon = Icons.Filled.SkipPrevious, label = "Previous paragraph", delta = -1,
+                        icon = Icons.Filled.SkipPrevious, label = "Previous chapter", delta = -1,
                         onClick = onSkipPrevious, onSeek = onSeek,
                         onSeekStart = onSeekStart, onSeekEnd = onSeekEnd
                     )
@@ -427,7 +433,7 @@ private fun PositionMiniPlayer(
                     }
 
                     SpeechSkipButton(
-                        icon = Icons.Filled.SkipNext, label = "Next paragraph", delta = 1,
+                        icon = Icons.Filled.SkipNext, label = "Next chapter", delta = 1,
                         onClick = onSkipNext, onSeek = onSeek,
                         onSeekStart = onSeekStart, onSeekEnd = onSeekEnd
                     )
