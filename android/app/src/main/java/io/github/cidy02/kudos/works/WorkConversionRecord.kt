@@ -16,8 +16,8 @@ data class WorkConversionRecord(
     val convertedAt: Double = appleDate(Instant.now()),
     val converterPlatform: String? = null
 ) {
-    // An unmarked iOS stamp cannot prove Android has built this EPUB with its current converter.
-    val isStale: Boolean get() = converterPlatform != "android" || converterVersion < CURRENT_VERSION
+    // Each app judges only its own version scale; legacy and foreign stamps ask before rebuilding.
+    val isStale: Boolean get() = converterPlatform == "android" && converterVersion < CURRENT_VERSION
 
     fun encode(): ByteArray = json.encodeToString(this).encodeToByteArray()
 
@@ -34,8 +34,8 @@ data class WorkConversionRecord(
             runCatching { json.decodeFromString<WorkConversionRecord>(it.decodeToString()) }.getOrNull()
         }
 
-        /** A missing or unreadable record is version zero, as in iOS WorkReconversion. */
-        fun isStale(record: WorkConversionRecord?): Boolean = record?.isStale ?: true
+        /** Without a readable Android stamp, there is no local version to judge. */
+        fun isStale(record: WorkConversionRecord?): Boolean = record?.isStale ?: false
 
         fun formatName(format: ImportedFileFormat): String = when (format) {
             ImportedFileFormat.TEXT -> "plainText"

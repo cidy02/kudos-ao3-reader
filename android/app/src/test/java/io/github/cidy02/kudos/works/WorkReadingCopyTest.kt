@@ -169,6 +169,10 @@ class WorkReadingCopyTest {
         val stale = works.upsert(SavedWork(title = "Import", author = "A", lastSpineIndex = 1))
         assertTrue(importer.rebuildFromOriginal(stale) is WorkImportResult.Failure)
         store.writeOriginal(stale.id, "txt", "The original text.".toByteArray())
+        assertFalse(importer.conversionIsStale(stale))
+        store.writeConversionRecord(stale.id, WorkConversionRecord(
+            converterVersion = 0, format = "plainText", originalFileName = "story.txt", converterPlatform = "android"
+        ).encode())
         assertTrue(importer.conversionIsStale(stale))
         works.upsert(stale.copy(lastSpineIndex = 7, isFavorite = true))
         val rebuilt = (importer.rebuildFromOriginal(stale) as WorkImportResult.Success).work
@@ -178,6 +182,7 @@ class WorkReadingCopyTest {
         assertFalse(importer.conversionIsStale(rebuilt))
         assertEquals(WorkConversionRecord.CURRENT_VERSION,
             WorkConversionRecord.decode(store.readConversionRecord(stale.id))!!.converterVersion)
+        assertEquals("android", WorkConversionRecord.decode(store.readConversionRecord(stale.id))!!.converterPlatform)
         assertEquals(0, downloads)
     }
     @Test fun everyConvertedImportWritesItsStampAndRebuildRefreshesIt() = runBlocking {
@@ -192,6 +197,20 @@ class WorkReadingCopyTest {
         val rebuilt = (importer.rebuildFromOriginal(work) as WorkImportResult.Success).work
         assertFalse(importer.conversionIsStale(rebuilt))
         assertEquals("story.txt", WorkConversionRecord.decode(store.readConversionRecord(work.id))!!.originalFileName)
+        assertEquals(0, downloads)
+    }
+
+    @Test fun foreignConverterRecordsNeverOfferAnAutomaticRebuild() = runBlocking {
+        val work = works.upsert(SavedWork(title = "Shared import", author = "A"))
+        store.writeOriginal(work.id, "txt", "The original text.".toByteArray())
+        for (platform in listOf(null, "ios", "other")) {
+            for (version in listOf(0, 9, 999)) {
+                val record = WorkConversionRecord(version, "plainText", "story.txt", converterPlatform = platform)
+                store.writeConversionRecord(work.id, record.encode())
+                assertFalse(importer.conversionIsStale(work))
+                assertEquals(record, WorkConversionRecord.decode(store.readConversionRecord(work.id)))
+            }
+        }
         assertEquals(0, downloads)
     }
 

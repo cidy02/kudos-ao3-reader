@@ -2269,8 +2269,10 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   F04: Library bulk Delete, a collection's bulk Remove, Queue Storage's Remove and the
   queue-only Remove swipe always ask, as iOS, whatever the delete-confirmation setting (that
   setting covers single-work deletes). F05: Rebuild from Original asks first and shows a
-  failure (one shared dialog). Brief 3fz adds converter stamps: stale copies rebuild at once;
-  only current copies ask first.
+  failure (one shared dialog). Brief 3fz adds converter stamps: older Android copies rebuild
+  at once; current Android, unmarked/legacy, and foreign-platform stamps ask first (3gc).
+  Missing/unreadable stamps also ask: there is no Android version to judge. Each app uses
+  only its own explicitly tagged converter scale (owner decision, 2026-10-20).
   F06: Read on a work with no file fetches a reading copy and opens it, without keeping it as
   a download; a fresh copy resets Finished and the fallback position, as iOS's
   `restoreReadableEPUB`. F07: Continue Reading from a work page opened over its reader goes
@@ -2459,3 +2461,10 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   must clear it whatever happened (their tests, and the code before 3fv): otherwise a sign-out
   mid-write left the button busy for good. Maintainers, Moderation, Tag Set and the Prompt Meme
   keep Codex's guard: their contract is that a session change never touches the old screen.
+- **2026-10-20 · Converter records are judged by the app that wrote them (Claude; Android 3gc,
+  iOS T-421).** Each app numbers its converter on its own scale (iOS 9, Android 1), and both
+  carry the same `Originals/<id>.conversion.json` through backups and sync. Android writes the
+  additive key `converterPlatform: "android"`; iOS writes none. Android calls a record stale only
+  when it is Android's and older; iOS only when it has no platform (or "ios") and is older. A
+  foreign record is never stale, so neither app nags about the other's imports (My copy still
+  rebuilds them, after asking). Reverse: `WorkConversionRecord.isStale` on both apps.

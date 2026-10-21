@@ -113,6 +113,7 @@ import io.github.cidy02.kudos.reader.settings.ReaderSettingsMapper
 import io.github.cidy02.kudos.reader.settings.backgroundColor
 import io.github.cidy02.kudos.reader.settings.ReaderSpeechPreferences
 import io.github.cidy02.kudos.reader.speech.ReaderSpeechController
+import io.github.cidy02.kudos.reader.speech.ReaderSpeechSeekSession
 import io.github.cidy02.kudos.reader.speech.SpeechStatus
 import io.github.cidy02.kudos.ui.components.ReaderPageSkeleton
 import io.github.cidy02.kudos.ui.components.workCardZoomDestination
@@ -357,6 +358,19 @@ private fun ReaderReading(
             val sections = remember(publication) { ReadiumTocAdapter.sections(publication) }
             val progressLabel = ReaderProgressDisplay.label(state.liveProgress, sections, state.work.chapters)
             var positions by remember(publication) { mutableStateOf<List<List<Locator>>>(emptyList()) }
+            val speechSeek = remember(publication, speechController, navigatorController) {
+                ReaderSpeechSeekSession(
+                    onStart = speechController::beginSeeking,
+                    navigate = { navigatorController.go(it, animated = false) },
+                    reanchor = { locator ->
+                        scope.launch {
+                            speechController.endSeeking(ReaderContentText.source(
+                                publication, locator, viewModel.readsAuthorNotes()
+                            ))
+                        }
+                    }
+                )
+            }
             fun bookmarkChapter(entry: ReaderTocEntry, editNote: Boolean = false) {
                 val locator = ReadiumTocAdapter.chapterStartLocator(positions, entry.href) ?: return
                 val progress = ReadiumProgressAdapter.toReaderProgress(publication, locator)
@@ -740,9 +754,15 @@ private fun ReaderReading(
                                 },
                                 onSkipNext = { speechController.skipForward() },
                                 onSkipPrevious = { speechController.skipBackward() },
-                                onSeekSpeech = speechController::seek,
-                                onSpeechSeekStart = speechController::beginSeeking,
-                                onSpeechSeekEnd = speechController::endSeeking,
+                                onSeekSpeech = { delta ->
+                                    if (speechSeek.step(positions, page, pageCount, delta)) {
+                                        haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    }
+                                },
+                                onSpeechSeekStart = {
+                                    speechSeek.begin(navigatorController.currentLocator ?: liveLocator ?: initialLocator)
+                                },
+                                onSpeechSeekEnd = speechSeek::end,
                                 onDownloadVoiceModel = { confirmVoicePack = true }
                             )
                         }
