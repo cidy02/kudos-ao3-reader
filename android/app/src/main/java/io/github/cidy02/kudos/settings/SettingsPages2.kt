@@ -202,11 +202,13 @@ fun SettingsAccountPage(authRepository: AO3AuthRepository?, onLogin: () -> Unit)
     )
     val authState by (authRepository?.state ?: flowOf(AO3AuthState.SignedOut))
         .collectAsState(initial = AO3AuthState.SignedOut)
+    // iOS shows the sign-in notice (a session that ended, say) in place of the footnote (A66 #17).
+    val notice by (authRepository?.noticeMessage ?: flowOf(null)).collectAsState(initial = null)
     SettingsPage(title = "AO3 Account") {
         item {
             SettingsSection(
-                footnote = "Sign in to use your AO3 bookmarks, history, subscriptions, kudos, " +
-                    "comments, and restricted works in Kudos."
+                footnote = notice ?: ("Sign in to use your AO3 bookmarks, history, subscriptions, kudos, " +
+                    "comments, and restricted works in Kudos.")
             ) {
                 when (authState) {
                     is AO3AuthState.SignedIn -> {

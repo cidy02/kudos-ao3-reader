@@ -203,7 +203,7 @@ internal class AO3ChallengeAssignmentsState(private val slug: String, private va
         } catch (e: CancellationException) {
             // No POST was dispatched. Never manufacture a failure prefix for an answer already received.
         } finally {
-            if (generation == auth.generation.value) mutable.value = state.value.copy(busy = false)
+            mutable.value = state.value.copy(busy = false)
             job = null
         }
         if (confirmed && active && generation == auth.generation.value) load(refresh = true)

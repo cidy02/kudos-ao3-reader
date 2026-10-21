@@ -61,6 +61,21 @@ class BackupMergeParityTest {
     }
 
     @Test
+    fun theNewerAvailabilityCheckIsKeptWhicheverSideWins() {
+        // A68 #6, iOS `apply`: newest(work.lastAvailabilityCheck, archived.lastAvailabilityCheck).
+        for (localWins in listOf(false, true)) {
+            for ((localCheck, archiveCheck) in listOf(at(50) to null, at(30) to at(60), null to at(40))) {
+                val local = work().copy(lastModifiedAt = at(if (localWins) 300 else 100), lastAvailabilityCheck = localCheck)
+                val remote = work().copy(lastModifiedAt = at(if (localWins) 100 else 300), lastAvailabilityCheck = archiveCheck)
+                val result = merge(BackupLibrarySnapshot(works = listOf(local)), BackupLibrarySnapshot(works = listOf(remote)),
+                    BackupImportMode.RECONCILE)
+                val newest = listOfNotNull(localCheck, archiveCheck).maxOrNull()
+                assertEquals("localWins=$localWins", newest, result.works.single().lastAvailabilityCheck)
+            }
+        }
+    }
+
+    @Test
     fun fileMergeOfDeletedWorkAlsoKeepsEarlierDateAddedWithEitherClockWinner() {
         for (localClock in listOf(at(100), at(300))) {
             val local = work().copy(dateAdded = at(20), lastModifiedAt = localClock, isDeleted = true)

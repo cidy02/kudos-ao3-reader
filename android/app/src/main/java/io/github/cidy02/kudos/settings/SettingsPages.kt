@@ -92,7 +92,7 @@ fun SettingsAppearancePage(
                             options = ReaderThemeSetting.entries,
                             selected = settings.reader.readerTheme,
                             onSelect = { theme -> scope.launch { repository.updateReaderTheme(theme) } },
-                            title = { it.storageValue.replaceFirstChar { char -> char.uppercase() } },
+                            title = { if (it.storageValue == "oled") "OLED" else it.storageValue.replaceFirstChar { char -> char.uppercase() } },
                             contentDescription = "Reader Theme"
                         )
                     }
@@ -206,9 +206,14 @@ fun SettingsReaderPage(repository: SettingsRepository, settings: KudosSettings) 
     val scope = rememberCoroutineScope()
     SettingsPage(title = "Reader") {
         item {
+            // iOS `ReaderSettingsSection`: Layout, Two-page spread on a wide screen, Keep screen
+            // awake. Bold and Justify are in Customize Theme on both apps (owner Q29, 2026-10-20);
+            // here Justify did nothing with Customize off (A66 #14).
+            val wide = androidx.compose.ui.platform.LocalConfiguration.current.smallestScreenWidthDp >= 600
             SettingsSection(
                 label = "Reading",
-                footnote = "Choose whether you turn pages or scroll while reading."
+                footnote = if (wide) "On a wide screen, Paged mode can show two pages side by side."
+                    else "Choose whether you turn pages or scroll while reading."
             ) {
                 SubjectSegmentedControl(
                     options = ReaderMode.entries,
@@ -218,30 +223,19 @@ fun SettingsReaderPage(repository: SettingsRepository, settings: KudosSettings) 
                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 10.dp)
                 )
                 SubjectRowSeparator()
-                SubjectFormRow(
-                    "Bold text",
-                    trailing = {
-                        SubjectToggle(
-                            checked = settings.reader.readerBoldText,
-                            onCheckedChange = {
-                                scope.launch {
-                                    repository.updateReaderBoldText(it)
-                                }
-                            }
-                        )
-                    }
-                )
-                SubjectRowSeparator()
-                SubjectFormRow(
-                    "Justified text",
-                    trailing = {
-                        SubjectToggle(
-                            checked = settings.reader.readerJustify,
-                            onCheckedChange = { scope.launch { repository.updateReaderJustify(it) } }
-                        )
-                    }
-                )
-                SubjectRowSeparator()
+                if (wide) {
+                    SubjectFormRow(
+                        "Two-page spread",
+                        trailing = {
+                            SubjectToggle(
+                                checked = settings.reader.readerTwoPage,
+                                enabled = settings.reader.readerMode == ReaderMode.Paged,
+                                onCheckedChange = { scope.launch { repository.updateReaderTwoPage(it) } }
+                            )
+                        }
+                    )
+                    SubjectRowSeparator()
+                }
                 SubjectFormRow(
                     "Keep screen awake",
                     trailing = {

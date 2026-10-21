@@ -2447,3 +2447,13 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   (seen on the emulator), and before it, picking any built-in font crashed it too (the JVM tests
   never ran Readium). Only imported fonts (with a file) are declared. Reverse:
   `ReaderSettingsMapper.BUILT_IN_GENERIC_FAMILY`.
+- **2026-10-20 · Lane note: `720cf773` carried 3fv and 3fu ungated (Claude).** `git apply --3way`
+  stages what it applies, and a docs commit made with `git add <docs> && git commit` swept the
+  staged code in with it. That commit is local history now (not rewritten, per §1); `the next
+  commit` makes the gate green on top of it. From now on docs are committed with a pathspec
+  commit (`git commit -m … -- <paths>`), which takes only those paths.
+- **2026-10-20 · Busy flags after a session change (Claude, review of 3fv).** 3fv cleared a write's
+  busy flag only when the AO3 session was unchanged. Assignments and a sign-up's Save and Withdraw
+  must clear it whatever happened (their tests, and the code before 3fv): otherwise a sign-out
+  mid-write left the button busy for good. Maintainers, Moderation, Tag Set and the Prompt Meme
+  keep Codex's guard: their contract is that a session change never touches the old screen.

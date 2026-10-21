@@ -868,6 +868,9 @@ object BackupMergeService {
         // values that only arrived on the archive (and vice versa).
         val withPreservation = base.copy(
             dateAdded = minInstant(existing.dateAdded, restored.dateAdded),
+            // iOS `apply`: `newest(work.lastAvailabilityCheck, archived.lastAvailabilityCheck)`
+            // whichever side wins (A68 #6): an older or absent date made the sweep re-ask AO3.
+            lastAvailabilityCheck = maxInstant(existing.lastAvailabilityCheck, restored.lastAvailabilityCheck),
             ao3Unavailable = existing.ao3Unavailable || restored.ao3Unavailable,
             downloadedAt = if (archived.downloadedAt != null &&
                 (incomingWins || existing.downloadedAt == null)

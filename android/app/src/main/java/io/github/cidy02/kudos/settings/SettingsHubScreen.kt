@@ -54,8 +54,10 @@ fun SettingsHubScreen(
     val authState by (authRepository?.state ?: kotlinx.coroutines.flow.flowOf(AO3AuthState.SignedOut)).collectAsState(initial = AO3AuthState.SignedOut)
 
     val themeMatched = settings.reader.matchAppReaderTheme
-    val appTheme = settings.app.appTheme.name
-    val readerTheme = settings.reader.readerTheme.storageValue.replaceFirstChar { it.uppercase() }
+    // iOS `ReaderTheme.title`: "OLED" in capitals, the others as words.
+    fun themeTitle(storage: String) = if (storage == "oled") "OLED" else storage.replaceFirstChar { it.uppercase() }
+    val appTheme = themeTitle(settings.app.appTheme.storageValue)
+    val readerTheme = themeTitle(settings.reader.readerTheme.storageValue)
     val themeString = if (themeMatched || settings.app.appTheme.storageValue == settings.reader.readerTheme.storageValue) appTheme else "$appTheme, $readerTheme reader"
     
     val readingMode = when (settings.reader.readerMode) {
@@ -64,7 +66,8 @@ fun SettingsHubScreen(
     }
     
     val keepWorks = settings.app.keepsWorksYouRead
-    val downloadsString = if (keepWorks) "Keep what you read" else "Manual"
+    // iOS SettingsRoute.downloads: keeping what you read names the row, then a subscribe's download.
+    val downloadsString = if (keepWorks) "Keep what you read" else if (settings.app.downloadOnSubscribe) "On subscribe" else "Manual"
     val readingQueuesString = if (settings.app.autoPreserveSmallSeriesOnSaveForLater) "Auto up to ${settings.app.autoPreserveSeriesWorkThreshold} works" else "Ask first"
     
     val accountString = when (authState) {
