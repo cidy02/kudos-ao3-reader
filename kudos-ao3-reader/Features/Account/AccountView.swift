@@ -726,6 +726,7 @@ struct AccountView: View {
                     ProgressView()
                         .frame(maxWidth: .infinity)
                         .padding()
+                        .accentFill()
                 }
             case .unavailable:
                 profileMessage(

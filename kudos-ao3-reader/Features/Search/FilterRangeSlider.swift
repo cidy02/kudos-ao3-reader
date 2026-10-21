@@ -50,7 +50,7 @@ struct FilterRangeSlider: View {
                     .frame(height: 4)
                 if showsSelectedRange {
                     Capsule()
-                        .fill(.tint)
+                        .fill(.accentFill)
                         .frame(width: max(upperX - lowerX, 0), height: 4)
                         .offset(x: lowerX)
                 }

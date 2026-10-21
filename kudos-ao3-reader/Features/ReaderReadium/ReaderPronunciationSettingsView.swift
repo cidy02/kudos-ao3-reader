@@ -60,7 +60,7 @@ struct ReaderPronunciationSettingsView: View {
                         HStack {
                             Label("Scan this chapter", systemImage: "text.magnifyingglass")
                             Spacer()
-                            if isScanning { ProgressView() }
+                            if isScanning { ProgressView().accentFill() }
                         }
                     }
                     .disabled(isScanning)

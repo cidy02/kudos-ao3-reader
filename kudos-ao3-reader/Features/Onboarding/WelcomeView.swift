@@ -80,6 +80,7 @@ struct WelcomeView: View {
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
+            .accentFill()
             .prominentLabel()
             .controlSize(.large)
         }

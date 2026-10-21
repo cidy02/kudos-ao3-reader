@@ -67,6 +67,7 @@ struct AO3AuthorHero: View {
                                     if isPerformingSubscription {
                                         ProgressView()
                                             .controlSize(.small)
+                                            .accentFill()
                                     } else {
                                         Image(systemName: form.isSubscribed ? "bell.slash" : "bell")
                                     }
@@ -74,6 +75,7 @@ struct AO3AuthorHero: View {
                                 }
                             }
                             .buttonStyle(.borderedProminent)
+                            .accentFill()
                             .prominentLabel()
                             .controlSize(.small)
                             .disabled(actionsBusy)
@@ -98,6 +100,7 @@ struct AO3AuthorHero: View {
                         if isPerformingModeration {
                             ProgressView()
                                 .controlSize(.small)
+                                .accentFill()
                         }
                     }
                     .padding(.top, 3)
@@ -122,6 +125,8 @@ struct AO3AuthorHero: View {
                 ?? (webKind == .mute ? "speaker.slash" : "hand.raised"))
         }
         .buttonStyle(.bordered)
+        .foregroundStyle(.accentInk)
+        .accentFill()
         .controlSize(.small)
         .disabled(actionsBusy)
         .accessibilityLabel(action.label)

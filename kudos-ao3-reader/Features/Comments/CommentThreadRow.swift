@@ -307,7 +307,7 @@ struct CommentParticipantBadge: View {
             .font(.caption2.weight(isEmphasized ? .semibold : .regular))
             .padding(.horizontal, 7)
             .padding(.vertical, 2)
-            .background(isEmphasized ? AnyShapeStyle(.tint) : AnyShapeStyle(.quaternary), in: Capsule())
+            .background(isEmphasized ? AnyShapeStyle(.accentFill) : AnyShapeStyle(.quaternary), in: Capsule())
             .foregroundStyle(isEmphasized ? AnyShapeStyle(.white) : AnyShapeStyle(.secondary))
             .fixedSize()
             .layoutPriority(1)
@@ -1214,7 +1214,7 @@ private struct CommentPostRow: View {
             Text("Replying to you".uppercased())
                 .font(.caption2.weight(.semibold))
                 .tracking(0.7)
-                .foregroundStyle(theme.effectiveTint)
+                .foregroundStyle(theme.accentInk)
                 // Two: at the accessibility sizes one line cut it to "REPLYING TO…".
                 .lineLimit(2)
                 .accessibilityHidden(true)
@@ -1638,7 +1638,7 @@ private extension View {
         self
             .overlay {
                 if isHighlighted {
-                    shape.fill(.tint.opacity(0.12))
+                    shape.fill(.accentFill.opacity(0.12))
                         .allowsHitTesting(false)
                 }
             }

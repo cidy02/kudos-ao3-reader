@@ -472,6 +472,7 @@ extension ChallengeSignUpView {
                     if isWithdrawing {
                         ProgressView()
                             .controlSize(.small)
+                            .accentFill()
                     }
                 }
                 .padding(.horizontal, 14)
@@ -585,6 +586,7 @@ extension ChallengeSignUpView {
         HStack(spacing: 10) {
             ProgressView()
                 .controlSize(.small)
+                .accentFill()
             Text("Loading sign-up…")
                 .font(.system(size: loadingSize))
                 .foregroundStyle(.secondary)
@@ -605,6 +607,8 @@ extension ChallengeSignUpView {
                 Task { await loadSignUp() }
             }
             .buttonStyle(.bordered)
+            .foregroundStyle(.accentInk)
+            .accentFill()
             .tint(palette.tint)
             .padding(.top, 4)
         }

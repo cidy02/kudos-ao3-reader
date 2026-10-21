@@ -324,7 +324,7 @@ struct CollectionMaintainersView: View {
                 AO3FormOption(value: AO3CollectionParticipantRole.owner.rawValue, title: "Owner"),
             ]
         )
-        .tint(palette.tint)
+        .screenTint(palette)
         .panelSegment(1, of: count, gutter: gutter)
 
         if !username.isEmpty {
@@ -336,6 +336,7 @@ struct CollectionMaintainersView: View {
                         ProgressView()
                             .controlSize(.small)
                             .padding(.trailing, 4)
+                            .accentFill()
                     }
                     Text("Send invitation to \(username)")
                         .font(.system(size: buttonLabelSize, weight: .semibold))
@@ -396,6 +397,7 @@ struct CollectionMaintainersView: View {
                     if isLeaving {
                         ProgressView()
                             .controlSize(.small)
+                            .accentFill()
                     }
                 }
                 .padding(.horizontal, 14)
@@ -422,6 +424,7 @@ struct CollectionMaintainersView: View {
         HStack(spacing: 10) {
             ProgressView()
                 .controlSize(.small)
+                .accentFill()
             Text("Loading maintainers…")
                 .font(.system(size: loadingSize))
                 .foregroundStyle(.secondary)
@@ -445,6 +448,8 @@ struct CollectionMaintainersView: View {
                 Task { await loadMaintainers() }
             }
             .buttonStyle(.bordered)
+            .foregroundStyle(.accentInk)
+            .accentFill()
             .tint(palette.tint)
             .padding(.top, 4)
         }

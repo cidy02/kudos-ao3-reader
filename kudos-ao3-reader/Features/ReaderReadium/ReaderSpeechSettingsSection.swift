@@ -115,6 +115,7 @@ struct ReaderSpeechSettingsSection: View {
                     "Author's notes often carry content warnings. "
                         + "Turn this off to hear only the story."
                 )
+                .accentFill()
 
             if isKokoroAwaitingVoicePack {
                 Label(
@@ -164,6 +165,7 @@ struct ReaderSpeechSettingsSection: View {
                 Slider(value: $rate, in: ReaderSpeechPreferences.rateRange, step: 0.05)
                     .accessibilityLabel("Read-aloud speed")
                     .accessibilityValue(rateLabel)
+                    .accentFill()
             }
 
             VStack(alignment: .leading, spacing: 8) {
@@ -177,6 +179,7 @@ struct ReaderSpeechSettingsSection: View {
                 Slider(value: $pitch, in: ReaderSpeechPreferences.pitchRange, step: 0.05)
                     .accessibilityLabel("Read-aloud pitch")
                     .accessibilityValue(pitchLabel)
+                    .accentFill()
             }
 
             Button("Reset Read Aloud") {
@@ -266,7 +269,7 @@ struct ReaderSpeechSettingsSection: View {
         switch kokoroInstaller.status {
         case .downloading(let progress):
             VStack(alignment: .leading, spacing: 8) {
-                ProgressView(value: progress)
+                ProgressView(value: progress).accentFill()
                 HStack {
                     Text("Downloading… \(Int(progress * 100))%")
                         .font(.caption)
@@ -341,7 +344,7 @@ struct ReaderSpeechSettingsSection: View {
         switch downloadManager.status {
         case .downloading(let progress) where isBusyWithSelectedPack:
             VStack(alignment: .leading, spacing: 8) {
-                ProgressView(value: progress)
+                ProgressView(value: progress).accentFill()
                 Text(selectedKokoroModelPack.requiresInt8SupportFiles
                      ? "Downloading official FP32 model from Hugging Face… \(Int(progress * 100))%"
                      : "Downloading... \(Int(progress * 100))%")
@@ -365,6 +368,7 @@ struct ReaderSpeechSettingsSection: View {
             HStack {
                 ProgressView()
                     .padding(.trailing, 8)
+                    .accentFill()
                 Text("Cancelling…")
                 Spacer()
             }
@@ -398,6 +402,7 @@ struct ReaderSpeechSettingsSection: View {
         HStack {
             ProgressView()
                 .padding(.trailing, 8)
+                .accentFill()
             Text(title)
             Spacer()
             Button("Cancel", role: .cancel) {

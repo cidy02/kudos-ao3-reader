@@ -121,7 +121,7 @@ struct CommentsView: View {
             if model.belongsToCurrentSession(auth: auth) {
                 commentsBody
             } else {
-                ProgressView()
+                ProgressView().accentFill()
                     .task { dismiss() }
             }
         }
@@ -686,6 +686,7 @@ struct CommentsView: View {
                         }
                     }
                         .buttonStyle(.borderedProminent)
+                        .accentFill()
                         .prominentLabel()
                 }
             }
@@ -998,7 +999,7 @@ struct CommentsView: View {
                             )
                         )
                     } else {
-                        ProgressView()
+                        ProgressView().accentFill()
                     }
                 }
             }
@@ -1334,7 +1335,7 @@ struct CommentComposerSheet: View {
                         Task { await model.submit(auth: auth) }
                     } label: {
                         if model.submissionGuard.phase.isBusy {
-                            ProgressView()
+                            ProgressView().accentFill()
                         } else {
                             Text(Self.confirmationAction(isEdit: isEdit, isReply: isReply))
                                 .fontWeight(.semibold)
@@ -1554,6 +1555,8 @@ struct CommentComposerSheet: View {
                         .font(.footnote.weight(.medium))
                 }
                 .buttonStyle(.bordered)
+                .foregroundStyle(.accentInk)
+                .accentFill()
             }
         case let .failed(message):
             Label(message, systemImage: "exclamationmark.triangle")

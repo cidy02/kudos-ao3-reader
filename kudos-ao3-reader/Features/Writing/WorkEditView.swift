@@ -493,6 +493,7 @@ struct WorkEditView: View {
         SubjectFormRow(label: "Set a different publication date", arrangement: .control) {
             Toggle("Set a different publication date", isOn: backdate)
                 .labelsHidden()
+                .accentFill()
         }
         .panelSegment(first, of: count, gutter: gutter)
         if showsDate {
@@ -504,18 +505,20 @@ struct WorkEditView: View {
                     displayedComponents: .date
                 )
                 .labelsHidden()
-                .frame(maxWidth: .infinity, alignment: .trailing)
+                .frame(maxWidth: .infinity, alignment: .trailing).accentFill()
             }
             .panelSegment(first + 1, of: count, gutter: gutter)
         }
         SubjectFormRow(label: "Only show to registered users", arrangement: .control) {
             Toggle("Only show to registered users", isOn: $form.restricted)
                 .labelsHidden()
+                .accentFill()
         }
         .panelSegment(afterDate, of: count, gutter: gutter)
         SubjectFormRow(label: "Enable comment moderation", arrangement: .control) {
             Toggle("Enable comment moderation", isOn: $form.moderatedCommenting)
                 .labelsHidden()
+                .accentFill()
         }
         .panelSegment(afterDate + 1, of: count, gutter: gutter)
         WritingChoiceRow(
@@ -666,6 +669,7 @@ extension WorkEditView {
                 set: { form.chapterTotal = $0 ? "\(form.chaptersPosted ?? 1)" : "" }
             ))
             .labelsHidden()
+            .accentFill()
         }
         .panelSegment(1, of: count, gutter: gutter)
     }

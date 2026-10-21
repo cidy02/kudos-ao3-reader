@@ -3,6 +3,7 @@ import SwiftUI
 
 /// Shared highlight-colour swatches for the post-highlight bar and the note editor.
 struct ReadingAnnotationColorPicker: View {
+    @Environment(\.accentFill) private var fill
     let selected: ReadingAnnotationColor
     let onSelect: (ReadingAnnotationColor) -> Void
     /// Compact row for the floating bar; the note editor uses the default size.
@@ -41,7 +42,7 @@ struct ReadingAnnotationColorPicker: View {
         .frame(width: size, height: size)
         .overlay {
             Circle().strokeBorder(
-                isSelected ? Color.accentColor : Color.primary.opacity(0.12),
+                isSelected ? fill : Color.primary.opacity(0.12),
                 lineWidth: isSelected ? 3 : 1
             )
         }

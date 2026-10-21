@@ -336,6 +336,7 @@ struct ChallengeSignUpsView: View {
                     ProgressView()
                         .controlSize(.small)
                         .padding(.trailing, 4)
+                        .accentFill()
                 }
                 Text("Load page \(pages.loadedPages + 1) of \(pages.totalPages)")
                     .font(.system(size: loadMoreSize, weight: .medium))
@@ -417,6 +418,7 @@ struct ChallengeSignUpsView: View {
         HStack(spacing: 10) {
             ProgressView()
                 .controlSize(.small)
+                .accentFill()
             Text("Loading sign-ups…")
                 .font(.system(size: loadingSize))
                 .foregroundStyle(.secondary)
@@ -440,6 +442,8 @@ struct ChallengeSignUpsView: View {
                 Task { await loadSignUps(resetPage: true) }
             }
             .buttonStyle(.bordered)
+            .foregroundStyle(.accentInk)
+            .accentFill()
             .tint(palette.tint)
             .padding(.top, 4)
         }

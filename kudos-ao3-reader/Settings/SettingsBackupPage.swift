@@ -474,7 +474,7 @@ struct BackupSettingsSection: View {
                     Label("Export Backup…", systemImage: "square.and.arrow.up")
                     if isPreparingExport {
                         Spacer()
-                        ProgressView()
+                        ProgressView().accentFill()
                     }
                 }
             }
@@ -484,7 +484,7 @@ struct BackupSettingsSection: View {
                     Label("Import Backup…", systemImage: "square.and.arrow.down")
                     if isImporting {
                         Spacer()
-                        ProgressView()
+                        ProgressView().accentFill()
                     }
                 }
             }
@@ -497,6 +497,7 @@ struct BackupSettingsSection: View {
                 ProgressView()
                     .progressViewStyle(.linear)
                     .accessibilityLabel(isImporting ? "Importing backup" : "Preparing backup")
+                    .accentFill()
             }
         } footer: {
             Text("Your backup file includes your Library, Reading Queues, downloaded copies, "

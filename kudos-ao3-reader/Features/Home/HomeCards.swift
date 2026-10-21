@@ -314,7 +314,7 @@ struct WorkSelectionBubble: View {
             Circle()
                 .fill(.regularMaterial)
             if isSelected {
-                Circle().fill(.tint)
+                Circle().fill(.accentFill)
             }
             Circle()
                 .strokeBorder(

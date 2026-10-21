@@ -88,8 +88,8 @@ struct ReaderSpeechDeveloperSettingsView: View {
             }
 
             Section {
-                Toggle("Break at dialogue", isOn: $dialogueBarrier)
-                Toggle("Pause at line breaks", isOn: $lineBreakPauses)
+                Toggle("Break at dialogue", isOn: $dialogueBarrier).accentFill()
+                Toggle("Pause at line breaks", isOn: $lineBreakPauses).accentFill()
             } header: {
                 Text("Boundaries")
             } footer: {
@@ -142,6 +142,7 @@ struct ReaderSpeechDeveloperSettingsView: View {
             Slider(value: value, in: ReaderSpeechTuning.pauseRange, step: 0.01)
                 .accessibilityLabel(title)
                 .accessibilityValue(String(format: "%.2f seconds", value.wrappedValue))
+                .accentFill()
             Text(note).font(.footnote).foregroundStyle(.secondary)
         }
     }
@@ -164,6 +165,7 @@ struct ReaderSpeechDeveloperSettingsView: View {
             Slider(value: proxy, in: range, step: 5)
                 .accessibilityLabel(title)
                 .accessibilityValue("\(value.wrappedValue) phonemes")
+                .accentFill()
         }
     }
 }

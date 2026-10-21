@@ -182,6 +182,7 @@ struct RemoteWorkBulkActionBar: View {
         if controller.isProcessingBatch {
             ProgressView()
                 .controlSize(.small)
+                .accentFill()
         }
     }
 

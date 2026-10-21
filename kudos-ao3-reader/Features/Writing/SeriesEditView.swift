@@ -184,7 +184,7 @@ struct SeriesEditView: View {
 
     private var statePanel: some View {
         SubjectFormRow(label: "Series is complete", arrangement: .control) {
-            Toggle("", isOn: $form.isComplete).labelsHidden()
+            Toggle("", isOn: $form.isComplete).labelsHidden().accentFill()
         }
         .subjectPanel()
     }

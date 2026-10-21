@@ -15,6 +15,7 @@ import SwiftUI
 /// preview page differs from the scrub origin.
 struct ReaderPositionCard<MiniPlayer: View>: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.accentInk) private var ink
     /// Current page (1-based) shown in "Page **N** of M".
     let page: Int
     /// Total pages in the chapter.
@@ -162,7 +163,7 @@ struct ReaderPositionCard<MiniPlayer: View>: View {
             // One string, so it wraps between words. The digit keeps its tint; it gives up
             // the rolling-number transition a separate `Text` has at the ordinary sizes.
             (Text("Page ").foregroundStyle(.primary)
-                + Text("\(page)").foregroundStyle(scrubValuesEmphasized ? tint : Color.primary)
+                + Text("\(page)").foregroundStyle(scrubValuesEmphasized ? ink : Color.primary)
                 + Text(" of \(pageCount)").foregroundStyle(.primary))
                 .font(.subheadline.weight(.semibold))
                 .monospacedDigit()
@@ -172,7 +173,7 @@ struct ReaderPositionCard<MiniPlayer: View>: View {
                 Text("Page ")
                     .foregroundStyle(.primary)
                 Text("\(page)")
-                    .foregroundStyle(scrubValuesEmphasized ? tint : Color.primary)
+                    .foregroundStyle(scrubValuesEmphasized ? ink : Color.primary)
                     .contentTransition(.numericText())
                     .animation(.default, value: page)
                     .animation(.easeInOut(duration: 0.15), value: scrubValuesEmphasized)
@@ -189,7 +190,7 @@ struct ReaderPositionCard<MiniPlayer: View>: View {
     private var chapterTimeLabel: some View {
         if let minutes = chapterRemainingMinutes, dynamicTypeSize.isAccessibilitySize {
             (Text(ReaderTimeEstimate.durationLabel(minutes: minutes))
-                .foregroundStyle(scrubValuesEmphasized ? tint : Color.secondary)
+                .foregroundStyle(scrubValuesEmphasized ? ink : Color.secondary)
                 + Text(" left in chapter").foregroundStyle(.secondary))
                 .font(.footnote)
                 .monospacedDigit()
@@ -197,7 +198,7 @@ struct ReaderPositionCard<MiniPlayer: View>: View {
         } else if let minutes = chapterRemainingMinutes {
             HStack(alignment: .firstTextBaseline, spacing: 0) {
                 Text(ReaderTimeEstimate.durationLabel(minutes: minutes))
-                    .foregroundStyle(scrubValuesEmphasized ? tint : Color.secondary)
+                    .foregroundStyle(scrubValuesEmphasized ? ink : Color.secondary)
                     .contentTransition(.numericText())
                     .animation(.default, value: minutes)
                     .animation(.easeInOut(duration: 0.15), value: scrubValuesEmphasized)
