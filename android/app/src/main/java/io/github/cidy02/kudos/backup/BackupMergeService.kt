@@ -24,6 +24,7 @@ import io.github.cidy02.kudos.works.EpubImportMetadata
 import io.github.cidy02.kudos.works.WorkIdentityIndex
 import io.github.cidy02.kudos.works.WorkRepository
 import io.github.cidy02.kudos.works.WorkTags
+import java.io.File
 import java.time.Duration
 import java.time.Instant
 import java.util.UUID
@@ -54,7 +55,9 @@ object BackupMergeService {
          */
         normalizeQueuePreservation: Boolean = true,
         /** Apply-only identity decisions from capture; does not rewrite archive record IDs. */
-        workIdRemapForApply: Map<String, String> = emptyMap()
+        workIdRemapForApply: Map<String, String> = emptyMap(),
+        /** Where an incoming EPUB is staged while its package is checked. Null keeps the process temp dir. */
+        cacheDirectory: File? = null
     ): BackupMergeResult {
         val manifest = BackupValidator.validateManifest(backup.manifest, now)
         val exportedAt = parseOptionalInstant(manifest.exportedAt)
@@ -182,7 +185,7 @@ object BackupMergeService {
             // asset the same way and skips an invalid one, leaving the existing
             // file, `hasEPUB` and preservation as they were.
             val incomingEpub = (epubFilesById[archivedId] ?: epubFilesById[targetId])
-                ?.takeIf { mayReplace && EpubImportMetadata.isReadablePackage(it) }
+                ?.takeIf { mayReplace && EpubImportMetadata.isReadablePackage(it, cacheDirectory) }
             val existingHasEpub = existingHasFile || existing?.hasEpub == true
             val restoredHasEpub = incomingEpub != null || existingHasEpub
 

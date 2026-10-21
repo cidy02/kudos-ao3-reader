@@ -84,7 +84,7 @@ class KudosAppContainer(
     }
 
     val workFileStore: WorkFileStore by lazy {
-        WorkFileStore(appContext.filesDir.toPath())
+        WorkFileStore(appContext.filesDir.toPath(), persistenceGate)
     }
 
     val localDataFootprintScanner by lazy {
@@ -108,7 +108,8 @@ class KudosAppContainer(
         CustomFontRepository(
             customFontDao = database.customFontDao(),
             fontFileStore = fontFileStore,
-            settingsRepository = settingsRepository
+            settingsRepository = settingsRepository,
+            cacheDirectory = appContext.cacheDir
         )
     }
 
@@ -317,7 +318,8 @@ class KudosAppContainer(
             workFileStore = workFileStore,
             fontFileStore = fontFileStore,
             settingsRepository = settingsRepository,
-            persistenceGate = persistenceGate
+            persistenceGate = persistenceGate,
+            cacheDirectory = appContext.cacheDir
         )
     }
 
