@@ -4,7 +4,8 @@ package io.github.cidy02.kudos.backup
 data class BackupExportResult(
     val bytes: ByteArray,
     val omittedBookTitles: List<String> = emptyList(),
-    val omittedFontNames: List<String> = emptyList()
+    val omittedFontNames: List<String> = emptyList(),
+    val pronunciationsUnreadable: Boolean = false
 ) {
     fun toUserMessage(): String = buildString {
         append("Exported ${bytes.size / 1024} KB as a v${BackupVersion.CURRENT} .kudosbackup ZIP.")
@@ -13,6 +14,9 @@ data class BackupExportResult(
         }
         if (omittedFontNames.isNotEmpty()) {
             append(" ${omission(omittedFontNames, "font")}.")
+        }
+        if (pronunciationsUnreadable) {
+            append(" $PRONUNCIATIONS_EXPORT_WARNING")
         }
     }
 
@@ -32,3 +36,6 @@ data class BackupExportResult(
         return "${values.size} $reason: $names"
     }
 }
+
+internal const val PRONUNCIATIONS_EXPORT_WARNING =
+    "Pronunciation corrections could not be read. Their file was kept; no local corrections were exported."

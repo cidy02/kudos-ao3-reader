@@ -441,6 +441,7 @@ object BackupMergeService {
 
         return BackupMergeResult(
             snapshot = BackupLibrarySnapshot(
+                pronunciations = current.pronunciations.merging(manifest.pronunciations),
                 works = worksById.values.sortedByDescending { it.dateAdded },
                 userTagsByWorkId = userTagsByWorkId,
                 bookmarks = bookmarks,

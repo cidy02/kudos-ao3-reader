@@ -143,6 +143,8 @@ class ReaderSpeechController(
         }
     }
 
+    fun setPronunciationScope(fandom: String?, workID: String?) = tts.setPronunciationScope(fandom, workID)
+
     fun enqueueDownload() {
         _downloadFailure.value = null
         _downloadProgress.value = 0f

@@ -39,7 +39,9 @@ class BackupRepository(
     private val persistenceGate: PersistenceGate,
     private val clock: () -> Instant = { Instant.now() },
     private val uuidFactory: () -> String = { UUID.randomUUID().toString() },
-    private val appVersion: String = "0.1.0"
+    private val appVersion: String = "0.1.0",
+    private val pronunciationStore: io.github.cidy02.kudos.reader.speech.KokoroPronunciationStore =
+        io.github.cidy02.kudos.reader.speech.KokoroPronunciationStore(workFileStore.worksDirectory.parent.toFile())
 ) {
     fun suggestedExportFileName(now: Instant = clock()): String {
         val day = DateTimeFormatter.ofPattern("yyyy-MM-dd")
@@ -85,7 +87,8 @@ class BackupRepository(
                 fontFilesByFileName = fontFiles,
                 originalFilesByName = originalFiles
             )
-            BackupExportResult(BackupExporter.exportV2(pack), omittedBooks, omittedFonts)
+            BackupExportResult(BackupExporter.exportV2(pack), omittedBooks, omittedFonts,
+                pronunciationsUnreadable = snapshot.pronunciationsUnreadable)
         }
     }
 
@@ -134,6 +137,10 @@ class BackupRepository(
         } else {
             TombstoneLocalMigration.runIfNeeded(database, settingsRepository)
         }
+    }
+
+    internal fun applyPronunciations(corrections: io.github.cidy02.kudos.reader.speech.PronunciationCorrections) {
+        pronunciationStore.apply(corrections)
     }
 
     internal suspend fun recoverInterruptedReplace() = persistenceGate.withLock {
@@ -328,7 +335,11 @@ class BackupRepository(
             .mapTo(mutableSetOf()) { it.id }
         val conversionRecordWorkIds = works.filter { workFileStore.conversionRecordExists(it.id) }
             .mapTo(mutableSetOf()) { it.id }
+        // An unreadable corrections file must not block the library or be overwritten with empty data.
+        val pronunciations = runCatching { pronunciationStore.load().corrections() }
         stored.copy(
+            pronunciations = pronunciations.getOrDefault(io.github.cidy02.kudos.reader.speech.PronunciationCorrections()),
+            pronunciationsUnreadable = pronunciations.isFailure,
             settings = settings,
             originalWorkIds = originalWorkIds,
             conversionRecordWorkIds = conversionRecordWorkIds,
@@ -385,7 +396,8 @@ class BackupRepository(
         originalFiles: Map<String, ByteArray>
     ): BackupRestoreSummary {
         if (merge.mode != BackupImportMode.REPLACE_LIBRARY) {
-            return applyMergeResultWithFiles(merge, originalFiles)
+            val summary = applyMergeResultWithFiles(merge, originalFiles)
+            return restorePronunciations(summary, merge)
         }
         val fileUndo = BackupFileUndo()
         val summary = try {
@@ -408,8 +420,19 @@ class BackupRepository(
             throw error
         }
         fileUndo.discard()
-        return summary
+        // iOS merges corrections even for Replace; never sweep local-only words.
+        return restorePronunciations(summary, merge)
     }
+
+    private fun restorePronunciations(summary: BackupRestoreSummary, merge: BackupMergeResult): BackupRestoreSummary =
+        try {
+            pronunciationStore.apply(merge.sourceManifest.pronunciations)
+            summary.copy(pronunciationsUnreadable = merge.capturedSnapshot.pronunciationsUnreadable)
+        } catch (_: Exception) {
+            // The library has committed. Do not report a failed/rolled-back Replace.
+            summary.copy(pronunciationsRestoreFailed = true,
+                pronunciationsUnreadable = merge.capturedSnapshot.pronunciationsUnreadable)
+        }
 
     private suspend fun applyMergeResultWithFiles(
         merge: BackupMergeResult,
@@ -779,6 +802,12 @@ class BackupRepository(
 
 fun BackupRestoreSummary.toUserMessage(): String {
     val parts = buildList {
+        if (pronunciationsUnreadable) {
+            add("local pronunciation corrections could not be read; their file was kept")
+        }
+        if (pronunciationsRestoreFailed) {
+            add("pronunciation corrections could not be saved; import again to retry them")
+        }
         if (worksCreated > 0) add("$worksCreated work(s) added")
         if (worksUpdated > 0) add("$worksUpdated work(s) updated")
         if (worksRemoved > 0) add("$worksRemoved work(s) removed from this library")

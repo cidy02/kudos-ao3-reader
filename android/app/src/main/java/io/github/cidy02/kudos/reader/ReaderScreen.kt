@@ -262,6 +262,8 @@ private fun ReaderReading(
     }
     var isOrientationLocked by remember { mutableStateOf(false) }
     var showTtsControls by remember { mutableStateOf(false) }
+    val pronunciationStore = remember(context) { io.github.cidy02.kudos.reader.speech.KokoroPronunciationStore(context.applicationContext.filesDir) }
+    var pronunciationTarget by remember { mutableStateOf<Pair<String, String>?>(null) }
 
     val scope = rememberCoroutineScope()
 
@@ -293,7 +295,9 @@ private fun ReaderReading(
         }
     }
 
-    LaunchedEffect(state.preferences, state.work.title) {
+    LaunchedEffect(state.preferences, state.work.title, state.work.workFandoms, state.work.sourceUrl) {
+        speechController.setPronunciationScope(state.work.workFandoms.firstOrNull(),
+            io.github.cidy02.kudos.works.WorkIdentityIndex.ao3WorkId(state.work)?.toString())
         speechController.configure(state.preferences, state.work.title)
     }
 
@@ -321,6 +325,13 @@ private fun ReaderReading(
         value = opener.open(state.epubPath.toFile())
     }
 
+
+    pronunciationTarget?.let { target ->
+        CompositionLocalProvider(LocalKudosTokens provides tokens) {
+            io.github.cidy02.kudos.settings.PronunciationEditor(target.first, target.second, pronunciationStore,
+                onDismiss = { pronunciationTarget = null })
+        }
+    }
 
     if (confirmVoicePack) CompositionLocalProvider(LocalKudosTokens provides tokens) {
         AlertDialog(
@@ -479,6 +490,21 @@ private fun ReaderReading(
                         controller = navigatorController,
                         onHighlightSelection = { complete -> annotateSelection(false, complete) },
                         onAddNoteSelection = { complete -> annotateSelection(true, complete) },
+                        onFixPronunciationSelection = { complete ->
+                            scope.launch {
+                                try {
+                                    val selection = navigatorController.currentSelection() ?: return@launch
+                                    val word = io.github.cidy02.kudos.reader.speech.pronunciationSelectionWord(
+                                        selection.locator.text.highlight.orEmpty())
+                                    if (word.isEmpty()) return@launch
+                                    val existing = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                        runCatching { pronunciationStore.load().global[word].orEmpty() }.getOrDefault("")
+                                    }
+                                    pronunciationTarget = word to existing
+                                    navigatorController.clearSelection()
+                                } finally { complete() }
+                            }
+                        },
                         onHighlightTap = viewModel::openHighlight,
                         onViewportChanged = viewModel::onViewport,
                         onContentTap = {
@@ -1123,6 +1149,8 @@ internal fun ReaderDisplaySheet(
                 }
                 SubjectRowSeparator()
             }
+            io.github.cidy02.kudos.settings.PronunciationsRow()
+            SubjectRowSeparator()
             SubjectSliderRow(
                 label = "Speed",
                 value = preferences.speechRate,

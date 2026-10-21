@@ -542,14 +542,18 @@ class SyncRepositoryTest {
 
     @Test
     fun whatTheManifestHoldsThatThisBuildDoesNotKnowStaysInTheOneItWrites() = runTest {
-        // iOS's read-aloud pronunciation corrections: Android has no such thing, and wrote a
-        // manifest without them. A device that joined the folder after that never got them.
+        // Native pronunciation restore must coexist with the existing unknown-key passthrough.
         val pronunciations = """{"global":{"Cid":"sid"},"fandoms":{},"works":{}}"""
+        val futurePronunciationField = Json.parseToJsonElement("""{"format":"future"}""")
         val theirs = BackupJson.encodeToString(remoteManifest(emptyList(), "2026-06-01T00:00:00Z"))
         val kudos = ensureKudosLibrary()
         writeChild(
             kudos, BackupPaths.MANIFEST, "application/json",
-            theirs.trimEnd().removeSuffix("}").plus(""", "pronunciations": $pronunciations}""").toByteArray()
+            JsonObject(Json.parseToJsonElement(theirs).jsonObject + mapOf(
+                "pronunciations" to JsonObject(Json.parseToJsonElement(pronunciations).jsonObject +
+                    ("futureField" to futurePronunciationField)),
+                "futureManifestKey" to Json.parseToJsonElement("""{"kept":true}""")
+            )).toString().toByteArray()
         )
         seedLocalWork(WORK_A, "Local", "local-a".toByteArray())
 
@@ -558,10 +562,153 @@ class SyncRepositoryTest {
         val written = Json.parseToJsonElement(
             readDocument(requireKudosLibrary().findFile(BackupPaths.MANIFEST)!!).toString(Charsets.UTF_8)
         ).jsonObject
-        assertEquals(Json.parseToJsonElement(pronunciations), written["pronunciations"])
+        assertEquals(JsonObject(Json.parseToJsonElement(pronunciations).jsonObject +
+            ("futureField" to futurePronunciationField)), written["pronunciations"])
+        assertEquals(Json.parseToJsonElement("""{"kept":true}"""), written["futureManifestKey"])
+        val store = io.github.cidy02.kudos.reader.speech.KokoroPronunciationStore(workFileStore.worksDirectory.parent.toFile())
+        assertEquals(mapOf("Cid" to "sid"), store.load().global)
         // What this build does know is its own: the exporter is this device, not theirs.
         assertTrue(written["works"].toString().contains(WORK_A, ignoreCase = true))
         assertFalse(written["exportedBy"].toString().contains("\"test\""))
+    }
+
+    @Test
+    fun legacyOwnManifestCorrectionsAreAdoptedOnceWithoutOverwritingSubsequentLocalEdits() = runTest {
+        val ios = remoteManifest(emptyList(), "2026-06-01T00:00:00Z").copy(
+            pronunciations = io.github.cidy02.kudos.reader.speech.PronunciationCorrections(
+                global = mapOf("Sam" to "sæm"), fandoms = mapOf("LOTR" to mapOf("Sam" to "sɑm")),
+                works = mapOf("42" to mapOf("Sam" to "səm"))))
+        val bytes = BackupJson.encodeToString(ios).toByteArray()
+        val kudos = ensureKudosLibrary()
+        writeChild(kudos, BackupPaths.MANIFEST, "application/json", bytes)
+        // This is a digest left by the build that only carried the unknown pronunciations key.
+        settingsRepository.updateSyncLastManifestDigest(BackupPaths.sha256(bytes))
+        val store = io.github.cidy02.kudos.reader.speech.KokoroPronunciationStore(workFileStore.worksDirectory.parent.toFile())
+        store.setOverride("Local", "loʊkəl")
+        assertTrue(syncRepository.runSync() is SyncResult.Success)
+        assertEquals(ios.pronunciations.global + ("Local" to "loʊkəl"), store.load().global)
+        assertEquals(ios.pronunciations.fandoms, store.load().fandoms)
+        assertEquals(ios.pronunciations.works, store.load().works)
+
+        store.setOverride("Sam", "new")
+        assertTrue(syncRepository.runSync() is SyncResult.Success)
+        assertEquals("new", store.load().global["Sam"])
+        val outgoing = BackupImporter.decodeManifest(readDocument(requireKudosLibrary().findFile(BackupPaths.MANIFEST)!!))
+        assertEquals(store.load().corrections(), outgoing.pronunciations)
+        store.removeOverride("Sam")
+        assertTrue(syncRepository.runSync() is SyncResult.Success)
+        assertFalse(store.load().global.containsKey("Sam"))
+    }
+
+    @Test
+    fun unsettledOwnManifestKeepsPronunciationEditsAndDeletionsWhileRetryingLateEpub() = runTest {
+        val initial = io.github.cidy02.kudos.reader.speech.PronunciationCorrections(
+            global = mapOf("Sam" to "old", "Deleted" to "old"),
+            fandoms = mapOf("LOTR" to mapOf("Sam" to "old", "Deleted" to "old")),
+            works = mapOf("42" to mapOf("Sam" to "old", "Deleted" to "old")))
+        val kudos = ensureKudosLibrary()
+        val remote = remoteManifest(listOf(remoteBackupWork(WORK_REMOTE, "Late EPUB", true)),
+            FIXED_CLOCK.toString()).copy(pronunciations = initial)
+        writeChild(kudos, BackupPaths.MANIFEST, "application/json", BackupJson.encodeToString(remote).toByteArray())
+        val store = io.github.cidy02.kudos.reader.speech.KokoroPronunciationStore(workFileStore.worksDirectory.parent.toFile())
+
+        assertTrue(syncRepository.runSync() is SyncResult.Success)
+        assertEquals(initial, store.load().corrections())
+        assertTrue(database.workDao().getById(WORK_REMOTE)!!.remoteEpubPending)
+        assertNull(settingsRepository.settings.first().sync.lastManifestDigest)
+        val edited = io.github.cidy02.kudos.reader.speech.KokoroPronunciationStore.Document(
+            global = mapOf("Sam" to "new"), fandoms = mapOf("LOTR" to mapOf("Sam" to "new")),
+            works = mapOf("42" to mapOf("Sam" to "new")))
+        store.save(edited)
+
+        assertTrue(syncRepository.runSync() is SyncResult.Success)
+        assertEquals(edited, store.load())
+        assertNull(settingsRepository.settings.first().sync.lastManifestDigest)
+        val works = kudos.findFile(BackupPaths.WORKS_DIRECTORY)!!
+        writeChild(works, BackupPaths.iosEpubAssetIdentifier(WORK_REMOTE), "application/epub+zip", REMOTE_EPUB)
+        assertTrue(syncRepository.runSync() is SyncResult.Success)
+        assertEquals(edited, store.load())
+        assertFalse(database.workDao().getById(WORK_REMOTE)!!.remoteEpubPending)
+        assertArrayEquals(REMOTE_EPUB, Files.readAllBytes(workFileStore.workEpubPath(WORK_REMOTE)))
+        val outgoing = BackupImporter.decodeManifest(readDocument(kudos.findFile(BackupPaths.MANIFEST)!!))
+        assertEquals(edited.corrections(), outgoing.pronunciations)
+
+        // A peer's changed manifest still restores with the archive-wins rule.
+        val peer = outgoing.copy(pronunciations = initial.copy(global = mapOf("Sam" to "peer")))
+        writeChild(kudos, BackupPaths.MANIFEST, "application/json", BackupJson.encodeToString(peer).toByteArray())
+        assertTrue(syncRepository.runSync() is SyncResult.Success)
+        assertEquals(peer.pronunciations, store.load().corrections())
+    }
+
+    @Test
+    fun ownManifestWithMissingLocalEpubDoesNotRestoreDeletedOrEditedCorrections() = runTest {
+        seedLocalWork(WORK_A, "Local", REMOTE_EPUB)
+        val store = io.github.cidy02.kudos.reader.speech.KokoroPronunciationStore(workFileStore.worksDirectory.parent.toFile())
+        store.setOverride("Sam", "old")
+        store.setOverride("Deleted", "old")
+        assertTrue(syncRepository.runSync() is SyncResult.Success)
+        Files.delete(workFileStore.workEpubPath(WORK_A))
+        assertTrue(syncRepository.runSync() is SyncResult.Success)
+        assertNull(settingsRepository.settings.first().sync.lastManifestDigest)
+        store.setOverride("Sam", "new")
+        store.removeOverride("Deleted")
+
+        assertTrue(syncRepository.runSync() is SyncResult.Success)
+        assertEquals(mapOf("Sam" to "new"), store.load().global)
+        assertTrue(workFileStore.workEpubExists(WORK_A))
+    }
+
+    @Test
+    fun malformedLocalCorrectionsDoNotBlockSyncAndTheOmissionIsReported() = runTest {
+        val store = io.github.cidy02.kudos.reader.speech.KokoroPronunciationStore(workFileStore.worksDirectory.parent.toFile())
+        val malformed = "{not valid JSON"
+        store.file.writeText(malformed)
+        seedLocalWork(WORK_A, "Still exported", REMOTE_EPUB)
+
+        repeat(2) {
+            val result = syncRepository.runSync()
+            assertTrue(result is SyncResult.Success)
+            assertEquals(PRONUNCIATIONS_EXPORT_WARNING, (result as SyncResult.Success).warning)
+            assertEquals(PRONUNCIATIONS_EXPORT_WARNING, settingsRepository.settings.first().sync.lastError)
+            val outgoing = BackupImporter.decodeManifest(readDocument(requireKudosLibrary().findFile(BackupPaths.MANIFEST)!!))
+            assertEquals(WORK_A, outgoing.works.single().id.lowercase())
+            assertEquals(io.github.cidy02.kudos.reader.speech.PronunciationCorrections(), outgoing.pronunciations)
+            assertEquals(malformed, store.file.readText())
+        }
+    }
+
+    @Test
+    fun legacyBackupCorrectionsSaveFailureStopsPublicationAndRetriesTheArchive() = runTest {
+        val store = io.github.cidy02.kudos.reader.speech.KokoroPronunciationStore(workFileStore.worksDirectory.parent.toFile())
+        // A directory at the file path cannot be decoded or replaced by an atomic file save.
+        assertTrue(store.file.mkdir())
+        val blocker = store.file.resolve("keep")
+        blocker.writeText("original")
+        val archive = KudosBackupPackage(remoteManifest(
+            listOf(remoteBackupWork(WORK_REMOTE, "Legacy work", false)), FIXED_CLOCK.toString()
+        ).copy(pronunciations = io.github.cidy02.kudos.reader.speech.PronunciationCorrections(
+            global = mapOf("Sam" to "sæm"))))
+        val bytes = BackupExporter.exportV2(archive)
+        val root = DocumentFile.fromTreeUri(context, treeUri)!!
+        writeChild(root, "Kudos.kudosbackup", "application/zip", bytes)
+
+        val result = syncRepository.runSync()
+        assertTrue(result is SyncResult.Error)
+        assertEquals("Could not save pronunciation corrections. The sync folder was kept; try again.",
+            (result as SyncResult.Error).message)
+        assertNull(requireKudosLibrary().findFile(BackupPaths.MANIFEST))
+        assertEquals("Legacy work", database.workDao().getById(WORK_REMOTE)!!.title)
+        assertEquals("original", blocker.readText())
+        assertArrayEquals(bytes, readDocument(root.findFile("Kudos.kudosbackup")!!))
+        assertNull(settingsRepository.settings.first().sync.lastSyncAt)
+
+        assertTrue(blocker.delete())
+        assertTrue(store.file.delete())
+        assertTrue(syncRepository.runSync() is SyncResult.Success)
+        assertEquals(archive.manifest.pronunciations, store.load().corrections())
+        val outgoing = BackupImporter.decodeManifest(readDocument(requireKudosLibrary().findFile(BackupPaths.MANIFEST)!!))
+        assertEquals(archive.manifest.pronunciations, outgoing.pronunciations)
+        assertArrayEquals(bytes, readDocument(root.findFile("Kudos.kudosbackup")!!))
     }
 
     @Test

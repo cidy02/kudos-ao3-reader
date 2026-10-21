@@ -174,6 +174,8 @@ internal fun SettingsListeningPage(
                     onSelect = { id -> scope.launch { repository.updateSpeechVoiceIdentifier(id) } }
                 )
                 SubjectRowSeparator()
+                PronunciationsRow()
+                SubjectRowSeparator()
                 SubjectFormRow(
                     "Read author's notes",
                     trailing = {

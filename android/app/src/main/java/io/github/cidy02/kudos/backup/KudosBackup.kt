@@ -46,7 +46,11 @@ data class BackupLibrarySnapshot(
     val readingSessions: List<ReadingSessionEntity> = emptyList(),
     val readingFavorites: List<ReadingFavoriteEntity> = emptyList(),
     val fandomReadWatermarks: List<FandomReadWatermarkEntity> = emptyList(),
-    val queueTagNamesByQueueId: Map<String, List<String>> = emptyMap()
+    val queueTagNamesByQueueId: Map<String, List<String>> = emptyMap(),
+    val pronunciations: io.github.cidy02.kudos.reader.speech.PronunciationCorrections =
+        io.github.cidy02.kudos.reader.speech.PronunciationCorrections(),
+    /** Local capture warning only; never serialized into the manifest. */
+    val pronunciationsUnreadable: Boolean = false
 )
 
 enum class BackupImportMode {
@@ -102,7 +106,10 @@ data class BackupRestoreSummary(
     /** Apply-time conflicts; not part of the backup manifest. */
     val concurrentRowsChanged: Int = 0,
     /** Clockless, equal-clock or progress conflict: the archive value was deferred. */
-    val concurrentRowsDeferred: Int = 0
+    val concurrentRowsDeferred: Int = 0,
+    /** Library import succeeded, but the separate corrections file could not be saved. */
+    val pronunciationsRestoreFailed: Boolean = false,
+    val pronunciationsUnreadable: Boolean = false
 )
 
 data class BackupMergeResult(

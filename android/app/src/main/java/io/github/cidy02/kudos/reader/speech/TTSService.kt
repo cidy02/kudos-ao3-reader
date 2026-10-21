@@ -17,6 +17,8 @@ interface TTSService {
     fun setVoice(id: String)
     fun setRate(rate: Float)
     fun setPitch(pitch: Float)
+    /** Which fandom's and work's pronunciation corrections apply (Kokoro only). */
+    fun setPronunciationScope(fandom: String?, workID: String?) {}
 }
 
 /** Shared application path for the reader and Settings' sample playback. */

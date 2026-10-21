@@ -52,6 +52,8 @@ class AutomaticTTSService(
     /** Kokoro's voices; the device's own is the one its Settings chose (Automatic). */
     override val availableVoices: StateFlow<List<TTSVoice>> = kokoro.availableVoices
 
+    override fun setPronunciationScope(fandom: String?, workID: String?) = kokoro.setPronunciationScope(fandom, workID)
+
     override suspend fun speak(text: String) {
         // A pack that is there but will not open reads with the device's voice: Read Aloud
         // skipped silently through the text (A49 F4).
@@ -90,6 +92,7 @@ class AutomaticTTSService(
  * when the device has no such voice; the reader then offers the Kokoro pack, as before.
  * Android's engine cannot pause: pausing stops the stretch being read and resuming reads it again.
  */
+// Android TextToSpeech has no portable word → IPA lexicon API; stored corrections cannot reach this engine.
 class SystemTTSService(context: Context) : TTSService {
     private val _status = MutableStateFlow(SpeechStatus.UNAVAILABLE)
     override val status: StateFlow<SpeechStatus> = _status.asStateFlow()

@@ -31,9 +31,9 @@ class ReaderSelectionActionModeCallbackTest {
         val wrapped = wrapper(original, calls)
 
         assertTrue(wrapped.onCreateActionMode(mode, menu.menu))
-        assertEquals(listOf("Copy", "Share", "Highlight", "Add Note"), menu.titles())
+        assertEquals(listOf("Copy", "Share", "Highlight", "Add Note", "Fix Pronunciation"), menu.titles())
         repeat(3) { assertFalse(wrapped.onPrepareActionMode(mode, menu.menu)) }
-        assertEquals(listOf("Copy", "Share", "Highlight", "Add Note"), menu.titles())
+        assertEquals(listOf("Copy", "Share", "Highlight", "Add Note", "Fix Pronunciation"), menu.titles())
         assertEquals(listOf("create", "prepare", "prepare", "prepare"), calls)
     }
 
@@ -48,7 +48,7 @@ class ReaderSelectionActionModeCallbackTest {
         wrapped.onCreateActionMode(mode, menu.menu)
         repeat(3) {
             assertTrue(wrapped.onPrepareActionMode(mode, menu.menu))
-            assertEquals(listOf("Copy", "Share", "Highlight", "Add Note"), menu.titles())
+            assertEquals(listOf("Copy", "Share", "Highlight", "Add Note", "Fix Pronunciation"), menu.titles())
         }
         assertEquals(listOf("create", "prepare", "prepare", "prepare"), calls)
     }
@@ -56,7 +56,7 @@ class ReaderSelectionActionModeCallbackTest {
     @Test
     fun eachCustomItemCallsItsRecordingEntryPointThenFinishesWithoutCallingTheOriginalClick() {
         for ((id, name) in listOf(R.id.reader_selection_highlight to "highlight",
-            R.id.reader_selection_add_note to "note")) {
+            R.id.reader_selection_add_note to "note", R.id.reader_selection_fix_pronunciation to "pronunciation")) {
             val calls = mutableListOf<String>()
             val menu = FakeMenu()
             val mode = RecordingMode(menu.menu, calls)
@@ -160,7 +160,7 @@ class ReaderSelectionActionModeCallbackTest {
         val wrapped = wrapper(original, calls)
         assertTrue(wrapped.onCreateActionMode(mode, menu.menu))
         // One native item whose id is not android.R.id.copy, as every item of a real WebView's.
-        assertEquals(listOf("Paste", "Highlight", "Add Note"), menu.titles())
+        assertEquals(listOf("Paste", "Highlight", "Add Note", "Fix Pronunciation"), menu.titles())
         original.rebuildOnPrepare = false
         menu.menu.clear()
         wrapped.onPrepareActionMode(mode, menu.menu)
@@ -223,7 +223,8 @@ class ReaderSelectionActionModeCallbackTest {
     private fun wrapper(original: ActionMode.Callback, calls: MutableList<String>) =
         ReaderSelectionActionModeCallback(original,
             onHighlight = { complete -> calls += "highlight"; complete() },
-            onAddNote = { complete -> calls += "note"; complete() })
+            onAddNote = { complete -> calls += "note"; complete() },
+            onFixPronunciation = { complete -> calls += "pronunciation"; complete() })
 
     private class RecordingCallback(private val calls: MutableList<String>) : ActionMode.Callback2() {
         var createResult = true

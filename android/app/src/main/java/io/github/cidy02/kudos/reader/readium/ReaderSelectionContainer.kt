@@ -14,7 +14,8 @@ import io.github.cidy02.kudos.R
 internal class ReaderSelectionContainer(
     context: Context,
     private val onHighlight: (() -> Unit) -> Unit,
-    private val onAddNote: (() -> Unit) -> Unit
+    private val onAddNote: (() -> Unit) -> Unit,
+    private val onFixPronunciation: (() -> Unit) -> Unit = { complete -> complete() }
 ) : FrameLayout(context) {
     override fun startActionModeForChild(
         originalView: View,
@@ -22,7 +23,7 @@ internal class ReaderSelectionContainer(
         type: Int
     ): ActionMode? {
         val wrapped = wrapReaderSelectionActionMode(
-            callback, type, originalView is WebView, onHighlight, onAddNote
+            callback, type, originalView is WebView, onHighlight, onAddNote, onFixPronunciation
         )
         return try {
             super.startActionModeForChild(originalView, wrapped, type)
@@ -43,17 +44,19 @@ internal fun wrapReaderSelectionActionMode(
     type: Int,
     isNavigatorWebView: Boolean,
     onHighlight: (() -> Unit) -> Unit,
-    onAddNote: (() -> Unit) -> Unit
+    onAddNote: (() -> Unit) -> Unit,
+    onFixPronunciation: (() -> Unit) -> Unit = { complete -> complete() }
 ): ActionMode.Callback {
     if (type != ActionMode.TYPE_FLOATING || !isNavigatorWebView) return original
-    return ReaderSelectionActionModeCallback(original, onHighlight, onAddNote)
+    return ReaderSelectionActionModeCallback(original, onHighlight, onAddNote, onFixPronunciation)
 }
 
 internal class ReaderSelectionActionModeCallback(
     private val original: ActionMode.Callback,
     // Completion runs after Readium's asynchronous selection read, before dismissal.
     private val onHighlight: (() -> Unit) -> Unit,
-    private val onAddNote: (() -> Unit) -> Unit
+    private val onAddNote: (() -> Unit) -> Unit,
+    private val onFixPronunciation: (() -> Unit) -> Unit = { complete -> complete() }
 ) : ActionMode.Callback2() {
     private var customActionsEnabled = true
     private var selectionActionPending = false
@@ -81,11 +84,13 @@ internal class ReaderSelectionActionModeCallback(
             // either action does nothing.
             val hasNativeItem = (0 until menu.size()).any {
                 val id = menu.getItem(it).itemId
-                id != R.id.reader_selection_highlight && id != R.id.reader_selection_add_note
+                id != R.id.reader_selection_highlight && id != R.id.reader_selection_add_note &&
+                    id != R.id.reader_selection_fix_pronunciation
             }
             if (!hasNativeItem) {
                 val hadActions = menu.findItem(R.id.reader_selection_highlight) != null ||
-                    menu.findItem(R.id.reader_selection_add_note) != null
+                    menu.findItem(R.id.reader_selection_add_note) != null ||
+                    menu.findItem(R.id.reader_selection_fix_pronunciation) != null
                 removeActions(menu)
                 return hadActions
             }
@@ -101,6 +106,11 @@ internal class ReaderSelectionActionModeCallback(
                     Menu.CATEGORY_SYSTEM or 0xffff, "Add Note")
                 added = true
             }
+            if (menu.findItem(R.id.reader_selection_fix_pronunciation) == null) {
+                menu.add(Menu.NONE, R.id.reader_selection_fix_pronunciation,
+                    Menu.CATEGORY_SYSTEM or 0xffff, "Fix Pronunciation")
+                added = true
+            }
             added
         } catch (_: RuntimeException) {
             // An optional action must never break the original menu or Copy.
@@ -113,12 +123,14 @@ internal class ReaderSelectionActionModeCallback(
     private fun removeActions(menu: Menu) {
         runCatching { menu.removeItem(R.id.reader_selection_highlight) }
         runCatching { menu.removeItem(R.id.reader_selection_add_note) }
+        runCatching { menu.removeItem(R.id.reader_selection_fix_pronunciation) }
     }
 
     override fun onActionItemClicked(mode: ActionMode, item: MenuItem): Boolean {
         val action = when (item.itemId) {
             R.id.reader_selection_highlight -> onHighlight
             R.id.reader_selection_add_note -> onAddNote
+            R.id.reader_selection_fix_pronunciation -> onFixPronunciation
             else -> return original.onActionItemClicked(mode, item)
         }
         if (!customActionsEnabled || destroyed) return original.onActionItemClicked(mode, item)
