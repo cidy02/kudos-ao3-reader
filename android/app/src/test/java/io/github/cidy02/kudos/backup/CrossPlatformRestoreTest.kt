@@ -5,6 +5,7 @@ import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import io.github.cidy02.kudos.data.local.KudosDatabase
+import io.github.cidy02.kudos.data.local.entity.toDomain
 import io.github.cidy02.kudos.data.preferences.SettingsRepository
 import io.github.cidy02.kudos.files.FontFileStore
 import io.github.cidy02.kudos.files.WorkFileStore
@@ -53,6 +54,7 @@ class CrossPlatformRestoreTest {
     fun iosGoldenRestoresThroughRepositoryAndAndroidRoundTripsEverySharedField() = runTest {
         val iosBytes = resourceBytes("cross-platform/ios-export.kudosbackup")
         assertDeviceLocalFieldsAreAbsent(iosBytes)
+        CrossPlatformFixtureFields.assertManifest(resourceBytes("cross-platform/expected-values.json"))
         val expected = BackupJson.decodeFromString<KudosBackupManifest>(
             resourceBytes("cross-platform/expected-values.json").toString(Charsets.UTF_8)
         )
@@ -68,10 +70,16 @@ class CrossPlatformRestoreTest {
         // The converted import's original and the record of its conversion (iOS `Originals/`).
         assertEquals(2, importedPack.originalFilesByName.size)
         assertOriginalsRestored(importedPack, harness)
+        CrossPlatformFixtureFields.assertPack(importedPack)
+        CrossPlatformFixtureFields.assertRestored(harness.database, harness.fontFiles, harness.root.toFile())
+        // Seed through Android models/stores too: its golden must exercise its own writers.
+        CrossPlatformFixtureFields.seed(harness.database, harness.fontFiles, harness.root.toFile(),
+            checkNotNull(harness.database.workDao().getById("10000000-0000-4000-8000-000000000002")).toDomain())
 
         val androidBytes = harness.repository.exportV2ZipBytes()
         assertDeviceLocalFieldsAreAbsent(androidBytes)
         val androidPack = BackupImporter.importV2Zip(androidBytes)
+        CrossPlatformFixtureFields.assertPack(androidPack)
         val androidManifest = androidPack.manifest
         // What iOS put in comes back out of Android, byte for byte, under iOS's names.
         assertEquals(importedPack.originalFilesByName.keys, androidPack.originalFilesByName.keys)
@@ -87,6 +95,7 @@ class CrossPlatformRestoreTest {
             Files.write(androidFixture, androidBytes)
         } else {
             val committed = Files.readAllBytes(androidFixture)
+            CrossPlatformFixtureFields.assertPack(BackupImporter.importV2Zip(committed))
             assertEquals(canonical(androidManifest), canonical(BackupImporter.importV2Zip(committed).manifest))
         }
 
@@ -104,6 +113,7 @@ class CrossPlatformRestoreTest {
                 assertArrayEquals(bytes, Files.readAllBytes(roundTrip.workFiles.workEpubPath(workId)))
             }
             assertOriginalsRestored(importedPack, roundTrip)
+            CrossPlatformFixtureFields.assertRestored(roundTrip.database, roundTrip.fontFiles, roundTrip.root.toFile())
         } finally {
             roundTrip.close()
         }
@@ -177,7 +187,9 @@ class CrossPlatformRestoreTest {
                 it.copy(
                     id = canonicalId(it.id),
                     workIDs = it.workIDs.map(::canonicalId),
-                    workOrderRaw = it.workOrderRaw?.split(',')?.joinToString(",", transform = ::canonicalId),
+                    // An empty order (a collection with no works, as 3ge's deleted one) stays empty.
+                    workOrderRaw = it.workOrderRaw?.takeIf(String::isNotEmpty)
+                        ?.split(',')?.joinToString(",", transform = ::canonicalId) ?: it.workOrderRaw,
                     permanentDeletionScheduledAt = null
                 )
             }.sortedBy { it.id },
@@ -228,6 +240,7 @@ class CrossPlatformRestoreTest {
                 .first { it.name == BackupPaths.MANIFEST }
             zip.readBytes().toString(Charsets.UTF_8)
         }
+        CrossPlatformFixtureFields.assertManifest(manifest.toByteArray())
         assertFalse(manifest.contains("\"freedAt\""))
         assertFalse(manifest.contains("\"authorIdentitiesJSON\""))
     }
@@ -249,7 +262,7 @@ class CrossPlatformRestoreTest {
     private class Harness : AutoCloseable {
         private val context = ApplicationProvider.getApplicationContext<Context>()
         private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
-        private val root = Files.createTempDirectory("kudos-cross-platform")
+        val root = Files.createTempDirectory("kudos-cross-platform")
         val database: KudosDatabase = Room.inMemoryDatabaseBuilder(context, KudosDatabase::class.java)
             .allowMainThreadQueries()
             .build()
@@ -260,10 +273,11 @@ class CrossPlatformRestoreTest {
             )
         )
         val workFiles = WorkFileStore(root)
+        val fontFiles = FontFileStore(root)
         val repository = BackupRepository(
             database = database,
             workFileStore = workFiles,
-            fontFileStore = FontFileStore(root),
+            fontFileStore = fontFiles,
             settingsRepository = settings,
             persistenceGate = PersistenceGate(),
             clock = { Instant.parse("2026-01-15T12:00:00Z") },

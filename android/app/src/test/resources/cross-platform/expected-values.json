@@ -44,6 +44,22 @@
       "selectedText" : "Text with a note",
       "spineIndex" : 0,
       "workID" : "10000000-0000-4000-8000-000000000002"
+    },
+    {
+      "chapterTitle" : "",
+      "colorRaw" : "yellow",
+      "createdAt" : "2023-11-14T22:14:20.000Z",
+      "deletedAt" : "2023-11-14T22:31:20.000Z",
+      "id" : "E0000000-0000-4000-8000-000000000003",
+      "isPendingDeletion" : true,
+      "kindRaw" : "highlight",
+      "lastModifiedAt" : "2023-11-14T22:31:20.000Z",
+      "locatorString" : "{\"href\":\"deleted.xhtml\",\"locations\":{\"totalProgression\":0.33}}",
+      "note" : "Deleted reader note",
+      "progression" : 0,
+      "selectedText" : "Deleted passage",
+      "spineIndex" : 0,
+      "workID" : "10000000-0000-4000-8000-000000000002"
     }
   ],
   "bookmarks" : [
@@ -74,9 +90,24 @@
         "10000000-0000-4000-8000-000000000002"
       ],
       "workOrderRaw" : "10000000-0000-4000-8000-000000000002,10000000-0000-4000-8000-000000000001"
+    },
+    {
+      "createdAt" : "2023-11-14T22:14:20.000Z",
+      "dateAdded" : "2023-11-14T22:14:20.000Z",
+      "deletedAt" : "2023-11-14T22:31:20.000Z",
+      "id" : "E0000000-0000-4000-8000-000000000001",
+      "isDeleted" : true,
+      "lastModifiedAt" : "2023-11-14T22:31:20.000Z",
+      "name" : "Deleted Portable Collection",
+      "showsOnHome" : false,
+      "syncStatusRaw" : "localOnly",
+      "workIDs" : [
+
+      ],
+      "workOrderRaw" : ""
     }
   ],
-  "exportedAt" : "2026-10-04T14:21:01.772Z",
+  "exportedAt" : "2026-10-21T19:18:14.419Z",
   "fandomReadWatermarks" : [
     {
       "fandomName" : "Portable Fandom",
@@ -88,17 +119,25 @@
     }
   ],
   "fonts" : [
-
+    {
+      "dateAdded" : "2023-11-14T22:14:20.000Z",
+      "fileName" : "kudos-cross-platform-fixture.ttf",
+      "name" : "Kudos Fixture Regular"
+    }
   ],
   "pronunciations" : {
     "fandoms" : {
-
+      "Portable Fandom" : {
+        "Sam" : "sæm"
+      }
     },
     "global" : {
-
+      "Nico" : "nˈikoʊ"
     },
     "works" : {
-
+      "820002" : {
+        "Sam" : "sɑm"
+      }
     }
   },
   "readingFavorites" : [
@@ -190,6 +229,21 @@
       "sortOrder" : -1000,
       "tagNames" : [
         "System Tag"
+      ]
+    },
+    {
+      "dateCreated" : "2023-11-14T22:14:20.000Z",
+      "dateUpdated" : "2023-11-14T22:31:20.000Z",
+      "deletedAt" : "2023-11-14T22:31:20.000Z",
+      "id" : "E0000000-0000-4000-8000-000000000002",
+      "isDeleted" : true,
+      "isPinned" : false,
+      "kindRaw" : "custom",
+      "lastMembershipChangedAt" : "2023-11-14T22:14:20.000Z",
+      "name" : "Deleted Portable Queue",
+      "sortOrder" : 0,
+      "tagNames" : [
+
       ]
     }
   ],
@@ -303,6 +357,19 @@
       "signature" : "716fe0862b2769a5a06c558de57a7772de0877dd3ba527335ae0b9d405f46652e9f1cb6387a022ba4f067b8746fc0ac9da815c8ac5eb1caa0394fd1ad5deaa0a",
       "signerPublicKey" : "03a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8",
       "sourceURL" : "https:\/\/archiveofourown.org\/works\/829999"
+    },
+    {
+      "ao3WorkID" : 829998,
+      "createdAt" : "2023-11-14T22:31:20.000Z",
+      "deletedOnDeviceID" : "cross-platform-fixture",
+      "deletionReason" : "fixture coverage",
+      "id" : "C0000000-0000-4000-8000-000000000002",
+      "lastModifiedAt" : "2023-11-14T22:31:20.000Z",
+      "recordID" : "B0000000-0000-4000-8000-000000000002",
+      "recordTypeRaw" : "savedSearch",
+      "signature" : "ed5fe7713c031096df77adb16525722bf6c7dd8485bebd596eb9977570d55a5bef8883cb1545e9765d935143b81adf95b2e41f47eabc999a9230621ccc067904",
+      "signerPublicKey" : "03a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8",
+      "sourceURL" : "https:\/\/archiveofourown.org\/works\/829998"
     }
   ],
   "version" : 8,

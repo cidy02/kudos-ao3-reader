@@ -1346,7 +1346,6 @@ object BackupMergeService {
                 .mapTo(mutableSetOf()) { BackupPaths.normalizeIdForComparison(it) }
 
             if (existing == null) {
-                if (archived.isDeleted == true) return@forEach
                 when (tombstoneIndex.collectionResolution(id, incomingModified)) {
                     TombstoneResolution.SUPPRESS_STALE -> return@forEach
                     TombstoneResolution.REVIVE_NEWER,
