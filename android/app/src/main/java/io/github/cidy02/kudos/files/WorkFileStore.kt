@@ -2,6 +2,7 @@ package io.github.cidy02.kudos.files
 
 import io.github.cidy02.kudos.backup.BackupFileUndo
 import io.github.cidy02.kudos.backup.BackupPaths
+import io.github.cidy02.kudos.backup.PersistenceGate
 import java.io.IOException
 import java.nio.file.Files
 import java.nio.file.Path
@@ -11,14 +12,25 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 open class WorkFileStore(
-    private val filesRoot: Path
+    private val filesRoot: Path,
+    private val persistenceGate: PersistenceGate? = null
 ) {
     internal val worksDirectory: Path
         get() = filesRoot.resolve("works").normalize()
 
+    /**
+     * EPUB, original, and the conversion record beside an original wait on the
+     * same lock a Replace or the launch sweep already holds. Empty bytes never
+     * touch the disk, so they do not take the lock. Reads stay outside it.
+     */
+    private suspend fun <T> withPersistenceGate(block: suspend () -> T): T {
+        val gate = persistenceGate ?: return block()
+        return gate.withLock { block() }
+    }
+
     open suspend fun writeWorkEpub(workId: String, bytes: ByteArray): FileWriteResult {
         if (bytes.isEmpty()) return FileWriteResult.Failure("EPUB download was empty.")
-        return withContext(Dispatchers.IO) {
+        return withPersistenceGate { withContext(Dispatchers.IO) {
             try {
                 val destination = workEpubPath(workId)
                 Files.createDirectories(worksDirectory)
@@ -42,11 +54,11 @@ open class WorkFileStore(
             } catch (error: Exception) {
                 FileWriteResult.Failure(error.message ?: "Could not write EPUB file.", error)
             }
-        }
+        } }
     }
 
-    open suspend fun deleteWorkEpub(workId: String): Boolean {
-        return withContext(Dispatchers.IO) {
+    open suspend fun deleteWorkEpub(workId: String): Boolean = withPersistenceGate {
+        withContext(Dispatchers.IO) {
             runCatching { Files.deleteIfExists(workEpubPath(workId)) }.getOrDefault(false)
         }
     }
@@ -76,7 +88,7 @@ open class WorkFileStore(
      */
     suspend fun writeOriginal(workId: String, extension: String, bytes: ByteArray): FileWriteResult {
         if (bytes.isEmpty()) return FileWriteResult.Failure("Original file was empty.")
-        return withContext(Dispatchers.IO) {
+        return withPersistenceGate { withContext(Dispatchers.IO) {
             try {
                 Files.createDirectories(originalsDirectory)
                 val destination = originalPath(workId, extension)
@@ -100,7 +112,7 @@ open class WorkFileStore(
             } catch (error: Exception) {
                 FileWriteResult.Failure(error.message ?: "Could not archive the original file.", error)
             }
-        }
+        } }
     }
 
     /** The archived original, if this work was converted from one. */
@@ -117,8 +129,9 @@ open class WorkFileStore(
     suspend fun originalExists(workId: String): Boolean =
         withContext(Dispatchers.IO) { runCatching { findOriginal(workId) != null }.getOrDefault(false) }
 
-    suspend fun deleteOriginal(workId: String): Boolean =
+    suspend fun deleteOriginal(workId: String): Boolean = withPersistenceGate {
         withContext(Dispatchers.IO) { runCatching { deleteOriginalFiles(workId) }.getOrDefault(false) }
+    }
 
     /** The archived original's file, if there is one: for its size and name without reading it. */
     fun originalFile(workId: String): Path? = runCatching { findOriginal(workId) }.getOrNull()
@@ -138,22 +151,24 @@ open class WorkFileStore(
         }.getOrNull()
     }
 
-    suspend fun writeConversionRecord(workId: String, bytes: ByteArray): Boolean = withContext(Dispatchers.IO) {
-        runCatching {
-            Files.createDirectories(originalsDirectory)
-            val destination = conversionRecordPath(workId)
-            val temp = Files.createTempFile(originalsDirectory, ".conversion-", ".tmp")
-            try {
-                Files.write(temp, bytes)
+    suspend fun writeConversionRecord(workId: String, bytes: ByteArray): Boolean = withPersistenceGate {
+        withContext(Dispatchers.IO) {
+            runCatching {
+                Files.createDirectories(originalsDirectory)
+                val destination = conversionRecordPath(workId)
+                val temp = Files.createTempFile(originalsDirectory, ".conversion-", ".tmp")
                 try {
-                    Files.move(temp, destination, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
-                } catch (_: IOException) {
-                    Files.move(temp, destination, StandardCopyOption.REPLACE_EXISTING)
+                    Files.write(temp, bytes)
+                    try {
+                        Files.move(temp, destination, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
+                    } catch (_: IOException) {
+                        Files.move(temp, destination, StandardCopyOption.REPLACE_EXISTING)
+                    }
+                } finally {
+                    Files.deleteIfExists(temp)
                 }
-            } finally {
-                Files.deleteIfExists(temp)
-            }
-        }.isSuccess
+            }.isSuccess
+        }
     }
 
     private fun findOriginal(workId: String): Path? {

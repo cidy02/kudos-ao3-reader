@@ -1,8 +1,10 @@
 package io.github.cidy02.kudos.backup
 
 import android.graphics.Typeface
+import io.github.cidy02.kudos.files.CacheStaging
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
+import java.io.File
 import java.io.IOException
 import java.nio.file.Files
 import java.nio.file.Path
@@ -14,13 +16,12 @@ object BackupImporter {
         return BackupValidator.decodeManifest(bytes)
     }
 
-    fun importV2Zip(bytes: ByteArray): KudosBackupPackage {
+    fun importV2Zip(bytes: ByteArray, cacheDirectory: File? = null): KudosBackupPackage {
         if (bytes.size.toLong() > BackupLimits.MAX_ARCHIVE_BYTES) {
             throw BackupError.ArchiveTooLarge()
         }
-        if (!hasEndOfCentralDirectory(bytes)) {
-            throw BackupError.InvalidPackage("The backup ZIP appears to be incomplete or truncated.")
-        }
+        // Before any entry is read and before font bytes are staged.
+        ZipCentralDirectory.requireReadable(bytes)
 
         var manifestBytes: ByteArray? = null
         val epubFiles = mutableMapOf<String, ByteArray>()
@@ -105,7 +106,7 @@ object BackupImporter {
         if (!BackupVersion.isZipCompatible(manifest.version)) {
             throw BackupError.UnsupportedVersion(manifest.version)
         }
-        BackupFontValidator.validate(fontFiles)
+        BackupFontValidator.validate(fontFiles, cacheDirectory)
 
         return KudosBackupPackage(
             manifest = manifest,
@@ -115,7 +116,7 @@ object BackupImporter {
         )
     }
 
-    fun importV1Directory(root: Path): KudosBackupPackage {
+    fun importV1Directory(root: Path, cacheDirectory: File? = null): KudosBackupPackage {
         val normalizedRoot = root.toAbsolutePath().normalize()
         if (!Files.isDirectory(normalizedRoot)) {
             throw BackupError.InvalidPackage("Apple v1 backups must be directory-backed packages.")
@@ -160,7 +161,7 @@ object BackupImporter {
             }
             fontFiles[font.fileName] = payload
         }
-        BackupFontValidator.validate(fontFiles)
+        BackupFontValidator.validate(fontFiles, cacheDirectory)
 
         return KudosBackupPackage(
             manifest = manifest,
@@ -235,32 +236,19 @@ object BackupImporter {
         return Files.readAllBytes(path)
     }
 
-    private fun hasEndOfCentralDirectory(bytes: ByteArray): Boolean {
-        if (bytes.size < 22) return false
-        val firstPossibleOffset = (bytes.size - 22).coerceAtLeast(0)
-        val lastPossibleOffset = (bytes.size - 22 - 65_535).coerceAtLeast(0)
-        for (index in firstPossibleOffset downTo lastPossibleOffset) {
-            if (
-                bytes[index] == 0x50.toByte() &&
-                bytes[index + 1] == 0x4b.toByte() &&
-                bytes[index + 2] == 0x05.toByte() &&
-                bytes[index + 3] == 0x06.toByte()
-            ) {
-                return true
-            }
-        }
-        return false
-    }
-
 }
 
 internal object BackupFontValidator {
     fun validate(
         fontFiles: Map<String, ByteArray>,
-        temporaryFileFactory: (String, String) -> Path = { prefix, suffix ->
-            Files.createTempFile(prefix, suffix)
-        }
+        cacheDirectory: File? = null,
+        temporaryFileFactory: ((String, String) -> Path)? = null
     ) {
+        val factory = temporaryFileFactory ?: { prefix, suffix ->
+            val directory = cacheDirectory
+            if (directory != null) CacheStaging.path(directory.toPath(), prefix, suffix)
+            else Files.createTempFile(prefix, suffix)
+        }
         var totalBytes = 0L
         fontFiles.forEach { (fileName, bytes) ->
             BackupPaths.requireSafeFontFileName(fileName)
@@ -274,7 +262,7 @@ internal object BackupFontValidator {
             if (totalBytes > BackupLimits.MAX_TOTAL_FONT_BYTES) {
                 throw BackupError.InvalidPackage("Total font size exceeds limit")
             }
-            if (!isLoadableFont(fileName, bytes, temporaryFileFactory)) {
+            if (!isLoadableFont(fileName, bytes, factory)) {
                 throw BackupError.InvalidPackage("Invalid font file")
             }
         }

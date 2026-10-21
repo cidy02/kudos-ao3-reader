@@ -261,7 +261,10 @@ object DemoLibrary {
             database.withTransaction {
                 seedContents(database, workRepository, readingQueueRepository, fileStore, clock)
             }
-            if (context != null) seedPrivacyData(database, context.filesDir.toPath(), context.cacheDir.toPath(), clock = clock)
+            if (context != null) seedPrivacyData(
+                database, context.filesDir.toPath(), context.cacheDir.toPath(),
+                fileStore = fileStore, clock = clock
+            )
         }
     }
 
@@ -271,10 +274,11 @@ object DemoLibrary {
         filesRoot: Path,
         cacheRoot: Path,
         fontSource: Path? = null,
+        fileStore: WorkFileStore? = null,
         clock: () -> Instant = { Instant.now() }
     ): Unit = withContext(Dispatchers.IO) {
         val paper = database.workDao().getAll().firstOrNull { it.title == "Paper Cranes" }
-        val files = WorkFileStore(filesRoot)
+        val files = fileStore ?: WorkFileStore(filesRoot)
         if (paper != null && !files.originalExists(paper.id)) {
             files.writeOriginal(paper.id, "txt", ("Paper Cranes\nby origamist\n\n" +
                 "The city was quiet, but never dark. Streetlamps hummed along the pavement, casting sharp amber shadows across the rain-slicked stones.\n" +

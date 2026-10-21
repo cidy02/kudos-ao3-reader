@@ -18,6 +18,7 @@ import io.github.cidy02.kudos.files.WorkFileStore
 import io.github.cidy02.kudos.works.WorkIdentityIndex
 import io.github.cidy02.kudos.works.WorkRepository
 import io.github.cidy02.kudos.works.WorkSearchIndex
+import java.io.File
 import java.io.IOException
 import java.nio.file.Files
 import java.time.Instant
@@ -41,7 +42,8 @@ class BackupRepository(
     private val uuidFactory: () -> String = { UUID.randomUUID().toString() },
     private val appVersion: String = "0.1.0",
     private val pronunciationStore: io.github.cidy02.kudos.reader.speech.KokoroPronunciationStore =
-        io.github.cidy02.kudos.reader.speech.KokoroPronunciationStore(workFileStore.worksDirectory.parent.toFile())
+        io.github.cidy02.kudos.reader.speech.KokoroPronunciationStore(workFileStore.worksDirectory.parent.toFile()),
+    private val cacheDirectory: File? = null
 ) {
     fun suggestedExportFileName(now: Instant = clock()): String {
         val day = DateTimeFormatter.ofPattern("yyyy-MM-dd")
@@ -105,7 +107,7 @@ class BackupRepository(
     ): BackupRestoreSummary = persistenceGate.withLock {
         if (!admit()) throw ImportDeclined()
         withContext(Dispatchers.IO) {
-            val pack = BackupImporter.importV2Zip(bytes)
+            val pack = BackupImporter.importV2Zip(bytes, cacheDirectory)
             prepareForImport(mode)
             val current = captureLibrarySnapshot(pack.fontFilesByFileName.keys, pack.fontFilesByFileName)
             val merge = mergePackage(current, pack, mode)
@@ -121,7 +123,7 @@ class BackupRepository(
     ): BackupRestoreSummary = persistenceGate.withLock {
         if (!admit()) throw ImportDeclined()
         withContext(Dispatchers.IO) {
-            BackupFontValidator.validate(pack.fontFilesByFileName)
+            BackupFontValidator.validate(pack.fontFilesByFileName, cacheDirectory)
             prepareForImport(mode)
             val current = captureLibrarySnapshot(pack.fontFilesByFileName.keys, pack.fontFilesByFileName)
             val merge = mergePackage(current, pack, mode, normalizeQueuePreservation)
@@ -289,7 +291,8 @@ class BackupRepository(
             backup = pack,
             mode = mode,
             trustedPublicKeys = trusted,
-            normalizeQueuePreservation = normalizeQueuePreservation
+            normalizeQueuePreservation = normalizeQueuePreservation,
+            cacheDirectory = cacheDirectory
         )
         // Feeds the pairing sheet's count-only unknown-signer badge. See
         // SettingsRepository.recordUnknownSignerTombstoneIds.

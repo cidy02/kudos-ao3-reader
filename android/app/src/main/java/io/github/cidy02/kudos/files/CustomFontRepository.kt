@@ -9,6 +9,7 @@ import io.github.cidy02.kudos.data.local.dao.CustomFontDao
 import io.github.cidy02.kudos.data.local.entity.toDomain
 import io.github.cidy02.kudos.data.local.entity.toEntity
 import io.github.cidy02.kudos.data.preferences.SettingsRepository
+import java.io.File
 import java.nio.file.Path
 import java.nio.file.Files
 import java.util.Locale
@@ -25,7 +26,8 @@ import kotlinx.coroutines.withContext
 class CustomFontRepository(
     private val customFontDao: CustomFontDao,
     private val fontFileStore: FontFileStore,
-    private val settingsRepository: SettingsRepository
+    private val settingsRepository: SettingsRepository,
+    private val cacheDirectory: File? = null
 ) {
     fun observeImported(): Flow<List<CustomFont>> {
         return customFontDao.observeAll().map { rows -> rows.map { it.toDomain() } }
@@ -55,7 +57,7 @@ class CustomFontRepository(
 
         val rejection = withContext(Dispatchers.IO) {
             try {
-                BackupFontValidator.validate(mapOf(fileName to bytes))
+                BackupFontValidator.validate(mapOf(fileName to bytes), cacheDirectory)
             } catch (error: BackupError) {
                 val reason = when (error) {
                     is BackupError.EntryTooLarge -> "It's bigger than the " +

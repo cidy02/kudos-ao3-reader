@@ -1,6 +1,7 @@
 package io.github.cidy02.kudos.works
 
 import io.github.cidy02.kudos.core.model.SavedWork
+import io.github.cidy02.kudos.files.CacheStaging
 import io.github.cidy02.kudos.files.TextDecoding
 import io.github.cidy02.kudos.network.ao3.search.AO3Language
 import java.io.ByteArrayInputStream
@@ -124,7 +125,8 @@ internal data class EpubImportMetadata(
          * iOS `EPUBDocument.inspectPackage`: a whole ZIP whose package document lists at least
          * one readable spine item. What a restore checks before bytes may replace a local EPUB.
          */
-        fun isReadablePackage(bytes: ByteArray): Boolean = EpubMetadataReader.isReadablePackage(bytes)
+        fun isReadablePackage(bytes: ByteArray, cacheDirectory: File? = null): Boolean =
+            EpubMetadataReader.isReadablePackage(bytes, cacheDirectory)
 
         private fun normalized(value: String): String = value.trim().lowercase()
 
@@ -203,9 +205,15 @@ private object EpubMetadataReader {
      * iOS accepts it, and a ZIP that merely held a stray `.opf` passed, and could replace a
      * good local EPUB.
      */
-    fun isReadablePackage(bytes: ByteArray): Boolean = runCatching {
+    fun isReadablePackage(bytes: ByteArray, cacheDirectory: File? = null): Boolean = runCatching {
         // `ZipFile` reads the central directory, as iOS's reader does, and needs a file.
-        val file = File.createTempFile("incoming", ".epub")
+        // The file lives in the app cache when the caller has one, and is removed on
+        // every path, including a package `ZipFile` refuses.
+        val file = if (cacheDirectory != null) {
+            CacheStaging.file(cacheDirectory, "incoming", ".epub")
+        } else {
+            File.createTempFile("incoming", ".epub")
+        }
         try {
             file.writeBytes(bytes)
             ZipFile(file).use { zip ->
