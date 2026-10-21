@@ -10,6 +10,7 @@ import io.github.cidy02.kudos.core.model.SavedWork
 import io.github.cidy02.kudos.core.model.SyncTombstone
 import io.github.cidy02.kudos.core.model.SyncTombstoneRecordType
 import io.github.cidy02.kudos.core.model.WorkCollection
+import io.github.cidy02.kudos.works.WorkRepository
 import java.time.Instant
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -30,6 +31,65 @@ class BackupMergeParityTest {
 
     @After
     fun resetSigningKey() = TombstoneSigning.resetForTests()
+
+    @Test
+    fun absentSoftDeletedRecordsRestoreInEveryModeWithALocalRecoveryWindow() {
+        val remote = BackupLibrarySnapshot(
+            works = listOf(work().copy(isDeleted = true, deletedAt = at(100), permanentDeletionScheduledAt = at(500))),
+            collections = listOf(collection().copy(isDeleted = true, deletedAt = at(100), permanentDeletionScheduledAt = at(500))),
+            readingQueues = listOf(queue().copy(isDeleted = true, deletedAt = at(100), permanentDeletionScheduledAt = at(500))),
+            annotations = listOf(annotation().copy(isPendingDeletion = true, deletedAt = at(100)))
+        )
+        for (mode in BackupImportMode.entries) {
+            val earliestSchedule = Instant.now().plus(WorkRepository.RECOVERY_WINDOW)
+            val result = merge(BackupLibrarySnapshot(), remote, mode)
+            val latestSchedule = Instant.now().plus(WorkRepository.RECOVERY_WINDOW)
+            val work = result.works.single()
+            val collection = result.collections.single()
+            val queue = result.readingQueues.single()
+            assertTrue("$mode", work.isDeleted && collection.isDeleted && queue.isDeleted)
+            assertEquals("$mode", listOf(at(100), at(100), at(100)),
+                listOf(work.deletedAt, collection.deletedAt, queue.deletedAt))
+            for (scheduledAt in listOf(work.permanentDeletionScheduledAt,
+                collection.permanentDeletionScheduledAt, queue.permanentDeletionScheduledAt)) {
+                assertTrue("$mode: restore starts a local recovery window", scheduledAt != null &&
+                    !scheduledAt.isBefore(earliestSchedule) && !scheduledAt.isAfter(latestSchedule))
+            }
+            assertEquals("$mode", remote.annotations.single(), result.annotations.single())
+        }
+    }
+
+    @Test
+    fun absentSoftDeletedCollectionStillRespectsTombstonesExceptInReplace() {
+        val local = BackupLibrarySnapshot(tombstones = listOf(tombstone(COLLECTION, SyncTombstoneRecordType.WORK_COLLECTION)))
+        for (mode in BackupImportMode.entries) {
+            for (clock in listOf(at(100), at(200), at(300))) {
+                val remote = collection().copy(isDeleted = true, deletedAt = at(50), lastModifiedAt = clock)
+                val result = merge(local, BackupLibrarySnapshot(collections = listOf(remote)), mode)
+                val shouldRestore = mode == BackupImportMode.REPLACE_LIBRARY || clock > at(200)
+                assertEquals("$mode: $clock", shouldRestore, result.collections.isNotEmpty())
+                if (shouldRestore) {
+                    val restored = result.collections.single()
+                    assertTrue(restored.isDeleted)
+                    assertEquals(at(50), restored.deletedAt)
+                    assertEquals(clock, restored.lastModifiedAt)
+                }
+            }
+        }
+    }
+
+    @Test
+    fun reconcilingAnImportedDeletedCollectionKeepsItsRecoveryDeadline() {
+        val remote = BackupLibrarySnapshot(collections = listOf(collection().copy(isDeleted = true, deletedAt = at(100))))
+        val first = merge(BackupLibrarySnapshot(), remote)
+        val deadline = first.collections.single().permanentDeletionScheduledAt
+        assertTrue(deadline != null)
+        val newer = remote.copy(collections = listOf(remote.collections.single().copy(lastModifiedAt = at(300))))
+        val second = merge(first, newer)
+        assertTrue(second.collections.single().isDeleted)
+        assertEquals(at(100), second.collections.single().deletedAt)
+        assertEquals(deadline, second.collections.single().permanentDeletionScheduledAt)
+    }
 
     @Test
     fun dateAddedAndDateCreatedKeepTheEarlierCopyRegardlessOfWinner() {
