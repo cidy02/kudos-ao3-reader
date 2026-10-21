@@ -27,7 +27,30 @@ import java.io.File
 
 class KokoroTTSController(private val context: Context) : TTSService {
     private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
-    private var tts: OfflineTts? = null
+    @Volatile private var tts: OfflineTts? = null
+    private val engineLock = Any()
+    private val pronunciations = KokoroPronunciationStore(context.filesDir)
+    @Volatile private var pronunciationScope: Pair<String?, String?> = null to null
+    private var loadedLexicon = ""
+    private var lexiconFile: File? = null
+
+    override fun setPronunciationScope(fandom: String?, workID: String?) {
+        pronunciationScope = fandom to workID
+    }
+
+    private fun resolvedLexicon(): String = try {
+        val tokensFile = File(TTSDownloadWorker.modelDirectory(context), "tokens.txt")
+        val tokens = if (!tokensFile.isFile) emptySet() else tokensFile.readLines().mapNotNull { line ->
+            line.trim().substringBeforeLast(' ', "").takeIf { it.isNotEmpty() }
+        }.toSet()
+        val (fandom, workID) = pronunciationScope
+        KokoroPronunciationLexicon.render(pronunciations.load().corrections().lexicon(fandom, workID), tokens)
+    } catch (_: Exception) {
+        // A damaged correction file must not silence a working voice or leak its words to logcat.
+        Log.w("KokoroTTS", "Could not read pronunciation corrections; saved file kept")
+        ""
+    }
+
     @Volatile private var disposed = false
     /** The pack is here but would not open: not tried again for every stretch (A49 F4). */
     @Volatile private var failedToOpen = false
@@ -51,7 +74,8 @@ class KokoroTTSController(private val context: Context) : TTSService {
         initEngine()
     }
 
-    private fun initEngine() {
+    private fun initEngine() = synchronized(engineLock) {
+        if (tts != null || disposed || failedToOpen) return
         if (!TTSDownloadWorker.isModelDownloaded(context)) {
             _status.value = SpeechStatus.UNAVAILABLE
             return
@@ -64,13 +88,22 @@ class KokoroTTSController(private val context: Context) : TTSService {
             val tokensPath = File(modelDir, "tokens.txt").absolutePath
             val dataDir = File(modelDir, "espeak-ng-data").absolutePath
 
+            loadedLexicon = resolvedLexicon()
+            val customLexicon = lexiconFile ?: File.createTempFile("kokoro-pronunciations-", ".txt", context.cacheDir)
+                .also { lexiconFile = it }
+            customLexicon.writeText(loadedLexicon)
+
             val kokoroConfig = OfflineTtsKokoroModelConfig(
                 model = modelPath,
                 voices = voicesPath,
                 tokens = tokensPath,
                 dataDir = dataDir,
                 lengthScale = 1.0f,
-                lexicon = "",
+                // v1.13.6 accepts this path, but its v0.19 frontend IGNORES lexicon.
+                // Audio corrections need a compatible frontend/pack; do not substitute IPA
+                // into prose or claim current-pack pronunciation parity. It also exposes no
+                // G2P for the iOS syllable-respelling preview. JSON remains the source of truth.
+                lexicon = if (loadedLexicon.isEmpty()) "" else customLexicon.absolutePath,
                 dictDir = ""
             )
 
@@ -117,6 +150,18 @@ class KokoroTTSController(private val context: Context) : TTSService {
         stop()
         previous?.join() // Native generate may finish after cancellation; never run two generations together.
         if (disposed) return
+        // Reopen only between utterances, after cancelled native work has joined. Changes
+        // to an existing word's IPA count too, as in iOS's pronunciation revision token.
+        withContext(Dispatchers.IO) {
+            synchronized(engineLock) {
+                if (!disposed && resolvedLexicon() != loadedLexicon) {
+                    tts?.release()
+                    tts = null
+                    initEngine()
+                }
+            }
+        }
+        if (disposed || tts == null) return
 
         _status.value = SpeechStatus.PLAYING
         
@@ -161,7 +206,7 @@ class KokoroTTSController(private val context: Context) : TTSService {
                     
                     try {
                         val generatedAudio = withContext(Dispatchers.Default) {
-                            tts?.generate(chunk, currentVoiceId, currentRate)
+                            synchronized(engineLock) { tts?.generate(chunk, currentVoiceId, currentRate) }
                         }
                         
                         val samples = generatedAudio?.samples
@@ -226,8 +271,12 @@ class KokoroTTSController(private val context: Context) : TTSService {
         scope.launch {
             job?.cancelAndJoin()
             try {
-                tts?.release()
-                tts = null
+                synchronized(engineLock) {
+                    tts?.release()
+                    tts = null
+                    lexiconFile?.delete()
+                    lexiconFile = null
+                }
             } finally {
                 scope.cancel()
             }

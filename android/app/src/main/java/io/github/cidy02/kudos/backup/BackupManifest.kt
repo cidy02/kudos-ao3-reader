@@ -34,7 +34,9 @@ data class KudosBackupManifest(
     val readingFavorites: List<BackupReadingFavorite> = emptyList(),
     val fandomReadWatermarks: List<BackupFandomReadWatermark> = emptyList(),
     /** Apple sync tombstones — decoded so we do not fail on v5+ archives. */
-    val tombstones: List<BackupTombstone> = emptyList()
+    val tombstones: List<BackupTombstone> = emptyList(),
+    val pronunciations: io.github.cidy02.kudos.reader.speech.PronunciationCorrections =
+        io.github.cidy02.kudos.reader.speech.PronunciationCorrections()
 )
 
 @Serializable

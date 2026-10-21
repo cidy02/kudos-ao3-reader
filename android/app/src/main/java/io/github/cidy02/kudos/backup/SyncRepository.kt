@@ -166,7 +166,7 @@ class SyncRepository(
             }
             when (result) {
                 is SyncResult.Error -> settingsRepository.updateSyncLastError(result.message)
-                is SyncResult.Success -> settingsRepository.updateSyncLastError(null)
+                is SyncResult.Success -> settingsRepository.updateSyncLastError(result.warning)
                 SyncResult.SkippedAlreadyRunning -> Unit
             }
             return@withContext result
@@ -243,15 +243,28 @@ class SyncRepository(
                 // a manifest is news. Merged again every time, as it was, it brought back a
                 // download the reader had just removed: this device's own last manifest still
                 // said the work had one.
-                val ownManifest = decodedLive != null && BackupPaths.sha256(manifestBytesAtRead!!) ==
+                val liveDigest = manifestBytesAtRead?.let(BackupPaths::sha256)
+                val nativeDigest = context.getSharedPreferences("pronunciation-sync", Context.MODE_PRIVATE)
+                    .getString("nativeManifestDigest", null)
+                val ownPronunciations = decodedLive != null && liveDigest == nativeDigest
+                val ownManifest = decodedLive != null && liveDigest ==
                     settingsRepository.settings.first().sync.lastManifestDigest
                 if (ownManifest) {
+                    // An older Android wrote these as unknown keys. Its digest can match
+                    // without ever having restored them into the newly added local store.
+                    if (!ownPronunciations) {
+                        backupRepository.applyPronunciations(decodedLive!!.pronunciations)
+                    }
                     folderViewIsCurrent = true
                     // Files can land in the folder after the manifest that lists their work.
                     importOriginals(syncDir, decodedLive!!)
                 } else {
                     (decodedLive ?: decodeManifestOrNull(backupManifest))?.let { manifest ->
-                        val outcome = importManifest(syncDir, manifest)
+                        // Asset retries must not replay our older corrections over local edits/deletions.
+                        val incoming = if (ownPronunciations) manifest.copy(
+                            pronunciations = io.github.cidy02.kudos.reader.speech.PronunciationCorrections()
+                        ) else manifest
+                        val outcome = importManifest(syncDir, incoming)
                         pendingFonts += outcome.pendingFonts
                         folderViewIsCurrent = decodedLive != null && outcome.complete
                     }
@@ -275,7 +288,10 @@ class SyncRepository(
                     context.contentResolver.openInputStream(remoteBackup.uri)?.use { input ->
                         val bytes = input.readBytes()
                         if (bytes.isNotEmpty()) {
-                            backupRepository.importV2ZipBytes(bytes, admit = this::folderImportStillAllowed)
+                            val summary = backupRepository.importV2ZipBytes(bytes, admit = this::folderImportStillAllowed)
+                            if (summary.pronunciationsRestoreFailed) {
+                                throw IOException("Could not save pronunciation corrections. The sync folder was kept; try again.")
+                            }
                         }
                     }
                 }
@@ -285,7 +301,7 @@ class SyncRepository(
             }
 
             // 2. Export incrementally
-            persistenceGate.withLock {
+            val pronunciationsUnreadable = persistenceGate.withLock {
                 // iOS holds its gate for the whole run, so a Replace can never come between a
                 // run's check and its write-up. Here the gate is taken again for the export: a
                 // Replace that paused sync meanwhile must not have its library published or the
@@ -400,8 +416,7 @@ class SyncRepository(
                         }
                     )
                 ).jsonObject
-                // What the folder's manifest held that this build does not know (iOS's
-                // pronunciation corrections, and whatever a later version adds) stays in the
+                // What the folder's manifest held that this build does not know stays in the
                 // manifest this build writes. Dropped, as it was, a device that joined the
                 // folder after an Android sync never received it. It is the manifest this
                 // run replaces, read moments ago, so nothing stale is carried.
@@ -422,6 +437,8 @@ class SyncRepository(
                     work.remoteEpubPending ||
                         (work.hasEpub && BackupPaths.normalizeIdForComparison(work.id) !in snapshot.epubWorkIds)
                 }
+                context.getSharedPreferences("pronunciation-sync", Context.MODE_PRIVATE).edit()
+                    .putString("nativeManifestDigest", BackupPaths.sha256(manifestBytes)).commit()
                 settingsRepository.updateSyncLastManifestDigest(
                     if (settled) BackupPaths.sha256(manifestBytes) else null
                 )
@@ -441,11 +458,13 @@ class SyncRepository(
                         )
                     }
                 }
+                snapshot.pronunciationsUnreadable
             }
 
             settingsRepository.updateSyncLastSyncAt(clock())
             settingsRepository.updateSyncHasPendingChanges(false)
-            return SyncResult.Success(foldedConflicts.size)
+            return SyncResult.Success(foldedConflicts.size,
+                warning = PRONUNCIATIONS_EXPORT_WARNING.takeIf { pronunciationsUnreadable })
         } catch (e: CancellationException) {
             throw e
         } catch (_: ImportDeclined) {
@@ -617,11 +636,14 @@ class SyncRepository(
             }
             // The batches are one restore; only the last marks queued works preserved
             // (see `BackupMergeService.merge`).
-            backupRepository.importPackage(
+            val summary = backupRepository.importPackage(
                 KudosBackupPackage(manifest, epubFiles, fontFiles),
                 normalizeQueuePreservation = next >= manifest.works.size,
                 admit = this::folderImportStillAllowed
             )
+            if (summary.pronunciationsRestoreFailed) {
+                throw IOException("Could not save pronunciation corrections. The sync folder was kept; try again.")
+            }
             // Fonts are restored once per manifest, with the first batch (iOS
             // `readChangedRemoteAssets`). Offered again with each batch, a font whose name
             // collides with a local one gained another suffixed copy every time.
@@ -843,7 +865,7 @@ sealed interface SyncResult {
      * exactly the situation a user needs told about, and the fold is silent
      * otherwise — nothing else in the UI would ever hint it happened.
      */
-    data class Success(val foldedConflicts: Int = 0) : SyncResult
+    data class Success(val foldedConflicts: Int = 0, val warning: String? = null) : SyncResult
     data class Error(val message: String) : SyncResult
 
     /**
@@ -878,6 +900,13 @@ internal fun carryUnknownRecordKeys(outgoing: JsonObject, replaced: JsonObject?)
     fun JsonObject.id(): String? = text("id")?.let(BackupPaths::normalizeIdForComparison)
 
     val result = outgoing.toMutableMap()
+    val oldPronunciations = replaced["pronunciations"] as? JsonObject
+    val newPronunciations = outgoing["pronunciations"] as? JsonObject
+    if (oldPronunciations != null && newPronunciations != null) {
+        result["pronunciations"] = JsonObject(newPronunciations + oldPronunciations.filterKeys {
+            it !in setOf("global", "fandoms", "works")
+        })
+    }
     descriptors.forEach { (listName, descriptor) ->
         val oldRecords = (replaced[listName] as? JsonArray)?.mapNotNull { it as? JsonObject }
             ?: return@forEach

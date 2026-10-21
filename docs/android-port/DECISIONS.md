@@ -2468,3 +2468,11 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   when it is Android's and older; iOS only when it has no platform (or "ios") and is older. A
   foreign record is never stale, so neither app nags about the other's imports (My copy still
   rebuilds them, after asking). Reverse: `WorkConversionRecord.isStale` on both apps.
+- **2026-10-20 · Pronunciation corrections: kept, edited, backed up and synced as iOS; heard only
+  once Android's voice pack honours them (Claude, 3ft).** Android now has iOS's store (the same
+  JSON), the list and editor in Settings › Listening, Fix Pronunciation in the selection menu, and
+  the backup key `pronunciations` merged on restore as iOS (archive wins conflicts, local-only kept,
+  a device's own manifest never overwrites newer local edits). The bundled Kokoro pack
+  (`kokoro-int8-en-v0_19`, sherpa-onnx 1.13.6) ignores a lexicon, so a correction does not yet
+  change Android's speech; the page says so. A later pack that reads the lexicon picks them up
+  with no data change. Reverse: drop the Listening row; the key would pass through as before.

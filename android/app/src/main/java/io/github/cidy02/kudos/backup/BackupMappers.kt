@@ -34,6 +34,7 @@ fun BackupLibrarySnapshot.toV2Manifest(
 
     return KudosBackupManifest(
         version = BackupVersion.CURRENT,
+        pronunciations = pronunciations,
         exportedAt = BackupValidator.formatInstant(exportedAt),
         exportedBy = BackupExportedBy(
             platform = "android",

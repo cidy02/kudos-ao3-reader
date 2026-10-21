@@ -90,7 +90,8 @@ fun ReadiumNavigatorHost(
     onContentTap: (() -> Unit)? = null,
     fontDeclarations: List<CustomFontDeclaration> = emptyList(),
     /** Fired once the fragment is attached and ready for decorations/go(). */
-    onNavigatorReady: (() -> Unit)? = null
+    onNavigatorReady: (() -> Unit)? = null,
+    onFixPronunciationSelection: (() -> Unit) -> Unit = { complete -> complete() }
 ) {
     val activity = LocalContext.current.findFragmentActivity() ?: return
     val containerId = remember { View.generateViewId() }
@@ -100,6 +101,7 @@ fun ReadiumNavigatorHost(
     val currentOnHighlightTap by rememberUpdatedState(onHighlightTap)
     val currentOnHighlightSelection by rememberUpdatedState(onHighlightSelection)
     val currentOnAddNoteSelection by rememberUpdatedState(onAddNoteSelection)
+    val currentOnFixPronunciationSelection by rememberUpdatedState(onFixPronunciationSelection)
     val currentController by rememberUpdatedState(controller)
     val currentOnNavigatorReady by rememberUpdatedState(onNavigatorReady)
     val currentOnViewportChanged by rememberUpdatedState(onViewportChanged)
@@ -162,7 +164,8 @@ fun ReadiumNavigatorHost(
             ReaderSelectionContainer(
                 ctx,
                 onHighlight = { complete -> currentOnHighlightSelection(complete) },
-                onAddNote = { complete -> currentOnAddNoteSelection(complete) }
+                onAddNote = { complete -> currentOnAddNoteSelection(complete) },
+                onFixPronunciation = { complete -> currentOnFixPronunciationSelection(complete) }
             ).apply {
                 addView(
                     FragmentContainerView(ctx).apply { id = containerId },

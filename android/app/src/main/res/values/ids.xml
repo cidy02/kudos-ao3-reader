@@ -2,4 +2,5 @@
 <resources>
     <item name="reader_selection_highlight" type="id" />
     <item name="reader_selection_add_note" type="id" />
+    <item name="reader_selection_fix_pronunciation" type="id" />
 </resources>
