@@ -144,4 +144,40 @@ class ReaderProgressDisplayTest {
             ReaderProgressDisplay.label(ReaderProgress(1, 0.2, totalProgression = 0.34), plainChapters(2), "2/1"))
     }
 
+    @Test fun compactPillsMatchTheIosReferenceWithoutChangingTheIphoneCardWords() {
+        val sections = ReaderSectionBuilder.build(
+            listOf(ReaderSectionBuilder.RawTOCEntry("Preface", 0)) +
+                (1..101).map { ReaderSectionBuilder.RawTOCEntry("Chapter $it", it + 1) } +
+                ReaderSectionBuilder.RawTOCEntry("Afterword", 103),
+            (0..103).map { "section$it.xhtml" }
+        )
+        assertEquals(101, sections.storyChapterCount)
+        fun pill(spine: Int, chapters: String = "") = ReaderProgressDisplay.pillLabel(
+            ReaderProgress(spine, 0.0), sections, chapters
+        )
+        assertEquals("P", pill(0))
+        assertEquals("S", pill(1))
+        assertEquals("1/101", pill(2))
+        assertEquals("101/101", pill(102))
+        assertEquals("A", pill(103))
+        assertEquals("1/120", pill(2, "101/120"))
+        assertEquals("101/101", pill(102, "1/2"))
+        assertEquals("1/101", pill(2, "101/?"))
+        assertEquals("Preface · 0% of work", ReaderProgressDisplay.label(ReaderProgress(0, 0.0), sections))
+        assertEquals("Chapter 1 of 101 · 0% of work", ReaderProgressDisplay.label(ReaderProgress(2, 0.0), sections))
+        assertNull(pill(-1))
+        assertNull(pill(104))
+        assertNull(ReaderProgressDisplay.pillLabel(null, sections))
+        assertNull(ReaderProgressDisplay.pillLabel(ReaderProgress(0, 0.0), emptyList()))
+    }
+
+    @Test fun compactPillsKeepOtherSectionsEmptyAndSingleChapterIsOneOfOne() {
+        assertEquals("1/1", plainChapters(1).single().pillLabel(1))
+        val other = ReaderSection("cover.xhtml", "Cover", ReaderSectionKind.OTHER, 0, null)
+        assertEquals("", other.pillLabel(100))
+        assertNull(ReaderProgressDisplay.pillLabel(ReaderProgress(0, 0.0), listOf(other)))
+        val malformed = other.copy(kind = ReaderSectionKind.CHAPTER)
+        assertEquals("0/10", malformed.pillLabel(10))
+    }
+
 }

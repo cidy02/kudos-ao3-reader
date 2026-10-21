@@ -15,8 +15,11 @@ import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipe
+import io.github.cidy02.kudos.reader.speech.SpeechStatus
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -113,4 +116,67 @@ class ReaderPositionCardTest {
         compose.onNodeWithContentDescription("Seek within chapter").assertIsNotEnabled()
             .assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Measuring pages"))
     }
+    @Test fun standaloneTransportSurvivesHiddenChromeAndPausedPlayback() {
+        var chrome by mutableStateOf(true)
+        var status by mutableStateOf(SpeechStatus.PLAYING)
+        val calls = mutableListOf<String>()
+        compose.setContent {
+            MaterialTheme {
+                if (chrome || status == SpeechStatus.PLAYING || status == SpeechStatus.PAUSED) {
+                    ReaderPositionCard(
+                        page = 2, pageCount = 10, chapterRemainingMinutes = 3,
+                        workLine = "Chapter 2 of 3 · 50% of work", sliderValue = 0.1f, onSeek = {},
+                        showsMiniPlayer = status != SpeechStatus.STOPPED, showsPosition = chrome,
+                        speechStatus = status, spokenText = "Spoken caption",
+                        onPlayerBackgroundTap = if (chrome) null else ({ chrome = true }),
+                        onPause = { status = SpeechStatus.PAUSED },
+                        onPlay = { status = SpeechStatus.PLAYING },
+                        onSkipPrevious = { calls += "previous" }, onSkipNext = { calls += "next" },
+                        onStopSpeech = { status = SpeechStatus.STOPPED }
+                    )
+                }
+            }
+        }
+        compose.onNodeWithContentDescription("Seek within chapter").assertExists()
+        compose.runOnIdle { chrome = false }
+        compose.onNodeWithContentDescription("Seek within chapter").assertDoesNotExist()
+        compose.onNodeWithText("Chapter 2 of 3 · 50% of work").assertDoesNotExist()
+        compose.onNodeWithContentDescription("Previous chapter").performClick()
+        compose.onNodeWithContentDescription("Next chapter").performClick()
+        compose.onNodeWithContentDescription("Pause").performClick()
+        compose.onNodeWithContentDescription("Play").assertExists().performClick()
+        // The merged clickable strip's center is over transport; tap the actual caption bounds.
+        compose.onNodeWithText("Spoken caption", useUnmergedTree = true).performClick()
+        compose.onNodeWithContentDescription("Seek within chapter").assertExists()
+        compose.onNodeWithContentDescription("Stop reading aloud").performClick()
+        compose.onNodeWithContentDescription("Seek within chapter").assertExists()
+        compose.onNodeWithContentDescription("Play").assertDoesNotExist()
+        compose.runOnIdle { assertEquals(listOf("previous", "next"), calls); chrome = false }
+        compose.onNodeWithContentDescription("Stop reading aloud").assertDoesNotExist()
+    }
+
+    @Test fun holdingTransportSeeksPositionsWithoutDispatchingAChapterTap() {
+        var taps = 0
+        var starts = 0
+        var ends = 0
+        val ticks = mutableListOf<Int>()
+        compose.setContent {
+            MaterialTheme {
+                ReaderPositionCard(page = 1, pageCount = 4, chapterRemainingMinutes = 1,
+                    workLine = "", sliderValue = 0f, onSeek = {}, showsMiniPlayer = true,
+                    showsPosition = false, speechStatus = SpeechStatus.PAUSED,
+                    onSkipPrevious = { taps++ }, onSpeechSeekStart = { starts++ },
+                    onSeekSpeech = { ticks += it }, onSpeechSeekEnd = { ends++ })
+            }
+        }
+        compose.onNodeWithContentDescription("Previous chapter").performTouchInput { longClick(durationMillis = 900) }
+        compose.runOnIdle {
+            assertEquals(0, taps)
+            assertEquals(1, starts)
+            assertEquals(1, ends)
+            assertTrue(ticks.isNotEmpty())
+            assertTrue(ticks.all { it == -1 })
+        }
+    }
+
 }

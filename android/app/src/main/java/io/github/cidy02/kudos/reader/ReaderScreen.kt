@@ -395,6 +395,31 @@ private fun ReaderReading(
             val pageCount = viewport?.pageCount ?: 0
             val page = scrubValue?.let { ReaderProgressDisplay.scrubPage(it, pageCount) } ?: viewport?.page ?: 0
             val currentProgress = scrubValue ?: if (pageCount > 0) ReaderProgressDisplay.sliderValue(page, pageCount) else 0f
+            val skipChapter by androidx.compose.runtime.rememberUpdatedState<(Boolean) -> Unit> { forward ->
+                val spine = state.viewport?.spineIndex ?: state.liveProgress?.spineIndex
+                val target = spine?.let {
+                    io.github.cidy02.kudos.reader.speech.ReaderSpeechSkip.target(
+                        positions, it, state.viewport?.page ?: 1, forward
+                    )
+                }
+                if (target != null && navigatorController.go(target, animated = false)) {
+                    speechController.beginSeeking()
+                    scope.launch {
+                        speechController.endSeeking(ReaderContentText.source(
+                            publication, target, viewModel.readsAuthorNotes()
+                        ))
+                    }
+                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                }
+            }
+            DisposableEffect(speechController, publication) {
+                speechController.onSkipNext = { skipChapter(true) }
+                speechController.onSkipPrevious = { skipChapter(false) }
+                onDispose {
+                    speechController.onSkipNext = {}
+                    speechController.onSkipPrevious = {}
+                }
+            }
             val chapterPositions = positions.getOrNull(viewport?.spineIndex ?: -1)
             val chapterRemainingMinutes = chapterPositions?.takeIf { it.isNotEmpty() && pageCount > 0 }?.let {
                 ReaderProgressDisplay.minutesForPositions(
@@ -727,18 +752,17 @@ private fun ReaderReading(
                             )
                         }
 
-                        // Floating Position Card
+                        val downloadProgress by speechController.downloadProgress.collectAsState()
+                        val showsMiniPlayer = speechStatus == SpeechStatus.PLAYING ||
+                            speechStatus == SpeechStatus.PAUSED ||
+                            (showTtsControls && speechStatus == SpeechStatus.MODEL_NOT_DOWNLOADED)
+                        // Chrome down + speech: the same transport in its own surface, without progress.
                         AnimatedVisibility(
-                            visible = chromeVisible,
+                            visible = chromeVisible || showsMiniPlayer,
                             enter = fadeIn() + slideInVertically { it },
                             exit = fadeOut() + slideOutVertically { it },
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            val downloadProgress by speechController.downloadProgress.collectAsState()
-                            val showsMiniPlayer = speechStatus == SpeechStatus.PLAYING ||
-                                speechStatus == SpeechStatus.PAUSED ||
-                                (showTtsControls && speechStatus == SpeechStatus.MODEL_NOT_DOWNLOADED)
-
                             ReaderPositionCard(
                                 page = page,
                                 pageCount = pageCount,
@@ -754,6 +778,8 @@ private fun ReaderReading(
                                     viewModel.setScrubbing(false)
                                 },
                                 showsMiniPlayer = showsMiniPlayer,
+                                showsPosition = chromeVisible,
+                                onPlayerBackgroundTap = if (chromeVisible) null else ({ chromeVisible = true }),
                                 speechStatus = speechStatus,
                                 speechDownloadProgress = downloadProgress,
                                 spokenText = spokenText,
@@ -1185,19 +1211,25 @@ internal fun ReaderDisplaySheet(
             }
         }
 
-        SettingsGroupLabel("Font", Modifier.padding(top = 22.dp))
-        SettingsPanel {
-            ReaderFontCatalog.builtIns.forEachIndexed { index, option ->
-                if (index > 0) SubjectRowSeparator()
-                SubjectFormRow(
-                    label = option.name,
-                    onClick = { onFontFamilyChange(if (option.id == "system") null else option.id) },
-                    trailing = {
-                        if (currentFontId == option.id) {
-                            Icon(Icons.Filled.Check, contentDescription = "Selected", tint = tokens.accentInk)
+        if (customFontRepository != null) {
+            io.github.cidy02.kudos.settings.ReaderFontSection(currentFontId, customFontRepository) { id ->
+                onFontFamilyChange(if (id == "system") null else id)
+            }
+        } else {
+            SettingsGroupLabel("Font", Modifier.padding(top = 22.dp))
+            SettingsPanel {
+                ReaderFontCatalog.builtIns.forEachIndexed { index, option ->
+                    if (index > 0) SubjectRowSeparator()
+                    SubjectFormRow(
+                        label = option.name,
+                        onClick = { onFontFamilyChange(if (option.id == "system") null else option.id) },
+                        trailing = {
+                            if (currentFontId == option.id) {
+                                Icon(Icons.Filled.Check, contentDescription = "Selected", tint = tokens.accentInk)
+                            }
                         }
-                    }
-                )
+                    )
+                }
             }
         }
     }

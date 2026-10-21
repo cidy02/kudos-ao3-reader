@@ -450,6 +450,23 @@ fun SettingsFontPage(
     customFontRepository: CustomFontRepository
 ) {
     val scope = rememberCoroutineScope()
+    SettingsPage(title = "Font") {
+        item {
+            ReaderFontSection(settings.reader.readerFontId, customFontRepository) { id ->
+                scope.launch { repository.updateReaderFontId(id) }
+            }
+        }
+    }
+}
+
+/** Shared by Settings › Font and the reader, as iOS ReaderFontSection is. */
+@Composable
+internal fun ReaderFontSection(
+    fontId: String,
+    customFontRepository: CustomFontRepository,
+    onSelect: (String) -> Unit
+) {
+    val scope = rememberCoroutineScope()
     val tokens = LocalKudosTokens.current
     val context = LocalContext.current
     val importedFonts by customFontRepository.observeImported().collectAsState(initial = emptyList())
@@ -504,13 +521,10 @@ fun SettingsFontPage(
                     }
                 }
                 fontStatusIsError = failures.isNotEmpty() && successes.isEmpty()
-                fontStatus = if (successes.isNotEmpty()) {
-                    "Imported ${successes.size} fonts"
-                } else if (failures.isNotEmpty()) {
-                    failures.joinToString("\n")
-                } else {
-                    "Nothing imported."
-                }
+                fontStatus = buildList {
+                    if (successes.isNotEmpty()) add("Imported ${successes.size} fonts")
+                    addAll(failures)
+                }.joinToString("\n").ifEmpty { "Nothing imported." }
             } catch (error: Exception) {
                 fontStatusIsError = true
                 fontStatus = error.message ?: "Could not import font."
@@ -520,94 +534,90 @@ fun SettingsFontPage(
         }
     }
 
-    SettingsPage(title = "Font") {
-        item {
-            Column(Modifier.padding(top = 22.dp)) {
-                SettingsGroupLabel("Font")
-                SettingsPanel {
-                    options.forEachIndexed { index, option ->
-                        if (index > 0) SubjectRowSeparator()
-                        SubjectFormRow(
-                            label = option.name,
-                            onClick = { scope.launch { repository.updateReaderFontId(option.id) } },
-                            trailing = {
-                                Row(
-                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    if (settings.reader.readerFontId == option.id) {
-                                        Icon(
-                                            imageVector = Icons.Filled.Check,
-                                            contentDescription = "Selected",
-                                            tint = tokens.accentInk,
-                                            modifier = Modifier.size(18.dp)
-                                        )
-                                    }
-                                    if (option.isCustom) {
-                                        IconButton(
-                                            onClick = {
-                                                scope.launch {
-                                                    val fontToDelete = importedFonts.find { it.selectionId == option.id }
-                                                    if (fontToDelete != null) {
-                                                        fontBusy = true
-                                                        fontStatus = null
-                                                        try {
-                                                            customFontRepository.deleteImported(fontToDelete)
-                                                            fontStatusIsError = false
-                                                            fontStatus = "Removed “${fontToDelete.name}”."
-                                                        } catch (error: Exception) {
-                                                            fontStatusIsError = true
-                                                            fontStatus = error.message ?: "Could not delete font."
-                                                        } finally {
-                                                            fontBusy = false
-                                                        }
-                                                    }
+    Column(Modifier.padding(top = 22.dp)) {
+        SettingsGroupLabel("Font")
+        SettingsPanel {
+            options.forEachIndexed { index, option ->
+                if (index > 0) SubjectRowSeparator()
+                SubjectFormRow(
+                    label = option.name,
+                    onClick = { onSelect(option.id) },
+                    trailing = {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            if (fontId == option.id) {
+                                Icon(
+                                    imageVector = Icons.Filled.Check,
+                                    contentDescription = "Selected",
+                                    tint = tokens.accentInk,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                            if (option.isCustom) {
+                                IconButton(
+                                    onClick = {
+                                        scope.launch {
+                                            val fontToDelete = importedFonts.find { it.selectionId == option.id }
+                                            if (fontToDelete != null) {
+                                                fontBusy = true
+                                                fontStatus = null
+                                                try {
+                                                    customFontRepository.deleteImported(fontToDelete)
+                                                    fontStatusIsError = false
+                                                    fontStatus = "Removed “${fontToDelete.name}”."
+                                                } catch (error: Exception) {
+                                                    fontStatusIsError = true
+                                                    fontStatus = error.message ?: "Could not delete font."
+                                                } finally {
+                                                    fontBusy = false
                                                 }
-                                            },
-                                            enabled = !fontBusy
-                                        ) {
-                                            Icon(
-                                                imageVector = Icons.Outlined.Delete,
-                                                contentDescription = "Delete ${option.name}",
-                                                tint = tokens.secondaryInk
-                                            )
+                                            }
                                         }
-                                    }
+                                    },
+                                    enabled = !fontBusy
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Outlined.Delete,
+                                        contentDescription = "Delete ${option.name}",
+                                        tint = tokens.secondaryInk
+                                    )
                                 }
                             }
-                        )
-                    }
-                    SubjectRowSeparator()
-                    SettingsActionRow(
-                        label = if (fontBusy) "Working…" else "Add Font…",
-                        icon = Icons.Outlined.Add,
-                        enabled = !fontBusy,
-                        contentDescription = "Import font (.ttf / .otf)",
-                        onClick = {
-                            importFontLauncher.launch(
-                                arrayOf(
-                                    "font/ttf",
-                                    "font/otf",
-                                    "application/x-font-ttf",
-                                    "application/x-font-otf",
-                                    "application/font-sfnt",
-                                    "application/octet-stream"
-                                )
-                            )
                         }
-                    )
-                }
-                if (fontStatus != null) {
-                    Text(
-                        text = fontStatus!!,
-                        color = if (fontStatusIsError) MaterialTheme.colorScheme.error else tokens.secondaryInk,
-                        fontSize = 13.sp,
-                        modifier = Modifier.padding(horizontal = SubjectMetrics.accountGutter).padding(top = 8.dp)
-                    )
-                } else {
-                    SettingsFootnote("Built-in families plus fonts you import (.ttf / .otf).")
-                }
+                    }
+                )
             }
+            SubjectRowSeparator()
+            SettingsActionRow(
+                label = if (fontBusy) "Working…" else "Add Font…",
+                icon = Icons.Outlined.Add,
+                enabled = !fontBusy,
+                contentDescription = "Import font (.ttf / .otf)",
+                onClick = {
+                    importFontLauncher.launch(
+                        arrayOf(
+                            "font/ttf",
+                            "font/otf",
+                            "application/x-font-ttf",
+                            "application/x-font-otf",
+                            "application/font-sfnt",
+                            "application/octet-stream"
+                        )
+                    )
+                }
+            )
+        }
+        if (fontStatus != null) {
+            Text(
+                text = fontStatus!!,
+                color = if (fontStatusIsError) MaterialTheme.colorScheme.error else tokens.secondaryInk,
+                fontSize = 13.sp,
+                modifier = Modifier.padding(horizontal = SubjectMetrics.accountGutter).padding(top = 8.dp)
+            )
+        } else {
+            SettingsFootnote("Built-in families plus fonts you import (.ttf / .otf).")
         }
     }
 }

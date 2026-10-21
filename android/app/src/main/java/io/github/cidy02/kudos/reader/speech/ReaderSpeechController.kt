@@ -17,6 +17,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -72,7 +73,6 @@ class ReaderSpeechController(
     private var currentPreferences = ReaderPreferences()
     private var workTitle: String = "Kudos"
     private var currentSpeakJob: Job? = null
-    private var restartAfterPull: Job? = null
     private var totalPositions = 0
     private var currentPosition: Int? = null
     private var playbackState = PlaybackState.STATE_STOPPED
@@ -193,31 +193,13 @@ class ReaderSpeechController(
         speakCurrent()
     }
 
-    fun skipForward() {
-        currentIndex++
-        restartAfterSkip()
-    }
+    // Both the mini-player and MediaSession use the reader's chapter navigation.
+    var onSkipNext: () -> Unit = {}
+    var onSkipPrevious: () -> Unit = {}
 
-    fun skipBackward() {
-        currentIndex = (currentIndex - 1).coerceAtLeast(0)
-        restartAfterSkip()
-    }
+    fun skipForward() = onSkipNext()
 
-    private fun restartAfterSkip() {
-        if (!pullingParagraph) {
-            speakCurrent()
-            return
-        }
-        // The IO source may already have taken its text. Queue it before restarting.
-        pausedAtQueuePosition = true
-        _status.value = SpeechStatus.PLAYING
-        if (restartAfterPull?.isActive == true) return
-        val pull = currentSpeakJob
-        restartAfterPull = scope.launch {
-            pull?.join()
-            if (pausedAtQueuePosition && _status.value == SpeechStatus.PLAYING) speakCurrent()
-        }
-    }
+    fun skipBackward() = onSkipPrevious()
 
     fun beginSeeking() {
         seekWasPlaying = _status.value == SpeechStatus.PLAYING
@@ -244,6 +226,7 @@ class ReaderSpeechController(
     }
 
     private suspend fun nextParagraph(): String? {
+        val pullJob = currentSpeakJob
         pullingParagraph = true
         return try {
             source?.next()
@@ -252,7 +235,8 @@ class ReaderSpeechController(
         } catch (_: Exception) {
             null
         } finally {
-            pullingParagraph = false
+            // A cancelled old chapter can finish IO after the new chapter started pulling.
+            if (currentSpeakJob === pullJob) pullingParagraph = false
         }
     }
 
@@ -266,6 +250,8 @@ class ReaderSpeechController(
             while (true) {
                 while (currentIndex >= currentQueue.size) {
                     val next = nextParagraph()
+                    // Non-cancellable IO may return after a chapter change; discard its result.
+                    ensureActive()
                     if (next == null) {
                         source = null
                         if (pausedAtQueuePosition) return@launch
@@ -321,10 +307,9 @@ class ReaderSpeechController(
     }
 
     fun stop() {
-        restartAfterPull?.cancel()
-        restartAfterPull = null
         currentSpeakJob?.cancel()
         currentSpeakJob = null
+        pullingParagraph = false
         tts.stop()
         source = null
         pausedAtQueuePosition = false
@@ -335,10 +320,11 @@ class ReaderSpeechController(
     }
 
     fun shutdown() {
-        restartAfterPull?.cancel()
         currentSpeakJob?.cancel()
         scope.cancel()
         (tts as? AutomaticTTSService)?.shutdown()
+        onSkipNext = {}
+        onSkipPrevious = {}
         mediaSession.isActive = false
         mediaSession.release()
     }
