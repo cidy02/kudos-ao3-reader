@@ -2496,3 +2496,20 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   uses to weigh a deletion from elsewhere against its own edits. Gemini's A68 said both apps
   read and write it; they do not, by design (queues' clock is in both manifests). Codex's 3ge
   found the absence; it is not a gap.
+- **2026-10-21 · A70's screen differences that are not Android's to change (Claude).** Checked
+  against both apps' code: History's group order is the same rule on both (AO3's order kept, a
+  heading wherever the bucket changes; iOS `AO3HistoryVisitGrouping`), so a different order is
+  different data. The Settings hub's Appearance value shows the stored theme; the screenshots set
+  the theme for the session only. The iPhone's AO3-logo avatar is an image the simulator fetched
+  online (iOS's fallback is the same person glyph as Android's; the emulator is offline). Where
+  Android keeps information at the largest text that the iPhone cuts or hides (a collection's
+  maintainer line, the dashboard card's symbol grid, the collection preview's rows, the reading
+  ring's label, chips the iPhone clips), Android keeps it: the owner's rule is no lost
+  information, and the iPhone's cuts are listed for the iOS tail.
+- **2026-10-21 · A queue a restore creates keeps the archive's membership clock (Claude; 3ge, iOS
+  T-423).** The cross-platform readers found iOS setting a newly restored queue's
+  `lastMembershipChangedAt` to the later of the archived clock and the queue's `dateUpdated` (the
+  initializer's placeholder), so a restored queue looked as if its contents changed at its last
+  edit. Android restores the clock as written. iOS now does too; a queue already on the device
+  still keeps the newer of the two clocks, on both apps. Reverse: the one `hadExistingQueue` branch
+  in `KudosBackupService`'s queue loop.

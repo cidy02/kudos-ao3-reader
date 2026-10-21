@@ -352,6 +352,10 @@ Until answered: iOS unchanged. On Android the action rows (Settings, and the new
 buttons) now use the palette's accent, which is readable on every theme and keeps the
 chosen hue; about forty other places still use the raw accent for text or an icon.
 
+**Answered 2026-10-20: A, on both apps.** iOS T-419 (`AccentInk.swift`, 93 files) and Android
+(`KudosTokens.accentInk`, `Color.readableOn`): accent text and icons step toward white until
+4.5 to 1 against the page in Dark and OLED; fills keep the chosen colour.
+
 ## 20. (withdrawn) Hide mode and a search of your own library
 
 Not a question after all: iOS's own code says Hide mode filters a work out before any row
@@ -460,3 +464,75 @@ collection's tile, Home's queue card). These three were left, because each is a 
   nothing is purged or kept unseen.
 
 Until answered: A. My recommendation is C.
+
+## 24. Your own Works and Series pages (2026-10-12)
+
+Android kept the profile's four tabs and your totals under the title; the iPhone shows a plain
+list under your name, with fandom chips on Works.
+
+**Answered 2026-10-20: B, match the iPhone, keeping Android's own-works totals** (brief 3fu).
+
+## 25. Two card details (2026-10-12)
+
+The control that unfolds a card sat before the title on Android and at the card's foot on the
+iPhone; Android opened History, Bookmarks and your works lists on the Ledger card where the
+iPhone opens them on Compact.
+
+**Answered 2026-10-20: B, as the iPhone** (brief 3fu).
+
+## 26. Short fields of a work form through a background kill (both apps) (2026-10-12)
+
+If the phone kills Kudos in the background while a work form is open, the long text (work
+text, summary, notes) is offered back from its recovery copy on both apps; the title, tags,
+rating and switches are not. Android kills background apps more readily than the iPhone.
+
+- **A (what stands).** Leave it as designed.
+- **B.** Keep the short fields on the device too, on both apps (needs a rule for when AO3's
+  copy changed meanwhile).
+
+Until answered: A.
+
+## 27. "Words per hour" on Reading Insights (both apps) (2026-10-12)
+
+Each reading session stored its work's whole word count, so every sitting counted the whole
+work however little was read (one 22-second look showed 2,977,444 words per hour).
+
+**Answered 2026-10-20: B, count what was read in each sitting, on both apps** (iOS T-420,
+Android `ReadingStatistics.wordsRead`).
+
+## 28. A work card's day is written two ways (2026-10-12)
+
+iOS writes "07/09/2026" (`WorkStat.displayDate`); Android, and iOS's own series and bookmark
+cards, show AO3's "09 Jul 2026".
+
+- **A (what stands).** Leave each as it is.
+- **B (recommended).** AO3's own form on both: it cannot be misread as the 7th of September.
+
+Until answered: A.
+
+## 29. "Customize Theme…" on Android's Appearance page (2026-10-12)
+
+It opened the accent colour's presets; on the iPhone it opens the reading-text sheet.
+
+**Answered 2026-10-20: B, as the iPhone** (brief 3fs: the sheet with a sample page, the four
+themes, Font, Bold Text, Customize, spacing, margins, Justify Text and Reset Theme).
+
+## 30. The reader's Highlight and Add Note (2026-10-14)
+
+The iPhone highlights at once in the last colour used, and Add Note marks the text and opens
+the note editor; Android asked first in a pop-up.
+
+**Answered 2026-10-20: B, as the iPhone** (brief 3fs; seen on the emulator).
+
+## 31. A script inside an imported EPUB can open a link without a tap (Android) (2026-10-16)
+
+The Android reader library reports only the address of a link, not whether it was tapped, so
+Android cannot cancel script-driven navigation the way iOS does. AO3's own EPUBs carry no
+scripts; an imported book might.
+
+- **A (what stands).** Leave it.
+- **B.** Ask "Open this link?" before leaving the app for any link from the reader, tapped
+  or not.
+
+Until answered: A.
+
