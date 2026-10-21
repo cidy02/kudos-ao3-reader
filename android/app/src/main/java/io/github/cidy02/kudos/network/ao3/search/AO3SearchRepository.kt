@@ -42,8 +42,11 @@ class AO3SearchRepository(
         filters: AO3SearchFilters,
         page: Int = 1
     ): AO3Result<AO3SearchPage> {
-        val url = urlBuilder.buildFandomWorksUrl(tag, filters, page)
-            ?: return AO3Result.Failure(AO3Error.Validation("No fandom selected."))
+        val url = if (tag.startsWith("http://") || tag.startsWith("https://")) {
+            urlBuilder.filteredWorksUrl(tag, filters, page)
+        } else {
+            urlBuilder.buildFandomWorksUrl(tag, filters, page)
+        } ?: return AO3Result.Failure(AO3Error.Validation("No fandom selected."))
         return when (val result = client.get(url)) {
             is AO3Result.Failure -> result
             is AO3Result.Success -> parse(result.value.body, result.value.statusCode, page)

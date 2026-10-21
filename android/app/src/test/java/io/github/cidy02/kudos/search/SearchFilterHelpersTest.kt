@@ -110,11 +110,43 @@ class SearchFilterHelpersTest {
     }
 
 
+    /**
+     * Port of iOS SearchPanelRulesTests.swift:38 filterBadgeMatchesTheHeroFiltersCell.
+     * The toolbar badge counts what the hero's Filters cell counts: every label
+     * but the subject (the heading names it) and the sort.
+     */
+    @Test
+    fun filterBadgeMatchesTheHeroFiltersCell() {
+        val filters = AO3SearchFilters(
+            fandom = "Fandom A",
+            rating = AO3Rating.TEEN,
+            completion = AO3Completion.COMPLETE
+        )
+        val heroCell = summaryLabels(filters, excluding = filters.searchSubject().text)
+            .filter { !it.text.startsWith("Sort: ") }
+            .size
+        assertEquals(heroCell, activeFilterCount(filters))
+        assertEquals(2, activeFilterCount(filters))
+        assertEquals(0, activeFilterCount(AO3SearchFilters()))
+    }
+
+    @Test
+    fun browseFilterBadgeMatchesBrowseHeroFiltersCell() {
+        // On Browse for "Naruto", adding a single character filter ("Sasuke") must count as 1
+        // on both the badge and the hero's Filters cell. Browse's filters do not carry the fandom name.
+        val browseFilters = AO3SearchFilters(characters = "Sasuke")
+        val fandomName = "Naruto"
+        val heroCell = summaryLabels(browseFilters, excluding = fandomName)
+            .filter { !it.text.startsWith("Sort: ") }
+            .size
+        assertEquals(1, heroCell)
+        assertEquals(heroCell, activeFilterCount(browseFilters, excluding = fandomName))
+    }
+
     @Test
     fun activeFilterCountReportsWhatTheUserChanged() {
-        // The badge means "you have narrowed this". `summaryLabels` always ends with
-        // the sort so the results card is never empty — counting its rows here would
-        // light the badge on a screen with no filters at all.
+        // The badge means "you have narrowed this", matching the hero's Filters cell:
+        // the subject (already in the heading) and sort are excluded.
         assertEquals(0, activeFilterCount(AO3SearchFilters()))
         assertEquals(0, activeFilterCount(AO3SearchFilters(query = "only query")))
 
@@ -134,13 +166,13 @@ class SearchFilterHelpersTest {
             language = AO3Language.ENGLISH,
             sort = AO3SearchSort.KUDOS
         )
-        // Every label counts here because the sort is non-default too.
-        assertEquals(summaryLabels(filters).size, activeFilterCount(filters))
+        // Subject ("Naruto") and sort are excluded from the badge count.
+        val heroCell = summaryLabels(filters, excluding = filters.searchSubject().text, includesSort = false).size
+        assertEquals(heroCell, activeFilterCount(filters))
 
-        // With a default sort the card still shows "Sort: Best Match", but the badge
-        // must not count it.
+        // Changing sort doesn't alter the active filter count.
         val defaultSort = filters.copy(sort = AO3SearchSort.RELEVANCE)
-        assertEquals(summaryLabels(defaultSort).size - 1, activeFilterCount(defaultSort))
+        assertEquals(heroCell, activeFilterCount(defaultSort))
     }
 
     @Test

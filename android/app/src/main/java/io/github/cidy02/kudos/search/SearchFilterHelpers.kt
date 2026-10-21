@@ -121,19 +121,16 @@ fun clearedFiltersPreservingQuery(filters: AO3SearchFilters): AO3SearchFilters {
  * filter sheet sections. Empty when [AO3SearchFilters.hasActiveFilters] is false.
  */
 /**
- * How many settings the filter button's badge should report.
- *
- * Not `summaryLabels().size`: that list always ends with the sort so the results
- * card is never empty, whereas the badge must mean "you have narrowed this" — and a
- * default sort has narrowed nothing. Counting the card's rows here would light the
- * badge on a screen with no filters at all.
+ * How many settings the filter button's badge should report: what the hero's
+ * "Filters" cell counts for the same search — every summary label except the
+ * subject, which the heading already names, and the sort, which is always in
+ * effect and has its own control. One function so the two cannot disagree
+ * (iOS SearchResultsHero.swift:320).
  */
-fun activeFilterCount(filters: AO3SearchFilters): Int {
-    if (!filters.hasActiveFilters) return 0
-    val labels = summaryLabels(filters)
-    val facets = if (filters.sort == AO3SearchSort.RELEVANCE) labels.size - 1 else labels.size
-    return facets + if (filters.sortDirection != AO3SortDirection.DESCENDING) 1 else 0
-}
+fun activeFilterCount(
+    filters: AO3SearchFilters,
+    excluding: String? = filters.searchSubject().text
+): Int = summaryLabels(filters, excluding = excluding, includesSort = false).size
 
 /**
  * The results card's chips: everything currently narrowing or ordering the list.
@@ -146,7 +143,11 @@ fun activeFilterCount(filters: AO3SearchFilters): Int {
  * [excluding] names the one thing this would otherwise repeat: on a fandom's page the
  * card's own heading is already the fandom.
  */
-fun summaryLabels(filters: AO3SearchFilters, excluding: String? = null): List<SummaryLabel> {
+fun summaryLabels(
+    filters: AO3SearchFilters,
+    excluding: String? = null,
+    includesSort: Boolean = true
+): List<SummaryLabel> {
     val chips = mutableListOf<SummaryLabel>()
     fun add(text: String, icon: ImageVector? = null) {
         chips += SummaryLabel(text, icon)
@@ -222,10 +223,12 @@ fun summaryLabels(filters: AO3SearchFilters, excluding: String? = null): List<Su
     if (filters.languageId != null) {
         add(filters.languageTitle)
     }
-    // Sort last, and unconditionally: unlike every entry above there is always an
-    // order in effect, so this is the one label that is never noise — and it is the
+    // Sort last, and unconditionally where it applies: unlike every entry above there is
+    // always an order in effect, so this is the one label that is never noise — and it is the
     // setting users most often forget they changed.
-    add("Sort: ${filters.sort.title}")
+    if (includesSort) {
+        add("Sort: ${filters.sort.title}")
+    }
 
     return chips
 }

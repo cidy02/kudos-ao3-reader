@@ -2,6 +2,7 @@ package io.github.cidy02.kudos.network.ao3.browse
 
 import io.github.cidy02.kudos.network.ao3.AO3Client
 import io.github.cidy02.kudos.network.ao3.AO3Clock
+import io.github.cidy02.kudos.network.ao3.AO3Constants
 import io.github.cidy02.kudos.network.ao3.AO3Error
 import io.github.cidy02.kudos.network.ao3.AO3Result
 import io.github.cidy02.kudos.network.ao3.DemoNetwork
@@ -159,7 +160,14 @@ class AO3BrowseRepository(
     ): AO3Result<AO3SearchPage> {
         val trimmed = tagName.trim()
         if (trimmed.isEmpty()) return AO3Result.Failure(AO3Error.Validation("No tag selected."))
-        return searchRepository.searchTagWorks(trimmed, filters ?: browseBaseline(), page)
+        val tagAddress = if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+            trimmed
+        } else {
+            val segment = AO3SearchUrlBuilder().tagPathSegment(trimmed)
+                ?: return AO3Result.Failure(AO3Error.Validation("No tag selected."))
+            "${AO3Constants.BASE_URL}/tags/$segment/works"
+        }
+        return searchRepository.searchTagWorks(tagAddress, filters ?: browseBaseline(), page)
     }
 
     companion object {

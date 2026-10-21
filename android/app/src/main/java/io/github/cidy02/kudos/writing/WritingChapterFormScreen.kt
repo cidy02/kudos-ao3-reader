@@ -135,7 +135,13 @@ internal fun WritingChapterFormScreen(model: WritingChapterFormState, workTitle:
             }
             item { WorkFormSection("Publication") }
             item { WritingPanelRow(first = true, last = false) {
-                WorkFormToggle("Set a different publication date", form.publishedYear.isNotEmpty(), enabled, model::dateEnabled)
+                WorkFormToggle(
+                    label = "Set a different publication date",
+                    checked = form.publishedYear.isNotEmpty(),
+                    enabled = enabled,
+                    spokenLabel = "Custom publication date",
+                    onChange = model::dateEnabled
+                )
             } }
             if (form.publishedYear.isNotEmpty()) item { WritingPanelRow(first = false, last = false) {
                 // A choice, drawn as one (3cr): it was grey and bare, like a value that is fixed.
@@ -144,10 +150,10 @@ internal fun WritingChapterFormScreen(model: WritingChapterFormState, workTitle:
                     showsChoice = true, onClick = if (enabled) ({ dating = true }) else null)
             } }
             if (form.posts) item { WritingPanelRow(first = false, last = false) {
-                WorkFormToggle("Post without preview", state.postWithoutPreview, enabled, model::withoutPreview)
+                WorkFormToggle("Post without preview", state.postWithoutPreview, enabled = enabled, onChange = model::withoutPreview)
             } }
             item { WritingPanelRow(first = false, last = true) {
-                WorkFormToggle("This is the last chapter", state.isLastChapter, enabled, model::lastChapter)
+                WorkFormToggle("This is the last chapter", state.isLastChapter, enabled = enabled, onChange = model::lastChapter)
             } }
             item { WorkFormFootnote(CHAPTER_LAST_NOTE) }
             item { WorkFormSection("Post") }

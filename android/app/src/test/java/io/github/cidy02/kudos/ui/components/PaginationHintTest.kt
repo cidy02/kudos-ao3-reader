@@ -1,5 +1,8 @@
 package io.github.cidy02.kudos.ui.components
 
+import androidx.compose.ui.test.longClick
+import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.assertIsEnabled
@@ -53,5 +56,25 @@ class PaginationHintTest {
         compose.onNodeWithText("Go").assertDoesNotExist()
         button.performSemanticsAction(SemanticsActions.OnClick)
         compose.onNodeWithText("Go").assertExists()
+    }
+
+    /** Port of iOS SearchPaginationTests.swift:45 arrowsUseTapForAdjacentAndLongPressForEnds. */
+    @Test fun arrowsUseTapForAdjacentAndLongPressForEnds() {
+        assertEquals(19, navigationPage(PaginationDirection.BACKWARD, longPress = false, currentPage = 20, totalPages = 100))
+        assertEquals(1, navigationPage(PaginationDirection.BACKWARD, longPress = true, currentPage = 20, totalPages = 100))
+        assertEquals(21, navigationPage(PaginationDirection.FORWARD, longPress = false, currentPage = 20, totalPages = 100))
+        assertEquals(100, navigationPage(PaginationDirection.FORWARD, longPress = true, currentPage = 20, totalPages = 100))
+    }
+
+    @Test fun arrowLongPressJumpsToFirstAndLastPage() {
+        var page = 20
+        compose.setContent {
+            KudosPaginationBar(currentPage = page, totalPages = 100, onPageChange = { page = it })
+        }
+        compose.onNodeWithContentDescription("Previous Page").performTouchInput { longClick() }
+        assertEquals(1, page)
+
+        compose.onNodeWithContentDescription("Next Page").performTouchInput { longClick() }
+        assertEquals(100, page)
     }
 }

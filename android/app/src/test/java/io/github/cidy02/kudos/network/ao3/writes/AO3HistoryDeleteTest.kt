@@ -2,6 +2,7 @@ package io.github.cidy02.kudos.network.ao3.writes
 
 import io.github.cidy02.kudos.network.ao3.AO3Error
 import io.github.cidy02.kudos.network.ao3.AO3Result
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.*
 import org.junit.Test
@@ -96,5 +97,69 @@ class AO3HistoryDeleteTest {
         val noToken = FakeAuthenticatedClient(listOf(success("<p>Are you sure?</p>")), emptyList())
         assertTrue(AO3WriteRepository(noToken).clearReadingHistory() is AO3Result.Failure)
         assertTrue(noToken.posts.isEmpty())
+    }
+
+    @Test fun clearHistoryStopsAndSendsNothingIfSessionChangesDuringGet() = runTest {
+        val client = FakeAuthenticatedClient(
+            listOf(success(confirmPage)),
+            listOf(success("<div class='flash notice'>Your history is now cleared.</div>"))
+        )
+        client.afterGet = {
+            // The session changes (e.g. user signs out or switches accounts) while GET is underway
+            client.currentGeneration = 2
+        }
+        var cancelled = false
+        try {
+            AO3WriteRepository(client).clearReadingHistory()
+        } catch (_: CancellationException) {
+            cancelled = true
+        }
+        assertTrue("Session change during GET cancelled the write", cancelled)
+        val confirm = "https://archiveofourown.org/users/AO3_Reader/readings/confirm_clear"
+        assertEquals(listOf(confirm), client.gets)
+        assertTrue("Nothing was posted", client.posts.isEmpty())
+    }
+
+    @Test fun deleteReadingStopsAndSendsNothingIfSessionChangesDuringGet() = runTest {
+        val client = FakeAuthenticatedClient(
+            listOf(success(history)),
+            listOf(success(done))
+        )
+        client.afterGet = {
+            client.currentGeneration = 2
+        }
+        var cancelled = false
+        try {
+            AO3WriteRepository(client).deleteReading(77, 1)
+        } catch (_: CancellationException) {
+            cancelled = true
+        }
+        assertTrue("Session change during GET cancelled the write", cancelled)
+        val referer = "https://archiveofourown.org/users/AO3_Reader/readings"
+        assertEquals(listOf(referer), client.gets)
+        assertTrue("Nothing was posted", client.posts.isEmpty())
+    }
+
+    @Test fun a307Or308AnswerToAWriteIsNotReSentAndFails() = runTest {
+        for (code in listOf(307, 308)) {
+            // Both when client returns a 307/308 HTTP response, and when transport reports redirect refusal:
+            val clientWithStatus = FakeAuthenticatedClient(
+                listOf(success(confirmPage)),
+                listOf(success("", status = code))
+            )
+            val resultStatus = AO3WriteRepository(clientWithStatus).clearReadingHistory()
+            assertTrue("HTTP $code must fail", resultStatus is AO3Result.Failure)
+            assertEquals("one POST, never re-sent", 1, clientWithStatus.posts.size)
+
+            val transportFailure = AO3Result.Failure(AO3Error.Validation(
+                "AO3 asked for this to be sent again, and it wasn't. Check on AO3 before trying again."))
+            val clientWithFailure = FakeAuthenticatedClient(
+                listOf(success(confirmPage)),
+                listOf(transportFailure)
+            )
+            val resultFailure = AO3WriteRepository(clientWithFailure).clearReadingHistory()
+            assertTrue("Transport failure for $code must fail", resultFailure is AO3Result.Failure)
+            assertEquals("one POST, never re-sent", 1, clientWithFailure.posts.size)
+        }
     }
 }

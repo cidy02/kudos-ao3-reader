@@ -298,18 +298,23 @@ internal data class RecordedPost(
 internal class FakeAuthenticatedClient(
     getResults: List<AO3Result<AO3HttpResponse>>,
     postResults: List<AO3Result<AO3HttpResponse>>,
-    private val username: String? = "AO3_Reader"
+    private val username: String? = "AO3_Reader",
+    var currentGeneration: Int = 1
 ) : AO3AuthenticatedClient {
     private val getQueue = ArrayDeque<AO3Result<AO3HttpResponse>>().apply { addAll(getResults) }
     private val postQueue = ArrayDeque<AO3Result<AO3HttpResponse>>().apply { addAll(postResults) }
     val posts = mutableListOf<RecordedPost>()
     val gets = mutableListOf<String>()
+    var afterGet: (String) -> Unit = {}
 
     override fun username(): String? = username
+    override fun sessionGeneration(): Int = currentGeneration
 
     override suspend fun getAuthenticated(url: String): AO3Result<AO3HttpResponse> {
         gets += url
-        return getQueue.removeFirst()
+        val result = getQueue.removeFirst()
+        afterGet(url)
+        return result
     }
 
     override suspend fun postAuthenticated(
