@@ -89,4 +89,34 @@ class SystemTTSServiceTest {
         shadowOf(ShadowTextToSpeech.getLastTextToSpeechInstance()).onInitListener.onInit(TextToSpeech.SUCCESS)
         assertEquals(SpeechStatus.UNAVAILABLE, service.status.value)
     }
+    @Test fun automaticChecksPackAvailabilityAgainBeforeEveryUtterance() = runBlocking {
+        ShadowTextToSpeech.addVoice(voice("local", Locale.getDefault()))
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val installed = java.util.concurrent.atomic.AtomicBoolean(false)
+        val checks = java.util.concurrent.atomic.AtomicInteger()
+        val service = AutomaticTTSService(context, packInstalled = { checks.incrementAndGet(); installed.get() })
+        val shadow = shadowOf(ShadowTextToSpeech.getLastTextToSpeechInstance())
+        shadow.onInitListener.onInit(TextToSpeech.SUCCESS)
+        try {
+            var id = 0
+            suspend fun utterance(text: String) {
+                val before = checks.get()
+                val reading = async(Dispatchers.Default) { service.speak(text) }
+                withTimeout(5_000) { while (shadow.lastSpokenText != text) kotlinx.coroutines.delay(10) }
+                org.junit.Assert.assertTrue("availability must be checked for each utterance", checks.get() > before)
+                shadow.utteranceProgressListener.onDone("kudos-${++id}")
+                withTimeout(5_000) { reading.await() }
+            }
+            utterance("Before installation.")
+            // Same Automatic service, changed files. An unusable pack falls back as before.
+            installed.set(true)
+            utterance("After installation.")
+            installed.set(false)
+            utterance("After removal.")
+            assertEquals(listOf("Before installation.", "After installation.", "After removal."), shadow.spokenTextList)
+        } finally {
+            service.shutdown()
+        }
+    }
+
 }

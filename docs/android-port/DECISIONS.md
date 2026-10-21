@@ -263,8 +263,9 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   folder.** Android dropped iOS's `Originals/` on restore and exported none, so a library that
   passed through Android lost the file a work was converted from (often the last copy). Android
   now reads, restores, exports and syncs them by iOS's rules (`briefs/5b-result.md`). The
-  conversion record is carried through byte for byte, not ported, and is taken only with the
-  original it describes. An original over 128 MB is left out rather than failing the restore.
+  conversion record is carried through byte for byte and is taken only with the
+  original it describes. Brief 3fz adds Android's own stamp after a local conversion/rebuild;
+  foreign stamps still pass through unchanged until then. An original over 128 MB is left out rather than failing the restore.
   No format change: this is iOS's existing layout.
   Reverse: `originalFilesByName` in `backup/KudosBackup.kt` and its users.
 - **2026-10-04 · "Check Availability…" opens a screen that states the cost first; it no longer
@@ -2268,7 +2269,8 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   F04: Library bulk Delete, a collection's bulk Remove, Queue Storage's Remove and the
   queue-only Remove swipe always ask, as iOS, whatever the delete-confirmation setting (that
   setting covers single-work deletes). F05: Rebuild from Original asks first and shows a
-  failure (one shared dialog; Android has no converter-version stamp, so it always asks).
+  failure (one shared dialog). Brief 3fz adds converter stamps: stale copies rebuild at once;
+  only current copies ask first.
   F06: Read on a work with no file fetches a reading copy and opens it, without keeping it as
   a download; a fresh copy resets Finished and the fallback position, as iOS's
   `restoreReadableEPUB`. F07: Continue Reading from a work page opened over its reader goes

@@ -71,6 +71,21 @@ class ReaderFanMenuTest {
     }
 
     @Test
+    fun aStaleImportsRebuildPillUsesTheExistingFanAndDispatchesItsAction() {
+        var rebuilt = false
+        val menu = readerFanPills(
+            percent = null, searchable = true, ao3WorkId = null, commentsChapter = null,
+            onContents = {}, onFind = {}, onComments = { _, _ -> }, onSettings = {},
+            onRebuild = { rebuilt = true }
+        )
+        assertEquals(listOf("contents", "bookmarks", "find", "rebuild", "settings"), menu.map { it.id })
+        val rebuild = menu.single { it.id == "rebuild" }
+        assertEquals("Rebuild from Original", rebuild.title)
+        rebuild.action()
+        assertTrue(rebuilt)
+    }
+
+    @Test
     fun anImportWithoutAo3IdentityOmitsCommentsAndKudosButKeepsLocalActions() {
         assertEquals(listOf("contents", "bookmarks", "find", "settings"),
             pills(workId = null).map { it.id })

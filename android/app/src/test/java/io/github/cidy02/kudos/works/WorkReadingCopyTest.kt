@@ -169,11 +169,30 @@ class WorkReadingCopyTest {
         val stale = works.upsert(SavedWork(title = "Import", author = "A", lastSpineIndex = 1))
         assertTrue(importer.rebuildFromOriginal(stale) is WorkImportResult.Failure)
         store.writeOriginal(stale.id, "txt", "The original text.".toByteArray())
+        assertTrue(importer.conversionIsStale(stale))
         works.upsert(stale.copy(lastSpineIndex = 7, isFavorite = true))
         val rebuilt = (importer.rebuildFromOriginal(stale) as WorkImportResult.Success).work
         assertEquals(7, rebuilt.lastSpineIndex)
         assertTrue(rebuilt.isFavorite)
         assertTrue(store.workEpubExists(stale.id))
+        assertFalse(importer.conversionIsStale(rebuilt))
+        assertEquals(WorkConversionRecord.CURRENT_VERSION,
+            WorkConversionRecord.decode(store.readConversionRecord(stale.id))!!.converterVersion)
         assertEquals(0, downloads)
     }
+    @Test fun everyConvertedImportWritesItsStampAndRebuildRefreshesIt() = runBlocking {
+        val work = (importer.importLocalEpub("story.txt", "Original story.".toByteArray()) as WorkImportResult.Success).work
+        val record = WorkConversionRecord.decode(store.readConversionRecord(work.id))!!
+        assertEquals("story.txt", record.originalFileName)
+        assertEquals("plainText", record.format)
+        assertEquals("android", record.converterPlatform)
+        assertFalse(importer.conversionIsStale(work))
+        store.writeConversionRecord(work.id, record.copy(converterVersion = 0).encode())
+        assertTrue(importer.conversionIsStale(work))
+        val rebuilt = (importer.rebuildFromOriginal(work) as WorkImportResult.Success).work
+        assertFalse(importer.conversionIsStale(rebuilt))
+        assertEquals("story.txt", WorkConversionRecord.decode(store.readConversionRecord(work.id))!!.originalFileName)
+        assertEquals(0, downloads)
+    }
+
 }

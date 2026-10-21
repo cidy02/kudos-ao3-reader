@@ -51,7 +51,8 @@ class ReaderViewModel(
     private val settingsRepository: SettingsRepository,
     private val annotationRepository: AnnotationRepository,
     private val workId: String,
-    private val writeRepository: AO3WriteRepository? = null
+    private val writeRepository: AO3WriteRepository? = null,
+    internal val readerWorkImporter: io.github.cidy02.kudos.works.WorkImporter? = null
 ) : ViewModel() {
 
     private val _state = MutableStateFlow<ReaderUiState>(ReaderUiState.Loading)
@@ -224,6 +225,14 @@ class ReaderViewModel(
         sessionLifecycleJob = viewModelScope.launch {
             previous?.join()
             block()
+        }
+    }
+
+    fun reloadAfterRebuild() {
+        enqueueSessionLifecycle {
+            saver.flush()
+            flushScrubPosition()
+            load()
         }
     }
 
@@ -498,7 +507,8 @@ class ReaderViewModel(
             settingsRepository: SettingsRepository,
             annotationRepository: AnnotationRepository,
             workId: String,
-            writeRepository: AO3WriteRepository? = null
+            writeRepository: AO3WriteRepository? = null,
+            readerWorkImporter: io.github.cidy02.kudos.works.WorkImporter? = null
         ): ViewModelProvider.Factory =
             viewModelFactory {
                 initializer {
@@ -508,7 +518,8 @@ class ReaderViewModel(
                         settingsRepository,
                         annotationRepository,
                         workId,
-                        writeRepository
+                        writeRepository,
+                        readerWorkImporter
                     )
                 }
             }

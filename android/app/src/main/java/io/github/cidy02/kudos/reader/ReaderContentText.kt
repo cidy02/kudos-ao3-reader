@@ -20,24 +20,37 @@ object ReaderContentText {
     fun isAvailable(publication: Publication): Boolean =
         runCatching { publication.content() != null }.getOrDefault(false)
 
-    suspend fun paragraphs(
+    /** A pull source: no other resource is read until speech asks for its next paragraph. */
+    fun source(
         publication: Publication,
         from: Locator? = null,
         readAuthorNotes: Boolean = true
-    ): List<String> = withContext(Dispatchers.IO) {
-        val content = runCatching { publication.content(from) }.getOrNull()
-            ?: return@withContext emptyList()
-        // Each text element is a paragraph; a blockquote is a quote (where AO3 puts a note).
-        val blocks = runCatching { content.elements() }.getOrNull().orEmpty().mapNotNull { element ->
-            val text = (element as? Content.TextualElement)?.text?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
-            SpeechBlock(text, (element as? Content.TextElement)?.role is Content.TextElement.Role.Quote)
+    ): ReaderSpeechSource {
+        return source(readAuthorNotes) { publication.content(from) }
+    }
+
+    internal fun source(readAuthorNotes: Boolean, content: () -> Content?): ReaderSpeechSource {
+        var iterator: Content.Iterator? = null
+        var initialized = false
+        val filter = SpeechFilter(readAuthorNotes)
+        var chunks: Iterator<String> = emptyList<String>().iterator()
+        return ReaderSpeechSource {
+            withContext(Dispatchers.IO) {
+                if (!initialized) {
+                    iterator = content()?.iterator()
+                    initialized = true
+                }
+                while (!chunks.hasNext()) {
+                    val element = iterator?.nextOrNull() ?: return@withContext null
+                    val text = (element as? Content.TextualElement)?.text ?: continue
+                    val spoken = filter.paragraph(SpeechBlock(
+                        text, (element as? Content.TextElement)?.role is Content.TextElement.Role.Quote
+                    )) ?: continue
+                    chunks = splitIntoSpeakableChunks(spoken).iterator()
+                }
+                chunks.next()
+            }
         }
-        if (blocks.isEmpty()) return@withContext emptyList()
-        // To the end of the work, as iOS reads on. It stopped after 80,000 characters (about an
-        // hour and a half), though `text()` had already read the rest in.
-        // ponytail: the rest of the work is read in before the first word; walk
-        // `content.iterator()` lazily if a very long work is slow to start.
-        speakableParagraphs(blocks, readAuthorNotes).flatMap(::splitIntoSpeakableChunks)
     }
 
     internal data class SpeechBlock(val text: String, val isQuote: Boolean = false)
@@ -54,27 +67,28 @@ object ReaderContentText {
      * with one is read), and a link is said as its site ("tumblr.com.").
      */
     internal fun speakableParagraphs(blocks: List<SpeechBlock>, readAuthorNotes: Boolean): List<String> {
-        val spoken = mutableListOf<String>()
-        // iOS's rule for "Read author's notes" off: a note runs from its label to the end of the
-        // quotation after it, and anything that is not a quote ends it. A label followed by a
-        // plain paragraph leaves that paragraph spoken: a note read that was meant to be
-        // skipped is far better than a chapter skipped that was meant to be read.
-        var inSkippedNote = false
-        for (block in blocks) {
+        val filter = SpeechFilter(readAuthorNotes)
+        return blocks.mapNotNull(filter::paragraph)
+    }
+
+    /** Retains the author's-note boundary while paragraphs are pulled one at a time. */
+    private class SpeechFilter(private val readAuthorNotes: Boolean) {
+        private var inSkippedNote = false
+
+        fun paragraph(block: SpeechBlock): String? {
             val paragraph = block.text.replace(WHITESPACE, " ").trim()
-            if (paragraph.isEmpty()) continue
+            if (paragraph.isEmpty()) return null
             val plain = normalized(paragraph)
             if (plain in LABELS || plain == KUDOS_PLUG) {
                 inSkippedNote = !readAuthorNotes && plain in LABELS
-                continue
+                return null
             }
             if (inSkippedNote) {
-                if (block.isQuote) continue
+                if (block.isQuote) return null
                 inSkippedNote = false
             }
-            spoken += URL.replace(paragraph) { host(it.value) }
+            return URL.replace(paragraph) { host(it.value) }
         }
-        return spoken
     }
 
     private val WHITESPACE = Regex("\\s+")

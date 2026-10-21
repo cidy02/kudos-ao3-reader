@@ -188,6 +188,7 @@ fun WorkDetailScreen(
     var collectionDialogWorking by remember { mutableStateOf(false) }
     var chapterIndexSheetOpen by remember { mutableStateOf(false) }
     var canRebuild by remember { mutableStateOf(false) }
+    var conversionIsStale by remember { mutableStateOf(false) }
     var rebuildWork by remember { mutableStateOf<SavedWork?>(null) }
     val scope = rememberCoroutineScope()
     val uriHandler = LocalUriHandler.current
@@ -209,6 +210,7 @@ fun WorkDetailScreen(
     suspend fun refreshLocal(workId: String, remote: AO3WorkSummary? = state.remote) {
         val local = workRepository.getWork(workId)
         canRebuild = local?.let { workImporter.canRebuildFromOriginal(it) } ?: false
+        conversionIsStale = local?.let { workImporter.conversionIsStale(it) } ?: false
         val liveQueues = runCatching {
             readingQueueRepository.listQueues().filter { it.kindRaw != ReadingQueueKind.SAVED_FOR_LATER }
         }.getOrDefault(emptyList())
@@ -996,6 +998,7 @@ fun WorkDetailScreen(
             inSavedForLater = state.inSavedForLater,
             isWorking = state.working || state.queuingSeries,
             canRebuildFromOriginal = canRebuild,
+            conversionIsStale = conversionIsStale,
             palette = palette,
             newTagName = newTagName,
             onNewTagName = { newTagName = it },
