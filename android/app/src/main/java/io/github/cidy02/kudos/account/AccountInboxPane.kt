@@ -23,7 +23,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.Reply
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.MarkEmailRead
@@ -453,7 +452,7 @@ private enum class InboxQuickFilter(
 }
 
 @Composable
-private fun InboxToolbar(
+internal fun InboxToolbar(
     state: AccountInboxUiState,
     palette: SubjectPalette,
     onBeginSelection: () -> Unit,
@@ -488,7 +487,7 @@ private fun InboxToolbar(
                     onClick = {
                         if (!state.isPerformingBulkAction) onShowFilters()
                     },
-                    badgeCount = activeFilterCount(state)
+                    badgeCount = 0
                 )
             }
             if (state.canSelectItems) {
@@ -809,19 +808,11 @@ internal fun InboxItemCard(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             // iOS's Reply on the card, as a comment's own row draws it.
-                            if (item.canReply) Row(
-                                modifier = Modifier.height(44.dp)
-                                    .clickable(enabled = !isPerformingAction, role = Role.Button, onClick = onReply)
-                                    .semantics { contentDescription = "Reply to ${item.commenterName}" }
-                                    .padding(end = 12.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(4.dp)
-                            ) {
-                                Icon(Icons.AutoMirrored.Filled.Reply, contentDescription = null,
-                                    tint = tokens.scopePalette.accent, modifier = Modifier.size(14.dp))
-                                Text("Reply", fontSize = 12.sp, fontWeight = FontWeight.Medium,
-                                    color = tokens.scopePalette.accent)
-                            }
+                            if (item.canReply) io.github.cidy02.kudos.comments.CommentReplyButton(
+                                accessibilityLabel = "Reply to ${item.commenterName}",
+                                enabled = !isPerformingAction,
+                                onClick = onReply
+                            )
                             Spacer(Modifier.weight(1f))
                             InboxItemOverflowMenu(
                                 item = item,
@@ -881,20 +872,7 @@ private fun InboxByline(
                     modifier = Modifier.weight(1f)
                 )
             }
-            SubjectChip(
-                text = role.label,
-                modifier = Modifier.semantics {
-                    contentDescription = when (role) {
-                        AO3CommentParticipantRole.Me -> "Your comment"
-                        AO3CommentParticipantRole.Author -> "Work author"
-                        else -> role.label
-                    }
-                },
-                style = if (role == AO3CommentParticipantRole.Me ||
-                    role == AO3CommentParticipantRole.Author
-                ) SubjectChipStyle.Tinted else SubjectChipStyle.Neutral,
-                palette = LocalSubjectPalette.current
-            )
+            CommentParticipantBadge(role = role)
             if (item.isReplied) {
                 SubjectChip(
                     text = "Replied",
@@ -1145,12 +1123,6 @@ private fun inboxTally(state: AccountInboxUiState): String? {
     }
     return line
 }
-
-private fun activeFilterCount(state: AccountInboxUiState): Int =
-    state.filterForm?.fields.orEmpty().count { field ->
-        val selected = state.filterValues[field.name] ?: field.selectedValue
-        selected != field.options.firstOrNull()?.value
-    }
 
 /** A comment's own page on AO3, which is its thread (iOS `AO3Client.commentThreadURL`). */
 internal fun commentThreadUrl(commentId: Long): String = "https://archiveofourown.org/comments/$commentId"

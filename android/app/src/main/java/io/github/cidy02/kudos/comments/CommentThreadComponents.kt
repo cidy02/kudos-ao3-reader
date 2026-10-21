@@ -774,33 +774,14 @@ fun CommentActionRowLayout(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(if (canReply) 40.dp else 28.dp),
+            .heightIn(min = if (canReply) 44.dp else 28.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         if (canReply) {
-            Row(
-                modifier = Modifier
-                    .height(44.dp)
-                    .clickable(role = Role.Button) { handlers.onReply(comment) }
-                    // In a list of comments, to whom (iOS: "Reply to <name>").
-                    .semantics { contentDescription = "Reply to ${comment.author.name}" }
-                    .padding(end = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.Reply,
-                    contentDescription = null,
-                    tint = palette.accent,
-                    modifier = Modifier.size(14.dp)
-                )
-                Text(
-                    text = "Reply",
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = palette.accent
-                )
-            }
+            CommentReplyButton(
+                accessibilityLabel = "Reply to ${comment.author.name}",
+                onClick = { handlers.onReply(comment) }
+            )
         }
 
         Spacer(Modifier.weight(1f))
@@ -1042,6 +1023,33 @@ fun ContentUnavailableView(
                     fontWeight = FontWeight.SemiBold
                 )
             }
+        }
+    }
+}
+
+/** The native comment action used by both a thread and Inbox (iOS CommentReplyButton). */
+@Composable
+internal fun CommentReplyButton(
+    accessibilityLabel: String,
+    enabled: Boolean = true,
+    onClick: () -> Unit
+) {
+    val tokens = LocalKudosTokens.current
+    Box(
+        Modifier.heightIn(min = 44.dp)
+            .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
+            .semantics { contentDescription = accessibilityLabel },
+        contentAlignment = Alignment.Center
+    ) {
+        Row(
+            Modifier.background(tokens.glassFill(0.12), CircleShape)
+                .padding(horizontal = 10.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Icon(Icons.AutoMirrored.Filled.Reply, contentDescription = null,
+                tint = tokens.primaryInk, modifier = Modifier.size(14.dp))
+            Text("Reply", color = tokens.primaryInk, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
         }
     }
 }

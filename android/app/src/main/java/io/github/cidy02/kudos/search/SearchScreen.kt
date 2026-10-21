@@ -38,6 +38,7 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -49,6 +50,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -805,8 +808,9 @@ private fun SearchSkeletonList() {
     }
 }
 
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class, androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
-private fun SavedSearchesList(
+internal fun SavedSearchesList(
     savedSearches: List<SavedSearch>,
     subtitleFor: (SavedSearch) -> String?,
     onRun: (SavedSearch) -> Unit,
@@ -823,29 +827,52 @@ private fun SavedSearchesList(
         }
         items(savedSearches, key = { it.id }) { saved ->
             val subtitle = subtitleFor(saved)
-            Row(
-                modifier = Modifier
-                    .padding(horizontal = 16.dp)
-                    .fillMaxWidth()
-                    .subjectPanel()
-                    .clickable { onRun(saved) }
-                    .padding(horizontal = 14.dp, vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text(saved.name, color = tokens.primaryInk, fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    if (!subtitle.isNullOrBlank()) {
-                        Text(
-                            subtitle,
-                            color = tokens.secondaryInk,
-                            fontSize = 12.sp,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
+            var menu by remember(saved.id) { mutableStateOf(false) }
+            val dismissState = androidx.compose.material3.rememberSwipeToDismissBoxState(
+                confirmValueChange = { value ->
+                    if (value == androidx.compose.material3.SwipeToDismissBoxValue.EndToStart) onDelete(saved)
+                    false
+                }
+            )
+            Box(Modifier.padding(horizontal = 16.dp)) {
+                androidx.compose.material3.SwipeToDismissBox(
+                    state = dismissState,
+                    enableDismissFromStartToEnd = false,
+                    backgroundContent = {
+                        if (dismissState.dismissDirection == androidx.compose.material3.SwipeToDismissBoxValue.EndToStart) {
+                            Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.error),
+                                contentAlignment = Alignment.CenterEnd) {
+                                Icon(Icons.Outlined.Delete, "Delete saved search", tint = MaterialTheme.colorScheme.onError,
+                                    modifier = Modifier.padding(16.dp))
+                            }
+                        }
+                    }
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth()
+                            .background(tokens.theme.cardBackdrop)
+                            .subjectPanel()
+                            .combinedClickable(onClick = { onRun(saved) },
+                                onLongClickLabel = "Delete saved search", onLongClick = { menu = true })
+                            .semantics {
+                                customActions = listOf(androidx.compose.ui.semantics.CustomAccessibilityAction("Delete saved search") {
+                                    onDelete(saved); true
+                                })
+                            }
+                            .padding(horizontal = 14.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Text(saved.name, color = tokens.primaryInk, fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            if (!subtitle.isNullOrBlank()) Text(subtitle, color = tokens.secondaryInk, fontSize = 12.sp,
+                                maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
                     }
                 }
-                IconButton(onClick = { onDelete(saved) }) {
-                    Icon(Icons.Outlined.Delete, contentDescription = "Delete saved search", tint = tokens.secondaryInk)
+                androidx.compose.material3.DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                    androidx.compose.material3.DropdownMenuItem(text = { Text("Delete saved search") },
+                        leadingIcon = { Icon(Icons.Outlined.Delete, null) },
+                        onClick = { menu = false; onDelete(saved) })
                 }
             }
         }

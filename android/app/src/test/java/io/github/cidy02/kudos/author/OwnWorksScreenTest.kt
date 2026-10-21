@@ -239,6 +239,7 @@ class OwnWorksScreenTest {
         compose.onAllNodesWithText("Works").onFirst().assertExists() // the title, and the scope control below it
         // Subtitle shows the writer's totals line (words and kudos)
         compose.onNode(hasText("works", substring = true).and(hasText("words", substring = true))).assertExists()
+        compose.onNodeWithText("WORKS").assertExists() // the loaded-count section is present outside selection too
         // The four profile tabs (Works, Series, Bookmarks, About) segmented control is hidden on own works
         compose.onAllNodesWithText("Bookmarks").assertCountEquals(0)
         compose.onAllNodesWithText("About").assertCountEquals(0)

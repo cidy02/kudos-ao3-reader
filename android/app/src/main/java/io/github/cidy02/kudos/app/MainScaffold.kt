@@ -406,7 +406,7 @@ fun MainScaffold(
                 enter = fadeIn(ChromeMotion),
                 exit = fadeOut(ChromeMotion)
             ) {
-                TopChromeFade(fadeHeight)
+                TopChromeFade(fadeHeight, pageBackground = pushedChrome.pageBackground)
             }
             AnimatedVisibility(
                 visible = !chromeHidden,
@@ -597,7 +597,7 @@ private fun ShellNavigationBar(
  * 16dp: Material's top bar that turns solid when a list runs under it, in the page's colour.
  */
 @Composable
-private fun TopChromeFade(height: Dp) {
+private fun TopChromeFade(height: Dp, pageBackground: Color? = null) {
     val tokens = LocalKudosTokens.current
     val wash = LocalShellWashes.current.page
     Box(
@@ -614,7 +614,7 @@ private fun TopChromeFade(height: Dp) {
                 )
             }
             .clipToBounds()
-            .then(wash?.let { Modifier.subjectWash(it.palette, it.height) } ?: Modifier.background(tokens.background))
+            .then(wash?.let { Modifier.subjectWash(it.palette, it.height) } ?: Modifier.background(pageBackground ?: tokens.background))
     )
 }
 

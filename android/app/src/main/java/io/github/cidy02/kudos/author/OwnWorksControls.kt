@@ -77,21 +77,22 @@ internal fun OwnWorksBulkBar(count: Int, busy: Boolean, onEdit: (String?) -> Uni
 
 /** Android menu and trailing swipe reveal the same four actions; swiping never writes. */
 @Composable
-internal fun OwnWorkRow(work: AO3WorkSummary, onAction: (String) -> Unit, content: @Composable () -> Unit) {
+internal fun OwnWorkRow(work: AO3WorkSummary, onAction: (String) -> Unit, content: @Composable (@Composable () -> Unit) -> Unit) {
     val tokens = LocalKudosTokens.current
     var expanded by remember(work.id) { mutableStateOf(false) }
     Box(Modifier.pointerInput(work.id) {
         var distance = 0f
         detectHorizontalDragGestures(onDragStart = { distance = 0f }, onDragEnd = { if (distance < -48f) expanded = true }) { _, amount -> distance += amount }
     }) {
-        Column(Modifier.padding(top = 40.dp)) { content() }
-        Box(Modifier.align(androidx.compose.ui.Alignment.TopEnd)) {
-            IconButton(onClick = { expanded = true }) { Icon(Icons.Default.MoreVert, "Actions for ${work.title}", tint = tokens.scopePalette.accent) }
-            DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }, containerColor = tokens.cardFill) {
-                for ((label, action) in listOf("Delete" to "delete", "Chapter" to "chapter", "Tags" to "tags", "Edit" to "edit")) {
-                    if (action == "chapter" && !offersOwnWorkChapter(work)) continue
-                    DropdownMenuItem(text = { Text(label, color = if (action == "delete") SubjectPalette.fromHue(0.0, tokens.theme).accent else tokens.primaryInk, lineHeight = 22.sp) },
-                        onClick = { expanded = false; onAction(action) })
+        content {
+            Box {
+                IconButton(onClick = { expanded = true }) { Icon(Icons.Default.MoreVert, "Actions for ${work.title}", tint = tokens.scopePalette.accent) }
+                DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }, containerColor = tokens.cardFill) {
+                    for ((label, action) in listOf("Delete" to "delete", "Chapter" to "chapter", "Tags" to "tags", "Edit" to "edit")) {
+                        if (action == "chapter" && !offersOwnWorkChapter(work)) continue
+                        DropdownMenuItem(text = { Text(label, color = if (action == "delete") SubjectPalette.fromHue(0.0, tokens.theme).accent else tokens.primaryInk, lineHeight = 22.sp) },
+                            onClick = { expanded = false; onAction(action) })
+                    }
                 }
             }
         }

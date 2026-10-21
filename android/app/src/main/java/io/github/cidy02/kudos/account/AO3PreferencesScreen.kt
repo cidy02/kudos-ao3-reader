@@ -246,9 +246,9 @@ fun AO3PreferencesScreen(
                                 .padding(horizontal = SubjectMetrics.accountGutter)
                                 .subjectPanel()
                         ) {
-                            snap.webLinks.forEachIndexed { index, link ->
+                            orderedPreferenceAccountLinks(snap.webLinks).forEachIndexed { index, link ->
                                 if (index > 0) SubjectRowSeparator()
-                                val icon = when (link.url.substringBefore('?').trimEnd('/').substringAfterLast('/')) {
+                                val icon = when (link.url.substringBefore('?').trimEnd('/').removeSuffix("/users").substringAfterLast('/')) {
                                     "edit" -> Icons.Outlined.Badge
                                     "pseuds" -> Icons.Outlined.Group
                                     "change_username" -> Icons.Outlined.AlternateEmail
@@ -514,5 +514,23 @@ private fun PreferenceHelpSheet(
                 }
             }
         }
+    }
+}
+
+/** iOS's Account rows, retaining any additional links AO3 provides after the known rows. */
+internal fun orderedPreferenceAccountLinks(
+    links: List<io.github.cidy02.kudos.network.ao3.preferences.AO3PreferenceWebLink>
+): List<io.github.cidy02.kudos.network.ao3.preferences.AO3PreferenceWebLink> {
+    val rows = listOf(
+        "profile/edit" to "Edit profile", "pseuds" to "Manage pseuds",
+        "change_username" to "Change username", "change_password" to "Change password",
+        "change_email" to "Change email", "blocked" to "Blocked users", "muted" to "Muted users"
+    )
+    fun row(url: String): Int {
+        val path = url.substringBefore('?').trimEnd('/').removeSuffix("/users")
+        return rows.indexOfFirst { path.endsWith("/${it.first}") }.let { if (it < 0) rows.size else it }
+    }
+    return links.sortedBy { row(it.url) }.map { link ->
+        rows.getOrNull(row(link.url))?.let { link.copy(title = it.second) } ?: link
     }
 }
