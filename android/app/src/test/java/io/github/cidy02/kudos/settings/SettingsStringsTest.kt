@@ -12,7 +12,7 @@ import java.io.File
 class SettingsStringsTest {
     private val restored = listOf(
         "App Theme", "Reader Theme", "Accent color", "Apply accent", "Reset to AO3 Red",
-        "Text size", "Line height", "Letter spacing", "Word spacing", "Margin", "Import font",
+        "Text size", "Customize Theme…", "Import font",
         "Could not import font.", "Could not delete font.",
         // Import results now come from the app-wide import path (KudosApp), not this page.
         "Check Now",
@@ -30,5 +30,24 @@ class SettingsStringsTest {
         val source = files.joinToString("\n") { it.readText() }
         val missing = restored.filterNot { source.contains(it, ignoreCase = true) }
         assertTrue("Settings lost: $missing", missing.isEmpty())
+    }
+
+    @Test fun spacingControlsRemainInCustomizeThemeWithoutAnExtraAppearanceSection() {
+        val appearance = File("src/main/java/io/github/cidy02/kudos/settings/SettingsPages.kt")
+            .readText().substringBefore("fun SettingsReaderPage")
+        assertTrue(appearance.contains("TextSizeSlider("))
+        assertTrue(appearance.contains("Customize Theme…"))
+        assertTrue(!appearance.contains("updateReaderCustomize(true)"))
+        for (label in listOf("Line height", "Letter spacing", "Word spacing", "Margin")) {
+            assertTrue(!appearance.contains("label = \"$label\""))
+        }
+        val sheet = File("src/main/java/io/github/cidy02/kudos/reader/CustomizeThemeSheet.kt").readText()
+        for (label in listOf("Line Spacing", "Character Spacing", "Word Spacing", "Margins")) {
+            assertTrue("Customize Theme lost $label", sheet.contains("ThemeSlider(\"$label\""))
+        }
+    }
+
+    @Test fun workPickerAllowsAnyFileForImporterFeedback() {
+        org.junit.Assert.assertArrayEquals(arrayOf("*/*"), EpubOpenMimeTypes)
     }
 }

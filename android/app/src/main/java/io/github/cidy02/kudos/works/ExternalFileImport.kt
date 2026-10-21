@@ -33,8 +33,8 @@ object ExternalFileImport {
      * Extracts any importable URIs from [intent] and queues them.
      *
      * The URIs come from another app and are untrusted: they are only ever read,
-     * and `WorkImporter` still applies its own extension allowlist and ZIP-magic
-     * validation before anything is written to the library.
+     * and document preparation checks size/format before the importer validates
+     * the EPUB and writes anything to the library.
      */
     fun offer(intent: Intent?) {
         offer(extractUris(intent ?: return))
@@ -100,6 +100,15 @@ object ExternalFileImport {
         }.getOrNull()
         return fromResolver?.takeIf { it.isNotBlank() } ?: uri.lastPathSegment
     }
+
+    /** A missing provider size is allowed, but every read still has a streaming bound. */
+    fun sizeFor(context: Context, uri: Uri): Long? = runCatching {
+        context.contentResolver.query(uri, arrayOf(OpenableColumns.SIZE), null, null, null)?.use { cursor ->
+            if (!cursor.moveToFirst()) return@use null
+            val index = cursor.getColumnIndex(OpenableColumns.SIZE)
+            if (index < 0 || cursor.isNull(index)) null else cursor.getLong(index).takeIf { it >= 0 }
+        }
+    }.getOrNull()
 
     /** SAF usually exposes modification time but not creation time. */
     fun lastModifiedFor(context: Context, uri: Uri): Instant? = runCatching {

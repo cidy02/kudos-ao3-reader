@@ -1,6 +1,5 @@
 package io.github.cidy02.kudos.settings
 
-import android.text.format.Formatter
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -21,7 +20,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
@@ -35,9 +33,7 @@ import io.github.cidy02.kudos.ui.subject.SubjectFormRow
 import io.github.cidy02.kudos.ui.subject.SubjectRowSeparator
 import io.github.cidy02.kudos.ui.subject.SubjectSegmentedControl
 import io.github.cidy02.kudos.ui.subject.SubjectToggle
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 @Composable
 fun SettingsAppearancePage(
@@ -132,67 +128,6 @@ fun SettingsAppearancePage(
                 )
             }
         }
-        item {
-            SettingsSection(
-                footnote = "Line height, letter spacing, word spacing, and margin also appear in the reader Display sheet."
-            ) {
-                SubjectSliderRow(
-                    label = "Line height",
-                    value = settings.reader.readerLineHeight.toFloat().coerceIn(1.2f, 2.2f),
-                    valueRange = 1.2f..2.2f,
-                    steps = 19,
-                    formatValue = { String.format("%.2f", it) },
-                    onValueChangeFinished = { value ->
-                        scope.launch {
-                            repository.updateReaderLineHeight((kotlin.math.round(value * 100) / 100.0))
-                            repository.updateReaderCustomize(true)
-                        }
-                    }
-                )
-                SubjectRowSeparator()
-                SubjectSliderRow(
-                    label = "Letter spacing",
-                    value = settings.reader.readerLetterSpacing.toFloat().coerceIn(0f, 0.12f),
-                    valueRange = 0f..0.12f,
-                    steps = 9,
-                    formatValue = { String.format("%.2f em", it) },
-                    onValueChangeFinished = { value ->
-                        scope.launch {
-                            repository.updateReaderLetterSpacing(value.toDouble())
-                            repository.updateReaderCustomize(true)
-                        }
-                    }
-                )
-                SubjectRowSeparator()
-                SubjectSliderRow(
-                    label = "Word spacing",
-                    value = settings.reader.readerWordSpacing.toFloat().coerceIn(0f, 0.6f),
-                    valueRange = 0f..0.6f,
-                    steps = 9,
-                    formatValue = { String.format("%.2f em", it) },
-                    onValueChangeFinished = { value ->
-                        scope.launch {
-                            repository.updateReaderWordSpacing(value.toDouble())
-                            repository.updateReaderCustomize(true)
-                        }
-                    }
-                )
-                SubjectRowSeparator()
-                SubjectSliderRow(
-                    label = "Margin",
-                    value = settings.reader.readerMargin.toFloat().coerceIn(8f, 48f),
-                    valueRange = 8f..48f,
-                    steps = 39,
-                    formatValue = { "${kotlin.math.round(it).toInt()} pt" },
-                    onValueChangeFinished = { value ->
-                        scope.launch {
-                            repository.updateReaderMargin(kotlin.math.round(value).toDouble())
-                            repository.updateReaderCustomize(true)
-                        }
-                    }
-                )
-            }
-        }
     }
     if (showCustomizeTheme) {
         io.github.cidy02.kudos.reader.CustomizeThemeSheet(repository, customFontRepository,
@@ -251,15 +186,14 @@ fun SettingsReaderPage(repository: SettingsRepository, settings: KudosSettings) 
 }
 
 @Composable
-fun SettingsDownloadsPage(repository: SettingsRepository, settings: KudosSettings) {
+fun SettingsDownloadsPage(
+    repository: SettingsRepository, settings: KudosSettings,
+    footprintScanner: LocalDataFootprintScanner? = null
+) {
     val scope = rememberCoroutineScope()
-    val context = LocalContext.current
-    var storageUsed by remember { mutableStateOf("…") }
-    LaunchedEffect(Unit) {
-        val bytes = withContext(Dispatchers.IO) {
-            context.filesDir.walkTopDown().filter { it.isFile }.sumOf { it.length() }
-        }
-        storageUsed = LocalStorageFootprint.formatted(bytes)
+    var storageUsed by remember(footprintScanner) { mutableStateOf("…") }
+    LaunchedEffect(footprintScanner) {
+        storageUsed = footprintScanner?.measure()?.let { LocalStorageFootprint.formatted(it.totalBytes) } ?: "—"
     }
     SettingsPage(title = "Downloads") {
         item {

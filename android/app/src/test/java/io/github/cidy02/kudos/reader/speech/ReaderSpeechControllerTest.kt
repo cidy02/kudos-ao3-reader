@@ -14,11 +14,13 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
+import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.withContext
 import org.junit.After
 import org.junit.Assert.*
@@ -77,8 +79,12 @@ class ReaderSpeechControllerTest {
         val pulling = CompletableDeferred<Unit>()
         val release = CompletableDeferred<Unit>()
         var index = 0
+        // Its own IO thread, stopped before tearDown resets Main: a pull still returning to Main
+        // from Dispatchers.IO raced the reset ("Dispatchers.Main is used concurrently").
+        val ioPool = java.util.concurrent.Executors.newSingleThreadExecutor()
+        val io = ioPool.asCoroutineDispatcher()
         val source = ReaderSpeechSource {
-            withContext(Dispatchers.IO) {
+            withContext(io) {
                 val taken = index++
                 if (taken == 1) {
                     // Like Readium: advance the iterator before an IO result returns to Main.
@@ -110,6 +116,9 @@ class ReaderSpeechControllerTest {
         } finally {
             release.complete(Unit)
             controller.shutdown()
+            ioPool.shutdown()
+            ioPool.awaitTermination(5, java.util.concurrent.TimeUnit.SECONDS)
+            advanceUntilIdle()
         }
     }
 

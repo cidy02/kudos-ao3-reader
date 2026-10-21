@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -50,6 +51,7 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -99,6 +101,15 @@ fun AO3NativeLoginScreen(
     var submitTimestamp by remember { mutableStateOf(0L) }
     val scope = rememberCoroutineScope()
 
+    fun submit() {
+        if (!networkAllowed || loading || username.isBlank() || password.isBlank()) return
+        loading = true
+        message = null
+        pendingSubmit = true
+        submitTimestamp = System.currentTimeMillis()
+        webViewRef?.loadUrl(LoginUrl)
+    }
+
     // iOS parity: 25s timeout for login submission (Item 7 note).
     LaunchedEffect(loading, submitTimestamp) {
         if (!loading || submitTimestamp == 0L) return@LaunchedEffect
@@ -107,7 +118,6 @@ fun AO3NativeLoginScreen(
             loading = false
             useWebFallback = true
             message = FallbackPrompt
-            password = ""
         }
     }
 
@@ -120,24 +130,32 @@ fun AO3NativeLoginScreen(
         top = WindowInsets.systemBars.asPaddingValues().calculateTopPadding() + 56.dp
     )
 
+    DisposableEffect(Unit) {
+        onDispose {
+            webViewRef?.stopLoading()
+            webViewRef = null
+            password = ""
+        }
+    }
+
     if (useWebFallback) {
         Column(modifier = modifier.fillMaxSize().background(tokens.background)
             .then(headerInset)
             .then(if (largeType) Modifier.verticalScroll(rememberScrollState()) else Modifier)) {
             LoginHeader(onCancel)
-            Text(
-                text = "Using alternative login method…",
-                style = MaterialTheme.typography.titleMedium,
-                lineHeight = 21.sp,
-                color = tokens.secondaryInk,
-                modifier = Modifier.padding(16.dp)
-            )
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text("Using alternative login method…", style = MaterialTheme.typography.titleMedium,
+                    lineHeight = 22.sp, color = tokens.primaryInk)
+                Text(message ?: FallbackPrompt, style = MaterialTheme.typography.bodySmall,
+                    lineHeight = 18.sp, color = tokens.secondaryInk)
+            }
             AO3WebLoginScreen(
                 authRepository = authRepository,
-                onLoginComplete = onLoginComplete,
+                onLoginComplete = { password = ""; onLoginComplete() },
                 onCancel = onCancel,
                 demo = !networkAllowed,
-                modifier = if (largeType) Modifier.fillMaxWidth() else Modifier.weight(1f)
+                modifier = if (largeType) Modifier.fillMaxWidth() else Modifier.weight(1f),
+                hostShowsPrompt = true
             )
             TextButton(
                 colors = ButtonDefaults.textButtonColors(contentColor = tokens.accentInk),
@@ -167,7 +185,8 @@ fun AO3NativeLoginScreen(
             SettingsPanel {
                 LoginField("Username or email", username, { username = it }, !loading)
                 SubjectRowSeparator()
-                LoginField("Password", password, { password = it }, !loading, secure = true)
+                LoginField("Password", password, { password = it }, !loading, secure = true,
+                    imeAction = ImeAction.Go, onGo = ::submit)
             }
             SettingsFootnote("Kudos submits these credentials only to AO3's official login page. " +
                 "Your password is never saved.")
@@ -190,16 +209,7 @@ fun AO3NativeLoginScreen(
                 disabledContentColor = tokens.secondaryInk
             ),
             enabled = !loading && username.isNotBlank() && password.isNotBlank(),
-            onClick = {
-                if (networkAllowed) {
-                    loading = true
-                    message = null
-                    pendingSubmit = true
-                    submitTimestamp = System.currentTimeMillis()
-                    // Existing login attempt mechanics.
-                    webViewRef?.loadUrl(LoginUrl)
-                }
-            }
+            onClick = ::submit
         ) {
             if (loading) {
                 CircularProgressIndicator(modifier = Modifier.size(18.dp), color = tokens.primaryInk)
@@ -259,43 +269,17 @@ fun AO3NativeLoginScreen(
                             if (loading && request?.isForMainFrame == true) {
                                 loading = false
                                 message = "AO3 could not load. Check your connection and try again."
-                                password = ""
                             }
                         }
 
                         override fun onPageFinished(view: WebView, url: String?) {
                             if (pendingSubmit && url?.contains("/users/login") == true) {
                                 pendingSubmit = false
-                                val userJs = jsonEscape(username.trim())
-                                val passJs = jsonEscape(password)
-                                // Only fill on https://archiveofourown.org
-                                val script = """
-                                    (function() {
-                                      if (location.protocol !== 'https:' ||
-                                          location.hostname !== 'archiveofourown.org') {
-                                        return JSON.stringify({ok:false, reason:'bad-host'});
-                                      }
-                                      var form = document.querySelector('form#new_user, form[action*="/users/login"]');
-                                      if (!form) return JSON.stringify({ok:false, reason:'no-form'});
-                                      var u = form.querySelector('input[name="user[login]"]');
-                                      var p = form.querySelector('input[name="user[password]"]');
-                                      if (!u || !p) return JSON.stringify({ok:false, reason:'no-fields'});
-                                      u.value = "$userJs";
-                                      p.value = "$passJs";
-                                      form.submit();
-                                      return JSON.stringify({ok:true});
-                                    })();
-                                """.trimIndent()
-                                view.evaluateJavascript(script) { result ->
-                                    if (result?.contains("\"ok\":false") == true ||
-                                        result?.contains("ok\":false") == true
-                                    ) {
+                                view.evaluateJavascript(AO3NativeLoginScript.fill(username.trim(), password)) { result ->
+                                    if (!AO3NativeLoginScript.submitted(result)) {
                                         loading = false
-                                        // Not iOS's words here: iOS moves to AO3's page by itself
-                                        // at this point and Android does not, so "below" would
-                                        // point at nothing.
-                                        message = "Couldn't find AO3's login form. Try the alternative method."
-                                        password = ""
+                                        useWebFallback = true
+                                        message = FallbackPrompt
                                     }
                                 }
                                 return
@@ -313,19 +297,18 @@ fun AO3NativeLoginScreen(
                                             is AO3Result.Failure -> {
                                                 loading = false
                                                 message = "AO3 logged in, but the session could not be saved securely."
-                                                password = ""
                                             }
                                         }
                                     }
-                                } else if (url?.contains("/users/login") != true && loading) {
-                                    // Still navigating after submit — wait.
-                                } else if (!pendingSubmit && loading &&
-                                    url?.contains("/users/login") == true
-                                ) {
-                                    // Failed login landed back on login page.
+                                } else if (loading && inspection.errorMessage != null) {
                                     loading = false
-                                    message = "Login failed. Check your username and password."
-                                    password = ""
+                                    message = inspection.errorMessage
+                                } else if (loading && AO3NativeLoginScript.requiresFallback(inspection)) {
+                                    // No AO3 error to explain the result: let its visible page handle it.
+                                    pendingSubmit = false
+                                    loading = false
+                                    useWebFallback = true
+                                    message = FallbackPrompt
                                 }
                             }
                         }
@@ -340,22 +323,6 @@ fun AO3NativeLoginScreen(
             update = {}
         )
     }
-
-    DisposableEffect(Unit) {
-        onDispose {
-            webViewRef?.stopLoading()
-            webViewRef = null
-            password = ""
-        }
-    }
-}
-
-private fun jsonEscape(value: String): String {
-    return value
-        .replace("\\", "\\\\")
-        .replace("\"", "\\\"")
-        .replace("\n", "\\n")
-        .replace("\r", "\\r")
 }
 
 private const val LoginUrl = "https://archiveofourown.org/users/login"
@@ -389,8 +356,9 @@ private fun LoginHeader(onCancel: () -> Unit) {
 }
 
 @Composable
-private fun LoginField(label: String, value: String, onValueChange: (String) -> Unit,
-    enabled: Boolean, secure: Boolean = false) {
+internal fun LoginField(label: String, value: String, onValueChange: (String) -> Unit,
+    enabled: Boolean, secure: Boolean = false,
+    imeAction: ImeAction = ImeAction.Next, onGo: () -> Unit = {}) {
     val tokens = LocalKudosTokens.current
     Column(Modifier.fillMaxWidth().padding(13.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(label, color = tokens.secondaryInk, fontSize = 14.sp, lineHeight = 20.sp)
@@ -402,13 +370,15 @@ private fun LoginField(label: String, value: String, onValueChange: (String) -> 
             keyboardOptions = KeyboardOptions(
                 capitalization = KeyboardCapitalization.None,
                 autoCorrectEnabled = false,
+                imeAction = imeAction,
                 keyboardType = if (secure) KeyboardType.Password else KeyboardType.Text
             ),
+            keyboardActions = KeyboardActions(onGo = { if (enabled) onGo() }),
             modifier = Modifier.fillMaxWidth().semantics { contentDescription = label }
         )
     }
 }
 
-private const val FallbackPrompt = "Complete login on AO3 below."
+private const val FallbackPrompt = "Let's finish logging in on AO3's page below."
 private const val SignUpUrl = "https://archiveofourown.org/users/new"
 private const val PasswordResetUrl = "https://archiveofourown.org/users/password/new"

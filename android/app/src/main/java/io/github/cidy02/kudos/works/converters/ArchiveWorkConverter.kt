@@ -23,6 +23,11 @@ object ArchiveWorkConverter {
 
     fun convert(title: String, bytes: ByteArray): ByteArray? {
         val members = readMembers(bytes) ?: return null
+        // Backups restore through the review sheet; never extract one of their works as a book.
+        if (members.any { (name, body) ->
+            name == io.github.cidy02.kudos.backup.BackupPaths.MANIFEST &&
+                io.github.cidy02.kudos.works.PickedDocumentReader.isBackupManifest(body)
+        }) return null
 
         // 1. A nested EPUB wins outright — it's already the format we want.
         members.firstOrNull { (name, body) ->

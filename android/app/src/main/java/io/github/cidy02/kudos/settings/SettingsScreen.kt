@@ -72,7 +72,7 @@ fun SettingsScreen(
             SettingsListeningPage(repository)
         }
         composable("downloads") {
-            SettingsDownloadsPage(repository, settings)
+            SettingsDownloadsPage(repository, settings, footprintScanner)
         }
         composable("preservation") {
             SettingsPreservationPage(onOpenAvailabilitySweep)

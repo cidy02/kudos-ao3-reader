@@ -33,6 +33,11 @@ import io.github.cidy02.kudos.network.ao3.DemoNetwork
 import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
 import io.github.cidy02.kudos.ui.subject.SubjectPalette
 import io.github.cidy02.kudos.ui.subject.isAccessibilityFontScale
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -43,7 +48,9 @@ fun AO3WebLoginScreen(
     onLoginComplete: () -> Unit,
     onCancel: () -> Unit,
     modifier: Modifier = Modifier,
-    demo: Boolean = false
+    demo: Boolean = false,
+    /** The native login screen draws the prompt above this one: say it once, as iOS does. */
+    hostShowsPrompt: Boolean = false
 ) {
     val largeType = isAccessibilityFontScale()
     val tokens = LocalKudosTokens.current
@@ -62,8 +69,8 @@ fun AO3WebLoginScreen(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        // The native host supplies the login title.
-        Text(
+        // The native host supplies the login title, and its prompt when it shows one.
+        if (!(hostShowsPrompt && message == DefaultMessage)) Text(
             text = message,
             style = MaterialTheme.typography.bodyMedium,
             lineHeight = 21.sp,
@@ -149,7 +156,8 @@ fun AO3WebLoginScreen(
 
 data class AO3WebLoginInspection(
     val loggedIn: Boolean,
-    val username: String?
+    val username: String?,
+    val errorMessage: String? = null
 ) {
     companion object {
         const val Script: String = """
@@ -165,23 +173,20 @@ data class AO3WebLoginInspection(
                   break;
                 }
               }
-              return JSON.stringify({ loggedIn: loggedIn, username: username });
+              var error = document.querySelector('#main .flash.error, #main .error, .flash.error, .flash.alert');
+              return JSON.stringify({ loggedIn: loggedIn, username: username,
+                errorMessage: error ? error.textContent.trim() : null });
             })();
         """
 
         fun parseJavascriptResult(raw: String?): AO3WebLoginInspection {
-            if (raw.isNullOrBlank() || raw == "null") return AO3WebLoginInspection(false, null)
-            val payload = raw.trim()
-                .removeSurrounding("\"")
-                .replace("\\\\\"", "\"")
-                .replace("\\\"", "\"")
-            val loggedIn = Regex(""""loggedIn"\s*:\s*true""").containsMatchIn(payload)
-            val username = Regex(""""username"\s*:\s*"([^"]+)"""")
-                .find(payload)
-                ?.groupValues
-                ?.getOrNull(1)
-                ?.takeIf { it.isNotBlank() && it != "null" }
-            return AO3WebLoginInspection(loggedIn = loggedIn, username = username)
+            val payload = loginJavascriptObject(raw) ?: return AO3WebLoginInspection(false, null)
+            return AO3WebLoginInspection(
+                loggedIn = (payload["loggedIn"] as? JsonPrimitive)?.booleanOrNull == true,
+                username = (payload["username"] as? JsonPrimitive)?.contentOrNull?.takeIf { it.isNotBlank() },
+                errorMessage = (payload["errorMessage"] as? JsonPrimitive)?.contentOrNull
+                    ?.trim()?.takeIf { it.isNotEmpty() }
+            )
         }
     }
 }
@@ -191,3 +196,11 @@ private const val StallMessage = "This is taking a while - try Reload, or check 
 private const val PageLoadTimeoutMs = 25_000L
 private const val LoginUrl = "https://archiveofourown.org/users/login"
 
+/** WebView JSON-encodes the result of a script which itself returns JSON.stringify. */
+internal fun loginJavascriptObject(raw: String?): JsonObject? {
+    if (raw.isNullOrBlank()) return null
+    return runCatching {
+        val value = Json.parseToJsonElement(raw)
+        (if (value is JsonPrimitive && value.isString) Json.parseToJsonElement(value.content) else value) as? JsonObject
+    }.getOrNull()
+}

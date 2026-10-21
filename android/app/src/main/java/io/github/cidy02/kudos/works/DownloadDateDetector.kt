@@ -6,6 +6,7 @@ import java.time.Duration
 import java.time.Instant
 import java.time.OffsetDateTime
 import java.util.zip.ZipInputStream
+import java.util.zip.ZipFile
 import org.jsoup.Jsoup
 import org.jsoup.parser.Parser
 
@@ -66,7 +67,21 @@ object DownloadDateDetector {
         }
     }.getOrNull()
 
-    private fun ZipInputStream.readBounded(limit: Int): ByteArray? {
+    /** Central-directory lookup avoids decompressing images/chapters just to find the OPF. */
+    fun epubGeneratedAt(zip: ZipFile): Instant? = runCatching {
+        for (entry in zip.entries().asSequence()) {
+            if (entry.isDirectory || !entry.name.endsWith(".opf", ignoreCase = true)) continue
+            val opf = zip.getInputStream(entry).use { it.readBounded(MAX_OPF_BYTES) } ?: continue
+            val document = Jsoup.parse(opf.decodeToString(), "", Parser.xmlParser())
+            val value = document.getElementsByTag("meta")
+                .firstOrNull { it.attr("name").equals("calibre:timestamp", ignoreCase = true) }
+                ?.attr("content").orEmpty()
+            parseEpubTimestamp(value)?.let { return@runCatching it }
+        }
+        null
+    }.getOrNull()
+
+    private fun java.io.InputStream.readBounded(limit: Int): ByteArray? {
         val output = ByteArrayOutputStream()
         val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
         var total = 0

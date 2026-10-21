@@ -60,7 +60,10 @@ fun BackupScreen(
     repository: BackupRepository,
     settingsRepository: SettingsRepository,
     database: KudosDatabase,
-    workRepository: WorkRepository
+    workRepository: WorkRepository,
+    incomingUri: Uri? = null,
+    importOnly: Boolean = false,
+    onIncomingHandled: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -96,18 +99,12 @@ fun BackupScreen(
         }
     }
 
-    val importLauncher = rememberLauncherForActivityResult(
-        contract = OpenBackupDocument()
-    ) { uri: Uri? ->
-        if (uri == null) return@rememberLauncherForActivityResult
+    fun prepareImport(uri: Uri) {
         scope.launch {
             busy = true
             statusMessage = null
             try {
-                val bytes = withContext(Dispatchers.IO) {
-                    context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
-                        ?: error("Could not read the selected file.")
-                }
+                val bytes = io.github.cidy02.kudos.works.readPickedDocument(context, uri)
                 val pack = withContext(Dispatchers.IO) { BackupImporter.importV2Zip(bytes) }
                 val preview = repository.previewImport(pack)
                 val syncEnabled = settingsRepository.settings.first().sync.isEnabled
@@ -117,6 +114,8 @@ fun BackupScreen(
                     manifest = pack.manifest,
                     syncEnabled = syncEnabled
                 )
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
             } catch (error: Exception) {
                 statusIsError = true
                 statusMessage = userFacingError("Import failed", error)
@@ -124,6 +123,17 @@ fun BackupScreen(
                 busy = false
             }
         }
+    }
+
+    // 3fy: the picker opens on Replace's undo copies (OpenBackupDocument); 3ga: Import hands a
+    // picked .kudosbackup to the same preparation.
+    val importLauncher = rememberLauncherForActivityResult(
+        contract = OpenBackupDocument()
+    ) { uri: Uri? ->
+        if (uri != null) prepareImport(uri)
+    }
+    LaunchedEffect(incomingUri) {
+        incomingUri?.let(::prepareImport)
     }
 
     fun clearPendingImport() {
@@ -187,7 +197,7 @@ fun BackupScreen(
     }
 
     val tokens = LocalKudosTokens.current
-    SettingsPage(title = "Backup") {
+    if (!importOnly) SettingsPage(title = "Backup") {
         item {
             SettingsSection(
                 footnote = "Your backup file includes your Library, Reading Queues, downloaded copies, " +
@@ -288,11 +298,30 @@ fun BackupScreen(
     pendingImport?.let { pending ->
         ImportBackupDialog(
             pending = pending,
-            onDismiss = { clearPendingImport() },
+            onDismiss = {
+                clearPendingImport()
+                if (importOnly) onIncomingHandled()
+            },
             onMerge = { runImport(BackupImportMode.MERGE, pauseSync = false) },
             onReplace = { pauseSync ->
                 runImport(BackupImportMode.REPLACE_LIBRARY, pauseSync = pauseSync)
             }
+        )
+    }
+    if (importOnly && busy) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = {},
+            title = { Text("Import Backup") },
+            text = { LinearProgressIndicator(Modifier.fillMaxWidth()) },
+            confirmButton = {}
+        )
+    }
+    if (importOnly && !busy && statusMessage != null) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = onIncomingHandled,
+            title = { Text("Import Backup") },
+            text = { Text(statusMessage!!) },
+            confirmButton = { TextButton(onClick = onIncomingHandled) { Text("OK") } }
         )
     }
 }

@@ -88,13 +88,8 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-private val EpubOpenMimeTypes = arrayOf(
-    "application/epub+zip",
-    "application/pdf",
-    "text/html",
-    "text/plain",
-    "application/octet-stream"
-)
+// iOS's .data catch-all: the importer, rather than the picker, explains unsupported files.
+internal val EpubOpenMimeTypes = arrayOf("*/*")
 
 private val AccentPresets = listOf("#990000", "#0B57D0", "#0F6B46", "#7A3E00", "#5B2C6F")
 

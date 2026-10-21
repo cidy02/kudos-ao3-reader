@@ -61,6 +61,25 @@ class ImportedFileFormatTest {
         assertEquals(ImportedFileFormat.HTML, ImportedFileFormat.sniff(bytes, "chapter.txt"))
     }
 
+    @Test
+    fun `unsupported office and archive formats are named rather than imported as prose`() {
+        assertEquals(ImportedFileFormat.RTF, ImportedFileFormat.sniff("{\\rtf1 control words}".toByteArray(), "renamed.txt"))
+        assertEquals(ImportedFileFormat.DOCX, ImportedFileFormat.sniff(zip("word/document.xml"), "renamed.zip"))
+        val odt = ByteArrayOutputStream().also { out ->
+            ZipOutputStream(out).use { zip ->
+                zip.putNextEntry(ZipEntry("mimetype"))
+                zip.write("application/vnd.oasis.opendocument.text".toByteArray())
+                zip.closeEntry()
+            }
+        }.toByteArray()
+        assertEquals(ImportedFileFormat.ODT, ImportedFileFormat.sniff(odt, "renamed.zip"))
+        val mobi = ByteArray(68).also { "BOOKMOBI".toByteArray().copyInto(it, 60) }
+        assertEquals(ImportedFileFormat.MOBI, ImportedFileFormat.sniff(mobi, "renamed.bin"))
+        assertEquals(ImportedFileFormat.RAR, ImportedFileFormat.sniff("Rar!".toByteArray(), "renamed.bin"))
+        assertEquals(ImportedFileFormat.SEVEN_ZIP, ImportedFileFormat.sniff(
+            byteArrayOf(0x37, 0x7A, 0xBC.toByte(), 0xAF.toByte(), 0x27, 0x1C), "renamed.bin"))
+    }
+
     private fun converter() = PDFWorkConverter(Files.createTempDirectory("kudos-pdf-tests").toFile())
 
     @Test

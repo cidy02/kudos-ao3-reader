@@ -24,6 +24,7 @@ import io.github.cidy02.kudos.auth.AO3AuthRepository
 import io.github.cidy02.kudos.auth.AO3AuthState
 import io.github.cidy02.kudos.core.model.KudosSettings
 import io.github.cidy02.kudos.network.ao3.browse.FandomCatalogCache
+import io.github.cidy02.kudos.ui.components.KudosRefreshBox
 import io.github.cidy02.kudos.ui.components.DestructiveConfirmation
 import io.github.cidy02.kudos.ui.components.LogOutConfirmation
 import io.github.cidy02.kudos.ui.subject.*
@@ -81,80 +82,83 @@ fun PrivacyDataScreen(
     fun bytes(value: Long?) = value?.let { LocalStorageFootprint.formatted(it) } ?: "—"
     fun count(value: Int?, noun: String) = value?.let { countLabel(it, noun) } ?: "—"
 
-    SettingsPage(title = "Privacy", kicker = "AO3 Account › Settings",
-        subtitle = "Your reading data stays on this device") {
-        item {
-            val mint = SubjectPalette.fromHue(SubjectHueSwatches.all.first { it.name == "Mint" }.hue, tokens.theme)
-            val shape = RoundedCornerShape(16.dp)
-            Column(Modifier.padding(horizontal = SubjectMetrics.accountGutter).padding(top = 14.dp)
-                .background(mint.panelWash, shape).border(0.5.dp, mint.rowBorder, shape)
-                .padding(horizontal = 18.dp, vertical = 16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text(PrivacyCopy.promiseTitle, color = tokens.primaryInk, fontSize = 17.sp,
-                    lineHeight = 23.sp, fontWeight = FontWeight.SemiBold)
-                Text(PrivacyCopy.promise, color = tokens.secondaryInk, fontSize = 13.sp, lineHeight = 18.sp)
+    KudosRefreshBox(onRefresh = { footprint = footprintScanner?.measure() },
+        modifier = Modifier.testTag("privacy-refresh")) {
+        SettingsPage(title = "Privacy", kicker = "AO3 Account › Settings",
+            subtitle = "Your reading data stays on this device") {
+            item {
+                val mint = SubjectPalette.fromHue(SubjectHueSwatches.all.first { it.name == "Mint" }.hue, tokens.theme)
+                val shape = RoundedCornerShape(16.dp)
+                Column(Modifier.padding(horizontal = SubjectMetrics.accountGutter).padding(top = 14.dp)
+                    .background(mint.panelWash, shape).border(0.5.dp, mint.rowBorder, shape)
+                    .padding(horizontal = 18.dp, vertical = 16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(PrivacyCopy.promiseTitle, color = tokens.primaryInk, fontSize = 17.sp,
+                        lineHeight = 23.sp, fontWeight = FontWeight.SemiBold)
+                    Text(PrivacyCopy.promise, color = tokens.secondaryInk, fontSize = 13.sp, lineHeight = 18.sp)
+                }
             }
-        }
-        item {
-            PrivacySection("Stored on this device") {
-                if (footprintScanner != null) {
-                    // Like iOS, conditional rows stay absent until positive; always-visible
-                    // figures show an em dash until the off-main scan finishes.
-                    val rows = footprint?.sizeRows() ?: listOf("Downloaded works" to null,
-                        "Draft recovery" to null, "Caches" to null)
-                    rows.forEachIndexed { index, (label, value) ->
-                        if (index > 0) SubjectRowSeparator()
-                        PrivacyFigureRow(label, bytes(value))
+            item {
+                PrivacySection("Stored on this device") {
+                    if (footprintScanner != null) {
+                        // Like iOS, conditional rows stay absent until positive; always-visible
+                        // figures show an em dash until the off-main scan finishes.
+                        val rows = footprint?.sizeRows() ?: listOf("Downloaded works" to null,
+                            "Draft recovery" to null, "Caches" to null)
+                        rows.forEachIndexed { index, (label, value) ->
+                            if (index > 0) SubjectRowSeparator()
+                            PrivacyFigureRow(label, bytes(value))
+                        }
+                        SubjectRowSeparator()
+                        PrivacyFigureRow("Reading positions", count(positions?.size, "work"))
+                        SubjectRowSeparator()
+                        PrivacyFigureRow("Local collections", footprint?.localCollections?.toString() ?: "—")
+                        SubjectRowSeparator()
+                        PrivacyFigureRow("Saved searches", footprint?.savedSearches?.toString() ?: "—")
+                        SubjectRowSeparator()
                     }
-                    SubjectRowSeparator()
-                    PrivacyFigureRow("Reading positions", count(positions?.size, "work"))
-                    SubjectRowSeparator()
-                    PrivacyFigureRow("Local collections", footprint?.localCollections?.toString() ?: "—")
-                    SubjectRowSeparator()
-                    PrivacyFigureRow("Saved searches", footprint?.savedSearches?.toString() ?: "—")
-                    SubjectRowSeparator()
+                    PrivacyFigureRow("Search history", "Not recorded", monospaced = false)
                 }
-                PrivacyFigureRow("Search history", "Not recorded", monospaced = false)
+                PrivacyFootnote(PrivacyCopy.stored)
             }
-            PrivacyFootnote(PrivacyCopy.stored)
-        }
-        item {
-            PrivacySection("Clear") {
-                PrivacyFigureRow("Free up space", count(freeable?.size, "file"), destructive = true,
-                    enabled = !freeable.isNullOrEmpty(), onClick = { confirming = "space" })
-                SubjectRowSeparator()
-                PrivacyFigureRow("Clear reading positions", count(positions?.size, "work"), destructive = true,
-                    enabled = !positions.isNullOrEmpty(), onClick = { confirming = "positions" })
-                SubjectRowSeparator()
-                PrivacyFigureRow("Clear reading history", count(history?.size, "work"), destructive = true,
-                    enabled = !history.isNullOrEmpty(), onClick = { confirming = "history" })
-                SubjectRowSeparator()
-                PrivacyFigureRow(if (browseCacheCleared) "Browse cache cleared" else "Clear browse cache",
-                    if (footprintScanner != null) bytes(footprint?.cacheBytes) else null,
-                    destructive = !browseCacheCleared, enabled = !browseCacheCleared,
-                    onClick = { confirming = "browse" })
-            }
-            PrivacyFootnote(PrivacyCopy.clear)
-        }
-        item {
-            PrivacySection("AO3 session") {
-                val signedIn = auth as? AO3AuthState.SignedIn
-                if (signedIn != null) {
-                    PrivacyFigureRow("Signed in", signedIn.username, monospaced = false)
+            item {
+                PrivacySection("Clear") {
+                    PrivacyFigureRow("Free up space", count(freeable?.size, "file"), destructive = true,
+                        enabled = !freeable.isNullOrEmpty(), onClick = { confirming = "space" })
                     SubjectRowSeparator()
-                    SettingsActionRow("Remove AO3 session", destructive = true, onClick = { confirmingLogout = true })
-                } else {
-                    PrivacyFigureRow("AO3 account", "Not signed in", monospaced = false)
+                    PrivacyFigureRow("Clear reading positions", count(positions?.size, "work"), destructive = true,
+                        enabled = !positions.isNullOrEmpty(), onClick = { confirming = "positions" })
+                    SubjectRowSeparator()
+                    PrivacyFigureRow("Clear reading history", count(history?.size, "work"), destructive = true,
+                        enabled = !history.isNullOrEmpty(), onClick = { confirming = "history" })
+                    SubjectRowSeparator()
+                    PrivacyFigureRow(if (browseCacheCleared) "Browse cache cleared" else "Clear browse cache",
+                        if (footprintScanner != null) bytes(footprint?.cacheBytes) else null,
+                        destructive = !browseCacheCleared, enabled = !browseCacheCleared,
+                        onClick = { confirming = "browse" })
                 }
+                PrivacyFootnote(PrivacyCopy.clear)
             }
-            PrivacyFootnote(PrivacyCopy.session + (notice?.let { " $it" } ?: ""))
-        }
-        item {
-            PrivacySection("Read Aloud downloads") {
-                Column(Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text(PrivacyCopy.voiceTitle, color = tokens.primaryInk, fontSize = 15.sp,
-                        lineHeight = 21.sp, fontWeight = FontWeight.SemiBold)
-                    Text(PrivacyCopy.voice, color = tokens.secondaryInk, fontSize = 12.5.sp, lineHeight = 18.sp)
+            item {
+                PrivacySection("AO3 session") {
+                    val signedIn = auth as? AO3AuthState.SignedIn
+                    if (signedIn != null) {
+                        PrivacyFigureRow("Signed in", signedIn.username, monospaced = false)
+                        SubjectRowSeparator()
+                        SettingsActionRow("Remove AO3 session", destructive = true, onClick = { confirmingLogout = true })
+                    } else {
+                        PrivacyFigureRow("AO3 account", "Not signed in", monospaced = false)
+                    }
+                }
+                PrivacyFootnote(PrivacyCopy.session + (notice?.let { " $it" } ?: ""))
+            }
+            item {
+                PrivacySection("Read Aloud downloads") {
+                    Column(Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(PrivacyCopy.voiceTitle, color = tokens.primaryInk, fontSize = 15.sp,
+                            lineHeight = 21.sp, fontWeight = FontWeight.SemiBold)
+                        Text(PrivacyCopy.voice, color = tokens.secondaryInk, fontSize = 12.5.sp, lineHeight = 18.sp)
+                    }
                 }
             }
         }
@@ -173,7 +177,7 @@ fun PrivacyDataScreen(
                 "positions" -> "Clear ${count(positions?.size, "Position")}"
                 "history" -> "Clear ${count(history?.size, "Work")}"
                 else -> if (footprintScanner != null) "Clear ${bytes(footprint?.cacheBytes)}" else "Clear"
-            }, confirmBeforeDelete = settings.app.confirmBeforeDelete,
+            }, confirmBeforeDelete = true,
             onConfirm = {
                 confirming = null
                 scope.launch {

@@ -59,6 +59,7 @@ private fun KudosThemeMode.toAppTheme(): AppThemeSetting = when (this) {
  */
 private suspend fun importExternalFiles(
     container: KudosAppContainer,
+    context: android.content.Context,
     selections: List<io.github.cidy02.kudos.works.SelectedDocumentImport>,
     preparationFailures: List<String>
 ): ExternalImportNotice? {
@@ -68,18 +69,23 @@ private suspend fun importExternalFiles(
         for (selection in selections) {
             val item = selection.pending
             val label = item.displayName?.substringAfterLast('/')?.ifBlank { null } ?: "file"
-            when (val result = container.workImporter.importLocalEpub(
-                item.displayName,
-                item.bytes,
-                selection.downloadedAt
-            )) {
-                is io.github.cidy02.kudos.works.WorkImportResult.Success ->
-                    imported += "“${result.work.title}”"
-                is io.github.cidy02.kudos.works.WorkImportResult.Failure -> {
-                    val message = (result.error as? io.github.cidy02.kudos.network.ao3.AO3Error.Validation)
-                        ?.message ?: "couldn't be imported"
-                    failed += "$label: $message"
+            try {
+                val bytes = io.github.cidy02.kudos.works.readPickedDocument(context, item.uri)
+                when (val result = container.workImporter.importLocalEpub(
+                    item.displayName, bytes, selection.downloadedAt
+                )) {
+                    is io.github.cidy02.kudos.works.WorkImportResult.Success ->
+                        imported += "“${result.work.title}”"
+                    is io.github.cidy02.kudos.works.WorkImportResult.Failure -> {
+                        val message = (result.error as? io.github.cidy02.kudos.network.ao3.AO3Error.Validation)
+                            ?.message ?: "couldn't be imported"
+                        failed += "$label: $message"
+                    }
                 }
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                failed += "$label: ${error.message ?: "couldn't be imported"}"
             }
         }
     }
@@ -171,6 +177,9 @@ fun KudosApp(
     var pendingImports by remember {
         androidx.compose.runtime.mutableStateOf<List<io.github.cidy02.kudos.works.PendingDocumentImport>>(emptyList())
     }
+    var pendingBackups by remember {
+        androidx.compose.runtime.mutableStateOf<List<android.net.Uri>>(emptyList())
+    }
     var importPreparationFailures by remember {
         androidx.compose.runtime.mutableStateOf<List<String>>(emptyList())
     }
@@ -184,10 +193,12 @@ fun KudosApp(
         scope.launch {
             val preparation = io.github.cidy02.kudos.works.prepareDocumentImports(context, uris)
             pendingImports = pendingImports + preparation.imports
+            pendingBackups = pendingBackups + preparation.backups
             importPreparationFailures = importPreparationFailures + preparation.failures
-            if (preparation.imports.isEmpty()) {
-                importStatus = preparation.failures.joinToString("\n").ifBlank { null }
+            if (pendingImports.isEmpty() && pendingBackups.isEmpty()) {
+                importStatus = importPreparationFailures.joinToString("\n").ifBlank { null }
                     ?.let { ExternalImportNotice(it, addedToLibrary = false) }
+                importPreparationFailures = emptyList()
             }
         }
     }
@@ -197,7 +208,27 @@ fun KudosApp(
             FirstRunDemoDestination(preview) { previewClosed = true }
             return@KudosTheme
         }
-        if (pendingImports.isNotEmpty()) {
+        pendingBackups.firstOrNull()?.let { uri ->
+            androidx.compose.runtime.key(uri) {
+                io.github.cidy02.kudos.backup.BackupScreen(
+                    repository = container.backupRepository,
+                    settingsRepository = container.settingsRepository,
+                    database = container.database,
+                    workRepository = container.workRepository,
+                    incomingUri = uri,
+                    importOnly = true,
+                    onIncomingHandled = {
+                        pendingBackups = pendingBackups.drop(1)
+                        if (pendingBackups.isEmpty() && pendingImports.isEmpty()) {
+                            importStatus = importPreparationFailures.joinToString("\n").ifBlank { null }
+                                ?.let { ExternalImportNotice(it, addedToLibrary = false) }
+                            importPreparationFailures = emptyList()
+                        }
+                    }
+                )
+            }
+        }
+        if (pendingBackups.isEmpty() && pendingImports.isNotEmpty()) {
             io.github.cidy02.kudos.works.DownloadDateImportConfirmation(
                 imports = pendingImports,
                 onCancel = {
@@ -206,19 +237,21 @@ fun KudosApp(
                 },
                 onImport = { selections ->
                     pendingImports = emptyList()
+                    val failures = importPreparationFailures
+                    importPreparationFailures = emptyList()
                     scope.launch {
                         importStatus = importExternalFiles(
                             container,
+                            context,
                             selections,
-                            importPreparationFailures
+                            failures
                         )
-                        importPreparationFailures = emptyList()
                     }
                 }
             )
         }
 
-        importStatus?.let { notice ->
+        importStatus?.takeIf { pendingImports.isEmpty() && pendingBackups.isEmpty() }?.let { notice ->
             androidx.compose.material3.AlertDialog(
                 onDismissRequest = { importStatus = null },
                 title = { androidx.compose.material3.Text("Import") },

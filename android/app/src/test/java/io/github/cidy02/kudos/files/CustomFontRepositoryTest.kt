@@ -5,6 +5,7 @@ import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import io.github.cidy02.kudos.core.model.ReaderFontCatalog
+import io.github.cidy02.kudos.backup.BackupLimits
 import io.github.cidy02.kudos.data.local.KudosDatabase
 import io.github.cidy02.kudos.data.preferences.SettingsRepository
 import java.io.File
@@ -69,7 +70,7 @@ class CustomFontRepositoryTest {
         val result = repository.importFont(
             displayName = "Reader Serif",
             originalFileName = "Reader.ttf",
-            bytes = "dummy-font".toByteArray()
+            bytes = validFont()
         )
         assertTrue(result.isSuccess)
         val font = result.getOrThrow()
@@ -106,7 +107,7 @@ class CustomFontRepositoryTest {
         val font = repository.importFont(
             displayName = "Temp",
             originalFileName = "Temp.otf",
-            bytes = "otf-bytes".toByteArray()
+            bytes = validFont()
         ).getOrThrow()
         assertEquals(font.selectionId, settingsRepository.snapshot().reader.readerFontId)
 
@@ -123,6 +124,41 @@ class CustomFontRepositoryTest {
         assertEquals("otf", CustomFontRepository.resolveExtension("path/My Font.otf"))
         assertEquals(null, CustomFontRepository.resolveExtension("font.woff"))
         assertEquals(null, CustomFontRepository.resolveExtension(null))
+    }
+
+    private fun validFont(): ByteArray = ApplicationProvider.getApplicationContext<Context>()
+        .assets.open("readium/fonts/OpenDyslexic-Regular.otf").use { it.readBytes() }
+
+    @Test
+    fun invalidOrOversizedFontsLeaveFilesMetadataAndSelectionUntouched() = runBlocking {
+        for (bytes in listOf(ByteArray(0), "not a font".toByteArray(),
+            byteArrayOf(0, 1, 0, 0), ByteArray(BackupLimits.MAX_FONT_ENTRY_BYTES.toInt() + 1))) {
+            val result = repository.importFont("Rejected", "font.ttf", bytes)
+            assertTrue(result.isFailure)
+            assertTrue(result.exceptionOrNull()!!.message!!.contains(
+                "Keeping it would stop your library backup from restoring."))
+            assertTrue(repository.listImported().isEmpty())
+            assertEquals("system", settingsRepository.snapshot().reader.readerFontId)
+            assertTrue(fontRoot.resolve("fonts").listFiles().orEmpty().isEmpty())
+        }
+    }
+
+    @Test
+    fun totalLimitAcceptsTheBoundaryAndRejectsTheNextFontWithoutChangingSelection() = runBlocking {
+        val installed = repository.importFont("Installed", "font.otf", validFont()).getOrThrow()
+        val incoming = validFont()
+        // Sparse existing file avoids allocating 32 MB just to exercise the disk-size sum.
+        java.io.RandomAccessFile(repository.fontPath(installed).toFile(), "rw").use {
+            it.setLength(BackupLimits.MAX_TOTAL_FONT_BYTES - incoming.size)
+        }
+        val boundary = repository.importFont("Boundary", "font.otf", incoming).getOrThrow()
+        val before = repository.listImported()
+        val result = repository.importFont("Over limit", "font.otf", incoming)
+        assertEquals("Your fonts would go over the 32 MB a backup can carry, " +
+            "which would stop your library backup from restoring.", result.exceptionOrNull()!!.message)
+        assertEquals(before, repository.listImported())
+        assertEquals(boundary.selectionId, settingsRepository.snapshot().reader.readerFontId)
+        assertEquals(before.size, fontRoot.resolve("fonts").listFiles()!!.size)
     }
 
     @Test

@@ -9,7 +9,6 @@ import kotlinx.coroutines.withContext
 data class PendingDocumentImport(
     val uri: Uri,
     val displayName: String?,
-    val bytes: ByteArray,
     val detection: DownloadDateDetection
 )
 
@@ -20,10 +19,11 @@ data class SelectedDocumentImport(
 
 data class DocumentImportPreparation(
     val imports: List<PendingDocumentImport>,
-    val failures: List<String>
+    val failures: List<String>,
+    val backups: List<Uri> = emptyList()
 )
 
-/** Reads picker metadata and EPUB bytes before the confirmation UI commits anything. */
+/** Inspects picks with bounded I/O; confirmation retains URIs, never document payloads. */
 suspend fun prepareDocumentImports(
     context: Context,
     uris: List<Uri>,
@@ -31,25 +31,37 @@ suspend fun prepareDocumentImports(
 ): DocumentImportPreparation = withContext(Dispatchers.IO) {
     val imports = mutableListOf<PendingDocumentImport>()
     val failures = mutableListOf<String>()
+    val backups = mutableListOf<Uri>()
     for (uri in uris) {
         val displayName = ExternalFileImport.displayNameFor(context, uri)
         val label = displayName?.takeIf { it.isNotBlank() } ?: "file"
-        val bytesResult = runCatching {
-            context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
-                ?: error("Could not read the selected file.")
+        try {
+            val inspection = context.contentResolver.openInputStream(uri)?.use {
+                PickedDocumentReader.inspect(it, ExternalFileImport.sizeFor(context, uri), displayName, context.cacheDir)
+            } ?: error("Could not read the selected file.")
+            if (inspection.isBackup) {
+                backups += uri
+                continue
+            }
+            val detection = DownloadDateDetector.detect(
+                fileCreated = null,
+                fileModified = ExternalFileImport.lastModifiedFor(context, uri),
+                epubGeneratedAt = inspection.generatedAt,
+                now = now
+            )
+            imports += PendingDocumentImport(uri, displayName, detection)
+        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            failures += "$label: ${error.message ?: "Could not read the selected file."}"
         }
-        val bytes = bytesResult.getOrNull()
-        if (bytes == null) {
-            failures += "$label: ${bytesResult.exceptionOrNull()?.message ?: "Could not read the selected file."}"
-            continue
-        }
-        val detection = DownloadDateDetector.detect(
-            fileCreated = null,
-            fileModified = ExternalFileImport.lastModifiedFor(context, uri),
-            epubGeneratedAt = DownloadDateDetector.epubGeneratedAt(bytes),
-            now = now
-        )
-        imports += PendingDocumentImport(uri, displayName, bytes, detection)
     }
-    DocumentImportPreparation(imports, failures)
+    DocumentImportPreparation(imports, failures, backups)
+}
+
+/** Read one confirmed document at a time, with the same size bound as preparation. */
+suspend fun readPickedDocument(context: Context, uri: Uri): ByteArray = withContext(Dispatchers.IO) {
+    context.contentResolver.openInputStream(uri)?.use {
+        PickedDocumentReader.readBytes(it, ExternalFileImport.sizeFor(context, uri))
+    } ?: error("Could not read the selected file.")
 }

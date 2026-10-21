@@ -2482,3 +2482,11 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   browser's exact body, which its tests pin ("untouched bodies equal a browser's, field for
   field"), and owner question 17 covers the general choice. 3fx's change to drop the "0" was
   taken back; its tests now assert the value Rails keeps.
+
+- **2026-10-20 · Privacy & Local Data's four Clears always ask first (brief 3ga).**
+  The owner's iOS parity goal reverses the 2026-10-09 (3bz) decision that kept the
+  Android preference governing these actions. Free up space, Clear reading positions,
+  Clear reading history and Clear browse cache now always show their confirmation,
+  matching iOS `Features/Account/PrivacyDataView.swift:120–177`. “Confirm before deleting”
+  continues to govern swipes only, as its footnote says. No clear action or stored
+  preference is removed.
