@@ -87,7 +87,7 @@ struct AO3AuthorPaginationRows: View {
         } else if hasMore || isLoadingMore {
             Button(action: loadMore) {
                 HStack {
-                    if isLoadingMore { ProgressView().controlSize(.small) }
+                    if isLoadingMore { ProgressView().controlSize(.small).accentFill() }
                     Text(isLoadingMore ? "Loading…" : "Load More")
                     Spacer()
                     Text("Page \(max(1, currentPage)) of \(totalPages)")
@@ -282,6 +282,7 @@ struct AO3AuthorWorksSection: View {
                 ProgressView()
                     .frame(maxWidth: .infinity)
                     .padding()
+                    .accentFill()
             } else if model.works.isEmpty {
                 AccountScrollChromeCard {
                     AO3AuthorContentMessage(
@@ -621,6 +622,7 @@ struct AO3AuthorBookmarksSection: View {
                 ProgressView()
                     .frame(maxWidth: .infinity)
                     .padding()
+                    .accentFill()
             } else if model.bookmarks.isEmpty {
                 AccountScrollChromeCard {
                     AO3AuthorContentMessage(

@@ -57,6 +57,7 @@ struct AO3PreferencesView: View {
             case .loading:
                 ProgressView("Loading preferences…")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .accentFill()
             case let .failed(message):
                 ContentUnavailableView {
                     Label("Couldn't load preferences", systemImage: "exclamationmark.triangle")
@@ -85,7 +86,7 @@ struct AO3PreferencesView: View {
                     Task { await save() }
                 } label: {
                     if isSaving {
-                        ProgressView()
+                        ProgressView().accentFill()
                     } else {
                         Text("Save")
                     }
@@ -231,6 +232,7 @@ struct AO3PreferencesView: View {
             HStack(alignment: .center, spacing: 8) {
                 Toggle(label, isOn: isOn)
                     .labelsHidden()
+                    .accentFill()
                 if let help {
                     helpButton(help)
                 }
@@ -261,6 +263,7 @@ struct AO3PreferencesView: View {
                 case .loading:
                     ProgressView("Loading help…")
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .accentFill()
                 case let .ready(content):
                     helpContentList(content)
                 case let .failed(_, message):

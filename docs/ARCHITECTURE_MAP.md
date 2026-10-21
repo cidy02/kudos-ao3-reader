@@ -79,6 +79,8 @@ All paths relative to `kudos-ao3-reader/` unless noted. Confirmed as of 2026-07-
 
 `ThemeManager` (environment), `UIComponents/` (`WorkCardListControls` — expand-all + filter button with `onClearFilters` long-press, `AppThemeSurface` with `.appThemedScroll()/.appThemedRows()`), `WorkSelectionBubble` in `HomeCards.swift`.
 
+`ThemeManager.accentInk` / `UIComponents/AccentInk.swift` separate readable foreground tint from the exact accent fill. Root and screen/sheet accents use `.accentTint(_:on:)`; filled native controls use `.accentFill()`, custom shapes use `.fill(.accentFill)`. `Color.readable(on:minimum:)` in `Utilities/ColorHex.swift` matches Android's 5%-white WCAG contrast steps on Dark/OLED's `cardBackdrop`. `SubjectPalette.accent` keeps its existing tones.
+
 ## Unknowns / verify-before-touching
 
 - Legacy macOS reader internals (`ReaderController.swift`) — least-touched area this cycle.

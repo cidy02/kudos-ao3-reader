@@ -276,6 +276,16 @@ enum DebugLaunchRoute {
             path.append(AO3CollectionDestination(slug: slug, title: slug))
             return
         }
+        // `acct:settings:<page>` — a Settings page by its `SettingsRoute` case name (backup,
+        // syncFolder, about, …), for side-by-side screenshots with Android.
+        if let value, value.hasPrefix("acct:settings:") {
+            let name = String(value.dropFirst("acct:settings:".count))
+            if let page = SettingsRoute.allCases.first(where: { "\($0)" == name }) {
+                path.append(AccountView.Route.settings)
+                path.append(page)
+            }
+            return
+        }
         switch accountTarget() {
         case let route as AccountView.Route: path.append(route)
         case let kind as AO3AccountWorksList.Kind: path.append(kind)

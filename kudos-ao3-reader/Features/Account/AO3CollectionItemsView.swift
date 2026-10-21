@@ -363,7 +363,7 @@ struct AO3CollectionItemsView: View {
     private var loadingRow: some View {
         HStack {
             Spacer()
-            ProgressView()
+            ProgressView().accentFill()
             Spacer()
         }
     }
@@ -384,6 +384,8 @@ struct AO3CollectionItemsView: View {
                 Task { await load(page: currentPage, replacing: true) }
             }
             .buttonStyle(.bordered)
+            .foregroundStyle(.accentInk)
+            .accentFill()
             .tint(palette.tint)
             .padding(.top, 4)
         }
@@ -750,6 +752,7 @@ struct AO3CollectionItemCard: View {
             if isEditable {
                 Toggle(label, isOn: Binding(get: { isOn }, set: set))
                     .labelsHidden()
+                    .accentFill()
             } else {
                 Text(isOn ? "On" : "Off")
                     .font(.system(size: actionSize, weight: .semibold))

@@ -283,7 +283,7 @@ extension WorkDetailView {
                         .accessibilityHidden(true)
                 }
                 if busy {
-                    ProgressView().controlSize(.small)
+                    ProgressView().controlSize(.small).accentFill()
                 } else if let value {
                     myCopyValue(value)
                 }
@@ -475,7 +475,7 @@ extension WorkDetailView {
                             .frame(maxWidth: .infinity, alignment: .leading)
                         myCopyValue(progressLabel)
                     }
-                    ProgressView(value: progress)
+                    ProgressView(value: progress).accentFill()
                 }
                 .accessibilityElement(children: .combine)
                 .myCopyRow()
@@ -559,7 +559,7 @@ extension WorkDetailView {
         .padding(.vertical, 6)
         .background(
             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(.tint.opacity(0.16))
+                .fill(.accentFill.opacity(0.16))
                 .overlay(
                     RoundedRectangle(cornerRadius: 8, style: .continuous)
                         .strokeBorder(.tint.opacity(0.22), lineWidth: 0.5)
@@ -582,7 +582,7 @@ struct DownloadedDateEditor: View {
     var body: some View {
         NavigationStack {
             Form {
-                DatePicker("Downloaded", selection: $date, in: ...Date(), displayedComponents: .date)
+                DatePicker("Downloaded", selection: $date, in: ...Date(), displayedComponents: .date).accentFill()
             }
             .navigationTitle("Downloaded")
             #if os(iOS)
@@ -600,6 +600,7 @@ struct DownloadedDateEditor: View {
                         dismiss()
                     }
                     .buttonStyle(.borderedProminent)
+                    .accentFill()
                 }
             }
         }

@@ -345,12 +345,15 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
                             router.selection = .browse
                         }
                         .buttonStyle(.borderedProminent)
+                        .accentFill()
                         .prominentLabel()
 
                         Button("Open Library") {
                             router.selection = .library
                         }
                         .buttonStyle(.bordered)
+                        .foregroundStyle(.accentInk)
+                        .accentFill()
                     }
                     .padding(.horizontal, 16)
                 }

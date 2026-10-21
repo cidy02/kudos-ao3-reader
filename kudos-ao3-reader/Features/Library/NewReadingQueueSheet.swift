@@ -147,7 +147,7 @@ struct NewReadingQueueSheet: View {
         }
         // Outside the stack so the Create button, the toggle and the caret all
         // take the swatch too, not just the rows.
-        .tint(palette.tint)
+        .screenTint(palette)
         #if os(iOS)
         // Taller than .medium now: 1j's sheet carries four groups, and a medium
         // detent hid the seed step below the fold — the one decision the board
@@ -235,7 +235,7 @@ struct NewReadingQueueSheet: View {
             // Titled even though the title is hidden: `labelsHidden` hides it
             // from the eye, not from VoiceOver, and an empty title left the
             // switch announcing only "switch button, off".
-            Toggle("Keep works offline", isOn: $options.keepsWorksOffline).labelsHidden()
+            Toggle("Keep works offline", isOn: $options.keepsWorksOffline).labelsHidden().accentFill()
         }
         .subjectPanel()
     }

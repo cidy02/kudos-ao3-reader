@@ -481,7 +481,7 @@ struct AddToQueueView: View {
                                     .foregroundStyle(.primary)
                                 Spacer()
                                 if workingQueueIDs.contains(queue.id) {
-                                    ProgressView()
+                                    ProgressView().accentFill()
                                 } else if isMember(queue) {
                                     Image(systemName: "checkmark")
                                         .foregroundStyle(.tint)
@@ -500,12 +500,12 @@ struct AddToQueueView: View {
 
                 if hasSeries {
                     Section {
-                        Toggle("Also add works from this AO3 series", isOn: $includeSeries)
+                        Toggle("Also add works from this AO3 series", isOn: $includeSeries).accentFill()
 
                         if includeSeries {
                             if checkingSeriesPreview {
                                 HStack {
-                                    ProgressView()
+                                    ProgressView().accentFill()
                                     Text("Checking series size…")
                                         .foregroundStyle(.secondary)
                                 }
@@ -521,7 +521,7 @@ struct AddToQueueView: View {
                                 HStack {
                                     Label("Add Series to Selected Queues", systemImage: "square.stack.3d.up")
                                     Spacer()
-                                    if preservingSeries { ProgressView() }
+                                    if preservingSeries { ProgressView().accentFill() }
                                 }
                             }
                             .disabled(preservingSeries || selectedQueuesForSeries.isEmpty)

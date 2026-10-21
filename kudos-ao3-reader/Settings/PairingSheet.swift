@@ -138,7 +138,7 @@ struct TombstoneTrustSettingsSection: View {
         .sheet(isPresented: $showPairingSheet, onDismiss: refresh) {
             PairingSheet()
                 .environment(themeManager)
-                .tint(themeManager.effectiveTint)
+                .accentTint(themeManager.effectiveTint, on: themeManager.appTheme)
         }
         .sheet(item: $revokeTarget) { device in
             RevokeDeviceSheet(device: device) { reason in
@@ -147,7 +147,7 @@ struct TombstoneTrustSettingsSection: View {
                 statusMessage = "Revoked that device."
             }
             .environment(themeManager)
-            .tint(themeManager.effectiveTint)
+            .accentTint(themeManager.effectiveTint, on: themeManager.appTheme)
         }
     }
 
@@ -339,7 +339,7 @@ struct PairingSheet: View {
                         .textInputAutocapitalization(.never)
                         #endif
                         .autocorrectionDisabled()
-                    Toggle("I got this key from my other device", isOn: $confirmedFromOwnDevice)
+                    Toggle("I got this key from my other device", isOn: $confirmedFromOwnDevice).accentFill()
                     Button("Trust") {
                         trustPasted()
                     }

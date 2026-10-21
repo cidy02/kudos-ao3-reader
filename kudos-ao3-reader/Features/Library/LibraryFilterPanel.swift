@@ -40,6 +40,7 @@ struct LibraryFilterPanel: View {
                 Image(systemName: "checkmark")
             }
             .buttonStyle(.borderedProminent)
+            .accentFill()
             .prominentLabel()
             .accessibilityLabel("Done")
         }

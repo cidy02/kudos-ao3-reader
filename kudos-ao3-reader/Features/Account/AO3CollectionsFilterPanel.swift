@@ -138,6 +138,7 @@ struct AO3CollectionsFilterPanel: View {
                 Toggle("", isOn: isOn)
                     .labelsHidden()
                     .frame(maxWidth: .infinity, alignment: .trailing)
+                    .accentFill()
             }
         )
     }
@@ -160,6 +161,8 @@ struct AO3CollectionsFilterPanel: View {
     private var resetBar: some View {
         Button("Reset") { editor.reset() }
             .buttonStyle(.bordered)
+            .foregroundStyle(.accentInk)
+            .accentFill()
             .frame(maxWidth: .infinity, alignment: .leading)
             .disabled(editor.draft == AO3CollectionsFilter())
         .padding(.horizontal, SubjectMetrics.gutter)

@@ -357,7 +357,7 @@ struct ChallengeAssignmentsView: View {
         } label: {
             HStack(spacing: 4) {
                 if isInFlight {
-                    ProgressView().controlSize(.small)
+                    ProgressView().controlSize(.small).accentFill()
                 }
                 Text("Claim")
                     .font(.system(size: pillLabelSize, weight: .semibold))
@@ -445,6 +445,7 @@ struct ChallengeAssignmentsView: View {
             }
         }
         .buttonStyle(.bordered)
+        .foregroundStyle(tint)
         .buttonBorderShape(dynamicTypeSize.isAccessibilitySize ? .roundedRectangle(radius: 14) : .automatic)
         .tint(tint)
     }
@@ -561,6 +562,7 @@ extension ChallengeAssignmentsView {
         HStack(spacing: 10) {
             ProgressView()
                 .controlSize(.small)
+                .accentFill()
             Text("Loading assignments…")
                 .font(.system(size: loadingSize))
                 .foregroundStyle(.secondary)
@@ -595,6 +597,8 @@ extension ChallengeAssignmentsView {
                 Task { await load() }
             }
             .buttonStyle(.bordered)
+            .foregroundStyle(.accentInk)
+            .accentFill()
             .tint(palette.tint)
             .padding(.top, 4)
         }

@@ -578,6 +578,7 @@ struct WorkCreatorsPickerView: View {
                     SubjectFormRow(label: pseud.title, arrangement: .control) {
                         Toggle("", isOn: binding(for: pseud.value))
                             .labelsHidden()
+                            .accentFill()
                     }
                 }
             }
@@ -708,6 +709,7 @@ struct WorkParentWorkPickerView: View {
             SubjectFormRow(label: "This work is a translation", arrangement: .control) {
                 Toggle("", isOn: $parentWork.isTranslation)
                     .labelsHidden()
+                    .accentFill()
             }
             SubjectRowSeparator()
             WritingChoiceRow(

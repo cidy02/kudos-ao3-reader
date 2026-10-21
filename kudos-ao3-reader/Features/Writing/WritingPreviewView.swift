@@ -103,7 +103,7 @@ struct WritingPreviewView: View {
                 Image(systemName: icon).frame(width: 20).accessibilityHidden(true)
                 Text(title).font(.system(size: actionTitleSize))
                 Spacer()
-                if busy { ProgressView() }
+                if busy { ProgressView().accentFill() }
             }
             .foregroundStyle(color)
             .padding(.horizontal, 14)

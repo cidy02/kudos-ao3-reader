@@ -310,7 +310,7 @@ struct ChallengeSettingsEditView: View {
                 ), displayedComponents: [.date, .hourAndMinute])
                 .labelsHidden()
                 .datePickerStyle(.compact)
-                .environment(\.timeZone, TimeZone(secondsFromGMT: 0)!)
+                .environment(\.timeZone, TimeZone(secondsFromGMT: 0)!).accentFill()
             } else {
                 // Unreadable text is shown as AO3 sent it and posted back unchanged.
                 Text(instant.wireString.isEmpty ? "Not set" : instant.wireString)
@@ -394,7 +394,7 @@ struct ChallengeSettingsEditView: View {
                     .foregroundStyle(.secondary)
                 Stepper("", value: Binding(get: { value }, set: onChange), in: range)
                     .labelsHidden()
-                    .disabled(isDisabled)
+                    .disabled(isDisabled).accentFill()
             }
         }
     }
@@ -648,6 +648,7 @@ struct ChallengeSettingsEditView: View {
         HStack(spacing: 10) {
             ProgressView()
                 .controlSize(.small)
+                .accentFill()
             Text("Loading challenge settings…")
                 .font(.system(size: loadingSize))
                 .foregroundStyle(.secondary)
@@ -668,6 +669,8 @@ struct ChallengeSettingsEditView: View {
                 Task { await load() }
             }
             .buttonStyle(.bordered)
+            .foregroundStyle(.accentInk)
+            .accentFill()
             .tint(palette.tint)
             .padding(.top, 4)
         }

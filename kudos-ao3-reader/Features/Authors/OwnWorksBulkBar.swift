@@ -18,7 +18,7 @@ struct OwnWorksBulkBar: View {
             Button("Visibility") { edit(.visibility) }
             Spacer()
             Button("Delete", role: .destructive, action: delete)
-            if isBusy { ProgressView().controlSize(.small) }
+            if isBusy { ProgressView().controlSize(.small).accentFill() }
         }
         .disabled(selectedCount < 1 || isBusy)
     }

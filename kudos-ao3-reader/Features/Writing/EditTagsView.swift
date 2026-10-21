@@ -208,6 +208,7 @@ struct EditTagsView: View {
                     }
                 ))
                 .labelsHidden()
+                .accentFill()
             }
             .panelSegment(index, of: options.count, gutter: gutter)
         }

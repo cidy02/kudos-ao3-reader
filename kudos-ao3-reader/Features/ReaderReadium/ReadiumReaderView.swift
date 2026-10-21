@@ -16,9 +16,11 @@ import WebKit
 /// made in one place.
 struct BookReaderView: View {
     let work: SavedWork
+    @Environment(ThemeManager.self) private var theme
 
     var body: some View {
         reader.keepScreenAwakeWhileReading()
+            .accentTint(theme.effectiveTint, on: theme.readerTheme)
     }
 
     @ViewBuilder private var reader: some View {
@@ -1099,7 +1101,7 @@ struct ReadiumReaderView: View {
     private func speechMiniPlayer(tint: SwiftUI.Color) -> some View {
         ReaderSpeechMiniPlayer(
             controller: speech,
-            tint: tint,
+            tint: readerTheme.accentInk(for: tint),
             onStop: { stopReadingAloud() },
             onSkipBack: { handleSpeechSkipBack() },
             onSkipForward: { handleSpeechSkipForward() },
@@ -1656,7 +1658,7 @@ extension ReadiumReaderView {
         .presentationContentInteraction(.scrolls)
         // Annotation rows and the segmented control tint from the theme, not the
         // raw accent, so Sepia keeps its warm brown.
-        .tint(themeManager.effectiveTint)
+        .accentTint(themeManager.effectiveTint, on: readerTheme)
         .preferredColorScheme(readerTheme.colorScheme)
     }
     private func handleSpeechSkipBack() {

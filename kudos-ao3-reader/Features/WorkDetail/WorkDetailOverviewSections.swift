@@ -199,7 +199,7 @@ extension WorkDetailView {
                                         systemImage: "arrow.down.circle"
                                     )
                                     Spacer()
-                                    if queuingSeries { ProgressView() }
+                                    if queuingSeries { ProgressView().accentFill() }
                                 }
                             }
                             .disabled(queuingSeries)

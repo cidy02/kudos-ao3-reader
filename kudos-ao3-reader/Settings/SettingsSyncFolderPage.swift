@@ -158,6 +158,7 @@ struct FolderSyncSettingsSection: View {
                 )) {
                     Label("Auto Sync", systemImage: "arrow.triangle.2.circlepath.circle")
                 }
+                .accentFill()
 
                 Button(action: onSyncNow) {
                     Label("Sync Now", systemImage: "arrow.triangle.2.circlepath")
@@ -202,7 +203,7 @@ struct FolderSyncSettingsSection: View {
 
             if isPreparing || isSyncing {
                 HStack(spacing: 12) {
-                    ProgressView()
+                    ProgressView().accentFill()
                     Text(isSyncing ? "Syncing library…" : "Preparing your library…")
                         .foregroundStyle(.secondary)
                 }

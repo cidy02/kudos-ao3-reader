@@ -1075,6 +1075,7 @@ struct SubjectChip: View {
     var horizontalPadding: CGFloat?
     var verticalPadding: CGFloat?
 
+    @Environment(\.accentFill) private var fill
     @Environment(ThemeManager.self) private var themeManager
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @ScaledMetric(relativeTo: .caption) private var leadingImageSize: CGFloat = 11
@@ -1124,7 +1125,7 @@ struct SubjectChip: View {
             // the page — `onEffectiveTint`'s problem, solved the same way: from
             // the fill's luminance rather than from a per-theme case.
             isSelected
-                ? ThemeManager.label(on: palette?.accent ?? themeManager.effectiveTint)
+                ? ThemeManager.label(on: palette?.accent ?? fill)
                 : .primary
         }
     }
@@ -1155,7 +1156,7 @@ struct SubjectChip: View {
         case .pill(let isSelected):
             Capsule()
                 .fill(isSelected
-                    ? AnyShapeStyle(palette?.accent ?? Color.accentColor)
+                    ? AnyShapeStyle(palette?.accent ?? fill)
                     : AnyShapeStyle(theme.glassFill()))
         }
     }
@@ -1184,14 +1185,16 @@ struct GlassCircleButton<Label: View>: View {
     @ViewBuilder var label: () -> Label
 
     @Environment(ThemeManager.self) private var themeManager
+    @Environment(\.accentFill) private var fill
+    @Environment(\.accentInk) private var ink
 
     var body: some View {
         let theme = themeManager.appTheme
-        let accent = palette?.accent ?? Color.accentColor
+        let accent = palette?.accent ?? fill
         Button(action: action) {
             label()
                 .font(.system(size: 17, weight: .medium))
-                .foregroundStyle(isAccented ? (palette?.accentOnFill ?? Color.accentColor) : Color.primary)
+                .foregroundStyle(isAccented ? (palette?.accentOnFill ?? ink) : Color.primary)
                 .frame(width: SubjectMetrics.chromeButton, height: SubjectMetrics.chromeButton)
                 .background {
                     Circle()
@@ -1355,7 +1358,8 @@ extension View {
     /// alerts are attached outside the wash applies it again at the end of
     /// `body`, since environment only flows inward.
     func screenTint(_ palette: SubjectPalette) -> some View {
-        tint(palette.tint).environment(\.screenTint, palette.tint)
+        accentTint(palette.tint, on: palette.theme)
+            .environment(\.screenTint, palette.tint)
     }
 
     /// The label on a `.borderedProminent` / `.glassProminent` button: black or
@@ -1367,10 +1371,9 @@ extension View {
 }
 
 private struct ProminentLabel: ViewModifier {
-    @Environment(\.screenTint) private var screenTint
-    @Environment(ThemeManager.self) private var theme
+    @Environment(\.accentFill) private var fill
 
     func body(content: Content) -> some View {
-        content.foregroundStyle(ThemeManager.label(on: screenTint ?? theme.effectiveTint))
+        content.foregroundStyle(ThemeManager.label(on: fill))
     }
 }

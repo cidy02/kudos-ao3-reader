@@ -31,8 +31,14 @@ nonisolated struct WorkConversionRecord: Codable, Equatable, Sendable {
         self.convertedAt = convertedAt
     }
 
+    /// Which app converted it: Android writes `"android"`, iOS leaves it out. Each app judges
+    /// only its own records, because each numbers its converter's versions on its own scale: an
+    /// Android record at version 1 is not "older" than iOS's version 9 (T-421, 2026-10-20).
+    var converterPlatform: String?
+
     var isStale: Bool {
-        converterVersion < ImportedDocumentConverter.converterVersion
+        (converterPlatform == nil || converterPlatform == "ios")
+            && converterVersion < ImportedDocumentConverter.converterVersion
     }
 
     // MARK: - Storage

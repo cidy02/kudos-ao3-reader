@@ -24,7 +24,7 @@ private struct HeroWash: ViewModifier {
                         .ignoresSafeArea()
                 }
             }
-            .tint(palette?.tint)
+            .accentTint(palette?.tint ?? themeManager.effectiveTint, on: themeManager.appTheme)
             .environment(\.screenTint, palette?.tint)
             .reportsScreenWash(palette?.tint)
     }

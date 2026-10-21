@@ -194,6 +194,7 @@ struct TagSetView: View {
                 Toggle("", isOn: .constant(tagSet?.isVisible ?? true))
                     .labelsHidden()
                     .disabled(true)
+                    .accentFill()
             }
         }
         .subjectPanel()
@@ -364,6 +365,7 @@ struct TagSetView: View {
                 Toggle("", isOn: .constant(tagSet?.isNominated ?? false))
                     .labelsHidden()
                     .disabled(true)
+                    .accentFill()
             }
 
             SubjectRowSeparator()
@@ -595,6 +597,7 @@ struct TagSetView: View {
         HStack(spacing: 10) {
             ProgressView()
                 .controlSize(.small)
+                .accentFill()
             Text("Loading tag set…")
                 .font(.system(size: loadingSize))
                 .foregroundStyle(.secondary)
@@ -618,6 +621,8 @@ struct TagSetView: View {
                 Task { await loadTagSet() }
             }
             .buttonStyle(.bordered)
+            .foregroundStyle(.accentInk)
+            .accentFill()
             .tint(palette.tint)
             .padding(.top, 4)
         }

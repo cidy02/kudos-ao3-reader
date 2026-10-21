@@ -76,7 +76,7 @@ struct DownloadDateImportConfirmation: View {
                                 ),
                                 in: ...today,
                                 displayedComponents: .date
-                            )
+                            ).accentFill()
                         }
                     }
                 }
@@ -106,6 +106,7 @@ struct DownloadDateImportConfirmation: View {
                         onImport(selected)
                     }
                     .buttonStyle(.borderedProminent)
+                    .accentFill()
                 }
             }
         }

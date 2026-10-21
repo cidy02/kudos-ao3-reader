@@ -56,6 +56,7 @@ struct WritingDraftsView: View {
                 ProgressView("Loading drafts…")
                     .frame(maxWidth: .infinity)
                     .pageBodyRow(top: 18, gutter: gutter)
+                    .accentFill()
             }
             if let errorMessage {
                 Section {
@@ -409,7 +410,7 @@ struct WritingTagsDestination: View {
                     Button("Try Again") { retry += 1 }
                 }.padding()
             } else {
-                ProgressView("Loading tags…")
+                ProgressView("Loading tags…").accentFill()
             }
         }
         .task(id: "\(auth.sessionGeneration):\(retry)") {
@@ -460,7 +461,7 @@ struct WritingBulkEditDestination: View {
                     Button("Try Again") { retry += 1 }
                 }.padding()
             } else {
-                ProgressView("Loading \(workIDs.count) works…")
+                ProgressView("Loading \(workIDs.count) works…").accentFill()
             }
         }
         .task(id: "\(auth.sessionGeneration):\(retry)") {
@@ -555,7 +556,7 @@ struct WritingLoaderPage: View {
                             Button("Try Again", action: onRetry)
                         }
                     } else {
-                        ProgressView().controlSize(.large)
+                        ProgressView().controlSize(.large).accentFill()
                     }
                 }
                 .frame(maxWidth: .infinity)

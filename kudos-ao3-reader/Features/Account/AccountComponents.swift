@@ -332,6 +332,7 @@ struct AccountProfileCard: View {
                 }
             }
             .buttonStyle(.borderedProminent)
+            .accentFill()
             .prominentLabel()
             .buttonBorderShape(.capsule)
             .disabled(auth.status == .signingIn)
@@ -444,7 +445,7 @@ struct AccountIconSquare: View {
             .frame(width: 22, height: 22)
             .background(
                 RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .fill(.tint.opacity(0.16))
+                    .fill(.accentFill.opacity(0.16))
                     .overlay(
                         RoundedRectangle(cornerRadius: 6, style: .continuous)
                             .strokeBorder(theme.appTheme.glassStroke(0.1), lineWidth: 0.5)
@@ -739,6 +740,8 @@ struct AccountWorksInlineSection: View {
                     .labelStyle(.titleAndIcon)
             }
             .buttonStyle(.bordered)
+            .foregroundStyle(.accentInk)
+            .accentFill()
             .buttonBorderShape(.roundedRectangle(radius: AccountControlMetrics.inlineCornerRadius))
             .controlSize(.small)
         }
@@ -755,6 +758,7 @@ struct AccountWorksInlineSection: View {
                     ProgressView()
                         .frame(maxWidth: .infinity)
                         .padding()
+                        .accentFill()
                 }
             } else {
                 rows(useCardRow: useCardRow)

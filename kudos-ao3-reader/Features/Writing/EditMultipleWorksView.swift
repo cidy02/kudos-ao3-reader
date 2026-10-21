@@ -331,6 +331,7 @@ struct EditMultipleWorksView: View {
         SubjectFormRow(label: "Remove me as a co-creator", arrangement: .control) {
             Toggle("Remove me as a co-creator", isOn: $changes.removesSelfAsCreator)
                 .labelsHidden()
+                .accentFill()
         }
         .panelSegment(1, of: 2, gutter: gutter)
     }

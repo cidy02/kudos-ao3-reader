@@ -708,7 +708,7 @@ struct AO3AccountWorksList: View {
         }
         .overlay {
             if phase == .loading {
-                ProgressView().controlSize(.large)
+                ProgressView().controlSize(.large).accentFill()
             } else if visibleWorks.isEmpty, !works.isEmpty {
                 // Everything on the page was filtered out by the refine facets.
                 ContentUnavailableView {
