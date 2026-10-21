@@ -1,6 +1,6 @@
 {
     "version": 8,
-    "exportedAt": "2026-10-04T14:28:09.910Z",
+    "exportedAt": "2026-10-21T19:19:14.544Z",
     "works": [
         {
             "id": "2000abcd-0000-4000-8000-00000000000a",
@@ -8,7 +8,7 @@
             "author": "Archive Author",
             "summary": "",
             "sourceURL": "https://archiveofourown.org/works/2001",
-            "dateAdded": "2026-10-04T14:27:09.855Z",
+            "dateAdded": "2026-10-21T19:18:14.498Z",
             "isFavorite": false,
             "hasGivenKudos": false,
             "isSaved": false,
@@ -39,8 +39,8 @@
             "hits": 0,
             "knownChapterCount": 0,
             "collectionIDs": [],
-            "createdAt": "2026-10-04T14:27:09.855Z",
-            "lastModifiedAt": "2026-10-04T14:27:09.855Z",
+            "createdAt": "2026-10-21T19:18:14.498Z",
+            "lastModifiedAt": "2026-10-21T19:18:14.498Z",
             "isDeleted": false,
             "assetIdentifier": "2000ABCD-0000-4000-8000-00000000000A.epub",
             "datePublished": "",
@@ -62,7 +62,7 @@
             "author": "Archive Author",
             "summary": "",
             "sourceURL": "https://archiveofourown.org/works/2002",
-            "dateAdded": "2026-10-04T14:27:09.864Z",
+            "dateAdded": "2026-10-21T19:18:14.507Z",
             "isFavorite": false,
             "hasGivenKudos": false,
             "isSaved": false,
@@ -93,8 +93,8 @@
             "hits": 0,
             "knownChapterCount": 0,
             "collectionIDs": [],
-            "createdAt": "2026-10-04T14:27:09.864Z",
-            "lastModifiedAt": "2026-10-04T14:27:09.864Z",
+            "createdAt": "2026-10-21T19:18:14.507Z",
+            "lastModifiedAt": "2026-10-21T19:18:14.507Z",
             "isDeleted": false,
             "assetIdentifier": "2000ABCD-0000-4000-8000-00000000000B.epub",
             "datePublished": "",
@@ -116,7 +116,7 @@
             "author": "Android Author",
             "summary": "",
             "sourceURL": "https://archiveofourown.org/works/3001",
-            "dateAdded": "2026-10-04T14:28:09.910Z",
+            "dateAdded": "2026-10-21T19:19:14.544Z",
             "isFavorite": false,
             "hasGivenKudos": false,
             "isSaved": true,
@@ -143,7 +143,7 @@
             "workTagsFetched": false,
             "userTags": [],
             "collectionIDs": [],
-            "lastModifiedAt": "2026-10-04T14:28:09.910Z",
+            "lastModifiedAt": "2026-10-21T19:19:14.544Z",
             "isDeleted": false,
             "datePublished": "",
             "dateUpdated": "",
@@ -152,13 +152,19 @@
             "ao3WorkID": 3001,
             "keepInProgressOverride": false,
             "bookmarks": 0,
-            "epubDigest": "2b23df13bc23d44f630ce9dedbe72e1ed314d7af1ae65ddd9f73c38f762a290a",
+            "epubDigest": "fcc6ab12affec30f4af34d4e3025ef7a04640bc1de5c47e5de3899b8e31f9882",
             "legacyReaderProgress": null,
             "hiddenFromHistoryAt": null
         }
     ],
     "bookmarks": [],
-    "fonts": [],
+    "fonts": [
+        {
+            "name": "Kudos Fixture Regular",
+            "fileName": "kudos-cross-platform-fixture.ttf",
+            "dateAdded": "2023-11-14T22:14:20.000Z"
+        }
+    ],
     "settings": {
         "readerFontID": "system",
         "readerMode": "scroll",
@@ -188,18 +194,89 @@
         "appVersion": "0.2.1",
         "schemaVersion": 8
     },
-    "collections": [],
+    "collections": [
+        {
+            "id": "e0000000-0000-4000-8000-000000000001",
+            "name": "Deleted Portable Collection",
+            "dateAdded": "2023-11-14T22:14:20.000Z",
+            "workIDs": [],
+            "createdAt": "2023-11-14T22:14:20.000Z",
+            "lastModifiedAt": "2023-11-14T22:31:20.000Z",
+            "deletedAt": "2023-11-14T22:31:20.000Z",
+            "isDeleted": true,
+            "permanentDeletionScheduledAt": "2027-01-19T22:35:16.957Z",
+            "syncStatusRaw": "localOnly",
+            "showsOnHome": false,
+            "workOrderRaw": ""
+        }
+    ],
     "savedSearches": [],
-    "readingQueues": [],
+    "readingQueues": [
+        {
+            "id": "e0000000-0000-4000-8000-000000000002",
+            "name": "Deleted Portable Queue",
+            "kindRaw": "custom",
+            "sortOrder": 0,
+            "dateCreated": "2023-11-14T22:14:20.000Z",
+            "dateUpdated": "2023-11-14T22:31:20.000Z",
+            "lastMembershipChangedAt": "2023-11-14T22:14:20.000Z",
+            "deletedAt": "2023-11-14T22:31:20.000Z",
+            "isDeleted": true,
+            "permanentDeletionScheduledAt": "2027-01-19T22:35:16.957Z",
+            "tagNames": [],
+            "isPinned": false
+        }
+    ],
     "readingQueueMemberships": [],
-    "annotations": [],
+    "annotations": [
+        {
+            "id": "e0000000-0000-4000-8000-000000000003",
+            "workID": "2000abcd-0000-4000-8000-00000000000b",
+            "kindRaw": "highlight",
+            "colorRaw": "yellow",
+            "locatorString": "{\"href\":\"deleted.xhtml\",\"locations\":{\"totalProgression\":0.33}}",
+            "selectedText": "Deleted passage",
+            "note": "Deleted reader note",
+            "progression": 0.0,
+            "spineIndex": 0,
+            "chapterTitle": "",
+            "createdAt": "2023-11-14T22:14:20.000Z",
+            "lastModifiedAt": "2023-11-14T22:31:20.000Z",
+            "deletedAt": "2023-11-14T22:31:20.000Z",
+            "isPendingDeletion": true
+        }
+    ],
     "readingSessions": [],
     "readingFavorites": [],
     "fandomReadWatermarks": [],
-    "tombstones": [],
+    "tombstones": [
+        {
+            "id": "c0000000-0000-4000-8000-000000000002",
+            "recordID": "b0000000-0000-4000-8000-000000000002",
+            "recordTypeRaw": "savedSearch",
+            "createdAt": "2023-11-14T22:31:20.000Z",
+            "lastModifiedAt": "2023-11-14T22:31:20.000Z",
+            "sourceURL": "https://archiveofourown.org/works/829998",
+            "ao3WorkID": 829998,
+            "deletedOnDeviceID": "cross-platform-fixture",
+            "deletionReason": "fixture coverage",
+            "signerPublicKey": "03a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8",
+            "signature": "ed5fe7713c031096df77adb16525722bf6c7dd8485bebd596eb9977570d55a5bef8883cb1545e9765d935143b81adf95b2e41f47eabc999a9230621ccc067904"
+        }
+    ],
     "pronunciations": {
-        "fandoms": {},
-        "global": {},
-        "works": {}
+        "global": {
+            "Nico": "nˈikoʊ"
+        },
+        "fandoms": {
+            "Portable Fandom": {
+                "Sam": "sæm"
+            }
+        },
+        "works": {
+            "820002": {
+                "Sam": "sɑm"
+            }
+        }
     }
 }

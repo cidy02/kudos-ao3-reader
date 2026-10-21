@@ -20,6 +20,8 @@ struct CrossPlatformFolderSyncTests {
     /// reads, so a change to its layout or names fails here first and there
     /// next. `KUDOS_WRITE_GOLDEN=1` rewrites the fixture.
     @Test func theFolderIOSWritesIsTheFixtureAndroidReads() async throws {
+        let restoreStorage = try CrossPlatformFixtureFields.isolateStorage()
+        defer { restoreStorage() }
         let container = try container()
         let context = container.mainContext
         let defaults = try testDefaults()
@@ -47,6 +49,7 @@ struct CrossPlatformFolderSyncTests {
             work.hasEPUB = true
             works.append(work)
         }
+        _ = try CrossPlatformFixtureFields.seed(in: context, work: try #require(works.last))
         try context.save()
         // The first is a converted import: the file it was made from and the
         // record of its conversion go into the folder's `Originals/`.
@@ -61,6 +64,7 @@ struct CrossPlatformFolderSyncTests {
         _ = try await FolderSyncService.syncUp(in: context, defaults: defaults)
 
         let written = folder.appendingPathComponent(FolderSyncService.syncDirectoryName)
+        try expectUserFields(in: written, context: context)
         let paths = fixturePaths()
         if writesGolden {
             try? FileManager.default.removeItem(at: paths.iosFolder)
@@ -70,8 +74,12 @@ struct CrossPlatformFolderSyncTests {
             )
             try FileManager.default.copyItem(at: written, to: paths.iosFolder)
         }
-        // The names are the contract here. What the manifest holds is the
-        // backup goldens' business.
+        try CrossPlatformFixtureFields.assertManifest(
+            Data(contentsOf: paths.iosFolder.appendingPathComponent("manifest.json"))
+        )
+        #expect(try Data(contentsOf: paths.iosFolder.appendingPathComponent("Fonts")
+            .appendingPathComponent(CrossPlatformFixtureFields.fontFile)) == CrossPlatformFixtureFields.fontBytes)
+        // Names and user-made fields are both part of the shared-folder contract.
         #expect(try relativeFiles(in: written) == relativeFiles(in: paths.iosFolder))
     }
 
@@ -79,6 +87,8 @@ struct CrossPlatformFolderSyncTests {
     /// `-Dkudos.writeGolden=true`). Every EPUB it lists arrives on this
     /// device, and a full sync from here leaves Android's files in place.
     @Test func aFolderAndroidWroteIsReadAndKept() async throws {
+        let restoreStorage = try CrossPlatformFixtureFields.isolateStorage()
+        defer { restoreStorage() }
         let folder = try temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: folder) }
         let syncDirectory = folder.appendingPathComponent(FolderSyncService.syncDirectoryName)
@@ -89,6 +99,12 @@ struct CrossPlatformFolderSyncTests {
         let context = container.mainContext
         let defaults = try testDefaults()
         defer { FolderSyncService.disconnect(defaults: defaults) }
+        let incoming = try Data(contentsOf: syncDirectory.appendingPathComponent("manifest.json"))
+        try CrossPlatformFixtureFields.assertManifest(incoming)
+        let manifest = try KudosBackupContents.decodeManifest(incoming)
+        for tombstone in manifest.tombstones {
+            #expect(TombstoneTrustStore.add(tombstone.signerPublicKey, defaults: defaults))
+        }
         try FolderSyncService.connect(to: folder, defaults: defaults)
 
         _ = try await FolderSyncService.syncNow(in: context, defaults: defaults)
@@ -96,6 +112,7 @@ struct CrossPlatformFolderSyncTests {
         let restored = try context.fetch(FetchDescriptor<SavedWork>())
         defer { restored.forEach { try? FileManager.default.removeItem(at: $0.fileURL) } }
         defer { removeOriginals(of: restored.map(\.id)) }
+        try expectUserFields(in: syncDirectory, context: context)
         #expect(restored.count == 2)
         for work in restored {
             #expect(work.hasEPUB)
@@ -118,6 +135,8 @@ struct CrossPlatformFolderSyncTests {
     /// with its EPUB and its original, and a full sync from here leaves every
     /// file in place and goes on listing all three works.
     @Test func aFolderBothAppsWroteIsReadAndKept() async throws {
+        let restoreStorage = try CrossPlatformFixtureFields.isolateStorage()
+        defer { restoreStorage() }
         let folder = try temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: folder) }
         let syncDirectory = folder.appendingPathComponent(FolderSyncService.syncDirectoryName)
@@ -128,6 +147,12 @@ struct CrossPlatformFolderSyncTests {
         let context = container.mainContext
         let defaults = try testDefaults()
         defer { FolderSyncService.disconnect(defaults: defaults) }
+        let incoming = try Data(contentsOf: syncDirectory.appendingPathComponent("manifest.json"))
+        try CrossPlatformFixtureFields.assertManifest(incoming)
+        let manifest = try KudosBackupContents.decodeManifest(incoming)
+        for tombstone in manifest.tombstones {
+            #expect(TombstoneTrustStore.add(tombstone.signerPublicKey, defaults: defaults))
+        }
         try FolderSyncService.connect(to: folder, defaults: defaults)
 
         _ = try await FolderSyncService.syncNow(in: context, defaults: defaults)
@@ -135,6 +160,7 @@ struct CrossPlatformFolderSyncTests {
         let restored = try context.fetch(FetchDescriptor<SavedWork>())
         defer { restored.forEach { try? FileManager.default.removeItem(at: $0.fileURL) } }
         defer { removeOriginals(of: restored.map(\.id)) }
+        try expectUserFields(in: syncDirectory, context: context)
         #expect(Set(restored.map(\.title)) == ["Folder Sync One", "Folder Sync Two", "Android's own work"])
         for work in restored {
             #expect(work.hasEPUB)
@@ -154,6 +180,13 @@ struct CrossPlatformFolderSyncTests {
         )
         #expect(written.works.count == 3)
         #expect(written.works.filter(\.hasEPUB).count == 3)
+    }
+
+    private func expectUserFields(in folder: URL, context: ModelContext) throws {
+        try CrossPlatformFixtureFields.assertManifest(Data(contentsOf: folder.appendingPathComponent("manifest.json")))
+        try CrossPlatformFixtureFields.assertRestored(in: context)
+        #expect(try Data(contentsOf: folder.appendingPathComponent("Fonts")
+            .appendingPathComponent(CrossPlatformFixtureFields.fontFile)) == CrossPlatformFixtureFields.fontBytes)
     }
 
     /// Every file in the folder's `Originals/` is on this device too, byte for
@@ -235,7 +268,8 @@ struct CrossPlatformFolderSyncTests {
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
             WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self,
-            SavedSearch.self, SyncTombstone.self
+            SavedSearch.self, SyncTombstone.self, ReadingAnnotation.self,
+            ReadingSession.self, ReadingFavorite.self, FandomReadWatermark.self
         ])
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
         return try ModelContainer(for: schema, configurations: [configuration])
