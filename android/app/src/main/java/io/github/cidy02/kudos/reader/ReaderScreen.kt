@@ -216,6 +216,18 @@ private fun ReaderReading(
     val hasOriginal = remember(state.work.id, state.work.isDeleted) {
         workActions.originalIntent(state.work) != null
     }
+    var staleConversion by remember(state.work.id) { mutableStateOf(false) }
+    var rebuildingOriginal by remember { mutableStateOf(false) }
+    LaunchedEffect(state.work.id, state.work.lastModifiedAt) {
+        staleConversion = viewModel.readerWorkImporter?.conversionIsStale(state.work) == true
+    }
+    if (rebuildingOriginal) viewModel.readerWorkImporter?.let { importer ->
+        io.github.cidy02.kudos.works.RebuildOriginalDialog(
+            work = state.work, importer = importer,
+            onRebuilt = { viewModel.reloadAfterRebuild() },
+            onDismiss = { rebuildingOriginal = false }
+        )
+    }
     val haptics = LocalHapticFeedback.current
     val opener = remember { ReadiumPublicationOpener(context) }
     val linkHandler = remember { ReaderLinkHandler() }
@@ -556,7 +568,8 @@ private fun ReaderReading(
                             },
                             onFind = { showSearchSheet = true },
                             onComments = onOpenComments,
-                            onSettings = { showDisplaySheet = true }
+                            onSettings = { showDisplaySheet = true },
+                            onRebuild = if (staleConversion) ({ rebuildingOriginal = true }) else null
                         )
 
                         // Round Actions
@@ -598,8 +611,9 @@ private fun ReaderReading(
                                             scope.launch {
                                                 val from = state.liveProgress?.locatorJson
                                                     ?.let { ReadiumNavigatorController.locatorFromJson(it) }
-                                                val paragraphs = ReaderContentText.paragraphs(publication, from, viewModel.readsAuthorNotes())
-                                                if (paragraphs.isNotEmpty()) speechController.startReading(paragraphs)
+                                                speechController.startReading(ReaderContentText.source(
+                                                    publication, from, viewModel.readsAuthorNotes()
+                                                ))
                                             }
                                         }
                                     },
@@ -710,19 +724,12 @@ private fun ReaderReading(
                                         scope.launch {
                                             val from = state.liveProgress?.locatorJson
                                                 ?.let { ReadiumNavigatorController.locatorFromJson(it) }
-                                            val paragraphs = ReaderContentText.paragraphs(publication, from, viewModel.readsAuthorNotes())
-                                                .ifEmpty {
-                                                    buildList {
-                                                        if (state.work.title.isNotBlank()) add(state.work.title)
-                                                        tocEntries.forEach { e ->
-                                                            if (e.title.isNotBlank()) add(e.title)
-                                                        }
-                                                    }
-                                                }
-                                                .ifEmpty {
-                                                    listOf(state.work.title.ifBlank { "No text available." })
-                                                }
-                                            speechController.startReading(paragraphs)
+                                            speechController.startReading(ReaderContentText.source(
+                                                publication, from, viewModel.readsAuthorNotes()
+                                            ).withFallback(buildList {
+                                                if (state.work.title.isNotBlank()) add(state.work.title)
+                                                tocEntries.forEach { if (it.title.isNotBlank()) add(it.title) }
+                                            }.ifEmpty { listOf(state.work.title.ifBlank { "No text available." }) }))
                                         }
                                     }
                                 },
@@ -733,6 +740,9 @@ private fun ReaderReading(
                                 },
                                 onSkipNext = { speechController.skipForward() },
                                 onSkipPrevious = { speechController.skipBackward() },
+                                onSeekSpeech = speechController::seek,
+                                onSpeechSeekStart = speechController::beginSeeking,
+                                onSpeechSeekEnd = speechController::endSeeking,
                                 onDownloadVoiceModel = { confirmVoicePack = true }
                             )
                         }

@@ -114,7 +114,8 @@ fun WorkDetailMyCopySheet(
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
     onFilterTag: (String) -> Unit = {},
-    onRetryPreservation: () -> Unit = {}
+    onRetryPreservation: () -> Unit = {},
+    conversionIsStale: Boolean = true
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val tokens = LocalKudosTokens.current
@@ -245,6 +246,7 @@ fun WorkDetailMyCopySheet(
                     MyCopyOriginSection(
                         work = work,
                         canRebuildFromOriginal = canRebuildFromOriginal,
+                        conversionIsStale = conversionIsStale,
                         isWorking = isWorking,
                         palette = palette,
                         onRebuildFromOriginal = onRebuildFromOriginal
@@ -552,6 +554,7 @@ private fun DownloadedDateEditorDialog(
 @Composable
 private fun MyCopyOriginSection(
     work: SavedWork,
+    conversionIsStale: Boolean,
     canRebuildFromOriginal: Boolean,
     isWorking: Boolean,
     palette: SubjectPalette,
@@ -596,6 +599,7 @@ private fun MyCopyOriginSection(
 
         if (canRebuildFromOriginal) {
             MyCopyGroupHeader(title = "Conversion")
+            if (!conversionIsStale) MyCopyValueRow(title = "Conversion", value = "Up to date")
             Text(
                 text = "The original file stays on your device, so you can rebuild this work without downloading it again.",
                 fontSize = 12.sp,
@@ -625,7 +629,10 @@ private fun MyCopyOriginSection(
             }
 
             Text(
-                text = "Rebuilding reads the original file again. Your progress, tags, and collections are kept.",
+                text = if (conversionIsStale)
+                    "Kudos has a newer way to build this work. Rebuilding reads the original " +
+                        "file again and keeps your progress, tags, and collections."
+                else "Rebuilding reads the original file again. Your progress, tags, and collections are kept.",
                 fontSize = 12.sp,
                 color = tokens.secondaryInk
             )

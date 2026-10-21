@@ -36,6 +36,7 @@ import androidx.compose.material.icons.filled.ChatBubbleOutline
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.FindInPage
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.TextFields
 import androidx.compose.runtime.Composable
@@ -91,7 +92,8 @@ internal fun readerFanPills(
     onContents: (Int) -> Unit,
     onFind: () -> Unit,
     onComments: (Long, Int?) -> Unit,
-    onSettings: () -> Unit
+    onSettings: () -> Unit,
+    onRebuild: (() -> Unit)? = null
 ): List<ReaderFanMenuPill> = buildList {
     add(ReaderFanMenuPill(
         id = "contents",
@@ -113,6 +115,10 @@ internal fun readerFanPills(
             action = { onComments(ao3WorkId, commentsChapter) }
         ))
     }
+    if (onRebuild != null) add(ReaderFanMenuPill(
+        id = "rebuild", title = "Rebuild from Original", icon = Icons.Filled.Refresh,
+        action = onRebuild
+    ))
     add(ReaderFanMenuPill(
         id = "settings", title = "Themes & Settings", icon = Icons.Filled.TextFields,
         action = onSettings

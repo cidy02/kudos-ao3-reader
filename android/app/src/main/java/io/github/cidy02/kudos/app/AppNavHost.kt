@@ -1140,7 +1140,8 @@ fun AppNavHost(
                         container.settingsRepository,
                         container.annotationRepository,
                         workId,
-                        container.writeRepository
+                        container.writeRepository,
+                        readerWorkImporter = container.workImporter
                     )
                 )
                 ReaderScreen(

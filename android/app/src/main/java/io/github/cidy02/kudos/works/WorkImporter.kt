@@ -349,6 +349,9 @@ class WorkImporter(
             )
             is FileWriteResult.Success -> {
                 val saved = workRepository.upsert(work)
+                if (format != ImportedFileFormat.EPUB) {
+                    recordConversion(saved.id, format, displayName ?: title)
+                }
                 WorkImportResult.Success(saved)
             }
         }
@@ -360,6 +363,20 @@ class WorkImporter(
      */
     suspend fun canRebuildFromOriginal(work: SavedWork): Boolean =
         fileStore.originalExists(work.id)
+
+    suspend fun conversionIsStale(work: SavedWork): Boolean =
+        canRebuildFromOriginal(work) && WorkConversionRecord.isStale(
+            WorkConversionRecord.decode(fileStore.readConversionRecord(work.id))
+        )
+
+    private suspend fun recordConversion(workId: String, format: ImportedFileFormat, originalName: String) {
+        // Best effort, like iOS: a missing stamp leaves a readable EPUB eligible for rebuilding.
+        fileStore.writeConversionRecord(workId, WorkConversionRecord(
+            format = WorkConversionRecord.formatName(format),
+            originalFileName = originalName,
+            converterPlatform = "android"
+        ).encode())
+    }
 
     /**
      * Re-runs the current converters over the archived source and replaces the
@@ -393,9 +410,12 @@ class WorkImporter(
             is FileWriteResult.Success -> {
                 val current = workRepository.getWork(work.id)
                     ?: return WorkImportResult.Failure(null, AO3Error.Validation("This local work no longer exists."))
-                WorkImportResult.Success(workRepository.upsert(
+                val saved = workRepository.upsert(
                     current.copy(hasEpub = true, remoteEpubPending = false, lastModifiedAt = Instant.now())
-                ))
+                )
+                val previous = WorkConversionRecord.decode(fileStore.readConversionRecord(work.id))
+                recordConversion(work.id, format, previous?.originalFileName ?: "${work.id}.$extension")
+                WorkImportResult.Success(saved)
             }
         }
     }

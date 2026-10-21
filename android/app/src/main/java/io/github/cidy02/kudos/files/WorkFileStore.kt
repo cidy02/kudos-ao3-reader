@@ -125,9 +125,8 @@ open class WorkFileStore(
 
     /**
      * iOS `WorkConversionRecord`, `<work>.conversion.json` beside the original: which converter
-     * made the EPUB, and from which file. Android writes none of its own. It keeps the one a
-     * backup or the sync folder brings, byte for byte, and writes it back out, so a library
-     * that passes through Android still has it.
+     * made the EPUB, and from which file. Backup and sync preserve foreign records byte for byte;
+     * a successful local conversion replaces the stamp with Android's own version.
      */
     suspend fun conversionRecordExists(workId: String): Boolean = withContext(Dispatchers.IO) {
         runCatching { Files.isRegularFile(conversionRecordPath(workId)) }.getOrDefault(false)
@@ -142,7 +141,18 @@ open class WorkFileStore(
     suspend fun writeConversionRecord(workId: String, bytes: ByteArray): Boolean = withContext(Dispatchers.IO) {
         runCatching {
             Files.createDirectories(originalsDirectory)
-            Files.write(conversionRecordPath(workId), bytes)
+            val destination = conversionRecordPath(workId)
+            val temp = Files.createTempFile(originalsDirectory, ".conversion-", ".tmp")
+            try {
+                Files.write(temp, bytes)
+                try {
+                    Files.move(temp, destination, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
+                } catch (_: IOException) {
+                    Files.move(temp, destination, StandardCopyOption.REPLACE_EXISTING)
+                }
+            } finally {
+                Files.deleteIfExists(temp)
+            }
         }.isSuccess
     }
 

@@ -2,6 +2,7 @@ package io.github.cidy02.kudos.reader
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.DragInteraction
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -47,7 +48,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.TextStyle
@@ -58,6 +64,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.cidy02.kudos.reader.speech.SpeechStatus
 import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 
 /**
  * Bottom floating card matching iOS `ReaderPositionCard.swift`:
@@ -85,6 +96,9 @@ fun ReaderPositionCard(
     onStopSpeech: () -> Unit = {},
     onSkipNext: () -> Unit = {},
     onSkipPrevious: () -> Unit = {},
+    onSeekSpeech: (Int) -> Unit = {},
+    onSpeechSeekStart: () -> Unit = {},
+    onSpeechSeekEnd: () -> Unit = {},
     onDownloadVoiceModel: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
@@ -152,6 +166,9 @@ fun ReaderPositionCard(
                     onStop = onStopSpeech,
                     onSkipNext = onSkipNext,
                     onSkipPrevious = onSkipPrevious,
+                    onSeek = onSeekSpeech,
+                    onSeekStart = onSpeechSeekStart,
+                    onSeekEnd = onSpeechSeekEnd,
                     onDownloadStart = onDownloadVoiceModel
                 )
 
@@ -319,6 +336,9 @@ private fun PositionMiniPlayer(
     onStop: () -> Unit,
     onSkipNext: () -> Unit,
     onSkipPrevious: () -> Unit,
+    onSeek: (Int) -> Unit,
+    onSeekStart: () -> Unit,
+    onSeekEnd: () -> Unit,
     onDownloadStart: () -> Unit
 ) {
     val tokens = LocalKudosTokens.current
@@ -388,16 +408,11 @@ private fun PositionMiniPlayer(
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    IconButton(
-                        onClick = onSkipPrevious,
-                        modifier = Modifier.size(44.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.SkipPrevious,
-                            contentDescription = "Previous paragraph",
-                            tint = tokens.primaryInk
-                        )
-                    }
+                    SpeechSkipButton(
+                        icon = Icons.Filled.SkipPrevious, label = "Previous paragraph", delta = -1,
+                        onClick = onSkipPrevious, onSeek = onSeek,
+                        onSeekStart = onSeekStart, onSeekEnd = onSeekEnd
+                    )
 
                     IconButton(
                         onClick = if (status == SpeechStatus.PLAYING) onPause else onPlay,
@@ -411,16 +426,11 @@ private fun PositionMiniPlayer(
                         )
                     }
 
-                    IconButton(
-                        onClick = onSkipNext,
-                        modifier = Modifier.size(44.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.SkipNext,
-                            contentDescription = "Next paragraph",
-                            tint = tokens.primaryInk
-                        )
-                    }
+                    SpeechSkipButton(
+                        icon = Icons.Filled.SkipNext, label = "Next paragraph", delta = 1,
+                        onClick = onSkipNext, onSeek = onSeek,
+                        onSeekStart = onSeekStart, onSeekEnd = onSeekEnd
+                    )
                 }
 
                 // Trailing Stop Button
@@ -448,5 +458,58 @@ private fun PositionMiniPlayer(
                 )
             }
         }
+    }
+}
+
+/** Tap skips; a hold repeats one paragraph at a time and preserves paused playback on release. */
+@Composable
+private fun SpeechSkipButton(
+    icon: ImageVector,
+    label: String,
+    delta: Int,
+    onClick: () -> Unit,
+    onSeek: (Int) -> Unit,
+    onSeekStart: () -> Unit,
+    onSeekEnd: () -> Unit
+) {
+    val click by rememberUpdatedState(onClick)
+    val seek by rememberUpdatedState(onSeek)
+    val start by rememberUpdatedState(onSeekStart)
+    val end by rememberUpdatedState(onSeekEnd)
+    Box(
+        modifier = Modifier.size(44.dp)
+            .semantics(mergeDescendants = true) {
+                contentDescription = label
+                role = Role.Button
+                onClick { click(); true }
+            }
+            .pointerInput(delta) {
+                coroutineScope {
+                    var repeating: Job? = null
+                    detectTapGestures(
+                        onTap = { click() },
+                        onLongPress = {
+                            start()
+                            repeating = launch {
+                                while (isActive) {
+                                    seek(delta)
+                                    delay(180)
+                                }
+                            }
+                        },
+                        onPress = {
+                            try {
+                                tryAwaitRelease()
+                            } finally {
+                                repeating?.let { it.cancel(); end() }
+                                repeating = null
+                            }
+                        }
+                    )
+                }
+            },
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(icon, contentDescription = null, tint = LocalKudosTokens.current.primaryInk)
     }
 }
