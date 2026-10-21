@@ -1,29 +1,66 @@
 {
   "annotations" : [
-
+    {
+      "chapterTitle" : "",
+      "colorRaw" : "yellow",
+      "createdAt" : "2023-11-14T22:14:20.000Z",
+      "deletedAt" : "2023-11-14T22:31:20.000Z",
+      "id" : "E0000000-0000-4000-8000-000000000003",
+      "isPendingDeletion" : true,
+      "kindRaw" : "highlight",
+      "lastModifiedAt" : "2023-11-14T22:31:20.000Z",
+      "locatorString" : "{\"href\":\"deleted.xhtml\",\"locations\":{\"totalProgression\":0.33}}",
+      "note" : "Deleted reader note",
+      "progression" : 0,
+      "selectedText" : "Deleted passage",
+      "spineIndex" : 0,
+      "workID" : "2000ABCD-0000-4000-8000-00000000000B"
+    }
   ],
   "bookmarks" : [
 
   ],
   "collections" : [
+    {
+      "createdAt" : "2023-11-14T22:14:20.000Z",
+      "dateAdded" : "2023-11-14T22:14:20.000Z",
+      "deletedAt" : "2023-11-14T22:31:20.000Z",
+      "id" : "E0000000-0000-4000-8000-000000000001",
+      "isDeleted" : true,
+      "lastModifiedAt" : "2023-11-14T22:31:20.000Z",
+      "name" : "Deleted Portable Collection",
+      "showsOnHome" : false,
+      "syncStatusRaw" : "localOnly",
+      "workIDs" : [
 
+      ],
+      "workOrderRaw" : ""
+    }
   ],
-  "exportedAt" : "2026-10-04T14:27:09.910Z",
+  "exportedAt" : "2026-10-21T19:18:14.544Z",
   "fandomReadWatermarks" : [
 
   ],
   "fonts" : [
-
+    {
+      "dateAdded" : "2023-11-14T22:14:20.000Z",
+      "fileName" : "kudos-cross-platform-fixture.ttf",
+      "name" : "Kudos Fixture Regular"
+    }
   ],
   "pronunciations" : {
     "fandoms" : {
-
+      "Portable Fandom" : {
+        "Sam" : "sæm"
+      }
     },
     "global" : {
-
+      "Nico" : "nˈikoʊ"
     },
     "works" : {
-
+      "820002" : {
+        "Sam" : "sɑm"
+      }
     }
   },
   "readingFavorites" : [
@@ -33,7 +70,21 @@
 
   ],
   "readingQueues" : [
+    {
+      "dateCreated" : "2023-11-14T22:14:20.000Z",
+      "dateUpdated" : "2023-11-14T22:31:20.000Z",
+      "deletedAt" : "2023-11-14T22:31:20.000Z",
+      "id" : "E0000000-0000-4000-8000-000000000002",
+      "isDeleted" : true,
+      "isPinned" : false,
+      "kindRaw" : "custom",
+      "lastMembershipChangedAt" : "2023-11-14T22:14:20.000Z",
+      "name" : "Deleted Portable Queue",
+      "sortOrder" : 0,
+      "tagNames" : [
 
+      ]
+    }
   ],
   "readingSessions" : [
 
@@ -65,20 +116,32 @@
     "requireBiometricToReveal" : false
   },
   "tombstones" : [
-
+    {
+      "ao3WorkID" : 829998,
+      "createdAt" : "2023-11-14T22:31:20.000Z",
+      "deletedOnDeviceID" : "cross-platform-fixture",
+      "deletionReason" : "fixture coverage",
+      "id" : "C0000000-0000-4000-8000-000000000002",
+      "lastModifiedAt" : "2023-11-14T22:31:20.000Z",
+      "recordID" : "B0000000-0000-4000-8000-000000000002",
+      "recordTypeRaw" : "savedSearch",
+      "signature" : "ed5fe7713c031096df77adb16525722bf6c7dd8485bebd596eb9977570d55a5bef8883cb1545e9765d935143b81adf95b2e41f47eabc999a9230621ccc067904",
+      "signerPublicKey" : "03a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8",
+      "sourceURL" : "https:\/\/archiveofourown.org\/works\/829998"
+    }
   ],
   "version" : 8,
   "works" : [
     {
       "ao3Unavailable" : false,
-      "ao3WorkID" : 2001,
-      "assetIdentifier" : "2000ABCD-0000-4000-8000-00000000000A.epub",
+      "ao3WorkID" : 2002,
+      "assetIdentifier" : "2000ABCD-0000-4000-8000-00000000000B.epub",
       "author" : "Archive Author",
       "bookmarks" : 0,
       "chapters" : "",
       "comments" : 0,
-      "createdAt" : "2026-10-04T14:27:09.855Z",
-      "dateAdded" : "2026-10-04T14:27:09.855Z",
+      "createdAt" : "2026-10-21T19:18:14.507Z",
+      "dateAdded" : "2026-10-21T19:18:14.507Z",
       "datePublished" : "",
       "dateUpdated" : "",
       "epubDigest" : "2be63c7aa2950b6b7bbda7be0eff723a9a2410fc71dac2bf5a9b9ab07061d644",
@@ -87,7 +150,7 @@
       "hasGivenKudos" : false,
       "hiddenFromHistoryAt" : null,
       "hits" : 0,
-      "id" : "2000ABCD-0000-4000-8000-00000000000A",
+      "id" : "2000ABCD-0000-4000-8000-00000000000B",
       "isComplete" : false,
       "isDeleted" : false,
       "isFavorite" : false,
@@ -98,7 +161,7 @@
       "knownChapterCount" : 0,
       "kudos" : 0,
       "language" : "",
-      "lastModifiedAt" : "2026-10-04T14:27:09.855Z",
+      "lastModifiedAt" : "2026-10-21T19:18:14.507Z",
       "lastScrollFraction" : 0,
       "lastSpineIndex" : 0,
       "legacyReaderProgress" : null,
@@ -108,9 +171,9 @@
       "seriesPosition" : 0,
       "seriesTitle" : "",
       "seriesURL" : "",
-      "sourceURL" : "https:\/\/archiveofourown.org\/works\/2001",
+      "sourceURL" : "https:\/\/archiveofourown.org\/works\/2002",
       "summary" : "",
-      "title" : "Folder Sync One",
+      "title" : "Folder Sync Two",
       "userTags" : [
 
       ],
@@ -140,14 +203,14 @@
     },
     {
       "ao3Unavailable" : false,
-      "ao3WorkID" : 2002,
-      "assetIdentifier" : "2000ABCD-0000-4000-8000-00000000000B.epub",
+      "ao3WorkID" : 2001,
+      "assetIdentifier" : "2000ABCD-0000-4000-8000-00000000000A.epub",
       "author" : "Archive Author",
       "bookmarks" : 0,
       "chapters" : "",
       "comments" : 0,
-      "createdAt" : "2026-10-04T14:27:09.864Z",
-      "dateAdded" : "2026-10-04T14:27:09.864Z",
+      "createdAt" : "2026-10-21T19:18:14.498Z",
+      "dateAdded" : "2026-10-21T19:18:14.498Z",
       "datePublished" : "",
       "dateUpdated" : "",
       "epubDigest" : "2be63c7aa2950b6b7bbda7be0eff723a9a2410fc71dac2bf5a9b9ab07061d644",
@@ -156,7 +219,7 @@
       "hasGivenKudos" : false,
       "hiddenFromHistoryAt" : null,
       "hits" : 0,
-      "id" : "2000ABCD-0000-4000-8000-00000000000B",
+      "id" : "2000ABCD-0000-4000-8000-00000000000A",
       "isComplete" : false,
       "isDeleted" : false,
       "isFavorite" : false,
@@ -167,7 +230,7 @@
       "knownChapterCount" : 0,
       "kudos" : 0,
       "language" : "",
-      "lastModifiedAt" : "2026-10-04T14:27:09.864Z",
+      "lastModifiedAt" : "2026-10-21T19:18:14.498Z",
       "lastScrollFraction" : 0,
       "lastSpineIndex" : 0,
       "legacyReaderProgress" : null,
@@ -177,9 +240,9 @@
       "seriesPosition" : 0,
       "seriesTitle" : "",
       "seriesURL" : "",
-      "sourceURL" : "https:\/\/archiveofourown.org\/works\/2002",
+      "sourceURL" : "https:\/\/archiveofourown.org\/works\/2001",
       "summary" : "",
-      "title" : "Folder Sync Two",
+      "title" : "Folder Sync One",
       "userTags" : [
 
       ],
