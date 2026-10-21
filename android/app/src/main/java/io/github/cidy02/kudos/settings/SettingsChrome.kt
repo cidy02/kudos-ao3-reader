@@ -36,6 +36,8 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
@@ -67,6 +69,7 @@ import io.github.cidy02.kudos.ui.subject.SubjectPalette
 import io.github.cidy02.kudos.ui.subject.isAccessibilityFontScale
 import io.github.cidy02.kudos.ui.subject.spokenAs
 import io.github.cidy02.kudos.ui.subject.subjectPanel
+import io.github.cidy02.kudos.ui.subject.LocalSettingsFormGround
 
 /**
  * The frame for Settings sub-pages: no bar title (the header
@@ -77,6 +80,11 @@ fun SettingsPage(
     title: String,
     kicker: String = "SETTINGS",
     subtitle: String? = null,
+    /**
+     * iOS draws Settings pages as a grouped `Form` whose rows sit on `cardSurface`
+     * (`SettingsPageForm`, `.appThemedRows()`); pages iOS builds from subject panels pass false.
+     */
+    formGround: Boolean = true,
     content: LazyListScope.() -> Unit
 ) {
     val tokens = LocalKudosTokens.current
@@ -85,25 +93,38 @@ fun SettingsPage(
     } else tokens.background
     ProvidePushedShellChrome(hasSubjectHeader = true, scrollKey = title, pageBackground = background)
     val palette = LocalSubjectPalette.current
-    LazyColumn(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(background),
-        contentPadding = PaddingValues(bottom = 32.dp)
-    ) {
-        item {
-            Spacer(Modifier.height(WindowInsets.systemBars.asPaddingValues().calculateTopPadding() + 56.dp))
-            SubjectHeaderBlock(
-                kicker = kicker,
-                title = title,
-                subtitle = subtitle,
-                palette = palette,
-                gutter = SubjectMetrics.accountGutter
-            )
+    CompositionLocalProvider(LocalSettingsFormGround provides formGround) {
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(background),
+            contentPadding = PaddingValues(bottom = 32.dp)
+        ) {
+            item {
+                Spacer(Modifier.height(WindowInsets.systemBars.asPaddingValues().calculateTopPadding() + 56.dp))
+                SubjectHeaderBlock(
+                    kicker = kicker,
+                    title = title,
+                    subtitle = subtitle,
+                    palette = palette,
+                    gutter = SubjectMetrics.accountGutter
+                )
+            }
+            content()
         }
-        content()
     }
 }
+
+/**
+ * A Settings group's ground: on a Settings page, the theme's card surface as iOS's form rows
+ * (A70b: Android's glass made Light and Sepia cards darker than the page); elsewhere the subject
+ * panel's glass, as the iOS screens that use it.
+ */
+@Composable
+fun Modifier.settingsPanelGround(): Modifier =
+    if (LocalSettingsFormGround.current) {
+        background(LocalKudosTokens.current.theme.cardSurface, RoundedCornerShape(SubjectMetrics.panelRadius))
+    } else subjectPanel()
 
 /** Plain text entry on the same tokens as the note editor; no Material text-field chrome. */
 @Composable
@@ -206,7 +227,7 @@ fun SettingsPanel(
             // A panel spans the page whatever it holds: one with a single short line of
             // text used to shrink to that line.
             .fillMaxWidth()
-            .subjectPanel(),
+            .settingsPanelGround(),
         content = content
     )
 }

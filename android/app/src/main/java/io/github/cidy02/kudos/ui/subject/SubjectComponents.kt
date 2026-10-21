@@ -55,6 +55,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -200,6 +201,33 @@ fun Modifier.subjectPanel(
     return this
         .background(fill, shape)
         .border(0.5.dp, tokens.glassStroke(0.13), shape)
+}
+
+/**
+ * True inside a Settings page drawn as iOS's grouped form (`SettingsPageForm`): its groups sit on
+ * `cardSurface` and its segmented controls are the native control, a white pill on light themes.
+ */
+val LocalSettingsFormGround = staticCompositionLocalOf { false }
+
+/**
+ * iOS `.cardRow()`: a free-standing list card on `cardSurface`, with a hairline and a soft shadow
+ * on the flat Light and Sepia grounds; Dark and OLED stay flat, where the tone already separates.
+ */
+@Composable
+fun Modifier.cardRow(cornerRadius: Dp = SubjectMetrics.rowRadius): Modifier {
+    val theme = LocalKudosTokens.current.theme
+    val shape = RoundedCornerShape(cornerRadius)
+    val paper = Color(red = 0.34f, green = 0.22f, blue = 0.08f)
+    val (edge, shade) = when (theme) {
+        ReaderTheme.Light -> Color.Black.copy(alpha = 0.06f) to Color.Black.copy(alpha = 0.12f)
+        ReaderTheme.Sepia -> paper.copy(alpha = 0.15f) to paper.copy(alpha = 0.20f)
+        else -> Color.Transparent to null
+    }
+    return this
+        .then(if (shade != null) Modifier.shadow(3.dp, shape, clip = false, ambientColor = shade, spotColor = shade) else Modifier)
+        .background(theme.cardSurface, shape)
+        .border(0.5.dp, edge, shape)
+        .clip(shape)
 }
 
 /**
@@ -582,19 +610,27 @@ fun SubjectStatStrip(
 ) {
     val tokens = LocalKudosTokens.current
     val divider = tokens.glassStroke(0.13)
-    Row(modifier.fillMaxWidth().subjectPanel()) {
-        cells.forEachIndexed { index, cell ->
-            StatCell(
-                cell = cell,
-                palette = palette,
-                modifier = Modifier
-                    .weight(1f)
-                    .drawBehind {
-                        if (index > 0) {
-                            drawRect(divider, size = Size(0.5.dp.toPx(), size.height))
-                        }
-                    }
-            )
+    // iOS `SubjectStatStripContent`: four across cut the labels at the accessibility sizes, so two
+    // to a row there (A70).
+    val rows = if (isAccessibilityFontScale() && cells.size > 2) cells.chunked(2) else listOf(cells)
+    Column(modifier.fillMaxWidth().subjectPanel()) {
+        rows.forEachIndexed { rowIndex, rowCells ->
+            if (rowIndex > 0) Box(Modifier.fillMaxWidth().height(0.5.dp).background(divider))
+            Row(Modifier.fillMaxWidth()) {
+                rowCells.forEachIndexed { index, cell ->
+                    StatCell(
+                        cell = cell,
+                        palette = palette,
+                        modifier = Modifier
+                            .weight(1f)
+                            .drawBehind {
+                                if (index > 0) {
+                                    drawRect(divider, size = Size(0.5.dp.toPx(), size.height))
+                                }
+                            }
+                    )
+                }
+            }
         }
     }
 }

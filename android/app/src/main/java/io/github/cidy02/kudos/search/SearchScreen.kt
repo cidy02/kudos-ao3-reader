@@ -51,6 +51,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -91,6 +92,7 @@ import io.github.cidy02.kudos.ui.subject.SubjectMetrics
 import io.github.cidy02.kudos.ui.subject.SubjectPalette
 import io.github.cidy02.kudos.ui.subject.ToolbarCircleButton
 import io.github.cidy02.kudos.ui.subject.compactCount
+import io.github.cidy02.kudos.ui.subject.cardRow
 import io.github.cidy02.kudos.ui.subject.subjectPanel
 import io.github.cidy02.kudos.ui.subject.subjectScreenWash
 import io.github.cidy02.kudos.works.CanonicalWork
@@ -823,7 +825,14 @@ internal fun SavedSearchesList(
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         item {
-            SectionRuleHeader(title = "Saved Searches", modifier = Modifier.padding(top = 8.dp))
+            // iOS: a plain list's section header, in title case (A70).
+            Text(
+                "Saved Searches",
+                color = tokens.secondaryInk,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp).semantics { heading() }
+            )
         }
         items(savedSearches, key = { it.id }) { saved ->
             val subtitle = subtitleFor(saved)
@@ -849,9 +858,9 @@ internal fun SavedSearchesList(
                     }
                 ) {
                     Row(
+                        // iOS draws a saved search as a `.cardRow()` (A70: a grey panel here).
                         modifier = Modifier.fillMaxWidth()
-                            .background(tokens.theme.cardBackdrop)
-                            .subjectPanel()
+                            .cardRow()
                             .combinedClickable(onClick = { onRun(saved) },
                                 onLongClickLabel = "Delete saved search", onLongClick = { menu = true })
                             .semantics {

@@ -21,6 +21,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.Logout
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.BugReport
 import androidx.compose.material.icons.outlined.Code
@@ -207,7 +208,13 @@ fun SettingsAccountPage(authRepository: AO3AuthRepository?, onLogin: () -> Unit)
             ) {
                 when (authState) {
                     is AO3AuthState.SignedIn -> {
-                        SubjectFormRow("Signed In", value = (authState as AO3AuthState.SignedIn).username)
+                        // iOS: `Label("Signed In", systemImage: "checkmark.circle.fill")` in green (A70b).
+                        SubjectFormRow(
+                            "Signed In",
+                            value = (authState as AO3AuthState.SignedIn).username,
+                            leadingIcon = Icons.Filled.CheckCircle,
+                            statusInk = androidx.compose.ui.graphics.Color(0xFF34C759)
+                        )
                         SubjectRowSeparator()
                         SettingsActionRow(
                             label = "Log Out",
@@ -804,7 +811,9 @@ private fun StepButton(label: String, enabled: Boolean, onClick: () -> Unit) {
     ) {
         Text(
             text = label,
-            color = if (enabled) tokens.primaryInk else tokens.secondaryInk,
+            // iOS's disabled stepper keeps its − and + nearly full strength; secondary ink read as
+            // grey on grey (A69 #26, A70b).
+            color = if (enabled) tokens.primaryInk else tokens.primaryInk.copy(alpha = 0.6f),
             fontSize = 18.sp
         )
     }

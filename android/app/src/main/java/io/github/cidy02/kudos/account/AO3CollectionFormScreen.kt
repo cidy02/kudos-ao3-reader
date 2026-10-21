@@ -82,7 +82,7 @@ fun AO3CollectionFormScreen(
     // No buttons of its own up here, as on iOS: Back leaves, and the one Save is at the end.
     ProvidePushedShellChrome(hasSubjectHeader = true, onBack = close)
     MaterialTheme(colorScheme = MaterialTheme.colorScheme.copy(error = red)) {
-        SettingsPage(title = if (slug == null) "New collection" else "Edit collection",
+        SettingsPage(formGround = false, title = if (slug == null) "New collection" else "Edit collection",
             kicker = "AO3 Account › Collections", subtitle = "Your changes are saved to AO3") {
             if (state.loading || (state.form == null && state.loadError == null)) item {
                 Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {

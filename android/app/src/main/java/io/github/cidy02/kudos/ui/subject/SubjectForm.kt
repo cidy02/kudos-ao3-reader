@@ -141,6 +141,8 @@ fun SubjectFormRow(
     labelSpokenByControl: Boolean = false,
     leadingIcon: androidx.compose.ui.graphics.vector.ImageVector? = null,
     showsChoice: Boolean = false,
+    /** A status row's own colour for its icon and label (iOS: a green "Signed In"). */
+    statusInk: Color? = null,
     trailing: (@Composable () -> Unit)? = null
 ) {
     val tokens = LocalKudosTokens.current
@@ -159,7 +161,7 @@ fun SubjectFormRow(
             Icon(
                 imageVector = leadingIcon,
                 contentDescription = null,
-                tint = LocalSubjectPalette.current.accent,
+                tint = statusInk ?: LocalSubjectPalette.current.accent,
                 modifier = Modifier.padding(end = 4.dp).size(with(LocalDensity.current) { 18.sp.toDp() })
             )
         }
@@ -168,7 +170,7 @@ fun SubjectFormRow(
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(2.dp)
             ) {
-                Text(text = formLabelText(label), modifier = Modifier.spokenAs(label), color = tokens.primaryInk, fontSize = 14.5.sp, lineHeight = 20.sp)
+                Text(text = formLabelText(label), modifier = Modifier.spokenAs(label), color = statusInk ?: tokens.primaryInk, fontSize = 14.5.sp, lineHeight = 20.sp)
                 Text(
                     text = value.orEmpty(),
                     color = valueInk,
@@ -186,7 +188,7 @@ fun SubjectFormRow(
             Text(
                 text = formLabelText(label),
                 modifier = (if (hasValue) Modifier else Modifier.weight(1f)).spokenAs(label, byControl = labelSpokenByControl),
-                color = tokens.primaryInk,
+                color = statusInk ?: tokens.primaryInk,
                 fontSize = 14.5.sp,
                 lineHeight = 20.sp
             )

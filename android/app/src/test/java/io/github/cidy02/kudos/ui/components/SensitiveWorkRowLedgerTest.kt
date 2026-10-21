@@ -88,13 +88,14 @@ class SensitiveWorkRowLedgerTest {
 
     @Test fun aPrivateBookmarkSaysSoWhenItsWorkNamesNoFandom() {
         show(bookmark = LedgerBookmark(listOf("Private"), "") {}, fandoms = emptyList())
-        compose.onNodeWithText("PRIVATE").assertExists()
+        // The badge is iOS's `SubjectStateBadge`: read as written ("Private"), drawn in capitals.
+        compose.onNodeWithContentDescription("Private").assertExists()
     }
 
     @Test fun aBookmarkIsOneCardWithItsNoteWhereTheSummaryWouldBe() {
         show(bookmark = LedgerBookmark(listOf("Rec"), "07 Jul 2026") { androidx.compose.material3.Text("Reread the ending.") })
 
-        compose.onNodeWithText("REC").assertExists()
+        compose.onNodeWithContentDescription("Rec").assertExists()
         compose.onNodeWithText("Reread the ending.").assertExists()
         // The bookmark's note stands where the work's summary would, and its date closes the line.
         compose.onAllNodesWithText("A city that never sleeps.").assertCountEquals(0)
