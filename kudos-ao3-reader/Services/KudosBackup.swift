@@ -2931,7 +2931,13 @@ enum KudosBackupService {
             } else {
                 queue.dateUpdated = max(queue.dateUpdated, archived.dateUpdated)
                 if let archivedChangedAt = archived.lastMembershipChangedAt {
-                    queue.lastMembershipChangedAt = max(queue.lastMembershipChangedAt, archivedChangedAt)
+                    // A queue this restore created keeps the archive's own clock: its
+                    // initializer's placeholder (`dateUpdated`) is not a membership change,
+                    // and `max` against it moved the clock to the queue's last edit (3ge;
+                    // Android restores the clock as written).
+                    queue.lastMembershipChangedAt = hadExistingQueue
+                        ? max(queue.lastMembershipChangedAt, archivedChangedAt)
+                        : archivedChangedAt
                 }
             }
             queue.deletedAt = newest(queue.deletedAt, archived.deletedAt)
