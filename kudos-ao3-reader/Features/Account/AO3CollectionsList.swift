@@ -740,7 +740,9 @@ struct AO3CollectionCard: View {
     @ViewBuilder
     private var eyebrowRow: some View {
         if !eyebrow.isEmpty || !statusLabels.isEmpty {
-            HStack(alignment: .top, spacing: 6) {
+            // Wraps rather than squeezes: in one row at the largest text, "You own" became
+            // "YO…" and the chips broke letter by letter (A69 #13).
+            FlowLayout(spacing: 6, rowSpacing: 6) {
                 if !eyebrow.isEmpty {
                     SubjectKicker(
                         text: eyebrow,
@@ -752,7 +754,6 @@ struct AO3CollectionCard: View {
                 ForEach(statusLabels, id: \.self) { label in
                     SubjectChip(text: label, style: .neutral, palette: palette)
                 }
-                Spacer(minLength: 0)
             }
         }
     }
