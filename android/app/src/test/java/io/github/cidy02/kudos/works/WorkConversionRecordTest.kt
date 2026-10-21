@@ -8,15 +8,18 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class WorkConversionRecordTest {
-    @Test fun staleVersionsIncludeMissingAndForeignStamps() {
-        assertTrue(WorkConversionRecord.isStale(null))
+    @Test fun onlyOlderAndroidStampsAreStale() {
+        assertFalse(WorkConversionRecord.isStale(null))
         val local = WorkConversionRecord(format = "plainText", originalFileName = "story.txt", converterPlatform = "android")
         assertFalse(local.isStale)
         assertTrue(local.copy(converterVersion = 0).isStale)
         assertFalse(local.copy(converterVersion = WorkConversionRecord.CURRENT_VERSION + 1).isStale)
         val ios = WorkConversionRecord.decode("""{"converterVersion":999,"format":"pdf","originalFileName":"story.pdf","convertedAt":0}""".encodeToByteArray())!!
-        assertTrue("iOS's scale cannot certify an Android conversion", ios.isStale)
-        assertTrue(WorkConversionRecord.isStale(WorkConversionRecord.decode("invalid".encodeToByteArray())))
+        assertFalse("Android must not judge iOS's converter scale", ios.isStale)
+        assertFalse(ios.copy(converterVersion = 0).isStale)
+        assertFalse(local.copy(converterPlatform = "ios", converterVersion = 0).isStale)
+        assertFalse(local.copy(converterPlatform = "other", converterVersion = 0).isStale)
+        assertFalse(WorkConversionRecord.isStale(WorkConversionRecord.decode("invalid".encodeToByteArray())))
     }
 
     @Test fun sidecarRoundTripsBesideTheOriginalWithSwiftsDateShape() = runBlocking {

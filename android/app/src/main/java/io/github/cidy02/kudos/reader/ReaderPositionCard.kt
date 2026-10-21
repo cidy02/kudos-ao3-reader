@@ -461,7 +461,7 @@ private fun PositionMiniPlayer(
     }
 }
 
-/** Tap skips; a hold repeats one paragraph at a time and preserves paused playback on release. */
+/** Tap skips; a hold steps through chapter positions and preserves paused playback on release. */
 @Composable
 private fun SpeechSkipButton(
     icon: ImageVector,

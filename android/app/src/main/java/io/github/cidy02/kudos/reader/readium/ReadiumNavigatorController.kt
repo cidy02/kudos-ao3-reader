@@ -22,6 +22,8 @@ class ReadiumNavigatorController {
     private var pendingScrub: Locator? = null
     private var scrubInFlight = false
 
+    val currentLocator: Locator? get() = navigator?.currentLocator?.value
+
     internal fun attach(fragment: EpubNavigatorFragment?) {
         navigator = fragment
         pendingScrub = null

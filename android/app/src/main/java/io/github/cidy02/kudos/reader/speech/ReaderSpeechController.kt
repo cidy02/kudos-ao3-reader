@@ -25,6 +25,7 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 enum class SpeechStatus {
     UNAVAILABLE,
@@ -40,10 +41,10 @@ enum class SpeechStatus {
  */
 class ReaderSpeechController(
     private val context: Context,
-    private val onUtteranceStart: ((String) -> Unit)? = null
+    private val onUtteranceStart: ((String) -> Unit)? = null,
+    private val tts: TTSService = AutomaticTTSService(context.applicationContext)
 ) {
     private val appContext = context.applicationContext
-    private val tts = AutomaticTTSService(appContext)
     
     private val scope = CoroutineScope(Dispatchers.Main + Job())
 
@@ -71,6 +72,7 @@ class ReaderSpeechController(
     private var currentPreferences = ReaderPreferences()
     private var workTitle: String = "Kudos"
     private var currentSpeakJob: Job? = null
+    private var restartAfterPull: Job? = null
     private var totalPositions = 0
     private var currentPosition: Int? = null
     private var playbackState = PlaybackState.STATE_STOPPED
@@ -191,12 +193,28 @@ class ReaderSpeechController(
 
     fun skipForward() {
         currentIndex++
-        speakCurrent()
+        restartAfterSkip()
     }
 
     fun skipBackward() {
         currentIndex = (currentIndex - 1).coerceAtLeast(0)
-        speakCurrent()
+        restartAfterSkip()
+    }
+
+    private fun restartAfterSkip() {
+        if (!pullingParagraph) {
+            speakCurrent()
+            return
+        }
+        // The IO source may already have taken its text. Queue it before restarting.
+        pausedAtQueuePosition = true
+        _status.value = SpeechStatus.PLAYING
+        if (restartAfterPull?.isActive == true) return
+        val pull = currentSpeakJob
+        restartAfterPull = scope.launch {
+            pull?.join()
+            if (pausedAtQueuePosition && _status.value == SpeechStatus.PLAYING) speakCurrent()
+        }
     }
 
     fun beginSeeking() {
@@ -209,24 +227,18 @@ class ReaderSpeechController(
         publishPlaybackState(PlaybackState.STATE_PAUSED)
     }
 
-    /** iOS ReaderSpeechSkip.seekIndex, on Android's paragraph positions. Never starts speech. */
-    fun seek(delta: Int) {
+    /** Re-anchor to the reader's release locator, preserving a paused session as on iOS. */
+    fun endSeeking(paragraphs: ReaderSpeechSource) {
         if (!pausedAtQueuePosition) return
-        // A paused reader may not have pulled the following paragraph yet. Pull it on demand.
-        if (currentSpeakJob?.isActive == true) return
-        currentSpeakJob = scope.launch {
-            if (delta > 0 && currentIndex == currentQueue.lastIndex) {
-                nextParagraph()?.let(currentQueue::add) ?: run { source = null }
-            }
-            val target = ReaderSpeechSeek.seekIndex(currentIndex, currentQueue.size, delta) ?: return@launch
-            currentIndex = target
-            seekPreview.value = currentQueue[target]
-        }
-    }
-
-    fun endSeeking() {
-        if (seekWasPlaying) resume()
-        seekWasPlaying = false
+        val resumePlaying = seekWasPlaying
+        stop()
+        currentQueue.clear()
+        source = paragraphs
+        currentIndex = 0
+        pausedAtQueuePosition = true
+        _status.value = SpeechStatus.PAUSED
+        publishPlaybackState(PlaybackState.STATE_PAUSED)
+        if (resumePlaying) speakCurrent()
     }
 
     private suspend fun nextParagraph(): String? {
@@ -254,11 +266,13 @@ class ReaderSpeechController(
                     val next = nextParagraph()
                     if (next == null) {
                         source = null
+                        if (pausedAtQueuePosition) return@launch
                         _status.value = SpeechStatus.STOPPED
                         publishPlaybackState(PlaybackState.STATE_STOPPED)
                         return@launch
                     }
                     currentQueue.add(next)
+                    if (pausedAtQueuePosition) return@launch
                 }
                 if (pausedAtQueuePosition) return@launch
                 val text = currentQueue[currentIndex]
@@ -266,7 +280,8 @@ class ReaderSpeechController(
                 tts.setPitch(currentPreferences.speechPitch)
                 onUtteranceStart?.invoke("utt_$currentIndex")
                 publishPlaybackState(PlaybackState.STATE_PLAYING)
-                tts.speak(text)
+                // Pack checks and a newly downloaded Kokoro model may perform blocking IO.
+                withContext(Dispatchers.Default) { tts.speak(text) }
                 if (pausedAtQueuePosition) return@launch
                 currentIndex++
             }
@@ -304,6 +319,8 @@ class ReaderSpeechController(
     }
 
     fun stop() {
+        restartAfterPull?.cancel()
+        restartAfterPull = null
         currentSpeakJob?.cancel()
         currentSpeakJob = null
         tts.stop()
@@ -316,9 +333,10 @@ class ReaderSpeechController(
     }
 
     fun shutdown() {
+        restartAfterPull?.cancel()
         currentSpeakJob?.cancel()
         scope.cancel()
-        tts.shutdown()
+        (tts as? AutomaticTTSService)?.shutdown()
         mediaSession.isActive = false
         mediaSession.release()
     }

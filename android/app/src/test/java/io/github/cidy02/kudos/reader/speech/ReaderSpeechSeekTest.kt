@@ -5,7 +5,7 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 
 class ReaderSpeechSeekTest {
-    @Test fun eachHoldTickMovesOneParagraphAndBoundsNeverWrap() {
+    @Test fun eachHoldTickMovesOnePositionAndBoundsNeverWrap() {
         assertEquals(2, ReaderSpeechSeek.seekIndex(1, 4, 1))
         assertEquals(0, ReaderSpeechSeek.seekIndex(1, 4, -1))
         assertNull(ReaderSpeechSeek.seekIndex(0, 4, -1))
