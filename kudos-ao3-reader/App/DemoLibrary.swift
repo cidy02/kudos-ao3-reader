@@ -360,10 +360,27 @@ enum DebugLaunchRoute {
         }
     }
 
+    /// `comments:<title>` opens that work's page, then its Comments (fixture-served),
+    /// for side-by-side screenshots with Android's `comments/<ao3 id>`.
+    static func commentsRoute(for work: SavedWork) -> AO3CommentsRoute? {
+        guard value?.hasPrefix("comments:") == true, let id = work.ao3WorkID else { return nil }
+        return AO3CommentsRoute(workID: id, context: AO3CommentsWorkContext(
+            title: work.title, authors: [work.author], fandoms: work.workFandoms,
+            rating: work.rating, chapters: work.chapters
+        ))
+    }
+
+    /// `author:<username>` opens another reader's AO3 profile (fixture-served) on Home's stack.
+    static var authorRoute: AO3AuthorRoute? {
+        guard let value, value.hasPrefix("author:") else { return nil }
+        return AO3AuthorRoute(username: String(value.dropFirst("author:".count)))
+    }
+
     static func homeWork(in works: [SavedWork]) -> SavedWork? {
         // `mycopy:<title>` opens the same page with its My copy sheet up;
         // `read:<title>` opens the reader instead (see `opensReader`).
-        guard let value, let prefix = ["work:", "mycopy:", "read:"].first(where: value.hasPrefix) else { return nil }
+        let prefixes = ["work:", "mycopy:", "read:", "comments:"]
+        guard let value, let prefix = prefixes.first(where: value.hasPrefix) else { return nil }
         let title = String(value.dropFirst(prefix.count))
         return works.first { $0.title == title }
     }
