@@ -119,4 +119,75 @@ class SystemTTSServiceTest {
         }
     }
 
+    @Test fun automaticHonoursEngineChoiceFallsBackWhenKokoroPackMissingAndForwardsPitch() = runBlocking {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val kokoro = FakeSubTTSService(listOf(TTSVoice("0", "Kokoro A")))
+        val device = FakeSubTTSService(emptyList())
+        var installed = true
+        val service = AutomaticTTSService(
+            context = context,
+            kokoro = kokoro,
+            device = device,
+            packInstalled = { installed }
+        )
+        try {
+            // Default Automatic with pack installed uses Kokoro and exposes its voices.
+            assertEquals(listOf(TTSVoice("0", "Kokoro A")), service.availableVoices.value)
+            service.speak("Automatic utterance.")
+            assertEquals(listOf("Automatic utterance."), kokoro.spoken)
+            assertEquals(emptyList<String>(), device.spoken)
+
+            // Forced Device voice ("system") uses device even when Kokoro pack is installed, and hides Kokoro voices.
+            service.applySpeechPreferences(
+                io.github.cidy02.kudos.reader.settings.ReaderSpeechPreferences(
+                    pitch = 1.15f,
+                    engine = "system"
+                ).applyTo(io.github.cidy02.kudos.reader.settings.ReaderPreferences())
+            )
+            assertEquals(1.15f, device.pitchSet, 0f)
+            assertEquals(1.15f, kokoro.pitchSet, 0f)
+            withTimeout(5_000) {
+                while (service.availableVoices.value.isNotEmpty()) kotlinx.coroutines.delay(10)
+            }
+            service.speak("Device utterance.")
+            assertEquals(listOf("Device utterance."), device.spoken)
+            assertEquals(listOf("Automatic utterance."), kokoro.spoken)
+
+            // Forced Kokoro with pack installed uses Kokoro.
+            service.setEngine("kokoro")
+            withTimeout(5_000) {
+                while (service.availableVoices.value.isEmpty()) kotlinx.coroutines.delay(10)
+            }
+            service.speak("Kokoro utterance.")
+            assertEquals(listOf("Automatic utterance.", "Kokoro utterance."), kokoro.spoken)
+
+            // Forced Kokoro without pack installed falls back to Device voice, as on iOS.
+            installed = false
+            service.speak("Fallback utterance.")
+            assertEquals(listOf("Device utterance.", "Fallback utterance."), device.spoken)
+        } finally {
+            service.shutdown()
+        }
+    }
+
+    private class FakeSubTTSService(voices: List<TTSVoice>) : TTSService {
+        override val status = kotlinx.coroutines.flow.MutableStateFlow(SpeechStatus.STOPPED)
+        override val spokenText = kotlinx.coroutines.flow.MutableStateFlow("")
+        override val availableVoices = kotlinx.coroutines.flow.MutableStateFlow(voices)
+        val spoken = mutableListOf<String>()
+        var pitchSet = 1.0f
+        var rateSet = 1.0f
+        var voiceSet = "0"
+        override suspend fun speak(text: String) {
+            spoken += text
+            spokenText.value = text
+        }
+        override fun pause() { status.value = SpeechStatus.PAUSED }
+        override fun resume() { status.value = SpeechStatus.PLAYING }
+        override fun stop() { status.value = SpeechStatus.STOPPED }
+        override fun setVoice(id: String) { voiceSet = id }
+        override fun setRate(rate: Float) { rateSet = rate }
+        override fun setPitch(pitch: Float) { pitchSet = pitch }
+    }
+
 }

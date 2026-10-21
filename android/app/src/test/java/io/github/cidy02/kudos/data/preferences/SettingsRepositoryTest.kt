@@ -16,6 +16,7 @@ import io.github.cidy02.kudos.core.model.KudosSettings
 import io.github.cidy02.kudos.core.model.MatureContentMode
 import io.github.cidy02.kudos.core.model.ReaderMode
 import io.github.cidy02.kudos.core.model.ReaderThemeSetting
+import io.github.cidy02.kudos.reader.settings.ReaderSpeechPreferences
 import java.io.File
 import java.nio.file.Files
 import kotlinx.coroutines.CoroutineScope
@@ -292,5 +293,50 @@ class SettingsRepositoryTest {
 
         repository.setHasCompletedOnboarding(false)
         assertFalse(repository.hasCompletedOnboarding.first())
+    }
+
+    @Test
+    fun speechEngineAndPitchRoundTripClampNormalizeResetAndStayOutOfBackupSettings() = runBlocking {
+        assertEquals(ReaderSpeechPreferences(), repository.speechPreferences.first())
+        val backupBefore = BackupJson.encodeToString(
+            BackupSettings.fromSettings(repository.snapshot()).toBackupSettingsPayload()
+        )
+
+        repository.updateSpeechPitch(1.15f)
+        repository.updateSpeechEngine("kokoro")
+        val saved = SettingsRepository(dataStore).speechPreferences.first()
+        assertEquals(1.15f, saved.pitch, 0f)
+        assertEquals("kokoro", saved.engine)
+
+        val applied = saved.applyTo(io.github.cidy02.kudos.reader.settings.ReaderPreferences())
+        assertEquals(1.15f, applied.speechPitch, 0f)
+        assertEquals("kokoro", applied.speechEngine)
+
+        // Clamping and engine normalization match iOS ReaderSpeechPreferences.
+        repository.updateSpeechPitch(0.2f)
+        assertEquals(0.75f, repository.speechPreferences.first().pitch, 0f)
+        repository.updateSpeechPitch(1.9f)
+        assertEquals(1.25f, repository.speechPreferences.first().pitch, 0f)
+        repository.updateSpeechPitch(Float.NaN)
+        assertEquals(1.0f, repository.speechPreferences.first().pitch, 0f)
+
+        repository.updateSpeechEngine("device")
+        assertEquals("system", repository.speechPreferences.first().engine)
+        repository.updateSpeechEngine("unknown-future-engine")
+        assertEquals("", repository.speechPreferences.first().engine)
+
+        // Speech preferences stay device-local (excluded from KudosBackupSettings, as on iOS).
+        repository.updateSpeechPitch(0.85f)
+        repository.updateSpeechEngine("system")
+        assertEquals(
+            backupBefore,
+            BackupJson.encodeToString(BackupSettings.fromSettings(repository.snapshot()).toBackupSettingsPayload())
+        )
+        repository.replaceAll(KudosSettings.Defaults)
+        assertEquals(0.85f, repository.speechPreferences.first().pitch, 0f)
+        assertEquals("system", repository.speechPreferences.first().engine)
+
+        repository.resetSpeechPreferences()
+        assertEquals(ReaderSpeechPreferences(), repository.speechPreferences.first())
     }
 }

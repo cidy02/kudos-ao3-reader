@@ -41,6 +41,8 @@ data class ReaderPreferences(
     /** TTS speech pitch (1.0 = normal). */
     val speechPitch: Float = 1.0f,
     val speechVoiceIdentifier: String? = null,
+    /** Settings › Listening's Engine: a [ReaderTTSEngineKind.rawValue], or "" for Automatic. */
+    val speechEngine: String = ReaderSpeechPreferences.AUTOMATIC_ENGINE,
     /** Registered custom font declarations from disk. */
     val fontDeclarations: List<CustomFontDeclaration> = emptyList()
 )

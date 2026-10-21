@@ -5,6 +5,7 @@ import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import android.speech.tts.Voice
 import io.github.cidy02.kudos.reader.settings.ReaderSpeechPreferences
+import io.github.cidy02.kudos.reader.settings.ReaderTTSEngineKind
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.CompletableDeferred
@@ -28,36 +29,49 @@ import kotlinx.coroutines.flow.stateIn
  */
 class AutomaticTTSService(
     context: Context,
-    private val kokoro: KokoroTTSController = KokoroTTSController(context.applicationContext),
-    private val device: SystemTTSService = SystemTTSService(context),
+    private val kokoro: TTSService = KokoroTTSController(context.applicationContext),
+    private val device: TTSService = SystemTTSService(context),
     private val packInstalled: () -> Boolean = { TTSDownloadWorker.isModelDownloaded(context.applicationContext) }
 ) : TTSService {
     private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
+    /**
+     * Settings › Listening's Engine; null is Automatic. iOS `ReaderTTSEngineKind.effective`:
+     * the device's voice when it is chosen, Kokoro otherwise once its pack is here and opens.
+     * Kokoro chosen without its pack reads with the device's voice, as iOS reads with Apple's.
+     */
+    private val requested = MutableStateFlow<ReaderTTSEngineKind?>(null)
     /**
      * The engine of the reading under way, so Pause, Resume and the player's state stay with it
      * when the pack finishes downloading mid-reading; they followed the pack's arrival and
      * reached Kokoro while the device still spoke (A49 F3).
      */
     @Volatile private var owner: TTSService? = null
+    private fun kokoroAllowed(): Boolean = requested.value != ReaderTTSEngineKind.SYSTEM
     /** Kokoro when its pack is here and has not failed to open; the device's voice otherwise. */
     private fun active(): TTSService =
-        owner ?: if (packInstalled() && kokoro.status.value != SpeechStatus.UNAVAILABLE) kokoro else device
+        owner ?: if (kokoroAllowed() && packInstalled() && kokoro.status.value != SpeechStatus.UNAVAILABLE) kokoro else device
 
     override val status: StateFlow<SpeechStatus> =
-        combine(kokoro.status, device.status) { k, d -> if (active() === kokoro) k else d }
+        combine(kokoro.status, device.status, requested) { k, d, _ -> if (active() === kokoro) k else d }
             .stateIn(scope, SharingStarted.Eagerly, active().status.value)
     override val spokenText: StateFlow<String> =
         combine(kokoro.spokenText, device.spokenText) { k, d -> if (active() === kokoro) k else d }
             .stateIn(scope, SharingStarted.Eagerly, "")
-    /** Kokoro's voices; the device's own is the one its Settings chose (Automatic). */
-    override val availableVoices: StateFlow<List<TTSVoice>> = kokoro.availableVoices
+    /**
+     * Kokoro's voices; the device's own is the one its Settings chose (Automatic). With the
+     * device's voice chosen there are none, as iOS lists only the chosen engine's voices.
+     */
+    override val availableVoices: StateFlow<List<TTSVoice>> =
+        combine(kokoro.availableVoices, requested) { voices, engine ->
+            if (engine == ReaderTTSEngineKind.SYSTEM) emptyList() else voices
+        }.stateIn(scope, SharingStarted.Eagerly, kokoro.availableVoices.value)
 
     override fun setPronunciationScope(fandom: String?, workID: String?) = kokoro.setPronunciationScope(fandom, workID)
 
     override suspend fun speak(text: String) {
         // A pack that is there but will not open reads with the device's voice: Read Aloud
         // skipped silently through the text (A49 F4).
-        val engine = if (packInstalled() && kokoro.ensureReady()) kokoro else device
+        val engine = if (kokoroAllowed() && packInstalled() && kokoro.ensureReady()) kokoro else device
         if (owner !== engine) owner?.stop()
         owner = engine
         engine.speak(text)
@@ -74,12 +88,20 @@ class AutomaticTTSService(
         kokoro.setRate(rate)
         device.setRate(rate)
     }
+    /**
+     * The device's voice takes it; Kokoro cannot. sherpa-onnx's Kokoro has no pitch control,
+     * the same as iOS's SherpaKokoroTTSService, so Pitch changes only the device's voice.
+     */
     override fun setPitch(pitch: Float) {
         kokoro.setPitch(pitch)
         device.setPitch(pitch)
     }
+    /** Takes effect from the next stretch read, as iOS's choice does on its next utterance. */
+    override fun setEngine(engine: String) {
+        requested.value = ReaderTTSEngineKind.from(engine)
+    }
 
-    fun shutdown() {
+    override fun shutdown() {
         kokoro.shutdown()
         device.shutdown()
         scope.cancel()
@@ -207,7 +229,7 @@ class SystemTTSService(context: Context) : TTSService {
         if (pitch.isFinite()) engine.setPitch(pitch.coerceIn(0.5f, 2f))
     }
 
-    fun shutdown() {
+    override fun shutdown() {
         stop()
         engine.shutdown()
     }
