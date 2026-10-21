@@ -396,6 +396,7 @@ struct PromptMemeView: View {
                 if isInFlight {
                     ProgressView()
                         .controlSize(.small)
+                        .accentFill()
                 } else if let systemImage {
                     Image(systemName: systemImage)
                         .font(.system(size: 11, weight: .semibold))
@@ -466,6 +467,7 @@ private extension PromptMemeView {
         HStack(spacing: 10) {
             ProgressView()
                 .controlSize(.small)
+                .accentFill()
             Text("Loading prompts…")
                 .font(.system(size: loadingSize))
                 .foregroundStyle(.secondary)
@@ -489,6 +491,8 @@ private extension PromptMemeView {
                 Task { await loadPrompts(page: currentPage) }
             }
             .buttonStyle(.bordered)
+            .foregroundStyle(.accentInk)
+            .accentFill()
             .tint(palette.tint)
             .padding(.top, 4)
         }

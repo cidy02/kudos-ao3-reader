@@ -179,7 +179,7 @@ struct AO3CollectionsList: View {
     @ViewBuilder
     private var signedInContent: some View {
         if !sessionOwnsScreen {
-            ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
+            ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity).accentFill()
         } else if case let .failed(message) = phase, displayedCollections.isEmpty {
             ContentUnavailableView {
                 Label("Couldn't load collections", systemImage: "exclamationmark.triangle")
@@ -189,7 +189,7 @@ struct AO3CollectionsList: View {
                 Button("Try Again") { Task { await load(page: currentPage) } }
             }
         } else if phase == .loading, displayedCollections.isEmpty {
-            ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
+            ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity).accentFill()
         } else if filters.needsWholeIndex, !hasCurrentWholeIndex {
             switch wholeIndexPhase {
             case let .failed(message):
@@ -201,7 +201,7 @@ struct AO3CollectionsList: View {
                     Button("Try Again") { wholeIndexRetry += 1 }
                 }
             case .idle, .loading, .loaded:
-                ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
+                ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity).accentFill()
             }
         } else {
             collectionsList

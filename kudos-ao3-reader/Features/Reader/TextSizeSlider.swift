@@ -19,6 +19,7 @@ struct TextSizeSlider: View {
                    step: ReaderTextStyle.fontSizeStep)
                 .accessibilityLabel("Text size")
                 .accessibilityValue("\(Int(fontSizePt.rounded())) points")
+                .accentFill()
             Text("A")
                 .font(.title3)
                 .foregroundStyle(.secondary)

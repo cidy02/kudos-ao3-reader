@@ -76,7 +76,7 @@ struct AO3CollectionFormView: View {
         Group {
             switch phase {
             case .idle, .loading:
-                ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
+                ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity).accentFill()
             case let .failed(message):
                 ContentUnavailableView {
                     Label("Couldn't open the form", systemImage: "exclamationmark.triangle")
@@ -356,6 +356,7 @@ struct AO3CollectionFormView: View {
                 Toggle("", isOn: isOn)
                     .labelsHidden()
                     .frame(maxWidth: .infinity, alignment: .trailing)
+                    .accentFill()
             }
         )
     }
@@ -403,6 +404,7 @@ struct AO3CollectionFormView: View {
                 .frame(maxWidth: .infinity)
         }
         .buttonStyle(.borderedProminent)
+        .accentFill()
         .prominentLabel()
         .disabled(phase == .saving || !canSave)
     }

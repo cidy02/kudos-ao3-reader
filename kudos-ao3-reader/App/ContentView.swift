@@ -19,7 +19,9 @@ struct ContentView: View {
 
     /// What the tab bar and chrome outside a screen are tinted with: the wash of
     /// the screen on top, else the app accent.
-    private var chromeTint: Color { washRegistry.current ?? theme.effectiveTint }
+    private var chromeTint: Color {
+        washRegistry.current.map { theme.appTheme.accentInk(for: $0) } ?? theme.accentInk
+    }
 
     /// First-launch onboarding gate, persisted locally.
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
@@ -74,7 +76,7 @@ struct ContentView: View {
             // The current screen's wash where it has one (owner, 2026-10-11: the
             // tab bar and chrome buttons follow it), else the app accent: Sepia's
             // warm brown, or the user's accent colour in Light and Dark.
-            .tint(chromeTint)
+            .accentTint(washRegistry.current ?? theme.effectiveTint, on: theme.appTheme)
             .environment(washRegistry)
             // Segmented controls (UISegmentedControl) draw a white selected segment
             // in Sepia's light scheme; warm them via the appearance proxy. Reset for
@@ -167,11 +169,11 @@ struct ContentView: View {
                 #if os(iOS)
                 BugReportView(screenshot: bugReportScreenshot)
                     .environment(theme)
-                    .tint(theme.effectiveTint)
+                    .accentTint(theme.effectiveTint, on: theme.appTheme)
                 #else
                 BugReportView()
                     .environment(theme)
-                    .tint(theme.effectiveTint)
+                    .accentTint(theme.effectiveTint, on: theme.appTheme)
                 #endif
             }
             .onAppear {
@@ -188,7 +190,7 @@ struct ContentView: View {
                     whatsNewEntries = []
                 }
                 .environment(theme)
-                .tint(theme.effectiveTint)
+                .accentTint(theme.effectiveTint, on: theme.appTheme)
             }
         // First-launch welcome, then (once that's done) sync-folder onboarding — never
         // both at once, never sync-onboarding in place of welcome. The theme is
@@ -197,23 +199,23 @@ struct ContentView: View {
             .fullScreenCover(isPresented: onboardingPresented) {
                 WelcomeView(onContinue: { hasCompletedOnboarding = true })
                     .environment(theme)
-                    .tint(theme.effectiveTint)
+                    .accentTint(theme.effectiveTint, on: theme.appTheme)
             }
             .fullScreenCover(isPresented: syncFolderOnboardingPresented) {
                 SyncFolderOnboardingView(onFinished: { dismissedSyncFolderOnboardingThisSession = true })
                     .environment(theme)
-                    .tint(theme.effectiveTint)
+                    .accentTint(theme.effectiveTint, on: theme.appTheme)
             }
         #else
             .sheet(isPresented: onboardingPresented) {
                 WelcomeView(onContinue: { hasCompletedOnboarding = true })
                     .environment(theme)
-                    .tint(theme.effectiveTint)
+                    .accentTint(theme.effectiveTint, on: theme.appTheme)
             }
             .sheet(isPresented: syncFolderOnboardingPresented) {
                 SyncFolderOnboardingView(onFinished: { dismissedSyncFolderOnboardingThisSession = true })
                     .environment(theme)
-                    .tint(theme.effectiveTint)
+                    .accentTint(theme.effectiveTint, on: theme.appTheme)
             }
         #endif
     }
@@ -382,6 +384,7 @@ struct ContentView: View {
                     Label(tab.title, systemImage: tab.symbol).tag(tab)
                 }
             }
+            .accentFill()
             .navigationSplitViewColumnWidth(min: 190, ideal: 215, max: 280)
             .safeAreaInset(edge: .bottom) {
                 searchButton

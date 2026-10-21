@@ -413,7 +413,7 @@ struct AO3CollectionDetailView: View {
     private var loadingRow: some View {
         HStack {
             Spacer()
-            ProgressView()
+            ProgressView().accentFill()
             Spacer()
         }
     }

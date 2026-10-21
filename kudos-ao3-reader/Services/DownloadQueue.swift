@@ -196,7 +196,7 @@ struct DownloadQueueBanner: View {
         Group {
             if queue.isActive {
                 HStack(spacing: 12) {
-                    ProgressView()
+                    ProgressView().accentFill()
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Downloading \(min(queue.finishedCount + 1, queue.total)) of \(queue.total)")
                             .font(.subheadline.weight(.medium))

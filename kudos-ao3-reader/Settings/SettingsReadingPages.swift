@@ -32,7 +32,7 @@ struct SettingsAppearancePage: View {
         SettingsPageForm(route: .appearance) {
             Section {
                 ReaderThemePicker(title: "App Theme", selection: appThemeBinding)
-                Toggle("Match App & Reader Theme", isOn: matchThemeBinding)
+                Toggle("Match App & Reader Theme", isOn: matchThemeBinding).accentFill()
                 if !themeManager.matchAppAndReader {
                     ReaderThemePicker(title: "Reader Theme", selection: readerThemeBinding)
                 }
@@ -61,7 +61,7 @@ struct SettingsAppearancePage: View {
         .sheet(isPresented: $showCustomize) {
             CustomizeThemeView()
                 .environment(themeManager)
-                .tint(themeManager.effectiveTint)
+                .accentTint(themeManager.effectiveTint, on: themeManager.appTheme)
                 .presentationDetents([.large])
                 .presentationDragIndicator(.visible)
         }

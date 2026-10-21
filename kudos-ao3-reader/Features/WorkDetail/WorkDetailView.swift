@@ -213,6 +213,7 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
             } else {
                 ProgressView("Checking series size…")
                     .padding()
+                    .accentFill()
             }
         }
         // The title is the page's own 32pt heading now (spec 1a), so repeating
@@ -339,6 +340,7 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
                             value: Double(progress.completed),
                             total: Double(progress.total)
                         )
+                        .accentFill()
                     }
 
                     if let loadError {
@@ -1210,7 +1212,7 @@ private struct SeriesPreservationPromptSheet: View {
                     }
 
                     Section {
-                        Toggle(prompt.autoPreserveLabel, isOn: $autoPreserveSmallSeries)
+                        Toggle(prompt.autoPreserveLabel, isOn: $autoPreserveSmallSeries).accentFill()
                         Text("Kudos saves a series automatically only when the first AO3 page shows "
                             + "the full series and it has \(threshold) works or fewer.")
                             .font(.footnote)

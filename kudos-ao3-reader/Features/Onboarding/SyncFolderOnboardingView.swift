@@ -88,12 +88,13 @@ struct SyncFolderOnboardingView: View {
         VStack(spacing: 14) {
             Toggle("Don't remind me again", isOn: $dontRemindAgain)
                 .font(.subheadline)
+                .accentFill()
 
             Button {
                 choosingFolder = true
             } label: {
                 if isConnecting {
-                    ProgressView().frame(maxWidth: .infinity)
+                    ProgressView().frame(maxWidth: .infinity).accentFill()
                 } else {
                     Text("Choose Sync Folder")
                         .font(.headline)
@@ -101,6 +102,7 @@ struct SyncFolderOnboardingView: View {
                 }
             }
             .buttonStyle(.borderedProminent)
+            .accentFill()
             .prominentLabel()
             .controlSize(.large)
             .disabled(isConnecting)

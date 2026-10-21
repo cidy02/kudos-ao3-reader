@@ -27,14 +27,15 @@ struct SettingsPrivacyPage: View {
     var body: some View {
         SettingsPageForm(route: .privacySettings) {
             Section {
-                Toggle("Hide mature content", isOn: $hideMatureContent)
+                Toggle("Hide mature content", isOn: $hideMatureContent).accentFill()
                 if hideMatureContent {
                     Picker("When locked", selection: $matureMode) {
                         ForEach(MaturePrivacyMode.allCases) { Text($0.title).tag($0) }
                     }
                     .pickerStyle(.segmented)
+                    .accentFill()
 
-                    Toggle("Require Face ID to reveal", isOn: $requireBiometric)
+                    Toggle("Require Face ID to reveal", isOn: $requireBiometric).accentFill()
                 }
                 NavigationLink(value: SettingsRoute.privacy) {
                     Label("Privacy & Local Data", systemImage: "hand.raised")
@@ -67,12 +68,12 @@ struct SettingsAboutPage: View {
         .sheet(isPresented: $showAbout) {
             NavigationStack { AboutView() }
                 .environment(themeManager)
-                .tint(themeManager.effectiveTint)
+                .accentTint(themeManager.effectiveTint, on: themeManager.appTheme)
         }
         .sheet(isPresented: $showingBugReport) {
             BugReportView()
                 .environment(themeManager)
-                .tint(themeManager.effectiveTint)
+                .accentTint(themeManager.effectiveTint, on: themeManager.appTheme)
         }
     }
 }

@@ -15,7 +15,7 @@ struct SettingsDownloadsPage: View {
     var body: some View {
         SettingsPageForm(route: .downloads) {
             Section {
-                Toggle("Keep works you read", isOn: $keepsWorksYouRead)
+                Toggle("Keep works you read", isOn: $keepsWorksYouRead).accentFill()
             } footer: {
                 Text("When this is on, every work you open stays downloaded, as if you tapped "
                     + "Download. When it's off, finishing a work removes its copy unless you "
@@ -23,7 +23,7 @@ struct SettingsDownloadsPage: View {
                     + "can download it again.")
             }
             Section {
-                Toggle("Download on subscribe", isOn: $downloadOnSubscribe)
+                Toggle("Download on subscribe", isOn: $downloadOnSubscribe).accentFill()
                 StorageUsedRow()
             } footer: {
                 Text("When you subscribe to a work already in your Library, Kudos downloads it "
@@ -67,8 +67,8 @@ struct SettingsLibraryPage: View {
     var body: some View {
         SettingsPageForm(route: .library) {
             Section {
-                Toggle("Confirm before deleting", isOn: $confirmBeforeDelete)
-                Toggle("Show zero counts", isOn: $showsZeroStats)
+                Toggle("Confirm before deleting", isOn: $confirmBeforeDelete).accentFill()
+                Toggle("Show zero counts", isOn: $showsZeroStats).accentFill()
             } footer: {
                 Text(
                     """
@@ -117,12 +117,13 @@ struct SettingsReadingQueuesPage: View {
                     "Auto-preserve small series",
                     isOn: $autoPreserveSmallSeriesOnSaveForLater
                 )
+                .accentFill()
                 Stepper(
                     "Series limit: \(autoPreserveSeriesWorkThreshold)",
                     value: $autoPreserveSeriesWorkThreshold,
                     in: 2 ... 25
                 )
-                .disabled(!autoPreserveSmallSeriesOnSaveForLater)
+                .disabled(!autoPreserveSmallSeriesOnSaveForLater).accentFill()
 
                 if !legacySavedWorksForQueueMigration.isEmpty {
                     Button {
@@ -139,6 +140,7 @@ struct SettingsReadingQueuesPage: View {
                             value: Double(savedWorkMigrationCompleted),
                             total: Double(max(savedWorkMigrationTotal, 1))
                         )
+                        .accentFill()
                         HStack(spacing: 12) {
                             Text(savedWorkMigrationProgress ?? "Updating Saved for Later…")
                                 .font(.footnote)

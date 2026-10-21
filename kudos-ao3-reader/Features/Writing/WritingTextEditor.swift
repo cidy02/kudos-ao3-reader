@@ -93,7 +93,7 @@ struct WritingTextEditor: View {
                         .accessibilityHidden(isPreviewing)
                         // Nothing may edit the buffer behind the preview.
                         .allowsHitTesting(!isPreviewing)
-                } else { ProgressView() }
+                } else { ProgressView().accentFill() }
                 if isPreviewing { preview }
             }
             Text("Recovery copy on this device · Save from the work form")
@@ -205,7 +205,7 @@ struct WritingTextEditor: View {
     private var preview: some View {
         switch previewState {
         case nil:
-            ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
+            ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity).accentFill()
         case let .rendered(document):
             ScrollView {
                 AO3RichTextView(document: document)

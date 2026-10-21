@@ -254,6 +254,7 @@ struct CollectionDetailView: View {
                     }
                 )
             )
+            .accentFill()
             Toggle(
                 "Show on Home",
                 isOn: Binding(
@@ -265,6 +266,7 @@ struct CollectionDetailView: View {
                     }
                 )
             )
+            .accentFill()
         } header: {
             SubjectFieldLabel(text: "Behaviour", style: .formGroup)
         } footer: {

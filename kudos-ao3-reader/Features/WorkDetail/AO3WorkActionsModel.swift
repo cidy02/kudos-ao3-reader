@@ -211,8 +211,8 @@ private struct AO3BookmarkComposer: View {
                         Text("Separate your bookmark tags with commas.")
                     }
                     Section {
-                        Toggle("Private", isOn: $actions.bookmarkInput.isPrivate)
-                        Toggle("Recommend", isOn: $actions.bookmarkInput.isRec)
+                        Toggle("Private", isOn: $actions.bookmarkInput.isPrivate).accentFill()
+                        Toggle("Recommend", isOn: $actions.bookmarkInput.isRec).accentFill()
                     }
                     if let error = actions.bookmarkError {
                         Section {
@@ -235,7 +235,7 @@ private struct AO3BookmarkComposer: View {
                     }
                     ToolbarItem(placement: .confirmationAction) {
                         if actions.isWorking {
-                            ProgressView()
+                            ProgressView().accentFill()
                         } else {
                             Button("Save") { actions.submitBookmark(workID: workID, auth: auth) }
                         }

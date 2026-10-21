@@ -169,6 +169,7 @@ struct SearchPaginationBar: View {
             if isLoading {
                 ProgressView()
                     .controlSize(.mini)
+                    .accentFill()
             } else if totalPages > 1 {
                 Image(systemName: "chevron.up")
                     .font(.system(size: 10, weight: .semibold))

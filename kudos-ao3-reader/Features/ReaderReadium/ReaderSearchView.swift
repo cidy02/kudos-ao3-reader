@@ -323,7 +323,7 @@ struct ReaderSearchView: View {
                 description: Text("Search the text of this work. Tap a result to jump to that passage.")
             )
         case .searching:
-            ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
+            ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity).accentFill()
         case let .failed(message):
             ContentUnavailableView(
                 "Couldn't Search", systemImage: "exclamationmark.triangle",
@@ -361,7 +361,7 @@ struct ReaderSearchView: View {
             if isCurrentChapterGroupPending {
                 Section("This Chapter") {
                     HStack(spacing: 8) {
-                        ProgressView()
+                        ProgressView().accentFill()
                         Text("Searching…")
                             .foregroundStyle(.secondary)
                     }
@@ -383,7 +383,7 @@ struct ReaderSearchView: View {
             if model.isLoadingMore {
                 HStack {
                     Spacer()
-                    ProgressView()
+                    ProgressView().accentFill()
                     Spacer()
                 }
             }

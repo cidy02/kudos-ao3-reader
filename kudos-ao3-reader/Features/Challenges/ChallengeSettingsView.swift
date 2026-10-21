@@ -359,6 +359,7 @@ struct ChallengeSettingsView: View {
                 Toggle("", isOn: .constant(restriction.allowsAnyTag))
                     .labelsHidden()
                     .disabled(true)
+                    .accentFill()
             }
 
             if !isPromptMeme {
@@ -368,6 +369,7 @@ struct ChallengeSettingsView: View {
                     Toggle("", isOn: .constant(!restriction.allowAnyFandom))
                         .labelsHidden()
                         .disabled(true)
+                        .accentFill()
                 }
             }
         }
@@ -471,6 +473,7 @@ private extension ChallengeSettingsView {
         HStack(spacing: 10) {
             ProgressView()
                 .controlSize(.small)
+                .accentFill()
             Text("Loading challenge settings…")
                 .font(.system(size: loadingSize))
                 .foregroundStyle(.secondary)
@@ -494,6 +497,8 @@ private extension ChallengeSettingsView {
                 Task { await loadSettings() }
             }
             .buttonStyle(.bordered)
+            .foregroundStyle(.accentInk)
+            .accentFill()
             .tint(palette.tint)
             .padding(.top, 4)
         }

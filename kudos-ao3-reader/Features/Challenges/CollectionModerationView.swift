@@ -413,6 +413,7 @@ struct CollectionModerationView: View {
                 if isInFlight {
                     ProgressView()
                         .controlSize(.small)
+                        .accentFill()
                 }
                 Text(title)
                     .font(.system(size: bodySize, weight: .semibold))
@@ -637,6 +638,7 @@ struct CollectionModerationView: View {
                         if isRevealing {
                             ProgressView()
                                 .controlSize(.small)
+                                .accentFill()
                         }
                     }
                     .padding(.horizontal, 14)
@@ -670,6 +672,7 @@ struct CollectionModerationView: View {
                         if isUnanonymizing {
                             ProgressView()
                                 .controlSize(.small)
+                                .accentFill()
                         }
                     }
                     .padding(.horizontal, 14)
@@ -697,6 +700,7 @@ struct CollectionModerationView: View {
         HStack(spacing: 10) {
             ProgressView()
                 .controlSize(.small)
+                .accentFill()
             Text("Loading moderation…")
                 .font(.system(size: loadingSize))
                 .foregroundStyle(.secondary)
@@ -720,6 +724,8 @@ struct CollectionModerationView: View {
                 Task { await load() }
             }
             .buttonStyle(.bordered)
+            .foregroundStyle(.accentInk)
+            .accentFill()
             .tint(palette.tint)
             .padding(.top, 4)
         }

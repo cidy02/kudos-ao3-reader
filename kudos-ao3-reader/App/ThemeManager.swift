@@ -54,11 +54,14 @@ final class ThemeManager {
         Color(hex: accentHex) ?? Color(hex: Self.ao3Red)!
     }
 
-    /// The control/link tint for the whole app: Sepia keeps its cohesive warm
+    /// The exact control fill for the whole app: Sepia keeps its cohesive warm
     /// brown; Light/Dark use the user's accent (default AO3 red).
     var effectiveTint: Color {
         SubjectPalette.controlColor(appTheme.appTint ?? accentColor, on: appTheme)
     }
+
+    /// Text, glyphs and text-button labels; filled controls keep `effectiveTint`.
+    var accentInk: Color { appTheme.accentInk(for: effectiveTint) }
 
     /// The palette every *scope*-level surface in the redesign draws from — the
     /// Account hub, the pushed Home and Library sections, the inbox, Writing.
@@ -83,7 +86,7 @@ final class ThemeManager {
     /// search results, a queue) take that subject's own hue instead — there is no
     /// chosen colour there to be faithful to. See `CoverArt.workHue(fandoms:title:)`.
     /// Built from the accent itself, not `effectiveTint`: the wash is the
-    /// chosen colour (1m); only controls are lifted on dark grounds.
+    /// chosen colour (1m); text receives readable ink separately.
     var scopePalette: SubjectPalette {
         SubjectPalette(color: appTheme.appTint ?? accentColor, theme: appTheme)
     }

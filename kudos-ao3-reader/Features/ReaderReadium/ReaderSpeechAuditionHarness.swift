@@ -61,6 +61,7 @@ struct ReaderSpeechAuditionHarness: View {
                 Slider(value: $rate, in: ReaderSpeechPreferences.rateRange, step: 0.05)
                     .accessibilityLabel("Audition speed")
                     .accessibilityValue(rateLabel)
+                    .accentFill()
 
                 // The open question is specifically 0.9 (widely recommended for
                 // audiobook narration) against our 1.0 default, so make that
@@ -74,6 +75,8 @@ struct ReaderSpeechAuditionHarness: View {
                                 .frame(maxWidth: .infinity)
                         }
                         .buttonStyle(.bordered)
+                        .foregroundStyle(.accentInk)
+                        .accentFill()
                         .disabled(abs(rate - candidate) < 0.001)
                     }
                 }
@@ -93,6 +96,7 @@ struct ReaderSpeechAuditionHarness: View {
                         controller.stop()
                     }
                     .buttonStyle(.borderedProminent)
+                    .accentFill()
                     .frame(maxWidth: .infinity, alignment: .center)
                     .padding(.top, 4)
                 }

@@ -70,7 +70,7 @@ struct ReaderOptionsForm: View {
         .sheet(isPresented: $showCustomize) {
             CustomizeThemeView()
                 .environment(themeManager)
-                .tint(themeManager.effectiveTint)
+                .accentTint(themeManager.effectiveTint, on: themeManager.appTheme)
                 .presentationDetents([.large])
                 .presentationDragIndicator(.visible)
         }
@@ -88,6 +88,7 @@ struct ReaderThemePicker: View {
             ForEach(ReaderTheme.allCases) { Label($0.title, systemImage: $0.symbol).tag($0) }
         }
         .pickerStyle(.segmented)
+        .accentFill()
         .labelStyle(.titleOnly)
     }
 }
@@ -119,6 +120,7 @@ struct ReaderLayoutSection: View {
                 ForEach(ReadingMode.allCases) { Label($0.title, systemImage: $0.symbol).tag($0) }
             }
             .pickerStyle(.segmented)
+            .accentFill()
             .labelStyle(.titleOnly)
 
             // Two-page spread is hidden on iPhone (no practical use); shown on
@@ -126,13 +128,14 @@ struct ReaderLayoutSection: View {
             if twoPageSpreadAvailable {
                 Toggle("Two-page spread", isOn: $twoPageEnabled)
                     .disabled(readingMode != .paged || !twoPageAvailable)
+                    .accentFill()
             }
 
             // 1ab files this under Reading. iOS only: macOS has no idle
             // timer to hold open, and a switch that did nothing there
             // would be worse than its absence.
             #if os(iOS)
-            Toggle("Keep screen awake", isOn: $keepScreenAwake)
+            Toggle("Keep screen awake", isOn: $keepScreenAwake).accentFill()
             #endif
         } header: {
             Text("Reading")
@@ -426,6 +429,7 @@ struct ReplaceLibraryConfirmationView: View {
                         Text("I understand the risks")
                             .font(.footnote.weight(.semibold))
                     }
+                    .accentFill()
                 } else {
                     Text("You can't replace your library until a copy can be saved. Free some "
                         + "space and try again.")
@@ -456,8 +460,9 @@ struct ReplaceLibraryConfirmationView: View {
                     Toggle(isOn: $acknowledgedRemoval) {
                         Text("Remove \(willRemove) works that are not in this backup")
                     }
+                    .accentFill()
                     if syncIsConnected {
-                        Toggle("Pause Library Sync on this device", isOn: $pauseSync)
+                        Toggle("Pause Library Sync on this device", isOn: $pauseSync).accentFill()
                         Text("If you leave Library Sync on, it will add the removed works back. "
                             + "Pause it on this device?")
                             .font(.footnote)

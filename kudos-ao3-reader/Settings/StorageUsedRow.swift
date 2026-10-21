@@ -23,7 +23,7 @@ struct StorageUsedRow: View {
             } else {
                 // Measuring walks several directories, so the row says it is
                 // working rather than showing a zero that is about to change.
-                ProgressView().controlSize(.small)
+                ProgressView().controlSize(.small).accentFill()
             }
         }
         .task {
