@@ -1,12 +1,12 @@
 package io.github.cidy02.kudos.ui.components
 
-import androidx.compose.foundation.border
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import io.github.cidy02.kudos.ui.subject.HomeStatusArrangement
 import io.github.cidy02.kudos.ui.subject.HomeStatusTray
 import io.github.cidy02.kudos.ui.subject.SubjectKicker
+import io.github.cidy02.kudos.ui.subject.SubjectStateBadge
 import io.github.cidy02.kudos.ui.subject.isAccessibilityFontScale
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
@@ -542,19 +542,8 @@ private fun LedgerBody(
                                 }
                         )
                     }
-                    badges.forEach { badge ->
-                        Text(
-                            text = badge.uppercase(),
-                            color = tokens.secondaryInk,
-                            fontSize = 9.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            letterSpacing = 0.6.sp,
-                            maxLines = 1,
-                            modifier = Modifier
-                                .border(0.5.dp, tokens.secondaryInk.copy(alpha = 0.5f), RoundedCornerShape(4.dp))
-                                .padding(horizontal = 5.dp, vertical = 1.dp)
-                        )
-                    }
+                    // iOS draws Private and Rec as `SubjectStateBadge`s in the secondary colour (A70).
+                    badges.forEach { badge -> SubjectStateBadge(text = badge, color = tokens.secondaryInk) }
                 }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {

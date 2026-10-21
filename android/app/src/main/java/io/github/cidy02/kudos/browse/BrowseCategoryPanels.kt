@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
@@ -27,6 +28,7 @@ import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -65,9 +67,14 @@ fun JumpBackInSection(
 ) {
     if (picks.isEmpty()) return
     val names = picks.map { it.fandom }
+    val listState = rememberLazyListState()
+    // A pick that arrives in front (visits load after the Library) kept the old first card in
+    // place, so the new first card hung cut off at the left edge (A70). iOS starts at the first.
+    LaunchedEffect(names.firstOrNull()) { listState.scrollToItem(0) }
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(11.dp)) {
         SectionRuleHeader(title = "Jump Back In", count = picks.size)
         LazyRow(
+            state = listState,
             horizontalArrangement = Arrangement.spacedBy(11.dp),
             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp)
         ) {

@@ -121,7 +121,9 @@ internal fun SettingsListeningPage(
                         val inUse = speech.rate == rate
                         androidx.compose.foundation.layout.Box(
                             Modifier.weight(1f).heightIn(min = 44.dp)
-                                .background(tokens.glassFill(if (inUse) 0.05 else 0.12), androidx.compose.foundation.shape.RoundedCornerShape(10.dp))
+                                // iOS's bordered buttons: tinted with the accent, the one in use dimmed (A70b).
+                                .background(if (inUse) tokens.glassFill(0.05) else tokens.scopePalette.accent.copy(alpha = 0.15f),
+                                    androidx.compose.foundation.shape.RoundedCornerShape(10.dp))
                                 .clickable(enabled = !inUse, role = androidx.compose.ui.semantics.Role.Button) { updateRate(rate) }
                                 .padding(horizontal = 6.dp, vertical = 8.dp),
                             contentAlignment = androidx.compose.ui.Alignment.Center
@@ -220,7 +222,8 @@ internal fun ListeningChoiceRow(
     var expanded by remember { mutableStateOf(false) }
     val tokens = LocalKudosTokens.current
     Box(Modifier.fillMaxWidth()) {
-        SubjectFormRow(label, value = value, showsDisclosure = true, onClick = { expanded = true })
+        // iOS draws these as menu pickers: the value in the accent with a chevron (A70b).
+        SubjectFormRow(label, value = value, showsChoice = true, onClick = { expanded = true })
         DropdownMenu(
             expanded = expanded,
             onDismissRequest = { expanded = false },

@@ -36,6 +36,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.outlined.List
 import androidx.compose.material.icons.automirrored.outlined.MenuBook
@@ -70,8 +71,6 @@ import io.github.cidy02.kudos.ui.components.DestructiveConfirmation
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -98,6 +97,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -752,7 +752,16 @@ private fun LibraryContent(
                 (state.topFandoms.isNotEmpty() || state.filters.hasActiveFilters)
             ) {
                 item {
+                    // iOS `washPalette`: the chips take the hero work's own colour in every theme,
+                    // Sepia included (its fixed brown is the app tint, not the page's wash).
+                    val chipTokens = io.github.cidy02.kudos.ui.subject.LocalKudosTokens.current
                     FandomFilterChips(
+                        palette = state.continueReading.firstOrNull()?.item?.work
+                            ?.let {
+                                io.github.cidy02.kudos.ui.subject.SubjectPalette.fromHue(
+                                    io.github.cidy02.kudos.home.HomeFacts.workHue(it.workFandoms, it.title), chipTokens.theme
+                                )
+                            } ?: chipTokens.scopePalette,
                         topFandoms = state.topFandoms,
                         selectedFandom = state.filters.fandoms.singleOrNull(),
                         hasActiveFilters = state.filters.hasActiveFilters,
@@ -1786,6 +1795,7 @@ private fun LibraryToolbarPill(
 
 @Composable
 private fun FandomFilterChips(
+    palette: io.github.cidy02.kudos.ui.subject.SubjectPalette,
     topFandoms: List<String>,
     selectedFandom: String?,
     hasActiveFilters: Boolean,
@@ -1794,6 +1804,17 @@ private fun FandomFilterChips(
     onReset: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    // iOS `LibraryView.filterChip`: pills in the page wash's palette, and a quieter Reset pill
+    // with an xmark (A70: Android drew Material's square-cornered filter chips).
+    @Composable
+    fun Pill(text: String, selected: Boolean, onClick: () -> Unit) = SubjectChip(
+        text = text,
+        style = SubjectChipStyle.Pill(selected),
+        palette = palette,
+        modifier = Modifier
+            .semantics { this.selected = selected }
+            .clickable(onClick = onClick)
+    )
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -1802,37 +1823,23 @@ private fun FandomFilterChips(
         verticalAlignment = Alignment.CenterVertically
     ) {
         if (topFandoms.isNotEmpty()) {
-            val allSelected = selectedFandom == null
-            val tokens = io.github.cidy02.kudos.ui.subject.LocalKudosTokens.current
-            val chipColors = FilterChipDefaults.filterChipColors(
-                selectedContainerColor = tokens.accent,
-                selectedLabelColor = tokens.background
-            )
-            FilterChip(
-                selected = allSelected,
-                onClick = onSelectAll,
-                label = { Text("All") },
-                colors = chipColors
-            )
+            Pill("All", selectedFandom == null, onSelectAll)
             topFandoms.forEach { fandom ->
-                FilterChip(
-                    selected = selectedFandom == fandom,
-                    onClick = {
-                        if (selectedFandom == fandom) onSelectAll() else onSelectFandom(fandom)
-                    },
-                    label = {
-                        Text(
-                            fandom,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    },
-                    colors = chipColors
-                )
+                Pill(fandom, selectedFandom == fandom) {
+                    if (selectedFandom == fandom) onSelectAll() else onSelectFandom(fandom)
+                }
             }
         }
         if (hasActiveFilters) {
-            TextButton(onClick = onReset) { Text("Reset") }
+            SubjectChip(
+                text = "Reset",
+                style = SubjectChipStyle.Pill(false),
+                leadingIcon = Icons.Default.Close,
+                modifier = Modifier
+                    .alpha(0.7f)
+                    .semantics { contentDescription = "Reset filters" }
+                    .clickable(onClick = onReset)
+            )
         }
     }
 }

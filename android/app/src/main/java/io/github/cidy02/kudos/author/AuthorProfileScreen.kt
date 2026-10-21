@@ -899,9 +899,12 @@ fun AuthorProfileScreen(
                             item {
                                 LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                     items(AO3AuthorWorksScope.entries.filter { it.acceptsWorkSearch || it == AO3AuthorWorksScope.Gifts }) { scopeVal ->
+                                        // iOS `WorksScopeAndSort`: the screen's palette, whose accent is
+                                        // lifted on dark themes (A70c: the raw red read as a different chip).
                                         SubjectChip(
                                             text = scopeVal.label,
                                             style = SubjectChipStyle.Pill(scopeState == scopeVal),
+                                            palette = LocalKudosTokens.current.scopePalette,
                                             modifier = Modifier.clickable {
                                                 if (scopeState != scopeVal) { scopeState = scopeVal; loadTab(tab, 1) }
                                             }
@@ -918,6 +921,7 @@ fun AuthorProfileScreen(
                                     LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                         item {
                                             SubjectChip(text = "All", style = SubjectChipStyle.Pill(selectedFandom == null),
+                                                palette = LocalKudosTokens.current.scopePalette,
                                                 modifier = Modifier.clickable {
                                                     if (selectedFandom != null) { selection.exit(); selectedFandom = null; loadTab(tab, 1) }
                                                 })
@@ -926,6 +930,7 @@ fun AuthorProfileScreen(
                                             val count = fandom.workCount?.let { " (${it.compactCount()})" }.orEmpty()
                                             SubjectChip(text = io.github.cidy02.kudos.browse.FandomDisplayName.bareTitle(fandom.name) + count,
                                                 style = SubjectChipStyle.Pill(selectedFandom == fandom),
+                                                palette = LocalKudosTokens.current.scopePalette,
                                                 modifier = Modifier.clickable {
                                                     if (selectedFandom != fandom) { selection.exit(); selectedFandom = fandom; loadTab(tab, 1) }
                                                 })

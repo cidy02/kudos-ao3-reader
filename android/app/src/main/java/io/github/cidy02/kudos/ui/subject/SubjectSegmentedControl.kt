@@ -47,6 +47,9 @@ fun <T> SubjectSegmentedControl(
     val track = RoundedCornerShape(9.dp)
     val segment = RoundedCornerShape(7.dp)
     val large = isAccessibilityFontScale()
+    // On a Settings page iOS uses the native segmented control: a white pill on light themes (A70b).
+    val selectedFill = if (LocalSettingsFormGround.current && !tokens.theme.isDarkFamily) Color.White
+        else tokens.glassFill(0.16)
     Column(
         modifier
             .fillMaxWidth()
@@ -67,7 +70,7 @@ fun <T> SubjectSegmentedControl(
                 Modifier
                     .weight(1f)
                     .clip(segment)
-                    .background(if (isSelected) tokens.glassFill(0.16) else Color.Transparent)
+                    .background(if (isSelected) selectedFill else Color.Transparent)
                     .clickable { onSelect(option) }
                     .semantics { this.selected = isSelected }
                     .padding(vertical = 6.dp, horizontal = 4.dp),

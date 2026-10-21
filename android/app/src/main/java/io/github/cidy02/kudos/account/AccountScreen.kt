@@ -23,6 +23,11 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.automirrored.outlined.Login
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Cancel
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Sync
+import androidx.compose.material.icons.filled.Verified
+import androidx.compose.material.icons.filled.WifiOff
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.ui.unit.sp
@@ -469,23 +474,23 @@ private fun AccountSignedInHeader(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(5.dp)
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(7.dp)
-                        .background(
-                            when (sessionHealth) {
-                                AO3SessionHealth.Expired -> MaterialTheme.colorScheme.error
-                                AO3SessionHealth.Unreachable -> Color(0xFFFF9500)
-                                else -> Color(0xFF34C759)
-                            },
-                            CircleShape
-                        )
-                )
+                // iOS `sessionStatusIcon`: a symbol for each state, not a coloured dot (A70).
+                val (statusIcon, statusTint) = when (sessionHealth) {
+                    AO3SessionHealth.Verifying -> Icons.Filled.Sync to tokens.secondaryInk
+                    is AO3SessionHealth.Healthy -> Icons.Filled.Verified to Color(0xFF34C759)
+                    AO3SessionHealth.Expired -> Icons.Filled.Cancel to MaterialTheme.colorScheme.error
+                    AO3SessionHealth.Unreachable -> Icons.Filled.WifiOff to Color(0xFFFF9500)
+                    else -> Icons.Filled.CheckCircle to Color(0xFF34C759)
+                }
+                Icon(statusIcon, contentDescription = null, tint = statusTint, modifier = Modifier.size(13.dp))
                 Text(
                     text = when (sessionHealth) {
                         AO3SessionHealth.Verifying -> "Checking session…"
                         AO3SessionHealth.Expired -> "Session expired"
                         AO3SessionHealth.Unreachable -> "Signed in · couldn't verify"
+                        // iOS `sessionStatusLineText`: the check's own time once AO3 confirmed it.
+                        is AO3SessionHealth.Healthy -> "Session verified " +
+                            relativeSyncPhrase(sessionHealth.verifiedAtEpochMillis, System.currentTimeMillis())
                         else -> "Signed in"
                     },
                     fontSize = 12.sp,
