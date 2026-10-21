@@ -239,6 +239,52 @@ class SyncRepositoryTest {
         assertTrue(syncRepository.runAutoSync() is SyncResult.Success)
     }
 
+    /**
+     * Replace pauses sync after this run already passed its Auto Sync check.
+     * The import must not land, and Sync Now must still be able to bring the
+     * folder's work in afterwards.
+     */
+    @Test
+    fun autoSyncThatAlreadyPassedItsCheckDoesNotImportAfterReplacePauses() = runTest {
+        seedFolder(remoteBackupWork(WORK_REMOTE, "Theirs", hasEpub = false))
+        val gate = object : PersistenceGate() {
+            var pauseOnNextImport = true
+            override suspend fun <T> withLock(action: suspend () -> T): T {
+                if (pauseOnNextImport) {
+                    pauseOnNextImport = false
+                    settingsRepository.updateSyncIsEnabled(false)
+                }
+                return super.withLock(action)
+            }
+        }
+        backupRepository = BackupRepository(
+            database = database,
+            workFileStore = workFileStore,
+            fontFileStore = fontFileStore,
+            settingsRepository = settingsRepository,
+            persistenceGate = gate,
+            clock = { clockInstant },
+            uuidFactory = { "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb" },
+            appVersion = "test"
+        )
+        syncRepository = SyncRepository(
+            context = context,
+            settingsRepository = settingsRepository,
+            backupRepository = backupRepository,
+            workFileStore = workFileStore,
+            fontFileStore = fontFileStore,
+            persistenceGate = gate,
+            clock = { clockInstant }
+        )
+
+        val automatic = syncRepository.runAutoSync()
+        assertTrue(automatic is SyncResult.Success)
+        assertNull(database.workDao().getById(WORK_REMOTE))
+
+        assertTrue(syncRepository.runSync() is SyncResult.Success)
+        assertEquals("Theirs", database.workDao().getById(WORK_REMOTE)?.title)
+    }
+
     // ------------------------------------------------------------------ (A)
 
     @Test

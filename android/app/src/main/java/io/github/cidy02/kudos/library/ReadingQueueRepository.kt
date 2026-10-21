@@ -717,36 +717,42 @@ class ReadingQueueRepository(
     }
 
     private suspend fun normalizeWork(workId: String, now: Instant, markModified: Boolean = false) {
-        val work = workDao.getById(workId) ?: return
-        // A Recently Deleted queue still owns its memberships until permanent deletion.
-        val hasMembership = queueDao.getMembershipsForWork(workId).any {
-            queueDao.getQueueById(it.queueID) != null
-        }
-        val hasFile = epubOnDisk?.invoke(workId) ?: work.hasEpub
-        val releaseHold = work.freedAt != null && workDao.isKeptOffline(workId)
-        var status = work.epubPreservationStatusRaw ?: "notPreserved"
-        var preservedAt = work.preservedAt
-        if (!hasFile && status == "preserved") status = "missingFile"
-        if (hasMembership) {
-            if (work.hasEpub && hasFile) {
-                if (status != "preserving") status = "preserved"
-                if (preservedAt == null) preservedAt = now
-            } else if (status == "notPreserved") {
-                status = "queued"
+        if (workDao.getById(workId) == null) return
+        // The file stat yields. On addWork that yield is outside a transaction, so the
+        // row written afterwards has to be the one read after the stat, not before it.
+        val probed = epubOnDisk?.invoke(workId)
+        database.withTransaction {
+            val work = workDao.getById(workId) ?: return@withTransaction
+            // A Recently Deleted queue still owns its memberships until permanent deletion.
+            val hasMembership = queueDao.getMembershipsForWork(workId).any {
+                queueDao.getQueueById(it.queueID) != null
             }
-        } else {
-            status = "notPreserved"
-            preservedAt = null
+            val hasFile = probed ?: work.hasEpub
+            val releaseHold = work.freedAt != null && workDao.isKeptOffline(workId)
+            var status = work.epubPreservationStatusRaw ?: "notPreserved"
+            var preservedAt = work.preservedAt
+            if (!hasFile && status == "preserved") status = "missingFile"
+            if (hasMembership) {
+                if (work.hasEpub && hasFile) {
+                    if (status != "preserving") status = "preserved"
+                    if (preservedAt == null) preservedAt = now
+                } else if (status == "notPreserved") {
+                    status = "queued"
+                }
+            } else {
+                status = "notPreserved"
+                preservedAt = null
+            }
+            val normalized = work.copy(
+                isQueuedForLater = hasMembership,
+                hasEpub = work.hasEpub && hasFile,
+                freedAt = if (releaseHold) null else work.freedAt,
+                epubPreservationStatusRaw = status,
+                preservedAt = preservedAt,
+                lastModifiedAt = if (markModified || releaseHold) now else work.lastModifiedAt
+            )
+            if (normalized != work) workDao.upsert(normalized)
         }
-        val normalized = work.copy(
-            isQueuedForLater = hasMembership,
-            hasEpub = work.hasEpub && hasFile,
-            freedAt = if (releaseHold) null else work.freedAt,
-            epubPreservationStatusRaw = status,
-            preservedAt = preservedAt,
-            lastModifiedAt = if (markModified || releaseHold) now else work.lastModifiedAt
-        )
-        if (normalized != work) workDao.upsert(normalized)
     }
 
     suspend fun sweepExpiredQueueSoftDeletes(): Int {

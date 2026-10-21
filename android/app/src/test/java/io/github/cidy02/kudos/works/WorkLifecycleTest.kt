@@ -12,6 +12,7 @@ import io.github.cidy02.kudos.core.model.SyncTombstone
 import io.github.cidy02.kudos.core.model.SyncTombstoneRecordType
 import io.github.cidy02.kudos.data.local.KudosDatabase
 import io.github.cidy02.kudos.data.local.entity.toEntity
+import io.github.cidy02.kudos.files.FileWriteResult
 import io.github.cidy02.kudos.files.WorkFileStore
 import io.github.cidy02.kudos.network.ao3.AO3BinaryResponse
 import io.github.cidy02.kudos.network.ao3.AO3Client
@@ -24,6 +25,7 @@ import io.github.cidy02.kudos.network.ao3.work.AO3WorkMetadata
 import io.github.cidy02.kudos.network.ao3.work.AO3WorkMetadataRepository
 import java.io.ByteArrayOutputStream
 import java.nio.file.Files
+import java.time.Duration
 import java.time.Instant
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
@@ -1030,6 +1032,102 @@ class WorkLifecycleRepositoryTest {
         assertEquals(untouched.lastModifiedAt, repository.getWork(untouched.id)!!.lastModifiedAt)
         assertTrue(repository.observePositionedWorks().first().isEmpty())
     }
+
+    /** A page saved while the launch rebuild is between its batches survives. */
+    @Test
+    fun searchRebuildKeepsAPlaceWrittenBetweenBatches() = runTest {
+        val seeded = repository.upsert(sampleSavedWork().copy(lastSpineIndex = 1, isFavorite = false))
+        database.workDao().upsert(
+            database.workDao().getById(seeded.id)!!.copy(searchIndexVersion = 0, searchText = "")
+        )
+        val rebuilding = WorkRepository(
+            database = database,
+            fileStore = fileStore,
+            clock = { clockNow },
+            uuidFactory = { "22222222-2222-2222-2222-222222222222" },
+            beforeIndexingStaleWork = { id ->
+                val row = database.workDao().getById(id)!!
+                database.workDao().upsert(row.copy(lastSpineIndex = 9, isFavorite = true))
+            }
+        )
+        assertEquals(1, rebuilding.rebuildSearchIndexIfNeeded())
+        val after = database.workDao().getById(seeded.id)!!
+        assertEquals(9, after.lastSpineIndex)
+        assertTrue(after.isFavorite)
+        assertEquals(WorkSearchIndex.CURRENT_VERSION, after.searchIndexVersion)
+        assertTrue(after.searchText.contains("example"))
+    }
+
+    /** Deleting the file must not write back the row from before the delete. */
+    @Test
+    fun deleteLocalEpubKeepsAPlaceWrittenDuringTheFileDelete() = runTest {
+        val id = "33333333-3333-4333-8333-333333333333"
+        val hooked = object : WorkFileStore(fileStore.worksDirectory.parent) {
+            override suspend fun deleteWorkEpub(workId: String): Boolean {
+                val row = database.workDao().getById(workId)!!
+                database.workDao().upsert(row.copy(lastSpineIndex = 9, isFavorite = true))
+                return super.deleteWorkEpub(workId)
+            }
+        }
+        repository = WorkRepository(
+            database, hooked, clock = { clockNow },
+            uuidFactory = { "22222222-2222-2222-2222-222222222222" }
+        )
+        repository.upsert(sampleSavedWork(id).copy(lastSpineIndex = 1, isFavorite = false, hasEpub = true))
+        hooked.writeWorkEpub(id, epubBytes)
+        val deleted = repository.deleteLocalEpub(id)!!
+        assertEquals(9, deleted.lastSpineIndex)
+        assertTrue(deleted.isFavorite)
+        assertFalse(deleted.hasEpub)
+        assertFalse(deleted.remoteEpubPending)
+        assertNull(deleted.freedAt)
+    }
+
+    /** The held-copy sweep must not write back the list it loaded at the start. */
+    @Test
+    fun sweepHeldCopiesKeepsAPlaceWrittenWhileAnEarlierCopyIsFreed() = runTest {
+        val freeableId = "33333333-3333-4333-8333-333333333333"
+        val keptId = "44444444-4444-4444-8444-444444444444"
+        val hooked = object : WorkFileStore(fileStore.worksDirectory.parent) {
+            override suspend fun deleteWorkEpub(workId: String): Boolean {
+                if (workId == freeableId) {
+                    val kept = database.workDao().getById(keptId)!!
+                    database.workDao().upsert(kept.copy(lastSpineIndex = 9, isFavorite = true))
+                }
+                return super.deleteWorkEpub(workId)
+            }
+        }
+        repository = WorkRepository(
+            database, hooked, clock = { clockNow },
+            uuidFactory = { "22222222-2222-2222-2222-222222222222" }
+        )
+        repository.upsert(
+            sampleSavedWork(freeableId).copy(
+                isSaved = false,
+                isFavorite = false,
+                isFinished = true,
+                hasEpub = true,
+                freedAt = clockNow.minus(Duration.ofDays(61))
+            )
+        )
+        hooked.writeWorkEpub(freeableId, epubBytes)
+        repository.upsert(
+            sampleSavedWork(keptId).copy(
+                isSaved = true,
+                isFavorite = false,
+                lastSpineIndex = 1,
+                hasEpub = true,
+                freedAt = clockNow.minus(Duration.ofDays(1))
+            )
+        )
+        repository.sweepHeldCopies()
+        val kept = database.workDao().getById(keptId)!!
+        assertEquals(9, kept.lastSpineIndex)
+        assertTrue(kept.isFavorite)
+        assertNull(kept.freedAt)
+        val freed = database.workDao().getById(freeableId)!!
+        assertFalse(freed.hasEpub)
+    }
 }
 
 
@@ -1547,6 +1645,66 @@ class WorkImporterLifecycleTest {
             repository.observeSavedWorks().first().none { it.id == work.id }
         )
         assertNotNull("the row itself still exists for the Reading Queues screen", repository.getWork(work.id))
+    }
+
+    /** Re-importing an EPUB the library already has must not write the pre-write row. */
+    @Test
+    fun reimportKeepsAPlaceWrittenDuringTheEpubWrite() = runTest {
+        val id = "55555555-5555-4555-8555-555555555555"
+        val hooked = object : WorkFileStore(fileStore.worksDirectory.parent) {
+            override suspend fun writeWorkEpub(workId: String, bytes: ByteArray): FileWriteResult {
+                val row = database.workDao().getById(workId)!!
+                database.workDao().upsert(row.copy(lastSpineIndex = 9, isFavorite = true))
+                return super.writeWorkEpub(workId, bytes)
+            }
+        }
+        fileStore = hooked
+        repository = WorkRepository(database, fileStore, clock = { capturedNow })
+        repository.upsert(
+            sampleSavedWork(id).copy(
+                sourceUrl = "https://archiveofourown.org/works/424242",
+                lastSpineIndex = 1,
+                isFavorite = false,
+                hasEpub = false,
+                title = "Local title"
+            )
+        )
+        val result = importer(
+            AO3Result.Failure(AO3Error.NotFound),
+            AO3Result.Failure(AO3Error.NotFound)
+        ).importLocalEpub("book.epub", syntheticAo3Epub())
+        val saved = result as WorkImportResult.Success
+        assertEquals(id, saved.work.id)
+        assertEquals(9, saved.work.lastSpineIndex)
+        assertTrue(saved.work.isFavorite)
+        assertTrue(saved.work.hasEpub)
+    }
+
+    /** Preserving a queued work must not write the row from before the exists check. */
+    @Test
+    fun preserveKeepsAPlaceWrittenDuringTheExistsCheck() = runTest {
+        val id = "66666666-6666-4666-8666-666666666666"
+        val hooked = object : WorkFileStore(fileStore.worksDirectory.parent) {
+            override suspend fun workEpubExists(workId: String): Boolean {
+                val row = database.workDao().getById(workId) ?: return super.workEpubExists(workId)
+                database.workDao().upsert(row.copy(lastSpineIndex = 9, isFavorite = true))
+                return super.workEpubExists(workId)
+            }
+        }
+        fileStore = hooked
+        repository = WorkRepository(database, fileStore, clock = { capturedNow })
+        val work = repository.upsert(
+            sampleSavedWork(id).copy(hasEpub = true, lastSpineIndex = 1, isFavorite = false)
+        )
+        hooked.writeWorkEpub(id, epubBytes)
+        val result = importer(
+            AO3Result.Failure(AO3Error.NotFound),
+            AO3Result.Failure(AO3Error.NotFound)
+        ).preserveQueuedWork(repository.getWork(work.id)!!)
+        val preserved = result as WorkImportResult.Success
+        assertEquals("preserved", preserved.work.epubPreservationStatusRaw)
+        assertEquals(9, preserved.work.lastSpineIndex)
+        assertTrue(preserved.work.isFavorite)
     }
 
     @Test

@@ -45,13 +45,13 @@ open class WorkFileStore(
         }
     }
 
-    suspend fun deleteWorkEpub(workId: String): Boolean {
+    open suspend fun deleteWorkEpub(workId: String): Boolean {
         return withContext(Dispatchers.IO) {
             runCatching { Files.deleteIfExists(workEpubPath(workId)) }.getOrDefault(false)
         }
     }
 
-    suspend fun workEpubExists(workId: String): Boolean {
+    open suspend fun workEpubExists(workId: String): Boolean {
         return withContext(Dispatchers.IO) {
             runCatching { Files.isRegularFile(workEpubPath(workId)) }.getOrDefault(false)
         }

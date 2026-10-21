@@ -49,7 +49,12 @@ class WorkRepository(
     private val fileStore: WorkFileStore,
     private val tagsRepository: WorkTagsRepository? = null,
     private val clock: () -> Instant = { Instant.now() },
-    private val uuidFactory: () -> String = { UUID.randomUUID().toString() }
+    private val uuidFactory: () -> String = { UUID.randomUUID().toString() },
+    /**
+     * Runs before each stale work is indexed, after the launch snapshot was taken.
+     * A reader edit here must survive the save.
+     */
+    private val beforeIndexingStaleWork: suspend (String) -> Unit = {}
 ) {
     private val workDao = database.workDao()
     private val tagDao = database.tagDao()
@@ -249,12 +254,35 @@ class WorkRepository(
                 workDao.getWithStaleSearchIndex(version).map { it.toDomain() }
             },
             userTagsFor = { workId ->
+                beforeIndexingStaleWork(workId)
                 userTagsForWork(workId).map { it.name }
             },
             save = { batch ->
-                workDao.upsertAll(batch.map { it.toEntity() })
+                // Search columns only, computed from the row as it is now: the copies were
+                // taken at launch, and a title, author or tag changed while this ran (a sync
+                // import, say) must not be stamped current with the old text (review of 3fy).
+                batch.forEach { work -> reindexSearchForWork(work.id) }
             }
         )
+    }
+
+    /**
+     * Re-reads [workId] inside a transaction and writes [transform] of that row.
+     * Callers that already suspended (a file write, an exists check) must not
+     * upsert the copy they held across that wait.
+     */
+    internal suspend fun rewriteFresh(
+        workId: String,
+        transform: suspend (SavedWork) -> SavedWork
+    ): SavedWork? = database.withTransaction {
+        val current = getWork(workId) ?: return@withTransaction null
+        upsert(transform(current))
+    }
+
+    /** Continue Reading dates only. Does not write the place, the search text, or any other column. */
+    suspend fun noteOpened(workId: String, at: Instant): SavedWork? {
+        workDao.noteOpened(workId, at)
+        return getWork(workId)
     }
 
     suspend fun setHasEpub(workId: String, hasEpub: Boolean): SavedWork? {
@@ -364,9 +392,12 @@ class WorkRepository(
         val now = clock()
         var freed = 0
         for (entity in workDao.getHeldCopies()) {
-            val work = decorate(entity.toDomain())
+            // Decide on the row as it is now, not the list read at the start: the reader may
+            // have opened (released) this work while an earlier copy was being freed (review
+            // of 3fy), and its file must then stay.
+            val work = getWork(entity.id)?.takeIf { it.freedAt != null } ?: continue
             if (!qualifiesForHold(work)) {
-                upsert(work.copy(freedAt = null, lastModifiedAt = now))
+                workDao.clearFreedAt(work.id, now)
             } else if (everything || !now.isBefore(work.freedAt!!.plus(FREED_COPY_WINDOW))) {
                 deleteLocalEpub(work.id)
                 freed += 1
@@ -383,9 +414,20 @@ class WorkRepository(
     }
 
     suspend fun deleteLocalEpub(workId: String): SavedWork? {
-        val work = getWork(workId) ?: return null
+        if (getWork(workId) == null) return null
         fileStore.deleteWorkEpub(workId)
-        return upsert(work.copy(hasEpub = false, remoteEpubPending = false, freedAt = null, lastModifiedAt = clock()))
+        clearLocalEpub(workId)
+        return getWork(workId)
+    }
+
+    private suspend fun clearLocalEpub(workId: String) {
+        workDao.updateLocalEpubFlags(
+            id = workId,
+            hasEpub = false,
+            remoteEpubPending = false,
+            freedAt = null,
+            lastModifiedAt = clock()
+        )
     }
 
     /**
@@ -652,7 +694,8 @@ class WorkRepository(
     private suspend fun reindexSearchForWork(workId: String) {
         val work = getWork(workId) ?: return
         val tags = userTagsForWork(workId).map { it.name }
-        workDao.upsert(WorkSearchIndex.reindex(work, tags).toEntity())
+        val indexed = WorkSearchIndex.reindex(work, tags)
+        workDao.updateSearchIndex(workId, indexed.searchText, indexed.searchIndexVersion)
     }
 
     suspend fun collectionsForWork(workId: String): List<WorkCollection> {
