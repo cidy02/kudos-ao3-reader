@@ -21,7 +21,7 @@ Places:
   fixtures in `android/app/src/test/resources/cross-platform/` (`ios-export.kudosbackup`,
   `expected-values.json`, the sync-folder fixtures), and the Android → iOS exporter test that
   writes `android-export.kudosbackup`.
-- **iOS** (`/Users/cidy02/kudos-ios-polish`, edit there too): `KudosTests/CrossPlatformBackupTests.swift`,
+- **iOS** (edit in the iOS agent worktree `/Users/cidy02/kudos-agent-ios`, branch `claude/agent-ios-3ge`; never in `/Users/cidy02/kudos-ios-polish`): `KudosTests/CrossPlatformBackupTests.swift`,
   `KudosTests/CrossPlatformFolderSyncTests.swift`, `KudosTests/Fixtures/cross-platform/`.
 
 Do:
