@@ -2490,3 +2490,9 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   matching iOS `Features/Account/PrivacyDataView.swift:120–177`. “Confirm before deleting”
   continues to govern swipes only, as its footnote says. No clear action or stored
   preference is removed.
+- **2026-10-21 · A collection's membership clock stays on the device (Claude; corrects A68).**
+  Neither app writes `collections[].lastMembershipChangedAt` to a backup: iOS's own comment calls
+  it "when this device's reader last chose the contents of this collection", the clock a device
+  uses to weigh a deletion from elsewhere against its own edits. Gemini's A68 said both apps
+  read and write it; they do not, by design (queues' clock is in both manifests). Codex's 3ge
+  found the absence; it is not a gap.
