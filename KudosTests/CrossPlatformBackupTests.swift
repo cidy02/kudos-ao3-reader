@@ -9,21 +9,23 @@ extension PersistenceGateSuites {
 @Suite(.serialized)
 struct CrossPlatformBackupTests {
     @Test func iosAndAndroidGoldenArchivesRestoreAndRoundTrip() throws {
+        let restoreStorage = try CrossPlatformFixtureFields.isolateStorage()
+        defer { restoreStorage() }
         let seeded = try seedLibrary()
         defer { seeded.cleanup() }
 
         let plan = try KudosBackupService.makeExportPlan(
             works: seeded.works,
             bookmarks: [seeded.bookmark],
-            fonts: [],
-            collections: [seeded.collection],
+            fonts: seeded.fonts,
+            collections: seeded.collections,
             readingQueues: seeded.queues,
             annotations: seeded.annotations,
             savedSearches: [seeded.search],
             readingSessions: [seeded.session],
             readingFavorites: seeded.favorites,
             fandomReadWatermarks: [seeded.watermark],
-            tombstones: [seeded.tombstone],
+            tombstones: seeded.tombstones,
             defaults: seeded.defaults
         )
         let generatedURL = FileManager.default.temporaryDirectory
@@ -69,15 +71,18 @@ struct CrossPlatformBackupTests {
         assertOriginals(in: iosArchive)
 
         let androidArchive = try KudosBackupContents.read(from: paths.androidArchive)
+        try CrossPlatformFixtureFields.assertArchive(androidArchive)
         // The seeded copies are still on disk and would satisfy "already here".
         // Take them away, so the archive Android wrote has to bring its own.
         seeded.removeOriginals()
+        try CrossPlatformFixtureFields.clearAssets()
         let restored = try restore(androidArchive)
         defer { restored.cleanup() }
+        try CrossPlatformFixtureFields.assertRestored(in: restored.container.mainContext)
         let reexported = try KudosBackupService.makeContents(
             works: restored.works,
             bookmarks: restored.bookmarks,
-            fonts: [],
+            fonts: restored.fonts,
             collections: restored.collections,
             readingQueues: restored.queues,
             annotations: restored.annotations,
@@ -95,6 +100,7 @@ struct CrossPlatformBackupTests {
             try? androidCanonical.write(to: URL(fileURLWithPath: dir).appendingPathComponent("android-archive.json"))
         }
         #expect(iosCanonical == androidCanonical)
+        try CrossPlatformFixtureFields.assertArchive(reexported)
         try assertRestoredEPUBs(restored.works, expected: seeded.epub)
         // What iOS wrote into its archive came back out of Android's: a backup
         // that passes through Android keeps a converted import's original.
@@ -332,21 +338,23 @@ struct CrossPlatformBackupTests {
 
         let tombstone = seedTombstone(in: context, dates: dates)
 
+        let coverage = try CrossPlatformFixtureFields.seed(in: context, work: second)
         let defaults = try seedDefaults()
 
         try context.save()
         return SeededLibrary(
             container: container,
             works: [first, second],
-            collection: collection,
-            queues: [custom, savedForLater],
-            annotations: annotations,
+            collections: [collection, coverage.collection],
+            fonts: [coverage.font],
+            queues: [custom, savedForLater, coverage.queue],
+            annotations: annotations + [coverage.annotation],
             session: session,
             favorites: favorites,
             watermark: watermark,
             search: search,
             bookmark: bookmark,
-            tombstone: tombstone,
+            tombstones: [tombstone, coverage.tombstone],
             defaults: defaults,
             epub: epub
         )
@@ -507,6 +515,7 @@ struct CrossPlatformBackupTests {
             container: container,
             works: try context.fetch(FetchDescriptor<SavedWork>()),
             bookmarks: try context.fetch(FetchDescriptor<Bookmark>()),
+            fonts: try context.fetch(FetchDescriptor<CustomFont>()),
             collections: try context.fetch(FetchDescriptor<WorkCollection>()),
             queues: try context.fetch(FetchDescriptor<ReadingQueue>()),
             annotations: try context.fetch(FetchDescriptor<ReadingAnnotation>()),
@@ -524,6 +533,7 @@ struct CrossPlatformBackupTests {
         matches expected: KudosBackupManifest,
         epub: Data
     ) throws {
+        try CrossPlatformFixtureFields.assertArchive(archive)
         let expectedData = try KudosBackupContents(manifest: expected).manifestData()
         #expect(try canonicalManifest(archive.manifestData()) == canonicalManifest(expectedData))
         #expect(archive.epubData(for: Self.workOneID) == epub)
@@ -565,7 +575,6 @@ struct CrossPlatformBackupTests {
         var root = try #require(lowercasedUUIDs(in: object) as? [String: Any])
         root.removeValue(forKey: "exportedAt")
         root.removeValue(forKey: "exportedBy")
-        root.removeValue(forKey: "pronunciations")
         if var settings = root["settings"] as? [String: Any] {
             settings.removeValue(forKey: "readerFontID") // iOS restore deliberately keeps it device-local.
             root["settings"] = settings
@@ -593,6 +602,11 @@ struct CrossPlatformBackupTests {
         }
         if var queues = root["readingQueues"] as? [[String: Any]],
            let systemIndex = queues.firstIndex(where: { $0["kindRaw"] as? String == "savedForLater" }) {
+            // The added deleted custom queue receives a device-local recovery schedule.
+            for index in queues.indices where queues[index]["id"] as? String
+                == CrossPlatformFixtureFields.queueID.uuidString.lowercased() {
+                queues[index].removeValue(forKey: "permanentDeletionScheduledAt")
+            }
             let oldID = queues[systemIndex]["id"] as? String
             queues[systemIndex]["id"] = "00000000-0000-0000-0000-000000000000"
             queues[systemIndex].removeValue(forKey: "permanentDeletionScheduledAt")
@@ -696,7 +710,8 @@ struct CrossPlatformBackupTests {
 private struct SeededLibrary {
     let container: ModelContainer
     let works: [SavedWork]
-    let collection: WorkCollection
+    let collections: [WorkCollection]
+    let fonts: [CustomFont]
     let queues: [ReadingQueue]
     let annotations: [ReadingAnnotation]
     let session: ReadingSession
@@ -704,7 +719,7 @@ private struct SeededLibrary {
     let watermark: FandomReadWatermark
     let search: SavedSearch
     let bookmark: Bookmark
-    let tombstone: SyncTombstone
+    let tombstones: [SyncTombstone]
     let defaults: UserDefaults
     let epub: Data
 
@@ -727,6 +742,7 @@ private struct RestoredLibrary {
     let container: ModelContainer
     let works: [SavedWork]
     let bookmarks: [Bookmark]
+    let fonts: [CustomFont]
     let collections: [WorkCollection]
     let queues: [ReadingQueue]
     let annotations: [ReadingAnnotation]
