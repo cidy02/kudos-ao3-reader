@@ -218,9 +218,12 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
                         path.append(destination)
                     } else if let kind = DebugLaunchRoute.homeSection() {
                         path.append(kind)
+                    } else if let route = DebugLaunchRoute.authorRoute {
+                        path.append(route)
                     } else if let work = DebugLaunchRoute.homeWork(in: works) {
                         DebugLaunchRoute.installFixtureEPUBs(in: works)
                         path.append(DebugLaunchRoute.opensReader ? .reader(work) : LocalWorkDestination.detail(work))
+                        if let comments = DebugLaunchRoute.commentsRoute(for: work) { path.append(comments) }
                     }
                 }
                 #endif

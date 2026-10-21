@@ -32,6 +32,7 @@ enum AuditionSample: String, CaseIterable, Identifiable {
 struct ReaderSpeechAuditionHarness: View {
     @State private var controller = ReaderSpeechController()
     @State private var selectedSample: AuditionSample = .narration
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     @AppStorage(ReaderSpeechPreferences.engineKey) private var engineID = ""
     @AppStorage(ReaderSpeechPreferences.voiceIDKey) private var voiceID = ""
@@ -39,10 +40,15 @@ struct ReaderSpeechAuditionHarness: View {
 
     var body: some View {
         Section {
-            Picker("Sample Text", selection: $selectedSample) {
-                ForEach(AuditionSample.allCases) { sample in
-                    Text(sample.rawValue).tag(sample)
+            // At the largest text the label and value shared one row and the value was cut to
+            // "Plain…rration" (A69 #27); there the value gets a line of its own.
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Sample Text")
+                    samplePicker.labelsHidden()
                 }
+            } else {
+                samplePicker
             }
 
             // Bound to the real `rateKey`, not a preview-only copy: what you
@@ -66,7 +72,11 @@ struct ReaderSpeechAuditionHarness: View {
                 // The open question is specifically 0.9 (widely recommended for
                 // audiobook narration) against our 1.0 default, so make that
                 // one comparison a single tap rather than a slider hunt.
-                HStack(spacing: 8) {
+                // One above another at the largest text: side by side "1.0x (default)" was
+                // squeezed to "1." (A69 #27).
+                let pills = dynamicTypeSize.isAccessibilitySize
+                    ? AnyLayout(VStackLayout(spacing: 8)) : AnyLayout(HStackLayout(spacing: 8))
+                pills {
                     ForEach(Self.comparisonRates, id: \.self) { candidate in
                         Button {
                             rate = candidate
@@ -118,6 +128,14 @@ struct ReaderSpeechAuditionHarness: View {
         .onChange(of: voiceID) { _, _ in restartIfPlaying() }
         .onChange(of: rate) { _, _ in restartIfPlaying() }
         .onChange(of: selectedSample) { _, _ in restartIfPlaying() }
+    }
+
+    private var samplePicker: some View {
+        Picker("Sample Text", selection: $selectedSample) {
+            ForEach(AuditionSample.allCases) { sample in
+                Text(sample.rawValue).tag(sample)
+            }
+        }
     }
 
     /// 0.9 is the widely recommended audiobook-narration rate; 1.0 is what
