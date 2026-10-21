@@ -121,7 +121,7 @@ internal class AO3ChallengeSignUpState(private val slug: String, private val id:
         } catch (_: CancellationException) {
             if (ownsSession()) mutable.value = state.value.copy(saving = false)
         } finally {
-            if (generation == auth.generation.value) mutable.value = state.value.copy(saving = false)
+            mutable.value = state.value.copy(saving = false)
             saveJob = null
         }
     }
@@ -150,7 +150,7 @@ internal class AO3ChallengeSignUpState(private val slug: String, private val id:
         } catch (_: CancellationException) {
             // This cancellation is only before dispatch; an in-flight POST is NonCancellable.
         } finally {
-            if (generation == auth.generation.value) mutable.value = state.value.copy(withdrawing = false)
+            mutable.value = state.value.copy(withdrawing = false)
             withdrawJob = null
         }
     }

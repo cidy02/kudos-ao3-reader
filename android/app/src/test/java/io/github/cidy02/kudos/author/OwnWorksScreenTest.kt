@@ -235,8 +235,8 @@ class OwnWorksScreenTest {
         show("AO3_Reader", signedIn = true)
         idleRequests(3) // the dashboard, the works, and the account's totals
         // Header block verifies "AO3 Account" kicker and "Works" title
-        compose.onNodeWithText("AO3 Account").assertExists()
-        compose.onNodeWithText("Works").assertExists()
+        compose.onNodeWithText("AO3 ACCOUNT").assertExists() // the kicker is drawn in capitals
+        compose.onAllNodesWithText("Works").onFirst().assertExists() // the title, and the scope control below it
         // Subtitle shows the writer's totals line (words and kudos)
         compose.onNode(hasText("works", substring = true).and(hasText("words", substring = true))).assertExists()
         // The four profile tabs (Works, Series, Bookmarks, About) segmented control is hidden on own works

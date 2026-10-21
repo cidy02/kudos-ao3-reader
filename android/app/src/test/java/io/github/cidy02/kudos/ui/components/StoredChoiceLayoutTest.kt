@@ -3,6 +3,8 @@ package io.github.cidy02.kudos.ui.components
 import android.app.Application
 import android.content.Context
 import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.junit4.createComposeRule
 import org.junit.Assert.assertEquals
 import org.junit.Rule
@@ -42,8 +44,12 @@ class StoredChoiceLayoutTest {
         context.getSharedPreferences("layout-choices", Context.MODE_PRIVATE).edit().clear().commit()
 
         var state: MutableState<TestDisplayMode>? = null
+        var secondState: MutableState<TestDisplayMode>? = null
+        var relaunched by androidx.compose.runtime.mutableStateOf(false)
         compose.setContent {
-            state = rememberStoredChoice("account.displayMode", TestDisplayMode.Compact)
+            // A second key-less mount stands for the next launch: it reads the stored choice afresh.
+            if (!relaunched) state = rememberStoredChoice("account.displayMode", TestDisplayMode.Compact)
+            else secondState = rememberStoredChoice("account.displayMode", TestDisplayMode.Compact)
         }
         assertEquals(TestDisplayMode.Compact, state?.value)
 
@@ -55,10 +61,8 @@ class StoredChoiceLayoutTest {
         assertEquals("Detailed", prefs.getString("account.displayMode", null))
 
         // Subsequent read retains the user's stored choice instead of falling back to default Compact
-        var secondState: MutableState<TestDisplayMode>? = null
-        compose.setContent {
-            secondState = rememberStoredChoice("account.displayMode", TestDisplayMode.Compact)
-        }
+        compose.runOnIdle { relaunched = true }
+        compose.waitForIdle()
         assertEquals(TestDisplayMode.Detailed, secondState?.value)
     }
 }

@@ -108,8 +108,8 @@ class SensitiveWorkRowLedgerTest {
 
     @Test fun unfoldControlSitsAtTheFootOfLedgerCard() {
         show()
-        val titleBounds = compose.onNodeWithText("Sodium Lights").fetchSemanticsNode().boundsInRoot
-        val unfoldBounds = compose.onNodeWithContentDescription("Show more").fetchSemanticsNode().boundsInRoot
+        val titleBounds = compose.onNodeWithText("Sodium Lights", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        val unfoldBounds = compose.onNodeWithContentDescription("Show more", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
         assertTrue(
             "Ledger card unfold control top (${unfoldBounds.top}) should be below title bottom (${titleBounds.bottom})",
             unfoldBounds.top >= titleBounds.bottom
@@ -131,8 +131,8 @@ class SensitiveWorkRowLedgerTest {
                 )
             }
         }
-        val titleBounds = compose.onNodeWithText("Detailed Sodium Lights").fetchSemanticsNode().boundsInRoot
-        val unfoldBounds = compose.onNodeWithContentDescription("Show more").fetchSemanticsNode().boundsInRoot
+        val titleBounds = compose.onNodeWithText("Detailed Sodium Lights", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        val unfoldBounds = compose.onNodeWithContentDescription("Show more", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
         assertTrue(
             "Detailed card unfold control top (${unfoldBounds.top}) should be below title bottom (${titleBounds.bottom})",
             unfoldBounds.top >= titleBounds.bottom

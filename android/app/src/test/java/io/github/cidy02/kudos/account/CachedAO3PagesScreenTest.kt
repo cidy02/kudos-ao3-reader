@@ -125,6 +125,11 @@ class CachedAO3PagesScreenTest {
                 val density = LocalDensity.current
                 CompositionLocalProvider(LocalDensity provides Density(density.density, scale), LocalPushedShellChrome provides chrome) {
                     key(visit) {
+                        // Each visit is a fresh navigation entry, as in the app: entry-scoped page
+                        // state (3fv) survives a return to the same entry, not a new visit.
+                        val entry = remember { object : androidx.lifecycle.ViewModelStoreOwner {
+                            override val viewModelStore = androidx.lifecycle.ViewModelStore() } }
+                        CompositionLocalProvider(androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner provides entry) {
                         Column {
                             Row { chrome.trailingContent?.invoke(this) }
                             when (screen) {
@@ -142,6 +147,7 @@ class CachedAO3PagesScreenTest {
                                 else -> AuthorProfileScreen(if (screen == Screen.Author) "Avery_Archive" else "tester",
                                     authorRepository = authors, authRepository = auth, onOpenWork = {}, onOpenAbout = {})
                             }
+                        }
                         }
                     }
                 }
