@@ -533,6 +533,11 @@ class SettingsRepository(
         }
     }
 
+    /** iOS `UnknownSignerTracker.reset`: tapping the prompt marks it acted on. */
+    suspend fun clearUnknownSignerTombstoneIds() {
+        dataStore.edit { prefs -> prefs.remove(Keys.UnknownSignerTombstoneIds) }
+    }
+
     suspend fun resetToDefaults() {
         dataStore.edit { it.clear() }
     }

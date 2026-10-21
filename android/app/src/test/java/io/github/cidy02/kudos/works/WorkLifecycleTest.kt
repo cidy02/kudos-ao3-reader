@@ -1128,6 +1128,89 @@ class WorkLifecycleRepositoryTest {
         val freed = database.workDao().getById(freeableId)!!
         assertFalse(freed.hasEpub)
     }
+
+    /**
+     * The copies were taken at launch. A title written before the save must be
+     * what the stored search text says. Saving the launch copy stamps the old title.
+     */
+    @Test
+    fun searchRebuildWritesTheTitleTheRowHasAtSaveTime() = runTest {
+        val ids = listOf(
+            "77777777-7777-4777-8777-777777777777",
+            "88888888-8888-4888-8888-888888888888"
+        )
+        ids.forEach { id ->
+            val seeded = repository.upsert(sampleSavedWork(id).copy(title = "Old Title"))
+            database.workDao().upsert(
+                database.workDao().getById(seeded.id)!!.copy(searchIndexVersion = 0, searchText = "")
+            )
+        }
+        val rebuilding = WorkRepository(
+            database = database,
+            fileStore = fileStore,
+            clock = { clockNow },
+            uuidFactory = { "22222222-2222-2222-2222-222222222222" },
+            beforeIndexingStaleWork = { id ->
+                val row = database.workDao().getById(id)!!
+                database.workDao().upsert(row.copy(title = "Fresh Title $id"))
+            }
+        )
+        assertEquals(2, rebuilding.rebuildSearchIndexIfNeeded())
+        ids.forEach { id ->
+            val after = database.workDao().getById(id)!!
+            assertEquals("Fresh Title $id", after.title)
+            assertEquals(WorkSearchIndex.CURRENT_VERSION, after.searchIndexVersion)
+            assertTrue(after.searchText.contains("fresh title"))
+            assertTrue(after.searchText.contains(id))
+            assertFalse(after.searchText.contains("old title"))
+        }
+    }
+
+    /**
+     * Both copies are past the hold window. Releasing the later one while the
+     * earlier file is deleted must leave the later file. Deciding from the list
+     * loaded at the start still deletes it.
+     */
+    @Test
+    fun sweepHeldCopiesKeepsAFileWhoseHoldWasReleasedWhileAnEarlierCopyIsFreed() = runTest {
+        val earlierId = "55555555-5555-4555-8555-555555555555"
+        val laterId = "66666666-6666-4666-8666-666666666666"
+        val earlierFreedAt = clockNow.minus(Duration.ofDays(61))
+        val hooked = object : WorkFileStore(fileStore.worksDirectory.parent) {
+            override suspend fun deleteWorkEpub(workId: String): Boolean {
+                if (workId == earlierId) {
+                    val later = database.workDao().getById(laterId)!!
+                    database.workDao().upsert(later.copy(freedAt = null))
+                }
+                return super.deleteWorkEpub(workId)
+            }
+        }
+        repository = WorkRepository(
+            database, hooked, clock = { clockNow },
+            uuidFactory = { "22222222-2222-2222-2222-222222222222" }
+        )
+        val unprotected = sampleSavedWork().copy(
+            isSaved = false,
+            isFavorite = false,
+            isFinished = true,
+            hasEpub = true
+        )
+        repository.upsert(unprotected.copy(id = earlierId, freedAt = earlierFreedAt))
+        hooked.writeWorkEpub(earlierId, epubBytes)
+        repository.upsert(
+            unprotected.copy(id = laterId, freedAt = earlierFreedAt.plus(Duration.ofHours(1)))
+        )
+        hooked.writeWorkEpub(laterId, epubBytes)
+
+        assertEquals(1, repository.sweepHeldCopies())
+
+        assertFalse(hooked.workEpubExists(earlierId))
+        assertFalse(database.workDao().getById(earlierId)!!.hasEpub)
+        assertTrue(hooked.workEpubExists(laterId))
+        val later = database.workDao().getById(laterId)!!
+        assertTrue(later.hasEpub)
+        assertNull(later.freedAt)
+    }
 }
 
 

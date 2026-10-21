@@ -39,7 +39,9 @@ import io.github.cidy02.kudos.data.preferences.SettingsRepository
 import io.github.cidy02.kudos.settings.SettingsActionRow
 import io.github.cidy02.kudos.settings.SettingsFootnote
 import io.github.cidy02.kudos.settings.SettingsPage
+import io.github.cidy02.kudos.settings.SettingsPanel
 import io.github.cidy02.kudos.settings.SettingsSection
+import io.github.cidy02.kudos.ui.components.DestructiveConfirmation
 import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
 import io.github.cidy02.kudos.ui.subject.SubjectFormRow
 import io.github.cidy02.kudos.ui.subject.SubjectMetrics
@@ -66,6 +68,7 @@ fun BackupScreen(
     var statusMessage by remember { mutableStateOf<String?>(null) }
     var statusIsError by remember { mutableStateOf(false) }
     var pendingImport by remember { mutableStateOf<PendingBackupImport?>(null) }
+    var showResetConfirm by remember { mutableStateOf(false) }
 
     val exportLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument("application/zip")
@@ -257,7 +260,30 @@ fun BackupScreen(
                 workRepository = workRepository
             )
         }
+        item {
+            Column(Modifier.padding(top = 22.dp)) {
+                SettingsPanel {
+                    SettingsActionRow(
+                        label = "Reset settings to defaults",
+                        onClick = { showResetConfirm = true }
+                    )
+                }
+            }
+        }
     }
+
+    DestructiveConfirmation(
+        show = showResetConfirm,
+        title = "Reset settings to defaults?",
+        text = "This clears reader, theme, privacy, and other app preferences back to their defaults. Your Library, downloads, and AO3 session are not affected.",
+        confirmText = "Reset",
+        confirmBeforeDelete = true,
+        onConfirm = {
+            showResetConfirm = false
+            scope.launch { settingsRepository.resetToDefaults() }
+        },
+        onDismissRequest = { showResetConfirm = false }
+    )
 
     pendingImport?.let { pending ->
         ImportBackupDialog(
@@ -271,7 +297,7 @@ fun BackupScreen(
     }
 }
 
-private data class PendingBackupImport(
+internal data class PendingBackupImport(
     val bytes: ByteArray,
     val preview: BackupImportPreview,
     val manifest: KudosBackupManifest,
@@ -309,7 +335,39 @@ private fun ImportBackupDialog(
         containerColor = tokens.background,
         contentColor = tokens.primaryInk
     ) {
-        Column(Modifier.fillMaxHeight(0.9f)) {
+        ImportBackupChoices(
+            pending = pending,
+            reviewingReplace = reviewingReplace,
+            acknowledgeRemoval = acknowledgeRemoval,
+            pauseSync = pauseSync,
+            replaceEnabled = replaceEnabled,
+            onReviewingReplace = { reviewingReplace = it },
+            onAcknowledgeRemoval = { acknowledgeRemoval = it },
+            onPauseSync = { pauseSync = it },
+            onDismiss = onDismiss,
+            onMerge = onMerge,
+            onReplace = onReplace
+        )
+    }
+}
+
+@Composable
+internal fun ImportBackupChoices(
+    pending: PendingBackupImport,
+    reviewingReplace: Boolean,
+    acknowledgeRemoval: Boolean,
+    pauseSync: Boolean,
+    replaceEnabled: Boolean,
+    onReviewingReplace: (Boolean) -> Unit,
+    onAcknowledgeRemoval: (Boolean) -> Unit,
+    onPauseSync: (Boolean) -> Unit,
+    onDismiss: () -> Unit,
+    onMerge: () -> Unit,
+    onReplace: (pauseSync: Boolean) -> Unit
+) {
+    val preview = pending.preview
+    val tokens = LocalKudosTokens.current
+    Column(Modifier.fillMaxHeight(0.9f)) {
             Row(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = SubjectMetrics.accountGutter),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -324,8 +382,8 @@ private fun ImportBackupDialog(
                 if (reviewingReplace) {
                     TextButton(
                         onClick = {
-                            reviewingReplace = false
-                            acknowledgeRemoval = false
+                            onReviewingReplace(false)
+                            onAcknowledgeRemoval(false)
                         },
                         colors = ButtonDefaults.textButtonColors(contentColor = tokens.accentInk)
                     ) { Text("Back") }
@@ -364,17 +422,17 @@ private fun ImportBackupDialog(
                         SubjectFormRow("Custom fonts", value = "${pending.manifest.fonts.size}")
                     }
                 }
-                // Preserve the warning in the choice step too, before either import action.
-                if (!preview.isLibraryEmpty && preview.isMuchSmallerThanLibrary) {
-                    Text(
-                        text = "This backup has far fewer works than your current library.",
-                        color = MaterialTheme.colorScheme.tertiary,
-                        fontSize = 13.sp,
-                        lineHeight = 18.sp,
-                        modifier = Modifier.padding(horizontal = SubjectMetrics.accountGutter).padding(top = 16.dp)
-                    )
-                }
                 if (reviewingReplace) {
+                    // iOS shows this only on the Replace review, and only for a large removal.
+                    if (!preview.isLibraryEmpty && preview.isMuchSmallerThanLibrary) {
+                        Text(
+                            text = "This backup has far fewer works than your current library.",
+                            color = MaterialTheme.colorScheme.tertiary,
+                            fontSize = 13.sp,
+                            lineHeight = 18.sp,
+                            modifier = Modifier.padding(horizontal = SubjectMetrics.accountGutter).padding(top = 16.dp)
+                        )
+                    }
                     SettingsSection(
                         footnote = "Replace only changes this device. Removed works go to Recently Deleted and " +
                             "can return through Merge; saved links, saved searches, reading history, stars, " +
@@ -388,7 +446,7 @@ private fun ImportBackupDialog(
                             trailing = {
                                 SubjectToggle(
                                     checked = acknowledgeRemoval,
-                                    onCheckedChange = { acknowledgeRemoval = it },
+                                    onCheckedChange = onAcknowledgeRemoval,
                                     contentDescription = "Remove ${preview.willRemove} works that are not in this backup"
                                 )
                             }
@@ -400,7 +458,7 @@ private fun ImportBackupDialog(
                                 trailing = {
                                     SubjectToggle(
                                         checked = pauseSync,
-                                        onCheckedChange = { pauseSync = it },
+                                        onCheckedChange = onPauseSync,
                                         contentDescription = "Pause Library Sync on this device"
                                     )
                                 }
@@ -438,7 +496,7 @@ private fun ImportBackupDialog(
                         )
                     }
                 } else {
-                    if (preview.isLibraryEmpty) {
+                    if (!preview.hasReplaceableRecords) {
                         SettingsSection(
                             footnote = "This library is empty. Restore ${preview.fileWorkCount} work(s) from the selected backup."
                         ) {
@@ -464,14 +522,13 @@ private fun ImportBackupDialog(
                             SettingsActionRow(
                                 label = "Replace Library…",
                                 destructive = true,
-                                onClick = { reviewingReplace = true }
+                                onClick = { onReviewingReplace(true) }
                             )
                         }
                     }
                 }
             }
         }
-    }
 }
 
 private fun userFacingError(prefix: String, error: Throwable): String {

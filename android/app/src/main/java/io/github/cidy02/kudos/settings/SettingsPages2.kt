@@ -25,8 +25,6 @@ import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.BugReport
 import androidx.compose.material.icons.outlined.Code
 import androidx.compose.material.icons.outlined.Delete
-import androidx.compose.material.icons.outlined.FileDownload
-import androidx.compose.material.icons.outlined.FileUpload
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.NoteAdd
 import androidx.compose.material.icons.outlined.PanTool
@@ -71,7 +69,6 @@ import io.github.cidy02.kudos.core.model.MatureContentMode
 import io.github.cidy02.kudos.data.preferences.SettingsRepository
 import io.github.cidy02.kudos.files.CustomFontRepository
 import io.github.cidy02.kudos.network.ao3.AO3Error
-import io.github.cidy02.kudos.ui.components.DestructiveConfirmation
 import io.github.cidy02.kudos.ui.components.LogOutConfirmation
 import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
 import io.github.cidy02.kudos.ui.subject.SectionRuleHeader
@@ -401,61 +398,6 @@ fun SettingsAboutPage(
             }
         }
     }
-}
-
-@Composable
-fun SettingsBackupPageWrapper(
-    onOpenBackup: () -> Unit,
-    navController: NavController,
-    repository: SettingsRepository,
-    settings: KudosSettings
-) {
-    val scope = rememberCoroutineScope()
-    var showResetConfirm by remember { mutableStateOf(false) }
-    SettingsPage(title = "Backup") {
-        item {
-            SettingsSection(
-                footnote = "Your backup file includes your Library, Reading Queues, downloaded copies, " +
-                    "User Tags, saved links, custom fonts, imported original files, and app " +
-                    "settings. Importing adds anything you don't have without removing what is " +
-                    "already here. Your AO3 sign-in and password are never included."
-            ) {
-                SettingsActionRow(
-                    label = "Export Backup…",
-                    icon = Icons.Outlined.FileUpload,
-                    onClick = onOpenBackup
-                )
-                SubjectRowSeparator()
-                SettingsActionRow(
-                    label = "Import Backup…",
-                    icon = Icons.Outlined.FileDownload,
-                    onClick = onOpenBackup
-                )
-            }
-        }
-        item {
-            Column(Modifier.padding(top = 22.dp)) {
-                SettingsPanel {
-                    SettingsActionRow(
-                        label = "Reset settings to defaults",
-                        onClick = { showResetConfirm = true }
-                    )
-                }
-            }
-        }
-    }
-    DestructiveConfirmation(
-        show = showResetConfirm,
-        title = "Reset settings to defaults?",
-        text = "This clears reader, theme, privacy, and other app preferences back to their defaults. Your Library, downloads, and AO3 session are not affected.",
-        confirmText = "Reset",
-        confirmBeforeDelete = true,
-        onConfirm = {
-            showResetConfirm = false
-            scope.launch { repository.resetToDefaults() }
-        },
-        onDismissRequest = { showResetConfirm = false }
-    )
 }
 
 @Composable

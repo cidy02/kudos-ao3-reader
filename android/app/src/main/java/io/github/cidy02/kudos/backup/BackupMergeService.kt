@@ -758,7 +758,15 @@ object BackupMergeService {
             willRemove = localActive.count {
                 BackupPaths.normalizeIdForComparison(it.id) !in matchedLocalIds
             },
-            inBoth = matchedLocalIds.size
+            inBoth = matchedLocalIds.size,
+            // iOS SettingsBackupPage.hasAnythingReplaceWouldRemove. Collections come
+            // back including deleted rows, so a deleted shelf is not something Replace
+            // would take. Saved for Later is excluded: it is always there.
+            hasReplaceableRecords = localActive.isNotEmpty() ||
+                current.bookmarks.isNotEmpty() ||
+                current.savedSearches.isNotEmpty() ||
+                current.collections.any { !it.isDeleted } ||
+                current.readingQueues.any { it.kindRaw != ReadingQueueKind.SAVED_FOR_LATER }
         )
     }
 
