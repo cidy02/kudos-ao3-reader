@@ -248,8 +248,8 @@ class WorkImporter(
                 io.github.cidy02.kudos.works.converters.PlainTextWorkConverter().convert(title, bytes)
             ImportedFileFormat.ZIP ->
                 io.github.cidy02.kudos.works.converters.ArchiveWorkConverter.convert(title, bytes)
-            ImportedFileFormat.UNKNOWN -> null
-        } ?: return WorkImportResult.Failure(null, AO3Error.Validation(unsupportedMessage(format)))
+            else -> null
+        } ?: return WorkImportResult.Failure(null, AO3Error.Validation(unsupportedMessage(format, displayName)))
 
         // Every path above either passes an EPUB through or builds one, so the
         // result must be a ZIP by the time it reaches the file store.
@@ -402,7 +402,7 @@ class WorkImporter(
             ImportedFileFormat.ZIP ->
                 io.github.cidy02.kudos.works.converters.ArchiveWorkConverter.convert(work.title, bytes)
             ImportedFileFormat.EPUB -> bytes
-            ImportedFileFormat.UNKNOWN -> null
+            else -> null
         } ?: return WorkImportResult.Failure(work, AO3Error.Validation(unsupportedMessage(format)))
 
         return when (val write = fileStore.writeWorkEpub(work.id, rebuilt)) {
@@ -502,7 +502,7 @@ class WorkImporter(
         private val ZIP_MAGIC = byteArrayOf(0x50, 0x4B, 0x03, 0x04)
 
         /** Format-specific guidance instead of one generic rejection string. */
-        internal fun unsupportedMessage(format: ImportedFileFormat): String = when (format) {
+        internal fun unsupportedMessage(format: ImportedFileFormat, fileName: String? = null): String = when (format) {
             ImportedFileFormat.PDF ->
                 "This PDF's text couldn't be extracted — it may be a scanned " +
                     "(image-only) PDF with no real text layer. " +
@@ -510,8 +510,29 @@ class WorkImporter(
             ImportedFileFormat.ZIP ->
                 "Couldn't find anything readable in that archive. It needs an EPUB, " +
                     "or HTML/text files to build one from."
-            else ->
-                "Unsupported file type. Kudos can import EPUB, PDF, HTML, and TXT files."
+            ImportedFileFormat.DOCX, ImportedFileFormat.ODT, ImportedFileFormat.RTF -> {
+                val name = when (format) {
+                    ImportedFileFormat.DOCX -> "Word document"
+                    ImportedFileFormat.ODT -> "OpenDocument text"
+                    else -> "RTF"
+                }
+                "$name import is coming in a later update. For now, convert it " +
+                    "to EPUB (calibre, or Word's \"Save as\") and import that."
+            }
+            ImportedFileFormat.MOBI ->
+                "Kindle files aren't supported yet. Convert it to EPUB with calibre and import that."
+            ImportedFileFormat.RAR, ImportedFileFormat.SEVEN_ZIP -> {
+                val name = if (format == ImportedFileFormat.RAR) "RAR" else "7-Zip"
+                "${name} archives aren't supported yet. Unpack it first, then import the files inside."
+            }
+            ImportedFileFormat.UNKNOWN -> {
+                val extension = fileName?.substringAfterLast('/')?.substringAfterLast('\\')
+                    ?.substringAfterLast('.', "")?.takeIf { it.isNotBlank() }
+                val reason = extension?.let { "This ${it.uppercase(Locale.ROOT)} file isn't a format Kudos can read." }
+                    ?: "This file isn't a format Kudos can read."
+                "$reason Try an EPUB, HTML, or text file."
+            }
+            else -> "Unsupported file type. Kudos can import EPUB, PDF, HTML, and TXT files."
         }
 
         fun isSupportedFileName(fileName: String?): Boolean {

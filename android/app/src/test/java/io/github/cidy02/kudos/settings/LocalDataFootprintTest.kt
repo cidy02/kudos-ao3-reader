@@ -144,6 +144,13 @@ class LocalDataFootprintTest {
         assertEquals(first.savedSearches + 1, withRecords.savedSearches)
     }
 
+    @Test fun totalIsExactlyThePrivacyCategoriesIncludingRecoveryAndBrowseCache() {
+        val footprint = LocalStorageFootprint(10, 20, 30, 40, 50, 60, 999, 888, 777)
+        assertEquals(210L, footprint.totalBytes)
+        assertEquals(footprint.sizeRows().sumOf { it.second }, footprint.totalBytes)
+        assertEquals(0L, LocalStorageFootprint(0, 0, 0, 0, 0, 0, 0, 0, 0).totalBytes)
+    }
+
     @Test fun hidesOnlyIosConditionalRowsAtZeroAndFormatsCountsAndDecimalBytes() {
         val zero = LocalStorageFootprint(0, 0, 0, 0, 0, 0, 0, 0, 0)
         assertEquals(listOf("Downloaded works", "Draft recovery", "Caches"), zero.sizeRows().map { it.first })

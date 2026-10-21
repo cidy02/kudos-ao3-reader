@@ -173,7 +173,7 @@ fun QueueStorageScreen(
 /** One downloaded queued work: swipe to remove it from its queues, or hold for the menu. */
 @OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
-private fun PreservedWorkRow(
+internal fun PreservedWorkRow(
     work: SavedWork,
     inSavedForLater: Boolean,
     size: String,
@@ -239,7 +239,7 @@ private fun PreservedWorkRow(
                         overflow = TextOverflow.Ellipsis
                     )
                     if (work.author.isNotEmpty()) {
-                        Text(work.author, color = tokens.secondaryInk, fontSize = 12.sp)
+                        io.github.cidy02.kudos.works.detail.VerifiedAuthorByline(work.author, work.authorIdentitiesJSON, compact = true)
                     }
                     Text(size, color = tokens.secondaryInk, fontSize = 11.sp)
                 }

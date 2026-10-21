@@ -72,13 +72,13 @@ class PrivacyDataScreenTest {
     // a test that ended while that was running failed with "connection is closed". It is in memory.
     @After fun tearDown() { root.toFile().deleteRecursively() }
 
-    private fun show() {
+    private fun show(settings: KudosSettings = KudosSettings.Defaults) {
         compose.setContent {
             KudosTheme(themeMode = theme.value) {
                 val density = LocalDensity.current
                 CompositionLocalProvider(LocalDensity provides Density(density.density, scale.value),
                     LocalPushedShellChrome provides chrome) {
-                    PrivacyDataScreen(works, cache, KudosSettings.Defaults, auth, scanner)
+                    PrivacyDataScreen(works, cache, settings, auth, scanner)
                 }
             }
         }
@@ -136,6 +136,8 @@ class PrivacyDataScreenTest {
                 useUnmergedTree = true).assertExists()
         }
         assertSectionsAndCopy()
+        reach("Clear reading history")
+        compose.onNodeWithTag("privacy-Clear reading history").assertIsNotEnabled()
         reach("AO3 account")
         compose.onNodeWithText("Not signed in").assertExists()
         compose.onAllNodesWithText("Remove AO3 session").assertCountEquals(0)
@@ -246,6 +248,50 @@ class PrivacyDataScreenTest {
         await("Browse cache cleared")
         assertTrue(cache.load().isEmpty())
         reach("Caches"); await("0 bytes")
+    }
+
+    @Test fun clearsAlwaysAskWhenSwipeConfirmationsAreOffAndCancelKeepsData() = runBlocking<Unit> {
+        val row = SavedWork(id = UUID.randomUUID().toString(), title = "Reading copy", author = "Reader",
+            sourceUrl = "https://archiveofourown.org/works/123", hasEpub = true, isFinished = true,
+            lastSpineIndex = 2, lastScrollFraction = 0.5)
+        files.writeWorkEpub(row.id, EpubBuilder.buildEpub(row.title, "<p>Local text</p>"))
+        works.upsert(row)
+        // A work with an EPUB is not history-only, so it cannot enable Clear reading history.
+        val history = SavedWork(id = UUID.randomUUID().toString(), title = "History only", author = "Reader",
+            sourceUrl = "https://archiveofourown.org/works/456", hasEpub = false, isFinished = true,
+            lastReadDate = java.time.Instant.parse("2026-10-20T12:00:00Z"))
+        works.upsert(history)
+        cache.save(mapOf("TV" to FandomCatalogCache.Entry(listOf(AO3Fandom("Doctor Who", 42)), 1)))
+        val defaults = KudosSettings.Defaults
+        show(defaults.copy(app = defaults.app.copy(confirmBeforeDelete = false)))
+        for ((label, title) in listOf("Free up space" to "Free Up Space?",
+            "Clear reading positions" to "Clear Reading Positions?",
+            "Clear reading history" to "Clear Reading History?", "Clear browse cache" to "Clear Browse Cache?")) {
+            click(label)
+            compose.onNodeWithText(title).assertExists()
+            compose.onNodeWithText("Cancel").performClick()
+            assertTrue(files.workEpubExists(row.id))
+            assertFalse(works.getWork(row.id)!!.isDeleted)
+            assertFalse(works.getWork(history.id)!!.isDeleted)
+            assertEquals(history.lastReadDate, works.getWork(history.id)!!.lastReadDate)
+            assertEquals(2, works.getWork(row.id)!!.lastSpineIndex)
+            assertTrue(cache.load().isNotEmpty())
+        }
+    }
+
+    @Test fun pullingRefreshMeasuresFilesCreatedAfterOpening() = runBlocking<Unit> {
+        show()
+        Files.createDirectories(root.resolve("fonts"))
+        Files.write(root.resolve("fonts/added.ttf"), ByteArray(8192))
+        // Storage is a snapshot until the explicit pull, not a filesystem observer.
+        reach("Downloaded works")
+        compose.onAllNodesWithText("Imported fonts").assertCountEquals(0)
+        compose.onAllNodes(hasScrollAction()).onFirst().performScrollToIndex(0)
+        compose.onNodeWithTag("privacy-refresh").performTouchInput { swipeDown() }
+        await("Imported fonts")
+        val expected = LocalStorageFootprint.formatted(scanner.measure().importedFontBytes)
+        compose.onNode(hasText(expected) and hasAnyAncestor(hasTestTag("privacy-Imported fonts")),
+            useUnmergedTree = true).assertExists()
     }
 
     @Test fun fourPalettesAtAccessibilityScaleHaveUnclippedTextAndTheScreenOwnsChrome() {

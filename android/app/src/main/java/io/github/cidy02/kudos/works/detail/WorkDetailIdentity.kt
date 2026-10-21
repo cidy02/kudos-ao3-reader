@@ -129,9 +129,11 @@ internal fun VerifiedAuthorByline(
     author: String,
     identities: String,
     authorNames: List<String> = io.github.cidy02.kudos.works.resolveTappableAuthorNames(null, author),
+    compact: Boolean = false,
     onOpenAuthor: (String) -> Unit = LocalOpenAuthor.current
 ) {
     AuthorBylineRow(authorNames, author, LocalKudosTokens.current.scopePalette.accent,
+        compact = compact,
         isLinked = { io.github.cidy02.kudos.network.ao3.author.AO3AuthorIdentities.byline(identities, it) != null },
         onOpenAuthor = { name ->
             io.github.cidy02.kudos.network.ao3.author.AO3AuthorIdentities.byline(identities, name)?.let(onOpenAuthor)
@@ -178,7 +180,7 @@ fun WorkDetailIdentityHeader(
 }
 
 /**
- * 15.5sp byline row where each author name is individually tappable.
+ * Individually tappable authors, with caption sizing for compact storage rows.
  */
 @Composable
 private fun AuthorBylineRow(
@@ -187,15 +189,17 @@ private fun AuthorBylineRow(
     /** A name that opens its author is in the page's accent, as iOS draws it. It was grey, like "Anonymous". */
     accent: androidx.compose.ui.graphics.Color,
     isLinked: (String) -> Boolean,
-    onOpenAuthor: (String) -> Unit
+    onOpenAuthor: (String) -> Unit,
+    compact: Boolean = false
 ) {
     val tokens = LocalKudosTokens.current
+    val fontSize = if (compact) 12.sp else 15.5.sp
     if (authorNames.isEmpty()) {
         Text(
             text = displayAuthor.ifBlank { "Anonymous" },
             color = tokens.secondaryInk,
-            fontSize = 15.5.sp,
-            maxLines = 2,
+            fontSize = fontSize,
+            maxLines = if (compact) 1 else 2,
             overflow = TextOverflow.Ellipsis
         )
         return
@@ -218,8 +222,8 @@ private fun AuthorBylineRow(
                 Text(
                     text = name,
                     color = if (linked) accent else tokens.secondaryInk,
-                    fontSize = 15.5.sp,
-                    fontWeight = FontWeight.Medium,
+                    fontSize = fontSize,
+                    fontWeight = if (compact) FontWeight.Normal else FontWeight.Medium,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier
@@ -232,7 +236,7 @@ private fun AuthorBylineRow(
                     Text(
                         text = ",",
                         color = tokens.secondaryInk,
-                        fontSize = 15.5.sp
+                        fontSize = fontSize
                     )
                 }
             }

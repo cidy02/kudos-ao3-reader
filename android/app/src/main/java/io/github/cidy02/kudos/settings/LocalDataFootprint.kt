@@ -25,6 +25,10 @@ data class LocalStorageFootprint(
     val localCollections: Int,
     val savedSearches: Int
 ) {
+    val totalBytes: Long
+        get() = downloadedWorkBytes + readingCopyBytes + preservedOriginalBytes + importedFontBytes +
+            draftRecoveryBytes + cacheBytes
+
     fun sizeRows(): List<Pair<String, Long>> = buildList {
         add("Downloaded works" to downloadedWorkBytes)
         if (readingCopyBytes > 0) add("Works you're reading" to readingCopyBytes)
