@@ -285,6 +285,71 @@ class SyncRepositoryTest {
         assertEquals("Theirs", database.workDao().getById(WORK_REMOTE)?.title)
     }
 
+    /**
+     * Replace pauses sync after this automatic run already passed its opening
+     * check and is waiting to publish. The folder's manifest and an orphan EPUB
+     * must stay as they were. A manual Sync Now does not take this path.
+     */
+    @Test
+    fun autoSyncThatWaitedOnTheExportGatePublishesNothingAndPrunesNothing() = runTest {
+        seedLocalWork(WORK_A, "Example A", "epub-a-v1".toByteArray())
+        assertTrue(syncRepository.runSync() is SyncResult.Success)
+
+        val manifestBefore = readDocument(requireKudosLibrary().findFile(BackupPaths.MANIFEST)!!)
+        assertEquals(
+            BackupPaths.sha256(manifestBefore),
+            settingsRepository.settings.first().sync.lastManifestDigest
+        )
+        database.workDao().upsert(
+            database.workDao().getById(WORK_A)!!.copy(title = "Renamed After Publish")
+        )
+        val works = requireKudosLibrary().findFile(BackupPaths.WORKS_DIRECTORY)!!
+        val orphanBytes = "orphan-not-in-manifest".toByteArray()
+        writeChild(works, "orphan-not-in-manifest.epub", "application/epub+zip", orphanBytes)
+
+        // The digest matches, so this run does not import. An empty Originals
+        // takes no gate. The first lock is the export, and pausing there is
+        // what the export re-check has to notice. runSync would ignore the pause.
+        val gate = object : PersistenceGate() {
+            override suspend fun <T> withLock(action: suspend () -> T): T {
+                settingsRepository.updateSyncIsEnabled(false)
+                return super.withLock(action)
+            }
+        }
+        val pausedBackup = BackupRepository(
+            database = database,
+            workFileStore = workFileStore,
+            fontFileStore = fontFileStore,
+            settingsRepository = settingsRepository,
+            persistenceGate = gate,
+            clock = { clockInstant },
+            uuidFactory = { "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb" },
+            appVersion = "test"
+        )
+        val pausedSync = SyncRepository(
+            context = context,
+            settingsRepository = settingsRepository,
+            backupRepository = pausedBackup,
+            workFileStore = workFileStore,
+            fontFileStore = fontFileStore,
+            persistenceGate = gate,
+            clock = { clockInstant }
+        )
+
+        val automatic = pausedSync.runAutoSync()
+        assertTrue(automatic is SyncResult.Success)
+        assertArrayEquals(
+            manifestBefore,
+            readDocument(requireKudosLibrary().findFile(BackupPaths.MANIFEST)!!)
+        )
+        val orphan = requireKudosLibrary()
+            .findFile(BackupPaths.WORKS_DIRECTORY)!!
+            .findFile("orphan-not-in-manifest.epub")
+        assertNotNull(orphan)
+        assertArrayEquals(orphanBytes, readDocument(orphan!!))
+        assertEquals("Renamed After Publish", database.workDao().getById(WORK_A)!!.title)
+    }
+
     // ------------------------------------------------------------------ (A)
 
     @Test

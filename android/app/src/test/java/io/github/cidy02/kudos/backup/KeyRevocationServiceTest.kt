@@ -33,10 +33,8 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 /**
- * Production-entry coverage for the "Stolen or compromised" revoke flow's
- * restore step: [KeyRevocationService.restoreWorksDeletedBy] against the
- * real [io.github.cidy02.kudos.data.local.dao.SyncTombstoneDao.getBySigner]
- * query and [WorkRepository.restoreFromRecentlyDeleted].
+ * Revoke removes the key and leaves Recently Deleted alone. iOS does not
+ * restore works a revoked device had deleted.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
@@ -72,7 +70,7 @@ class KeyRevocationServiceTest {
             uuidFactory = { "22222222-2222-4222-8222-222222222222" }
         )
         trustStore = TombstoneTrustStore(settingsRepository)
-        service = KeyRevocationService(trustStore, database, workRepository)
+        service = KeyRevocationService(trustStore)
     }
 
     @After
@@ -108,16 +106,7 @@ class KeyRevocationServiceTest {
     }
 
     @Test
-    fun worksDeletedByCountFindsRowsSignedByThatKey() = runTest {
-        val peer = Ed25519Sign.KeyPair.newKeyPair().publicKey.toLowerHex()
-        givenWorkSoftDeletedBySigner(peer)
-
-        assertEquals(1, service.worksDeletedByCount(peer))
-        assertEquals(0, service.worksDeletedByCount(Ed25519Sign.KeyPair.newKeyPair().publicKey.toLowerHex()))
-    }
-
-    @Test
-    fun stolenRevokeOffersToRestoreWorksThatKeyDeleted() = runTest {
+    fun stolenRevokeLeavesTheWorkInRecentlyDeleted() = runTest {
         val peer = Ed25519Sign.KeyPair.newKeyPair().publicKey.toLowerHex()
         trustStore.trust(peer)
         givenWorkSoftDeletedBySigner(peer)
@@ -125,29 +114,21 @@ class KeyRevocationServiceTest {
         assertTrue(service.revoke(peer, KeyRevocationReason.STOLEN_OR_COMPROMISED))
         assertFalse(trustStore.isTrusted(peer))
 
-        val restoredCount = service.restoreWorksDeletedBy(peer)
-
-        assertEquals(1, restoredCount)
-        val restored = workRepository.getWork(workId)
-        assertNotNull(restored)
-        assertFalse(restored!!.isDeleted)
-        // Restoring retracts the tombstone too (WorkRepository.retractWorkTombstone),
-        // so a later legitimate sync doesn't re-suppress this work.
+        val kept = workRepository.getWork(workId)
+        assertNotNull(kept)
+        assertTrue(kept!!.isDeleted)
         assertTrue(
-            database.syncTombstoneDao().getBySigner(peer, SyncTombstoneRecordType.SAVED_WORK).isEmpty()
+            database.syncTombstoneDao().getBySigner(peer, SyncTombstoneRecordType.SAVED_WORK).isNotEmpty()
         )
     }
 
     @Test
-    fun retiredRevokeDoesNotOfferRestoreCount() = runTest {
+    fun retiredRevokeAlsoLeavesTheWorkDeleted() = runTest {
         val peer = Ed25519Sign.KeyPair.newKeyPair().publicKey.toLowerHex()
         trustStore.trust(peer)
         givenWorkSoftDeletedBySigner(peer)
 
         assertTrue(service.revoke(peer, KeyRevocationReason.RETIRED_OR_SOLD))
-        // worksDeletedByCount still reports the real count either way — the
-        // UI decides whether to surface the restore prompt based on reason,
-        // not this method.
-        assertEquals(1, service.worksDeletedByCount(peer))
+        assertTrue(workRepository.getWork(workId)!!.isDeleted)
     }
 }

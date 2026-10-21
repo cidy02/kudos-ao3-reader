@@ -25,8 +25,9 @@ class SettingsStringsTest {
 
     @Test
     fun everyOldSettingsControlIsStillDrawn() {
-        val dir = File("src/main/java/io/github/cidy02/kudos/settings")
-        val source = dir.listFiles { f -> f.extension == "kt" }!!.joinToString("\n") { it.readText() }
+        val files = File("src/main/java/io/github/cidy02/kudos/settings").listFiles { f -> f.extension == "kt" }!!.toList() +
+            File("src/main/java/io/github/cidy02/kudos/backup/BackupScreen.kt")
+        val source = files.joinToString("\n") { it.readText() }
         val missing = restored.filterNot { source.contains(it, ignoreCase = true) }
         assertTrue("Settings lost: $missing", missing.isEmpty())
     }

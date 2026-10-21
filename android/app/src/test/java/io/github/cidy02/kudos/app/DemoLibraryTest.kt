@@ -296,10 +296,8 @@ class DemoLibraryTest {
             assertTrue(java.time.Duration.between(device.trustedAt, fixedNow) > trustStore.undoWindow)
             DemoLibrary.seed(database, workRepository, queueRepository, fileStore, context, settingsRepository, { fixedNow })
             assertEquals(listOf(device), trustStore.trustedDevices())
-            val revocation = KeyRevocationService(trustStore, database, workRepository)
-            assertEquals(0, revocation.worksDeletedByCount(device.publicKeyHex))
+            val revocation = KeyRevocationService(trustStore)
             assertTrue(revocation.revoke(device.publicKeyHex, reason))
-            assertEquals(0, revocation.restoreWorksDeletedBy(device.publicKeyHex))
             assertFalse(trustStore.isTrusted(device.publicKeyHex))
             assertEquals(reason == KeyRevocationReason.STOLEN_OR_COMPROMISED,
                 device.publicKeyHex in settingsRepository.revokedTombstonePublicKeysSnapshot())

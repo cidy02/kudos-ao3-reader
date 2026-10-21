@@ -56,7 +56,8 @@ fun SettingsScreen(
             val importedFonts by remember(customFontRepository) { customFontRepository.observeImported() }
                 .collectAsState(initial = emptyList())
             SettingsHubScreen(navController, settings, authRepository,
-                fontName = io.github.cidy02.kudos.core.model.ReaderFontCatalog.name(settings.reader.readerFontId, importedFonts))
+                fontName = io.github.cidy02.kudos.core.model.ReaderFontCatalog.name(settings.reader.readerFontId, importedFonts),
+                onOpenBackup = onOpenBackup)
         }
         composable("appearance") {
             SettingsAppearancePage(repository, settings, customFontRepository)
@@ -78,9 +79,6 @@ fun SettingsScreen(
         }
         composable("library") {
             SettingsLibraryPage(repository, settings)
-        }
-        composable("backup") {
-            SettingsBackupPageWrapper(onOpenBackup, navController, repository, settings)
         }
         composable("folder_sync") {
             SettingsFolderSyncPage(repository, settings)
@@ -108,6 +106,6 @@ fun SettingsScreen(
 
 private val SettingsDebugPages = setOf(
     "hub", "appearance", "font", "reader", "listening", "downloads", "preservation",
-    "library", "backup", "folder_sync", "import_files", "reading_queues", "account",
+    "library", "folder_sync", "import_files", "reading_queues", "account",
     "privacy_settings", "privacy", "about"
 )

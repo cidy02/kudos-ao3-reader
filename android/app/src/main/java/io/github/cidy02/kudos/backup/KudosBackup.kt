@@ -75,11 +75,18 @@ data class BackupImportPreview(
     val fileWorkCount: Int,
     val willAdd: Int,
     val willRemove: Int,
-    val inBoth: Int
+    val inBoth: Int,
+    /**
+     * iOS `hasAnythingReplaceWouldRemove`. Saved for Later does not count: that
+     * queue always exists, so counting it would offer Replace on an empty library.
+     */
+    val hasReplaceableRecords: Boolean = false
 ) {
     val isLibraryEmpty: Boolean get() = localWorkCount == 0
+
+    /** iOS `backupIsMuchSmaller`: a large removal, not merely a smaller file. */
     val isMuchSmallerThanLibrary: Boolean
-        get() = willRemove > 0 && fileWorkCount * 2 < localWorkCount
+        get() = willRemove >= 20 && willRemove >= willAdd * 10
 }
 
 data class BackupRestoreSummary(

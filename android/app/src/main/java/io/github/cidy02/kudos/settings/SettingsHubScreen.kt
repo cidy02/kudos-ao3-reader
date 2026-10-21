@@ -42,7 +42,9 @@ fun SettingsHubScreen(
     settings: KudosSettings,
     authRepository: AO3AuthRepository?,
     /** The chosen reading font's name, as iOS's hub shows it. It always said "System". */
-    fontName: String = "System"
+    fontName: String = "System",
+    /** Opens the backup exporter. One tap, as iOS's Backup page. Not a second settings page. */
+    onOpenBackup: () -> Unit
 ) {
     val chrome = LocalPushedShellChrome.current
     LaunchedEffect(Unit) {
@@ -154,7 +156,7 @@ fun SettingsHubScreen(
                 ) {
                     SubjectFormRow("Library", showsDisclosure = true, onClick = { navController.navigate("library") })
                     SubjectRowSeparator()
-                    SubjectFormRow("Backup", showsDisclosure = true, onClick = { navController.navigate("backup") })
+                    SubjectFormRow("Backup", showsDisclosure = true, onClick = onOpenBackup)
                     SubjectRowSeparator()
                     SubjectFormRow(
                         "Sync Folder",

@@ -29,6 +29,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.foundation.Image
 import androidx.compose.ui.platform.LocalClipboardManager
@@ -83,7 +84,7 @@ private fun PairingContent(
 ) {
     val trustStore = remember { TombstoneTrustStore(settingsRepository) }
     val revocationService = remember {
-        KeyRevocationService(trustStore, database, workRepository)
+        KeyRevocationService(trustStore)
     }
     val scope = rememberCoroutineScope()
 
@@ -130,7 +131,15 @@ private fun PairingContent(
             } else {
                 "$unknownSignerCount deletions skipped from an unpaired device"
             }
-            SettingsActionRow(label = label, onClick = { showSheet = true })
+            SettingsActionRow(
+                label = label,
+                onClick = {
+                    // iOS clears the count before the sheet, so the prompt is acted on.
+                    unknownSignerCount = 0
+                    scope.launch { settingsRepository.clearUnknownSignerTombstoneIds() }
+                    showSheet = true
+                }
+            )
         }
 
         if (trustedDevices.isEmpty()) {
@@ -207,18 +216,10 @@ private fun PairingContent(
             onDismiss = { revokeTarget = null },
             onConfirm = { reason ->
                 scope.launch {
+                    // iOS RevokeDeviceSheet only removes the key. It does not restore works.
                     revocationService.revoke(target.publicKeyHex, reason)
                     trustedDevices = trustStore.trustedDevices()
-                    if (reason == KeyRevocationReason.STOLEN_OR_COMPROMISED) {
-                        val restored = revocationService.restoreWorksDeletedBy(target.publicKeyHex)
-                        status = if (restored > 0) {
-                            "Revoked. Restored $restored work(s) that device had deleted."
-                        } else {
-                            "Revoked that device."
-                        }
-                    } else {
-                        status = "Revoked that device."
-                    }
+                    status = "Revoked that device."
                 }
                 revokeTarget = null
             }
@@ -491,7 +492,12 @@ private fun RevokeDeviceDialog(
             }
         },
         confirmButton = {
-            SettingsActionRow(label = "Revoke", onClick = { onConfirm(reason) }, destructive = true)
+            SettingsActionRow(
+                label = "Revoke",
+                onClick = { onConfirm(reason) },
+                destructive = true,
+                modifier = Modifier.testTag("confirmRevoke")
+            )
         },
         dismissButton = {
             SettingsActionRow(label = "Cancel", onClick = onDismiss)
