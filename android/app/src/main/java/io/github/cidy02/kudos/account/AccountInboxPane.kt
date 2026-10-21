@@ -157,11 +157,7 @@ fun AccountInboxPane(
         onConfirm = {
             val pending = pendingDelete ?: return@DestructiveConfirmation
             pendingDelete = null
-            if (pending.items.size == 1) {
-                viewModel.startItemAction(AO3InboxBulkAction.Delete, pending.items.first(), pending.openedIn)
-            } else {
-                viewModel.startBulkAction(AO3InboxBulkAction.Delete, pending.openedIn)
-            }
+            viewModel.startBulkAction(AO3InboxBulkAction.Delete, pending.openedIn, pending.items)
         },
         onDismissRequest = { pendingDelete = null }
     )

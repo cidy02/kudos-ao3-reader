@@ -63,6 +63,13 @@ class SyncRepository(
      */
     private val runSyncMutex = Mutex()
 
+    /**
+     * Set for an automatic run only, inside [runSyncMutex]. Replace pauses sync by
+     * storing the flag; an import that already passed the start-of-run check still
+     * has to read it again once it holds the persistence gate.
+     */
+    private var declineImportWhenPaused = false
+
     suspend fun isSyncEnabled(): Boolean {
         return settingsRepository.settings.first().sync.isEnabled
     }
@@ -132,21 +139,28 @@ class SyncRepository(
      */
     suspend fun runAutoSync(): SyncResult? {
         if (!isSyncEnabled() || getSyncFolderUri() == null) return null
-        return runSync()
+        return runSync(stopWhenPaused = true)
     }
 
-    suspend fun runSync(): SyncResult = withContext(Dispatchers.IO) {
+    suspend fun runSync(): SyncResult = runSync(stopWhenPaused = false)
+
+    private suspend fun runSync(stopWhenPaused: Boolean): SyncResult = withContext(Dispatchers.IO) {
         // Opportunistic best-effort: skip if another run is already in flight
         // (lifecycle + WorkManager + manual Sync Now can all race). Prefer
         // tryLock over await so callers are never stuck behind a long SAF run.
         if (!runSyncMutex.tryLock()) {
             return@withContext SyncResult.SkippedAlreadyRunning
         }
+        declineImportWhenPaused = stopWhenPaused
         try {
             val result = try {
                 runSyncLocked()
             } catch (error: CancellationException) {
                 throw error
+            } catch (_: ImportDeclined) {
+                // Replace paused sync while this run waited on the gate. Nothing was
+                // imported, and the worker must not retry it as a failure.
+                SyncResult.Success()
             } catch (error: Exception) {
                 SyncResult.Error(error.message ?: "Sync failed.")
             }
@@ -157,9 +171,13 @@ class SyncRepository(
             }
             return@withContext result
         } finally {
+            declineImportWhenPaused = false
             runSyncMutex.unlock()
         }
     }
+
+    private suspend fun folderImportStillAllowed(): Boolean =
+        !declineImportWhenPaused || isSyncEnabled()
 
     private suspend fun runSyncLocked(): SyncResult {
         val uri = getSyncFolderUri() ?: return SyncResult.Error("No sync folder selected.")
@@ -257,7 +275,7 @@ class SyncRepository(
                     context.contentResolver.openInputStream(remoteBackup.uri)?.use { input ->
                         val bytes = input.readBytes()
                         if (bytes.isNotEmpty()) {
-                            backupRepository.importV2ZipBytes(bytes)
+                            backupRepository.importV2ZipBytes(bytes, admit = this::folderImportStillAllowed)
                         }
                     }
                 }
@@ -268,6 +286,11 @@ class SyncRepository(
 
             // 2. Export incrementally
             persistenceGate.withLock {
+                // iOS holds its gate for the whole run, so a Replace can never come between a
+                // run's check and its write-up. Here the gate is taken again for the export: a
+                // Replace that paused sync meanwhile must not have its library published or the
+                // folder pruned by works it removed (review of 3fy, F7).
+                if (!folderImportStillAllowed()) throw ImportDeclined()
                 val snapshot = backupRepository.captureLibrarySnapshot()
                 // Same single-source rule as the User-Agent: a hardcoded version here
                 // drifts silently and lands in every archive the user exports.
@@ -425,6 +448,8 @@ class SyncRepository(
             return SyncResult.Success(foldedConflicts.size)
         } catch (e: CancellationException) {
             throw e
+        } catch (_: ImportDeclined) {
+            return SyncResult.Success()
         } catch (e: Exception) {
             return SyncResult.Error(e.message ?: "Sync failed.")
         }
@@ -594,7 +619,8 @@ class SyncRepository(
             // (see `BackupMergeService.merge`).
             backupRepository.importPackage(
                 KudosBackupPackage(manifest, epubFiles, fontFiles),
-                normalizeQueuePreservation = next >= manifest.works.size
+                normalizeQueuePreservation = next >= manifest.works.size,
+                admit = this::folderImportStillAllowed
             )
             // Fonts are restored once per manifest, with the first batch (iOS
             // `readChangedRemoteAssets`). Offered again with each batch, a font whose name
@@ -639,7 +665,7 @@ class SyncRepository(
         var batchBytes = 0L
         suspend fun flush() {
             if (batch.isEmpty()) return
-            backupRepository.importOriginalFiles(manifest, batch)
+            backupRepository.importOriginalFiles(manifest, batch, admit = this::folderImportStillAllowed)
             batch = mutableMapOf()
             batchBytes = 0L
         }

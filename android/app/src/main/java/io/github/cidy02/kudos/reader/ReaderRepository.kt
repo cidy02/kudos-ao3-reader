@@ -58,16 +58,11 @@ class ReaderRepository(
         val preferences = preferencesFor(settings)
 
         // iOS `ReadiumSessionStamp.noteOpened`: Continue Reading dates only.
-        // The stored fraction (including a macOS percent) stays put.
+        // The stored fraction (including a macOS percent) stays put. Column
+        // update so a place saved while the font list was read is not written back.
         val now = clock()
-        val stamped = workRepository.upsert(
-            openedWork.copy(
-                lastReadDate = now,
-                progressModifiedAt = now,
-                lastModifiedAt = now,
-                hiddenFromHistoryAt = null
-            )
-        )
+        val stamped = workRepository.noteOpened(workId, now)
+            ?: return ReaderOpenResult.Failure(openedWork, ReaderError.WorkNotFound)
         progressGate.seed(workId, stamped)
 
         return ReaderOpenResult.Success(

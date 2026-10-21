@@ -52,6 +52,18 @@
                 android:resource="@xml/file_paths" />
         </provider>
 
+        <!-- Undo copies Replace writes. Import opens this root. FileProvider does not list them. -->
+        <provider
+            android:name=".backup.KudosSafetyDocumentsProvider"
+            android:authorities="${applicationId}.safetycopies"
+            android:exported="true"
+            android:grantUriPermissions="true"
+            android:permission="android.permission.MANAGE_DOCUMENTS">
+            <intent-filter>
+                <action android:name="android.content.action.DOCUMENTS_PROVIDER" />
+            </intent-filter>
+        </provider>
+
         <provider
             android:name="androidx.startup.InitializationProvider"
             android:authorities="${applicationId}.androidx-startup"

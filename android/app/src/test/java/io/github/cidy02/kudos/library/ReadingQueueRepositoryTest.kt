@@ -86,6 +86,33 @@ class ReadingQueueRepositoryTest {
         assertEquals(1, savedForLaterQueues.size)
     }
 
+    /** Adding to a queue must not write back the row from before the file check. */
+    @Test
+    fun addWorkKeepsAPlaceWrittenDuringTheFileCheck() = runTest {
+        val work = savedWork("work-place", "Queued").copy(
+            lastSpineIndex = 1,
+            isFavorite = false,
+            hasEpub = true
+        )
+        database.workDao().upsert(work.toEntity())
+        val queues = ReadingQueueRepository(
+            database = database,
+            clock = { now },
+            uuidFactory = { "id-${uuidSeq.incrementAndGet()}" },
+            epubOnDisk = {
+                val row = database.workDao().getById(work.id)!!
+                database.workDao().upsert(row.copy(lastSpineIndex = 9, isFavorite = true))
+                true
+            }
+        )
+        val queue = queues.createQueue("Reading")
+        queues.addWork(queue.id, work.id, enqueueMissingEpub = false)
+        val after = database.workDao().getById(work.id)!!
+        assertEquals(9, after.lastSpineIndex)
+        assertTrue(after.isFavorite)
+        assertTrue(after.isQueuedForLater)
+    }
+
     @Test
     fun addWorkListWorksAndRemoveWorkRoundTrip() = runTest {
         val workA = savedWork("work-a", title = "Alpha")

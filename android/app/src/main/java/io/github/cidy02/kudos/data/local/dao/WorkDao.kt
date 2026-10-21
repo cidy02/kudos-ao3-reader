@@ -136,4 +136,48 @@ interface WorkDao {
     /** Works whose search index stamp is not [version] (includes never-indexed = 0). */
     @Query("SELECT * FROM works WHERE searchIndexVersion != :version")
     suspend fun getWithStaleSearchIndex(version: Int): List<WorkEntity>
+
+    /**
+     * Search text only. A missing id updates nothing, so a work deleted while
+     * the rebuild was between batches is not put back.
+     */
+    @Query(
+        """
+        UPDATE works
+        SET searchText = :searchText, searchIndexVersion = :searchIndexVersion
+        WHERE id = :id
+        """
+    )
+    suspend fun updateSearchIndex(id: String, searchText: String, searchIndexVersion: Int)
+
+    /** File flag only: hasEpub, the remote promise, the hold stamp, and the modified clock. */
+    @Query(
+        """
+        UPDATE works
+        SET hasEpub = :hasEpub, remoteEpubPending = :remoteEpubPending,
+            freedAt = :freedAt, lastModifiedAt = :lastModifiedAt
+        WHERE id = :id
+        """
+    )
+    suspend fun updateLocalEpubFlags(
+        id: String,
+        hasEpub: Boolean,
+        remoteEpubPending: Boolean,
+        freedAt: Instant?,
+        lastModifiedAt: Instant
+    )
+
+    @Query("UPDATE works SET freedAt = NULL, lastModifiedAt = :lastModifiedAt WHERE id = :id")
+    suspend fun clearFreedAt(id: String, lastModifiedAt: Instant)
+
+    /** iOS `markProgressModified`: Continue Reading dates only. The stored place stays. */
+    @Query(
+        """
+        UPDATE works
+        SET lastReadDate = :openedAt, progressModifiedAt = :openedAt,
+            lastModifiedAt = :openedAt, hiddenFromHistoryAt = NULL
+        WHERE id = :id
+        """
+    )
+    suspend fun noteOpened(id: String, openedAt: Instant)
 }

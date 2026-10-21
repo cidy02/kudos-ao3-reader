@@ -36,6 +36,7 @@ class InboxFailedPageTest {
         var posts = 0
         var empty = false
         var inboxReads = 0
+        var postedFields: List<Pair<String, String>> = emptyList()
         override fun username() = "tester"
         override fun sessionGeneration() = generation
         override suspend fun get(url: String, headers: Map<String, String>): AO3Result<AO3HttpResponse> {
@@ -53,7 +54,11 @@ class InboxFailedPageTest {
         }
         override suspend fun getAuthenticated(url: String) = get(url, emptyMap())
         override suspend fun postAuthenticated(url: String, formFields: List<Pair<String, String>>,
-            headers: Map<String, String>): AO3Result<AO3HttpResponse> { posts++; return AO3Result.Failure(AO3Error.NotFound) }
+            headers: Map<String, String>): AO3Result<AO3HttpResponse> {
+            posts++
+            postedFields = formFields
+            return AO3Result.Failure(AO3Error.NotFound)
+        }
     }
 
     private var model: AccountInboxViewModel? = null
@@ -154,6 +159,30 @@ class InboxFailedPageTest {
         model.startItemAction(AO3InboxBulkAction.Delete, item, openedIn)
         assertEquals(0, client.posts)
         assertEquals(false, model.uiState.value.isPerformingBulkAction)
+    }
+
+    /** A reload that clears the selection must not change which items a confirmed delete sends. */
+    @Test fun aConfirmedMultiDeleteSendsTheItemsTheDialogCaptured() = runTest {
+        val client = Client()
+        val model = AccountInboxViewModel(AO3InboxRepository(client, pageCache = AO3PageCache()),
+            AO3CommentRepository(client, client)).also { this@InboxFailedPageTest.model = it }
+        model.load(1)!!.join()
+        model.beginSelection()
+        val captured = model.uiState.value.items.filter { it.bulkSelectionField?.value in setOf("501", "502") }
+        assertEquals(2, captured.size)
+        captured.forEach { model.toggleSelection(it) }
+        assertEquals(setOf("501", "502"), model.uiState.value.selectedItemIds.mapNotNull { id ->
+            model.uiState.value.items.firstOrNull { it.id == id }?.bulkSelectionField?.value
+        }.toSet())
+        val openedIn = model.viewerScope()
+        model.load(1, bypassCache = true)!!.join()
+        assertTrue(model.uiState.value.selectedItemIds.isEmpty())
+        model.startBulkAction(AO3InboxBulkAction.Delete, openedIn, captured)
+        assertEquals(1, client.posts)
+        assertEquals(
+            setOf("501", "502"),
+            client.postedFields.filter { it.first == "inbox_comments[]" }.map { it.second }.toSet()
+        )
     }
 
     /** iOS `aFailedPillRequestKeepsThePillOfTheRowsShown`: the lit pill is the page on screen. */

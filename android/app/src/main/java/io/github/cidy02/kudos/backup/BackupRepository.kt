@@ -97,8 +97,10 @@ class BackupRepository(
      */
     suspend fun importV2ZipBytes(
         bytes: ByteArray,
-        mode: BackupImportMode = BackupImportMode.RECONCILE
+        mode: BackupImportMode = BackupImportMode.RECONCILE,
+        admit: suspend () -> Boolean = { true }
     ): BackupRestoreSummary = persistenceGate.withLock {
+        if (!admit()) throw ImportDeclined()
         withContext(Dispatchers.IO) {
             val pack = BackupImporter.importV2Zip(bytes)
             prepareForImport(mode)
@@ -111,8 +113,10 @@ class BackupRepository(
     suspend fun importPackage(
         pack: KudosBackupPackage,
         mode: BackupImportMode = BackupImportMode.RECONCILE,
-        normalizeQueuePreservation: Boolean = true
+        normalizeQueuePreservation: Boolean = true,
+        admit: suspend () -> Boolean = { true }
     ): BackupRestoreSummary = persistenceGate.withLock {
+        if (!admit()) throw ImportDeclined()
         withContext(Dispatchers.IO) {
             BackupFontValidator.validate(pack.fontFilesByFileName)
             prepareForImport(mode)
@@ -165,16 +169,20 @@ class BackupRepository(
      * the sync has merged it already, or it is this device's own. [manifest] only says which
      * work here each file's name means.
      */
-    internal suspend fun importOriginalFiles(manifest: KudosBackupManifest, files: Map<String, ByteArray>) =
-        persistenceGate.withLock {
-            val works = database.workDao().getAllIncludingDeleted().map { it.toDomain() }
-            val identity = WorkIdentityIndex.snapshot(works)
-            val remap = manifest.works.mapNotNull { archived ->
-                identity.existingWork(archived.ao3WorkID?.toLong(), archived.sourceURL, archived.id)
-                    ?.let { BackupPaths.normalizeIdForComparison(archived.id) to it.id }
-            }.toMap()
-            restoreOriginals(files, remap, expectedWorks = works.associateBy { it.id })
-        }
+    internal suspend fun importOriginalFiles(
+        manifest: KudosBackupManifest,
+        files: Map<String, ByteArray>,
+        admit: suspend () -> Boolean = { true }
+    ) = persistenceGate.withLock {
+        if (!admit()) throw ImportDeclined()
+        val works = database.workDao().getAllIncludingDeleted().map { it.toDomain() }
+        val identity = WorkIdentityIndex.snapshot(works)
+        val remap = manifest.works.mapNotNull { archived ->
+            identity.existingWork(archived.ao3WorkID?.toLong(), archived.sourceURL, archived.id)
+                ?.let { BackupPaths.normalizeIdForComparison(archived.id) to it.id }
+        }.toMap()
+        restoreOriginals(files, remap, expectedWorks = works.associateBy { it.id })
+    }
 
     /**
      * iOS `KudosBackupService.restore`, the originals loop. A file belongs to the work its name

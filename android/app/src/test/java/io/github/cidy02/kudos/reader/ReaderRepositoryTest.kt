@@ -266,6 +266,35 @@ class ReaderRepositoryTest {
         assertTrue(workRepository.getWork(WORK_UUID) != null)
     }
 
+    /** Opening must not write back the row from before the font list is read. */
+    @Test
+    fun openKeepsAPlaceWrittenWhileFontsAreListed() = runTest {
+        workRepository.upsert(
+            savedWork(hasEpub = true).copy(
+                lastSpineIndex = 1,
+                isFavorite = false,
+                hiddenFromHistoryAt = Instant.parse("2026-06-01T00:00:00Z")
+            )
+        )
+        fileStore.writeWorkEpub(WORK_UUID, EPUB_BYTES)
+        val reading = ReaderRepository(
+            workRepository = workRepository,
+            fileStore = fileStore,
+            settingsProvider = { settingsSnapshot },
+            clock = { now },
+            customFontsProvider = {
+                val row = database.workDao().getById(WORK_UUID)!!
+                database.workDao().upsert(row.copy(lastSpineIndex = 8, isFavorite = true))
+                emptyList()
+            }
+        )
+        val result = reading.open(WORK_UUID) as ReaderOpenResult.Success
+        assertEquals(8, result.work.lastSpineIndex)
+        assertTrue(result.work.isFavorite)
+        assertEquals(now, result.work.lastReadDate)
+        assertNull(result.work.hiddenFromHistoryAt)
+    }
+
     @Test
     fun openMapsCustomFontDeclarationsWhenCustomFontSelected() = runTest {
         val customFont = io.github.cidy02.kudos.core.model.CustomFont(

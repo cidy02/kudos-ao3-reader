@@ -132,9 +132,13 @@ class WorkImporter(
         if (work.ao3Unavailable) return WorkImportResult.Failure(work, AO3Error.NotFound)
         val attempt = workRepository.upsert(work.copy(lastPreservationAttemptAt = workRepository.currentInstant()))
         if (attempt.hasEpub && fileStore.workEpubExists(attempt.id)) {
-            return WorkImportResult.Success(workRepository.upsert(attempt.copy(
-                epubPreservationStatusRaw = "preserved", preservedAt = attempt.preservedAt ?: workRepository.currentInstant()
-            )))
+            val preserved = workRepository.rewriteFresh(attempt.id) { fresh ->
+                fresh.copy(
+                    epubPreservationStatusRaw = "preserved",
+                    preservedAt = fresh.preservedAt ?: workRepository.currentInstant()
+                )
+            } ?: attempt
+            return WorkImportResult.Success(preserved)
         }
         // A restricted listing may use an existing local EPUB, but never request a missing one.
         if (!allowDownload) return WorkImportResult.Failure(
@@ -307,22 +311,27 @@ class WorkImporter(
                         is FileWriteResult.Success -> Unit
                     }
                 }
-                val restored = if (existing.isDeleted) {
-                    workRepository.restoreFromRecentlyDeleted(existing.id) ?: existing
-                } else {
-                    existing
-                }
-                work = epubMetadata.applyTo(
-                    restored.copy(
-                        isSaved = true,
-                        hasEpub = true,
-                        remoteEpubPending = false,
-                        downloadedAt = restored.downloadedAt ?: downloadedAt,
-                        lastModifiedAt = workRepository.currentInstant()
-                    ),
-                    fillOnly = true
-                ).withImportedAo3Ids()
-                return WorkImportResult.Success(workRepository.upsert(work))
+                val saved = workRepository.rewriteFresh(existing.id) { current ->
+                    val restored = if (current.isDeleted) {
+                        workRepository.restoreFromRecentlyDeleted(current.id) ?: current
+                    } else {
+                        current
+                    }
+                    epubMetadata.applyTo(
+                        restored.copy(
+                            isSaved = true,
+                            hasEpub = true,
+                            remoteEpubPending = false,
+                            downloadedAt = restored.downloadedAt ?: downloadedAt,
+                            lastModifiedAt = workRepository.currentInstant()
+                        ),
+                        fillOnly = true
+                    ).withImportedAo3Ids()
+                } ?: return WorkImportResult.Failure(
+                    existing,
+                    AO3Error.Validation("This local work no longer exists.")
+                )
+                return WorkImportResult.Success(saved)
             }
             work = epubMetadata.applyTo(work, fillOnly = false).withImportedAo3Ids()
         }

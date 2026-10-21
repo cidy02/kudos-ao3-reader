@@ -1,7 +1,6 @@
 package io.github.cidy02.kudos.backup
 
 import android.net.Uri
-import android.os.Environment
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -47,9 +46,7 @@ import io.github.cidy02.kudos.ui.subject.SubjectMetrics
 import io.github.cidy02.kudos.ui.subject.SubjectRowSeparator
 import io.github.cidy02.kudos.ui.subject.SubjectToggle
 import io.github.cidy02.kudos.works.WorkRepository
-import java.io.File
-import java.nio.file.Files
-import java.nio.file.StandardOpenOption
+import java.time.Instant
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
@@ -97,7 +94,7 @@ fun BackupScreen(
     }
 
     val importLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.OpenDocument()
+        contract = OpenBackupDocument()
     ) { uri: Uri? ->
         if (uri == null) return@rememberLauncherForActivityResult
         scope.launch {
@@ -140,19 +137,14 @@ fun BackupScreen(
             var safetyName: String? = null
             try {
                 if (mode == BackupImportMode.REPLACE_LIBRARY) {
-                    val docs = context.getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS)
-                        ?: File(context.filesDir, "Documents").also { it.mkdirs() }
-                    docs.mkdirs()
-                    val file = File(docs, repository.suggestedSafetyBackupFileName())
                     val safetyBytes = repository.exportV2ZipBytes()
-                    withContext(Dispatchers.IO) {
-                        // Never overwrite the only copy that can undo an earlier Replace.
-                        Files.write(
-                            file.toPath(), safetyBytes,
-                            StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE
+                    safetyName = withContext(Dispatchers.IO) {
+                        SafetyCopies.write(
+                            SafetyCopies.directory(context),
+                            safetyBytes,
+                            Instant.now()
                         )
                     }
-                    safetyName = file.name
                     if (pauseSync && pending.syncEnabled) {
                         settingsRepository.updateSyncIsEnabled(false)
                     }

@@ -8,12 +8,15 @@ import kotlinx.coroutines.sync.withLock
  * Migration, backup import, and folder sync all contend for this mutex,
  * so they can never race each other's writes.
  */
-class PersistenceGate {
+open class PersistenceGate {
     private val mutex = Mutex()
 
-    suspend fun <T> withLock(action: suspend () -> T): T {
+    open suspend fun <T> withLock(action: suspend () -> T): T {
         return mutex.withLock {
             action()
         }
     }
 }
+
+/** A folder import refused because Replace paused sync. Not a failure and not a cancellation. */
+internal class ImportDeclined : Exception()

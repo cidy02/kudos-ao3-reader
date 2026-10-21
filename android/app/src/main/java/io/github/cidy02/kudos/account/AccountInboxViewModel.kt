@@ -292,8 +292,14 @@ class AccountInboxViewModel(
         startAction(action, listOf(item), openedIn)
     }
 
-    fun startBulkAction(action: AO3InboxBulkAction, openedIn: AO3PageCache.Scope? = null) {
-        startAction(action, mutableState.value.selectedItems, openedIn)
+    fun startBulkAction(
+        action: AO3InboxBulkAction,
+        openedIn: AO3PageCache.Scope? = null,
+        items: List<AO3InboxItem>? = null
+    ) {
+        // A delete dialog passes the items it showed. Mark read and mark unread
+        // pass none, and send whatever is selected now.
+        startAction(action, items ?: mutableState.value.selectedItems, openedIn)
     }
 
     private fun startAction(action: AO3InboxBulkAction, items: List<AO3InboxItem>, openedIn: AO3PageCache.Scope? = null) {
