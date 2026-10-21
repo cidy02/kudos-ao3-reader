@@ -163,7 +163,7 @@ struct EPUBImportSettingsSection: View {
 
             if isImporting {
                 HStack(spacing: 12) {
-                    ProgressView()
+                    ProgressView().accentFill()
                     Text(progressText ?? "Importing…")
                         .foregroundStyle(.secondary)
                 }

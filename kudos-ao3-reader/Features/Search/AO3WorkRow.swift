@@ -539,6 +539,8 @@ struct AO3WorkRow: View {
         } else {
             button
                 .buttonStyle(.bordered)
+                .foregroundStyle(.accentInk)
+                .accentFill()
                 .buttonBorderShape(.circle)
                 .controlSize(.small)
                 .minimumHitTarget()

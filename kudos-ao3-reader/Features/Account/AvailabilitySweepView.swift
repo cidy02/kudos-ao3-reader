@@ -58,7 +58,7 @@ struct AvailabilitySweepView: View {
             .onAppear(perform: refreshCounts)
             .onDisappear { task?.cancel() }
         }
-        .tint(theme.effectiveTint)
+        .accentTint(theme.effectiveTint, on: theme.appTheme)
     }
 
     /// Every work currently marked unavailable, not just the ones this run found —
@@ -138,7 +138,7 @@ struct AvailabilitySweepView: View {
     private var progressSection: some View {
         Section {
             VStack(alignment: .leading, spacing: 8) {
-                ProgressView(value: Double(completed), total: Double(max(total, 1)))
+                ProgressView(value: Double(completed), total: Double(max(total, 1))).accentFill()
                 Text("Checked \(completed.formatted()) of \(total.formatted())")
                     .font(.caption)
                     .foregroundStyle(.secondary)

@@ -44,7 +44,7 @@ struct TagChip: View {
             // chip red — a concrete `Color` doesn't participate in that lookup.
             .foregroundStyle(tinted ? AnyShapeStyle(Color.white) : AnyShapeStyle(Color.primary))
             .background(
-                tinted ? AnyShapeStyle(.tint) : AnyShapeStyle(Color(.quaternarySystemFill)),
+                tinted ? AnyShapeStyle(.accentFill) : AnyShapeStyle(Color(.quaternarySystemFill)),
                 in: Capsule()
             )
     }

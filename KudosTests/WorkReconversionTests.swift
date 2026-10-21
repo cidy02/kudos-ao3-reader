@@ -34,6 +34,20 @@ struct WorkReconversionTests {
 
     // MARK: - The record
 
+    @Test func eachAppJudgesOnlyItsOwnConversionRecords() throws {
+        // T-421: Android numbers its converter on its own scale and writes "android".
+        var android = WorkConversionRecord(converterVersion: 1, format: "pdf", originalFileName: "a.pdf")
+        android.converterPlatform = "android"
+        #expect(android.isStale == false)
+        let olderOwn = WorkConversionRecord(converterVersion: 1, format: "pdf", originalFileName: "a.pdf")
+        #expect(olderOwn.isStale)
+        let decoded = try JSONDecoder().decode(WorkConversionRecord.self, from: Data(
+            #"{"converterVersion":1,"format":"pdf","originalFileName":"a.pdf","convertedAt":0,"converterPlatform":"android"}"#.utf8))
+        #expect(decoded.converterPlatform == "android" && decoded.isStale == false)
+        let encoded = String(decoding: try JSONEncoder().encode(olderOwn), as: UTF8.self)
+        #expect(!encoded.contains("converterPlatform"))
+    }
+
     @Test func aConvertedImportRecordsTheConverterVersion() async throws {
         let context = try makeContext()
         let source = try write("Chapter 1: Start\n\nSome prose to convert.", "txt")

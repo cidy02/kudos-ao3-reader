@@ -178,7 +178,7 @@ struct AO3NamedSubscriptionsList: View {
                 .bareListRow()
             }
         } else {
-            Section { ProgressView().frame(maxWidth: .infinity).bareListRow() }
+            Section { ProgressView().frame(maxWidth: .infinity).bareListRow().accentFill() }
         }
     }
 

@@ -144,6 +144,7 @@ struct AO3LoginView: View {
                             if auth.status == .signingIn {
                                 ProgressView()
                                     .controlSize(.small)
+                                    .accentFill()
                                 Text("Logging In…")
                             } else {
                                 Label("Log In", systemImage: "person.badge.key")

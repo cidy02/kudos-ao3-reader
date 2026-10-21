@@ -226,6 +226,7 @@ struct ReadingQueueSettingsView: View {
                     }
                 ))
                 .labelsHidden()
+                .accentFill()
             }
             SubjectRowSeparator()
             SubjectFormRow(label: "Order", value: "Manual")

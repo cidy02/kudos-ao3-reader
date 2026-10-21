@@ -366,7 +366,7 @@ struct AccountInboxItemRow: View {
     private var bylineWho: some View {
         if item.isUnread {
             Circle()
-                .fill(.tint)
+                .fill(.accentFill)
                 .frame(width: 8, height: 8)
                 .accessibilityLabel("Unread")
         }

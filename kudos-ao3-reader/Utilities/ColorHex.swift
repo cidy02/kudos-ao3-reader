@@ -79,4 +79,36 @@ extension Color {
         }
         return 0.2126 * channel(red) + 0.7152 * channel(green) + 0.0722 * channel(blue)
     }
+
+    /// WCAG contrast between opaque colours, from 1 to 21.
+    func contrastRatio(on page: Color) -> Double {
+        let foreground = relativeLuminance
+        let background = page.relativeLuminance
+        return (max(foreground, background) + 0.05) / (min(foreground, background) + 0.05)
+    }
+
+    /// Mix toward white in 5% steps, matching Android's `readableOn` (owner Q19).
+    func readable(on page: Color, minimum: Double = 4.5) -> Color {
+        guard contrastRatio(on: page) < minimum else { return self }
+        let platform = PlatformColor(self)
+        var red: CGFloat = 0, green: CGFloat = 0, blue: CGFloat = 0, alpha: CGFloat = 0
+        #if canImport(UIKit)
+        platform.getRed(&red, green: &green, blue: &blue, alpha: &alpha)
+        #else
+        (platform.usingColorSpace(.sRGB) ?? platform).getRed(&red, green: &green, blue: &blue, alpha: &alpha)
+        #endif
+        var mixed = self
+        for step in 1...20 {
+            let fraction = Float(step) / 20
+            // Compose's sRGB Color constructor rounds Float channels to bytes.
+            func channel(_ component: CGFloat) -> Double {
+                let value = Float(component)
+                let lifted = value + (1 - value) * fraction
+                return Double((min(max(lifted, 0), 1) * 255).rounded()) / 255
+            }
+            mixed = Color(red: channel(red), green: channel(green), blue: channel(blue), opacity: Double(alpha))
+            if mixed.contrastRatio(on: page) >= minimum { break }
+        }
+        return mixed
+    }
 }

@@ -352,6 +352,8 @@ struct WorkRowExpandButton: View {
                 .font(.caption.weight(.semibold))
         }
         .buttonStyle(.bordered)
+        .foregroundStyle(.accentInk)
+        .accentFill()
         .buttonBorderShape(.circle)
         .controlSize(.small)
         .minimumHitTarget()

@@ -203,6 +203,7 @@ struct AO3FilterPanel: View {
             // on the board. Reset stays unfilled so the pair reads as one primary
             // and one secondary rather than two equal buttons.
             .buttonStyle(.borderedProminent)
+            .accentFill()
             .prominentLabel()
             .disabled(mode == .search && !filters.isSearchable)
             .accessibilityLabel(confirmLabel)
@@ -263,6 +264,7 @@ struct AO3FilterPanel: View {
                                 ForEach(AO3SearchFilters.SortDirection.allCases) { Text($0.title).tag($0) }
                             }
                             .pickerStyle(.segmented)
+                            .accentFill()
                         }
                     }
                     Picker("Rating", selection: $filters.rating) {
@@ -291,7 +293,7 @@ struct AO3FilterPanel: View {
                     }
                     // Drawn in both modes: Refine applies Search's rule under Any
                     // too (1au.4), so the switch filters wherever it shows.
-                    Toggle("Include Not Rated", isOn: $filters.includeNotRated)
+                    Toggle("Include Not Rated", isOn: $filters.includeNotRated).accentFill()
                 }
 
                 Section {
@@ -532,14 +534,14 @@ struct AO3FilterPanel: View {
         Toggle(title, isOn: Binding(
             get: { date.wrappedValue != nil },
             set: { date.wrappedValue = $0 ? (date.wrappedValue ?? Date()) : nil }
-        ))
+        )).accentFill()
         if let value = date.wrappedValue {
             DatePicker(
                 title,
                 selection: Binding(get: { value }, set: { date.wrappedValue = $0 }),
                 displayedComponents: .date
             )
-            .labelsHidden()
+            .labelsHidden().accentFill()
         }
     }
 
@@ -658,6 +660,7 @@ extension AO3FilterPanel {
                     }
                 }
                 .pickerStyle(.segmented)
+                .accentFill()
             }
             Section {
                 worksCompletionChips

@@ -44,6 +44,7 @@ struct WritingChaptersView: View {
                 ProgressView("Loading chapters…")
                     .frame(maxWidth: .infinity)
                     .pageBodyRow(top: 18, gutter: gutter)
+                    .accentFill()
             }
         }
         .cardList()

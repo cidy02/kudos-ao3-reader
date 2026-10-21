@@ -101,7 +101,7 @@ struct BugReportView: View {
         #if os(iOS)
         if let screenshot {
             Section {
-                Toggle("Include a screenshot", isOn: $includeScreenshot)
+                Toggle("Include a screenshot", isOn: $includeScreenshot).accentFill()
                 if includeScreenshot {
                     Image(uiImage: screenshot)
                         .resizable()

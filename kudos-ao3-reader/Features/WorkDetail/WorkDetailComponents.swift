@@ -33,10 +33,11 @@ struct WorkQuickActionTile: View {
         VStack(spacing: 8) {
             ZStack {
                 Circle()
-                    .fill(.tint.opacity(0.12))
+                    .fill(.accentFill.opacity(0.12))
                 if isBusy {
                     ProgressView()
                         .controlSize(.small)
+                        .accentFill()
                 } else {
                     Image(systemName: systemImage)
                         .font(.title3.weight(.medium))

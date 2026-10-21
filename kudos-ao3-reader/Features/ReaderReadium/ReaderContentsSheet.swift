@@ -69,6 +69,7 @@ struct ReaderContentsSheet: View {
                 ForEach(ReaderContentsSegment.allCases) { Text($0.title).tag($0) }
             }
             .pickerStyle(.segmented)
+            .accentFill()
             .labelsHidden()
             .padding(.horizontal, 16)
             .padding(.bottom, 8)

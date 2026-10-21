@@ -267,14 +267,14 @@ struct AddChapterView: View {
                 set: { enabled in
                     if enabled { publicationDate.wrappedValue = Date() } else { form.publishedYear = ""; form.publishedMonth = ""; form.publishedDay = "" }
                 }
-            )).labelsHidden()
+            )).labelsHidden().accentFill()
         }
         .panelSegment(0, of: count, gutter: gutter)
         if showsDate {
             SubjectFormRow(label: "Publication date", arrangement: .control) {
                 DatePicker("Publication date", selection: publicationDate, displayedComponents: .date)
                     .labelsHidden()
-                    .frame(maxWidth: .infinity, alignment: .trailing)
+                    .frame(maxWidth: .infinity, alignment: .trailing).accentFill()
             }
             .panelSegment(1, of: count, gutter: gutter)
         }
@@ -282,13 +282,14 @@ struct AddChapterView: View {
         // VoiceOver, and an empty one announced a bare "switch".
         if posts {
             SubjectFormRow(label: "Post without preview", arrangement: .control) {
-                Toggle("Post without preview", isOn: $postWithoutPreview).labelsHidden()
+                Toggle("Post without preview", isOn: $postWithoutPreview).labelsHidden().accentFill()
             }
             .panelSegment(count - 2, of: count, gutter: gutter)
         }
         SubjectFormRow(label: "This is the last chapter", arrangement: .control) {
             Toggle("This is the last chapter", isOn: $isLastChapter)
                 .labelsHidden()
+                .accentFill()
         }
         .panelSegment(count - 1, of: count, gutter: gutter)
     }

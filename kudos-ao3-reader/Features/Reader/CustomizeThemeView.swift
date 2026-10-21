@@ -65,7 +65,7 @@ struct CustomizeThemeView: View {
                         }
                         .pickerStyle(.navigationLink)
 
-                        Toggle("Bold Text", isOn: $boldText)
+                        Toggle("Bold Text", isOn: $boldText).accentFill()
                     }
 
                     Section {
@@ -76,6 +76,7 @@ struct CustomizeThemeView: View {
                         // own `Binding.animation(_:)` already takes an optional, so
                         // passing nil is the documented way to opt out.
                         Toggle("Customize", isOn: $customize.animation(reduceMotion ? nil : .easeInOut(duration: 0.2)))
+                            .accentFill()
 
                         Group {
                             sliderRow("Line Spacing", icon: "arrow.up.and.down.text.horizontal",
@@ -87,7 +88,7 @@ struct CustomizeThemeView: View {
                                       value: $wordSpacing, range: ReaderTextStyle.wordSpacingRange)
                             sliderRow("Margins", icon: "rectangle.inset.filled",
                                       value: $pageMargin, range: ReaderTextStyle.marginRange)
-                            Toggle("Justify Text", isOn: $justify)
+                            Toggle("Justify Text", isOn: $justify).accentFill()
                         }
                         .disabled(!customize)
                     } header: {
@@ -250,6 +251,7 @@ struct CustomizeThemeView: View {
                 // already uses (Text Size, next door).
                 .accessibilityLabel(title)
                 .accessibilityValue(valueLabel ?? String(format: "%.2f", value.wrappedValue))
+                .accentFill()
         }
         .padding(.vertical, 2)
     }

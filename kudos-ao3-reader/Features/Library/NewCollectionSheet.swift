@@ -88,7 +88,7 @@ struct NewCollectionSheet: View {
         }
         // Outside the stack, as New queue: the Create button, the toggles and
         // the caret take the swatch too.
-        .tint(palette.tint)
+        .screenTint(palette)
         // The same sheet chrome as New queue.
         #if os(iOS)
         .presentationDetents([.large])
@@ -120,11 +120,11 @@ struct NewCollectionSheet: View {
     private var behaviourPanel: some View {
         VStack(spacing: 0) {
             SubjectFormRow(label: "Keep downloads", arrangement: .control) {
-                Toggle("Keep downloads", isOn: $keepsWorksOffline).labelsHidden()
+                Toggle("Keep downloads", isOn: $keepsWorksOffline).labelsHidden().accentFill()
             }
             SubjectRowSeparator()
             SubjectFormRow(label: "Show on Home", arrangement: .control) {
-                Toggle("Show on Home", isOn: $showsOnHome).labelsHidden()
+                Toggle("Show on Home", isOn: $showsOnHome).labelsHidden().accentFill()
             }
         }
         .subjectPanel()

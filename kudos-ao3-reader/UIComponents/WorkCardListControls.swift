@@ -79,7 +79,7 @@ struct FilterButton: View {
                             .foregroundStyle(.white)
                             .padding(.horizontal, 3)
                             .frame(minWidth: 15, minHeight: 15)
-                            .background(Circle().fill(.tint))
+                            .background(Circle().fill(.accentFill))
                             .offset(x: 6, y: -6)
                             .accessibilityHidden(true)
                     }
