@@ -25,9 +25,9 @@ import androidx.compose.ui.unit.sp
 import io.github.cidy02.kudos.data.preferences.SettingsRepository
 import io.github.cidy02.kudos.reader.settings.ReaderPreferences
 import io.github.cidy02.kudos.reader.settings.ReaderSpeechPreferences
+import io.github.cidy02.kudos.reader.settings.ReaderTTSEngineKind
 import io.github.cidy02.kudos.reader.speech.AutomaticTTSService
 import io.github.cidy02.kudos.reader.speech.SpeechStatus
-import io.github.cidy02.kudos.reader.speech.TTSDownloadWorker
 import io.github.cidy02.kudos.reader.speech.TTSService
 import io.github.cidy02.kudos.reader.speech.applySpeechPreferences
 import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
@@ -44,7 +44,8 @@ fun SettingsListeningPage(repository: SettingsRepository) {
     DisposableEffect(service) {
         onDispose { service.shutdown() }
     }
-    SettingsListeningPage(repository, service, TTSDownloadWorker.isModelDownloaded(context))
+    val voicePack = rememberVoicePackUi(context)
+    SettingsListeningPage(repository, service, voicePack.installed, voicePack)
 }
 
 /** The production page accepts the existing engine seam so tests can report real catalog-shaped data. */
@@ -52,8 +53,10 @@ fun SettingsListeningPage(repository: SettingsRepository) {
 internal fun SettingsListeningPage(
     repository: SettingsRepository,
     service: TTSService,
-    packInstalled: Boolean
+    packInstalled: Boolean = false,
+    voicePack: VoicePackUi = VoicePackUi.fixed(packInstalled)
 ) {
+    val installed = packInstalled || voicePack.installed
     val speech by repository.speechPreferences.collectAsState(initial = ReaderSpeechPreferences())
     val voices by service.availableVoices.collectAsState()
     val status by service.status.collectAsState()
@@ -66,6 +69,7 @@ internal fun SettingsListeningPage(
 
     // Like iOS's audition harness, changing the real settings restarts a playing sample.
     LaunchedEffect(service, speech, sample, auditionRequested) {
+        service.setEngine(speech.engine)
         if (auditionRequested) {
             try {
                 service.applySpeechPreferences(speech.applyTo(ReaderPreferences()))
@@ -131,7 +135,7 @@ internal fun SettingsListeningPage(
                 SubjectRowSeparator()
                 if (auditionRequested) {
                     SubjectFormRow("Playing Sample")
-                    SubjectFormRow("Engine", value = if (packInstalled) "Kokoro" else "Device voice")
+                    SubjectFormRow("Engine", value = ReaderTTSEngineKind.effective(speech.engine, installed).displayName)
                     SubjectFormRow("Voice", value = voiceName ?: "Automatic")
                     SettingsActionRow("Stop", onClick = {
                         auditionRequested = false
@@ -148,17 +152,10 @@ internal fun SettingsListeningPage(
             }
         }
         item {
-            SettingsSection(
-                label = "Kokoro Pack",
-                footnote = when {
-                    !packInstalled -> "Read Aloud uses your device's own voice. For Kokoro's, download its " +
-                        "Voice Pack in the reader, from Display & Themes."
-                    status == SpeechStatus.UNAVAILABLE -> "The installed voice pack could not be opened."
-                    else -> null
-                }
-            ) {
-                SubjectFormRow("Voice Pack", value = if (packInstalled) "Voice Pack Downloaded" else "Not downloaded")
-            }
+            ListeningVoicePackSection(
+                voicePack = voicePack,
+                packFailedToOpen = installed && status == SpeechStatus.UNAVAILABLE
+            )
         }
         item {
             SettingsSection(
@@ -166,6 +163,9 @@ internal fun SettingsListeningPage(
                 footnote = "Automatic starts with your device's own voice, then uses Kokoro after you install " +
                     "its optional voice pack. Kudos doesn't send your reading, your library or any usage data."
             ) {
+                ListeningEngineRow(speech.engine, installed) { engine ->
+                    scope.launch { repository.updateSpeechEngine(engine) }
+                }
                 ListeningChoiceRow(
                     label = "Voice",
                     value = voices.firstOrNull { it.id == speech.voiceIdentifier }?.name
@@ -198,6 +198,9 @@ internal fun SettingsListeningPage(
                     onValueChangeFinished = updateRate,
                     accessibilityLabel = "Read-aloud speed"
                 )
+                ListeningPitchRow(speech.pitch) { pitch ->
+                    scope.launch { repository.updateSpeechPitch(pitch) }
+                }
                 SubjectRowSeparator()
                 SettingsActionRow("Reset Read Aloud", onClick = {
                     scope.launch { repository.resetSpeechPreferences() }
@@ -208,7 +211,7 @@ internal fun SettingsListeningPage(
 }
 
 @Composable
-private fun ListeningChoiceRow(
+internal fun ListeningChoiceRow(
     label: String,
     value: String,
     choices: List<Pair<String, String>>,

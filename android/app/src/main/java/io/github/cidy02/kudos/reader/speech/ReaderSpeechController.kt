@@ -152,7 +152,7 @@ class ReaderSpeechController(
     }
 
     fun cancelDownload() {
-        WorkManager.getInstance(appContext).cancelUniqueWork(TTSDownloadWorker.WORK_NAME)
+        TTSDownloadWorker.cancel(appContext)
     }
 
     fun configure(preferences: ReaderPreferences, title: String = workTitle) {

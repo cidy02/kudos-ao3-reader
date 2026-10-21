@@ -62,6 +62,10 @@ class TTSDownloadWorker(
                 request
             )
         }
+
+        /** Stops a download under way; the worker removes what it had written. */
+        fun cancel(context: Context): Operation =
+            WorkManager.getInstance(context).cancelUniqueWork(WORK_NAME)
     }
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {

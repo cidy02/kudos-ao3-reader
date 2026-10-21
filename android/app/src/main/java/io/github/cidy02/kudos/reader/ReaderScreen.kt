@@ -1163,10 +1163,12 @@ internal fun ReaderDisplaySheet(
             SubjectSliderRow(
                 label = "Pitch",
                 value = preferences.speechPitch,
-                valueRange = 0.5f..2.0f,
-                steps = 0,
-                formatValue = { "%.1f".format(it) },
-                onValueChangeFinished = onSpeechPitchChange
+                // Settings › Listening's Pitch: iOS's range, step and label (the shared section).
+                valueRange = ReaderSpeechPreferences.PITCH_RANGE,
+                steps = ReaderSpeechPreferences.PITCH_STEPS,
+                formatValue = { io.github.cidy02.kudos.settings.speechPitchLabel(it) },
+                onValueChangeFinished = onSpeechPitchChange,
+                accessibilityLabel = "Read-aloud pitch"
             )
             // Read Aloud uses the device's own voice until then. This was the one way to the pack,
             // and it showed only when reading was refused for want of it.

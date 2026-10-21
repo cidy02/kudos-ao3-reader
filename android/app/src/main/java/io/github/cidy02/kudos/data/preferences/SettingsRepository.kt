@@ -142,8 +142,26 @@ class SettingsRepository(
                 prefs[Keys.SpeechRate] ?: ReaderSpeechPreferences.DEFAULT_RATE
             ),
             voiceIdentifier = prefs[Keys.SpeechVoiceIdentifier]?.takeIf { it.isNotBlank() },
-            readAuthorNotes = prefs[Keys.SpeechReadAuthorNotes] ?: true
+            readAuthorNotes = prefs[Keys.SpeechReadAuthorNotes] ?: true,
+            pitch = ReaderSpeechPreferences.clampPitch(
+                prefs[Keys.SpeechPitch] ?: ReaderSpeechPreferences.DEFAULT_PITCH
+            ),
+            engine = ReaderSpeechPreferences.normalizeEngine(prefs[Keys.SpeechEngine])
         )
+    }
+
+    /** iOS `pitchMultiplier`'s setter: stored clamped to 0.75–1.25. */
+    suspend fun updateSpeechPitch(pitch: Float) {
+        dataStore.edit { it[Keys.SpeechPitch] = ReaderSpeechPreferences.clampPitch(pitch) }
+    }
+
+    /** "" (Automatic) or an engine this build does not know leaves no stored choice. */
+    suspend fun updateSpeechEngine(engine: String) {
+        val normalized = ReaderSpeechPreferences.normalizeEngine(engine)
+        dataStore.edit { prefs ->
+            if (normalized == ReaderSpeechPreferences.AUTOMATIC_ENGINE) prefs.remove(Keys.SpeechEngine)
+            else prefs[Keys.SpeechEngine] = normalized
+        }
     }
 
     suspend fun updateSpeechReadAuthorNotes(on: Boolean) {
@@ -165,6 +183,9 @@ class SettingsRepository(
         dataStore.edit {
             it.remove(Keys.SpeechRate)
             it.remove(Keys.SpeechVoiceIdentifier)
+            // iOS's Reset Read Aloud also returns Engine to Automatic and Pitch to Default.
+            it.remove(Keys.SpeechEngine)
+            it.remove(Keys.SpeechPitch)
         }
     }
 
@@ -659,6 +680,8 @@ class SettingsRepository(
         val SpeechRate = floatPreferencesKey("readerSpeechRate")
         val SpeechVoiceIdentifier = stringPreferencesKey("readerSpeechVoiceID")
         val SpeechReadAuthorNotes = booleanPreferencesKey("readerSpeechReadAuthorNotes")
+        val SpeechPitch = floatPreferencesKey("readerSpeechPitch")
+        val SpeechEngine = stringPreferencesKey("readerSpeechEngine")
         val ReaderFontId = stringPreferencesKey("readerFontID")
         val ReaderMode = stringPreferencesKey("readerMode")
         val ReaderTwoPage = booleanPreferencesKey("readerTwoPage")

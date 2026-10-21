@@ -1,6 +1,9 @@
 package io.github.cidy02.kudos.settings
 
 import android.app.Application
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
@@ -8,13 +11,16 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
+import androidx.work.WorkInfo
 import io.github.cidy02.kudos.core.model.KudosSettings
 import io.github.cidy02.kudos.data.preferences.SettingsRepository
 import io.github.cidy02.kudos.reader.settings.ReaderPreferences
 import io.github.cidy02.kudos.reader.settings.ReaderSpeechPreferences
+import io.github.cidy02.kudos.reader.settings.ReaderTTSEngineKind
 import io.github.cidy02.kudos.reader.speech.SpeechStatus
 import io.github.cidy02.kudos.reader.speech.TTSService
 import io.github.cidy02.kudos.reader.speech.TTSVoice
+import io.github.cidy02.kudos.reader.speech.VoicePackState
 import io.github.cidy02.kudos.reader.speech.applySpeechPreferences
 import java.io.File
 import java.nio.file.Files
@@ -115,21 +121,148 @@ class SettingsListeningPageTest {
     }
 
     @Test
-    fun resetReadAloudClearsExplicitVoiceAndRateWithoutChangingBackupSettings() {
+    fun resetReadAloudClearsExplicitVoiceRatePitchAndEngineWithoutChangingBackupSettings() {
         runBlocking {
             repository.updateSpeechVoiceIdentifier("7")
             repository.updateSpeechRate(1.3f)
+            repository.updateSpeechPitch(1.15f)
+            repository.updateSpeechEngine(ReaderTTSEngineKind.SYSTEM.rawValue)
         }
-        engine.applySpeechPreferences(ReaderPreferences(speechVoiceIdentifier = "7", speechRate = 1.3f))
+        engine.applySpeechPreferences(
+            ReaderPreferences(
+                speechVoiceIdentifier = "7",
+                speechRate = 1.3f,
+                speechPitch = 1.15f,
+                speechEngine = ReaderTTSEngineKind.SYSTEM.rawValue
+            )
+        )
         showPage()
         compose.onNodeWithText("Reset Read Aloud").performScrollTo().performClick()
         compose.waitUntil(5_000) { runBlocking { repository.speechPreferences.first() == ReaderSpeechPreferences() } }
         val speech = runBlocking { repository.speechPreferences.first() }
         engine.applySpeechPreferences(speech.applyTo(ReaderPreferences()))
         assertNull(speech.voiceIdentifier)
+        assertEquals(ReaderSpeechPreferences.DEFAULT_PITCH, speech.pitch, 0f)
+        assertEquals(ReaderSpeechPreferences.AUTOMATIC_ENGINE, speech.engine)
         assertEquals("0", engine.appliedVoice)
         assertEquals(1f, engine.appliedRate, 0f)
+        assertEquals(1f, engine.appliedPitch, 0f)
+        assertEquals("", engine.appliedEngine)
         assertEquals(KudosSettings.Defaults, runBlocking { repository.snapshot() })
+    }
+
+    @Test
+    fun engineChangedOnListeningPersistsReachesServiceAndWarnsWhenKokoroPackIsMissing() {
+        compose.setContent { SettingsListeningPage(repository, engine, packInstalled = false) }
+        compose.onNodeWithText("Engine").performScrollTo().performClick()
+        compose.onNodeWithText("Kokoro").performClick()
+        compose.waitUntil(5_000) {
+            runBlocking { repository.speechPreferences.first().engine == ReaderTTSEngineKind.KOKORO.rawValue } &&
+                engine.appliedEngine == ReaderTTSEngineKind.KOKORO.rawValue
+        }
+        compose.onNodeWithText(
+            "Download the Kokoro Voice Pack to use Kokoro. Until then, you hear your device's own voice."
+        ).assertExists()
+
+        compose.onNodeWithText("Engine").performScrollTo().performClick()
+        compose.onNodeWithText("Device voice").performClick()
+        compose.waitUntil(5_000) {
+            runBlocking { repository.speechPreferences.first().engine == ReaderTTSEngineKind.SYSTEM.rawValue } &&
+                engine.appliedEngine == ReaderTTSEngineKind.SYSTEM.rawValue
+        }
+        compose.onNodeWithText(
+            "Download the Kokoro Voice Pack to use Kokoro. Until then, you hear your device's own voice."
+        ).assertDoesNotExist()
+    }
+
+    @Test
+    fun voicePackSectionShowsConfirmationProgressCancelRetryAndInstalledStates() {
+        assertEquals(
+            VoicePackState.NotDownloaded,
+            VoicePackState.from(state = null, phase = null, progress = -1f, error = null, installed = false, cancelling = false)
+        )
+        assertEquals(
+            VoicePackState.Downloading(0f),
+            VoicePackState.from(WorkInfo.State.ENQUEUED, phase = null, progress = -1f, error = null, installed = false, cancelling = false)
+        )
+        assertEquals(
+            VoicePackState.Downloading(0.42f),
+            VoicePackState.from(WorkInfo.State.RUNNING, phase = "downloading", progress = 0.42f, error = null, installed = false, cancelling = false)
+        )
+        assertEquals(
+            VoicePackState.Extracting,
+            VoicePackState.from(WorkInfo.State.RUNNING, phase = "extracting", progress = 1f, error = null, installed = false, cancelling = false)
+        )
+        assertEquals(
+            VoicePackState.Cancelling,
+            VoicePackState.from(WorkInfo.State.RUNNING, phase = "downloading", progress = 0.5f, error = null, installed = false, cancelling = true)
+        )
+        assertEquals(
+            VoicePackState.Failed("Disk full."),
+            VoicePackState.from(WorkInfo.State.FAILED, phase = null, progress = -1f, error = "Disk full.", installed = false, cancelling = false)
+        )
+        assertEquals(
+            VoicePackState.Failed(VoicePackState.DEFAULT_FAILURE),
+            VoicePackState.from(WorkInfo.State.FAILED, phase = null, progress = -1f, error = "", installed = false, cancelling = false)
+        )
+        assertEquals(
+            VoicePackState.NotDownloaded,
+            VoicePackState.from(WorkInfo.State.CANCELLED, phase = null, progress = -1f, error = null, installed = false, cancelling = false)
+        )
+        assertEquals(
+            VoicePackState.Downloaded,
+            VoicePackState.from(WorkInfo.State.SUCCEEDED, phase = null, progress = 1f, error = null, installed = true, cancelling = false)
+        )
+
+        var downloads = 0
+        var cancels = 0
+        var packState by mutableStateOf<VoicePackState>(VoicePackState.NotDownloaded)
+        compose.setContent {
+            SettingsListeningPage(
+                repository = repository,
+                service = engine,
+                packInstalled = packState == VoicePackState.Downloaded,
+                voicePack = VoicePackUi(
+                    state = packState,
+                    installed = packState == VoicePackState.Downloaded,
+                    onDownload = { downloads++ },
+                    onCancel = { cancels++ }
+                )
+            )
+        }
+
+        compose.onNodeWithText(VOICE_PACK_DISCLOSURE).assertExists()
+        compose.onNodeWithText("Download Voice Pack").performScrollTo().performClick()
+        compose.onNodeWithText(VOICE_PACK_CONFIRM_TITLE).assertExists()
+        compose.onNodeWithText(VOICE_PACK_CONFIRM_MESSAGE).assertExists()
+        compose.onNodeWithText("Cancel").performClick()
+        assertEquals(0, downloads)
+
+        compose.onNodeWithText("Download Voice Pack").performScrollTo().performClick()
+        compose.onNodeWithText("Download $VOICE_PACK_SIZE_LABEL").performClick()
+        assertEquals(1, downloads)
+
+        compose.runOnIdle { packState = VoicePackState.Downloading(0.42f) }
+        compose.onNodeWithText("Downloading... 42%").assertExists()
+        compose.onNodeWithText("Cancel").performClick()
+        assertEquals(1, cancels)
+
+        compose.runOnIdle { packState = VoicePackState.Extracting }
+        compose.onNodeWithText("Extracting...").assertExists()
+        compose.onNodeWithText("Cancel").performClick()
+        assertEquals(2, cancels)
+
+        compose.runOnIdle { packState = VoicePackState.Cancelling }
+        compose.onNodeWithText("Cancelling…").assertExists()
+
+        compose.runOnIdle { packState = VoicePackState.Failed("Network lost.") }
+        compose.onNodeWithText("Network lost.").assertExists()
+        compose.onNodeWithText("Retry Download").performScrollTo().performClick()
+        compose.onNodeWithText("Download $VOICE_PACK_SIZE_LABEL").performClick()
+        assertEquals(2, downloads)
+
+        compose.runOnIdle { packState = VoicePackState.Downloaded }
+        compose.onNodeWithText("Voice Pack Downloaded").assertExists()
     }
 
     private fun showPage() {
@@ -143,6 +276,8 @@ class SettingsListeningPageTest {
             TTSVoice("0", "Reported A"), TTSVoice("7", "Reported B")
         ))
         @Volatile var appliedRate = 1f
+        @Volatile var appliedPitch = 1f
+        @Volatile var appliedEngine = ""
         var appliedVoice = "0"
         @Volatile var speakCount = 0
         override suspend fun speak(text: String) {
@@ -156,6 +291,7 @@ class SettingsListeningPageTest {
         override fun stop() { status.value = SpeechStatus.STOPPED }
         override fun setVoice(id: String) { appliedVoice = id }
         override fun setRate(rate: Float) { appliedRate = rate }
-        override fun setPitch(pitch: Float) {}
+        override fun setPitch(pitch: Float) { appliedPitch = pitch }
+        override fun setEngine(engine: String) { appliedEngine = engine }
     }
 }
