@@ -174,9 +174,11 @@ class AO3CommentParser(
     }
 
     private fun parseOneComment(element: Element, depth: Int): AO3Comment? {
-        val body = element.selectFirst("blockquote.userstuff, .userstuff")?.normalizedText()
-            ?: element.selectFirst(".comment-text")?.normalizedText()
-            ?: ""
+        val bodyElement = element.selectFirst("blockquote.userstuff, .userstuff, .comment-text")
+        // iOS parseComment joins nonempty paragraphs rather than flattening the blockquote.
+        val paragraphs = bodyElement?.select("p").orEmpty().map { it.normalizedText() }.filter { it.isNotEmpty() }
+        val body = if (paragraphs.isNotEmpty()) paragraphs.joinToString("\n\n")
+            else bodyElement?.normalizedText().orEmpty()
         val deleted = element.hasClass("deleted") ||
             element.hasClass("hidden") ||
             body.contains("deleted comment", ignoreCase = true) ||

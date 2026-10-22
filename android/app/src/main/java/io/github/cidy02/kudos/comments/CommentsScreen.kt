@@ -409,7 +409,7 @@ fun CommentsScreen(
                                     Text(
                                         text = author.displayName + if (index < authors.lastIndex) "," else "",
                                         fontSize = 15.sp,
-                                        color = tokens.primaryInk,
+                                        color = palette.accent,
                                         modifier = Modifier.clickable {
                                             author.username?.let(onOpenAuthor)
                                         }

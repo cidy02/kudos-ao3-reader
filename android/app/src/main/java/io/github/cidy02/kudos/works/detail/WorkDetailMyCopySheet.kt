@@ -31,6 +31,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.Icon
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.SelectableDates
@@ -191,8 +192,7 @@ fun WorkDetailMyCopySheet(
                     .fillMaxWidth()
                     .verticalScroll(rememberScrollState())
                     .padding(horizontal = 22.dp)
-                    .padding(bottom = 28.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+                    .padding(bottom = 28.dp)
             ) {
                 if (work != null) {
                     // 1a's three figures under the title: Progress, On device, Preserved
@@ -301,9 +301,7 @@ private fun MyCopyStrip(
     fileSizeString: String?,
     palette: SubjectPalette
 ) {
-    val progressLabel = work.publicationProgress?.let { fraction ->
-        "${(fraction.coerceIn(0.0, 1.0) * 100.0).roundToInt()}%"
-    } ?: "—"
+    val progressLabel = myCopyProgressLabel(work)
     val onDeviceLabel = fileSizeString ?: "—"
     val kept = work.hasEpub && work.isProtected
 
@@ -345,7 +343,7 @@ private fun MyCopyStatusSection(
         is WorkDownloadAction.KeptBy -> Triple("Kept Offline", true, false)
     }
 
-    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+    Column {
         MyCopyGroupHeader(title = "Status")
 
         MyCopyToggleRow(
@@ -386,7 +384,7 @@ private fun MyCopyQueuesSection(
     palette: SubjectPalette,
     onAddToQueue: () -> Unit
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+    Column {
         MyCopyGroupHeader(title = "Queues")
 
         memberships.forEach { line ->
@@ -415,7 +413,7 @@ private fun MyCopyCollectionsSection(
     val names = remember(collections) { collections.map { it.name }.sorted() }
     val tokens = LocalKudosTokens.current
 
-    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+    Column {
         MyCopyGroupHeader(title = "Collections")
 
         names.forEach { name ->
@@ -443,7 +441,7 @@ private fun MyCopyStorageSection(
     work: SavedWork,
     fileSizeString: String?
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+    Column {
         MyCopyGroupHeader(title = "Storage")
 
         val statusText = when {
@@ -473,7 +471,7 @@ private fun MyCopyActivitySection(
     onEditDownloadedAt: () -> Unit
 ) {
     val tokens = LocalKudosTokens.current
-    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+    Column {
         MyCopyGroupHeader(title = "Activity")
 
         MyCopyValueRow(
@@ -814,19 +812,21 @@ fun MyCopyGroupHeader(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .padding(top = 16.dp, bottom = 4.dp),
+            .padding(top = 19.dp, bottom = 5.dp),
         horizontalArrangement = Arrangement.spacedBy(6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        SubjectFieldLabel(text = title)
+        SubjectFieldLabel(text = title, lineHeight = 13.sp)
         if (note != null) {
             Text(
                 text = "· $note",
                 fontSize = 11.sp,
+                lineHeight = 13.sp,
                 fontWeight = FontWeight.Medium,
                 color = LocalKudosTokens.current.tertiaryInk
             )
         }
+        HorizontalDivider(modifier = Modifier.weight(1f), color = LocalKudosTokens.current.separator, thickness = 0.5.dp)
     }
 }
 
@@ -844,13 +844,14 @@ private fun MyCopyToggleRow(
         modifier = modifier
             .fillMaxWidth()
             .clickable(enabled = enabled, onClick = onClick)
-            .padding(vertical = 9.dp),
+            .padding(vertical = 3.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         Text(
             text = title,
             fontSize = 14.5.sp,
+            lineHeight = 19.sp,
             color = if (enabled) tokens.primaryInk else tokens.tertiaryInk,
             modifier = Modifier.weight(1f)
         )
@@ -875,19 +876,21 @@ private fun MyCopyValueRow(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .padding(vertical = 8.dp),
+            .padding(vertical = 3.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         Text(
             text = title,
             fontSize = 14.5.sp,
+            lineHeight = 19.sp,
             color = tokens.primaryInk,
             modifier = Modifier.weight(1f)
         )
         Text(
             text = value,
             fontSize = 13.sp,
+            lineHeight = 18.sp,
             color = tokens.secondaryInk,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
@@ -907,7 +910,7 @@ private fun MyCopyAddLabel(
         modifier = modifier
             .fillMaxWidth()
             .clickable(enabled = enabled, onClick = onClick)
-            .padding(vertical = 8.dp),
+            .padding(vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
@@ -920,6 +923,7 @@ private fun MyCopyAddLabel(
         Text(
             text = title,
             fontSize = 14.sp,
+            lineHeight = 19.sp,
             fontWeight = FontWeight.Medium,
             color = if (enabled) palette.accent else LocalKudosTokens.current.tertiaryInk
         )
@@ -977,3 +981,8 @@ internal fun myCopyOriginSentence(work: SavedWork): String {
     ).firstOrNull { matches(it.first) }?.second ?: "Other site"
     return "Imported work, originally posted on $name."
 }
+
+/** iOS My copy distinguishes a known zero from a work no reader has measured. */
+internal fun myCopyProgressLabel(work: SavedWork): String = work.publicationProgress?.let { fraction ->
+    "${(fraction.coerceIn(0.0, 1.0) * 100.0).roundToInt()}%"
+} ?: "—"

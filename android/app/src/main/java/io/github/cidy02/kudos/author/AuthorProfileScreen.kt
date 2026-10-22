@@ -699,15 +699,6 @@ fun AuthorProfileScreen(
                                         selectedFandom == null &&
                                         worksSort.completion == io.github.cidy02.kudos.network.ao3.author.AO3AuthorWorksCompletion.Any ->
                                         ownWorksLine(route.displayName, works?.summary?.total, stats)
-                                    tab == AuthorTab.Series -> {
-                                        val s = series
-                                        if (s != null && s.series.isEmpty()) {
-                                            "No series yet"
-                                        } else {
-                                            val tally = seriesTallyParts(s?.series.orEmpty(), (s?.totalPages ?: 1) > 1)
-                                            if (tally.isNotEmpty()) tally.joinToString(" · ") else route.displayName
-                                        }
-                                    }
                                     else -> route.displayName
                                 },
                                 palette = palette
@@ -987,6 +978,7 @@ fun AuthorProfileScreen(
                                         fontSize = 11.5.sp, lineHeight = 17.sp)
                                 } else item { EmptyStateCard("No series", "No series by this author are visible to you on AO3.") }
                             } else {
+                                item { SectionRuleHeader(title = "Series", count = pageData.series.size) }
                                 val tally = seriesTallyParts(pageData.series, pageData.totalPages > 1)
                                 if (tally.isNotEmpty()) item {
                                     Text(tally.joinToString(" · "), color = tokens.secondaryInk,
@@ -1021,7 +1013,8 @@ fun AuthorProfileScreen(
                                         loading = tabLoading,
                                         onNext = { loadTab(AuthorTab.Series, pageData.currentPage + 1) },
                                         loadMoreError = tabError?.takeIf { page > 1 },
-                                        onRetry = { loadTab(tab, page) }
+                                        onRetry = { loadTab(tab, page) },
+                                        showsCard = true
                                     )
                                 }
                             }
@@ -1135,17 +1128,19 @@ fun AuthorProfileScreen(
 @Composable
 internal fun AuthorLoadMoreRow(
     page: Int, total: Int, loading: Boolean, onNext: () -> Unit,
-    loadMoreError: String? = null, onRetry: () -> Unit = onNext
+    loadMoreError: String? = null, onRetry: () -> Unit = onNext,
+    showsCard: Boolean = false
 ) {
     if (loadMoreError != null) {
         val tokens = LocalKudosTokens.current
-        Column(Modifier.subjectPanel()) {
+        Column(if (showsCard) Modifier.cardRow() else Modifier.subjectPanel()) {
             Text(loadMoreError, color = tokens.secondaryInk, fontSize = 14.sp,
                 lineHeight = 20.sp, modifier = Modifier.padding(16.dp))
             TextButton(onClick = onRetry, enabled = !loading) { Text("Try Loading More") }
         }
     } else if (page < total || loading) {
-        TextButton(onClick = onNext, enabled = !loading, modifier = Modifier.fillMaxWidth()) {
+        TextButton(onClick = onNext, enabled = !loading,
+            modifier = Modifier.fillMaxWidth().then(if (showsCard) Modifier.cardRow() else Modifier)) {
             Text(if (loading) "Loading…" else "Load More")
             Spacer(Modifier.weight(1f))
             Text("Page $page of $total", color = LocalKudosTokens.current.secondaryInk, fontSize = 13.sp)

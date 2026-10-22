@@ -520,7 +520,7 @@ fun CommentPostRow(
                     )
                 }
 
-                if (comment.chapterLabel != null && comment.chapterLabel.isNotBlank()) {
+                if (replyToAuthor == null && !comment.chapterLabel.isNullOrBlank()) {
                     Surface(
                         shape = RoundedCornerShape(percent = 50),
                         color = tokens.glassFill(0.12)
@@ -780,6 +780,7 @@ fun CommentActionRowLayout(
         if (canReply) {
             CommentReplyButton(
                 accessibilityLabel = "Reply to ${comment.author.name}",
+                plainAccent = palette.accent,
                 onClick = { handlers.onReply(comment) }
             )
         }
@@ -1027,14 +1028,16 @@ fun ContentUnavailableView(
     }
 }
 
-/** The native comment action used by both a thread and Inbox (iOS CommentReplyButton). */
+/** Threads use plain accent text; Inbox retains iOS CommentReplyButton's capsule. */
 @Composable
 internal fun CommentReplyButton(
     accessibilityLabel: String,
     enabled: Boolean = true,
+    plainAccent: Color? = null,
     onClick: () -> Unit
 ) {
     val tokens = LocalKudosTokens.current
+    val tint = plainAccent ?: tokens.primaryInk
     Box(
         Modifier.heightIn(min = 44.dp)
             .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
@@ -1042,14 +1045,15 @@ internal fun CommentReplyButton(
         contentAlignment = Alignment.Center
     ) {
         Row(
-            Modifier.background(tokens.glassFill(0.12), CircleShape)
-                .padding(horizontal = 10.dp, vertical = 6.dp),
+            Modifier.then(if (plainAccent == null) Modifier.background(tokens.glassFill(0.12), CircleShape) else Modifier)
+                .padding(horizontal = if (plainAccent == null) 10.dp else 0.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             Icon(Icons.AutoMirrored.Filled.Reply, contentDescription = null,
-                tint = tokens.primaryInk, modifier = Modifier.size(14.dp))
-            Text("Reply", color = tokens.primaryInk, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                tint = tint, modifier = Modifier.size(14.dp))
+            Text("Reply", color = tint, fontSize = 12.sp,
+                fontWeight = if (plainAccent == null) FontWeight.SemiBold else FontWeight.Medium)
         }
     }
 }

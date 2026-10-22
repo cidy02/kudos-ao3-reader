@@ -57,6 +57,7 @@ import io.github.cidy02.kudos.network.ao3.author.AO3AuthorSeriesSummary
 import io.github.cidy02.kudos.network.ao3.author.AO3AuthorWebAction
 import io.github.cidy02.kudos.network.ao3.search.AO3WorkSummary
 import io.github.cidy02.kudos.ui.components.SensitiveWorkRow
+import io.github.cidy02.kudos.ui.subject.cardRow
 import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
 import io.github.cidy02.kudos.ui.subject.SubjectChip
 import io.github.cidy02.kudos.ui.subject.SubjectChipStyle
@@ -255,7 +256,7 @@ internal fun AO3SeriesRow(
     Column(
         modifier
             .fillMaxWidth()
-            .subjectPanel(cornerRadius = 16.dp)
+            .cardRow()
             .then(if (onOpenSeries != null) Modifier.clickable { onOpenSeries(series.url) } else Modifier)
             .padding(horizontal = 18.dp, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(if (displayMode == AuthorDisplayMode.Ledger) 10.dp else 7.dp)
