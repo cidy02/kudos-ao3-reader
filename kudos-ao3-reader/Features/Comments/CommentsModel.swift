@@ -86,6 +86,18 @@ final class CommentsModel {
     private(set) var isOffline = false
     /// Serving a cached page (shown with its fetch time when offline/stale).
     private(set) var isFromCache = false
+    /// The page on screen is the kept copy, shown because its read just failed,
+    /// offline or not (A74: after a timeout it showed with no notice).
+    private(set) var isKeptAfterFailure = false
+
+    /// The line above a kept copy, or nil when the page is AO3's own answer.
+    var keptCopyNotice: String? {
+        guard isKeptAfterFailure || (isFromCache && isOffline) else { return nil }
+        let fetched = page?.fetchedAt.formatted(.relative(presentation: .named)) ?? "earlier"
+        return isOffline
+            ? "You're offline. These comments are from \(fetched) and may be out of date."
+            : "AO3 couldn't be reached. These comments are from \(fetched) and may be out of date."
+    }
     /// Root comment nodes in the current display order. Each node keeps its full
     /// direct-reply tree so the view can render replies recursively inside the
     /// specific comment they answer.
@@ -271,6 +283,7 @@ final class CommentsModel {
         workContext = initialWorkContext
         isOffline = false
         isFromCache = false
+        isKeptAfterFailure = false
         phase = .idle
         return true
     }
@@ -470,6 +483,7 @@ final class CommentsModel {
             initialFocusCommentID = rootID
             isOffline = false
             isFromCache = false
+            isKeptAfterFailure = false
             phase = .loaded
             if let replyID = pendingInitialReplyCommentID,
                let target = presentedPage.comments
@@ -826,6 +840,7 @@ final class CommentsModel {
         )
         if !forceRefresh, let cached = cache.freshPage(for: key) {
             isFromCache = true
+            isKeptAfterFailure = false
             if phase != .loaded { phase = .loaded }
             return cached
         }
@@ -850,6 +865,7 @@ final class CommentsModel {
             cache.store(fetched, for: key)
             isOffline = false
             isFromCache = false
+            isKeptAfterFailure = false
             return fetched
         } catch is CancellationError {
             return nil
@@ -866,6 +882,7 @@ final class CommentsModel {
             // cold miss surfaces the full-screen failure state.
             if let cached = cache.page(for: key) {
                 isFromCache = true
+                isKeptAfterFailure = true
                 phase = .loaded
                 return cached
             }

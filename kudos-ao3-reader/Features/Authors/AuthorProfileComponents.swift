@@ -577,20 +577,16 @@ struct AO3RichTextView: View {
     let document: AO3RichText
     var font: Font = .body
     var lineSpacing: CGFloat = 0
+    /// Lays out only the blocks on screen: a whole chapter is over a thousand (T-358).
+    var isLazy = false
     @Environment(AppRouter.self) private var router
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 9) {
-            ForEach(document.blocks) { block in
-                HStack(alignment: .firstTextBaseline, spacing: 6) {
-                    if block.kind == .listItem {
-                        Image(systemName: "circle.fill")
-                            .font(.system(size: 4))
-                            .accessibilityHidden(true)
-                    }
-                    Text(attributedString(for: block))
-                        .fixedSize(horizontal: false, vertical: true)
-                }
+        Group {
+            if isLazy {
+                LazyVStack(alignment: .leading, spacing: 9) { blocks }
+            } else {
+                VStack(alignment: .leading, spacing: 9) { blocks }
             }
         }
         .font(font)
@@ -605,6 +601,20 @@ struct AO3RichTextView: View {
             }
             return .systemAction
         })
+    }
+
+    private var blocks: some View {
+        ForEach(document.blocks) { block in
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                if block.kind == .listItem {
+                    Image(systemName: "circle.fill")
+                        .font(.system(size: 4))
+                        .accessibilityHidden(true)
+                }
+                Text(attributedString(for: block))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
     }
 
     private func attributedString(for block: AO3RichText.Block) -> AttributedString {
