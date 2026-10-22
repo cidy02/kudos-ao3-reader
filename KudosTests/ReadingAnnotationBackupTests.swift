@@ -92,9 +92,14 @@ struct ReadingAnnotationBackupTests {
 
         // A different device trusts the deleting device; unsigned markers must
         // fail this gate even though the local hard-delete itself succeeded.
+        // A private store keeps its own trusted keys (`TombstoneTrustStore.saveKeys`); the
+        // Keychain override stands in only for the standard store's, so this test trusted the
+        // signer where the check never looked and failed from the day it landed (T-428).
         TombstoneSigning.keyOverride = TombstoneSigning.makePrivateKey()
-        TombstoneTrustStore.keychainOverride = .stored([archived.signerPublicKey])
-        #expect(TombstoneSigning.shouldAdopt(archived, defaults: try testDefaults()))
+        let otherDevice = try testDefaults()
+        #expect(!TombstoneSigning.shouldAdopt(archived, defaults: otherDevice), "not before pairing")
+        TombstoneTrustStore.add(archived.signerPublicKey, defaults: otherDevice)
+        #expect(TombstoneSigning.shouldAdopt(archived, defaults: otherDevice))
     }
     #endif
 
