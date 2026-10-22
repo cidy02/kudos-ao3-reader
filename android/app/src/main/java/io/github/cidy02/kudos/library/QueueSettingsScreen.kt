@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.library
 
+import io.github.cidy02.kudos.app.DebugShotEffect
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.sync.withLock
@@ -97,6 +98,9 @@ fun QueueSettingsScreen(
     var colourMenu by remember { mutableStateOf(false) }
     var showTags by remember { mutableStateOf(false) }
     var managing by remember { mutableStateOf(false) }
+    DebugShotEffect("queue-settings", ready = queue != null && tags.isNotEmpty()) { name ->
+        if (name == "queuetag") showTags = true else managing = true
+    }
 
     LaunchedEffect(queueId, reload) {
         val loaded = runCatching { repository.getQueue(queueId) }.getOrNull()

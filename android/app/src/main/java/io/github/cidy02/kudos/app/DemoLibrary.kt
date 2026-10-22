@@ -633,6 +633,17 @@ object DemoLibrary {
         fileStore.writeWorkEpub(workId, epubBytes)
     }
 
+    /** A revoked demo peer can be replaced for a later screenshot, never with a real device key. */
+    internal suspend fun seedShotDevice(settingsRepository: SettingsRepository) {
+        if (!io.github.cidy02.kudos.BuildConfig.DEBUG || !io.github.cidy02.kudos.network.ao3.DemoNetwork.isActive) return
+        val store = TombstoneTrustStore(settingsRepository)
+        if (store.trustedDevices().any { it.label == "Demo reading tablet" }) return
+        val pair = Ed25519Sign.KeyPair.newKeyPair()
+        val hex = pair.publicKey.toLowerHex()
+        pair.privateKey.fill(0)
+        store.trust(hex, "Demo reading tablet")
+    }
+
     private suspend fun seedPreferences(context: Context, settingsRepository: SettingsRepository?) {
         val namespace = SubscriptionWatermarks.NAMESPACE_SUBSCRIPTIONS
         val watermarks = SubscriptionWatermarks.load(context, namespace).toMutableMap()

@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.works
 
+import io.github.cidy02.kudos.app.DebugShotEffect
 import io.github.cidy02.kudos.ui.components.workDeletionMessage
 
 import androidx.compose.ui.semantics.Role
@@ -323,6 +324,37 @@ fun WorkDetailScreen(
                 loading = false,
                 error = "Open a work from Search or Library."
             )
+        }
+    }
+
+    DebugShotEffect("work-detail", ready = !state.loading && state.local != null) { name ->
+        when (name) {
+            "downloaddate" -> showingMyCopy = true
+            "addtocollection" -> collectionDialogOpen = true
+            "addtoqueue" -> {
+                readingQueueRepository.ensureSavedForLaterQueue()
+                availableQueues = readingQueueRepository.listQueues()
+                selectedQueueIds = availableQueues.filter { queue ->
+                    readingQueueRepository.listWorks(queue.id).any { it.work?.id == state.local?.id }
+                }.map { it.id }.toSet()
+                queuePickerOpen = true
+            }
+            "seriespreserve" -> {
+                val page = (seriesRepository.seriesPage(state.seriesUrl) as? AO3Result.Success)?.value
+                laterSeriesPrompt = SeriesPreservationPrompt(page, settings.app.autoPreserveSeriesWorkThreshold, page == null)
+                showingSeriesPrompt = true
+            }
+            "bookmarkform" -> {
+                val input = advisoryBookmark?.input ?: AO3BookmarkInput()
+                bookmarkNotes = input.notes
+                bookmarkTags = input.tags
+                bookmarkPrivate = input.isPrivate
+                bookmarkRecommendation = input.isRecommendation
+                bookmarkPseudId = input.pseudId
+                bookmarkIsEdit = advisoryBookmark?.exists == true
+                bookmarkDialog = true
+            }
+            else -> Unit
         }
     }
 

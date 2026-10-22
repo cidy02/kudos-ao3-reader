@@ -136,7 +136,9 @@ internal object DemoNetwork {
 
     fun isRequested(intent: Intent?): Boolean {
         if (intent == null) return false
-        return intent.getBooleanExtra(EXTRA, false) ||
+        return (io.github.cidy02.kudos.BuildConfig.DEBUG &&
+            intent.getStringExtra(io.github.cidy02.kudos.ui.subject.DebugRoutes.EXTRA)?.startsWith("shot:") == true) ||
+            intent.getBooleanExtra(EXTRA, false) ||
             intent.getStringExtra(EXTRA).equals("true", ignoreCase = true)
     }
 

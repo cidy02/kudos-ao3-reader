@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.comments
 
+import io.github.cidy02.kudos.app.DebugShotEffect
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -175,6 +176,11 @@ fun CommentsScreen(
     val screenWidth = configuration.screenWidthDp.dp
 
     var showingChapterPicker by remember { mutableStateOf(false) }
+    DebugShotEffect("comments", ready = state is CommentsUiState.Loaded) {
+        viewModel.loadChaptersIfNeeded(chapterIndexRepository)
+        showingChapterPicker = true
+    }
+
     var sortMenuOpen by remember { mutableStateOf(false) }
     var pendingDeleteComment by remember { mutableStateOf<AO3Comment?>(null) }
     var pushedThreadRootId by remember { mutableStateOf<Long?>(null) }

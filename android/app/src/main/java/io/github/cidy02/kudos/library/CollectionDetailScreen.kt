@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.library
 
+import io.github.cidy02.kudos.app.DebugShotEffect
 import io.github.cidy02.kudos.ui.subject.WorkLedgerRow
 import io.github.cidy02.kudos.ui.components.rememberStoredChoice
 import androidx.compose.ui.semantics.Role
@@ -153,6 +154,10 @@ fun CollectionDetailScreen(
     var renameText by remember(collectionId) { mutableStateOf("") }
     var showDetails by remember(collectionId) { mutableStateOf(false) }
     var showReorder by remember(collectionId) { mutableStateOf(false) }
+    DebugShotEffect("collection", ready = collection != null && works.isNotEmpty()) { name ->
+        if (name == "collectionreorder") showReorder = true else showDetails = true
+    }
+
     var showAddPicker by remember(collectionId) { mutableStateOf(false) }
     var confirmDeleteCollection by remember(collectionId) { mutableStateOf(false) }
     var pendingRemoveWork by remember(collectionId) { mutableStateOf<SavedWork?>(null) }

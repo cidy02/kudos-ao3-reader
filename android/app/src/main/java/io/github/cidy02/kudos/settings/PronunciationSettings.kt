@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.settings
 
+import io.github.cidy02.kudos.app.DebugShotEffect
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -44,6 +45,8 @@ fun PronunciationsRow() {
     val context = LocalContext.current.applicationContext
     val store = remember(context) { KokoroPronunciationStore(context.filesDir) }
     var showing by remember { mutableStateOf(false) }
+    DebugShotEffect("pronunciations") { showing = true }
+
     var count by remember { mutableStateOf("None") }
     LaunchedEffect(showing) {
         count = withContext(Dispatchers.IO) {
@@ -63,6 +66,8 @@ private fun PronunciationSettingsSheet(store: KokoroPronunciationStore, onDismis
     val clipboard = LocalClipboardManager.current
     var entries by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
     var editing by remember { mutableStateOf<Pair<String, String>?>(null) }
+    DebugShotEffect("pronunciation-list") { editing = "" to "" }
+
     var message by remember { mutableStateOf<String?>(null) }
     suspend fun reload() {
         try {

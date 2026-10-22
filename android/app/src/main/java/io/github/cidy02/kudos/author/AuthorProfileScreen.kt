@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.author
 
+import io.github.cidy02.kudos.app.DebugShotEffect
 import io.github.cidy02.kudos.ui.subject.SubjectSkeletonList
 import io.github.cidy02.kudos.ui.components.rememberStoredChoice
 import androidx.compose.foundation.verticalScroll
@@ -404,6 +405,13 @@ fun AuthorProfileScreen(
     }
     DisposableEffect(deletes) { onDispose { deletes?.close() } }
     val bulk = bulkModel
+    DebugShotEffect("author", ready = !works?.works.isNullOrEmpty()) { name ->
+        if (name == "authorworksfilter") showingWorksFilters = true
+        else if (ownWorks && seriesWrites != null) {
+            bulkModel = WritingBulkEditState(works!!.works.take(2).map { it.id }, seriesWrites, sessionGeneration)
+        }
+    }
+
     if (bulk != null) {
         // After a saved bulk edit the list is read again from AO3, as after a row's edit and a
         // delete: the rows still showed the rating and tags from before the Save, and the kept

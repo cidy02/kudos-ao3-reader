@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.settings
 
+import io.github.cidy02.kudos.app.DebugShotEffect
 import android.app.Activity
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -37,6 +38,15 @@ fun SettingsScreen(
     footprintScanner: LocalDataFootprintScanner? = null
 ) {
     val navController = rememberNavController()
+    DebugShotEffect("settings") { name ->
+        navController.navigate(when (name) {
+            "privacydata" -> "privacy"
+            "customizetheme" -> "appearance"
+            "pairing", "revokedevice" -> "folder_sync"
+            else -> "listening"
+        })
+    }
+
     val settings by repository.settings.collectAsState(initial = KudosSettings.Defaults)
     val requested = (LocalContext.current as? Activity)?.intent?.getStringExtra("kudosSettingsPage")
     val start = requested?.takeIf { it in SettingsDebugPages } ?: "hub"

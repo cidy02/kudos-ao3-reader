@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.library
 
+import io.github.cidy02.kudos.app.DebugShotEffect
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.material.icons.outlined.RemoveCircleOutline
@@ -136,6 +137,14 @@ fun QueuePageScreen(
     var showRemove by remember { mutableStateOf(false) }
     var showTag by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+    DebugShotEffect("queue-page", ready = queue != null && works.isNotEmpty()) { name ->
+        when (name) {
+            "editqueue" -> showEdit = true
+            "addworks" -> showAdd = true
+            "bulktag" -> { selecting = true; selected = works.map { it.id }.toSet(); showTag = true }
+            else -> Unit
+        }
+    }
 
     LaunchedEffect(queueId, reload) {
         QueueShowOnlyTag.name?.let {

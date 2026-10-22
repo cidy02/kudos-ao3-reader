@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.account
 
+import io.github.cidy02.kudos.app.DebugShotEffect
 import androidx.compose.foundation.border
 import androidx.compose.ui.draw.clip
 import androidx.compose.material.icons.outlined.Inventory2
@@ -95,6 +96,8 @@ fun AO3CollectionsScreen(
     val state by viewModel.uiState.collectAsState()
     val filters by viewModel.filters.collectAsState()
     var showingFilters by remember { mutableStateOf(false) }
+    DebugShotEffect("ao3-collections") { showingFilters = true }
+
     val tokens = LocalKudosTokens.current
     // The reader's accent, or Sepia's own brown: iOS `theme.scopePalette`. This was
     // `fromHue(210.0)`; a hue is a 0 to 1 fraction, so 210 wrapped to red whatever the accent.

@@ -124,6 +124,8 @@ fun SeriesWorksScreen(
     val canEdit = io.github.cidy02.kudos.network.ao3.author.isSeriesCreator(detail?.creatorUsernames.orEmpty(), username)
     val seriesID = Regex("/series/([0-9]+)").find(seriesUrl)?.groupValues?.get(1)?.toLongOrNull()
     val editMode = editing
+    DebugShotEffect("series", ready = detail != null && canEdit) { name -> editing = name == "seriesreorder" }
+
     if (editMode != null && seriesID != null && formRepository != null && writes != null) {
         io.github.cidy02.kudos.writing.WritingSeriesScreen(seriesID, title, formRepository, writes,
             onBack = { editing = null }, onOpenAo3 = onOpenAo3, reorderOnly = editMode, works = page?.works.orEmpty(),

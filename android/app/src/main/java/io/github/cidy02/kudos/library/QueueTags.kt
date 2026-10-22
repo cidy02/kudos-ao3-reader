@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.library
 
+import io.github.cidy02.kudos.app.DebugShotEffect
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.foundation.clickable
@@ -267,6 +268,10 @@ fun QueueTagManager(
     var others by remember { mutableStateOf<List<ReadingQueue>>(emptyList()) }
     var reload by remember { mutableIntStateOf(0) }
     var editing by remember { mutableStateOf<Tag?>(null) }
+    DebugShotEffect("queue-tag-manager", ready = tags.any { it.name == "Rereads" }) {
+        editing = tags.first { it.name == "Rereads" }
+    }
+
     var copying by remember { mutableStateOf<Tag?>(null) }
     var pending by remember { mutableStateOf<Tag?>(null) }
     var draft by remember { mutableStateOf("") }

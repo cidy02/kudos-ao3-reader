@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.search
 
+import io.github.cidy02.kudos.app.DebugShotEffect
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -50,6 +51,8 @@ internal fun matchingFilterLanguages(query: String): List<AO3Language> {
 @Composable
 internal fun FilterLanguageRow(selection: AO3Language, value: String = selection.title, onChange: (AO3Language) -> Unit) {
     var picking by remember { mutableStateOf(false) }
+    DebugShotEffect("filter-language") { picking = true }
+
     SubjectFormRow("Language", value = value, showsDisclosure = true, valueMaxLines = 3,
         onClick = { picking = true })
     if (picking) {

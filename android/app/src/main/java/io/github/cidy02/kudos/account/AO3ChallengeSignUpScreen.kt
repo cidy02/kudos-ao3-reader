@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.account
 
+import io.github.cidy02.kudos.app.DebugShotEffect
 import androidx.lifecycle.viewmodel.initializer
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.*
@@ -63,6 +64,10 @@ private fun ChallengeSignUpContent(slug: String, title: String, existingID: Int?
     var confirmingWithdraw by remember(model) { mutableStateOf(false) }
     LaunchedEffect(model, state.withdrawn) { if (state.withdrawn) onWithdrawn("Sign-up withdrawn.") }
     var editing by remember(model) { mutableStateOf<Pair<SignUpPromptKind, Int>?>(null) }
+    DebugShotEffect("challenge-signup", ready = form?.live(SignUpPromptKind.Request)?.isNotEmpty() == true) {
+        editing = SignUpPromptKind.Request to form!!.live(SignUpPromptKind.Request).first().id
+    }
+
     LaunchedEffect(model) { model.loadOnAppear() }
     DisposableEffect(model) { onDispose { model.close() } }
     val edit = editing

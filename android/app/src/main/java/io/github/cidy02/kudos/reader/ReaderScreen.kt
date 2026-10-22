@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.reader
 
+import io.github.cidy02.kudos.app.DebugShotEffect
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.verticalScroll
@@ -375,6 +376,28 @@ private fun ReaderReading(
             }
             val tocEntries = remember(publication) { ReadiumTocAdapter.entries(publication) }
             val sections = remember(publication) { ReadiumTocAdapter.sections(publication) }
+            DebugShotEffect("reader", ready = state.liveProgress != null) { name ->
+                when (name) {
+                    "readercontents" -> showTocSheet = true
+                    "readerfind" -> showSearchSheet = true
+                    "readerdisplay" -> showDisplaySheet = true
+                    "readernote" -> {
+                        val progress = state.liveProgress ?: return@DebugShotEffect
+                        val locator = ReadiumNavigatorController.locatorFromJson(progress.locatorJson.orEmpty())
+                            ?: return@DebugShotEffect
+                        val quote = when (sections.getOrNull(progress.spineIndex)?.kind) {
+                            ReaderSectionKind.PREFACE -> "A lantern marks the start of this original practice journey."
+                            ReaderSectionKind.AFTERWORD -> "The lantern is put away."
+                            else -> "The keeper checks the clock and records the weather."
+                        }
+                        viewModel.annotateSelection(locator.copy(text = Locator.Text(highlight = quote)).toJSON().toString(),
+                            quote, lastHighlightColor, progress.totalProgression ?: progress.scrollFraction,
+                            progress.spineIndex, withNote = true)
+                    }
+                    else -> Unit
+                }
+            }
+
             val progressLabel = ReaderProgressDisplay.label(state.liveProgress, sections, state.work.chapters)
             var positions by remember(publication) { mutableStateOf<List<List<Locator>>>(emptyList()) }
             val speechSeek = remember(publication, speechController, navigatorController) {

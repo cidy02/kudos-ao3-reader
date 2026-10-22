@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.writing
 
+import io.github.cidy02.kudos.app.DebugShotEffect
 import android.content.ComponentCallbacks2
 import android.content.res.Configuration
 import android.os.SystemClock
@@ -114,6 +115,11 @@ internal fun WritingTextEditorContent(
     var showLink by remember { mutableStateOf(false) }
     var link by remember { mutableStateOf("https://") }
     val leave = { session.editor.commitComposition(); session.scheduler.fireNow(); session.editor.endEditing(); onBack() }
+    DebugShotEffect("text-editor") { name ->
+        session.opening.join()
+        if (name == "texteditor") session.keepFormText()
+    }
+
     BackHandler(enabled = session.recoveries.isEmpty() && !showLink && session.error == null && !showDeleteChapter, onBack = leave)
     ProvidePushedShellChrome(hasSubjectHeader = true, hideTabBar = true, onBack = {
         if (session.recoveries.isEmpty()) leave()

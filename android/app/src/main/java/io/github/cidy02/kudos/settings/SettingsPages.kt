@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.settings
 
+import io.github.cidy02.kudos.app.DebugShotEffect
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -44,6 +45,8 @@ fun SettingsAppearancePage(
     val tokens = LocalKudosTokens.current
     var showAccentPresets by remember { mutableStateOf(false) }
     var showCustomizeTheme by remember { mutableStateOf(false) }
+    DebugShotEffect("appearance") { showCustomizeTheme = true }
+
     val matched = settings.reader.matchAppReaderTheme
     val themeFootnote = (if (matched) {
         "Choose Light, Sepia, Dark, or OLED for Kudos and the reader."

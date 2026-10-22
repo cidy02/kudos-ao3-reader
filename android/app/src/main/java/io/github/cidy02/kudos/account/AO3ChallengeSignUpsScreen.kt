@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.account
 
+import io.github.cidy02.kudos.app.DebugShotEffect
 import androidx.lifecycle.viewmodel.initializer
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
@@ -79,6 +80,10 @@ private fun ChallengeSignUpsContent(slug: String, title: String, viewerIsOwner: 
     val effectiveTitle = title.ifEmpty { slug }
     var filter by androidx.compose.runtime.saveable.rememberSaveable(model) { mutableStateOf(SignUpFilter.All) }
     var participant by remember(model) { mutableStateOf<AO3ListedSignUp?>(null) }
+    DebugShotEffect("challenge-signups", ready = state.filtered(SignUpFilter.All).isNotEmpty()) {
+        participant = state.filtered(SignUpFilter.All).first()
+    }
+
     LaunchedEffect(model) { model.loadOnAppear() }
     DisposableEffect(model) { onDispose { model.close() } }
     val detail = participant
