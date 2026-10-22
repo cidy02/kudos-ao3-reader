@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.app
 
+import io.github.cidy02.kudos.ui.subject.SubjectSkeletonList
 import android.content.Intent
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -53,7 +54,6 @@ import io.github.cidy02.kudos.ui.components.EmptyStateCard
 import io.github.cidy02.kudos.ui.components.ErrorStateCard
 import io.github.cidy02.kudos.author.AuthorLoadMoreRow
 import io.github.cidy02.kudos.ui.components.KudosSectionHeader
-import io.github.cidy02.kudos.ui.components.LoadingStateCard
 import io.github.cidy02.kudos.ui.components.SelectableRemoteWorkRow
 import io.github.cidy02.kudos.ui.components.SensitiveWorkRow
 import io.github.cidy02.kudos.ui.components.rememberRemoteWorkSelection
@@ -218,10 +218,7 @@ fun SeriesWorksScreen(
         SubjectHeaderBlock(kicker = "Series", title = title, palette = palette)
 
         when (val current = state) {
-            SeriesWorksState.Loading -> LoadingStateCard(
-                "Loading series…",
-                Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
-            )
+            SeriesWorksState.Loading -> SubjectSkeletonList("Loading series", count = 4)
             is SeriesWorksState.Error -> ErrorStateCard(
                 title = "Couldn't load series",
                 message = current.message,

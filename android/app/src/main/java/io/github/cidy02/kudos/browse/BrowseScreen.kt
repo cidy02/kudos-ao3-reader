@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.browse
 
+import io.github.cidy02.kudos.ui.subject.SubjectSkeletonList
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -32,7 +33,6 @@ import io.github.cidy02.kudos.network.ao3.browse.AO3MediaCategory
 import io.github.cidy02.kudos.network.ao3.displayMessage
 import io.github.cidy02.kudos.ui.components.EmptyStateCard
 import io.github.cidy02.kudos.ui.components.KudosRefreshBox
-import io.github.cidy02.kudos.ui.components.LoadingStateCard
 import io.github.cidy02.kudos.core.model.SavedWork
 import io.github.cidy02.kudos.works.WorkRepository
 import kotlinx.coroutines.Dispatchers
@@ -118,8 +118,10 @@ fun BrowseScreen(
     }
 
     suspend fun loadNow() {
-        state = BrowseCategoriesState.Loading
-        fandomLists = emptyMap()
+        if (state !is BrowseCategoriesState.Loaded) {
+            state = BrowseCategoriesState.Loading
+            fandomLists = emptyMap()
+        }
         when (val result = repository.categories()) {
             is AO3Result.Success -> {
                 state = BrowseCategoriesState.Loaded(result.value)
@@ -147,7 +149,10 @@ fun BrowseScreen(
     KudosRefreshBox(onRefresh = { loadNow() }, modifier = Modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize()) {
             when (val current = state) {
-                BrowseCategoriesState.Loading -> LoadingStateCard("Loading AO3 media categories")
+                BrowseCategoriesState.Loading -> SubjectSkeletonList(
+                    "Loading AO3 media categories", count = 11,
+                    shape = io.github.cidy02.kudos.ui.subject.SubjectSkeletonShape.Category
+                )
                 is BrowseCategoriesState.Error -> Column(
                     modifier = Modifier.padding(horizontal = 16.dp),
                     verticalArrangement = Arrangement.spacedBy(18.dp)

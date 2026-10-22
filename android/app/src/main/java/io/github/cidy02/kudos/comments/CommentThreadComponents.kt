@@ -903,67 +903,28 @@ fun CommentActionRowLayout(
  */
 @Composable
 fun CommentSkeletonRow(modifier: Modifier = Modifier) {
-    val tokens = LocalKudosTokens.current
-    val barColor = tokens.glassFill(0.18)
     val avatarSize = CommentThreadGeometry.avatarSize(0)
-
     Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(
-                top = CommentThreadGeometry.rowTopPadding,
-                bottom = CommentThreadGeometry.conversationGap,
-                start = CommentThreadGeometry.sideMargin,
-                end = CommentThreadGeometry.sideMargin
-            ),
+        modifier.fillMaxWidth().padding(
+            top = CommentThreadGeometry.rowTopPadding,
+            bottom = CommentThreadGeometry.conversationGap,
+            start = CommentThreadGeometry.sideMargin,
+            end = CommentThreadGeometry.sideMargin
+        ),
         horizontalArrangement = Arrangement.spacedBy(11.dp),
         verticalAlignment = Alignment.Top
     ) {
-        Box(
-            Modifier
-                .size(avatarSize)
-                .background(barColor, CircleShape)
-        )
-        Column(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Box(
-                    Modifier
-                        .width(110.dp)
-                        .height(12.dp)
-                        .background(barColor, RoundedCornerShape(4.dp))
-                )
-                Box(
-                    Modifier
-                        .width(60.dp)
-                        .height(10.dp)
-                        .background(barColor, RoundedCornerShape(4.dp))
-                )
+        Box(Modifier.size(avatarSize)) {
+            io.github.cidy02.kudos.ui.subject.SubjectSkeletonBlock(avatarSize.value.toInt(), round = true)
+        }
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Box(Modifier.weight(1f)) { io.github.cidy02.kudos.ui.subject.SubjectSkeletonBlock(12, 110) }
+                Box(Modifier.weight(0.6f)) { io.github.cidy02.kudos.ui.subject.SubjectSkeletonBlock(10, 60) }
             }
-            Box(
-                Modifier
-                    .fillMaxWidth()
-                    .height(12.dp)
-                    .background(barColor, RoundedCornerShape(4.dp))
-            )
-            Box(
-                Modifier
-                    .fillMaxWidth(0.9f)
-                    .height(12.dp)
-                    .background(barColor, RoundedCornerShape(4.dp))
-            )
-            Box(
-                Modifier
-                    .width(140.dp)
-                    .height(12.dp)
-                    .background(barColor, RoundedCornerShape(4.dp))
-            )
+            io.github.cidy02.kudos.ui.subject.SubjectSkeletonBlock()
+            io.github.cidy02.kudos.ui.subject.SubjectSkeletonBlock()
+            io.github.cidy02.kudos.ui.subject.SubjectSkeletonBlock(width = 140)
         }
     }
 }

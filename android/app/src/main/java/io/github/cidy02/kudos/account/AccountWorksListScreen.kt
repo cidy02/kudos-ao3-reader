@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.account
 
+import io.github.cidy02.kudos.ui.subject.SubjectSkeletonList
 import androidx.compose.foundation.combinedClickable
 
 import io.github.cidy02.kudos.ui.subject.SubjectWorkCoverCard
@@ -404,7 +405,7 @@ fun AccountWorksListScreen(
             } else when (val current = state) {
                 AccountListUiState.Loading -> {
                     Box(modifier = Modifier.padding(SubjectMetrics.accountGutter)) {
-                        LoadingStateCard("Loading ${type.title}")
+                        SubjectSkeletonList("Loading ${type.title}")
                     }
                 }
                 AccountListUiState.AuthRequired -> {
@@ -1283,7 +1284,7 @@ internal fun SubscriptionsBrowser(
             if (scope == "works" && worksState !is AccountListUiState.Loaded) {
                 item {
                     when (worksState) {
-                        AccountListUiState.Loading -> LoadingStateCard("Loading Subscriptions")
+                        AccountListUiState.Loading -> SubjectSkeletonList("Loading Subscriptions", scrollable = false)
                         AccountListUiState.AuthRequired -> EmptyStateCard(
                             "AO3 session required", "Your AO3 session needs to be refreshed.",
                             primaryActionLabel = "Log In Again", onPrimaryAction = onLogin

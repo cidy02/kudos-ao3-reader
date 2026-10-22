@@ -559,14 +559,16 @@ private fun SubscriptionsBlock(
         )
         if (!collapsed) {
             when {
-                showSkeleton -> Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .horizontalScroll(rememberScrollState())
-                        .padding(horizontal = 16.dp, vertical = 6.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    repeat(6) { HomeCoverSkeleton() }
+                showSkeleton -> io.github.cidy02.kudos.ui.subject.SubjectSkeletonLoading("Loading Subscriptions") {
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState())
+                            .padding(horizontal = 16.dp, vertical = 6.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        repeat(6) { HomeCoverSkeleton() }
+                    }
                 }
                 merged.isEmpty() -> HomeSectionEmpty(
                     message = HomeSubscriptionsCopy.emptyMessage(state.isSignedIn, state.subscriptionsLoadFailed),

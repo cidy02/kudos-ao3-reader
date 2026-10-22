@@ -786,28 +786,7 @@ private fun SearchEmpty(query: String) {
 
 @Composable
 private fun SearchSkeletonList() {
-    val tokens = LocalKudosTokens.current
-    val bar = tokens.glassFill(0.18)
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        repeat(7) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .subjectPanel()
-                    .padding(horizontal = 14.dp, vertical = 14.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Box(Modifier.fillMaxWidth(0.72f).height(16.dp).background(bar, RoundedCornerShape(4.dp)))
-                Box(Modifier.fillMaxWidth(0.42f).height(12.dp).background(bar, RoundedCornerShape(4.dp)))
-                Box(Modifier.fillMaxWidth().height(12.dp).background(bar, RoundedCornerShape(4.dp)))
-            }
-        }
-    }
+    io.github.cidy02.kudos.ui.subject.SubjectSkeletonList("Loading search results", count = 7)
 }
 
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class, androidx.compose.foundation.ExperimentalFoundationApi::class)

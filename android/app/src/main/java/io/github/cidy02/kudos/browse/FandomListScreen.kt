@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.browse
 
+import io.github.cidy02.kudos.ui.subject.SubjectSkeletonList
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
@@ -38,7 +39,6 @@ import io.github.cidy02.kudos.network.ao3.browse.AO3Fandom
 import io.github.cidy02.kudos.network.ao3.browse.AO3MediaCategory
 import io.github.cidy02.kudos.network.ao3.displayMessage
 import io.github.cidy02.kudos.ui.components.KudosRefreshBox
-import io.github.cidy02.kudos.ui.components.LoadingStateCard
 import io.github.cidy02.kudos.ui.subject.FilterButton
 import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
 import io.github.cidy02.kudos.ui.subject.subjectScreenWash
@@ -88,7 +88,7 @@ fun FandomListScreen(
     }
 
     suspend fun loadNow() {
-        phase = FandomListPhase.Loading
+        if (phase !is FandomListPhase.Loaded) phase = FandomListPhase.Loading
         phase = when (val result = repository.fandoms(category)) {
             is AO3Result.Success -> FandomListPhase.Loaded(result.value)
             is AO3Result.Failure -> FandomListPhase.Error(result.error.displayMessage())
@@ -171,7 +171,10 @@ fun FandomListScreen(
             )
             androidx.compose.foundation.layout.Spacer(Modifier.height(56.dp))
             when (val current = phase) {
-                FandomListPhase.Loading -> LoadingStateCard("Loading fandoms")
+                FandomListPhase.Loading -> SubjectSkeletonList(
+                    "Loading fandoms", count = 10,
+                    shape = io.github.cidy02.kudos.ui.subject.SubjectSkeletonShape.Fandom
+                )
                 is FandomListPhase.Error -> Column {
                     FandomListHeader(category, tally, palette)
                     BrowseErrorBlock(

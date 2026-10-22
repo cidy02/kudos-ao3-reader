@@ -70,11 +70,18 @@ internal object DemoNetwork {
     const val SIGNED_IN_EXTRA = "kudosDemoSignedIn"
     const val CACHED_PAGES_OFFLINE_EXTRA = "kudosDemoCachedPagesOffline"
     @Volatile private var cachedPagesOffline = false
+    /** `--ei kudosDemoDelayMs 4000`: demo pages answer that much later, so loading states can be seen. */
+    const val DELAY_EXTRA = "kudosDemoDelayMs"
+    @Volatile internal var responseDelayMs = 0L
+        private set
 
     fun applyCachedPagesExtra(intent: Intent?) {
         if (io.github.cidy02.kudos.BuildConfig.DEBUG && isActive &&
             intent?.hasExtra(CACHED_PAGES_OFFLINE_EXTRA) == true
         ) cachedPagesOffline = intent.getBooleanExtra(CACHED_PAGES_OFFLINE_EXTRA, false)
+        if (io.github.cidy02.kudos.BuildConfig.DEBUG && isActive && intent?.hasExtra(DELAY_EXTRA) == true) {
+            responseDelayMs = intent.getIntExtra(DELAY_EXTRA, 0).coerceIn(0, 30_000).toLong()
+        }
     }
 
     /** [showsComments]: a work's or chapter's comments page, which is kept for offline reading too. */
@@ -415,6 +422,7 @@ internal class DemoNetworkInterceptor(
         val url = chain.request().url
         if (!DemoNetworkRoutes.isAo3Host(url.host)) return chain.proceed(chain.request())
         val path = DemoNetworkRoutes.decodedPath(url)
+        if (chain.request().method == "GET" && DemoNetwork.responseDelayMs > 0) Thread.sleep(DemoNetwork.responseDelayMs)
         if (chain.request().method == "GET" && DemoNetwork.refusesCachedPageRead(path,
                 showsComments = chain.request().url.queryParameter("show_comments") == "true")) {
             throw java.net.UnknownHostException("Local cached-page demo is offline")
