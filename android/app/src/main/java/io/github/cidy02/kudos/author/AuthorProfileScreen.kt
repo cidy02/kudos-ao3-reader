@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.author
 
+import io.github.cidy02.kudos.ui.subject.SubjectSkeletonList
 import io.github.cidy02.kudos.ui.components.rememberStoredChoice
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.clickable
@@ -45,7 +46,6 @@ import io.github.cidy02.kudos.network.ao3.search.AO3SearchPage
 import io.github.cidy02.kudos.network.ao3.search.AO3WorkSummary
 import io.github.cidy02.kudos.ui.components.EmptyStateCard
 import io.github.cidy02.kudos.ui.components.ErrorStateCard
-import io.github.cidy02.kudos.ui.components.LoadingStateCard
 import io.github.cidy02.kudos.ui.subject.*
 import kotlinx.coroutines.launch
 
@@ -200,7 +200,7 @@ fun AuthorProfileScreen(
         }
     }
 
-    fun loadTab(target: AuthorTab, pageNum: Int = 1, bypassCache: Boolean = false) {
+    fun loadTab(target: AuthorTab, pageNum: Int = 1, bypassCache: Boolean = false, keepContent: Boolean = false) {
         val expectedRoute = route
         val expectedScope = scopeState
         val expectedSort = worksSort
@@ -211,7 +211,7 @@ fun AuthorProfileScreen(
         tabLoading = true
         tabError = null
         page = pageNum
-        if (target == AuthorTab.Works && pageNum == 1) works = null
+        if (target == AuthorTab.Works && pageNum == 1 && !keepContent) works = null
         tabTask = scope.launch {
             fun current(): Boolean = generation == loadGeneration && route == expectedRoute &&
                 sessionGeneration == expectedSession && tab == target && page == pageNum &&
@@ -624,7 +624,7 @@ fun AuthorProfileScreen(
             loadHeader(bypassCache = true)
             headerTask?.join()
             if (headerError == null && header != null && !isDashboard) {
-                loadTab(tab, 1, bypassCache = true)
+                loadTab(tab, 1, bypassCache = true, keepContent = true)
                 tabTask?.join()
                 loadOwnStats(bypassCache = true)
             }
@@ -647,7 +647,7 @@ fun AuthorProfileScreen(
             item {
                 // Below the bar like every other state of this page: it sat under the back button.
                 Spacer(Modifier.height(WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 56.dp))
-                LoadingStateCard("Loading author profile")
+                io.github.cidy02.kudos.ui.subject.SubjectAuthorProfileSkeleton()
             }
         } else if (headerError != null && header == null) {
             if (headerError == AO3Error.NotFound) {
@@ -847,8 +847,16 @@ fun AuthorProfileScreen(
                     onOpenDashboardList?.let { open -> DashboardSeeAll("bookmarks") { open(AccountListType.Bookmarks) } }
                 }
             } else if (!isDashboard) {
-                if (tabLoading && page == 1) {
-                    item { LoadingStateCard("Loading…") }
+                val tabHasContent = when (tab) {
+                    AuthorTab.Works -> works != null
+                    AuthorTab.Series -> series != null
+                    AuthorTab.Bookmarks -> bookmarks != null
+                    AuthorTab.About -> about != null
+                }
+                if (tabLoading && page == 1 && !tabHasContent) {
+                    item {
+                        SubjectSkeletonList("Loading ${tab.label}", count = 4, scrollable = false)
+                    }
                 } else if (tabError != null && page == 1) {
                     item {
                         ErrorStateCard(

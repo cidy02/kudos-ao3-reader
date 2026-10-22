@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.browse
 
+import io.github.cidy02.kudos.ui.subject.SubjectSkeletonList
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -53,7 +54,6 @@ import io.github.cidy02.kudos.ui.subject.FilterButton
 import io.github.cidy02.kudos.ui.subject.SubjectHeaderBlock
 import io.github.cidy02.kudos.ui.subject.ToolbarCircleButton
 import io.github.cidy02.kudos.ui.subject.subjectScreenWash
-import io.github.cidy02.kudos.ui.components.LoadingStateCard
 import io.github.cidy02.kudos.ui.components.MetadataChipRow
 import io.github.cidy02.kudos.works.WorkRepository
 import io.github.cidy02.kudos.works.WorkImporter
@@ -218,10 +218,7 @@ fun FandomWorksScreen(
         }
 
         when (val current = state) {
-            FandomWorksState.Loading -> LoadingStateCard(
-                "Loading fandom works",
-                Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
-            )
+            FandomWorksState.Loading -> SubjectSkeletonList("Loading fandom works")
             is FandomWorksState.Error -> BrowseErrorBlock(
                 message = current.message,
                 onRetry = { load(current.page) },

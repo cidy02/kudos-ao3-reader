@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.author
 
+import io.github.cidy02.kudos.ui.subject.SubjectSkeletonList
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material.icons.outlined.Checklist
@@ -38,7 +39,6 @@ import io.github.cidy02.kudos.ui.components.EmptyStateCard
 import io.github.cidy02.kudos.ui.components.ErrorStateCard
 import io.github.cidy02.kudos.ui.components.KudosScreenHeader
 import io.github.cidy02.kudos.ui.components.KudosSectionHeader
-import io.github.cidy02.kudos.ui.components.LoadingStateCard
 import io.github.cidy02.kudos.ui.components.MetadataChipRow
 import io.github.cidy02.kudos.works.WorkRepository
 import io.github.cidy02.kudos.works.WorkImporter
@@ -112,7 +112,7 @@ fun AuthorWorksScreen(
         )
 
         when (val current = state) {
-            AuthorWorksState.Loading -> LoadingStateCard("Loading author works")
+            AuthorWorksState.Loading -> SubjectSkeletonList("Loading author works", count = 4)
             is AuthorWorksState.Error -> ErrorStateCard(
                 title = "Author works failed",
                 message = current.message,
