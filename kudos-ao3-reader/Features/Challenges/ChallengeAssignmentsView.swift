@@ -16,6 +16,8 @@ struct ChallengeAssignmentsView: View {
     let collectionSlug: String
     var collectionTitle: String = ""
     var viewerIsOwner: Bool
+    /// Kind already read from the collection page. Nil keeps the gift-then-meme probe.
+    var challengeKind: AO3ChallengeKind?
 
     @Environment(AO3AuthService.self) private var auth
     @Environment(ThemeManager.self) private var theme
@@ -504,7 +506,9 @@ struct ChallengeAssignmentsView: View {
         // failure just leaves the header/rows without a due date (and no "late").
         if let request = try? auth.authenticatedRequest(
             for: AO3ChallengeURL.giftExchangeEdit(slug: collectionSlug)
-        ), let form = try? await AO3Client.shared.challengeSettings(slug: collectionSlug, request: request) {
+        ), let form = try? await AO3Client.shared.challengeSettings(
+            slug: collectionSlug, request: request, kind: challengeKind
+        ) {
             guard shouldApply(capturedLoadGeneration, capturedSessionGeneration) else { return }
             worksDueAt = form.settings.worksDueAt
         }

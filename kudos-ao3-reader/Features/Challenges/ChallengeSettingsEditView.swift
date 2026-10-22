@@ -27,6 +27,8 @@ struct ChallengeSettingsEditView: View {
     let collectionSlug: String
     var collectionTitle: String = ""
     var viewerIsOwner: Bool
+    /// Kind already read from the collection page. Nil keeps the gift-then-meme probe.
+    var challengeKind: AO3ChallengeKind?
 
     @Environment(AO3AuthService.self) private var auth
     @Environment(ThemeManager.self) private var theme
@@ -720,7 +722,9 @@ struct ChallengeSettingsEditView: View {
             let request = try auth.authenticatedRequest(
                 for: AO3ChallengeURL.giftExchangeEdit(slug: collectionSlug)
             )
-            let loaded = try await AO3Client.shared.challengeSettings(slug: collectionSlug, request: request)
+            let loaded = try await AO3Client.shared.challengeSettings(
+                slug: collectionSlug, request: request, kind: challengeKind
+            )
             try auth.requireSessionGeneration(capturedSessionGeneration)
 
             var loadedSignUpTotal: Int?

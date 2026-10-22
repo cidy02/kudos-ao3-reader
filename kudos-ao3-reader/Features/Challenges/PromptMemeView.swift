@@ -20,6 +20,8 @@ struct PromptMemeView: View {
     /// settings form, which AO3 serves to the collection's owners and refuses
     /// to everyone else, moderators included; the callers already know.
     var viewerIsOwner: Bool = false
+    /// Kind already read from the collection page. Nil keeps the gift-then-meme probe.
+    var challengeKind: AO3ChallengeKind?
 
     /// Whether this load asks AO3 for the close date: only for an owner (AO3
     /// refuses the settings form to anyone else), only until a date is known,
@@ -550,7 +552,7 @@ private extension PromptMemeView {
                 for: AO3ChallengeURL.promptMemeEdit(slug: collectionSlug)
             ),
                 let form = try? await AO3Client.shared.challengeSettings(
-                    slug: collectionSlug, request: settingsRequest
+                    slug: collectionSlug, request: settingsRequest, kind: challengeKind
                 ),
                 let closeDate = form.settings.signupsCloseAt.dateText {
                 closeDateText = "open until \(closeDate)"
