@@ -163,6 +163,8 @@ object BackupMergeService {
                 summary = summary.copy(worksSuppressed = summary.worksSuppressed + 1)
                 return@forEach
             }
+            // iOS `summary.works` is every archived work that was not suppressed.
+            summary = summary.copy(worksRestored = summary.worksRestored + 1)
             workIdRemap[archivedId] = targetId
 
             val incomingModifiedAt = resolveIncomingLastModifiedAt(
@@ -184,8 +186,17 @@ object BackupMergeService {
             // readable EPUB replace a file or claim one. iOS stages and inspects the
             // asset the same way and skips an invalid one, leaving the existing
             // file, `hasEPUB` and preservation as they were.
-            val incomingEpub = (epubFilesById[archivedId] ?: epubFilesById[targetId])
+            val packagedEpub = epubFilesById[archivedId] ?: epubFilesById[targetId]
+            val incomingEpub = packagedEpub
                 ?.takeIf { mayReplace && EpubImportMetadata.isReadablePackage(it, cacheDirectory) }
+            // iOS counts a promised EPUB only when nothing usable arrived and
+            // this device has no file. Bytes that are present but unreadable are
+            // refused above and are not this absence.
+            if (packagedEpub == null && archived.hasEPUB && !existingHasFile) {
+                summary = summary.copy(
+                    worksMissingPromisedEPUB = summary.worksMissingPromisedEPUB + 1
+                )
+            }
             val existingHasEpub = existingHasFile || existing?.hasEpub == true
             val restoredHasEpub = incomingEpub != null || existingHasEpub
 
@@ -359,7 +370,10 @@ object BackupMergeService {
             queuesUpdated = queueMerge.queuesUpdated,
             membershipsCreated = queueMerge.membershipsCreated,
             membershipsUpdated = queueMerge.membershipsUpdated,
-            membershipsSuppressed = queueMerge.membershipsSuppressed
+            membershipsSuppressed = queueMerge.membershipsSuppressed,
+            suppressedQueues = queueMerge.suppressedQueues,
+            revivedQueues = queueMerge.revivedQueues,
+            ambiguousQueueConflicts = queueMerge.ambiguousQueueConflicts
         )
         val restoredEpubIds = (currentEpubIds + epubFilesToWrite.keys)
             .map(BackupPaths::normalizeIdForComparison)
@@ -436,9 +450,12 @@ object BackupMergeService {
         val settings = if (mode == BackupImportMode.REPLACE_LIBRARY) {
             current.settings
         } else {
-            val settingsPayload = manifest.settings.retargetRenamedFont(fontMerge.renamedFonts)
+            // iOS `KudosBackup.swift` keeps `custom:<name>` only when that exact
+            // file is on disk (or about to be written). A `-restored-N` copy or
+            // a case-variant beside it is not the font the reader picked.
+            val presentFontFiles = current.fontFilesByFileName.keys + fontMerge.filesToWrite.keys
             BackupValidator
-                .normalizeSettings(settingsPayload, fontMerge.items.map { it.fileName }.toSet())
+                .normalizeSettings(manifest.settings, presentFontFiles)
                 .toCoreBackupSettings()
         }
 
@@ -1089,7 +1106,6 @@ object BackupMergeService {
             BackupPaths.fontFileNameKey(it.key)
         }
         val filesToWrite = linkedMapOf<String, ByteArray>()
-        val renamedFonts = mutableMapOf<String, String>()
         var created = 0
         var updated = 0
 
@@ -1112,7 +1128,6 @@ object BackupMergeService {
                 }
                 val names = fontNamesByFoldedName.getOrPut(BackupPaths.fontFileNameKey(reusableName)) { mutableListOf() }
                 if (reusableName !in names) names.add(reusableName)
-                renamedFonts[archived.fileName] = reusableName
                 return
             }
             val newFileName = BackupPaths.uniqueSuffixedFontFileName(
@@ -1127,7 +1142,6 @@ object BackupMergeService {
                 mutableListOf()
             }.add(newFileName)
             filesToWrite[newFileName] = incomingBytes
-            renamedFonts[archived.fileName] = newFileName
             created += 1
         }
 
@@ -1139,10 +1153,10 @@ object BackupMergeService {
             val existing = existingName?.let(fontsByName::get)
             val matchingFiles = currentFilesByFoldedName[foldedName].orEmpty()
 
-            // Multiple local DB rows that differ only by case are already
-            // ambiguous. Preserve every row and file, and give the archive its
-            // own unoccupied name instead of selecting an arbitrary winner.
-            if (existingNames.size > 1) {
+            // iOS asks this before any byte compare: two case-folded rows, or
+            // two case-variant files, are ambiguous. Keep every row and file,
+            // and install the archive under `-restored-N`.
+            if (existingNames.size > 1 || matchingFiles.size > 1) {
                 restoreWithSuffix(archived, incomingBytes)
                 return@forEach
             }
@@ -1158,9 +1172,6 @@ object BackupMergeService {
                         exportedAt = exportedAt
                     )
                     fontNamesByFoldedName.getOrPut(foldedName) { mutableListOf() }.add(localFileName)
-                    if (localFileName != archived.fileName) {
-                        renamedFonts[archived.fileName] = localFileName
-                    }
                     created += 1
                     return@forEach
                 }
@@ -1193,9 +1204,6 @@ object BackupMergeService {
                         )
                     )
                     filesToWrite[canonicalExistingName] = incomingBytes
-                    if (canonicalExistingName != archived.fileName) {
-                        renamedFonts[archived.fileName] = canonicalExistingName
-                    }
                     updated += 1
                 } else {
                     // A differently-cased file occupies the folded name. Do not
@@ -1218,9 +1226,6 @@ object BackupMergeService {
                         exportedAt
                     )
                 )
-                if (canonicalExistingName != archived.fileName) {
-                    renamedFonts[archived.fileName] = canonicalExistingName
-                }
                 updated += 1
             } else {
                 restoreWithSuffix(archived, incomingBytes)
@@ -1230,7 +1235,6 @@ object BackupMergeService {
         return FontMerge(
             items = fontsByName.values.sortedBy { it.fileName },
             filesToWrite = filesToWrite,
-            renamedFonts = renamedFonts,
             created = created,
             updated = updated
         )
@@ -1653,6 +1657,9 @@ object BackupMergeService {
         }
         var queuesCreated = 0
         var queuesUpdated = 0
+        var suppressedQueues = 0
+        var revivedQueues = 0
+        var ambiguousQueueConflicts = 0
 
         // iOS folds each queue's *membership* timestamps into the conflict clock
         // (`ReadingQueue.effectiveModifiedAt(memberships:)`). Passing an empty list
@@ -1707,10 +1714,15 @@ object BackupMergeService {
 
             val existing = queuesById[id]
             if (existing == null) {
+                // Same branches as before. The counts are the decision this
+                // restore already made; an existing queue is not re-checked.
                 when (tombstoneIndex.queueResolution(id, incomingModified)) {
-                    TombstoneResolution.SUPPRESS_STALE -> return@forEach
-                    TombstoneResolution.REVIVE_NEWER,
-                    TombstoneResolution.PRESERVE_AMBIGUOUS,
+                    TombstoneResolution.SUPPRESS_STALE -> {
+                        suppressedQueues += 1
+                        return@forEach
+                    }
+                    TombstoneResolution.REVIVE_NEWER -> revivedQueues += 1
+                    TombstoneResolution.PRESERVE_AMBIGUOUS -> ambiguousQueueConflicts += 1
                     TombstoneResolution.NO_TOMBSTONE -> Unit
                 }
                 val created = archived.toReadingQueue(exportedAt)
@@ -1832,6 +1844,8 @@ object BackupMergeService {
                     membershipsSuppressed += 1
                     return@forEach
                 }
+                // Still applied. iOS records the ambiguity and keeps the membership.
+                TombstoneResolution.PRESERVE_AMBIGUOUS -> ambiguousQueueConflicts += 1
                 else -> Unit
             }
 
@@ -1891,7 +1905,10 @@ object BackupMergeService {
             queuesUpdated = queuesUpdated,
             membershipsCreated = membershipsCreated,
             membershipsUpdated = membershipsUpdated,
-            membershipsSuppressed = membershipsSuppressed
+            membershipsSuppressed = membershipsSuppressed,
+            suppressedQueues = suppressedQueues,
+            revivedQueues = revivedQueues,
+            ambiguousQueueConflicts = ambiguousQueueConflicts
         )
     }
 
@@ -2303,15 +2320,6 @@ object BackupMergeService {
         return mapKeys { BackupPaths.normalizeIdForComparison(it.key) }
     }
 
-    private fun BackupSettingsPayload.retargetRenamedFont(
-        renamedFonts: Map<String, String>
-    ): BackupSettingsPayload {
-        if (!readerFontID.startsWith("custom:")) return this
-        val fileName = readerFontID.removePrefix("custom:")
-        val newFileName = renamedFonts[fileName] ?: return this
-        return copy(readerFontID = "custom:$newFileName")
-    }
-
     private fun String.uniqueName(existingNames: Set<String>): String {
         if (this !in existingNames) return this
         var index = 1
@@ -2392,7 +2400,6 @@ object BackupMergeService {
     private data class FontMerge(
         val items: List<CustomFont>,
         val filesToWrite: Map<String, ByteArray>,
-        val renamedFonts: Map<String, String>,
         val created: Int,
         val updated: Int
     )
@@ -2405,7 +2412,10 @@ object BackupMergeService {
         val queuesUpdated: Int,
         val membershipsCreated: Int,
         val membershipsUpdated: Int,
-        val membershipsSuppressed: Int
+        val membershipsSuppressed: Int,
+        val suppressedQueues: Int,
+        val revivedQueues: Int,
+        val ambiguousQueueConflicts: Int
     )
 
     private data class AnnotationMerge(

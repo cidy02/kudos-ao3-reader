@@ -224,6 +224,7 @@ class SyncRepository(
             }
             val backupManifest = syncDir.findFile(BackupPaths.MANIFEST_BACKUP)
             val foldedConflicts = mutableListOf<DocumentFile>()
+            var absorbed = SyncResult.Success()
             // Fonts in the folder that this run could not take: unreadable, or over a limit.
             // This device has no row for them, so its own manifest would stop listing them
             // and the next device to prune would delete another device's font. They go back
@@ -270,13 +271,17 @@ class SyncRepository(
                         ) else manifest
                         val outcome = importManifest(syncDir, incoming)
                         pendingFonts += outcome.pendingFonts
+                        absorbed = absorbed.absorb(outcome.summary)
                         folderViewIsCurrent = decodedLive != null && outcome.complete
                     }
                 }
 
                 conflicts.forEach { file ->
                     val outcome = decodeManifestOrNull(file)?.let { importManifest(syncDir, it) }
-                    if (outcome != null) pendingFonts += outcome.pendingFonts
+                    if (outcome != null) {
+                        pendingFonts += outcome.pendingFonts
+                        absorbed = absorbed.absorb(outcome.summary)
+                    }
                     if (outcome?.complete == true) {
                         foldedConflicts += file
                     } else {
@@ -293,6 +298,7 @@ class SyncRepository(
                         val bytes = input.readBytes()
                         if (bytes.isNotEmpty()) {
                             val summary = backupRepository.importV2ZipBytes(bytes, admit = this::folderImportStillAllowed)
+                            absorbed = absorbed.absorb(summary)
                             if (summary.pronunciationsRestoreFailed) {
                                 throw IOException("Could not save pronunciation corrections. The sync folder was kept; try again.")
                             }
@@ -469,8 +475,10 @@ class SyncRepository(
 
             settingsRepository.updateSyncLastSyncAt(clock())
             settingsRepository.updateSyncHasPendingChanges(false)
-            return SyncResult.Success(foldedConflicts.size,
-                warning = PRONUNCIATIONS_EXPORT_WARNING.takeIf { pronunciationsUnreadable })
+            return absorbed.copy(
+                foldedConflicts = foldedConflicts.size,
+                warning = PRONUNCIATIONS_EXPORT_WARNING.takeIf { pronunciationsUnreadable }
+            )
         } catch (e: CancellationException) {
             throw e
         } catch (_: ImportDeclined) {
@@ -564,7 +572,12 @@ class SyncRepository(
         /** False when a file the manifest lists is in the folder and could not be taken. */
         val complete: Boolean,
         /** The fonts among those, by file name. */
-        val pendingFonts: Map<String, BackupFont>
+        val pendingFonts: Map<String, BackupFont>,
+        /**
+         * The first batch's summary. Later batches re-merge the same manifest,
+         * so absorbing each one would count every work again.
+         */
+        val summary: BackupRestoreSummary
     )
 
     /**
@@ -616,6 +629,8 @@ class SyncRepository(
         // manifest is merged again with each batch: a merge that brings nothing new changes
         // nothing, and each work is offered once.
         var next = 0
+        var countedThisManifest = false
+        var manifestSummary = BackupRestoreSummary()
         do {
             val epubFiles = mutableMapOf<String, ByteArray>()
             var batchBytes = 0L
@@ -647,6 +662,10 @@ class SyncRepository(
                 normalizeQueuePreservation = next >= manifest.works.size,
                 admit = this::folderImportStillAllowed
             )
+            if (!countedThisManifest) {
+                manifestSummary = summary
+                countedThisManifest = true
+            }
             if (summary.pronunciationsRestoreFailed) {
                 throw IOException("Could not save pronunciation corrections. The sync folder was kept; try again.")
             }
@@ -657,7 +676,7 @@ class SyncRepository(
         } while (next < manifest.works.size)
 
         importOriginals(syncDir, manifest)
-        return ImportOutcome(complete && pendingFonts.isEmpty(), pendingFonts)
+        return ImportOutcome(complete && pendingFonts.isEmpty(), pendingFonts, manifestSummary)
     }
 
     /**
@@ -871,7 +890,89 @@ sealed interface SyncResult {
      * exactly the situation a user needs told about, and the fold is silent
      * otherwise — nothing else in the UI would ever hint it happened.
      */
-    data class Success(val foldedConflicts: Int = 0, val warning: String? = null) : SyncResult
+    data class Success(
+        val foldedConflicts: Int = 0,
+        val warning: String? = null,
+        /** iOS `FolderSyncResult.restoredWorks`. */
+        val restoredWorks: Int = 0,
+        val suppressedQueues: Int = 0,
+        val revivedQueues: Int = 0,
+        val ambiguousQueueConflicts: Int = 0
+    ) : SyncResult {
+        /**
+         * iOS `FolderSyncResult.absorb`. Android has no read/write flags, so
+         * this sums the five counts and keeps this result's warning.
+         */
+        fun absorb(other: Success): Success = copy(
+            foldedConflicts = foldedConflicts + other.foldedConflicts,
+            restoredWorks = restoredWorks + other.restoredWorks,
+            suppressedQueues = suppressedQueues + other.suppressedQueues,
+            revivedQueues = revivedQueues + other.revivedQueues,
+            ambiguousQueueConflicts = ambiguousQueueConflicts + other.ambiguousQueueConflicts
+        )
+
+        fun absorb(summary: BackupRestoreSummary): Success = absorb(
+            Success(
+                restoredWorks = summary.worksRestored,
+                suppressedQueues = summary.suppressedQueues,
+                revivedQueues = summary.revivedQueues,
+                ambiguousQueueConflicts = summary.ambiguousQueueConflicts
+            )
+        )
+
+        /**
+         * The sync footnote. iOS lists the same counts on Sync Details
+         * (Conflicts Folded, Works Restored, Queues Suppressed, Queues Revived,
+         * Ambiguous Queue Conflicts). A zero stays off the page.
+         */
+        fun footnoteLines(): List<String> = buildList {
+            if (foldedConflicts > 0) {
+                add(
+                    if (foldedConflicts == 1) {
+                        "Merged 1 conflicting copy from another device."
+                    } else {
+                        "Merged $foldedConflicts conflicting copies from other devices."
+                    }
+                )
+            }
+            if (restoredWorks > 0) {
+                add(
+                    if (restoredWorks == 1) {
+                        "Restored 1 work from another device."
+                    } else {
+                        "Restored $restoredWorks works from other devices."
+                    }
+                )
+            }
+            if (suppressedQueues > 0) {
+                add(
+                    if (suppressedQueues == 1) {
+                        "Skipped 1 previously deleted queue."
+                    } else {
+                        "Skipped $suppressedQueues previously deleted queues."
+                    }
+                )
+            }
+            if (revivedQueues > 0) {
+                add(
+                    if (revivedQueues == 1) {
+                        "Restored 1 queue with newer changes than a previous deletion."
+                    } else {
+                        "Restored $revivedQueues queues with newer changes than a previous deletion."
+                    }
+                )
+            }
+            if (ambiguousQueueConflicts > 0) {
+                add(
+                    if (ambiguousQueueConflicts == 1) {
+                        "Preserved 1 queue conflict because the state was ambiguous."
+                    } else {
+                        "Preserved $ambiguousQueueConflicts queue conflicts because the state was ambiguous."
+                    }
+                )
+            }
+        }
+    }
     data class Error(val message: String) : SyncResult
 
     /**

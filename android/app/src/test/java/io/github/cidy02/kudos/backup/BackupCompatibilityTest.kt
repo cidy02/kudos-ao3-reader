@@ -558,7 +558,7 @@ class BackupFontMissingReaderFontFallbackTest {
     }
 
     @Test
-    fun collidingDifferentFontBytesAreSuffixedAndSettingsRetargeted() {
+    fun collidingDifferentFontBytesAreSuffixedAndTheOriginalNameStaysSelected() {
         val existingFont = CustomFont(name = "Reader", fileName = "Reader.ttf", dateAdded = DATE)
         val result = BackupMergeService.merge(
             current = BackupLibrarySnapshot(
@@ -570,11 +570,11 @@ class BackupFontMissingReaderFontFallbackTest {
 
         assertTrue(result.snapshot.fonts.any { it.fileName == "Reader.ttf" })
         assertTrue(result.snapshot.fonts.any { it.fileName == "Reader-restored-1.ttf" })
-        assertEquals("custom:Reader-restored-1.ttf", result.snapshot.settings.readerFontID)
+        assertEquals("custom:Reader.ttf", result.snapshot.settings.readerFontID)
     }
 
     @Test
-    fun identicalCaseVariantReusesOrphanFileAndRetargetsSettings() {
+    fun identicalCaseVariantReusesOrphanFileAndDropsTheMissingSelection() {
         val incomingBytes = FONT_BYTES
         val result = BackupMergeService.merge(
             current = BackupLibrarySnapshot(
@@ -585,7 +585,7 @@ class BackupFontMissingReaderFontFallbackTest {
 
         assertEquals(listOf("reader.ttf"), result.snapshot.fonts.map { it.fileName })
         assertTrue(result.fontFilesToWriteByFileName.isEmpty())
-        assertEquals("custom:reader.ttf", result.snapshot.settings.readerFontID)
+        assertEquals("system", result.snapshot.settings.readerFontID)
     }
 
     @Test
@@ -602,7 +602,7 @@ class BackupFontMissingReaderFontFallbackTest {
         assertEquals(listOf("Reader-restored-1.ttf"), result.snapshot.fonts.map { it.fileName })
         assertArrayEquals(localBytes, result.snapshot.fontFilesByFileName["reader.ttf"])
         assertArrayEquals(incomingBytes, result.fontFilesToWriteByFileName["Reader-restored-1.ttf"])
-        assertEquals("custom:Reader-restored-1.ttf", result.snapshot.settings.readerFontID)
+        assertEquals("system", result.snapshot.settings.readerFontID)
     }
 
     @Test
@@ -616,7 +616,7 @@ class BackupFontMissingReaderFontFallbackTest {
         assertEquals(listOf(existingFont.id), result.snapshot.fonts.map { it.id })
         assertEquals(listOf("reader.ttf"), result.snapshot.fonts.map { it.fileName })
         assertArrayEquals(FONT_BYTES, result.fontFilesToWriteByFileName["reader.ttf"])
-        assertEquals("custom:reader.ttf", result.snapshot.settings.readerFontID)
+        assertEquals("system", result.snapshot.settings.readerFontID)
     }
 
     @Test
@@ -638,7 +638,7 @@ class BackupFontMissingReaderFontFallbackTest {
         )
         assertArrayEquals(ByteArray(0), result.snapshot.fontFilesByFileName["reader.ttf"])
         assertArrayEquals(FONT_BYTES, result.fontFilesToWriteByFileName["Reader-restored-1.ttf"])
-        assertEquals("custom:Reader-restored-1.ttf", result.snapshot.settings.readerFontID)
+        assertEquals("system", result.snapshot.settings.readerFontID)
     }
 
     @Test
@@ -665,7 +665,7 @@ class BackupFontMissingReaderFontFallbackTest {
             result.snapshot.fonts.map { it.fileName }.toSet()
         )
         assertTrue(result.snapshot.fonts.any { it.id == existingFont.id })
-        assertEquals("custom:Reader-restored-1.ttf", result.snapshot.settings.readerFontID)
+        assertEquals("custom:Reader.ttf", result.snapshot.settings.readerFontID)
     }
 
     @Test
@@ -688,7 +688,7 @@ class BackupFontMissingReaderFontFallbackTest {
             result.snapshot.fonts.map { it.fileName }.toSet()
         )
         assertTrue(result.snapshot.fonts.any { it.id == existingFont.id })
-        assertEquals("custom:Reader-restored-1.ttf", result.snapshot.settings.readerFontID)
+        assertEquals("system", result.snapshot.settings.readerFontID)
     }
 
     @Test

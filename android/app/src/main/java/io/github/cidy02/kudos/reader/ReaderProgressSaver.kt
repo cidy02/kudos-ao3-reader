@@ -23,11 +23,18 @@ class ReaderProgressSaver(
     private var job: Job? = null
     private val writing = Mutex()
 
-    fun onProgress(progress: ReaderProgress) {
+    fun onProgress(progress: ReaderProgress) = schedule(progress, debounceMillis)
+
+    /**
+     * [delayMillis] is the wait before this value is written. The reader gate
+     * passes 0 once it has already applied the two-second interval; this saver's
+     * own [debounceMillis] stays for callers that have not.
+     */
+    fun schedule(progress: ReaderProgress, delayMillis: Long) {
         pending = progress
         job?.cancel()
         job = scope.launch {
-            delay(debounceMillis)
+            if (delayMillis > 0) delay(delayMillis)
             flushPending()
         }
     }

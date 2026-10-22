@@ -116,7 +116,25 @@ data class BackupRestoreSummary(
     val concurrentRowsDeferred: Int = 0,
     /** Library import succeeded, but the separate corrections file could not be saved. */
     val pronunciationsRestoreFailed: Boolean = false,
-    val pronunciationsUnreadable: Boolean = false
+    val pronunciationsUnreadable: Boolean = false,
+    /**
+     * Archived works this restore kept (iOS `restoredWorksByArchivedID.count`).
+     * A tombstone that suppressed the work is not included. Created plus updated
+     * undercounts a File Merge, which leaves an existing live work's fields alone.
+     */
+    val worksRestored: Int = 0,
+    /**
+     * The manifest said `hasEPUB` and no readable bytes arrived, and this device
+     * has no file. Unreadable bytes are a different count: they are refused
+     * without claiming the promise was absent.
+     */
+    val worksMissingPromisedEPUB: Int = 0,
+    /** New queue snapshots older than a local deletion (iOS `suppressedQueues`). */
+    val suppressedQueues: Int = 0,
+    /** New queue snapshots newer than a local deletion (iOS `revivedQueues`). */
+    val revivedQueues: Int = 0,
+    /** Tombstone present, clock missing (iOS `ambiguousQueueConflicts`). */
+    val ambiguousQueueConflicts: Int = 0
 )
 
 data class BackupMergeResult(

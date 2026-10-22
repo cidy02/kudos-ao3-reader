@@ -378,32 +378,31 @@ class ReaderRepositoryTest {
     @Test
     fun openThenCloseWithoutMovingKeepsFortyTwoPercent() = runTest {
         val id = "77777777-7777-7777-7777-777777777777"
+        val stored = envelope(0.42)
         storedWork(
             id = id,
+            readiumLocator = stored,
             legacyReaderProgress = 0.42,
             lastSpineIndex = 1,
             lastScrollFraction = 0.42,
             chapters = "1/1"
         )
         val opened = readerRepository.open(id) as ReaderOpenResult.Success
-        val fallback = opened.restoreTarget as ReaderRestoreTarget.Fallback
-        assertEquals(1, fallback.spineIndex)
-        assertEquals(0.0, fallback.scrollFraction, 0.0)
-
-        val landing = ReaderProgress(
-            spineIndex = 0,
-            scrollFraction = 0.0,
-            locatorJson = envelope(0.0),
-            totalProgression = 0.0
+        assertTrue(opened.restoreTarget is ReaderRestoreTarget.Locator)
+        val emptyWithSpine = ReaderProgress(
+            spineIndex = 4,
+            scrollFraction = 0.9,
+            locatorJson = "",
+            totalProgression = 0.1
         )
-        assertFalse(readerRepository.observeLocation(id, landing))
+        assertFalse(readerRepository.observeLocation(id, emptyWithSpine))
 
         now = now.plusSeconds(30)
         val closed = readerRepository.finishReading(id)!!
         assertEquals(0.42, closed.legacyReaderProgress!!, 0.0)
         assertEquals(0.42, closed.lastScrollFraction, 0.0)
         assertEquals(1, closed.lastSpineIndex)
-        assertNull(closed.readiumLocator)
+        assertEquals(stored, closed.readiumLocator)
         assertEquals(0.42, closed.readingProgress!!, 0.0)
         assertEquals(now, closed.lastReadDate)
         assertEquals(now, closed.progressModifiedAt)
@@ -421,7 +420,10 @@ class ReaderRepositoryTest {
         )
         readerRepository.open(id)
         val openedAt = now
-        assertFalse(
+        // The first different locator after the seed is a place (iOS writes it).
+        // This test still persists only the later move, so the clock below stays
+        // on that write.
+        assertTrue(
             readerRepository.observeLocation(
                 id,
                 ReaderProgress(0, 0.0, envelope(0.0), totalProgression = 0.0)

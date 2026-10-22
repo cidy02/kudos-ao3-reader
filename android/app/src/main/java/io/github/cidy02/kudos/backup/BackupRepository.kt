@@ -824,6 +824,14 @@ fun BackupRestoreSummary.toUserMessage(): String {
         if (worksUpdated > 0) add("$worksUpdated work(s) updated")
         if (worksRemoved > 0) add("$worksRemoved work(s) removed from this library")
         if (worksSuppressed > 0) add("$worksSuppressed previously deleted work(s) skipped")
+        if (worksMissingPromisedEPUB > 0) {
+            val n = worksMissingPromisedEPUB
+            add(
+                "$n work${if (n == 1) "" else "s"} restored without " +
+                    "${if (n == 1) "its" else "their"} EPUB — the backup " +
+                    "listed the file but did not contain readable bytes for it"
+            )
+        }
         if (bookmarksCreated + bookmarksUpdated > 0) {
             add("${bookmarksCreated + bookmarksUpdated} bookmark(s)")
         }

@@ -80,6 +80,9 @@ class KudosApplication : Application(), Configuration.Provider {
             }
             // Paced rebuild of stale library searchText (schema bump / pre-index / restore).
             runCatching { container.workRepository.rebuildSearchIndexIfNeeded() }
+            // iOS `backfillEPUBDigests`: at most 100 books per launch, off the
+            // persistence gate so a hash does not block a restore.
+            runCatching { container.workRepository.backfillEpubDigests() }
             // No AO3 read here: iOS reads nothing at launch but the session check, and this
             // also ran in a process only a background worker had started. The Library's own
             // backfill reads what a work lacks while it is open (DECISIONS 2026-10-16).

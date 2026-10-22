@@ -180,4 +180,15 @@ interface WorkDao {
         """
     )
     suspend fun noteOpened(id: String, openedAt: Instant)
+
+    /** iOS `backfillEPUBDigests`: books that have a file and no content hash yet. */
+    @Query("SELECT * FROM works WHERE hasEpub = 1 AND epubDigest = '' LIMIT :limit")
+    suspend fun worksMissingEpubDigest(limit: Int): List<WorkEntity>
+
+    /**
+     * Writes a hash only while the column is still empty. An import that stored
+     * one during the read updates nothing and keeps its own value.
+     */
+    @Query("UPDATE works SET epubDigest = :digest WHERE id = :id AND epubDigest = ''")
+    suspend fun fillEpubDigestIfBlank(id: String, digest: String): Int
 }
