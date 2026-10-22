@@ -148,6 +148,18 @@ class SyncRepositoryTest {
         safRoot.deleteRecursively()
     }
 
+    /** iOS FolderSyncTests: connecting records the folder; Disconnect never re-arms first-run sync (A75 #11). */
+    @Test
+    fun connectingRecordsTheFolderAsConfiguredSoDisconnectingKeepsTheFirstRunPromptAway() = runBlocking {
+        settingsRepository.setHasCompletedOnboarding(true)
+        settingsRepository.updateSyncFolderUri(null)
+        assertTrue(settingsRepository.firstRunState.first().showsSync(dismissedThisSession = false))
+        syncRepository.connect(treeUri)
+        assertTrue(settingsRepository.hasConfiguredSyncFolder.first())
+        syncRepository.disconnect()
+        assertFalse(settingsRepository.firstRunState.first().showsSync(dismissedThisSession = false))
+    }
+
     @Test
     fun fakeDocumentsProviderSupportsDocumentFileRoundTrip() {
         // Infrastructure smoke test: if this fails, every SyncRepository test is

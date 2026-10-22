@@ -793,6 +793,24 @@ class WorkLifecycleRepositoryTest {
         assertEquals(listOf(workUuid), works.map { it.id })
     }
 
+    /** iOS PersistenceSync: any work whose file is gone stops offering it, queued or not (A75 #4). */
+    @Test
+    fun launchRepairClearsAMissingFileOnAnUnqueuedWorkAndMarksAPreservedCopyMissing() = runTest {
+        repository.upsert(sampleSavedWork("11111111-1111-4111-8111-111111111111").copy(hasEpub = true))
+        repository.upsert(sampleSavedWork("22222222-2222-4222-8222-222222222222").copy(
+            hasEpub = true, epubPreservationStatusRaw = "preserved"))
+        repository.upsert(sampleSavedWork("33333333-3333-4333-8333-333333333333").copy(hasEpub = true))
+        fileStore.writeWorkEpub("33333333-3333-4333-8333-333333333333", byteArrayOf(1, 2, 3))
+
+        assertEquals(2, repository.repairMissingEpubFlags())
+        assertFalse(repository.getWork("11111111-1111-4111-8111-111111111111")!!.hasEpub)
+        val preserved = repository.getWork("22222222-2222-4222-8222-222222222222")!!
+        assertFalse(preserved.hasEpub)
+        assertEquals("missingFile", preserved.epubPreservationStatusRaw)
+        assertTrue(repository.getWork("33333333-3333-4333-8333-333333333333")!!.hasEpub)
+        assertEquals(0, repository.repairMissingEpubFlags())
+    }
+
     @Test
     fun markFinishedHoldsEpubWhenUnprotected() = runTest {
         repository.upsert(

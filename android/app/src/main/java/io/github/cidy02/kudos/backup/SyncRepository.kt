@@ -85,6 +85,9 @@ class SyncRepository(
             Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
         )
         settingsRepository.updateSyncFolderUri(uri.toString())
+        // iOS records any connected folder as configured, wherever it was chosen, so a later
+        // Disconnect does not bring the first-run sync prompt back (A75 #11).
+        settingsRepository.setHasConfiguredSyncFolder(true)
         settingsRepository.updateSyncLastError(null)
         settingsRepository.updateSyncLastManifestDigest(null)
         settingsRepository.updateSyncIsEnabled(true)
