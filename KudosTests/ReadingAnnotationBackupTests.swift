@@ -40,6 +40,64 @@ struct ReadingAnnotationBackupTests {
         return work
     }
 
+    #if os(iOS)
+    @Test(arguments: ["highlight", "note", "bookmark"])
+    func readerDeletionPersistsASignedTombstone(for mark: String) throws {
+        let previousKey = TombstoneSigning.keyOverride
+        let previousTrust = TombstoneTrustStore.keychainOverride
+        let previousCloud = TombstoneTrustStore.iCloudStore
+        let metadataKey = "trustedTombstoneDeviceMetadata"
+        let previousMetadata = UserDefaults.standard.object(forKey: metadataKey)
+        defer {
+            TombstoneSigning.keyOverride = previousKey
+            TombstoneTrustStore.keychainOverride = previousTrust
+            TombstoneTrustStore.iCloudStore = previousCloud
+            UserDefaults.standard.set(previousMetadata, forKey: metadataKey)
+        }
+        let signingKey = TombstoneSigning.makePrivateKey()
+        TombstoneSigning.keyOverride = signingKey
+        TombstoneTrustStore.keychainOverride = .stored([])
+        TombstoneTrustStore.iCloudStore = nil
+
+        let context = try context(schema())
+        let work = makeWork()
+        context.insert(work)
+        // A note is a highlight carrying note text, not a third model kind.
+        let annotation = ReadingAnnotation(
+            work: work, kind: mark == "bookmark" ? .bookmark : .highlight,
+            locatorString: Self.locator,
+            note: mark == "note" ? "Do not resurrect this note" : ""
+        )
+        let annotationID = annotation.id
+        context.insert(annotation)
+        try context.save()
+
+        // Both the bookmark toggle and the reader's Delete action call this.
+        ReadiumReaderPersistence.deleteAnnotation(annotation, in: context)
+        try context.save()
+
+        let reloaded = ModelContext(context.container)
+        #expect(try reloaded.fetch(FetchDescriptor<ReadingAnnotation>()).isEmpty)
+        #expect(try reloaded.fetch(FetchDescriptor<SavedWork>()).count == 1)
+        let tombstones = try reloaded.fetch(FetchDescriptor<SyncTombstone>())
+        #expect(tombstones.count == 1)
+        let tombstone = try #require(tombstones.first)
+        #expect(tombstone.recordID == annotationID)
+        #expect(tombstone.recordType == .readingAnnotation)
+        #expect(tombstone.deletionReason == "annotationDeleted")
+        #expect(tombstone.signerPublicKey == TombstoneSigning.publicKeyHex(of: signingKey))
+        let archived = KudosBackupTombstone(tombstone: tombstone)
+        #expect(!archived.signature.isEmpty)
+        #expect(TombstoneSigning.verify(archived))
+
+        // A different device trusts the deleting device; unsigned markers must
+        // fail this gate even though the local hard-delete itself succeeded.
+        TombstoneSigning.keyOverride = TombstoneSigning.makePrivateKey()
+        TombstoneTrustStore.keychainOverride = .stored([archived.signerPublicKey])
+        #expect(TombstoneSigning.shouldAdopt(archived, defaults: try testDefaults()))
+    }
+    #endif
+
     @Test func annotationsRoundTripThroughTheArchive() throws {
         let schema = schema()
         let source = try context(schema)

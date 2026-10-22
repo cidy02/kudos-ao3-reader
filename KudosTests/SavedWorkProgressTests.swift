@@ -1,4 +1,5 @@
 import Foundation
+import SwiftData
 import Testing
 @testable import Kudos
 
@@ -6,6 +7,7 @@ import Testing
 /// Now" shelves (`isInProgress`, `readingProgress`), extracted from the views so the
 /// two dashboards can never drift.
 @MainActor
+@Suite(.serialized)
 struct SavedWorkProgressTests {
 
     private func work(_ title: String = "Work") -> SavedWork {
@@ -105,6 +107,107 @@ struct SavedWorkProgressTests {
     private static func readiumLocator(total: Double) -> String {
         #"{"href":"chapter1.xhtml","type":"application/xhtml+xml","locations":{"totalProgression":\#(total),"progression":0.1,"position":5}}"#
     }
+
+    #if os(iOS)
+    private func progressContext() throws -> ModelContext {
+        let schema = Schema([
+            SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self,
+            SyncTombstone.self, ReadingAnnotation.self
+        ])
+        return ModelContext(try ModelContainer(
+            for: schema,
+            configurations: [ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)]
+        ))
+    }
+
+    private var resumeSections: [ReaderSection] {
+        [
+            .init(href: "preface.xhtml", title: "Preface", kind: .preface,
+                  spineIndex: 0, storyChapterIndex: nil),
+            .init(href: "OEBPS/chapter3.xhtml", title: "Chapter 3", kind: .chapter,
+                  spineIndex: 5, storyChapterIndex: 3)
+        ]
+    }
+
+    private static let resumeLocator = """
+    {"href":"/chapter3.xhtml#passage","type":"application/xhtml+xml",\
+    "locations":{"progression":0.375,"totalProgression":0.65,"position":88}}
+    """
+
+    @Test(arguments: [0, 7])
+    func readiumPositionSavePersistsBothResumeFormats(previousChapter: Int) throws {
+        let context = try progressContext()
+        let reading = work()
+        let oldStamp = Date(timeIntervalSince1970: 1_000)
+        let savedAt = Date(timeIntervalSince1970: 2_000)
+        reading.lastSpineIndex = previousChapter
+        reading.lastScrollFraction = previousChapter == 0 ? 0 : 0.9
+        reading.legacyReaderProgress = 0.8
+        reading.lastReadDate = oldStamp
+        reading.lastModifiedAt = oldStamp
+        context.insert(reading)
+        try context.save()
+
+        // The same operation is used by debounce, flush and publication-end saves.
+        ReadiumReaderPersistence.writePosition(
+            Self.resumeLocator, to: reading, sections: resumeSections, at: savedAt
+        )
+        try context.save()
+
+        let reloaded = ModelContext(context.container)
+        let persisted = try #require(try reloaded.fetch(FetchDescriptor<SavedWork>()).first)
+        #expect(persisted.readiumLocator == Self.resumeLocator)
+        #expect(persisted.lastSpineIndex == 5)
+        #expect(persisted.lastScrollFraction == 0.375)
+        #expect(persisted.progressModifiedAt == savedAt)
+        #expect(persisted.legacyReaderProgress == nil)
+        // A streamed save must keep the existing shelf and sync-dirty clocks.
+        #expect(persisted.lastReadDate == oldStamp)
+        #expect(persisted.lastModifiedAt == oldStamp)
+    }
+
+    @Test func newerIPhonePositionDoesNotResetMacChapter() throws {
+        let phoneContext = try progressContext()
+        let phone = work()
+        phoneContext.insert(phone)
+        let savedAt = Date(timeIntervalSince1970: 2_000)
+        ReadiumReaderPersistence.writePosition(
+            Self.resumeLocator, to: phone, sections: resumeSections, at: savedAt
+        )
+        try phoneContext.save()
+        let phoneReloaded = ModelContext(phoneContext.container)
+        let incoming = try #require(try phoneReloaded.fetch(FetchDescriptor<SavedWork>()).first)
+
+        let macContext = try progressContext()
+        let mac = SavedWork(id: incoming.id, title: incoming.title, author: incoming.author)
+        mac.lastSpineIndex = 7
+        mac.lastScrollFraction = 0.9
+        mac.legacyReaderProgress = 0.8
+        mac.markProgressModified(Date(timeIntervalSince1970: 1_000))
+        macContext.insert(mac)
+        try macContext.save()
+
+        // This is the progress merge used by backup restore and folder sync.
+        SyncMerge.applyProgress(.init(
+            lastSpineIndex: incoming.lastSpineIndex,
+            lastScrollFraction: incoming.lastScrollFraction,
+            readiumLocator: incoming.readiumLocator,
+            lastReadDate: incoming.lastReadDate,
+            modifiedAt: incoming.progressModifiedAt,
+            legacyReaderProgress: .some(incoming.legacyReaderProgress)
+        ), to: mac)
+        try macContext.save()
+
+        let macReloaded = ModelContext(macContext.container)
+        let resumed = try #require(try macReloaded.fetch(FetchDescriptor<SavedWork>()).first)
+        #expect(resumed.readiumLocator == Self.resumeLocator)
+        #expect(resumed.progressModifiedAt == savedAt)
+        #expect(resumed.lastSpineIndex == 5)
+        #expect(resumed.lastScrollFraction == 0.375)
+        #expect(resumed.legacyReaderProgress == nil)
+    }
+    #endif
 
     @Test func readiumReadWorkIsInProgress() {
         // The Readium reader records only a locator (no spine index / scroll fraction).
