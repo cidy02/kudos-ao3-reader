@@ -1824,6 +1824,105 @@ struct KudosBackupTests {
         )
     }
 
+    /// A73-7: Saved for Later is matched by kind, not id, so a backup's system queue (another id)
+    /// must not lower this library's newer membership clock.
+    @Test(arguments: [BackupImportMode.merge, .reconcile])
+    func existingSavedForLaterKeepsItsNewerMembershipClock(mode: BackupImportMode) throws {
+        let schema = Schema([
+            SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SyncTombstone.self,
+            ReadingAnnotation.self
+        ])
+        let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: schema, configurations: [configuration])
+        let context = ModelContext(container)
+        let defaults = try testDefaults()
+        // Created long ago: Saved for Later's own repair raises its clock to at least its creation.
+        let created = Date(timeIntervalSince1970: 1_000)
+        let newer = Date(timeIntervalSince1970: 3_000)
+        let local = ReadingQueue(name: "Saved for Later", kind: .savedForLater)
+        local.dateCreated = created
+        local.lastMembershipChangedAt = newer
+        context.insert(local)
+        try context.save()
+        let archived = ReadingQueue(name: "Saved for Later", kind: .savedForLater)
+        archived.dateCreated = created
+        archived.lastMembershipChangedAt = Date(timeIntervalSince1970: 2_000)
+        #expect(archived.id != local.id)
+        let contents = try KudosBackupService.makeContents(
+            works: [], bookmarks: [], fonts: [], collections: [], readingQueues: [archived], defaults: defaults
+        )
+        _ = try KudosBackupService.restore(contents, into: context, defaults: defaults, mode: mode)
+        let queues = try context.fetch(FetchDescriptor<ReadingQueue>()).filter { $0.kind == .savedForLater }
+        #expect(queues.count == 1)
+        #expect(queues.first?.lastMembershipChangedAt == newer)
+    }
+
+    @Test func repeatedFileMergeKeepsArchivedDeletionsAndLocalRecoveryDeadlines() throws {
+        let schema = Schema([
+            SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SyncTombstone.self,
+            ReadingAnnotation.self
+        ])
+        let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: schema, configurations: [configuration])
+        let context = ModelContext(container)
+        let defaults = try testDefaults()
+        let deletedAt = Date(timeIntervalSince1970: 50)
+        let archiveDeadline = Date(timeIntervalSince1970: 100)
+        let work = SavedWork(title: "Deleted work", author: "A")
+        work.isPendingDeletion = true
+        work.deletedAt = deletedAt
+        work.permanentDeletionScheduledAt = archiveDeadline
+        let collection = WorkCollection(name: "Deleted collection")
+        collection.isPendingDeletion = true
+        collection.deletedAt = deletedAt
+        collection.permanentDeletionScheduledAt = archiveDeadline
+        let queue = ReadingQueue(name: "Deleted queue", kind: .custom)
+        queue.isPendingDeletion = true
+        queue.deletedAt = deletedAt
+        queue.permanentDeletionScheduledAt = archiveDeadline
+        let contents = try KudosBackupService.makeContents(
+            works: [work], bookmarks: [], fonts: [], collections: [collection],
+            readingQueues: [queue], defaults: defaults
+        )
+        _ = try KudosBackupService.restore(contents, into: context, defaults: defaults, mode: .merge)
+        let localWork = try #require(try context.fetch(FetchDescriptor<SavedWork>()).first { $0.id == work.id })
+        let localCollection = try #require(
+            try context.fetch(FetchDescriptor<WorkCollection>()).first { $0.id == collection.id }
+        )
+        let localQueue = try #require(
+            try context.fetch(FetchDescriptor<ReadingQueue>()).first { $0.id == queue.id }
+        )
+        let workDeadline = try #require(localWork.permanentDeletionScheduledAt)
+        let collectionDeadline = try #require(localCollection.permanentDeletionScheduledAt)
+        let queueDeadline = try #require(localQueue.permanentDeletionScheduledAt)
+        #expect(localWork.isPendingDeletion)
+        #expect(localCollection.isPendingDeletion)
+        #expect(localQueue.isPendingDeletion)
+        #expect(workDeadline > archiveDeadline)
+        #expect(collectionDeadline > archiveDeadline)
+        #expect(queueDeadline > archiveDeadline)
+        // A local suppressor must survive imports that affirm the deletion.
+        let tombstone = SyncTombstone(recordID: work.id, recordType: .savedWork)
+        let tombstoneID = tombstone.id
+        context.insert(tombstone)
+        try context.save()
+        for _ in 0..<2 {
+            _ = try KudosBackupService.restore(contents, into: context, defaults: defaults, mode: .merge)
+            #expect(localWork.isPendingDeletion)
+            #expect(localCollection.isPendingDeletion)
+            #expect(localQueue.isPendingDeletion)
+            #expect(localWork.deletedAt == deletedAt)
+            #expect(localCollection.deletedAt == deletedAt)
+            #expect(localQueue.deletedAt == deletedAt)
+            #expect(localWork.permanentDeletionScheduledAt == workDeadline)
+            #expect(localCollection.permanentDeletionScheduledAt == collectionDeadline)
+            #expect(localQueue.permanentDeletionScheduledAt == queueDeadline)
+            #expect(try context.fetch(FetchDescriptor<SyncTombstone>()).contains { $0.id == tombstoneID })
+        }
+    }
+
     @Test func fileMergeUndeletesPendingDeletion() throws {
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
@@ -1855,7 +1954,7 @@ struct KudosBackupTests {
         #expect(stored.title == "Restored From File")
     }
 
-    @Test func fileMergeUndeletesPendingDeletionCollectionsAndQueues() throws {
+    @Test func repeatedFileMergeUndoesReplaceParkingForWorksCollectionsAndQueues() throws {
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
             WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SyncTombstone.self,
@@ -1883,7 +1982,7 @@ struct KudosBackupTests {
             defaults: try testDefaults()
         )
         let replaceSnapshot = try KudosBackupService.makeContents(
-            works: [work],
+            works: [],
             bookmarks: [],
             fonts: [],
             collections: [],
@@ -1899,12 +1998,24 @@ struct KudosBackupTests {
         let afterReplaceQueue = try #require(
             try context.fetch(FetchDescriptor<ReadingQueue>()).first { $0.id == queue.id }
         )
+        #expect(work.isPendingDeletion)
         #expect(afterReplaceCollection.isPendingDeletion)
         #expect(afterReplaceQueue.isPendingDeletion)
 
-        _ = try KudosBackupService.restore(
-            realBackup, into: context, defaults: try testDefaults(), mode: .merge
-        )
+        for _ in 0..<2 {
+            _ = try KudosBackupService.restore(
+                realBackup, into: context, defaults: try testDefaults(), mode: .merge
+            )
+            #expect(!work.isPendingDeletion)
+            #expect(work.deletedAt == nil)
+            #expect(work.permanentDeletionScheduledAt == nil)
+            #expect(!afterReplaceCollection.isPendingDeletion)
+            #expect(afterReplaceCollection.deletedAt == nil)
+            #expect(afterReplaceCollection.permanentDeletionScheduledAt == nil)
+            #expect(!afterReplaceQueue.isPendingDeletion)
+            #expect(afterReplaceQueue.deletedAt == nil)
+            #expect(afterReplaceQueue.permanentDeletionScheduledAt == nil)
+        }
         let restoredCollection = try #require(
             try context.fetch(FetchDescriptor<WorkCollection>()).first { $0.id == collection.id }
         )
