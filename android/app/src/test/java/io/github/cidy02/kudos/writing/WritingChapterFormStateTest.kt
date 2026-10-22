@@ -8,6 +8,25 @@ import org.junit.Test
 import java.time.LocalDate
 
 class WritingChapterFormStateTest {
+    @Test fun unsavedGuardTracksRevertedTextAndLastChapterWithoutWriting() = runTest {
+        val setup = workFormSetup()
+        setup.client.body = workFixture("ao3_demo_chapter_995006_posted")
+        val model = WritingChapterFormState(995006, 12302, 2, setup.repository, setup.auth, writes = setup.writes)
+        assertFalse(model.hasUnsavedChanges)
+        model.load()
+        val original = model.state.value.form!!
+        assertFalse(model.hasUnsavedChanges)
+        model.checkpoint(ChapterFormText.Content, "Unsaved text")
+        assertTrue(model.hasUnsavedChanges)
+        model.checkpoint(ChapterFormText.Content, original.content)
+        assertFalse(model.hasUnsavedChanges)
+        model.lastChapter(true)
+        assertTrue(model.hasUnsavedChanges)
+        model.lastChapter(false)
+        assertFalse(model.hasUnsavedChanges)
+        assertEquals(0, setup.client.posts)
+    }
+
     @Test fun oneOpeningReadEditsAllFourRecoveryFieldsAndReturnsWithoutReading() = runTest {
         val setup = workFormSetup()
         setup.client.body = workFixture("ao3_demo_chapter_995006_new")

@@ -13,6 +13,26 @@ import org.junit.Test
 import java.time.LocalDate
 
 class WritingWorkFormStateTest {
+    @Test fun unsavedGuardTracksSubmittedEditsAndIgnoresUnselectedCollectionOffers() = runTest {
+        val setup = workFormSetup()
+        val model = setup.model(995001L)
+        assertFalse(model.hasUnsavedChanges)
+        model.load()
+        val original = model.state.value.form!!
+        assertFalse(model.hasUnsavedChanges)
+        model.title("Unsaved title")
+        assertTrue(model.hasUnsavedChanges)
+        model.title(original.title)
+        assertFalse(model.hasUnsavedChanges)
+        model.addCollection(AO3CollectionOffer("new-offer", "A newly offered collection"))
+        assertFalse(model.hasUnsavedChanges)
+        model.toggleCollection("new-offer")
+        assertTrue(model.hasUnsavedChanges)
+        model.toggleCollection("new-offer")
+        assertFalse(model.hasUnsavedChanges)
+        assertEquals(0, setup.client.posts)
+    }
+
     @Test fun oneGetPerOpeningAndNoReadAfterAnyEditOrEditorReturn() = runTest {
         for (id in listOf(null, 995001L, 995006L)) {
             val setup = workFormSetup()

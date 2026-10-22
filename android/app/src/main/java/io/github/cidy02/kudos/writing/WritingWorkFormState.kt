@@ -63,8 +63,12 @@ internal class WritingWorkFormState(
     private var tagRefreshAttempted = false
     private var publicationRefreshAttempted = false
     private var loadedChapter: AO3WorkChapterDraft? = null
+    private var loadedForm: AO3WorkForm? = null
     private val mutable = MutableStateFlow(WritingWorkFormUiState())
     val state = mutable.asStateFlow()
+    val hasUnsavedChanges: Boolean get() = !state.value.saved && state.value.form?.let { form ->
+        loadedForm?.let { form.parameters(AO3WorkSubmitAction.Update) != it.parameters(AO3WorkSubmitAction.Update) }
+    } == true
     private fun ownsSession() = active && generation == auth.generation.value
 
     suspend fun save() = perform(WorkFormAction.Save,
@@ -77,7 +81,10 @@ internal class WritingWorkFormState(
 
     suspend fun openPreview() = perform(WorkFormAction.Preview,
         request = { writes.previewWork(it, generation) },
-        confirmed = { old, preview -> old.copy(form = old.form!!.adopting(preview), preview = preview) })
+        confirmed = { old, preview ->
+            loadedForm = loadedForm?.adopting(preview)
+            old.copy(form = old.form!!.adopting(preview), preview = preview)
+        })
 
     suspend fun prepareDelete() {
         if (state.value.form?.workID == null || state.value.deleteImplications != null) return
@@ -152,7 +159,11 @@ internal class WritingWorkFormState(
         currentCoroutineContext().ensureActive()
         if (!ownsSession()) return
         mutable.value = when (result) {
-            is AO3Result.Success -> { loadedChapter = result.value.chapter; WritingWorkFormUiState(form = result.value) }
+            is AO3Result.Success -> {
+                loadedForm = result.value
+                loadedChapter = result.value.chapter
+                WritingWorkFormUiState(form = result.value)
+            }
             is AO3Result.Failure -> WritingWorkFormUiState(failure = workFormFailure(result.error))
         }
     }
@@ -200,6 +211,12 @@ internal class WritingWorkFormState(
                         freshChapter.copy(publishedYear = currentChapter.publishedYear,
                             publishedMonth = currentChapter.publishedMonth, publishedDay = currentChapter.publishedDay) else freshChapter
                     loadedChapter = fresh.chapter
+                    loadedForm = loadedForm?.let { loaded ->
+                        loaded.copy(chapterTotal = fresh.chapterTotal,
+                            chaptersPosted = fresh.chaptersPosted, isChaptered = fresh.isChaptered, chapter = freshChapter,
+                            servedControls = loaded.servedControls.filterNot { it.name.startsWith("work[chapter_attributes]") } +
+                                fresh.servedControls.filter { it.name.startsWith("work[chapter_attributes]") })
+                    }
                     // Remove stale replay of chapter 1 as well: AO3 may have removed its text box after an Add.
                     val controls = current.servedControls.filterNot { it.name.startsWith("work[chapter_attributes]") } +
                         fresh.servedControls.filter { it.name.startsWith("work[chapter_attributes]") }
@@ -239,8 +256,11 @@ internal class WritingWorkFormState(
             if (!ownsSession()) return
             val latest = state.value
             mutable.value = when (result) {
-                is AO3Result.Success -> latest.copy(form = latest.form?.withTagsFrom(result.value),
-                    tagsNeedRefresh = false, refreshingTags = false, saveError = null)
+                is AO3Result.Success -> {
+                    loadedForm = loadedForm?.withTagsFrom(result.value)
+                    latest.copy(form = latest.form?.withTagsFrom(result.value),
+                        tagsNeedRefresh = false, refreshingTags = false, saveError = null)
+                }
                 is AO3Result.Failure -> latest.copy(refreshingTags = false,
                     saveError = "Reload tags before saving this work. " + workFormFailure(result.error))
             }

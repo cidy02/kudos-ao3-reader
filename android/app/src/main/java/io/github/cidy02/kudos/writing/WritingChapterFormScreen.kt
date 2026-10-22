@@ -31,6 +31,7 @@ internal fun WritingChapterFormScreen(model: WritingChapterFormState, workTitle:
     operationScope: CoroutineScope? = null, onSaved: () -> Unit = {}, onBack: () -> Unit) {
     val state by model.state.collectAsState()
     val form = state.form
+    val leave = rememberWritingFormBack(model, model.hasUnsavedChanges, onBack)
     val tokens = LocalKudosTokens.current
     val palette = tokens.scopePalette
     val scope = rememberCoroutineScope()
@@ -71,8 +72,8 @@ internal fun WritingChapterFormScreen(model: WritingChapterFormState, workTitle:
                 delete = { run { model.deleteChapter(confirmed = true) } }) else null)
         return
     }
-    BackHandler(onBack = onBack)
-    ProvidePushedShellChrome(hasSubjectHeader = true, hideTabBar = true, onBack = onBack)
+    BackHandler(onBack = leave)
+    ProvidePushedShellChrome(hasSubjectHeader = true, hideTabBar = true, onBack = leave)
     state.saveError?.let { WritingErrorAlert("AO3 could not save the chapter", it, model::dismissError) }
     LazyColumn(Modifier.fillMaxSize().subjectScreenWash(palette).testTag("Writing chapter form"),
         contentPadding = PaddingValues(bottom = 24.dp)) {

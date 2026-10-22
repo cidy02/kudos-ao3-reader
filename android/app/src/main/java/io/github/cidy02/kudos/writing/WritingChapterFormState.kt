@@ -45,8 +45,11 @@ internal class WritingChapterFormState(
     private var active = true
     private var attempted = false
     private var savedTotal: Long? = null
+    private var loadedForm: AO3ChapterForm? = null
     private val mutable = MutableStateFlow(WritingChapterUiState())
     val state = mutable.asStateFlow()
+    val hasUnsavedChanges: Boolean get() = !state.value.finished && !state.value.chapterSaved &&
+        (state.value.form != loadedForm || state.value.isLastChapter)
     private fun ownsSession() = active && generation == auth.generation.value
 
     suspend fun load(retry: Boolean = false) {
@@ -62,7 +65,10 @@ internal class WritingChapterFormState(
             currentCoroutineContext().ensureActive()
             if (!ownsSession()) return
             mutable.value = when (result) {
-                is AO3Result.Success -> WritingChapterUiState(form = result.value)
+                is AO3Result.Success -> {
+                    loadedForm = result.value
+                    WritingChapterUiState(form = result.value)
+                }
                 is AO3Result.Failure -> WritingChapterUiState(failure = workFormFailure(result.error))
             }
         } catch (cancelled: CancellationException) {
@@ -146,6 +152,7 @@ internal class WritingChapterFormState(
                 is AO3Result.Success -> {
                     if (!active) return
                     val adopted = form.adopting(result.value)
+                    loadedForm = loadedForm?.adopting(result.value)
                     mutable.value = old.copy(form = adopted, preview = result.value,
                         savedRevision = old.savedRevision + if (form.chapterID == null) 1 else 0)
                 }

@@ -82,6 +82,7 @@ internal fun WritingWorkFormContent(model: WritingWorkFormState, account: String
     loadedWorks: List<io.github.cidy02.kudos.network.ao3.search.AO3WorkSummary> = emptyList()) {
     val state by model.state.collectAsState()
     val form = state.form
+    val leave = rememberWritingFormBack(model, model.hasUnsavedChanges, onClose)
     val tokens = LocalKudosTokens.current
     val palette = tokens.scopePalette
     val list = rememberLazyListState()
@@ -175,7 +176,7 @@ internal fun WritingWorkFormContent(model: WritingWorkFormState, account: String
         WorkFormTagChoices(form, tags, model::toggleTag) { choosingTags = null }
         return
     }
-    BackHandler(onBack = onClose)
+    BackHandler(onBack = leave)
     // No button until there is a form, as a value the shell sees change: a button that tested
     // for the form inside its own content stayed empty when the form arrived after the screen.
     val saveButton: (@Composable RowScope.() -> Unit)? = if (form == null) null else {
@@ -187,7 +188,7 @@ internal fun WritingWorkFormContent(model: WritingWorkFormState, account: String
             }
         }
     }
-    ProvidePushedShellChrome(hasSubjectHeader = true, hideTabBar = true, onBack = onClose, trailingContent = saveButton)
+    ProvidePushedShellChrome(hasSubjectHeader = true, hideTabBar = true, onBack = leave, trailingContent = saveButton)
     state.saveError?.let { WritingErrorAlert("AO3 could not save the change", it, model::dismissSaveError) }
     if (confirmingPost && form != null) {
         val missing = form.missingRequiredFields()

@@ -233,12 +233,14 @@ class WritingWorkFormScreenTest {
         noWrites()
     }
 
-    @Test fun leavingHasNoUnsavedDialogOrWrite() {
+    @Test fun leavingAnEditedFormAsksBeforeDiscardingAndDoesNotWrite() {
         show()
         compose.onNodeWithContentDescription("Title, required").performTextReplacement("Unsaved")
         compose.runOnIdle { chrome.onBack!!.invoke() }
+        assertEquals(0, leaves)
+        compose.onNodeWithText("Discard unsaved changes?").assertExists()
+        compose.onNodeWithText("Discard changes").performClick()
         assertEquals(1, leaves)
-        compose.onNodeWithText("Discard changes?").assertDoesNotExist()
         noWrites()
     }
 

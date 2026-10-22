@@ -49,7 +49,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.layout.systemBarsIgnoringVisibility
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
@@ -171,7 +171,8 @@ fun ReaderScreen(
 
     Surface(
         modifier = Modifier.fillMaxSize().background(backgroundColor)
-            .windowInsetsPadding(WindowInsets.systemBars.only(WindowInsetsSides.Vertical)),
+            // Keep the navigator's viewport and floating controls fixed when bars hide/reappear.
+            .windowInsetsPadding(WindowInsets.systemBarsIgnoringVisibility.only(WindowInsetsSides.Vertical)),
         color = backgroundColor
     ) {
         when (val state = uiState) {
@@ -264,6 +265,12 @@ private fun ReaderReading(
     var showTtsControls by remember { mutableStateOf(false) }
     val pronunciationStore = remember(context) { io.github.cidy02.kudos.reader.speech.KokoroPronunciationStore(context.applicationContext.filesDir) }
     var pronunciationTarget by remember { mutableStateOf<Pair<String, String>?>(null) }
+
+    ReaderSystemBars(
+        chromeVisible = chromeVisible,
+        overlayVisible = showTocSheet || showDisplaySheet || showSearchSheet ||
+            state.editingAnnotationId != null || confirmVoicePack || pronunciationTarget != null || rebuildingOriginal
+    )
 
     val scope = rememberCoroutineScope()
 

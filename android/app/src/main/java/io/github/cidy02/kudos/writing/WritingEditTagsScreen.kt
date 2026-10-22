@@ -39,6 +39,7 @@ internal fun WritingEditTagsScreen(
 ) {
     val state by model.state.collectAsState()
     val form = state.form
+    val leave = rememberWritingFormBack(model, model.hasUnsavedChanges, onBack)
     val tokens = LocalKudosTokens.current
     val palette = tokens.scopePalette
     val scope = rememberCoroutineScope()
@@ -56,7 +57,7 @@ internal fun WritingEditTagsScreen(
             recordScope = scope, onBack = { addingKind = null }, loadedWorks = loadedWorks, excludingWorkID = form.workID)
         return
     }
-    BackHandler(onBack = onBack)
+    BackHandler(onBack = leave)
     val save: (@Composable RowScope.() -> Unit)? = if (form == null) null else {
         {
             TextButton(enabled = !state.saving && !state.saved, onClick = onSave,
@@ -65,7 +66,7 @@ internal fun WritingEditTagsScreen(
             }
         }
     }
-    ProvidePushedShellChrome(hasSubjectHeader = true, hideTabBar = true, onBack = onBack, trailingContent = save)
+    ProvidePushedShellChrome(hasSubjectHeader = true, hideTabBar = true, onBack = leave, trailingContent = save)
     state.saveError?.let { message ->
         AlertDialog(onDismissRequest = model::dismissSaveError, containerColor = tokens.cardFill,
             titleContentColor = tokens.primaryInk, textContentColor = tokens.secondaryInk,
