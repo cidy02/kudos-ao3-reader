@@ -35,6 +35,7 @@ import io.github.cidy02.kudos.ui.subject.ReaderTheme
 import io.github.cidy02.kudos.ui.subject.SubjectFieldLabel
 import io.github.cidy02.kudos.ui.subject.SubjectHueSwatchRow
 import io.github.cidy02.kudos.ui.subject.SubjectPalette
+import io.github.cidy02.kudos.ui.subject.SubjectPaletteTheme
 import io.github.cidy02.kudos.ui.subject.SubjectRowSeparator
 import io.github.cidy02.kudos.ui.subject.SubjectToggle
 import io.github.cidy02.kudos.ui.subject.parseStoredColor
@@ -146,6 +147,7 @@ fun CollectionEditorSheet(
         }
     }
 
+    SubjectPaletteTheme(palette) {
     Dialog(
         onDismissRequest = { if (editing) save(close = true) else if (!saving) onDismiss() },
         properties = DialogProperties(usePlatformDefaultWidth = false)
@@ -177,7 +179,7 @@ fun CollectionEditorSheet(
                 ) {
                     Text(
                         text = if (editing) "Done" else "Create",
-                        color = if (canSave) palette.accent else tokens.tertiaryInk
+                        color = if (canSave) tokens.theme.accentInk(palette.tint) else tokens.tertiaryInk
                     )
                 }
             }
@@ -247,7 +249,7 @@ fun CollectionEditorSheet(
                         SubjectToggle(
                             checked = keepsWorksOffline,
                             onCheckedChange = { keepsWorksOffline = it; if (editing) save(close = false) },
-                            accent = palette.accent,
+                            accent = palette.tint,
                             contentDescription = "Keep downloads"
                         )
                     }
@@ -267,7 +269,7 @@ fun CollectionEditorSheet(
                         SubjectToggle(
                             checked = showsOnHome,
                             onCheckedChange = { showsOnHome = it; if (editing) save(close = false) },
-                            accent = palette.accent,
+                            accent = palette.tint,
                             contentDescription = "Show on Home"
                         )
                     }
@@ -291,6 +293,7 @@ fun CollectionEditorSheet(
             text = { Text(error.orEmpty()) },
             confirmButton = { TextButton(onClick = { error = null }) { Text("OK") } }
         )
+    }
     }
 }
 

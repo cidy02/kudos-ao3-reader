@@ -66,7 +66,7 @@ import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
 import io.github.cidy02.kudos.ui.subject.SubjectWorkCoverCard
 import io.github.cidy02.kudos.ui.subject.ToolbarAddButton
 import io.github.cidy02.kudos.ui.subject.ToolbarCircleButton
-import io.github.cidy02.kudos.ui.subject.rememberWorkDownloading
+import io.github.cidy02.kudos.ui.subject.rememberWorkDownloadFraction
 import io.github.cidy02.kudos.works.DownloadQueue
 import io.github.cidy02.kudos.ui.subject.SectionRuleHeader
 import io.github.cidy02.kudos.ui.subject.SubjectHeaderBlock
@@ -390,7 +390,7 @@ fun QueuePageScreen(
                                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                             row.forEach { work ->
                                                 key(work.id) {
-                                                    val downloading = rememberWorkDownloading(work, downloadQueue)
+                                                    val downloadFraction = rememberWorkDownloadFraction(work, downloadQueue)
                                                     QueueWorkItem(
                                                         work, workActions, selecting || reordering,
                                                         isObscuredMature(work, shownSettings, reveal),
@@ -399,7 +399,7 @@ fun QueuePageScreen(
                                                         SubjectWorkCoverCard(
                                                             work = work,
                                                             obscured = isObscuredMature(work, shownSettings, reveal),
-                                                            downloading = downloading,
+                                                            downloadFraction = downloadFraction,
                                                             isSelecting = selecting,
                                                             isSelected = work.id in selected
                                                         )
@@ -676,7 +676,7 @@ private fun WorkRow(
             onSelect = onClick, onReveal = onClick, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
         ) else QueueLedgerCard(
             work = work,
-            downloading = rememberWorkDownloading(work, downloadQueue),
+            downloadFraction = rememberWorkDownloadFraction(work, downloadQueue),
             obscured = obscured,
             selecting = selecting,
             selected = selected,

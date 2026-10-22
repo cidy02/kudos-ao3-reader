@@ -200,12 +200,8 @@ fun WorkDetailScreen(
     val reveal by privacyGate.state.collectAsState()
     val activity = LocalContext.current as? androidx.fragment.app.FragmentActivity
     val seriesWorks = localSeriesWorks(state.local, allLocalWorks, settings.privacy, reveal)
-    val downloadingItems by downloadQueue.items.collectAsState(initial = emptyList())
-    val isDownloading = remember(downloadingItems, state.ao3WorkId) {
-        state.ao3WorkId?.let { id ->
-            downloadingItems.any { it.ao3WorkId == id && it.status == DownloadQueueStatus.Downloading }
-        } ?: false
-    }
+    val downloadFraction = io.github.cidy02.kudos.ui.subject.rememberDownloadFraction(
+        state.local?.id, state.ao3WorkId, downloadQueue)
 
     suspend fun refreshLocal(workId: String, remote: AO3WorkSummary? = state.remote) {
         val local = workRepository.getWork(workId)
@@ -621,6 +617,7 @@ fun WorkDetailScreen(
                     }
                     WorkDownloadAction.Download -> {
                         val kept = workRepository.setSaved(active.id, true) ?: active
+                        if (kept.hasEpub) downloadQueue.showInstantDownload(kept.id)
                         refreshLocal(kept.id, state.remote)
                         if (!kept.hasEpub) download()
                     }
@@ -1079,7 +1076,7 @@ fun WorkDetailScreen(
 
     WorkDetailContent(
         state = state,
-        isDownloading = isDownloading,
+        downloadFraction = downloadFraction,
         seriesRunning = laterSeriesRunning,
         seriesProgress = laterSeriesProgress,
         seriesNotice = laterSeriesNotice,
@@ -1247,7 +1244,7 @@ fun WorkDetailScreen(
 @Composable
 private fun WorkDetailContent(
     state: WorkDetailUiState,
-    isDownloading: Boolean,
+    downloadFraction: Double?,
     seriesRunning: Boolean,
     seriesProgress: SeriesPreservationResult?,
     seriesNotice: String?,
@@ -1584,7 +1581,7 @@ private fun WorkDetailContent(
             WorkDetailResumeCard(
                 actionTitle = actionTitle,
                 isBusy = state.working,
-                isDownloading = isDownloading,
+                downloadFraction = downloadFraction,
                 readingProgress = readingProgress,
                 savedPositionTitle = HomeFacts.locatorTitle(state.local?.readiumLocator),
                 lastReadDate = state.local?.lastReadDate,
@@ -1650,6 +1647,7 @@ private fun WorkDetailContent(
                 relationships = state.relationships,
                 characters = state.characters,
                 freeforms = state.freeforms,
+                hasAo3WorkId = state.ao3WorkId != null,
                 palette = palette
             )
 

@@ -136,6 +136,7 @@ fun WorkLedgerRow(
     fandoms: List<String>,
     metadata: String,
     progress: Double,
+    downloadFraction: Double? = null,
     progressState: String?,
     rating: String,
     categories: List<String>,
@@ -161,7 +162,7 @@ fun WorkLedgerRow(
     val shape = RoundedCornerShape(14.dp)
     // Keep the selection chrome outside the blurred work content, as SensitiveWorkRow does.
     Box(
-        modifier.fillMaxWidth().clip(shape)
+        modifier.downloadDimmed(if (downloadFraction != null) 1f else 0f).fillMaxWidth().clip(shape)
             .background(tokens.cardFill)
             .then(if (muted) Modifier else Modifier.background(palette.rowWash))
             .border(if (selected) 2.dp else 0.5.dp, if (selected) tokens.accent else palette.rowBorder, shape)
@@ -194,7 +195,7 @@ fun WorkLedgerRow(
                             size = 9.sp,
                             ruleSpacing = 4.dp
                         )
-                        WorkProgressRing(progress, state = progressState, diameter = 44.dp * fontScale, showsZeroPercent = true)
+                        WorkReadingOrDownloadRing(downloadFraction, progress, state = if (downloadFraction != null) "Downloading" else progressState, diameter = 44.dp * fontScale, showsZeroPercent = true)
                         Row(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalAlignment = Alignment.CenterVertically) {
                             Text(
                                 title,
@@ -215,7 +216,7 @@ fun WorkLedgerRow(
                     horizontalArrangement = Arrangement.spacedBy(13.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    WorkProgressRing(progress, state = progressState, diameter = 44.dp * fontScale, showsZeroPercent = true)
+                    WorkReadingOrDownloadRing(downloadFraction, progress, state = if (downloadFraction != null) "Downloading" else progressState, diameter = 44.dp * fontScale, showsZeroPercent = true)
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                         SubjectKicker(
                             text = HomeFacts.primaryFandom(fandoms) ?: "Library",
@@ -343,4 +344,3 @@ private fun ActionButtons(actions: List<SwipeAction>, width: Dp, onClick: (Swipe
         }
     }
 }
-

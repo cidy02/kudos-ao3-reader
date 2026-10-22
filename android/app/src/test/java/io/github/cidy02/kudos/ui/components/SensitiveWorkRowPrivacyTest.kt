@@ -116,7 +116,7 @@ class SensitiveWorkRowPrivacyTest {
     @Test fun aBlurredCoverNamesNothing() {
         compose.setContent {
             KudosTheme(KudosThemeMode.Light) {
-                io.github.cidy02.kudos.ui.subject.SubjectWorkCoverCard(work = work, obscured = true, downloading = false)
+                io.github.cidy02.kudos.ui.subject.SubjectWorkCoverCard(work = work, obscured = true, downloadFraction = null)
             }
         }
         // The tree a screen reader is given (the unmerged one keeps cleared nodes, for tools).
@@ -137,7 +137,7 @@ class SensitiveWorkRowPrivacyTest {
                         progress = 0.0, progressState = null, rating = "Explicit", categories = emptyList(),
                         warnings = emptyList(), isComplete = null, obscured = true, favorite = false,
                         selected = chosen, selecting = true, onClick = { toggles++ }, onLongClick = {})
-                    io.github.cidy02.kudos.ui.subject.SubjectWorkCoverCard(work, true, false,
+                    io.github.cidy02.kudos.ui.subject.SubjectWorkCoverCard(work, true, null,
                         isSelecting = true, isSelected = chosen)
                 }
             }

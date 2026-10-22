@@ -35,6 +35,7 @@ import io.github.cidy02.kudos.ui.subject.SubjectMetrics
 import io.github.cidy02.kudos.ui.subject.SubjectPalette
 import io.github.cidy02.kudos.ui.subject.SubjectStatCell
 import io.github.cidy02.kudos.ui.subject.SubjectStatStrip
+import io.github.cidy02.kudos.ui.subject.downloadDimmed
 import io.github.cidy02.kudos.ui.subject.WorkReadingOrDownloadRing
 import java.time.Instant
 
@@ -315,7 +316,7 @@ fun WorkDetailFigureStrip(
 fun WorkDetailResumeCard(
     actionTitle: String,
     isBusy: Boolean,
-    isDownloading: Boolean,
+    downloadFraction: Double?,
     readingProgress: Double?,
     savedPositionTitle: String?,
     lastReadDate: Instant?,
@@ -344,6 +345,7 @@ fun WorkDetailResumeCard(
     Box(
         modifier = modifier
             .fillMaxWidth()
+            .downloadDimmed(if (downloadFraction != null) 1f else 0f)
             .padding(horizontal = SubjectMetrics.panelGutter)
             .clip(shape)
             .background(tokens.glassFill(0.10), shape)
@@ -357,9 +359,9 @@ fun WorkDetailResumeCard(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(15.dp)
         ) {
-            if (isDownloading || clampedProgress != null) {
+            if (downloadFraction != null || clampedProgress != null) {
                 WorkReadingOrDownloadRing(
-                    downloading = isDownloading,
+                    downloadFraction = downloadFraction,
                     progress = clampedProgress,
                     state = null,
                     diameter = 48.dp

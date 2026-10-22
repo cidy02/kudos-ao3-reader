@@ -155,7 +155,7 @@ class RecentlyDeletedViewModel(
         val deletedWorkEntries = works.map { work ->
             RecentlyDeletedEntry(
                 id = work.id,
-                kicker = if (work.hasEpub) "Downloaded work" else "Work",
+                kicker = recentlyDeletedWorkKicker(work),
                 noun = "work",
                 title = work.title,
                 detail = workDetail(work),
@@ -1021,6 +1021,9 @@ private fun containerDeletionMessage(workCount: Int): String {
 
 private fun bulkDeleteTitle(count: Int): String =
     if (count == 1) "Delete 1 item permanently?" else "Delete $count items permanently?"
+
+internal fun recentlyDeletedWorkKicker(work: SavedWork): String =
+    if (work.isDownloaded) "Downloaded work" else "Work"
 
 private fun restoreFailureText(failed: List<RecentlyDeletedEntry>): String {
     val what = if (failed.size == 1) "the restored ${failed[0].noun}" else "${failed.size} of the restored items"
