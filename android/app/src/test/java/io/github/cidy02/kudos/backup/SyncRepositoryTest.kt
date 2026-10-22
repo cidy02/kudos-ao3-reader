@@ -1985,8 +1985,10 @@ class SyncRepositoryTest {
         val fixture = iosSyncFolder()
         putFolder(fixture, ensureKudosLibrary())
         val before = relativeFiles(requireKudosLibrary()).keys
+        trustCrossPlatformFields(fixture)
 
         assertTrue(syncRepository.runSync() is SyncResult.Success)
+        assertCrossPlatformFieldsRestored()
 
         val listed = BackupValidator.decodeManifest(File(fixture, BackupPaths.MANIFEST).readBytes())
             .works.filter { it.hasEPUB }
@@ -2036,8 +2038,11 @@ class SyncRepositoryTest {
         // The first is a converted import: its original and the record of its conversion.
         workFileStore.writeOriginal(ANDROID_ONE, "html", "<html><body><p>From Android.</p></body></html>".toByteArray())
         workFileStore.writeConversionRecord(ANDROID_ONE, CONVERSION_RECORD)
+        CrossPlatformFixtureFields.seed(database, fontFileStore, workFileStore.worksDirectory.parent.toFile(),
+            checkNotNull(database.workDao().getById(ANDROID_TWO)).toDomain())
 
         assertTrue(syncRepository.runSync() is SyncResult.Success)
+        assertCrossPlatformFieldsRestored()
 
         val written = relativeFiles(requireKudosLibrary())
         val golden = fixturePath("KudosTests/Fixtures/cross-platform/android-sync-folder/KudosLibrary")
@@ -2047,7 +2052,8 @@ class SyncRepositoryTest {
                 File(golden, path).apply { parentFile.mkdirs() }.writeBytes(readDocument(file))
             }
         }
-        // The names are the contract here; what the manifest holds is the backup goldens' business.
+        trustCrossPlatformFields(golden)
+        // Names and user-made fields are both part of the shared-folder contract.
         assertEquals(
             written.keys,
             golden.walkTopDown().filter { it.isFile && !it.name.startsWith(".") }
@@ -2408,6 +2414,7 @@ class SyncRepositoryTest {
         val fixture = iosSyncFolder()
         val iosManifestBytes = File(fixture, BackupPaths.MANIFEST).readBytes()
         val iosManifest = BackupValidator.decodeManifest(iosManifestBytes)
+        trustCrossPlatformFields(fixture)
         // An outgoing snapshot must not predate the snapshot it just read.
         clockInstant = BackupValidator.parseInstant(iosManifest.exportedAt, "exportedAt").plusSeconds(60)
         putFolder(fixture, ensureKudosLibrary())
@@ -2447,6 +2454,7 @@ class SyncRepositoryTest {
             readDocument(requireKudosLibrary().findFile(BackupPaths.MANIFEST_BACKUP)!!))
         val manifestBytes = readDocument(written.getValue(BackupPaths.MANIFEST))
         val manifest = BackupValidator.decodeManifest(manifestBytes)
+        assertCrossPlatformFieldsRestored()
         assertEquals(3, manifest.works.size)
         assertEquals(iosManifest.works.map { it.id }.toSet() + ANDROID_ONE, manifest.works.map { it.id }.toSet())
         assertTrue(manifest.works.all { it.hasEPUB })
@@ -2469,12 +2477,31 @@ class SyncRepositoryTest {
                 File(golden, path).apply { parentFile.mkdirs() }.writeBytes(readDocument(file))
             }
         }
+        trustCrossPlatformFields(golden)
         // The folder iOS's `aFolderBothAppsWroteIsReadAndKept` reads is the one this writes.
         assertEquals(
             written.keys,
             golden.walkTopDown().filter { it.isFile && !it.name.startsWith(".") }
                 .map { it.relativeTo(golden).path }.toSet()
         )
+    }
+
+    private suspend fun trustCrossPlatformFields(folder: File) {
+        val bytes = File(folder, BackupPaths.MANIFEST).readBytes()
+        CrossPlatformFixtureFields.assertManifest(bytes)
+        assertArrayEquals(CrossPlatformFixtureFields.fontBytes,
+            File(folder, "Fonts/${CrossPlatformFixtureFields.FONT_FILE}").readBytes())
+        BackupValidator.decodeManifest(bytes).tombstones.forEach {
+            settingsRepository.trustTombstonePublicKey(it.signerPublicKey)
+        }
+    }
+
+    private suspend fun assertCrossPlatformFieldsRestored() {
+        CrossPlatformFixtureFields.assertRestored(database, fontFileStore, workFileStore.worksDirectory.parent.toFile())
+        val files = relativeFiles(requireKudosLibrary())
+        CrossPlatformFixtureFields.assertManifest(readDocument(files.getValue(BackupPaths.MANIFEST)))
+        assertArrayEquals(CrossPlatformFixtureFields.fontBytes,
+            readDocument(files.getValue("Fonts/${CrossPlatformFixtureFields.FONT_FILE}")))
     }
 
     private fun iosSyncFolder(): File = File(
