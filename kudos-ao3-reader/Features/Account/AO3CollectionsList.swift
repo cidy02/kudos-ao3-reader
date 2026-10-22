@@ -116,6 +116,14 @@ struct AO3CollectionsList: View {
                 onDeleted: { editingCollection = nil }
             )
         }
+        #if DEBUG
+        .task {
+            if DebugLaunchRoute.takeSheet("colsfilter") { showingFilters = true }
+            if DebugLaunchRoute.takeSheet("colitems") {
+                yourItems = AO3CollectionItemsDestination(slug: nil, title: "Your items")
+            }
+        }
+        #endif
         .navigationDestination(item: $yourItems) { destination in
             AO3CollectionItemsView(slug: destination.slug, title: destination.title)
         }

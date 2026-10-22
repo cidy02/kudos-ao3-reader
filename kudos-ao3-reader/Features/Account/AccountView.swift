@@ -185,6 +185,7 @@ struct AccountView: View {
                     try? await Task.sleep(for: .seconds(1.5))
                     DebugLaunchRoute.applyAccount(to: &path)
                     editingWorkID = DebugLaunchRoute.accountEditWorkID
+                    if DebugLaunchRoute.takeSheet("inboxfilter") { showingInboxFilters = true }
                 }
                 #endif
                 .navigationDestination(item: $editingWorkID) { WritingWorkDestination(workID: $0) }

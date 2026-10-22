@@ -1,6 +1,7 @@
 import SwiftUI
 import SwiftData
 
+// swiftlint:disable file_length
 struct WorkEditView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(ThemeManager.self) private var theme
@@ -28,6 +29,9 @@ struct WorkEditView: View {
     /// waits until the refresh lands.
     @State private var needsTagRefresh = false
     @State private var tagRetry = 0
+    #if DEBUG
+    @State private var debugPresented: DebugPresented?
+    #endif
     @State private var preview: AO3PreviewHTML?
     /// Chapter 1 as AO3 last gave it to this form — what `refreshedChapter`
     /// tells an unsaved backdate apart from a date nobody touched here by.
@@ -239,6 +243,21 @@ struct WorkEditView: View {
                 Text(imp.cautionText)
             }
         }
+        #if DEBUG
+        .task {
+            if editingGeneration == nil { editingGeneration = auth.sessionGeneration }
+            if DebugLaunchRoute.takeSheet("writingpreview") { openPreview() }
+            if let id = DebugLaunchRoute.takeFirstPush([
+                "chapters", "chapterform", "edittags", "texteditor", "recovery",
+                "seriespicker", "collectionsgifts", "creatorspicker", "parentpicker"
+            ]) {
+                debugPresented = DebugPresented(id: id)
+            }
+        }
+        .navigationDestination(item: $debugPresented) { presented in
+            debugWorkChild(presented.id)
+        }
+        #endif
         .navigationDestination(isPresented: Binding(
             get: { preview != nil }, set: { if !$0 { preview = nil } }
         )) {
@@ -586,6 +605,49 @@ extension WorkEditView {
             throw error
         }
     }
+
+    #if DEBUG
+    @ViewBuilder
+    private func debugWorkChild(_ id: String) -> some View {
+        switch id {
+        case "chapters":
+            if let workID = form.workID {
+                WritingChaptersView(workID: workID, workTitle: form.title) { needsPublicationRefresh = true }
+            }
+        case "chapterform":
+            if let workID = form.workID {
+                WritingChapterDestination(workID: workID, workTitle: form.title) { needsPublicationRefresh = true }
+            }
+        case "edittags":
+            if let workID = form.workID {
+                WritingTagsDestination(workID: workID, workTitle: form.title) { needsTagRefresh = true }
+            }
+        case "texteditor":
+            WritingTextEditor(
+                text: $form.summary, title: "Summary",
+                account: auth.username ?? "", target: recoveryTarget, field: "summary"
+            )
+        case "recovery":
+            WritingTextEditor(
+                text: $form.notes, title: "Beginning notes",
+                account: auth.username ?? "", target: recoveryTarget, field: "notes"
+            )
+        case "seriespicker":
+            WorkSeriesPickerView(
+                series: $form.series, newSeriesTitle: $form.newSeriesTitle, workTitle: form.title,
+                currentSeries: form.currentSeries
+            )
+        case "collectionsgifts":
+            collectionsAndGifts
+        case "creatorspicker":
+            WorkCreatorsPickerView(creators: $form.creators, workTitle: form.title)
+        case "parentpicker":
+            WorkParentWorkPickerView(parentWork: $form.parentWork, languageOptions: form.languageOptions)
+        default:
+            EmptyView()
+        }
+    }
+    #endif
 
     /// AO3's preview path for an unposted work. A NEW work is saved by AO3
     /// as a draft to preview it (`works#create` redirects to its preview), so

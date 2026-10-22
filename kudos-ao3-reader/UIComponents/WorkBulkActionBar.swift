@@ -125,6 +125,9 @@ struct WorkBulkActionBar: View {
         .sheet(isPresented: $showingTag) {
             WorkBulkTagSheet(works: selectedWorks)
         }
+        #if DEBUG
+        .task { if DebugLaunchRoute.takeSheet("bulktag") { showingTag = true } }
+        #endif
         .confirmationDialog(
             "Delete \(selectedWorks.count) work\(selectedWorks.count == 1 ? "" : "s")?",
             isPresented: $confirmDelete,

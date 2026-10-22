@@ -321,6 +321,9 @@ struct AllReadingQueuesGridView: View {
         .sheet(isPresented: $showingBulkTags) {
             QueueTagSheet(queues: selectedQueues)
         }
+        #if DEBUG
+        .task { if DebugLaunchRoute.takeSheet("newqueue") { showingNewQueue = true } }
+        #endif
         .sheet(isPresented: $showingNewQueue) {
             NewReadingQueueSheet(
                 name: $newQueueName,

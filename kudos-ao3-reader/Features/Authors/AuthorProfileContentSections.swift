@@ -466,6 +466,9 @@ struct AO3AuthorSeriesSection: View {
     /// opens Edit from a button rather than a link in a menu.
     @State private var editingSeries: AO3SeriesSummary?
     @State private var reorderingSeries: AO3SeriesSummary?
+    #if DEBUG
+    @State private var debugSeriesDetail: AO3SeriesSummary?
+    #endif
 
     @ScaledMetric(relativeTo: .body) private var emptyTitleSize: CGFloat = 18
     @ScaledMetric(relativeTo: .footnote) private var emptyBodySize: CGFloat = 13.5
@@ -562,9 +565,18 @@ struct AO3AuthorSeriesSection: View {
                     SeriesReorderDestination(seriesID: series.id, seriesTitle: series.title)
                 }
                 #if DEBUG
+                .navigationDestination(item: $debugSeriesDetail) { series in
+                    AO3SeriesDetailView(series: series)
+                }
                 .onChange(of: model.series.first?.id) { _, _ in
-                    if DebugLaunchRoute.value == "acct:seriesedit", editingSeries == nil {
+                    if DebugLaunchRoute.pageRoute == "acct:seriesedit", editingSeries == nil {
                         editingSeries = model.series.first
+                    }
+                    if DebugLaunchRoute.takeSheet("seriesreorder"), reorderingSeries == nil {
+                        reorderingSeries = model.series.first
+                    }
+                    if DebugLaunchRoute.takePush("seriesdetail"), debugSeriesDetail == nil {
+                        debugSeriesDetail = model.series.first
                     }
                 }
                 #endif

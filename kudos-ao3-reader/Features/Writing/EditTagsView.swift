@@ -116,6 +116,9 @@ struct EditTagsView: View {
         .navigationTitle("Edit tags")
         #endif
         .subjectScreenWash(palette: accountPalette)
+        #if DEBUG
+        .task { if DebugLaunchRoute.takePush("tagseditor") { addingKind = .fandom } }
+        #endif
         .navigationDestination(item: $addingKind) { kind in
             tagsEditor(kind)
         }

@@ -135,6 +135,14 @@ struct TombstoneTrustSettingsSection: View {
             unknownSignerCount = UnknownSignerTracker.count()
             refresh()
         }
+        #if DEBUG
+        .task {
+            if DebugLaunchRoute.takeSheet("pairing") { showPairingSheet = true }
+            if DebugLaunchRoute.takeSheet("revokedevice") {
+                revokeTarget = DebugLaunchRoute.revokedDevice()
+            }
+        }
+        #endif
         .sheet(isPresented: $showPairingSheet, onDismiss: refresh) {
             PairingSheet()
                 .environment(themeManager)

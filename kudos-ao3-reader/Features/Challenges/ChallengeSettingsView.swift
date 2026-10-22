@@ -31,6 +31,9 @@ struct ChallengeSettingsView: View {
     @State private var unmatchedCount: Int?
     @State private var defaultsCount: Int?
     @State private var phase: Phase = .idle
+    #if DEBUG
+    @State private var debugPresented: DebugPresented?
+    #endif
 
     private enum Phase: Equatable {
         case idle
@@ -87,6 +90,26 @@ struct ChallengeSettingsView: View {
         #endif
         .subjectScreenWash(palette: palette)
         .task { await loadSettingsIfNeeded() }
+        #if DEBUG
+        .task {
+            guard DebugLaunchRoute.wantsPush("chsettingsedit") || DebugLaunchRoute.wantsPush("tagset") else { return }
+            if let id = DebugLaunchRoute.takeFirstPush(["chsettingsedit", "tagset"]) {
+                debugPresented = DebugPresented(id: id)
+            }
+        }
+        .navigationDestination(item: $debugPresented) { presented in
+            if presented.id == "tagset" {
+                TagSetView(tagSetID: 42, tagSetTitle: "Winter Exchange Tags", isModerator: true)
+            } else {
+                ChallengeSettingsEditView(
+                    collectionSlug: collectionSlug,
+                    collectionTitle: effectiveTitle,
+                    viewerIsOwner: viewerIsOwner,
+                    challengeKind: challengeKind
+                )
+            }
+        }
+        #endif
         .refreshable { await loadSettings() }
         .onReceive(NotificationCenter.default.publisher(for: .ao3CollectionChanged)) { notification in
             guard notification.object as? String == collectionSlug else { return }

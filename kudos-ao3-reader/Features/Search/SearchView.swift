@@ -140,7 +140,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                 #if DEBUG
                 .task {
                     try? await Task.sleep(for: .seconds(2))
-                    if DebugLaunchRoute.opensFilters { router.panel = .searchFilters }
+                    if DebugLaunchRoute.opensSearchFilters { router.panel = .searchFilters }
                 }
                 #endif
                 .task(id: localMatchKey) { await refreshLocalMatches() }
@@ -288,6 +288,9 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                         // On the panel, not on this screen: on iPhone the panel is
                         // itself a sheet of this screen, which cannot present a second
                         // one over it, so "Save Search…" did nothing there.
+                        #if DEBUG
+                        .task { if DebugLaunchRoute.takeSheet("savesearch") { showingSaveDialog = true } }
+                        #endif
                         .sheet(isPresented: $showingSaveDialog, onDismiss: { saveName = "" }) {
                             SaveSearchSheet(
                                 filters: filters,

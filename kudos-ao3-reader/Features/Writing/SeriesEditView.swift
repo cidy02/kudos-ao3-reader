@@ -38,6 +38,9 @@ struct SeriesEditView: View {
     @State private var isSaving = false
     @State private var errorMessage: String?
     @State private var savedMessage: String?
+    #if DEBUG
+    @State private var debugRemoveWorks = false
+    #endif
 
     init(series: AO3SeriesSummary, form: AO3SeriesForm) {
         self.series = series
@@ -150,6 +153,16 @@ struct SeriesEditView: View {
                     .disabled(isSaving || form.title.trimmingCharacters(in: .whitespaces).isEmpty)
             }
         }
+        #if DEBUG
+        .task { if DebugLaunchRoute.takePush("seriesremove") { debugRemoveWorks = true } }
+        .navigationDestination(isPresented: $debugRemoveWorks) {
+            SeriesRemoveWorksView(
+                seriesID: form.seriesID ?? series.id,
+                seriesTitle: series.title,
+                rows: form.works
+            ) { form.works = $0 }
+        }
+        #endif
     }
 
     // MARK: Panels
