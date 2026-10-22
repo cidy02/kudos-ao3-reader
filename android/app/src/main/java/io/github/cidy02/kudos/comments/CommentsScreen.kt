@@ -592,7 +592,7 @@ fun CommentsScreen(
                         item {
                             io.github.cidy02.kudos.ui.components.CachedAO3DataRow(
                                 Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                                text = offlineCommentsLine(keptAt, System.currentTimeMillis()))
+                                text = offlineCommentsLine(keptAt, System.currentTimeMillis(), thread.keptWhileOffline))
                         }
                     }
                     if (thread.comments.isEmpty()) {
@@ -929,8 +929,11 @@ private fun flattenAll(comments: List<AO3Comment>): List<AO3Comment> {
     return result
 }
 
-/** iOS: "You're offline. These comments are from 2 hours ago and may be out of date." */
-internal fun offlineCommentsLine(keptAt: Long, now: Long): String {
+/**
+ * iOS: "You're offline. These comments are from 2 hours ago and may be out of date.", and after any
+ * other failed read "AO3 couldn't be reached. …" (it said offline after a timeout too).
+ */
+internal fun offlineCommentsLine(keptAt: Long, now: Long, offline: Boolean = true): String {
     val minutes = (now - keptAt) / 60_000
     fun count(n: Long, unit: String) = "$n $unit${if (n == 1L) "" else "s"} ago"
     val from = when {
@@ -940,7 +943,8 @@ internal fun offlineCommentsLine(keptAt: Long, now: Long): String {
         minutes < 60 * 24 -> count(minutes / 60, "hour")
         else -> count(minutes / (60 * 24), "day")
     }
-    return "You're offline. These comments are from $from and may be out of date."
+    val why = if (offline) "You're offline." else "AO3 couldn't be reached."
+    return "$why These comments are from $from and may be out of date."
 }
 
 /** iOS CommentsView.filterRail gives each control its own row at accessibility sizes. */

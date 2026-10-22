@@ -63,7 +63,8 @@ fun CommentThreadScreen(
                 expandedRootIds = setOf(rootId),
                 visibleReplyCounts = mapOf(rootId to Int.MAX_VALUE),
                 maxDepth = Int.MAX_VALUE
-            )
+            // No fold here, as iOS (`collapse: nil`): this screen exists to show one thread whole.
+            ).map { it.copy(collapse = null) }
         }
     }
 
@@ -127,7 +128,8 @@ fun CommentThreadScreen(
                         onExpand = {},
                         onContinueThread = {},
                         onToggleCollapse = {},
-                        containerWidth = screenWidth
+                        containerWidth = screenWidth,
+                        showChapterBadge = false
                     )
                 }
             }

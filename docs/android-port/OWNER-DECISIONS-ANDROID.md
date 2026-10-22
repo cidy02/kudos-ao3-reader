@@ -550,3 +550,23 @@ leave is less of a surprise, but it is still one swipe.
   assumed the question already existed.
 
 Until answered: A.
+
+## 33. A device you revoke on one phone stays trusted on your other phones (Android) (2026-10-22)
+
+Deletion signing (Settings → Sync Folder → Deletion signing) lets two devices honour each other's
+deletions once paired. When you revoke a device as stolen, iOS denylists its key and publishes
+that through your Apple account, so your other iPhones and Macs stop honouring it too
+(`TombstoneSigning.swift` `publishRevocationToiCloud`, `applyRemoteRevocations`). Android has no
+Apple account to publish through: a revoke (stolen or retired) holds on that phone only, and
+another Android phone that already paired the same device keeps applying its deletions until it
+is revoked there too (audit A75 #3). Nothing else is lost: pairing, the denylist on the phone
+that revoked, and re-pairing a retired device all work as on iOS.
+
+- **A (what stands).** Revoke on each phone. The Trusted Devices list on every phone shows the
+  device until it is revoked there.
+- **B.** Publish revocations through the sync folder (a small signed file every device reads on
+  sync), on both apps, so one revoke reaches every device that uses that folder. This is a new
+  cross-device feature, and the 2026-10-04 Sync Folder decision left the Apple-account trust
+  path out of Android.
+
+Until answered: A.

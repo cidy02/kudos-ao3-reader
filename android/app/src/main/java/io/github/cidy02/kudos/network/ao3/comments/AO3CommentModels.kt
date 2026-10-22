@@ -191,7 +191,9 @@ data class AO3CommentThread(
      * Set only on a copy kept for reading without a connection: when it was read from AO3 (epoch
      * milliseconds; 0 for a copy kept before this was recorded). Null on a page AO3 just served.
      */
-    val fetchedAt: Long? = null
+    val fetchedAt: Long? = null,
+    /** On a kept copy: its read failed because the phone is offline, not because AO3 was unreachable. */
+    @kotlinx.serialization.Transient val keptWhileOffline: Boolean = false
 )
 
 @Serializable

@@ -2619,3 +2619,17 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   every screen opened from it now passes it, and asks for that form only. A screen with no kind
   in hand keeps the old order. Reverse: `readChallengeForm` in
   `account/AO3CollectionDetailRepository.kt` (iOS `challengeSettings(slug:kind:request:)`).
+- **2026-10-22 · Four screens put beside the iPhone's for the first time (A80).** The comment
+  thread now starts below the back button and, as iOS's thread screen, draws no chapter badge and
+  no fold on its comments (`CommentThreadScreen.kt`; iOS `CommentThreadScreen.swift` passes
+  `showChapterBadge: false`, `collapse: nil`). The Library's filter sheet opens full height, as
+  iOS's (its scroll area had a 520dp cap). **Kept, not changed:** sign-in's "Use alternative
+  method" (Android only: it opens AO3's own sign-in page by hand; iOS goes there only
+  automatically, which Android also does); sign-in's colour (the iPhone's sign-in is a sheet and
+  takes the colour of the screen under it, Android's is a page and takes the app accent; both
+  default to AO3 red); at 2.0× sign-in's Cancel sits under its title.
+- **2026-10-22 · Comments says why it shows a kept copy (both apps; A74, §5c 6c).** After a failed
+  read, both apps show the copy kept from the last reading with its age. iOS said so only when
+  the phone was offline (after a timeout the old page showed with no notice) and Android said
+  "You're offline" after any network failure. Both now say "You're offline. …" when it is, and
+  "AO3 couldn't be reached. These comments are from … and may be out of date." otherwise.

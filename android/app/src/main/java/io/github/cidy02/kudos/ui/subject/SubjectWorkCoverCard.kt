@@ -122,8 +122,8 @@ fun rememberDownloadFraction(workId: String?, ao3WorkId: Long?, queue: DownloadQ
 fun SubjectWorkCoverCard(
     work: SavedWork,
     obscured: Boolean,
-    downloadFraction: Double? = rememberWorkDownloadFraction(work),
     modifier: Modifier = Modifier,
+    downloadFraction: Double? = rememberWorkDownloadFraction(work),
     footer: String? = null,
     progress: Double? = null,
     isSelecting: Boolean = false,

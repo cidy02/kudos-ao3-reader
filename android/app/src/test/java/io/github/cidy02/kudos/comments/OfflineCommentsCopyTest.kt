@@ -27,8 +27,9 @@ import org.robolectric.annotation.Config
 class OfflineCommentsCopyTest {
     private class Page : AO3Client, AO3AuthenticatedClient {
         var offline = false
+        var failure: AO3Error = AO3Error.Network("offline")
         private fun answer(): AO3Result<AO3HttpResponse> =
-            if (offline) AO3Result.Failure(AO3Error.Network("offline")) else success(writeResource("ao3/comments/comments_basic.html"))
+            if (offline) AO3Result.Failure(failure) else success(writeResource("ao3/comments/comments_basic.html"))
         override fun username() = "alice"
         override suspend fun get(url: String, headers: Map<String, String>) = answer()
         override suspend fun getAuthenticated(url: String) = answer()
@@ -52,6 +53,23 @@ class OfflineCommentsCopyTest {
         assertNotNull(kept.value.fetchedAt)
         assertTrue("stamped when it was read, not when it is shown", kept.value.fetchedAt!! in 1..before)
         assertEquals(live.value.comments.size, kept.value.comments.size)
+    }
+
+    /** iOS's two lines: offline, or AO3 not reached (a timeout said "offline" too, A74 / §5c 6c). */
+    @Test fun theKeptCopySaysWhetherThePhoneIsOfflineOrAO3WasNotReached() = runBlocking<Unit> {
+        val page = Page()
+        val repository = AO3CommentRepository(page, page, cache = CommentCache(RuntimeEnvironment.getApplication()))
+        val work = AO3CommentTarget.Work(124L)
+        repository.loadThread(work, 1, null)
+        page.offline = true
+        page.failure = AO3Error.Network("timed out")
+        val timedOut = (repository.loadThread(work, 1, null) as AO3Result.Success).value
+        assertEquals(false, timedOut.keptWhileOffline)
+        assertTrue(offlineCommentsLine(1, 2, timedOut.keptWhileOffline).startsWith("AO3 couldn't be reached. "))
+        page.failure = AO3Error.Network("offline", offline = true)
+        val offline = (repository.loadThread(work, 1, null) as AO3Result.Success).value
+        assertEquals(true, offline.keptWhileOffline)
+        assertTrue(offlineCommentsLine(1, 2, offline.keptWhileOffline).startsWith("You're offline. "))
     }
 
     @Test fun theLineSaysHowOldTheCopyIs() {
