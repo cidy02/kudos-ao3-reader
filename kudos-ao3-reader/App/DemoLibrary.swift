@@ -225,6 +225,7 @@ enum DemoLibrary {
 @MainActor
 enum DebugLaunchRoute {
     static var value: String? { UserDefaults.standard.string(forKey: "KudosDebugRoute") }
+    static var opensLogin: Bool { value == "login" }
     /// `-KudosDebugOpenFilters YES`: the routed screen opens its filter panel.
     static var opensFilters: Bool { UserDefaults.standard.bool(forKey: "KudosDebugOpenFilters") }
     /// `-KudosDebugManageRow <label>` with `acct:ao3collection:<slug>`: opens
@@ -362,16 +363,28 @@ enum DebugLaunchRoute {
 
     /// `comments:<title>` opens that work's page, then its Comments (fixture-served),
     /// for side-by-side screenshots with Android's `comments/<ao3 id>`; `compose:<title>` opens
-    /// the comment composer over them. A demo import has no AO3 id; it borrows Android's demo id
+    /// the comment composer over them; `thread:<title>` pushes the first conversation's
+    /// Thread screen. A demo import has no AO3 id; it borrows Android's demo id
     /// for the same work (the fixture page is the same).
     static func commentsRoute(for work: SavedWork) -> AO3CommentsRoute? {
-        guard let value, value.hasPrefix("comments:") || value.hasPrefix("compose:") else { return nil }
+        guard let value, ["comments:", "compose:", "thread:"].contains(where: value.hasPrefix) else { return nil }
         var route = AO3CommentsRoute(workID: work.ao3WorkID ?? 999_000_005, context: AO3CommentsWorkContext(
             title: work.title, authors: [work.author], fandoms: work.workFandoms,
             rating: work.rating, chapters: work.chapters
         ))
         route.composes = value.hasPrefix("compose:")
         return route
+    }
+
+    /// Opens the same subtree as the comments list's "Continue thread" action,
+    /// after the fixture has loaded, with the real parent view owning its actions.
+    static func threadRootID(in model: CommentsModel) -> Int? {
+        guard value?.hasPrefix("thread:") == true else { return nil }
+        for row in model.conversationRows {
+            if case let .continueThread(rootID, _) = row.item { return rootID }
+        }
+        return model.displayThreads.first(where: { !$0.replies.isEmpty })?.id
+            ?? model.displayThreads.first?.id
     }
 
     /// `author:<username>` opens another reader's AO3 profile (fixture-served) on Home's stack.
@@ -383,12 +396,23 @@ enum DebugLaunchRoute {
     static func homeWork(in works: [SavedWork]) -> SavedWork? {
         // `mycopy:<title>` opens the same page with its My copy sheet up;
         // `read:<title>` opens the reader instead (see `opensReader`).
-        let prefixes = ["work:", "mycopy:", "read:", "comments:", "compose:"]
+        let prefixes = ["work:", "mycopy:", "read:", "comments:", "compose:", "thread:"]
         guard let value, let prefix = prefixes.first(where: value.hasPrefix) else { return nil }
         let title = String(value.dropFirst(prefix.count))
         return works.first { $0.title == title }
     }
 }
+
+/// A fresh, unrestored auth service keeps the native form signed out even when
+/// the surrounding demo uses `-KudosDemoSignedIn YES`. No stored session is erased.
+struct DebugLoginView: View {
+    @State private var auth = AO3AuthService()
+
+    var body: some View {
+        AO3LoginView().environment(auth)
+    }
+}
+
 /// `-KudosDebugRoute comments`: real comment rows over sample data, for
 /// checking the byline against the avatar without contacting AO3.
 struct CommentsDemoView: View {
