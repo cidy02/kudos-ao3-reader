@@ -47,7 +47,6 @@ import io.github.cidy02.kudos.ui.components.EmptyStateCard
 import io.github.cidy02.kudos.ui.components.ErrorStateCard
 import io.github.cidy02.kudos.ui.components.LoadingStateCard
 import io.github.cidy02.kudos.ui.subject.*
-import io.github.cidy02.kudos.home.HomeFacts
 import kotlinx.coroutines.launch
 
 import io.github.cidy02.kudos.app.ProvidePushedShellChrome
@@ -392,8 +391,7 @@ fun AuthorProfileScreen(
     val shareContext = androidx.compose.ui.platform.LocalContext.current
     var showMenu by remember { mutableStateOf(false) }
 
-    val workHue = remember(route.displayName) { HomeFacts.workHue(emptyList(), route.displayName) }
-    val palette = if (ownAccount) tokens.scopePalette else remember(workHue, tokens.theme) { SubjectPalette.fromHue(workHue, tokens.theme) }
+    val palette = tokens.scopePalette
 
     LaunchedEffect(route.id, sessionGeneration, tab, scopeState) { selection.exit() }
     LaunchedEffect(deleteState.confirmed) {
@@ -699,29 +697,13 @@ fun AuthorProfileScreen(
                                         selectedFandom == null &&
                                         worksSort.completion == io.github.cidy02.kudos.network.ao3.author.AO3AuthorWorksCompletion.Any ->
                                         ownWorksLine(route.displayName, works?.summary?.total, stats)
-                                    tab == AuthorTab.Series -> {
-                                        val s = series
-                                        if (s != null && s.series.isEmpty()) {
-                                            "No series yet"
-                                        } else {
-                                            val tally = seriesTallyParts(s?.series.orEmpty(), (s?.totalPages ?: 1) > 1)
-                                            if (tally.isNotEmpty()) tally.joinToString(" · ") else route.displayName
-                                        }
-                                    }
                                     else -> route.displayName
                                 },
                                 palette = palette
                             )
                             if (h.pseuds.size > 1) {
                                 Spacer(Modifier.size(8.dp))
-                                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    item {
-                                        SubjectChip(text = "All Pseuds", style = SubjectChipStyle.Pill(route.pseud == null), modifier = Modifier.clickable { route = AO3AuthorRoute(route.username, null) })
-                                    }
-                                    items(h.pseuds) { pseud ->
-                                        SubjectChip(text = pseud.name, style = SubjectChipStyle.Pill(route.pseud.equals(pseud.route.pseud, true)), modifier = Modifier.clickable { route = pseud.route })
-                                    }
-                                }
+                                AuthorPseudSelector(h.pseuds, route) { route = it }
                             }
                         } else {
                             AO3AuthorHero(
@@ -752,24 +734,7 @@ fun AuthorProfileScreen(
                 }
 
                 if (!usesAccountHeader && h.pseuds.size > 1) {
-                    item {
-                        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            item {
-                                SubjectChip(
-                                    text = "All Pseuds",
-                                    style = SubjectChipStyle.Pill(route.pseud == null),
-                                    modifier = Modifier.clickable { route = AO3AuthorRoute(route.username, null) }
-                                )
-                            }
-                            items(h.pseuds) { pseud ->
-                                SubjectChip(
-                                    text = pseud.name,
-                                    style = SubjectChipStyle.Pill(route.pseud.equals(pseud.route.pseud, true)),
-                                    modifier = Modifier.clickable { route = pseud.route }
-                                )
-                            }
-                        }
-                    }
+                    item { AuthorPseudSelector(h.pseuds, route) { route = it } }
                 }
 
                 if (showsTabs) {
@@ -896,7 +861,7 @@ fun AuthorProfileScreen(
                 } else {
                     when (tab) {
                         AuthorTab.Works -> {
-                            item {
+                            if (ownAccount) item {
                                 LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                     items(AO3AuthorWorksScope.entries.filter { it.acceptsWorkSearch || it == AO3AuthorWorksScope.Gifts }) { scopeVal ->
                                         // iOS `WorksScopeAndSort`: the screen's palette, whose accent is
@@ -987,6 +952,7 @@ fun AuthorProfileScreen(
                                         fontSize = 11.5.sp, lineHeight = 17.sp)
                                 } else item { EmptyStateCard("No series", "No series by this author are visible to you on AO3.") }
                             } else {
+                                item { SectionRuleHeader(title = "Series", count = pageData.series.size) }
                                 val tally = seriesTallyParts(pageData.series, pageData.totalPages > 1)
                                 if (tally.isNotEmpty()) item {
                                     Text(tally.joinToString(" · "), color = tokens.secondaryInk,
@@ -1021,7 +987,8 @@ fun AuthorProfileScreen(
                                         loading = tabLoading,
                                         onNext = { loadTab(AuthorTab.Series, pageData.currentPage + 1) },
                                         loadMoreError = tabError?.takeIf { page > 1 },
-                                        onRetry = { loadTab(tab, page) }
+                                        onRetry = { loadTab(tab, page) },
+                                        showsCard = true
                                     )
                                 }
                             }
@@ -1135,17 +1102,19 @@ fun AuthorProfileScreen(
 @Composable
 internal fun AuthorLoadMoreRow(
     page: Int, total: Int, loading: Boolean, onNext: () -> Unit,
-    loadMoreError: String? = null, onRetry: () -> Unit = onNext
+    loadMoreError: String? = null, onRetry: () -> Unit = onNext,
+    showsCard: Boolean = false
 ) {
     if (loadMoreError != null) {
         val tokens = LocalKudosTokens.current
-        Column(Modifier.subjectPanel()) {
+        Column(if (showsCard) Modifier.cardRow() else Modifier.subjectPanel()) {
             Text(loadMoreError, color = tokens.secondaryInk, fontSize = 14.sp,
                 lineHeight = 20.sp, modifier = Modifier.padding(16.dp))
             TextButton(onClick = onRetry, enabled = !loading) { Text("Try Loading More") }
         }
     } else if (page < total || loading) {
-        TextButton(onClick = onNext, enabled = !loading, modifier = Modifier.fillMaxWidth()) {
+        TextButton(onClick = onNext, enabled = !loading,
+            modifier = Modifier.fillMaxWidth().then(if (showsCard) Modifier.cardRow() else Modifier)) {
             Text(if (loading) "Loading…" else "Load More")
             Spacer(Modifier.weight(1f))
             Text("Page $page of $total", color = LocalKudosTokens.current.secondaryInk, fontSize = 13.sp)

@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -25,6 +26,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Block
+import androidx.compose.material.icons.outlined.Check
+import androidx.compose.material.icons.outlined.People
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.NotificationsOff
 import androidx.compose.material.icons.outlined.VolumeOff
@@ -35,6 +38,9 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -57,6 +63,7 @@ import io.github.cidy02.kudos.network.ao3.author.AO3AuthorSeriesSummary
 import io.github.cidy02.kudos.network.ao3.author.AO3AuthorWebAction
 import io.github.cidy02.kudos.network.ao3.search.AO3WorkSummary
 import io.github.cidy02.kudos.ui.components.SensitiveWorkRow
+import io.github.cidy02.kudos.ui.subject.cardRow
 import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
 import io.github.cidy02.kudos.ui.subject.SubjectChip
 import io.github.cidy02.kudos.ui.subject.SubjectChipStyle
@@ -70,6 +77,38 @@ import io.github.cidy02.kudos.ui.subject.subjectPanel
 internal enum class AuthorDisplayMode(val label: String) {
     Ledger("Ledger"),
     Detailed("Detailed")
+}
+
+/** iOS AuthorProfileView.pseudSelector: one Scope row with a menu, also on account headers. */
+@Composable
+internal fun AuthorPseudSelector(
+    pseuds: List<io.github.cidy02.kudos.network.ao3.author.AO3AuthorPseud>,
+    route: AO3AuthorRoute,
+    onSelect: (AO3AuthorRoute) -> Unit
+) {
+    var expanded by remember(route.username) { mutableStateOf(false) }
+    Box(Modifier.fillMaxWidth().subjectPanel()) {
+        io.github.cidy02.kudos.ui.subject.SubjectFormRow(
+            "Scope", value = route.pseud ?: "All Pseuds", showsChoice = true,
+            valueMaxLines = if (io.github.cidy02.kudos.ui.subject.isAccessibilityFontScale()) 2 else 1,
+            leadingIcon = Icons.Outlined.People,
+            modifier = Modifier.semantics { contentDescription = "Author scope" },
+            onClick = { expanded = true }
+        )
+        androidx.compose.material3.DropdownMenu(
+            expanded = expanded, onDismissRequest = { expanded = false },
+            containerColor = LocalKudosTokens.current.cardFill
+        ) {
+            val choices = listOf("All Pseuds" to AO3AuthorRoute(route.username)) + pseuds.map { it.name to it.route }
+            choices.forEach { (name, choice) ->
+                androidx.compose.material3.DropdownMenuItem(
+                    text = { Text(name, color = LocalKudosTokens.current.primaryInk) },
+                    leadingIcon = if (route.id == choice.id) { { Icon(Icons.Outlined.Check, "Selected") } } else null,
+                    onClick = { expanded = false; if (route.id != choice.id) onSelect(choice) }
+                )
+            }
+        }
+    }
 }
 
 @Composable
@@ -116,17 +155,19 @@ internal fun AO3AuthorHero(
                 Text(profileTitle, color = tokens.primaryInk, fontSize = 15.sp, fontWeight = FontWeight.Medium)
             }
             if (showsActionRow) {
-                Row(
+                @OptIn(ExperimentalLayoutApi::class)
+                FlowRow(
                     modifier = Modifier.padding(top = 4.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    itemVerticalAlignment = Alignment.CenterVertically
                 ) {
                     header.subscriptionForm?.let { form ->
                         Button(
                             onClick = { onSubscription(form) },
                             enabled = !subscriptionBusy,
                             contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp, vertical = 6.dp),
-                            modifier = Modifier.height(32.dp)
+                            modifier = Modifier.heightIn(min = 32.dp)
                         ) {
                             Icon(
                                 imageVector = if (form.isSubscribed) Icons.Outlined.NotificationsOff else Icons.Outlined.Notifications,
@@ -255,7 +296,7 @@ internal fun AO3SeriesRow(
     Column(
         modifier
             .fillMaxWidth()
-            .subjectPanel(cornerRadius = 16.dp)
+            .cardRow()
             .then(if (onOpenSeries != null) Modifier.clickable { onOpenSeries(series.url) } else Modifier)
             .padding(horizontal = 18.dp, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(if (displayMode == AuthorDisplayMode.Ledger) 10.dp else 7.dp)

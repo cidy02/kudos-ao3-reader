@@ -139,6 +139,7 @@ import io.github.cidy02.kudos.ui.subject.SwipeAction
 import io.github.cidy02.kudos.ui.subject.SwipeActionRow
 import io.github.cidy02.kudos.ui.subject.WorkCardCarousel
 import io.github.cidy02.kudos.ui.subject.SubjectWorkCoverCard
+import io.github.cidy02.kudos.home.HomeFacts
 import io.github.cidy02.kudos.ui.components.SensitiveWorkRow
 import io.github.cidy02.kudos.ui.subject.WorkSectionLayout
 import io.github.cidy02.kudos.ui.subject.subjectPanel
@@ -1023,23 +1024,52 @@ internal fun LibrarySubjectLedgerRow(
     val progress = work.readingProgressFraction() ?: 0.0
     val row: @Composable () -> Unit = {
         Column {
-            SensitiveWorkRow(
-                work = work,
-                showsZeroStats = showsZeroStats,
-                mutedHistory = abandoned,
-                ledger = ledger,
-                onOpenWork = {
-                    if (work.hasEpub) actions.onOpenReader(work.id) else actions.onOpenWork(work.id)
-                },
-                selecting = selecting,
-                selected = selected,
-                obscured = obscured,
-                expandAll = expandAll,
-                onSelect = { actions.onSelect(work.id) },
-                onReveal = { actions.onReveal(work.id) },
-                onLongClick = { if (!obscured && !selecting) menuOpen = true },
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
-            )
+            if (ledger) {
+                io.github.cidy02.kudos.ui.subject.WorkLedgerRow(
+                    title = work.title,
+                    author = work.author.ifBlank { "Anonymous" },
+                    fandoms = work.workFandoms,
+                    metadata = HomeFacts.localWorkMetadata(work.author, work.wordCount, work.chapters).joinToString(" · "),
+                    progress = progress,
+                    progressState = if (progress <= 0.0) null else if (progress >= 1.0) "Finished" else "Reading",
+                    rating = work.rating,
+                    categories = work.workCategories,
+                    warnings = work.workWarnings,
+                    isComplete = work.knownCompletion,
+                    obscured = obscured,
+                    favorite = work.isFavorite,
+                    selected = selected,
+                    selecting = selecting,
+                    muted = abandoned,
+                    onClick = {
+                        when {
+                            selecting -> actions.onSelect(work.id)
+                            obscured -> actions.onReveal(work.id)
+                            work.hasEpub -> actions.onOpenReader(work.id)
+                            else -> actions.onOpenWork(work.id)
+                        }
+                    },
+                    onLongClick = { if (!obscured && !selecting) menuOpen = true },
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+                )
+            } else {
+                SensitiveWorkRow(
+                    work = work,
+                    showsZeroStats = showsZeroStats,
+                    mutedHistory = abandoned,
+                    onOpenWork = {
+                        if (work.hasEpub) actions.onOpenReader(work.id) else actions.onOpenWork(work.id)
+                    },
+                    selecting = selecting,
+                    selected = selected,
+                    obscured = obscured,
+                    expandAll = expandAll,
+                    onSelect = { actions.onSelect(work.id) },
+                    onReveal = { actions.onReveal(work.id) },
+                    onLongClick = { if (!obscured && !selecting) menuOpen = true },
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+                )
+            }
             if (abandoned && !selecting) {
                 MoveBackToInProgressButton { onKeepInProgress(work.id) }
             }

@@ -66,8 +66,10 @@ import io.github.cidy02.kudos.ui.subject.SubjectHeaderBlock
 import io.github.cidy02.kudos.ui.subject.SubjectMetrics
 import io.github.cidy02.kudos.ui.subject.SubjectFormRow
 import io.github.cidy02.kudos.ui.subject.SubjectPalette
+import io.github.cidy02.kudos.ui.subject.formLabelText
 import io.github.cidy02.kudos.ui.subject.isAccessibilityFontScale
 import io.github.cidy02.kudos.ui.subject.spokenAs
+import io.github.cidy02.kudos.ui.subject.subjectScreenWash
 import io.github.cidy02.kudos.ui.subject.subjectPanel
 import io.github.cidy02.kudos.ui.subject.LocalSettingsFormGround
 
@@ -85,6 +87,7 @@ fun SettingsPage(
      * (`SettingsPageForm`, `.appThemedRows()`); pages iOS builds from subject panels pass false.
      */
     formGround: Boolean = true,
+    washPalette: SubjectPalette? = null,
     content: LazyListScope.() -> Unit
 ) {
     val tokens = LocalKudosTokens.current
@@ -97,7 +100,7 @@ fun SettingsPage(
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .background(background),
+                .then(if (washPalette != null) Modifier.subjectScreenWash(washPalette) else Modifier.background(background)),
             contentPadding = PaddingValues(bottom = 32.dp)
         ) {
             item {
@@ -139,6 +142,8 @@ fun SubjectTextFieldRow(
     autocorrect: Boolean = true,
     /** The label above the field rather than beside it; for a narrow place such as a dialog. */
     stackedLabel: Boolean = false,
+    /** Single-line values such as a collection tagline use the space after their label. */
+    fillsRemainingWidth: Boolean = false,
     /** The writing tag field uses this row without a second visible label. */
     fieldOnly: Boolean = false,
     onSubmit: (() -> Unit)? = null,
@@ -195,6 +200,11 @@ fun SubjectTextFieldRow(
             Text(io.github.cidy02.kudos.ui.subject.formLabelText(label), color = tokens.primaryInk, fontSize = 14.5.sp, lineHeight = 20.sp,
                 modifier = Modifier.spokenAs(label, byControl = true))
             input()
+        } else if (fillsRemainingWidth) Row(Modifier.fillMaxWidth().padding(horizontal = 13.dp, vertical = 11.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(formLabelText(label), color = tokens.primaryInk, fontSize = 14.5.sp, lineHeight = 20.sp,
+                modifier = Modifier.spokenAs(label, byControl = true))
+            Box(Modifier.weight(1f)) { input() }
         } else SubjectFormRow(label, labelSpokenByControl = true, trailing = { Box(Modifier.fillMaxWidth(0.55f)) { input() } })
         if (!error.isNullOrEmpty()) Text(error, color = SubjectPalette.fromHue(0.0, tokens.theme).accent,
             fontSize = 11.5.sp, lineHeight = 17.sp,
