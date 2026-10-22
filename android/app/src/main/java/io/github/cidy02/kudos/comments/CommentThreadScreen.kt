@@ -5,7 +5,9 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
@@ -92,7 +94,12 @@ fun CommentThreadScreen(
                     title = "Thread",
                     subtitle = threadSubtitle,
                     palette = palette,
-                    modifier = Modifier.padding(top = 18.dp)
+                    // Below the floating back circle, as Comments and every pushed subject screen
+                    // (it sat under the status bar with the back arrow over "Thread").
+                    modifier = Modifier.padding(
+                        top = androidx.compose.foundation.layout.WindowInsets.systemBars
+                            .asPaddingValues().calculateTopPadding() + 56.dp
+                    )
                 )
             }
 
