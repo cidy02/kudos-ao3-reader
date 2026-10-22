@@ -13,6 +13,8 @@ struct AO3AuthorHero: View {
     let onSubscription: () -> Void
     var onModerationAction: (AO3AuthorWebAction) -> Void = { _ in }
 
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     private var showsAccountActions: Bool {
         !isOwnProfile && !route.isOrphanAccount
     }
@@ -27,89 +29,148 @@ struct AO3AuthorHero: View {
     }
 
     var body: some View {
-        HStack(alignment: .top, spacing: 14) {
-            AO3AuthorAvatar(url: header.identity.avatarURL, name: route.displayName)
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: 14) {
+                AO3AuthorAvatar(url: header.identity.avatarURL, name: route.displayName)
 
-            VStack(alignment: .leading, spacing: 5) {
-                Text(route.displayName)
-                    .font(.title2.weight(.semibold))
-                    .lineLimit(3)
-                    .minimumScaleFactor(0.75)
-                    .accessibilityAddTraits(.isHeader)
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(route.displayName)
+                        .font(.title2.weight(.semibold))
+                        .lineLimit(3)
+                        .minimumScaleFactor(0.75)
+                        .accessibilityAddTraits(.isHeader)
 
-                if route.pseud != nil {
-                    Text("Pseud of \(route.username)")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                } else {
-                    Text("AO3 user")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
-
-                if !profileTitle.isEmpty {
-                    Text(profileTitle)
-                        .font(.subheadline.weight(.medium))
-                        .foregroundStyle(.primary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-
-                if showsActionRow {
-                    // Subscribe keeps a text label; Mute/Block are icon-only beside it
-                    // (AO3's full label is the accessibility string).
-                    HStack(spacing: 8) {
-                        if let form = header.subscriptionForm {
-                            // Explicit HStack (not Label): Label + .borderedProminent +
-                            // .small often misaligns the glyph vs title.
-                            Button(action: onSubscription) {
-                                HStack(spacing: 5) {
-                                    if isPerformingSubscription {
-                                        ProgressView()
-                                            .controlSize(.small)
-                                            .accentFill()
-                                    } else {
-                                        Image(systemName: form.isSubscribed ? "bell.slash" : "bell")
-                                    }
-                                    Text(form.isSubscribed ? "Unsubscribe" : "Subscribe")
-                                }
-                            }
-                            .buttonStyle(.borderedProminent)
-                            .accentFill()
-                            .prominentLabel()
-                            .controlSize(.small)
-                            .disabled(actionsBusy)
-                            // The button reads as scoped to whatever route is on screen,
-                            // but AO3 subscriptions are account-wide — the unsubscribe
-                            // confirmation already says so explicitly; give Subscribe
-                            // the same disclosure when viewing a specific pseud.
-                            .accessibilityHint(
-                                route.pseud != nil
-                                    ? "Applies to \(route.username)'s whole account, not only this pseud."
-                                    : ""
-                            )
-                        }
-
-                        if let muteAction {
-                            moderationIconButton(muteAction, webKind: .mute)
-                        }
-                        if let blockAction {
-                            moderationIconButton(blockAction, webKind: .block)
-                        }
-
-                        if isPerformingModeration {
-                            ProgressView()
-                                .controlSize(.small)
-                                .accentFill()
-                        }
+                    if route.pseud != nil {
+                        Text("Pseud of \(route.username)")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    } else {
+                        Text("AO3 user")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
                     }
-                    .padding(.top, 3)
+
+                    if !profileTitle.isEmpty {
+                        Text(profileTitle)
+                            .font(.subheadline.weight(.medium))
+                            .foregroundStyle(.primary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    if showsActionRow && !dynamicTypeSize.isAccessibilitySize {
+                        // Subscribe keeps a text label; Mute/Block are icon-only beside it
+                        // (AO3's full label is the accessibility string).
+                        actionRow
+                            .padding(.top, 3)
+                    }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            // Beside the avatar at AX5 the column broke "Sub-scribe": the row takes the card's width.
+            if showsActionRow && dynamicTypeSize.isAccessibilitySize {
+                actionRow
+            }
         }
         .padding(.vertical, 4)
         .accessibilityElement(children: .contain)
+    }
+
+    /// Beside the avatar at AX5, Subscribe was squeezed into a tall empty pillar
+    /// with no label. There the row goes under the avatar row: Subscribe across the card,
+    /// Mute and Block beside each other under it.
+    @ViewBuilder
+    private var actionRow: some View {
+        if dynamicTypeSize.isAccessibilitySize {
+            VStack(alignment: .leading, spacing: 8) {
+                if let form = header.subscriptionForm {
+                    subscribeButton(form)
+                }
+                HStack(spacing: 8) {
+                    if let muteAction {
+                        moderationIconButton(muteAction, webKind: .mute)
+                    }
+                    if let blockAction {
+                        moderationIconButton(blockAction, webKind: .block)
+                    }
+                    if isPerformingModeration {
+                        ProgressView()
+                            .controlSize(.small)
+                            .accentFill()
+                    }
+                }
+            }
+        } else {
+            HStack(spacing: 8) {
+                if let form = header.subscriptionForm {
+                    subscribeButton(form)
+                }
+                if let muteAction {
+                    moderationIconButton(muteAction, webKind: .mute)
+                }
+                if let blockAction {
+                    moderationIconButton(blockAction, webKind: .block)
+                }
+                if isPerformingModeration {
+                    ProgressView()
+                        .controlSize(.small)
+                        .accentFill()
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func subscribeButton(_ form: AO3AuthorSubscriptionForm) -> some View {
+        // Explicit HStack (not Label): Label + .borderedProminent +
+        // .small often misaligns the glyph vs title.
+        let button = Button(action: onSubscription) {
+            HStack(spacing: 5) {
+                if isPerformingSubscription {
+                    ProgressView()
+                        .controlSize(.small)
+                        .accentFill()
+                } else {
+                    Image(systemName: form.isSubscribed ? "bell.slash" : "bell")
+                }
+                subscribeTitle(form)
+            }
+        }
+        .buttonStyle(.borderedProminent)
+        .accentFill()
+        .prominentLabel()
+        if dynamicTypeSize.isAccessibilitySize {
+            // A small capsule clipped the label and left the chrome. A rounded
+            // rect has room for the wrapped words, across the column.
+            button
+                .buttonBorderShape(.roundedRectangle(radius: 14))
+                .disabled(actionsBusy)
+                .accessibilityHint(subscriptionHint)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        } else {
+            button
+                .controlSize(.small)
+                .disabled(actionsBusy)
+                .accessibilityHint(subscriptionHint)
+        }
+    }
+
+    private var subscriptionHint: String {
+        route.pseud != nil
+            ? "Applies to \(route.username)'s whole account, not only this pseud."
+            : ""
+    }
+
+    @ViewBuilder
+    private func subscribeTitle(_ form: AO3AuthorSubscriptionForm) -> some View {
+        let title = Text(form.isSubscribed ? "Unsubscribe" : "Subscribe")
+        if dynamicTypeSize.isAccessibilitySize {
+            title
+                .multilineTextAlignment(.leading)
+                .fixedSize(horizontal: false, vertical: true)
+        } else {
+            title
+        }
     }
 
     private func moderationIconButton(
@@ -127,9 +188,22 @@ struct AO3AuthorHero: View {
         .buttonStyle(.bordered)
         .foregroundStyle(.accentInk)
         .accentFill()
-        .controlSize(.small)
+        .moderationControlSize(accessibilitySize: dynamicTypeSize.isAccessibilitySize)
         .disabled(actionsBusy)
         .accessibilityLabel(action.label)
+    }
+}
+
+extension View {
+    /// `.controlSize(.small)` at AX5 turned Subscribe's neighbour into the same
+    /// empty pillar. Ordinary sizes keep the small control.
+    @ViewBuilder
+    fileprivate func moderationControlSize(accessibilitySize: Bool) -> some View {
+        if accessibilitySize {
+            self
+        } else {
+            controlSize(.small)
+        }
     }
 }
 

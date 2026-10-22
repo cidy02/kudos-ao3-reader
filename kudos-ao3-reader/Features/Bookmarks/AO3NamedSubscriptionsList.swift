@@ -7,24 +7,22 @@ struct AO3SubscriptionsScopeRail: View {
     let palette: SubjectPalette
 
     var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                ForEach(AO3SubscriptionsScope.allCases) { option in
-                    Button {
-                        selection = option
-                    } label: {
-                        SubjectChip(
-                            text: option.title,
-                            style: .pill(isSelected: selection == option),
-                            palette: palette
-                        )
-                    }
-                    .buttonStyle(.plain)
-                    .minimumHitTarget(28)
-                    .accessibilityAddTraits(selection == option ? .isSelected : [])
+        // One line cut "Authors" once the pills no longer fit the phone.
+        AccessibilityChipRail(horizontalPadding: 16) {
+            ForEach(AO3SubscriptionsScope.allCases) { option in
+                Button {
+                    selection = option
+                } label: {
+                    SubjectChip(
+                        text: option.title,
+                        style: .pill(isSelected: selection == option),
+                        palette: palette
+                    )
                 }
+                .buttonStyle(.plain)
+                .minimumHitTarget(28)
+                .accessibilityAddTraits(selection == option ? .isSelected : [])
             }
-            .padding(.horizontal, 16)
         }
     }
 }
