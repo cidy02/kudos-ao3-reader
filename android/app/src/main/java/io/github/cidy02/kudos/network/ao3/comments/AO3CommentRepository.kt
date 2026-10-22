@@ -7,6 +7,7 @@ import kotlin.coroutines.cancellation.CancellationException
 import io.github.cidy02.kudos.network.ao3.AO3Client
 import io.github.cidy02.kudos.network.ao3.AO3Error
 import io.github.cidy02.kudos.network.ao3.AO3Result
+import io.github.cidy02.kudos.network.ao3.isOffline
 import io.github.cidy02.kudos.network.ao3.writes.AO3AuthenticatedClient
 import io.github.cidy02.kudos.network.ao3.writes.AO3WriteActionKind
 import io.github.cidy02.kudos.network.ao3.writes.AO3WriteFormParser
@@ -62,7 +63,8 @@ class AO3CommentRepository(
                         if (useCache && public.error is AO3Error.Network && focusedCommentId == null) {
                             // Marked as a kept copy, so the screen says it is one and from when.
                             cache?.load(target, safePage, viewer)?.let {
-                                return AO3Result.Success(it.copy(fetchedAt = it.fetchedAt ?: 0L), isStale = true)
+                                return AO3Result.Success(it.copy(fetchedAt = it.fetchedAt ?: 0L,
+                                    keptWhileOffline = public.error.isOffline()), isStale = true)
                             }
                         }
                         return public

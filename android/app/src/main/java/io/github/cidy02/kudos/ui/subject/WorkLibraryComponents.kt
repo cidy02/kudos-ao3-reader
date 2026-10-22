@@ -136,7 +136,6 @@ fun WorkLedgerRow(
     fandoms: List<String>,
     metadata: String,
     progress: Double,
-    downloadFraction: Double? = null,
     progressState: String?,
     rating: String,
     categories: List<String>,
@@ -149,6 +148,7 @@ fun WorkLedgerRow(
     onClick: () -> Unit,
     onLongClick: () -> Unit,
     modifier: Modifier = Modifier,
+    downloadFraction: Double? = null,
     selecting: Boolean = false,
     muted: Boolean = false
 ) {

@@ -287,7 +287,9 @@ fun CommentConversationRow(
     onContinueThread: () -> Unit,
     onToggleCollapse: () -> Unit,
     containerWidth: Dp,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    /** iOS `showChapterBadge`: off on the Thread screen, where every comment is one chapter's. */
+    showChapterBadge: Boolean = true
 ) {
     val tokens = LocalKudosTokens.current
     val depth = row.depth
@@ -353,7 +355,8 @@ fun CommentConversationRow(
                     collapse = row.collapse,
                     palette = palette,
                     handlers = handlers,
-                    onToggleCollapse = onToggleCollapse
+                    onToggleCollapse = onToggleCollapse,
+                    showChapterBadge = showChapterBadge
                 )
             }
             is CommentConversationItem.Expander -> {
@@ -432,7 +435,8 @@ fun CommentPostRow(
     collapse: CommentCollapseState?,
     palette: SubjectPalette,
     handlers: CommentThreadHandlers,
-    onToggleCollapse: () -> Unit
+    onToggleCollapse: () -> Unit,
+    showChapterBadge: Boolean = true
 ) {
     val tokens = LocalKudosTokens.current
     val avatarSize = CommentThreadGeometry.avatarSize(depth)
@@ -523,7 +527,7 @@ fun CommentPostRow(
                     )
                 }
 
-                if (replyToAuthor == null && !comment.chapterLabel.isNullOrBlank()) {
+                if (showChapterBadge && replyToAuthor == null && !comment.chapterLabel.isNullOrBlank()) {
                     Surface(
                         shape = RoundedCornerShape(percent = 50),
                         color = tokens.glassFill(0.12)

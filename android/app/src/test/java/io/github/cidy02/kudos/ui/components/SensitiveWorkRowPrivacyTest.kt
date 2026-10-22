@@ -137,7 +137,7 @@ class SensitiveWorkRowPrivacyTest {
                         progress = 0.0, progressState = null, rating = "Explicit", categories = emptyList(),
                         warnings = emptyList(), isComplete = null, obscured = true, favorite = false,
                         selected = chosen, selecting = true, onClick = { toggles++ }, onLongClick = {})
-                    io.github.cidy02.kudos.ui.subject.SubjectWorkCoverCard(work, true, null,
+                    io.github.cidy02.kudos.ui.subject.SubjectWorkCoverCard(work, true, downloadFraction = null,
                         isSelecting = true, isSelected = chosen)
                 }
             }

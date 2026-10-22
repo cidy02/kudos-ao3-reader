@@ -114,8 +114,9 @@ fun LibraryFilterPanel(
                     )
                 ) { Icon(Icons.Outlined.Check, "Done") }
             }
+            // As tall as the screen allows, as iOS's full-height sheet (A80; it stopped at 520dp).
             Column(
-                Modifier.fillMaxWidth().heightIn(max = 520.dp).verticalScroll(rememberScrollState()),
+                Modifier.fillMaxWidth().weight(1f, fill = false).verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(18.dp)
             ) {
                 Column(Modifier.subjectPanel()) {
