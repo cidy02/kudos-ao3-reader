@@ -506,6 +506,29 @@ extension AO3CollectionParsingTests {
         #expect(show.collection.viewerIsOwner)
     }
 
+    /// AO3's profile markup (otwarchive `collection_profile/show`): the owner/mod class is on
+    /// the list item, not the link, so only the Maintainers list names them.
+    @Test func collectionShowReadsMaintainersFromTheProfileList() throws {
+        let html = """
+        <html><body>
+        <div class="primary header module"><h2 class="heading">Winter Fest</h2></div>
+        <dl class="meta group">
+          <dt class="maintainers">Maintainers:</dt>
+          <dd class="maintainers">
+            <ul class="commas">
+              <li class="owner"><a href="/users/ada">ada</a></li>
+              <li class="mod"><a href="/users/bea">Bee (bea)</a></li>
+            </ul>
+          </dd>
+          <dt>Contact:</dt><dd><a href="/users/notamaintainer">someone</a></dd>
+        </dl>
+        </body></html>
+        """
+        let show = try AO3Client.parseCollectionShow(html, slug: "winter")
+        #expect(show.collection.maintainerNames == ["ada", "Bee (bea)"])
+        #expect(show.collection.byline == "ada, Bee (bea)")
+    }
+
     /// No header stats: the totals come from the collection nav's own links,
     /// and a link to another collection's works never supplies them.
     @Test func collectionShowReadsTotalsFromItsOwnNavLinks() throws {

@@ -822,7 +822,12 @@ extension AO3Client {
     }
 
     private static func parseMaintainerIdentities(in doc: Document) -> [AO3AuthorIdentity] {
-        let links = (try? doc.select("a.owner, a.mod, h4.heading a[href*='/users/']").array()) ?? []
+        // AO3's profile lists them as `dd.maintainers li.owner|li.mod > a`: the class is on the
+        // list item, so `a.owner` alone found none on a real page (Android reads the same list).
+        let links = (try? doc.select(
+            "a.owner, a.mod, h4.heading a[href*='/users/'], "
+                + "dl.meta dt:matchesOwn((?i)^Maintainers?:$) + dd a[href*='/users/']"
+        ).array()) ?? []
         return links.compactMap { link in
             let name = (try? link.text()) ?? ""
             let href = (try? link.attr("href")) ?? ""
