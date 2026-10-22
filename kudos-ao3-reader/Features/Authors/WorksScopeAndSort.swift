@@ -20,24 +20,23 @@ struct WorksScopeSegments: View {
     /// 1u draws three pills, the selected one filled in the scope accent — the
     /// same grammar as 1v's completion chips. Scrolls rather than clipping when
     /// Refine and Sort beside it leave too little width (large text, iPhone SE).
+    /// Accessibility sizes wrap: a scroll row cut "Gifts".
     var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                ForEach(Self.scopes, id: \.0) { option, title in
-                    Button {
-                        // A re-tap would refetch and drop select mode for nothing.
-                        if scope != option { scope = option }
-                    } label: {
-                        SubjectChip(
-                            text: title,
-                            style: .pill(isSelected: scope == option),
-                            palette: theme.scopePalette
-                        )
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(title)
-                    .accessibilityAddTraits(scope == option ? [.isSelected] : [])
+        AccessibilityChipRail {
+            ForEach(Self.scopes, id: \.0) { option, title in
+                Button {
+                    // A re-tap would refetch and drop select mode for nothing.
+                    if scope != option { scope = option }
+                } label: {
+                    SubjectChip(
+                        text: title,
+                        style: .pill(isSelected: scope == option),
+                        palette: theme.scopePalette
+                    )
                 }
+                .buttonStyle(.plain)
+                .accessibilityLabel(title)
+                .accessibilityAddTraits(scope == option ? [.isSelected] : [])
             }
         }
     }
@@ -68,6 +67,7 @@ struct AO3AuthorWorksScopeSection: View {
     var usesToolbarFilter = false
 
     @Environment(AO3AuthService.self) private var auth
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var showingFilters = false
 
     var body: some View {
@@ -104,13 +104,25 @@ struct AO3AuthorWorksScopeSection: View {
         }
     }
 
+    /// At accessibility sizes the segments take the row. Beside the funnel they
+    /// were given a strip a few letters wide and "Gifts" was cut.
+    @ViewBuilder
     private var controls: some View {
-        HStack(spacing: 10) {
-            if showsScopes {
-                WorksScopeSegments(scope: scopeBinding)
+        if dynamicTypeSize.isAccessibilitySize {
+            VStack(alignment: .leading, spacing: 10) {
+                if showsScopes {
+                    WorksScopeSegments(scope: scopeBinding)
+                }
+                sortAndFilterButton
             }
-            Spacer(minLength: 0)
-            sortAndFilterButton
+        } else {
+            HStack(spacing: 10) {
+                if showsScopes {
+                    WorksScopeSegments(scope: scopeBinding)
+                }
+                Spacer(minLength: 0)
+                sortAndFilterButton
+            }
         }
     }
 

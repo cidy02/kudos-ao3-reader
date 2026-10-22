@@ -441,37 +441,39 @@ struct AO3SubscriptionsFilterRail: View {
     let palette: SubjectPalette
 
     var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                ForEach(AO3SubscriptionsFilter.allCases) { option in
-                    Button {
-                        selection = option
-                    } label: {
-                        SubjectChip(
-                            text: option.title,
-                            style: .pill(isSelected: selection == option),
-                            palette: palette
-                        )
-                    }
-                    .buttonStyle(.plain)
-                    .minimumHitTarget(28)
-                }
+        // One line cut "Reset" once the pills no longer fit the phone.
+        AccessibilityChipRail(horizontalPadding: 16) {
+            ForEach(AO3SubscriptionsFilter.allCases) { option in
                 Button {
-                    selection = .all
+                    selection = option
                 } label: {
                     SubjectChip(
-                        text: "Reset",
-                        style: .pill(isSelected: false),
-                        systemImage: "xmark"
+                        text: option.title,
+                        style: .pill(isSelected: selection == option),
+                        palette: palette
                     )
-                    .opacity(selection == .all ? 0.45 : 0.7)
                 }
                 .buttonStyle(.plain)
                 .minimumHitTarget(28)
-                .accessibilityLabel("Reset filters")
             }
-            .padding(.horizontal, 16)
+            resetChip
         }
+    }
+
+    private var resetChip: some View {
+        Button {
+            selection = .all
+        } label: {
+            SubjectChip(
+                text: "Reset",
+                style: .pill(isSelected: false),
+                systemImage: "xmark"
+            )
+            .opacity(selection == .all ? 0.45 : 0.7)
+        }
+        .buttonStyle(.plain)
+        .minimumHitTarget(28)
+        .accessibilityLabel("Reset filters")
     }
 }
 

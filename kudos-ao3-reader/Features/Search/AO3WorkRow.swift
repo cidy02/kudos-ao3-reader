@@ -286,32 +286,68 @@ struct AO3WorkRow: View {
     private var searchLedgerIdentity: some View {
         VStack(alignment: .leading, spacing: 5) {
             if primaryFandom != nil || isExpandable || hasLedgerBadges {
-                HStack(alignment: .top, spacing: 5) {
-                    if let primaryFandom {
-                        Button { router.searchAO3(.fandom, primaryFandom) } label: {
-                            SubjectKicker(
-                                text: primaryFandom,
-                                palette: palette,
-                                trailingCount: expanded ? 0 : max(0, nonemptyFandoms.count - 1)
-                            )
+                if dynamicTypeSize.isAccessibilitySize {
+                    // Beside the badges the kicker stayed one line and was cut
+                    // ("THE LOCKED T…"). It takes the width and wraps, as a
+                    // page kicker does; the badges wrap under it.
+                    VStack(alignment: .leading, spacing: 6) {
+                        if let primaryFandom {
+                            Button { router.searchAO3(.fandom, primaryFandom) } label: {
+                                SubjectKicker(
+                                    text: primaryFandom,
+                                    palette: palette,
+                                    trailingCount: expanded ? 0 : max(0, nonemptyFandoms.count - 1),
+                                    lineLimit: 3
+                                )
+                            }
+                            .buttonStyle(.borderless)
+                            .fixedSize(horizontal: false, vertical: true)
                         }
-                        .buttonStyle(.borderless)
-                    }
-                    // 1u row 2: "Series" beside the kicker. Gift is drawn
-                    // too, but no gift flag is parsed onto the summary yet.
-                    if work.seriesTitle != nil {
-                        SubjectStateBadge(title: "Series", color: palette.accent)
-                    }
-                    if let bookmark {
-                        if bookmark.isPrivate {
-                            SubjectStateBadge(title: "Private", color: .secondary)
+                        if hasLedgerBadges || isExpandable {
+                            FlowLayout(spacing: 5, rowSpacing: 6) {
+                                if work.seriesTitle != nil {
+                                    SubjectStateBadge(title: "Series", color: palette.accent)
+                                }
+                                if bookmark?.isPrivate == true {
+                                    SubjectStateBadge(title: "Private", color: .secondary)
+                                }
+                                if bookmark?.isRecommendation == true {
+                                    SubjectStateBadge(title: "Rec", color: .secondary)
+                                }
+                                if isExpandable {
+                                    expandButton
+                                }
+                            }
                         }
-                        if bookmark.isRecommendation {
-                            SubjectStateBadge(title: "Rec", color: .secondary)
-                        }
                     }
-                    if isExpandable {
-                        expandButton
+                } else {
+                    HStack(alignment: .top, spacing: 5) {
+                        if let primaryFandom {
+                            Button { router.searchAO3(.fandom, primaryFandom) } label: {
+                                SubjectKicker(
+                                    text: primaryFandom,
+                                    palette: palette,
+                                    trailingCount: expanded ? 0 : max(0, nonemptyFandoms.count - 1)
+                                )
+                            }
+                            .buttonStyle(.borderless)
+                        }
+                        // 1u row 2: "Series" beside the kicker. Gift is drawn
+                        // too, but no gift flag is parsed onto the summary yet.
+                        if work.seriesTitle != nil {
+                            SubjectStateBadge(title: "Series", color: palette.accent)
+                        }
+                        if let bookmark {
+                            if bookmark.isPrivate {
+                                SubjectStateBadge(title: "Private", color: .secondary)
+                            }
+                            if bookmark.isRecommendation {
+                                SubjectStateBadge(title: "Rec", color: .secondary)
+                            }
+                        }
+                        if isExpandable {
+                            expandButton
+                        }
                     }
                 }
             }

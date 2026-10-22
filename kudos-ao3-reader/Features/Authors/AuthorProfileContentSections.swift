@@ -162,47 +162,52 @@ struct AO3AuthorFandomFilterSection: View {
     }
 
     private func chipStrip(fandoms: [AO3AuthorFandom]) -> some View {
-        ScrollView(.horizontal) {
-            HStack(spacing: 8) {
-                Button {
-                    onWillChange()
-                    model.selectFandom(nil, auth: auth)
-                } label: {
-                    // The same pill as the scope chips above it.
-                    SubjectChip(text: "All", style: .pill(isSelected: model.selectedFandom == nil),
-                                palette: theme.scopePalette)
-                }
-                .buttonStyle(.plain)
-                // 44pt (not the 28pt dense-flow floor used elsewhere in Wave 2): this
-                // is a single horizontal scroll row, not a wrapping FlowLayout, so a
-                // full 44pt box can't overlap an adjacent row the way it could in a
-                // dense tag cloud — and 44pt is what this bar already had before Wave 2
-                // (a hand-rolled .frame(minHeight: 44)), so this restores rather than
-                // grows it.
-                .minimumHitTarget()
-                .accessibilityAddTraits(model.selectedFandom == nil ? .isSelected : [])
-
-                ForEach(fandoms) { fandom in
-                    Button {
-                        onWillChange()
-                        model.selectFandom(fandom, auth: auth)
-                    } label: {
-                        let count = fandom.workCount.map { " (\($0.compactCount))" } ?? ""
-                        SubjectChip(
-                            text: FandomDisplayName.bareTitle(fandom.name) + count,
-                            style: .pill(isSelected: model.selectedFandom == fandom),
-                            palette: theme.scopePalette
-                        )
-                    }
-                    .buttonStyle(.plain)
-                    // See the "All" chip above: 44pt restores this bar's pre-Wave-2 size
-                    // (a single scroll row, no FlowLayout overlap risk).
-                    .minimumHitTarget()
-                    .accessibilityAddTraits(model.selectedFandom == fandom ? .isSelected : [])
-                }
+        // A scroll row cut "The Locked Tomb (3)". The 44pt target is the
+        // chip's layout height, so a wrapped row does not cover the next.
+        AccessibilityChipRail {
+            allFandomChip
+            ForEach(fandoms) { fandom in
+                fandomChip(fandom)
             }
         }
-        .scrollIndicators(.hidden)
+    }
+
+    private var allFandomChip: some View {
+        Button {
+            onWillChange()
+            model.selectFandom(nil, auth: auth)
+        } label: {
+            // The same pill as the scope chips above it.
+            SubjectChip(text: "All", style: .pill(isSelected: model.selectedFandom == nil),
+                        palette: theme.scopePalette)
+        }
+        .buttonStyle(.plain)
+        // 44pt (not the 28pt dense-flow floor used elsewhere in Wave 2): on the
+        // ordinary scroll row a full 44pt box can't overlap an adjacent row the
+        // way it could in a dense tag cloud — and 44pt is what this bar already
+        // had before Wave 2 (a hand-rolled .frame(minHeight: 44)), so this
+        // restores rather than grows it. Accessibility sizes wrap, and this
+        // floor is layout height, so one row still cannot paint over the next.
+        .minimumHitTarget()
+        .accessibilityAddTraits(model.selectedFandom == nil ? .isSelected : [])
+    }
+
+    private func fandomChip(_ fandom: AO3AuthorFandom) -> some View {
+        Button {
+            onWillChange()
+            model.selectFandom(fandom, auth: auth)
+        } label: {
+            let count = fandom.workCount.map { " (\($0.compactCount))" } ?? ""
+            SubjectChip(
+                text: FandomDisplayName.bareTitle(fandom.name) + count,
+                style: .pill(isSelected: model.selectedFandom == fandom),
+                palette: theme.scopePalette
+            )
+        }
+        .buttonStyle(.plain)
+        // See the "All" chip above: 44pt restores this bar's pre-Wave-2 size.
+        .minimumHitTarget()
+        .accessibilityAddTraits(model.selectedFandom == fandom ? .isSelected : [])
     }
 }
 

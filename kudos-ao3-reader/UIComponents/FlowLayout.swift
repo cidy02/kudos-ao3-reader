@@ -96,3 +96,32 @@ struct FlowLayout: Layout {
         return rows
     }
 }
+
+/// A horizontal chip row. At accessibility sizes the chips wrap (`FlowLayout`)
+/// so a label is not cut to "…"; every other size keeps one scrolling line.
+///
+/// Children are a layout's own content, not one opaque view: a `ForEach` passed
+/// in here stays a `ForEach` the row can break into chips.
+struct AccessibilityChipRail<Content: View>: View {
+    var spacing: CGFloat = 8
+    var horizontalPadding: CGFloat = 0
+    @ViewBuilder var content: () -> Content
+
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    var body: some View {
+        if dynamicTypeSize.isAccessibilitySize {
+            FlowLayout(spacing: spacing, rowSpacing: spacing) {
+                content()
+            }
+            .padding(.horizontal, horizontalPadding)
+        } else {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: spacing) {
+                    content()
+                }
+                .padding(.horizontal, horizontalPadding)
+            }
+        }
+    }
+}

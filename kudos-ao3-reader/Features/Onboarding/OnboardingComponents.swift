@@ -9,41 +9,62 @@ struct OnboardingScaffold<Content: View, Footer: View>: View {
     @ViewBuilder var footer: Footer
 
     @Environment(ThemeManager.self) private var theme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
-        VStack(spacing: 0) {
+        if dynamicTypeSize.isAccessibilitySize {
+            // Pinned under the header, the footer filled the phone and the feature
+            // rows never came on screen (AX5). The actions scroll after the rows.
             ScrollView {
-                VStack(spacing: 28) {
-                    content
+                VStack(spacing: 0) {
+                    scrollingIntro
+                    pinnedFooter
                 }
-                .padding(.horizontal, 28)
-                .padding(.top, 44)
-                .padding(.bottom, 24)
-                .frame(maxWidth: 540)
-                .frame(maxWidth: .infinity)
             }
-            footer
-                .padding(.horizontal, 28)
-                .padding(.top, 14)
-                .padding(.bottom, 22)
-                .frame(maxWidth: 540)
-                .frame(maxWidth: .infinity)
-                // The themed raised surface, not `.bar`: a system material resolves
-                // to its own near-white chrome and ignores the app theme entirely,
-                // so under Sepia this bar rendered solid white against the warm
-                // cream page above it (owner-reported). `cardSurface` is the
-                // codebase's existing token for exactly this — its
-                // `appElevatedBackground` doc calls out "list/form cells, bars,
-                // popovers" — and it keeps the same one-step lift over
-                // `backgroundColor` that `.bar` provided, while falling back to
-                // `secondarySystemGroupedBackground`/`controlBackgroundColor` on
-                // Light/Dark where no custom theme colour exists. Nothing is lost
-                // by dropping the material: this footer is a sibling *below* the
-                // ScrollView in the VStack, never an overlay, so no content ever
-                // scrolls behind it for the blur to reveal.
-                .background(theme.appTheme.cardSurface)
+            .background(backgroundColor.ignoresSafeArea())
+        } else {
+            VStack(spacing: 0) {
+                ScrollView {
+                    scrollingIntro
+                }
+                pinnedFooter
+            }
+            .background(backgroundColor.ignoresSafeArea())
         }
-        .background(backgroundColor.ignoresSafeArea())
+    }
+
+    private var scrollingIntro: some View {
+        VStack(spacing: 28) {
+            content
+        }
+        .padding(.horizontal, 28)
+        .padding(.top, 44)
+        .padding(.bottom, 24)
+        .frame(maxWidth: 540)
+        .frame(maxWidth: .infinity)
+    }
+
+    private var pinnedFooter: some View {
+        footer
+            .padding(.horizontal, 28)
+            .padding(.top, 14)
+            .padding(.bottom, 22)
+            .frame(maxWidth: 540)
+            .frame(maxWidth: .infinity)
+            // The themed raised surface, not `.bar`: a system material resolves
+            // to its own near-white chrome and ignores the app theme entirely,
+            // so under Sepia this bar rendered solid white against the warm
+            // cream page above it (owner-reported). `cardSurface` is the
+            // codebase's existing token for exactly this — its
+            // `appElevatedBackground` doc calls out "list/form cells, bars,
+            // popovers" — and it keeps the same one-step lift over
+            // `backgroundColor` that `.bar` provided, while falling back to
+            // `secondarySystemGroupedBackground`/`controlBackgroundColor` on
+            // Light/Dark where no custom theme colour exists. Nothing is lost
+            // by dropping the material: this footer is a sibling *below* the
+            // ScrollView in the VStack, never an overlay, so no content ever
+            // scrolls behind it for the blur to reveal.
+            .background(theme.appTheme.cardSurface)
     }
 
     /// The themed app background, falling back to the platform's default surface
@@ -55,6 +76,19 @@ struct OnboardingScaffold<Content: View, Footer: View>: View {
         #else
         return Color(uiColor: .systemBackground)
         #endif
+    }
+}
+
+extension View {
+    /// A capsule clips a second line ("Choose S…"). Accessibility sizes use a
+    /// rounded rect; every other size keeps the button's own shape.
+    @ViewBuilder
+    func onboardingWrapsButton(at accessibilitySize: Bool) -> some View {
+        if accessibilitySize {
+            buttonBorderShape(.roundedRectangle(radius: 14))
+        } else {
+            self
+        }
     }
 }
 
