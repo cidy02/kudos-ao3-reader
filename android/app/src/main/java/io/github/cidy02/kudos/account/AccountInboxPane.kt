@@ -126,6 +126,8 @@ fun AccountInboxPane(
     val settings by settingsFlow.collectAsState(initial = KudosSettings.Defaults)
     val palette = LocalSubjectPalette.current
     var showingFilters by remember { mutableStateOf(false) }
+    DebugShotEffect("inbox", ready = state.filterForm != null) { showingFilters = true }
+
     var pendingDelete by remember { mutableStateOf<PendingInboxDelete?>(null) }
     // A confirmation belongs to the session that showed it: the Inbox resets when the session
     // changes, and the dialog goes with it (Codex's A59 review).

@@ -96,12 +96,16 @@ fun SettingsPage(
     } else tokens.background
     ProvidePushedShellChrome(hasSubjectHeader = true, scrollKey = title, pageBackground = background)
     val palette = LocalSubjectPalette.current
+    val debugList = androidx.compose.foundation.lazy.rememberLazyListState()
+    io.github.cidy02.kudos.app.DebugShotEffect("listening-page", ready = title == "Listening") {
+        debugList.scrollToItem(3)
+    }
     CompositionLocalProvider(LocalSettingsFormGround provides formGround) {
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
                 .then(if (washPalette != null) Modifier.subjectScreenWash(washPalette) else Modifier.background(background)),
-            contentPadding = PaddingValues(bottom = 32.dp)
+            contentPadding = PaddingValues(bottom = 32.dp), state = debugList
         ) {
             item {
                 Spacer(Modifier.height(WindowInsets.systemBars.asPaddingValues().calculateTopPadding() + 56.dp))

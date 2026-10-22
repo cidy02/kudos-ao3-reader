@@ -93,6 +93,10 @@ private fun PairingContent(
     var unknownSignerCount by remember { mutableStateOf(0) }
     var revokeTarget by remember { mutableStateOf<TrustedDevice?>(null) }
     var status by remember { mutableStateOf<String?>(null) }
+    DebugShotEffect("pairing", ready = trustedDevices.any { it.label == "Demo reading tablet" }) { name ->
+        if (name == "revokedevice") revokeTarget = trustedDevices.first { it.label == "Demo reading tablet" }
+        else showSheet = true
+    }
 
     // Re-read whenever the underlying trust set changes — trust()/revoke()
     // both write TrustedTombstonePublicKeys, so this Flow is the refresh signal.

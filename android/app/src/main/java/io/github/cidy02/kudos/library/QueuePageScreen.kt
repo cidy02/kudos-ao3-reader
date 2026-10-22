@@ -136,6 +136,14 @@ fun QueuePageScreen(
     var showRemove by remember { mutableStateOf(false) }
     var showTag by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+    DebugShotEffect("queue-page", ready = queue != null && works.isNotEmpty()) { name ->
+        when (name) {
+            "editqueue" -> showEdit = true
+            "addworks" -> showAdd = true
+            "bulktag" -> { selecting = true; selected = works.map { it.id }.toSet(); showTag = true }
+            else -> Unit
+        }
+    }
 
     LaunchedEffect(queueId, reload) {
         QueueShowOnlyTag.name?.let {

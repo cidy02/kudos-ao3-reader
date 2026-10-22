@@ -37,6 +37,15 @@ fun SettingsScreen(
     footprintScanner: LocalDataFootprintScanner? = null
 ) {
     val navController = rememberNavController()
+    DebugShotEffect("settings") { name ->
+        navController.navigate(when (name) {
+            "privacydata" -> "privacy"
+            "customizetheme" -> "appearance"
+            "pairing", "revokedevice" -> "folder_sync"
+            else -> "listening"
+        })
+    }
+
     val settings by repository.settings.collectAsState(initial = KudosSettings.Defaults)
     val requested = (LocalContext.current as? Activity)?.intent?.getStringExtra("kudosSettingsPage")
     val start = requested?.takeIf { it in SettingsDebugPages } ?: "hub"

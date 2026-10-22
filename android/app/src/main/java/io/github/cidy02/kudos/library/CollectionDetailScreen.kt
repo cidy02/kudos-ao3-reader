@@ -153,6 +153,10 @@ fun CollectionDetailScreen(
     var renameText by remember(collectionId) { mutableStateOf("") }
     var showDetails by remember(collectionId) { mutableStateOf(false) }
     var showReorder by remember(collectionId) { mutableStateOf(false) }
+    DebugShotEffect("collection", ready = collection != null && works.isNotEmpty()) { name ->
+        if (name == "collectionreorder") showReorder = true else showDetails = true
+    }
+
     var showAddPicker by remember(collectionId) { mutableStateOf(false) }
     var confirmDeleteCollection by remember(collectionId) { mutableStateOf(false) }
     var pendingRemoveWork by remember(collectionId) { mutableStateOf<SavedWork?>(null) }

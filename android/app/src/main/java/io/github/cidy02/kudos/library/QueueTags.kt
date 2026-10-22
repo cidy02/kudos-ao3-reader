@@ -267,6 +267,10 @@ fun QueueTagManager(
     var others by remember { mutableStateOf<List<ReadingQueue>>(emptyList()) }
     var reload by remember { mutableIntStateOf(0) }
     var editing by remember { mutableStateOf<Tag?>(null) }
+    DebugShotEffect("queue-tag-manager", ready = tags.any { it.name == "Rereads" }) {
+        editing = tags.first { it.name == "Rereads" }
+    }
+
     var copying by remember { mutableStateOf<Tag?>(null) }
     var pending by remember { mutableStateOf<Tag?>(null) }
     var draft by remember { mutableStateOf("") }

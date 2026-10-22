@@ -106,6 +106,20 @@ internal fun WritingWorkFormContent(model: WritingWorkFormState, account: String
     var chapterModel by remember(model) { mutableStateOf<WritingChapterFormState?>(null) }
     var viewingChapters by remember(model) { mutableStateOf(false) }
     var editingPostedTags by remember(model) { mutableStateOf<WritingWorkFormState?>(null) }
+    DebugShotEffect("work-form", ready = form != null && !state.loading) { name ->
+        when (name) {
+            "writingpreview" -> model.openPreview()
+            "chapters" -> viewingChapters = true
+            "edittags" -> model.editTagsModel()?.let { onSaving(); editingPostedTags = it }
+            "tagseditor" -> writingTags = WritingTagKind.Fandom
+            "seriespicker" -> association = WorkAssociation.Series
+            "collectionsgifts" -> association = WorkAssociation.CollectionsGifts
+            "creatorspicker" -> association = WorkAssociation.Creators
+            "parentpicker" -> association = WorkAssociation.Parent
+            else -> Unit
+        }
+    }
+
     LaunchedEffect(state.publicationNeedRefresh) { if (state.publicationNeedRefresh) model.refreshPublication() }
     LaunchedEffect(state.tagsNeedRefresh) { if (state.tagsNeedRefresh) model.refreshTags() }
     editingPostedTags?.let { tagsModel ->

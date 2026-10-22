@@ -68,6 +68,7 @@ import io.github.cidy02.kudos.ui.subject.SubjectSegmentedControl
 import io.github.cidy02.kudos.ui.subject.SubjectToggle
 import io.github.cidy02.kudos.ui.subject.isAccessibilityFontScale
 import io.github.cidy02.kudos.ui.subject.subjectPanel
+import kotlinx.coroutines.flow.first
 import java.time.LocalDate
 
 /** iOS AO3FilterPanel's section order; Refine changes only the loaded page. */
@@ -96,9 +97,17 @@ fun SearchFilterSheet(
     val tokens = LocalKudosTokens.current
     var sortDraft by remember { mutableStateOf(worksSort ?: AO3AuthorWorksSort()) }
     val seededSort = remember { worksSort }
+    val debugList = androidx.compose.foundation.lazy.rememberLazyListState()
+    val debugSheet = rememberModalBottomSheetState(skipPartiallyExpanded = !opensHalfHeight)
+    DebugShotEffect("search-filters") { name ->
+        debugList.scrollToItem(if (name == "languagepicker") 4 else 5)
+        androidx.compose.runtime.snapshotFlow { debugSheet.isVisible }.first { it }
+        debugSheet.expand()
+    }
+
     ModalBottomSheet(
         onDismissRequest = onDismiss,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = !opensHalfHeight),
+        sheetState = debugSheet,
         containerColor = tokens.background
     ) {
         Column(
@@ -133,7 +142,7 @@ fun SearchFilterSheet(
             }
             LazyColumn(
                 Modifier.fillMaxWidth().weight(1f, fill = false).testTag("AO3 filter form"),
-                verticalArrangement = Arrangement.spacedBy(18.dp)
+                verticalArrangement = Arrangement.spacedBy(18.dp), state = debugList
             ) {
                 if (worksSort != null) item {
                     Column(verticalArrangement = Arrangement.spacedBy(18.dp)) {

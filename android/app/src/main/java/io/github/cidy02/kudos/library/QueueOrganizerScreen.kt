@@ -114,6 +114,8 @@ fun QueueOrganizerScreen(
     var selected by remember { mutableStateOf<Set<String>>(emptySet()) }
     var menu by remember { mutableStateOf(false) }
     var creating by remember { mutableStateOf(false) }
+    DebugShotEffect("queue-organizer") { creating = true }
+
     var editing by remember { mutableStateOf<ReadingQueue?>(null) }
     var tagging by remember { mutableStateOf(false) }
     var pendingDelete by remember { mutableStateOf<List<ReadingQueue>>(emptyList()) }

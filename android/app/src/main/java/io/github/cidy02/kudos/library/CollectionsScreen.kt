@@ -65,6 +65,8 @@ fun CollectionsScreen(
     var collections by remember { mutableStateOf<List<WorkCollection>>(emptyList()) }
     var works by remember { mutableStateOf<List<SavedWork>>(emptyList()) }
     var showCreate by remember { mutableStateOf(false) }
+    DebugShotEffect("collections") { showCreate = true }
+
     var deleteCandidate by remember { mutableStateOf<WorkCollection?>(null) }
     val scope = rememberCoroutineScope()
 

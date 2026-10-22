@@ -175,6 +175,11 @@ fun CommentsScreen(
     val screenWidth = configuration.screenWidthDp.dp
 
     var showingChapterPicker by remember { mutableStateOf(false) }
+    DebugShotEffect("comments", ready = state is CommentsUiState.Loaded) {
+        viewModel.loadChaptersIfNeeded(chapterIndexRepository)
+        showingChapterPicker = true
+    }
+
     var sortMenuOpen by remember { mutableStateOf(false) }
     var pendingDeleteComment by remember { mutableStateOf<AO3Comment?>(null) }
     var pushedThreadRootId by remember { mutableStateOf<Long?>(null) }

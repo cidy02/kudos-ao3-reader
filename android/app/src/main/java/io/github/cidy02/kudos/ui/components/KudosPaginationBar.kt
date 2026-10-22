@@ -82,6 +82,8 @@ fun KudosPaginationBar(
     if (totalPages <= 1) return
 
     var showScrubber by remember { mutableStateOf(false) }
+    DebugShotEffect("pagination", ready = enabled) { showScrubber = true }
+
     val tokens = LocalKudosTokens.current
     val textMeasurer = rememberTextMeasurer()
     val density = LocalDensity.current

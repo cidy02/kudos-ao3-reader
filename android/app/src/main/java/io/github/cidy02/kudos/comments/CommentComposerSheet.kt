@@ -84,6 +84,7 @@ fun CommentComposerSheet(
         mutableStateOf(TextFieldValue(draft, TextRange(draft.length)))
     }
     var showFormattingTray by remember { mutableStateOf(false) }
+    DebugShotEffect("comment-composer") { showFormattingTray = true }
 
     // The draft comes back through the model's flow a frame after the field sent it. Each late echo
     // was taken for a change from outside and put over what had been typed since: typed fast,

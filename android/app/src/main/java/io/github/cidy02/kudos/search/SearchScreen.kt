@@ -190,6 +190,15 @@ fun SearchScreen(
     var showFilterSheet by remember { mutableStateOf(false) }
     var showSaveSheet by remember { mutableStateOf(false) }
     var saveName by remember { mutableStateOf("") }
+    DebugShotEffect("search") { name ->
+        if (name == "savesearch") {
+            val demoFilters = AO3SearchFilters(fandom = "Doctor Who")
+            viewModel.updateFilters(demoFilters)
+            saveName = defaultSavedSearchName(demoFilters)
+            showSaveSheet = true
+        }
+        showFilterSheet = true
+    }
     var pendingDeleteCollection by remember { mutableStateOf<io.github.cidy02.kudos.core.model.WorkCollection?>(null) }
     var localActionError by remember { mutableStateOf<String?>(null) }
     var expandAllCards by remember { mutableStateOf(false) }

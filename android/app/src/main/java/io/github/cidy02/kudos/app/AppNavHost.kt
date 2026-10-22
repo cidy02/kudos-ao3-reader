@@ -789,6 +789,8 @@ fun AppNavHost(
             val context = androidx.compose.ui.platform.LocalContext.current
             var editingSettings by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
             var settingsOpening by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(0) }
+            DebugShotEffect("challenge-settings") { settingsOpening += 1; editingSettings = true }
+
             if (slug == null) navController.popBackStack()
             else if (editingSettings) io.github.cidy02.kudos.account.AO3ChallengeSettingsEditScreen(
                 slug = slug, title = Routes.routeArg(entry, "collectionTitle") ?: slug,

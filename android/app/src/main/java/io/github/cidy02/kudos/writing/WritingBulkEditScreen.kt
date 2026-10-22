@@ -39,6 +39,11 @@ fun WritingBulkEditScreen(model: WritingBulkEditState, focus: String?, onBack: (
     // A started Save finishes and reaches the opener after Cancel (A64 F04): the opener's scope.
     val saveIn = saveScope ?: scope
     var picker by remember(model) { mutableStateOf<BulkPicker?>(null) }
+    DebugShotEffect("bulk-editor", ready = form != null) { name ->
+        picker = if (name == "bulknames") BulkPicker("Add to collections", "work[collections_to_add]", "names")
+            else BulkPicker("Archive warnings", AO3WorkFormField.warnings, "tri")
+    }
+
     val list = rememberLazyListState()
     LaunchedEffect(model) { model.load() }
     LaunchedEffect(state.saved) { if (state.saved && saveScope == null) onSaved() }

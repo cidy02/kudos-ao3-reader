@@ -56,6 +56,8 @@ fun AO3TagSetScreen(
     val state by model.state.collectAsState()
     val scope = rememberCoroutineScope()
     var editing by remember(model) { mutableStateOf(false) }
+    DebugShotEffect("tag-set", ready = state.data != null) { editing = true }
+
     val tokens = LocalKudosTokens.current
     val palette = tokens.scopePalette
     val large = isAccessibilityFontScale()

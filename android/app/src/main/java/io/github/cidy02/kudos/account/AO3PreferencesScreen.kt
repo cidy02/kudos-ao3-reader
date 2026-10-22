@@ -144,6 +144,9 @@ fun AO3PreferencesScreen(
     }
 
     LaunchedEffect(username) { load() }
+    DebugShotEffect("preferences", ready = snapshot != null) {
+        snapshot?.sections?.firstNotNullOfOrNull { it.help }?.let(::openHelp)
+    }
 
     fun save() {
         val snap = snapshot ?: return

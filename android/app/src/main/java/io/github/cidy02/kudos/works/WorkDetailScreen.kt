@@ -326,6 +326,37 @@ fun WorkDetailScreen(
         }
     }
 
+    DebugShotEffect("work-detail", ready = !state.loading && state.local != null) { name ->
+        when (name) {
+            "downloaddate" -> showingMyCopy = true
+            "addtocollection" -> collectionDialogOpen = true
+            "addtoqueue" -> {
+                readingQueueRepository.ensureSavedForLaterQueue()
+                availableQueues = readingQueueRepository.listQueues()
+                selectedQueueIds = availableQueues.filter { queue ->
+                    readingQueueRepository.listWorks(queue.id).any { it.work?.id == state.local?.id }
+                }.map { it.id }.toSet()
+                queuePickerOpen = true
+            }
+            "seriespreserve" -> {
+                val page = (seriesRepository.seriesPage(state.seriesUrl) as? AO3Result.Success)?.value
+                laterSeriesPrompt = SeriesPreservationPrompt(page, settings.app.autoPreserveSeriesWorkThreshold, page == null)
+                showingSeriesPrompt = true
+            }
+            "bookmarkform" -> {
+                val input = advisoryBookmark?.input ?: AO3BookmarkInput()
+                bookmarkNotes = input.notes
+                bookmarkTags = input.tags
+                bookmarkPrivate = input.isPrivate
+                bookmarkRecommendation = input.isRecommendation
+                bookmarkPseudId = input.pseudId
+                bookmarkIsEdit = advisoryBookmark?.exists == true
+                bookmarkDialog = true
+            }
+            else -> Unit
+        }
+    }
+
     // Prefetch live Subscribe/Unsubscribe and Bookmark states so the actions match AO3.
     LaunchedEffect(state.ao3WorkId, state.loading) {
         val workId = state.ao3WorkId

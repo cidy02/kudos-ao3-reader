@@ -97,6 +97,9 @@ fun QueueSettingsScreen(
     var colourMenu by remember { mutableStateOf(false) }
     var showTags by remember { mutableStateOf(false) }
     var managing by remember { mutableStateOf(false) }
+    DebugShotEffect("queue-settings", ready = queue != null && tags.isNotEmpty()) { name ->
+        if (name == "queuetag") showTags = true else managing = true
+    }
 
     LaunchedEffect(queueId, reload) {
         val loaded = runCatching { repository.getQueue(queueId) }.getOrNull()
