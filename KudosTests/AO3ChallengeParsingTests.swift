@@ -321,6 +321,77 @@ struct AO3ChallengeParsingTests {
         #expect(AO3ChallengeCountText.pageQualifier(page: 1, totalPages: 1) == nil)
     }
 
+    @Test func knownChallengeKindRequestsThatFormOnly() async throws {
+        let gift = AO3ChallengeURL.giftExchangeEdit(slug: "fest")
+        let meme = AO3ChallengeURL.promptMemeEdit(slug: "fest")
+        func html(for url: URL) -> String {
+            let segment = url.absoluteString.contains("prompt_meme") ? "prompt_meme" : "gift_exchange"
+            return "<main id=\"main\"><form action=\"/collections/fest/\(segment)\"><input name=\"authenticity_token\" value=\"local\"></form></main>"
+        }
+        func asked(kind: AO3ChallengeKind?, respond: (URL) throws -> String) async throws -> (AO3ChallengeSettingsForm, [URL]) {
+            var urls: [URL] = []
+            let form = try await AO3Client.challengeSettings(slug: "fest", kind: kind) { url in
+                urls.append(url)
+                return try respond(url)
+            }
+            return (form, urls)
+        }
+
+        let memeOnly = try await asked(kind: .promptMeme) { html(for: $0) }
+        #expect(memeOnly.1 == [meme])
+        #expect(memeOnly.0.kind == .promptMeme)
+        let giftOnly = try await asked(kind: .giftExchange) { html(for: $0) }
+        #expect(giftOnly.1 == [gift])
+        #expect(giftOnly.0.kind == .giftExchange)
+
+        var refused: [URL] = []
+        do {
+            _ = try await AO3Client.challengeSettings(slug: "fest", kind: .giftExchange) { url in
+                refused.append(url)
+                throw AO3Error.notFound
+            }
+            Issue.record("A known gift exchange that AO3 refuses must not open the prompt meme form")
+        } catch AO3Error.notFound {
+            #expect(refused == [gift])
+        }
+        var unparsed: [URL] = []
+        do {
+            _ = try await AO3Client.challengeSettings(slug: "fest", kind: .giftExchange) { url in
+                unparsed.append(url)
+                return "<html>unparseable</html>"
+            }
+            Issue.record("A known gift exchange whose page does not parse must not open the prompt meme form")
+        } catch AO3Error.parse {
+            #expect(unparsed == [gift])
+        }
+
+        let unknownGift = try await asked(kind: nil) { html(for: $0) }
+        #expect(unknownGift.1 == [gift])
+        #expect(unknownGift.0.kind == .giftExchange)
+        let missing = try await asked(kind: nil) { url in
+            if url == gift { throw AO3Error.notFound }
+            return html(for: url)
+        }
+        #expect(missing.1 == [gift, meme])
+        #expect(missing.0.kind == .promptMeme)
+        let recovered = try await asked(kind: nil) { url in
+            if url == gift { return "<html>unparseable</html>" }
+            return html(for: url)
+        }
+        #expect(recovered.1 == [gift, meme])
+        #expect(recovered.0.kind == .promptMeme)
+        var blocked: [URL] = []
+        do {
+            _ = try await AO3Client.challengeSettings(slug: "fest", kind: nil) { url in
+                blocked.append(url)
+                throw AO3Error.forbidden
+            }
+            Issue.record("An unknown kind must keep a non-not-found gift failure")
+        } catch AO3Error.forbidden {
+            #expect(blocked == [gift])
+        }
+    }
+
     @Test func assignmentTemplatesPreserveDefaultAndDeliveryStates() throws {
         // From _assignment_blurb, _maintainer_index_defaulted and
         // _maintainer_index_unfulfilled in otwcode/otwarchive (2026-09-12).
