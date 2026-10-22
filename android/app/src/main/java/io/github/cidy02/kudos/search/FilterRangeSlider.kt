@@ -98,7 +98,11 @@ internal fun FilterRangeSlider(
                 thumbColor = Color.White,
                 activeTrackColor = tokens.accent, inactiveTrackColor = tokens.glassFill(0.18)
             ),
-            modifier = Modifier.fillMaxWidth().semantics { contentDescription = "Range" }
+            modifier = Modifier.fillMaxWidth().semantics {
+                contentDescription = "Range"
+                stateDescription = "${FilterRangeValues.integer(from)?.toString() ?: "Any"} to " +
+                    (FilterRangeValues.integer(to)?.toString() ?: "Any")
+            }
         )
         if (isAccessibilityFontScale()) {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {

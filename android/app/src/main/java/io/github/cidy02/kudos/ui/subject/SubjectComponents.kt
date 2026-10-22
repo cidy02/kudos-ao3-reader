@@ -998,7 +998,8 @@ fun FilterButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     badgeCount: Int = 0,
-    onClearFilters: (() -> Unit)? = null
+    onClearFilters: (() -> Unit)? = null,
+    filterHelp: String? = null
 ) {
     val tokens = LocalKudosTokens.current
     val tint = if (filtersActive) LocalSubjectPalette.current.accentOnFill else tokens.primaryInk
@@ -1014,6 +1015,7 @@ fun FilterButton(
                 .background(if (filtersActive) tokens.accent.withOpacity(AccentContainerOpacity) else Color.Transparent)
                 .combinedClickable(
                     role = Role.Button,
+                    onClickLabel = filterHelp,
                     onClick = onClick,
                     onLongClick = if (filtersActive && onClearFilters != null) {
                         { menuOpen = true }

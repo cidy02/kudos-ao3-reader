@@ -207,6 +207,19 @@ class AuthorProfileSortScreenTest {
         compose.waitForIdle()
     }
 
+    @Test fun sortButtonHasIOSHelpAndActiveCountAfterApplyingSort() {
+        show(AuthorTab.Works, false)
+        val button = compose.onNodeWithContentDescription("Sort and filter")
+        assertEquals("Sort and filter the works on this page", button.fetchSemanticsNode().config[SemanticsActions.OnClick].label)
+        assertNull(button.fetchSemanticsNode().config.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.StateDescription))
+        openSheet()
+        chooseColumn("Title")
+        apply()
+        awaitText("Page 1 of 3")
+        button.assert(SemanticsMatcher.expectValue(androidx.compose.ui.semantics.SemanticsProperties.StateDescription, "1 active"))
+        assertEquals("Sort and filter the works on this page", button.fetchSemanticsNode().config[SemanticsActions.OnClick].label)
+    }
+
     @Test fun applyReadsOnlyPageOneOnceDismissDoesNothingAndNextPageKeepsChoice() {
         show(AuthorTab.Works, false)
         assertEquals(1, indexReads().size); assertEquals(2, requests.size) // Dashboard + Works only.

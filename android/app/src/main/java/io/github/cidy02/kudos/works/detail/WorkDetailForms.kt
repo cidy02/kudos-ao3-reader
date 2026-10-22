@@ -24,6 +24,8 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.material3.SheetValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.cidy02.kudos.app.ProvidePushedShellChrome
@@ -170,7 +172,8 @@ internal fun WorkDetailSeriesForm(
     onOnlyThisWork: () -> Unit,
     onPreserve: () -> Unit
 ) {
-    DetailForm("Preserve Series?", onOnlyThisWork) {
+    DetailForm("Preserve Series?", onOnlyThisWork,
+        leading = { FormToolbarAction("Cancel", true, onOnlyThisWork) }) {
         item { SettingsSection(footnote = null) {
             DetailFormText(prompt.message, primary = true)
             DetailFormText("Kudos saves the series one work at a time, with the usual pause between visits to AO3.")
@@ -224,7 +227,8 @@ internal fun WorkDetailQueueForm(
                 SubjectFormRow(queue.displayName, onClick = { if (!working && !preserving) onAdd(queue) }, trailing = {
                     if (queue.id == workingQueueId) CircularProgressIndicator(color = LocalKudosTokens.current.scopePalette.accent,
                         trackColor = LocalKudosTokens.current.separator, modifier = Modifier.size(20.dp))
-                    else if (queue.id in selected) Text("✓", color = LocalKudosTokens.current.scopePalette.accent, fontSize = 15.sp, lineHeight = 21.sp)
+                    else if (queue.id in selected) Text("✓", color = LocalKudosTokens.current.scopePalette.accent, fontSize = 15.sp, lineHeight = 21.sp,
+                        modifier = Modifier.semantics { contentDescription = "In this queue" })
                 })
             }
         } }

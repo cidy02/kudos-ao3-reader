@@ -38,6 +38,9 @@ import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
@@ -196,7 +199,13 @@ internal fun FilterFacetRow(title: String, state: FilterSelectionState, onClick:
         Modifier.fillMaxWidth()
             .background(if (state == FilterSelectionState.INCLUDED) color.copy(alpha = 0.10f) else Color.Transparent)
             .clickable(role = Role.Button, onClick = onClick)
-            .semantics(mergeDescendants = true) { stateDescription = state.status }
+            .clearAndSetSemantics {
+                contentDescription = title
+                if (state != FilterSelectionState.CLEAR) stateDescription =
+                    if (state == FilterSelectionState.INCLUDED) "Included" else "Excluded"
+                role = Role.Button
+                onClick { onClick(); true }
+            }
             .padding(horizontal = 13.dp, vertical = 11.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically
