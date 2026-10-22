@@ -6,6 +6,8 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.Density
 import io.github.cidy02.kudos.app.Routes
@@ -273,6 +275,11 @@ class AO3PromptMemeScreenTest {
         assertTrue(tagLayouts.isNotEmpty())
         assertTrue(tagLayouts.all { !it.didOverflowHeight && !it.isLineEllipsized(it.lineCount - 1) })
         select("Unclaimed")
+        // One row at 2x, as iOS's segmented picker (A76): it does not stack into a list.
+        val filterRows = listOf("All", "Unclaimed", "Yours").map {
+            compose.onNode(hasText(it) and hasClickAction()).fetchSemanticsNode().boundsInRoot.center.y.toInt() / 8
+        }.toSet()
+        assertEquals(1, filterRows.size)
         val filterLayouts = mutableListOf<TextLayoutResult>()
         compose.onNodeWithText("Unclaimed").performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(filterLayouts) }
         assertTrue(filterLayouts.isNotEmpty())
