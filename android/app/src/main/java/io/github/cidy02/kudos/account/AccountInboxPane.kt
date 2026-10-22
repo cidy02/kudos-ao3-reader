@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.account
 
+import io.github.cidy02.kudos.ui.subject.SubjectSkeletonList
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -79,7 +80,6 @@ import io.github.cidy02.kudos.ui.components.CommentParticipantBadge
 import io.github.cidy02.kudos.ui.components.DestructiveConfirmation
 import io.github.cidy02.kudos.ui.components.EmptyStateCard
 import io.github.cidy02.kudos.ui.components.ErrorStateCard
-import io.github.cidy02.kudos.ui.components.LoadingStateCard
 import io.github.cidy02.kudos.ui.subject.FilterButton
 import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
 import io.github.cidy02.kudos.ui.subject.LocalSubjectPalette
@@ -274,7 +274,11 @@ fun AccountInboxPane(
                 state.phase == AccountInboxUiState.Phase.Loading && state.items.isEmpty() -> {
                     item {
                         Box(Modifier.padding(top = 16.dp)) {
-                            LoadingStateCard("Loading Inbox")
+                            SubjectSkeletonList(
+                                "Loading Inbox", count = 3,
+                                shape = io.github.cidy02.kudos.ui.subject.SubjectSkeletonShape.Inbox,
+                                scrollable = false
+                            )
                         }
                     }
                 }

@@ -303,7 +303,9 @@ fun HomeCoverSkeleton(modifier: Modifier = Modifier) {
             .then(cardShadow(tokens.theme, shape, hero = false))
             .clip(shape)
             .background(tokens.cardFill)
-    )
+    ) {
+        SubjectCoverSkeletonContent()
+    }
 }
 
 @Composable

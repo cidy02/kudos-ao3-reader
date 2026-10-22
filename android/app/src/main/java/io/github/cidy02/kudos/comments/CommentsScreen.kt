@@ -558,8 +558,10 @@ fun CommentsScreen(
             // Main Content Area
             when (val current = state) {
                 is CommentsUiState.Loading -> {
-                    items(4) {
-                        CommentSkeletonRow()
+                    item {
+                        io.github.cidy02.kudos.ui.subject.SubjectSkeletonLoading("Loading comments") {
+                            Column { repeat(4) { CommentSkeletonRow() } }
+                        }
                     }
                 }
                 is CommentsUiState.Error -> {
