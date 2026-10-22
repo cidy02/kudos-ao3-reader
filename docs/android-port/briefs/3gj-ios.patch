@@ -1,0 +1,162 @@
+--- a/kudos-ao3-reader/Services/KudosBackup.swift
++++ b/kudos-ao3-reader/Services/KudosBackup.swift
+@@ -2356,9 +2356,9 @@
+             var createdNewWork = false
+             if let existing = workIndex.existingWork(for: archived) {
+                 if mode == .merge {
+-                    if existing.isPendingDeletion {
+-                        // Not in the active library (Recently Deleted). Merge
+-                        // adds it back without planting a tombstone.
++                    if existing.isPendingDeletion, archived.isDeleted != true {
++                        // A live archive copy can undo Replace parking. An archived
++                        // deletion keeps the local recovery window and tombstone.
+                         existing.isPendingDeletion = false
+                         existing.deletedAt = nil
+                         existing.permanentDeletionScheduledAt = nil
+@@ -2374,7 +2374,7 @@
+                         work = existing
+                         isNewRecord = false
+                     } else {
+-                        // Active overlap: leave local state entirely — a stale
++                        // Existing overlap: leave local state entirely — a stale
+                         // backup must not overwrite metadata the reader has
+                         // moved on from.
+                         //
+@@ -2555,7 +2555,7 @@
+             if let existing = collectionsByID[archived.id] {
+                 // Mirror the work path: Merge must be able to undo a prior
+                 // Replace that parked this collection in Recently Deleted.
+-                if mode == .merge, existing.isPendingDeletion {
++                if mode == .merge, existing.isPendingDeletion, archived.isDeleted != true {
+                     existing.isPendingDeletion = false
+                     existing.deletedAt = nil
+                     existing.permanentDeletionScheduledAt = nil
+@@ -2786,7 +2786,7 @@
+             } else if let existing = queuesByID[archived.id] {
+                 // Mirror the work path: Merge must be able to undo a prior
+                 // Replace that parked this queue in Recently Deleted.
+-                if mode == .merge, existing.isPendingDeletion {
++                if mode == .merge, existing.isPendingDeletion, archived.isDeleted != true {
+                     existing.isPendingDeletion = false
+                     existing.deletedAt = nil
+                     existing.permanentDeletionScheduledAt = nil
+--- a/KudosTests/KudosBackupTests.swift
++++ b/KudosTests/KudosBackupTests.swift
+@@ -1824,6 +1824,71 @@
+         )
+     }
+ 
++    @Test func repeatedFileMergeKeepsArchivedDeletionsAndLocalRecoveryDeadlines() throws {
++        let schema = Schema([
++            SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
++            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SyncTombstone.self,
++            ReadingAnnotation.self
++        ])
++        let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
++        let container = try ModelContainer(for: schema, configurations: [configuration])
++        let context = ModelContext(container)
++        let defaults = try testDefaults()
++        let deletedAt = Date(timeIntervalSince1970: 50)
++        let archiveDeadline = Date(timeIntervalSince1970: 100)
++        let work = SavedWork(title: "Deleted work", author: "A")
++        work.isPendingDeletion = true
++        work.deletedAt = deletedAt
++        work.permanentDeletionScheduledAt = archiveDeadline
++        let collection = WorkCollection(name: "Deleted collection")
++        collection.isPendingDeletion = true
++        collection.deletedAt = deletedAt
++        collection.permanentDeletionScheduledAt = archiveDeadline
++        let queue = ReadingQueue(name: "Deleted queue", kind: .custom)
++        queue.isPendingDeletion = true
++        queue.deletedAt = deletedAt
++        queue.permanentDeletionScheduledAt = archiveDeadline
++        let contents = try KudosBackupService.makeContents(
++            works: [work], bookmarks: [], fonts: [], collections: [collection],
++            readingQueues: [queue], defaults: defaults
++        )
++        _ = try KudosBackupService.restore(contents, into: context, defaults: defaults, mode: .merge)
++        let localWork = try #require(try context.fetch(FetchDescriptor<SavedWork>()).first { $0.id == work.id })
++        let localCollection = try #require(
++            try context.fetch(FetchDescriptor<WorkCollection>()).first { $0.id == collection.id }
++        )
++        let localQueue = try #require(
++            try context.fetch(FetchDescriptor<ReadingQueue>()).first { $0.id == queue.id }
++        )
++        let workDeadline = try #require(localWork.permanentDeletionScheduledAt)
++        let collectionDeadline = try #require(localCollection.permanentDeletionScheduledAt)
++        let queueDeadline = try #require(localQueue.permanentDeletionScheduledAt)
++        #expect(localWork.isPendingDeletion)
++        #expect(localCollection.isPendingDeletion)
++        #expect(localQueue.isPendingDeletion)
++        #expect(workDeadline > archiveDeadline)
++        #expect(collectionDeadline > archiveDeadline)
++        #expect(queueDeadline > archiveDeadline)
++        // A local suppressor must survive imports that affirm the deletion.
++        let tombstone = SyncTombstone(recordID: work.id, recordType: .savedWork)
++        let tombstoneID = tombstone.id
++        context.insert(tombstone)
++        try context.save()
++        for _ in 0..<2 {
++            _ = try KudosBackupService.restore(contents, into: context, defaults: defaults, mode: .merge)
++            #expect(localWork.isPendingDeletion)
++            #expect(localCollection.isPendingDeletion)
++            #expect(localQueue.isPendingDeletion)
++            #expect(localWork.deletedAt == deletedAt)
++            #expect(localCollection.deletedAt == deletedAt)
++            #expect(localQueue.deletedAt == deletedAt)
++            #expect(localWork.permanentDeletionScheduledAt == workDeadline)
++            #expect(localCollection.permanentDeletionScheduledAt == collectionDeadline)
++            #expect(localQueue.permanentDeletionScheduledAt == queueDeadline)
++            #expect(try context.fetch(FetchDescriptor<SyncTombstone>()).contains { $0.id == tombstoneID })
++        }
++    }
++
+     @Test func fileMergeUndeletesPendingDeletion() throws {
+         let schema = Schema([
+             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
+@@ -1855,7 +1920,7 @@
+         #expect(stored.title == "Restored From File")
+     }
+ 
+-    @Test func fileMergeUndeletesPendingDeletionCollectionsAndQueues() throws {
++    @Test func repeatedFileMergeUndoesReplaceParkingForWorksCollectionsAndQueues() throws {
+         let schema = Schema([
+             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
+             WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SyncTombstone.self,
+@@ -1883,7 +1948,7 @@
+             defaults: try testDefaults()
+         )
+         let replaceSnapshot = try KudosBackupService.makeContents(
+-            works: [work],
++            works: [],
+             bookmarks: [],
+             fonts: [],
+             collections: [],
+@@ -1899,12 +1964,24 @@
+         let afterReplaceQueue = try #require(
+             try context.fetch(FetchDescriptor<ReadingQueue>()).first { $0.id == queue.id }
+         )
++        #expect(work.isPendingDeletion)
+         #expect(afterReplaceCollection.isPendingDeletion)
+         #expect(afterReplaceQueue.isPendingDeletion)
+ 
+-        _ = try KudosBackupService.restore(
+-            realBackup, into: context, defaults: try testDefaults(), mode: .merge
+-        )
++        for _ in 0..<2 {
++            _ = try KudosBackupService.restore(
++                realBackup, into: context, defaults: try testDefaults(), mode: .merge
++            )
++            #expect(!work.isPendingDeletion)
++            #expect(work.deletedAt == nil)
++            #expect(work.permanentDeletionScheduledAt == nil)
++            #expect(!afterReplaceCollection.isPendingDeletion)
++            #expect(afterReplaceCollection.deletedAt == nil)
++            #expect(afterReplaceCollection.permanentDeletionScheduledAt == nil)
++            #expect(!afterReplaceQueue.isPendingDeletion)
++            #expect(afterReplaceQueue.deletedAt == nil)
++            #expect(afterReplaceQueue.permanentDeletionScheduledAt == nil)
++        }
+         let restoredCollection = try #require(
+             try context.fetch(FetchDescriptor<WorkCollection>()).first { $0.id == collection.id }
+         )
