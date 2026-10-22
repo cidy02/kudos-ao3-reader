@@ -2356,9 +2356,9 @@ enum KudosBackupService {
             var createdNewWork = false
             if let existing = workIndex.existingWork(for: archived) {
                 if mode == .merge {
-                    if existing.isPendingDeletion {
-                        // Not in the active library (Recently Deleted). Merge
-                        // adds it back without planting a tombstone.
+                    if existing.isPendingDeletion, archived.isDeleted != true {
+                        // A live archive copy can undo Replace parking. An archived
+                        // deletion keeps the local recovery window and tombstone.
                         existing.isPendingDeletion = false
                         existing.deletedAt = nil
                         existing.permanentDeletionScheduledAt = nil
@@ -2374,7 +2374,7 @@ enum KudosBackupService {
                         work = existing
                         isNewRecord = false
                     } else {
-                        // Active overlap: leave local state entirely — a stale
+                        // Existing overlap: leave local state entirely — a stale
                         // backup must not overwrite metadata the reader has
                         // moved on from.
                         //
@@ -2555,7 +2555,7 @@ enum KudosBackupService {
             if let existing = collectionsByID[archived.id] {
                 // Mirror the work path: Merge must be able to undo a prior
                 // Replace that parked this collection in Recently Deleted.
-                if mode == .merge, existing.isPendingDeletion {
+                if mode == .merge, existing.isPendingDeletion, archived.isDeleted != true {
                     existing.isPendingDeletion = false
                     existing.deletedAt = nil
                     existing.permanentDeletionScheduledAt = nil
@@ -2786,7 +2786,7 @@ enum KudosBackupService {
             } else if let existing = queuesByID[archived.id] {
                 // Mirror the work path: Merge must be able to undo a prior
                 // Replace that parked this queue in Recently Deleted.
-                if mode == .merge, existing.isPendingDeletion {
+                if mode == .merge, existing.isPendingDeletion, archived.isDeleted != true {
                     existing.isPendingDeletion = false
                     existing.deletedAt = nil
                     existing.permanentDeletionScheduledAt = nil
@@ -2837,7 +2837,9 @@ enum KudosBackupService {
             }
             let localModifiedAt = SyncMerge.effectiveQueueModifiedAt(queue)
             let incomingWins = switch mode {
-            case .merge: false
+            // File Merge is add-only, but a queue this restore created takes the archive's
+            // state, as a new collection does: a deleted queue arrived live (3gj).
+            case .merge: !hadExistingQueue && kind != .savedForLater
             case .replaceLibrary: true
             case .reconcile:
                 SyncMerge.shouldApplyIncoming(
@@ -2935,7 +2937,9 @@ enum KudosBackupService {
                     // initializer's placeholder (`dateUpdated`) is not a membership change,
                     // and `max` against it moved the clock to the queue's last edit (3ge;
                     // Android restores the clock as written).
-                    queue.lastMembershipChangedAt = hadExistingQueue
+                    // Saved for Later is matched by kind, not id, so this library's own
+                    // system queue is not "existing" by id; it keeps the newer clock too (A73-7).
+                    queue.lastMembershipChangedAt = hadExistingQueue || kind == .savedForLater
                         ? max(queue.lastMembershipChangedAt, archivedChangedAt)
                         : archivedChangedAt
                 }
