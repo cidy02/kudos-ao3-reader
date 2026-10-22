@@ -536,3 +536,17 @@ scripts; an imported book might.
 
 Until answered: A.
 
+
+## 32. Leaving a work or chapter form with unsaved edits (both apps) (2026-10-22)
+
+Back (or Android's back swipe) from a work, chapter or tag form you have edited leaves without
+asking, on both apps; the long text comes back from its recovery copy, the short fields do not
+(see 26). With predictive back on Android the swipe shows the screen underneath first, so a
+leave is less of a surprise, but it is still one swipe.
+
+- **A (what stands).** Leave without asking, as both apps do now.
+- **B.** Ask "Keep editing / Discard changes" when something was changed, on both apps. Codex
+  built this for Android (kept on `android/agent-codex2-3gk`, not landed) because the brief
+  assumed the question already existed.
+
+Until answered: A.
