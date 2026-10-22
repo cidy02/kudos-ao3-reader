@@ -186,4 +186,26 @@ object BackupPaths {
         val digest = MessageDigest.getInstance("SHA-256").digest(bytes)
         return digest.joinToString("") { byte -> "%02x".format(byte) }
     }
+
+    /**
+     * iOS `Storage.fileDigest`: SHA-256 in 1 MiB chunks so a large book is not
+     * one resident array. Lowercase hex. Null when the file cannot be read.
+     */
+    fun sha256(file: java.io.File): String? {
+        if (!file.isFile) return null
+        return try {
+            val digest = MessageDigest.getInstance("SHA-256")
+            file.inputStream().use { input ->
+                val buffer = ByteArray(1 shl 20)
+                while (true) {
+                    val read = input.read(buffer)
+                    if (read < 0) break
+                    if (read > 0) digest.update(buffer, 0, read)
+                }
+            }
+            digest.digest().joinToString("") { byte -> "%02x".format(byte) }
+        } catch (_: java.io.IOException) {
+            null
+        }
+    }
 }

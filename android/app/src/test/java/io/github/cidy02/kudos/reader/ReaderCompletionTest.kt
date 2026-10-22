@@ -71,7 +71,12 @@ class ReaderCompletionTest {
             model = reader
             withTimeout(5_000) { reader.state.filterIsInstance<ReaderUiState.Reading>().first() }
             reader.setSpineCount(10)
-            val landing = ReaderProgress(9, 0.97, totalProgression = 0.985)
+            val landing = ReaderProgress(
+                spineIndex = 9,
+                scrollFraction = 0.97,
+                locatorJson = """{"href":"end.xhtml","locations":{"totalProgression":0.985}}""",
+                totalProgression = 0.985
+            )
             reader.onProgress(landing)
             reader.onViewport(ReaderViewport(9, 99, 100))
             assertFalse(works.getWork(work.id)!!.isFinished)

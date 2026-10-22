@@ -956,7 +956,7 @@ class SyncRepositoryTest {
         val repeated = BackupMergeService.merge(
             backupRepository.captureLibrarySnapshot(pack.fontFilesByFileName.keys, pack.fontFilesByFileName), pack
         )
-        assertEquals("custom:reader-restored-1.otf", repeated.snapshot.settings.readerFontID)
+        assertEquals("custom:reader.otf", repeated.snapshot.settings.readerFontID)
         assertTrue(repeated.fontFilesToWriteByFileName.isEmpty())
     }
 
@@ -1836,7 +1836,9 @@ class SyncRepositoryTest {
 
         val result = syncRepository.runSync()
 
-        assertEquals(SyncResult.Success(foldedConflicts = 1), result)
+        // The live manifest and the conflict copy each restore one work, and
+        // those counts are kept (iOS `FolderSyncResult.absorb`).
+        assertEquals(SyncResult.Success(foldedConflicts = 1, restoredWorks = 2), result)
         assertEquals("In the manifest", database.workDao().getById(WORK_REMOTE)?.title)
         assertEquals("In the conflict copy", database.workDao().getById(WORK_A)?.title)
         assertTrue(requireKudosLibrary().findFile("manifest (1).json") == null)

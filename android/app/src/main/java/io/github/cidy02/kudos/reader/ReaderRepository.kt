@@ -34,6 +34,9 @@ class ReaderRepository(
     private val customFontsProvider: (suspend () -> List<CustomFont>)? = null,
     private val fontPathResolver: ((String) -> String?)? = null
 ) {
+    init {
+        progressGate.clock = clock
+    }
     suspend fun currentWork(workId: String): SavedWork? = workRepository.getWork(workId)
 
     /**
@@ -99,19 +102,48 @@ class ReaderRepository(
     }
 
     /**
-     * Navigator location. The open landing and sub-threshold noise return false
-     * and must not be written. A later move returns true; persist it with
-     * [persistLocation].
+     * Navigator location, iOS `ReadiumProgressPersistence.note`. An empty locator
+     * is ignored. A different locator is accepted immediately, or armed for the
+     * rest of the two-second window. The write itself goes through
+     * [attachProgressWriter]; this return is only "was it a real place".
      */
+    fun noteLocation(workId: String, progress: ReaderProgress): NoteOutcome =
+        progressGate.note(workId, progress, clock())
+
     fun observeLocation(workId: String, progress: ReaderProgress): Boolean =
-        progressGate.consider(workId, progress) != null
+        noteLocation(workId, progress) != NoteOutcome.IGNORED
 
     /**
-     * Mid-session write for a location [observeLocation] already accepted.
-     * Updates the resume point and retires a macOS percent that the position
-     * moved past. Does not bump Continue Reading order (iOS debounced locator).
+     * Where a debounced or trailing write should go. The gate invokes [write]
+     * synchronously when the interval is already open.
+     */
+    fun attachProgressWriter(scheduler: TrailingWriteScheduler, write: (ReaderProgress) -> Unit) {
+        progressGate.scheduler = scheduler
+        progressGate.onDebouncedWrite = write
+    }
+
+    /**
+     * Close / background. Cancels the trailing timer and returns a locator the
+     * window was still holding, or null when disk already matches.
+     */
+    fun takeUnpersistedLocation(workId: String): ReaderProgress? {
+        if (!progressGate.sessionMatches(workId)) return null
+        progressGate.cancelTrailing()
+        val ready = progressGate.locatorForFlush() ?: return null
+        progressGate.markPersisted(ready, clock())
+        return ready
+    }
+
+    /**
+     * Mid-session write for a location the gate already accepted, or an explicit
+     * end-of-work / scrub write. Updates the resume point and retires a macOS
+     * percent that the position moved past. Does not bump Continue Reading
+     * order (iOS debounced locator).
      */
     suspend fun persistLocation(workId: String, progress: ReaderProgress): SavedWork? {
+        if (progressGate.sessionMatches(workId)) {
+            progressGate.markPersisted(progress, clock())
+        }
         val work = workRepository.getWork(workId) ?: return null
         return workRepository.upsert(
             progressMapper.applyProgress(work, progress, clock(), shelfStamp = false)
