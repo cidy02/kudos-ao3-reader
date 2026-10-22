@@ -23,6 +23,12 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
 
 interface AO3Client {
+    /** Clients without a task fraction still work; the queue supplies its pacing creep. */
+    suspend fun getBytesWithProgress(
+        url: String,
+        onProgress: (Double) -> Unit
+    ): AO3Result<AO3BinaryResponse> = getBytes(url)
+
     suspend fun get(
         url: String,
         headers: Map<String, String> = emptyMap()
@@ -135,6 +141,19 @@ class OkHttpAO3Client(
         url: String,
         headers: Map<String, String>
     ): AO3Result<AO3BinaryResponse> {
+        return getBytes(url, headers, onProgress = {})
+    }
+
+    override suspend fun getBytesWithProgress(
+        url: String,
+        onProgress: (Double) -> Unit
+    ): AO3Result<AO3BinaryResponse> = getBytes(url, emptyMap(), onProgress)
+
+    private suspend fun getBytes(
+        url: String,
+        headers: Map<String, String>,
+        onProgress: (Double) -> Unit
+    ): AO3Result<AO3BinaryResponse> {
         rejectedUrl(url)?.let { return it }
         val key = try {
             AO3RequestKey.get(url, headers)
@@ -145,7 +164,8 @@ class OkHttpAO3Client(
         return executeBinaryWithRetry(
             method = AO3HttpMethod.GET,
             url = key.canonicalUrl,
-            headers = headers
+            headers = headers,
+            onProgress = onProgress
         )
     }
 
@@ -243,14 +263,15 @@ class OkHttpAO3Client(
     private suspend fun executeBinaryWithRetry(
         method: AO3HttpMethod,
         url: String,
-        headers: Map<String, String>
+        headers: Map<String, String>,
+        onProgress: (Double) -> Unit
     ): AO3Result<AO3BinaryResponse> {
         var retryNumber = 0
         while (true) {
             currentCoroutineContext().ensureActive()
             val result = coordinator.coordinate {
                 currentCoroutineContext().ensureActive()
-                performBinaryOnce(method, url, headers)
+                performBinaryOnce(method, url, headers, onProgress)
             }
             if (result is AO3Result.Success) return result
 
@@ -265,13 +286,14 @@ class OkHttpAO3Client(
     private suspend fun performBinaryOnce(
         method: AO3HttpMethod,
         url: String,
-        headers: Map<String, String>
+        headers: Map<String, String>,
+        onProgress: (Double) -> Unit
     ): AO3Result<AO3BinaryResponse> {
         val request = buildRequest(method, url, headers)
         return try {
             val response = okHttpClient.newCall(request).await()
             withContext(Dispatchers.IO) {
-                response.use { mapBinaryResponse(it, originalUrl = url) }
+                response.use { mapBinaryResponse(it, originalUrl = url, onProgress = onProgress) }
             }
         } catch (error: CancellationException) {
             throw error
@@ -384,9 +406,24 @@ class OkHttpAO3Client(
 
     private fun mapBinaryResponse(
         response: Response,
-        originalUrl: String
+        originalUrl: String,
+        onProgress: (Double) -> Unit
     ): AO3Result<AO3BinaryResponse> {
-        val bytes = response.body.bytes()
+        val body = response.body
+        val length = body.contentLength()
+        val output = java.io.ByteArrayOutputStream()
+        body.byteStream().use { input ->
+            val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+            while (true) {
+                val count = input.read(buffer)
+                if (count < 0) break
+                output.write(buffer, 0, count)
+                if (response.isSuccessful && length > 0) {
+                    onProgress((output.size().toDouble() / length).coerceIn(0.0, 1.0))
+                }
+            }
+        }
+        val bytes = output.toByteArray()
         val statusCode = response.code
         val retryAfterMillis = AO3RetryAfter.parseMillis(response.header("Retry-After"))
         val finalUrl = response.request.url.toString()

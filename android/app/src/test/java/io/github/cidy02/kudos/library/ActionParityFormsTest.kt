@@ -9,6 +9,11 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.InspectableValue
+import androidx.compose.ui.platform.isDebugInspectorInfoEnabled
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import io.github.cidy02.kudos.app.LocalPushedShellChrome
@@ -18,6 +23,7 @@ import io.github.cidy02.kudos.data.local.KudosDatabase
 import io.github.cidy02.kudos.files.WorkFileStore
 import io.github.cidy02.kudos.ui.components.AddSelectionToCollectionDialog
 import io.github.cidy02.kudos.ui.theme.KudosTheme
+import io.github.cidy02.kudos.ui.subject.ReaderTheme
 import io.github.cidy02.kudos.works.WorkRepository
 import java.nio.file.Files
 import kotlinx.coroutines.runBlocking
@@ -34,6 +40,7 @@ import org.robolectric.annotation.GraphicsMode
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35], application = Application::class, qualifiers = "w411dp-h2400dp")
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
+@OptIn(androidx.compose.ui.ExperimentalComposeUiApi::class)
 class ActionParityFormsTest {
     @get:Rule val compose = createComposeRule()
     private lateinit var database: KudosDatabase
@@ -126,6 +133,44 @@ class ActionParityFormsTest {
         compose.runOnIdle { shown.value = false }
         await { works.getCollection(collection.id)?.description == "Keep this description" }
         assertEquals(0, saves)
+    }
+
+    @Test fun queueEditorUsesThePickedFillForItsSwitchAndReadableSheetInkForCancel() {
+        val picked = Color(0xFF193B97)
+        val queue = runBlocking { queues.createQueue("Blue queue", hue = 0.62, colorHex = "#193B97", keepsWorksOffline = true) }
+        val oldInspector = isDebugInspectorInfoEnabled
+        isDebugInspectorInfoEnabled = true
+        try {
+            compose.setContent { KudosTheme(io.github.cidy02.kudos.ui.theme.KudosThemeMode.Dark) {
+                QueueEditorSheet(queues, queue, {}, {})
+            } }
+            assertSwitchFill("Keep works offline", picked)
+            val layouts = mutableListOf<TextLayoutResult>()
+            compose.onNodeWithText("Cancel").performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
+            assertEquals(ReaderTheme.Dark.accentInk(picked), layouts.single().layoutInput.style.color)
+        } finally { isDebugInspectorInfoEnabled = oldInspector }
+    }
+
+    @Test fun collectionEditorUsesThePickedFillForBothSwitches() {
+        val picked = Color(0xFF193B97)
+        val collection = runBlocking { works.createCollection("Blue collection", hue = 0.62, colorHex = "#193B97",
+            keepsWorksOffline = true, showsOnHome = true) }
+        val oldInspector = isDebugInspectorInfoEnabled
+        isDebugInspectorInfoEnabled = true
+        try {
+            compose.setContent { KudosTheme(io.github.cidy02.kudos.ui.theme.KudosThemeMode.Oled) {
+                CollectionEditorSheet(works, collection, {}, {})
+            } }
+            assertSwitchFill("Keep downloads", picked)
+            assertSwitchFill("Show on Home", picked)
+        } finally { isDebugInspectorInfoEnabled = oldInspector }
+    }
+
+    private fun assertSwitchFill(description: String, expected: Color) {
+        val colors = compose.onNodeWithContentDescription(description).fetchSemanticsNode().layoutInfo.getModifierInfo()
+            .flatMap { (it.modifier as? InspectableValue)?.inspectableElements?.toList().orEmpty() }
+            .filter { it.name == "color" }.map { it.value }
+        assertTrue("$description track should be $expected, was $colors", expected in colors)
     }
 
     @Test fun collectionWorkLongPressOffersSharedActionsAndScopedRemove() {

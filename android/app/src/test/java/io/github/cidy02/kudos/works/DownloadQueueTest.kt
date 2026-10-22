@@ -21,6 +21,7 @@ import java.time.Instant
 import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
@@ -28,6 +29,12 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.setMain
+import kotlinx.coroutines.test.resetMain
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -40,6 +47,7 @@ import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
+@OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class DownloadQueueTest {
     private lateinit var database: KudosDatabase
     private lateinit var fileStore: WorkFileStore
@@ -317,6 +325,85 @@ class DownloadQueueTest {
         assertEquals(2, downloads.get())
     }
 
+    @Test
+    fun pacingCreepIncreasesButNeverReachesNinetyPercent() {
+        assertEquals(0.0, downloadPacingFraction(0), 0.0)
+        assertEquals(0.9 * (1 - kotlin.math.exp(-1.0)), downloadPacingFraction(4000), 0.000001)
+        assertTrue(downloadPacingFraction(8000) > downloadPacingFraction(4000))
+        assertTrue(downloadPacingFraction(Long.MAX_VALUE) < 0.9)
+    }
+
+    @Test
+    fun taskFractionNeverRetreatsAndSuccessHoldsOneHundredPercentForThreeHundredMillis() = runTest {
+        val release = CompletableDeferred<Unit>()
+        val taskReported = CompletableDeferred<Unit>()
+        val queue = queue(
+            downloadBytes = {
+                taskReported.complete(Unit)
+                release.await()
+                AO3Result.Success(epubBytes)
+            },
+            scope = this,
+            nowMillis = { testScheduler.currentTime },
+            reportedFractions = listOf(0.98, 0.2)
+        )
+        queue.enqueue(listOf(item(500, "Progress")))
+        taskReported.await()
+        assertEquals(0.98, queue.items.value.single().fraction, 0.0)
+        advanceTimeBy(8000)
+        runCurrent()
+        assertEquals(0.98, queue.items.value.single().fraction, 0.0)
+        release.complete(Unit)
+        queue.items.first { it.single().fraction == 1.0 }
+        assertEquals(DownloadQueueStatus.Downloading, queue.items.value.single().status)
+        advanceTimeBy(299)
+        runCurrent()
+        assertEquals(DownloadQueueStatus.Downloading, queue.items.value.single().status)
+        advanceTimeBy(1)
+        runCurrent()
+        assertEquals(DownloadQueueStatus.Done, queue.items.value.single().status)
+    }
+
+    @Test
+    fun keepingAFileAlreadyHereEmitsTheSameShortFillFromHomeAndLibraryWithoutFetching() = runTest {
+        val dispatcher = StandardTestDispatcher(testScheduler)
+        Dispatchers.setMain(dispatcher)
+        try {
+            val queue = queue(
+                downloadBytes = { error("An existing file must not be fetched") },
+                scope = this,
+                nowMillis = { testScheduler.currentTime }
+            )
+            val work = repository.upsert(SavedWork(
+                title = "Reading copy", author = "A", sourceUrl = "https://archiveofourown.org/works/501",
+                hasEpub = true, isSaved = false))
+            io.github.cidy02.kudos.home.applyDownload(work, repository, queue, keep = true)
+            assertEquals(0.0, queue.instantDownloads.value[work.id]!!, 0.0)
+            advanceTimeBy(350)
+            runCurrent()
+            assertEquals(0.5, queue.instantDownloads.value[work.id]!!, 0.000001)
+            advanceTimeBy(350)
+            runCurrent()
+            assertTrue(queue.instantDownloads.value.isEmpty())
+            assertTrue(repository.getWork(work.id)!!.isDownloaded)
+            repository.setSaved(work.id, false)
+            val library = io.github.cidy02.kudos.library.LibraryViewModel(
+                io.github.cidy02.kudos.library.LibraryRepository(repository), repository, downloadQueue = queue)
+            library.performDownloadAction(work.id, io.github.cidy02.kudos.core.model.WorkDownloadAction.Download)
+            // Room finishes off the test dispatcher; wait for admission, without advancing the fill.
+            queue.instantDownloads.first { it.containsKey(work.id) }
+            advanceTimeBy(350)
+            runCurrent()
+            assertEquals(0.5, queue.instantDownloads.value[work.id]!!, 0.000001)
+            advanceTimeBy(350)
+            runCurrent()
+            assertTrue(queue.instantDownloads.value.isEmpty())
+            assertTrue(queue.items.value.isEmpty())
+        } finally {
+            Dispatchers.resetMain()
+        }
+    }
+
     private suspend fun awaitIdle(queue: DownloadQueue) {
         withTimeout(10_000) {
             queue.items.first { list ->
@@ -331,9 +418,18 @@ class DownloadQueueTest {
 
     private fun queue(
         downloadBytes: suspend (Long) -> AO3Result<ByteArray>,
-        seriesRepository: AO3SeriesRepository = AO3SeriesRepository()
+        seriesRepository: AO3SeriesRepository = AO3SeriesRepository(),
+        scope: CoroutineScope = queueScope,
+        processDispatcher: CoroutineDispatcher = Dispatchers.IO,
+        nowMillis: () -> Long = { System.nanoTime() / 1_000_000 },
+        reportedFractions: List<Double> = emptyList()
     ): DownloadQueue {
         val client = object : AO3Client {
+            override suspend fun getBytesWithProgress(url: String, onProgress: (Double) -> Unit): AO3Result<AO3BinaryResponse> {
+                reportedFractions.forEach(onProgress)
+                return getBytes(url)
+            }
+
             override suspend fun get(
                 url: String,
                 headers: Map<String, String>
@@ -383,8 +479,9 @@ class DownloadQueueTest {
             workImporter = importer,
             workRepository = repository,
             seriesRepository = seriesRepository,
-            scope = queueScope,
-            processDispatcher = Dispatchers.IO
+            scope = scope,
+            processDispatcher = processDispatcher,
+            nowMillis = nowMillis
         )
     }
 

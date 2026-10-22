@@ -1,51 +1,31 @@
 package io.github.cidy02.kudos.ui.subject
 
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.ColorMatrix
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.Dp
 
-/**
- * `WorkProgressRing`, or while a download is queued the same ring sweeping and
- * labelled Downloading. Android's download queue has no byte fraction, so the
- * sweep is indeterminate until the file lands.
- * Port of `WorkReadingOrDownloadRing` (`SubjectSurface.swift`).
- */
+/** Reading progress, replaced by this work's own download fraction while it is active. */
 @Composable
 fun WorkReadingOrDownloadRing(
-    downloading: Boolean,
+    downloadFraction: Double?,
     progress: Double?,
     state: String?,
     modifier: Modifier = Modifier,
     diameter: Dp = SubjectMetrics.ringDiameter,
-    tint: androidx.compose.ui.graphics.Color? = null
+    tint: androidx.compose.ui.graphics.Color? = null,
+    showsZeroPercent: Boolean = false
 ) {
-    if (downloading) {
-        val transition = rememberInfiniteTransition(label = "downloadRing")
-        val sweep by transition.animateFloat(
-            initialValue = 0.08f,
-            targetValue = 1f,
-            animationSpec = infiniteRepeatable(
-                animation = tween(durationMillis = 1400, easing = LinearEasing),
-                repeatMode = RepeatMode.Restart
-            ),
-            label = "downloadSweep"
-        )
+    if (downloadFraction != null) {
         WorkProgressRing(
-            progress = sweep.toDouble(),
+            progress = downloadFraction,
             state = if (state == null) null else "Downloading",
             modifier = modifier,
             diameter = diameter,
-            tint = tint
+            tint = tint,
+            showsZeroPercent = true
         )
     } else if (progress != null) {
         WorkProgressRing(
@@ -53,7 +33,8 @@ fun WorkReadingOrDownloadRing(
             state = state,
             modifier = modifier,
             diameter = diameter,
-            tint = tint
+            tint = tint,
+            showsZeroPercent = showsZeroPercent
         )
     }
 }

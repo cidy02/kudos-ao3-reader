@@ -70,6 +70,8 @@ class WorkDetailFormsTest {
         show(mode, 2f) { WorkDetailSeriesForm(prompt, enabled, { enabled = it }, { only++ }, { preserve++ }) }
         compose.waitUntil(15_000) { compose.onAllNodesWithText("Preserve Series?").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText("Preserve Series?").assertExists()
+        compose.onNodeWithText("Cancel").performClick()
+        compose.runOnIdle { assertEquals(1, only) }
         compose.runOnIdle { assertNotNull(chrome.onBack) }
         noClippedText(prompt.message)
         noClippedText(prompt.autoPreserveLabel)
@@ -79,7 +81,7 @@ class WorkDetailFormsTest {
         noClippedText("Preserve Entire Series")
         reach("Preserve Entire Series"); compose.onNodeWithText("Preserve Entire Series").performClick()
         reach("Only This Work"); compose.onNodeWithText("Only This Work").performClick()
-        compose.runOnIdle { assertEquals(1, only); assertEquals(1, preserve) }
+        compose.runOnIdle { assertEquals(2, only); assertEquals(1, preserve) }
     }
     @Test fun seriesLightAtAccessibilitySize() = series(KudosThemeMode.Light)
     @Test fun seriesDarkAtAccessibilitySize() = series(KudosThemeMode.Dark)
@@ -156,6 +158,18 @@ class WorkDetailFormsTest {
         compose.onNodeWithText("Cancel").assertIsNotEnabled()
         compose.onNodeWithText("Save").assertDoesNotExist()
         compose.runOnIdle { chrome.onBack!!.invoke(); assertEquals(0, closes) }
+    }
+
+    @Test fun queueMembershipCheckmarkSpeaksInThisQueue() {
+        val queue = io.github.cidy02.kudos.core.model.ReadingQueue(id = "member", name = "A queue")
+        var selected by mutableStateOf(setOf(queue.id))
+        show {
+            WorkDetailQueueForm(listOf(queue), selected, "", false, false, false, false, null,
+                false, null, {}, {}, {}, {}, {}, {}, {})
+        }
+        compose.onNodeWithContentDescription("In this queue", useUnmergedTree = true).assertExists()
+        compose.runOnIdle { selected = emptySet() }
+        compose.onNodeWithContentDescription("In this queue", useUnmergedTree = true).assertDoesNotExist()
     }
 
     @Test fun queueSheetHasProgressCancelCompletionAndFootnote() {

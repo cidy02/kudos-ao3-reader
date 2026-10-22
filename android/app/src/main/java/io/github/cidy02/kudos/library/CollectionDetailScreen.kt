@@ -863,6 +863,7 @@ private fun CollectionWorkListItem(
                     // The row Home's lists draw (iOS `WorkRow.ledger`): the reading ring, the
                     // kicker and the tray. This page had a thinner copy of its own.
                     WorkLedgerRow(
+                        downloadFraction = io.github.cidy02.kudos.ui.subject.rememberWorkDownloadFraction(work),
                         title = work.title,
                         author = work.author.ifBlank { "Anonymous" },
                         fandoms = work.workFandoms,

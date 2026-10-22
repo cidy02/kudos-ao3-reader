@@ -2581,3 +2581,21 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   replies"). Not changed: the comments page's kept-copy line after any failed read (Android says
   the copy's age where iOS says nothing after a timeout: iOS follow-up in §5c 6c), and "Works
   Filters", whose iOS control has no Android counterpart (the lists say "Filter" as iOS's do).
+- **2026-10-22 · The owner's decisions checked one by one on Android (Codex A77, fixed in 3go).**
+  62 of 82 checks held. Fixed: Account's accent glyphs use the readable ink on Dark and OLED with
+  the exact fill (owner question 19); a picked colour fills switches and selected pills exactly; the
+  download ring shows the download's own fraction (task progress, else iOS's creep below 90%, then
+  100% for 300 ms) and the work page's resume card and saved rows grey while downloading; keeping a
+  file already here shows the 0.7 s fill; Recently Deleted's "Downloaded work" follows "kept"; the
+  shell takes the newest wash (owner, 2026-10-11) and a coloured sheet's own controls take its
+  colour; a work with no tags says why. Not a fault: comment swipe rails (Android has no comment
+  swipe). Kept: Backup's technical notes (owner question 9).
+- **2026-10-22 · Wording and content as iOS's on the screens ported on 10-08 and 10-09 (Codex
+  A78, fixed in 3gp).** History and Favorites rows show the reading time, "Read ×N" and "N new
+  chapters" from data Android already stores; their menus use iOS's words; series and chapter
+  forms' words; spoken labels. A filter facet keeps its title as its spoken label and says
+  "Included" / "Excluded" (Claude, on landing: 3gp had cleared the row's text, which hid it from
+  anything that finds a row by its words; the visible status word is now the part not spoken).
+- **2026-10-22 · Two A75 findings (Grok).** At launch every work whose EPUB is gone stops offering
+  it, queued or not, as iOS (`WorkRepository.repairMissingEpubFlags`); connecting a sync folder
+  from Settings records it as configured, so Disconnect does not bring the first-run prompt back.

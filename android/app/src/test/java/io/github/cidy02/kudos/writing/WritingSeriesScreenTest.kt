@@ -39,9 +39,9 @@ class WritingSeriesScreenTest {
     private var backCount = 0
     private var browser: String? = null
 
-    private fun show(load: Boolean = true) {
+    private fun show(load: Boolean = true, reorderOnly: Boolean = false) {
         setup = runBlocking { seriesSetup() }
-        model = setup.model()
+        model = setup.model(reorderOnly = reorderOnly)
         if (load) runBlocking<Unit> { model.load() }
         compose.setContent {
             KudosTheme(mode) {
@@ -49,7 +49,7 @@ class WritingSeriesScreenTest {
                 CompositionLocalProvider(LocalDensity provides Density(density.density, scale), LocalPushedShellChrome provides chrome) {
                     Column {
                         Row { chrome.trailingContent?.invoke(this) }
-                        WritingSeriesContent(model, "The Dawn Cycle", onBack = { backCount++ }, onOpenAo3 = { browser = it })
+                        WritingSeriesContent(model, "The Dawn Cycle", onBack = { backCount++ }, onOpenAo3 = { browser = it }, reorderOnly = reorderOnly)
                     }
                 }
             }
@@ -59,9 +59,9 @@ class WritingSeriesScreenTest {
         compose.waitForIdle()
         compose.waitUntil(15_000) { compose.onAllNodesWithText(text).fetchSemanticsNodes().isNotEmpty() }
     }
-    private fun reach(text: String) {
-        compose.onNodeWithTag("Writing series form").performScrollToNode(hasText(text))
-        await(text)
+    private fun reach(text: String, spoken: Boolean = false) {
+        compose.onNodeWithTag("Writing series form").performScrollToNode(if (spoken) hasContentDescription(text) else hasText(text))
+        if (spoken) compose.onNodeWithContentDescription(text).assertExists() else await(text)
     }
     private fun back() { compose.runOnIdle { chrome.onBack?.invoke() }; compose.waitForIdle() }
 
@@ -70,12 +70,29 @@ class WritingSeriesScreenTest {
         compose.waitForIdle()
         assertNull(chrome.trailingContent)
         compose.onNodeWithText("Save").assertDoesNotExist()
+        compose.onNodeWithText("Loading…").assertDoesNotExist()
+        compose.onNodeWithContentDescription("Loading…").assertExists()
         compose.runOnIdle { runBlocking<Unit> { model.load() } }
         await("Save")
         assertNotNull(chrome.trailingContent)
         compose.onNodeWithText("Save").assertIsEnabled()
         assertEquals(2, setup.client.gets.size)
         assertEquals(0, setup.client.posts.size)
+    }
+
+    @Test fun reorderLoadingAndErrorHeaderUseReorderSeriesButLoadedHeaderStaysReorder() {
+        show(load = false, reorderOnly = true)
+        await("Reorder series")
+        compose.onNodeWithText("Loading…").assertDoesNotExist()
+        compose.onNodeWithContentDescription("Loading…").assertExists()
+        setup.client.getFailure = io.github.cidy02.kudos.network.ao3.AO3Error.Forbidden
+        compose.runOnIdle { runBlocking<Unit> { model.load() } }
+        await("Couldn't load from AO3")
+        compose.onNodeWithText("Reorder series").assertExists()
+        setup.client.getFailure = null
+        compose.onNodeWithText("Try Again").performClick()
+        await("Reorder")
+        compose.onNodeWithText("Reorder series").assertDoesNotExist()
     }
 
     @Test fun summaryBackAndNotesDoneCheckpointIntoTheSameDraftWithoutReadingOrSaving() {
@@ -172,6 +189,8 @@ class WritingSeriesScreenTest {
         compose.waitUntil(15_000) { setup.client.posts.size == 1 }
         compose.onNodeWithText("Save").assertIsNotEnabled()
         assertNull(model.state.value.notice)
+        reach("Saving…", spoken = true)
+        compose.onNodeWithText("Saving…").assertDoesNotExist()
         hold.complete(Unit)
         reach("Series was successfully updated.")
         compose.onNodeWithText("Save").assertIsEnabled()
@@ -218,6 +237,7 @@ class WritingSeriesScreenTest {
         show()
         reach("Remove works"); compose.onNodeWithText("Remove works").performClick()
         await("Remove works")
+        compose.onNodeWithText("Remove").assertDoesNotExist()
         compose.onNodeWithContentDescription("Remove First Light from the series").performClick()
         await("Remove “First Light” from The Dawn Cycle?")
         compose.onNodeWithText("The work stays posted on AO3.").assertExists()

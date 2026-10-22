@@ -6,6 +6,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.RemoveCircle
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -109,7 +111,7 @@ internal fun WritingSeriesContent(model: WritingSeriesState, title: String, subt
         item {
             Spacer(Modifier.windowInsetsTopHeight(WindowInsets.statusBars))
             Spacer(Modifier.height(76.dp))
-            SubjectHeaderBlock(kicker = "AO3 Account", title = if (ordering) "Reorder" else if (removing) "Remove works" else "Edit series",
+            SubjectHeaderBlock(kicker = "AO3 Account", title = if (ordering && form == null && state.rows == null) "Reorder series" else if (ordering) "Reorder" else if (removing) "Remove works" else "Edit series",
                 subtitle = if (ordering) title else if (removing) "$title · ${rows?.size ?: 0} ${if (rows?.size == 1) "work" else "works"}" else subtitle,
                 palette = palette, gutter = SubjectMetrics.accountGutter)
         }
@@ -153,10 +155,9 @@ internal fun WritingSeriesContent(model: WritingSeriesState, title: String, subt
                             if (row.metadataText.isNotEmpty()) Text(row.metadataText, color = tokens.secondaryInk, fontSize = 11.5.sp, lineHeight = 17.sp)
                             if (row.isDraft) Text("Draft", color = tokens.secondaryInk, fontSize = 11.5.sp, lineHeight = 17.sp)
                         }
-                        if (removing && currentRows.size > 1) TextButton(onClick = { confirmRemoval = row }, enabled = !state.saving,
-                            colors = ButtonDefaults.textButtonColors(contentColor = SubjectPalette.fromHue(0.0, tokens.theme).accent)) {
-                            Text("Remove", fontSize = 13.sp, lineHeight = 19.sp,
-                                modifier = Modifier.semantics { contentDescription = "Remove ${row.displayTitle} from the series" })
+                        if (removing && currentRows.size > 1) IconButton(onClick = { confirmRemoval = row }, enabled = !state.saving) {
+                            Icon(Icons.Filled.RemoveCircle, contentDescription = "Remove ${row.displayTitle} from the series",
+                                tint = SubjectPalette.fromHue(0.0, tokens.theme).accent)
                         }
                     }
                     if (index < currentRows.lastIndex) SubjectRowSeparator()
@@ -256,8 +257,8 @@ private fun SeriesLoadingRow(failure: String?, saving: Boolean = false, retry: (
             }
         } else Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             CircularProgressIndicator(color = tokens.scopePalette.accent, trackColor = tokens.separator,
-                modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-            Text(if (saving) "Saving…" else "Loading…", color = tokens.secondaryInk, fontSize = 14.sp, lineHeight = 20.sp)
+                modifier = Modifier.size(20.dp).semantics { contentDescription = if (saving) "Saving…" else "Loading…"; liveRegion = LiveRegionMode.Polite },
+                strokeWidth = 2.dp)
         }
     }
 }
