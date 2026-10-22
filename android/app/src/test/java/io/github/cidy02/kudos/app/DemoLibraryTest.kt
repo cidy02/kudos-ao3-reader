@@ -112,6 +112,19 @@ class DemoLibraryTest {
         tempDir.toFile().deleteRecursively()
     }
 
+    @Test fun demoCardsKeepKnownZeroCountsOnFreshAndInstalledSeeds() = runTest {
+        DemoLibrary.seed(database, workRepository, queueRepository, fileStore, clock = { fixedNow })
+        val sample = workRepository.getWork(database.workDao().getAll().single { it.title == "Sodium Lights" }.id)!!
+        assertEquals(0, sample.comments)
+        assertEquals(0, sample.bookmarks)
+        // An installed demo gets missing figures, while counts already present survive reseeding.
+        workRepository.upsert(sample.copy(comments = null, bookmarks = 7))
+        DemoLibrary.seed(database, workRepository, queueRepository, fileStore, clock = { fixedNow })
+        val upgraded = workRepository.getWork(sample.id)!!
+        assertEquals(0, upgraded.comments)
+        assertEquals(7, upgraded.bookmarks)
+    }
+
     @Test fun demoAffinityScopesHaveThreeRowsAndNoUnreadWithoutAddingWorksOrSessions() = runTest {
         DemoLibrary.seed(database, workRepository, queueRepository, fileStore, clock = { fixedNow })
         val count = database.workDao().getAll().size

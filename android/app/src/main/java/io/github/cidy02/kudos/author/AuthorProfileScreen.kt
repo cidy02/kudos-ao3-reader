@@ -47,7 +47,6 @@ import io.github.cidy02.kudos.ui.components.EmptyStateCard
 import io.github.cidy02.kudos.ui.components.ErrorStateCard
 import io.github.cidy02.kudos.ui.components.LoadingStateCard
 import io.github.cidy02.kudos.ui.subject.*
-import io.github.cidy02.kudos.home.HomeFacts
 import kotlinx.coroutines.launch
 
 import io.github.cidy02.kudos.app.ProvidePushedShellChrome
@@ -392,8 +391,7 @@ fun AuthorProfileScreen(
     val shareContext = androidx.compose.ui.platform.LocalContext.current
     var showMenu by remember { mutableStateOf(false) }
 
-    val workHue = remember(route.displayName) { HomeFacts.workHue(emptyList(), route.displayName) }
-    val palette = if (ownAccount) tokens.scopePalette else remember(workHue, tokens.theme) { SubjectPalette.fromHue(workHue, tokens.theme) }
+    val palette = tokens.scopePalette
 
     LaunchedEffect(route.id, sessionGeneration, tab, scopeState) { selection.exit() }
     LaunchedEffect(deleteState.confirmed) {
@@ -714,14 +712,7 @@ fun AuthorProfileScreen(
                             )
                             if (h.pseuds.size > 1) {
                                 Spacer(Modifier.size(8.dp))
-                                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    item {
-                                        SubjectChip(text = "All Pseuds", style = SubjectChipStyle.Pill(route.pseud == null), modifier = Modifier.clickable { route = AO3AuthorRoute(route.username, null) })
-                                    }
-                                    items(h.pseuds) { pseud ->
-                                        SubjectChip(text = pseud.name, style = SubjectChipStyle.Pill(route.pseud.equals(pseud.route.pseud, true)), modifier = Modifier.clickable { route = pseud.route })
-                                    }
-                                }
+                                AuthorPseudSelector(h.pseuds, route) { route = it }
                             }
                         } else {
                             AO3AuthorHero(
@@ -752,24 +743,7 @@ fun AuthorProfileScreen(
                 }
 
                 if (!usesAccountHeader && h.pseuds.size > 1) {
-                    item {
-                        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            item {
-                                SubjectChip(
-                                    text = "All Pseuds",
-                                    style = SubjectChipStyle.Pill(route.pseud == null),
-                                    modifier = Modifier.clickable { route = AO3AuthorRoute(route.username, null) }
-                                )
-                            }
-                            items(h.pseuds) { pseud ->
-                                SubjectChip(
-                                    text = pseud.name,
-                                    style = SubjectChipStyle.Pill(route.pseud.equals(pseud.route.pseud, true)),
-                                    modifier = Modifier.clickable { route = pseud.route }
-                                )
-                            }
-                        }
-                    }
+                    item { AuthorPseudSelector(h.pseuds, route) { route = it } }
                 }
 
                 if (showsTabs) {
@@ -896,7 +870,7 @@ fun AuthorProfileScreen(
                 } else {
                     when (tab) {
                         AuthorTab.Works -> {
-                            item {
+                            if (ownAccount) item {
                                 LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                     items(AO3AuthorWorksScope.entries.filter { it.acceptsWorkSearch || it == AO3AuthorWorksScope.Gifts }) { scopeVal ->
                                         // iOS `WorksScopeAndSort`: the screen's palette, whose accent is

@@ -154,7 +154,7 @@ fun SensitiveWorkRow(
     showsStatusTray: Boolean = false,
     /**
      * A saved work's detailed card, iOS `WorkRow`: every fandom is on its line, and the card
-     * unfolds only for a long summary or for tags. An AO3 work's card (`AO3WorkRow`) names one
+     * unfolds beside its title only for a long summary or for tags. An AO3 work's card (`AO3WorkRow`) names one
      * fandom and counts the rest, and unfolds for those and for its warnings too.
      */
     savedWork: Boolean = false,
@@ -206,7 +206,7 @@ fun SensitiveWorkRow(
                 if (selected) Modifier.background(MaterialTheme.colorScheme.primaryContainer, MaterialTheme.shapes.medium)
                 else Modifier
                     .background(tokens.cardFill, MaterialTheme.shapes.medium)
-                    .then(if (mutedHistory) Modifier else Modifier.background(palette.cardWash, MaterialTheme.shapes.medium))
+                    .then(if (mutedHistory) Modifier else Modifier.background(if (savedWork) palette.rowWash else palette.cardWash, MaterialTheme.shapes.medium))
             )
             .combinedClickable(
                 onClick = cardTap,
@@ -288,7 +288,7 @@ fun SensitiveWorkRow(
                                         overflow = TextOverflow.Ellipsis
                                     )
                                     io.github.cidy02.kudos.works.detail.VerifiedAuthorByline(
-                                        author, authorIdentities, authorNames
+                                        author, authorIdentities, authorNames, includesBy = savedCard
                                     )
                                 }
                                 if (isFavorite && !selecting) {
@@ -298,6 +298,15 @@ fun SensitiveWorkRow(
                                         tint = Color(0xFFFFCC00),
                                         modifier = Modifier.padding(8.dp)
                                     )
+                                }
+                                if (savedCard && expandable) {
+                                    IconButton(onClick = if (obscured || selecting) cardTap else { { expanded = !expanded } }) {
+                                        Icon(
+                                            imageVector = if (expanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
+                                            contentDescription = if (expanded) "Show less" else "Show more",
+                                            tint = palette.accent
+                                        )
+                                    }
                                 }
                                 // iOS `standardCard`: AO3's own quadrant beside the title, a glance
                                 // at what the chips below say in words. Not spoken (the chips
@@ -414,7 +423,7 @@ fun SensitiveWorkRow(
                                 )
                             )
                             // iOS's standard card closes with the day AO3 gives the work and the unfold control at the foot.
-                            if (dateText.isNotBlank() || expandable) {
+                            if (dateText.isNotBlank() || (!savedCard && expandable)) {
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -430,7 +439,7 @@ fun SensitiveWorkRow(
                                     } else {
                                         Spacer(Modifier.weight(1f))
                                     }
-                                    if (expandable) {
+                                    if (!savedCard && expandable) {
                                         IconButton(
                                             onClick = { expanded = !expanded }
                                         ) {

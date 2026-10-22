@@ -353,7 +353,7 @@ object DemoLibrary {
             // Add only missing tags; keep demo row counts and every reading/user flag intact.
             for (row in allWorks) {
                 val work = workRepository.getWork(row.id) ?: continue
-                val tagged = withDemoAffinityTags(work)
+                val tagged = withDemoCounts(withDemoAffinityTags(work))
                 if (tagged != work) workRepository.upsert(tagged)
             }
             markQueuedCopiesPreserved(database, workRepository, clock)
@@ -413,7 +413,7 @@ object DemoLibrary {
                 writePlaceholderEpub(work.id, work.title, fileStore)
             }
 
-            val savedWork = workRepository.upsert(withDemoAffinityTags(withDemoListLinks(work)))
+            val savedWork = workRepository.upsert(withDemoCounts(withDemoAffinityTags(withDemoListLinks(work))))
             seededWorks.add(savedWork)
         }
 
@@ -507,6 +507,12 @@ object DemoLibrary {
             }
         }
     }
+
+    /** iOS demo SavedWork starts these at zero; null here meant the figures vanished. */
+    private fun withDemoCounts(work: SavedWork): SavedWork =
+        if (SAMPLES.any { it.title == work.title && it.author == work.author }) {
+            work.copy(comments = work.comments ?: 0, bookmarks = work.bookmarks ?: 0)
+        } else work
 
     private fun withDemoAffinityTags(work: SavedWork): SavedWork {
         if (work.workFreeforms.isNotEmpty() || work.workTags.isNotEmpty()) return work

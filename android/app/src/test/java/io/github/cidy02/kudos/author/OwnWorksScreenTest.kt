@@ -90,6 +90,21 @@ class OwnWorksScreenTest {
         compose.waitUntil(15_000) { requests.size >= count }
     }
 
+    @Test fun ownWorksRetainScopesAndChangingScopeReadsOnlyTheIndex() {
+        show()
+        compose.waitForIdle()
+        val headersBefore = requests.count { it.toHttpUrl().encodedPath == "/users/AO3_Reader" }
+        compose.onNodeWithText("In collections").performClick()
+        compose.waitUntil(15_000) { requests.any { it.toHttpUrl().encodedPath.endsWith("/works/collected") } }
+        compose.waitForIdle()
+        assertEquals(1, requests.count { it.toHttpUrl().encodedPath.endsWith("/works/collected") })
+        assertEquals(headersBefore, requests.count { it.toHttpUrl().encodedPath == "/users/AO3_Reader" })
+        compose.onNodeWithText("Gifts").assertExists()
+        compose.onNodeWithText("In collections").performClick()
+        compose.waitForIdle()
+        assertEquals(1, requests.count { it.toHttpUrl().encodedPath.endsWith("/works/collected") })
+    }
+
     @Test fun ownActionsAndBulkBarAreAbsentForAnotherProfileAndSignedOutReader() {
         show("Avery_Archive")
         compose.onAllNodes(hasContentDescription("Actions for", substring = true)).assertCountEquals(0)
