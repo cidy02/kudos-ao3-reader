@@ -64,6 +64,8 @@ struct ContentView: View {
             .overlay {
                 if DebugLaunchRoute.value == "comments" { CommentsDemoView() }
             }
+            // `-KudosDebugRoute bugreport`: the shake-to-report sheet, for side-by-side shots.
+            .task { if DebugLaunchRoute.value == "bugreport" { showingBugReport = true } }
             #endif
             .environment(router)
             .environment(privacyGate)
