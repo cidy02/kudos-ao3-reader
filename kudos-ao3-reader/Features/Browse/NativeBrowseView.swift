@@ -74,6 +74,22 @@ struct BrowseView: View {
                         router.pendingTagWorks = nil
                     }
                 }
+                #if DEBUG
+                .task {
+                    for step in DebugLaunchRoute.takeBrowse() {
+                        switch step {
+                        case let .media(name, fandomsURL):
+                            path.append(AO3MediaCategory(name: name, fandoms: [], fandomsURL: fandomsURL))
+                        case let .fandom(names, title):
+                            openFandom(names, title)
+                        case let .tag(url, title):
+                            if let parsed = URL(string: url) {
+                                path.append(AO3TagWorksRequest(url: parsed, title: title))
+                            }
+                        }
+                    }
+                }
+                #endif
         }
         // On the NavigationStack itself, not inside its content: views built by
         // `navigationDestination` are hosted by the stack, so a value injected

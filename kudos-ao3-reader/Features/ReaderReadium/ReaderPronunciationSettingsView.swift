@@ -179,6 +179,9 @@ struct ReaderPronunciationSettingsView: View {
                 save(word: word, ipa: ipa)
             }
         }
+        #if DEBUG
+        .task { if DebugLaunchRoute.takeSheet("pronunciationedit") { isAdding = true } }
+        #endif
         .onAppear(perform: reload)
     }
 

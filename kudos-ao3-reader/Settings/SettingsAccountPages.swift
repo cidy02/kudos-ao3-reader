@@ -65,6 +65,9 @@ struct SettingsAboutPage: View {
                 onReportBug: { showingBugReport = true }
             )
         }
+        #if DEBUG
+        .task { if DebugLaunchRoute.takeSheet("aboutkudos") { showAbout = true } }
+        #endif
         .sheet(isPresented: $showAbout) {
             NavigationStack { AboutView() }
                 .environment(themeManager)

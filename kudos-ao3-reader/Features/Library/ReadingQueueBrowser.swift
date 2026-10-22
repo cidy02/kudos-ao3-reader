@@ -304,6 +304,8 @@ struct ReadingQueueBrowserView: View {
                 resolveInitialSelection()
                 #if DEBUG
                 if DebugLaunchRoute.opensQueueDetails { showingQueueDetails = true }
+                if DebugLaunchRoute.takeSheet("editqueue") { showingEdit = true }
+                if DebugLaunchRoute.takeSheet("addworks") { showingAddWorks = true }
                 #endif
             }
             // Per-queue layout (1h): load the queue's own choice when the queue

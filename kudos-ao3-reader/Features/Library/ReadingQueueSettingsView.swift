@@ -36,6 +36,9 @@ struct ReadingQueueSettingsView: View {
     /// The shared vocabulary "Manage all tags" counts.
     @Query private var allTags: [Tag]
     @State private var showingTags = false
+    #if DEBUG
+    @State private var debugManageTags = false
+    #endif
 
     @ScaledMetric(relativeTo: .caption) private var legendSize: CGFloat = 11.5
     @ScaledMetric(relativeTo: .caption) private var footnoteSize: CGFloat = 11.5
@@ -176,6 +179,15 @@ struct ReadingQueueSettingsView: View {
         .environment(\.defaultMinListRowHeight, 0)
         .subjectScreenWash(palette: palette, washHeight: 620)
         .sheet(isPresented: $showingTags) { QueueTagSheet(queue: queue) }
+        #if DEBUG
+        .task {
+            if DebugLaunchRoute.takeSheet("queuetag") { showingTags = true }
+            if DebugLaunchRoute.takePush("queuetags") { debugManageTags = true }
+        }
+        .navigationDestination(isPresented: $debugManageTags) {
+            QueueTagManagerView(queue: queue, onShowOnlyTag: onShowOnlyTag)
+        }
+        #endif
         #if os(macOS)
         .navigationTitle(queue.displayName)
         #endif

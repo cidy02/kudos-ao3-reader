@@ -516,6 +516,12 @@ struct CollectionDetailView: View {
                 )
             }
             .sheet(isPresented: $showingDetails) { detailsSheet }
+            #if DEBUG
+            .task {
+                if DebugLaunchRoute.takeSheet("collectiondetails") { showingDetails = true }
+                if DebugLaunchRoute.takeSheet("collectionreorder") { showingReorder = true }
+            }
+            #endif
             .sheet(isPresented: $showingReorder) {
                 CollectionReorderSheet(collection: collection, works: works)
             }

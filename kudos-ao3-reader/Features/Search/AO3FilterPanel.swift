@@ -88,6 +88,9 @@ struct AO3FilterPanel: View {
     /// Commits `worksSort` when Apply finds it changed. The host refetches.
     var onApplyWorksSort: ((AO3WorksSort) -> Void)?
     @State private var sortPresentation: WorksSortPresentation
+    #if DEBUG
+    @State private var debugLanguage = false
+    #endif
 
     init(
         filters: Binding<AO3SearchFilters>,
@@ -393,6 +396,12 @@ struct AO3FilterPanel: View {
         }
         .formStyle(.grouped)
         .appThemedScroll()
+        #if DEBUG
+        .task { if DebugLaunchRoute.takePush("languagepicker") { debugLanguage = true } }
+        .navigationDestination(isPresented: $debugLanguage) {
+            FilterLanguagePicker(selection: $filters.language)
+        }
+        #endif
     }
 
     /// Everything you have to *type*, last — after the tag pickers.
