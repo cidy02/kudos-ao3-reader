@@ -724,8 +724,8 @@ struct CommentsView: View {
             }
             .cardRow()
         case .loaded:
-            if model.isFromCache && model.isOffline {
-                staleBanner
+            if let notice = model.keptCopyNotice {
+                staleBanner(notice)
             }
             if model.displayThreads.isEmpty {
                 Section {
@@ -798,14 +798,12 @@ struct CommentsView: View {
         }
     }
 
-    private var staleBanner: some View {
+    private func staleBanner(_ notice: String) -> some View {
         Section {
             Label {
-                let fetched = model.page?.fetchedAt
-                    .formatted(.relative(presentation: .named)) ?? "earlier"
-                Text("You're offline. These comments are from \(fetched) and may be out of date.")
+                Text(notice)
             } icon: {
-                Image(systemName: "wifi.exclamationmark")
+                Image(systemName: model.isOffline ? "wifi.exclamationmark" : "exclamationmark.triangle")
             }
             .font(.footnote)
             .foregroundStyle(.secondary)

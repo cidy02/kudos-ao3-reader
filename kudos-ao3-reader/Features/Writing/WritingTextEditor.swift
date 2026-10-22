@@ -207,13 +207,7 @@ struct WritingTextEditor: View {
         case nil:
             ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity).accentFill()
         case let .rendered(document):
-            ScrollView {
-                AO3RichTextView(document: document)
-                    .font(.system(size: editorFontSize, design: .serif))
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 16).padding(.vertical, 16)
-            }
-            .accessibilityLabel("Preview")
+            WritingRenderedPreview(document: document, fontSize: editorFontSize)
         case .failed:
             ContentUnavailableView(
                 "Couldn't render this HTML",
@@ -357,7 +351,7 @@ struct WritingTextEditor: View {
                 if recovery.originalDigest != WritingTextRecovery.digest(original) {
                     Text("The text on the form has changed since this copy began. Review the copy before restoring it.")
                 }
-                ScrollView { Text(recovery.text).font(.body.monospaced()).textSelection(.enabled) }
+                WritingRecoveryCopyText(text: recovery.text)
                 Button("Restore local copy") {
                     controller?.restore(recovery.text)
                     // Straight into the form and a fresh recovery copy, rather
@@ -542,6 +536,43 @@ struct WritingTextEditorRow: View {
 
 /// OD1's preview model: the buffer parsed as AO3 HTML and reduced to the blocks
 /// `AO3RichTextView` draws, with the same parser AO3's pages use here.
+/// The editor's Preview. Lazy: drawn whole, a chapter at AO3's 510,000-character limit
+/// stalls the screen, as it froze Android's for seconds (T-358).
+struct WritingRenderedPreview: View {
+    let document: AO3RichText
+    let fontSize: CGFloat
+
+    var body: some View {
+        ScrollView {
+            AO3RichTextView(document: document, isLazy: true)
+                .font(.system(size: fontSize, design: .serif))
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 16).padding(.vertical, 16)
+        }
+        .accessibilityLabel("Preview")
+    }
+}
+
+/// A recovery copy in the recovery sheet, a line at a time: one `Text` holding a whole
+/// chapter stalls the sheet (T-358; Android's is a lazy list of lines too).
+struct WritingRecoveryCopyText: View {
+    let text: String
+
+    var body: some View {
+        let lines = text.components(separatedBy: "\n")
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 0) {
+                ForEach(lines.indices, id: \.self) { index in
+                    // A blank line keeps its height, as it had inside one Text.
+                    Text(lines[index].isEmpty ? " " : lines[index]).frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+            .font(.body.monospaced())
+            .textSelection(.enabled)
+        }
+    }
+}
+
 nonisolated enum WritingBufferPreview {
     enum State: Equatable {
         case rendered(AO3RichText)
