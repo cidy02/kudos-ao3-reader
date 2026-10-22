@@ -259,7 +259,7 @@ fun QueueLedgerCard(
                     .fillMaxWidth()
                     .then(if (obscured) Modifier.blur(8.dp) else Modifier)
                     .padding(horizontal = 16.dp, vertical = 15.dp)
-                    .hiddenMatureWorkSemantics(obscured, selecting),
+                    .hiddenMatureWorkSemantics(obscured, selecting, selected),
                 horizontalArrangement = Arrangement.spacedBy(13.dp),
                 verticalAlignment = Alignment.Top
             ) {

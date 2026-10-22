@@ -97,6 +97,18 @@ class AccountShortcutsScreenTest {
         compose.onNodeWithText("Inbox").assertDoesNotExist()
     }
 
+    @Test fun oldSavedListsKeepTheirOrderAndSeriesRoundTripsWithoutChangingDefaults() {
+        val old = "inbox,works,bookmarks,history"
+        assertEquals(listOf(AccountShortcut.Inbox, AccountShortcut.Works, AccountShortcut.Bookmarks,
+            AccountShortcut.History), AccountShortcutStore.decode(old))
+        val withSeries = AccountShortcutStore.decode(old) + AccountShortcut.Series
+        assertEquals(withSeries, AccountShortcutStore.decode(AccountShortcutStore.encode(withSeries)))
+        assertEquals("series", AccountShortcut.Series.id)
+        assertEquals(emptyList<AccountShortcut>(), AccountShortcutStore.decode("none"))
+        for (raw in listOf(null, "", "unknown")) assertEquals(AccountShortcutStore.defaults, AccountShortcutStore.decode(raw))
+        assertFalse(AccountShortcut.Series in AccountShortcutStore.defaults)
+    }
+
     @Test fun gridRedrawsOnAnExternalPreferenceUpdate() {
         compose.setContent {
             KudosTheme(KudosThemeMode.Light) {

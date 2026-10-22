@@ -118,6 +118,8 @@ class CommentsViewModel(
 
     private val _submitting = MutableStateFlow(false)
     val submitting: StateFlow<Boolean> = _submitting.asStateFlow()
+    private val _verifying = MutableStateFlow(false)
+    val verifying: StateFlow<Boolean> = _verifying.asStateFlow()
 
     private val _message = MutableStateFlow<String?>(null)
     val message: StateFlow<String?> = _message.asStateFlow()
@@ -811,6 +813,7 @@ class CommentsViewModel(
             return
         }
         pendingVerification = sent to key
+        _verifying.value = true
         viewModelScope.launch {
             try {
                 val result = repository.verifySubmission(key, entry, sent.viewer.generation)
@@ -830,7 +833,7 @@ class CommentsViewModel(
                     CommentVerification.Unknown -> _message.value =
                         "Couldn't confirm whether the comment posted. Check again before posting this comment again."
                 }
-            } finally { _submitting.value = false }
+            } finally { _verifying.value = false; _submitting.value = false }
         }
     }
 

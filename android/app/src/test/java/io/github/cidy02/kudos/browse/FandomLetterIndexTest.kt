@@ -2,6 +2,7 @@ package io.github.cidy02.kudos.browse
 
 import android.app.Application
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.performSemanticsAction
@@ -18,6 +19,12 @@ import org.robolectric.annotation.Config
 @Config(sdk = [35], application = Application::class)
 class FandomLetterIndexTest {
     @get:Rule val compose = createComposeRule()
+
+    @Test fun emptyIndexSpeaksNoSections() {
+        compose.setContent { KudosTheme(KudosThemeMode.Light) { FandomLetterIndex(emptySet(), {}) } }
+        val index = compose.onNodeWithContentDescription("Fandom index").fetchSemanticsNode()
+        assertEquals("No sections", index.config[SemanticsProperties.StateDescription])
+    }
 
     @Test fun screenReaderAdjustmentSkipsUnavailableLettersAndClampsAtTheEnds() {
         val picked = mutableListOf<String>()

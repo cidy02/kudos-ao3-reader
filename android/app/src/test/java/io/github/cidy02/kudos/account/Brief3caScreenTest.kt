@@ -261,6 +261,43 @@ class Brief3caScreenTest {
         compose.onNodeWithContentDescription("Restoring AO3 session").assertExists().assertHasNoClickAction()
         assertTrue(client.gets.isEmpty()); assertTrue(client.posts.isEmpty())
     }
+    @Test fun brief3gnFailedAccountHeaderShowsIosErrorAndRetryClearsIt() {
+        client.dashboardError = AO3Error.Forbidden
+        showAccount()
+        awaitText("Couldn't load your profile")
+        compose.onNodeWithText("AO3 denied access.").assertExists()
+        compose.onNodeWithText("Profile unavailable").assertDoesNotExist()
+        assertEquals(1, client.gets.size)
+        client.dashboardError = null
+        compose.onNodeWithText("Try Again").performClick()
+        compose.waitUntil(15_000) { client.gets.size == 2 &&
+            compose.onAllNodesWithText("Couldn't load your profile").fetchSemanticsNodes().isEmpty() }
+        assertTrue(client.posts.isEmpty())
+    }
+
+    @Test fun brief3gnSignedOutHistoryUsesItsOwnLoginCard() = signedOutWorksList(AccountListType.History)
+    @Test fun brief3gnSignedOutSubscriptionsUsesItsOwnLoginCard() = signedOutWorksList(AccountListType.Subscriptions)
+    @Test fun brief3gnExpiredHistoryUsesTheSameLoginCard() = signedOutWorksList(AccountListType.History, expired = true)
+    @Test fun brief3gnExpiredSubscriptionsUsesTheSameLoginCard() = signedOutWorksList(AccountListType.Subscriptions, expired = true)
+
+    private fun signedOutWorksList(type: AccountListType, expired: Boolean = false) {
+        if (expired) runBlocking { auth.sessionDidExpire(auth.generation.value) } else setAccount(false)
+        val model = AccountListViewModel(type, lists, works)
+        models.put("signedOutList", model)
+        show(scale = 1f) {
+            AccountWorksListScreen(type, lists, AO3WriteRepository(writer()), works, settings, PrivacyGate(),
+                { loginTaps++ }, {}, {}, {}, viewModel = model)
+        }
+        val history = type == AccountListType.History
+        awaitText(if (history) "AO3 History" else "AO3 Subscriptions")
+        compose.onNodeWithText(if (history) "Log in to AO3 to see your reading history."
+            else "Log in to AO3 to see the works you subscribe to.").assertExists()
+        compose.onNodeWithText("AO3 session required").assertDoesNotExist()
+        compose.onNodeWithText("Log In to AO3").performClick()
+        assertEquals(1, loginTaps)
+        assertTrue(client.gets.isEmpty()); assertTrue(client.posts.isEmpty())
+    }
+
     @Test fun row18OwnProfile404ShowsUnavailableTitleUnderItsAccountHeaderWithoutRetry() {
         client.dashboardError = AO3Error.NotFound
         showAccount()

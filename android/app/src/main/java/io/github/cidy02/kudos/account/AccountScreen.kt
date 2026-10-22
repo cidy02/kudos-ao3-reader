@@ -119,6 +119,8 @@ import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import kotlinx.coroutines.launch
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -207,6 +209,8 @@ fun AccountScreen(
 ) {
     val state by viewModel.uiState.collectAsState()
     val profileUnavailable by viewModel.profileUnavailable.collectAsState()
+    val profileFailure by viewModel.profileFailure.collectAsState()
+    val profileScope = rememberCoroutineScope()
     val shortcuts by (settingsRepository?.accountShortcuts ?: kotlinx.coroutines.flow.flowOf(AccountShortcutStore.defaults))
         .collectAsState(initial = AccountShortcutStore.defaults)
     val signedIn = state.authState is AO3AuthState.SignedIn
@@ -246,6 +250,13 @@ fun AccountScreen(
                     modifier = Modifier.padding(horizontal = SubjectMetrics.accountGutter, vertical = 16.dp)
                 )
             }
+            profileFailure?.let { message -> item {
+                ErrorStateCard(
+                    "Couldn't load your profile", message,
+                    modifier = Modifier.padding(horizontal = SubjectMetrics.accountGutter, vertical = 16.dp),
+                    primaryActionLabel = "Try Again", onPrimaryAction = { profileScope.launch { viewModel.refreshProfile() } }
+                )
+            } }
             item { Spacer(Modifier.height(16.dp)) }
             
             item {
@@ -253,6 +264,7 @@ fun AccountScreen(
                     shortcut.listType?.let(onOpenList) ?: when (shortcut) {
                         AccountShortcut.Dashboard -> onOpenDashboard()
                         AccountShortcut.Collections -> onOpenAO3Collections()
+                        AccountShortcut.Series -> username?.let { onOpenSeries("https://archiveofourown.org/users/$it/series") }
                         AccountShortcut.Drafts -> onOpenDrafts()
                         AccountShortcut.Inbox -> onOpenInbox()
                         AccountShortcut.Preferences -> onOpenWeb("native:preferences")
@@ -896,7 +908,8 @@ internal fun AccountHubShortcuts(
                             AccountShortcutGridTile(
                                 title = item.title,
                                 icon = item.icon,
-                                count = item.listType?.listKey?.let { counts[it]?.displayText },
+                                count = (if (item == AccountShortcut.Series) AO3AccountListCountsCache.SERIES
+                                    else item.listType?.listKey)?.let { counts[it]?.displayText },
                                 onClick = { onOpen(item) }
                             )
                         }

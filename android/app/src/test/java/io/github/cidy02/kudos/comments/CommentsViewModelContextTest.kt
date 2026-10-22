@@ -328,8 +328,18 @@ class CommentsViewModelContextTest {
         reopened.openComposer()
         until("reopened verification") { session.urls.size > reads + 1 && !reopened.submitting.value && reopened.canReverify.value }
         reopened.updateDraft("edited while unresolved"); idle()
+        val checkGate = CompletableDeferred<Unit>()
+        session.getGate = { checkGate }
+        val beforeCheck = session.urls.size
         reopened.reverify()
+        until("verification GET held") { session.urls.size > beforeCheck }
+        assertEquals(true, reopened.verifying.value)
+        assertEquals(true, reopened.submitting.value)
+        reopened.reverify(); reopened.submitComment(); idle()
+        assertEquals(1, session.posts.size)
+        session.getGate = { null }; checkGate.complete(Unit)
         until("rechecked") { !reopened.submitting.value }
+        assertEquals(false, reopened.verifying.value)
         assertEquals(1, session.posts.size)
         val original = CommentSubmissionKey.of(work, null, "ambiguous original body", "alice")
         assertEquals(CommentSubmissionStore.Phase.Ambiguous, submissions.entry(original)?.phase)

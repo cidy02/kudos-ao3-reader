@@ -363,7 +363,9 @@ fun AccountWorksListScreen(
             Spacer(modifier = Modifier.windowInsetsTopHeight(WindowInsets.statusBars))
             Spacer(modifier = Modifier.height(56.dp))
 
-            if (loaded != null && pageWorks.isNotEmpty() && refinedWorks.isEmpty() &&
+            if (!authState.isSignedIn && (type == AccountListType.History || type == AccountListType.Subscriptions)) {
+                AccountListLoginCard(type, onLogin, Modifier.padding(SubjectMetrics.accountGutter))
+            } else if (loaded != null && pageWorks.isNotEmpty() && refinedWorks.isEmpty() &&
                 (type != AccountListType.Subscriptions || subscriptionsScope == "works")) {
                 SubjectHeaderBlock(kicker = "AO3 Account", title = type.title, palette = palette)
                 EmptyStateCard(
@@ -410,12 +412,7 @@ fun AccountWorksListScreen(
                 }
                 AccountListUiState.AuthRequired -> {
                     Box(modifier = Modifier.padding(SubjectMetrics.accountGutter)) {
-                        EmptyStateCard(
-                            title = "AO3 session required",
-                            message = "Your AO3 session needs to be refreshed.",
-                            primaryActionLabel = "Log In Again",
-                            onPrimaryAction = onLogin
-                        )
+                        AccountListLoginCard(type, onLogin)
                     }
                 }
                 is AccountListUiState.Failed -> {
@@ -1285,10 +1282,7 @@ internal fun SubscriptionsBrowser(
                 item {
                     when (worksState) {
                         AccountListUiState.Loading -> SubjectSkeletonList("Loading Subscriptions", scrollable = false)
-                        AccountListUiState.AuthRequired -> EmptyStateCard(
-                            "AO3 session required", "Your AO3 session needs to be refreshed.",
-                            primaryActionLabel = "Log In Again", onPrimaryAction = onLogin
-                        )
+                        AccountListUiState.AuthRequired -> AccountListLoginCard(AccountListType.Subscriptions, onLogin)
                         is AccountListUiState.Failed -> ErrorStateCard(
                             "Could not load Subscriptions", worksState.message,
                             primaryActionLabel = "Retry", onPrimaryAction = { onLoadPage(currentPage) }
@@ -1813,4 +1807,22 @@ internal fun relativeSyncPhrase(syncedAtMillis: Long, nowMillis: Long): String {
     if (hours < 24) return if (hours == 1L) "1 hr ago" else "$hours hr ago"
     val days = hours / 24
     return if (days == 1L) "1 day ago" else "$days days ago"
+}
+
+/** iOS uses this same prompt after session expiration returns the list to signed out. */
+@Composable
+internal fun AccountListLoginCard(type: AccountListType, onLogin: () -> Unit, modifier: Modifier = Modifier) {
+    val title = when (type) {
+        AccountListType.History -> "AO3 History"
+        AccountListType.Subscriptions -> "AO3 Subscriptions"
+        else -> "AO3 session required"
+    }
+    val message = when (type) {
+        AccountListType.History -> "Log in to AO3 to see your reading history."
+        AccountListType.Subscriptions -> "Log in to AO3 to see the works you subscribe to."
+        else -> "Your AO3 session needs to be refreshed."
+    }
+    EmptyStateCard(title, message, modifier = modifier,
+        primaryActionLabel = if (type == AccountListType.History || type == AccountListType.Subscriptions)
+            "Log In to AO3" else "Log In Again", onPrimaryAction = onLogin)
 }

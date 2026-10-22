@@ -156,6 +156,7 @@ fun CommentsScreen(
     val order by viewModel.order.collectAsState()
     val draft by viewModel.draft.collectAsState()
     val submitting by viewModel.submitting.collectAsState()
+    val verifying by viewModel.verifying.collectAsState()
     val canReverify by viewModel.canReverify.collectAsState()
     val message by viewModel.message.collectAsState()
     val composerPresented by viewModel.composerPresented.collectAsState()
@@ -264,6 +265,7 @@ fun CommentsScreen(
             draft = draft,
             onDraftChange = viewModel::updateDraft,
             submitting = submitting,
+            verifying = verifying,
             currentUsername = currentUsername,
             isScopeByChapter = composerTarget is AO3CommentTarget.Chapter,
             palette = palette,

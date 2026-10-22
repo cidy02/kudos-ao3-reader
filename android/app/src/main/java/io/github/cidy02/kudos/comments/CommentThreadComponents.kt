@@ -386,7 +386,8 @@ fun CommentConversationRow(
                         .fillMaxWidth()
                         .height(44.dp)
                         // Here the rest of the thread opens in the app (iOS sends it to the website).
-                        .clickable(onClickLabel = "open the rest of this thread", onClick = onContinueThread),
+                        .clickable(onClick = onContinueThread)
+                        .semantics(mergeDescendants = true) { contentDescription = "Continue thread, $countText" },
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
@@ -464,7 +465,7 @@ fun CommentPostRow(
                 .then(
                     if (comment.author.username != null) {
                         Modifier
-                            .clickable { handlers.onOpenAuthor(comment.author.username) }
+                            .clickable(onClickLabel = "Opens author profile") { handlers.onOpenAuthor(comment.author.username) }
                             .semantics { contentDescription = "View ${comment.author.name}'s profile" }
                     } else Modifier
                 )

@@ -33,6 +33,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -163,12 +165,15 @@ internal fun FilterTagRow(
                         Column(Modifier.subjectPanel()) {
                             if (waiting) FilterNote(if (showingPopular) "Loading…" else "Searching…", Modifier.padding(13.dp))
                             if (!waiting && matches.isEmpty()) FilterNote(
-                                if (query.isBlank() && repository != null)
+                                if (query.isBlank())
                                     "Type above to search AO3 ${title.lowercase()}."
-                                else if (query.isBlank()) "Search $title"
                                 else "No tags found for “$query”.",
                                 Modifier.padding(13.dp)
                             )
+                            if (!waiting && matches.isEmpty() && query.isBlank() && kind != "fandom" && fandom == null) {
+                                FilterNote("Choose a fandom to see its most-used ${title.lowercase()} here.",
+                                    Modifier.padding(start = 13.dp, end = 13.dp, bottom = 13.dp))
+                            }
                         }
                     }
                     itemsIndexed(matches, key = { _, tag -> tag }) { _, tag ->
@@ -217,6 +222,7 @@ private fun FilterTagCapsule(tag: String, state: FilterSelectionState, onClick: 
             .semantics(mergeDescendants = true) {
                 contentDescription = "${if (state == FilterSelectionState.EXCLUDED) "Excluded" else "Included"}: $tag"
                 stateDescription = "Tap to ${state.next.status.lowercase()} this tag"
+                customActions = listOf(CustomAccessibilityAction("Cycle tag") { onClick(); true })
             }.padding(horizontal = 9.dp, vertical = 5.dp),
         horizontalArrangement = Arrangement.spacedBy(4.dp),
         verticalAlignment = Alignment.CenterVertically

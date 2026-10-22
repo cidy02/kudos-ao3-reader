@@ -92,6 +92,8 @@ class AccountViewModel(
     private val staleFlow = MutableStateFlow(false)
     private val unavailableFlow = MutableStateFlow(false)
     val profileUnavailable: StateFlow<Boolean> = unavailableFlow
+    private val failureFlow = MutableStateFlow<String?>(null)
+    val profileFailure: StateFlow<String?> = failureFlow
     private val countsFlow = MutableStateFlow<Map<String, AO3AccountListCountsCache.Count>>(emptyMap())
 
     val uiState: StateFlow<AccountUiState> = combine(
@@ -122,6 +124,7 @@ class AccountViewModel(
                 .collect { (auth, _) ->
                 val username = auth.usernameOrNull
                 unavailableFlow.value = false
+                failureFlow.value = null
                 headerFlow.value = null
                 staleFlow.value = false
                 if (username != null && authRepository.username() == username) {
@@ -145,6 +148,7 @@ class AccountViewModel(
             if (generation != authRepository.generation.value) return@launch
             when (result) {
                 is AO3Result.Success -> {
+                    failureFlow.value = null
                     headerFlow.value = generation to result.value; unavailableFlow.value = false; staleFlow.value = result.isStale
                     // The nav just parsed carries the account's own list sizes (iOS; A59).
                     val scope = AO3AccountListCountsCache.scope(username, generation)
@@ -154,6 +158,7 @@ class AccountViewModel(
                 is AO3Result.Failure -> {
                     headerFlow.value = null; staleFlow.value = false
                     unavailableFlow.value = result.error == AO3Error.NotFound
+                    failureFlow.value = result.error.takeUnless { it == AO3Error.NotFound }?.displayMessage()
                 }
             }
         }

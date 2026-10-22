@@ -4,7 +4,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.ui.graphics.vector.ImageVector
 
-/** Only destinations Android can open natively. My series is not implemented yet. */
+/** Destinations shared with the Account page’s native rows. */
 enum class AccountShortcut(val id: String, val title: String, val icon: ImageVector,
     val listType: AccountListType? = null) {
     Dashboard("dashboard", "Dashboard", Icons.Outlined.GridView),
@@ -15,6 +15,7 @@ enum class AccountShortcut(val id: String, val title: String, val icon: ImageVec
     Collections("collections", "Collections", Icons.Outlined.FilterNone),
     Subscriptions("subscriptions", "Subscriptions", Icons.Outlined.NotificationsNone, AccountListType.Subscriptions),
     Works("works", "Works", Icons.Outlined.Description, AccountListType.MyWorks),
+    Series("series", "Series", Icons.Outlined.Layers),
     Drafts("drafts", "Drafts", Icons.Outlined.EditNote),
     History("history", "History", Icons.Outlined.History, AccountListType.History),
     Inbox("inbox", "Inbox", Icons.Outlined.Inbox),
