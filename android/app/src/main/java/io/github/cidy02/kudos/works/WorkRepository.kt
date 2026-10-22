@@ -387,6 +387,30 @@ class WorkRepository(
         return upsert(work.copy(freedAt = null, lastModifiedAt = clock()))
     }
 
+    /**
+     * iOS `PersistenceSync`'s launch stage: a work whose EPUB is gone stops offering one, queued or
+     * not, and a preserved copy becomes `missingFile` (A75 #4). The queue's own normalization only
+     * visits queued works. Local, as on iOS: nothing is marked modified. The file is stat-ed again
+     * inside the transaction, so a copy installed meanwhile is never undone.
+     */
+    suspend fun repairMissingEpubFlags(): Int {
+        var repaired = 0
+        for (entity in workDao.getAllIncludingDeleted()) {
+            if (!entity.hasEpub || fileStore.workEpubExists(entity.id)) continue
+            database.withTransaction {
+                val current = workDao.getById(entity.id) ?: return@withTransaction
+                if (!current.hasEpub || fileStore.workEpubExists(current.id)) return@withTransaction
+                workDao.upsert(current.copy(
+                    hasEpub = false,
+                    epubPreservationStatusRaw = if (current.epubPreservationStatusRaw == "preserved") "missingFile"
+                        else current.epubPreservationStatusRaw
+                ))
+                repaired += 1
+            }
+        }
+        return repaired
+    }
+
     /** Frees expired held copies and clears stale holds. Runs beside the 90-day sweep. */
     suspend fun sweepHeldCopies(everything: Boolean = false): Int {
         val now = clock()

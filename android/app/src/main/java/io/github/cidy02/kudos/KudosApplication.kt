@@ -76,6 +76,7 @@ class KudosApplication : Application(), Configuration.Provider {
                 runCatching { container.readingQueueRepository.sweepExpiredQueueSoftDeletes() }
                 runCatching { container.workRepository.sweepHeldCopies() }
                 runCatching { container.readingQueueRepository.normalizeAllQueuedWorks() }
+                runCatching { container.workRepository.repairMissingEpubFlags() }
             }
             // Paced rebuild of stale library searchText (schema bump / pre-index / restore).
             runCatching { container.workRepository.rebuildSearchIndexIfNeeded() }
