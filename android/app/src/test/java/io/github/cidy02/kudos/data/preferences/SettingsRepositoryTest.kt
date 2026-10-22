@@ -54,10 +54,13 @@ class SettingsRepositoryTest {
         assertFalse(before.contains("account.shortcuts"))
         repository.replaceAll(KudosSettings.Defaults)
         assertEquals(listOf(inbox, drafts), repository.accountShortcuts.first())
-        for (raw in listOf("", "future", ",future,,", "series")) {
+        for (raw in listOf("", "future", ",future,,")) {
             dataStore.edit { it[stringPreferencesKey(store.key)] = raw }
             assertEquals(store.defaults, repository.accountShortcuts.first())
         }
+        // Series is a shortcut since 3gn, as on iOS; it was the unknown example here before.
+        dataStore.edit { it[stringPreferencesKey(store.key)] = "series" }
+        assertEquals(listOf(io.github.cidy02.kudos.account.AccountShortcut.Series), repository.accountShortcuts.first())
         dataStore.edit { it[stringPreferencesKey(store.key)] = "future,inbox,drafts,Inbox, drafts,inbox" }
         assertEquals(listOf(inbox, drafts, inbox), repository.accountShortcuts.first())
         dataStore.edit { it.remove(stringPreferencesKey(store.key)) }

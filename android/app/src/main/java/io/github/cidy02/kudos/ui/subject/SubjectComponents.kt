@@ -500,7 +500,7 @@ fun SubjectChip(
     fontWeight: FontWeight? = null,
     horizontalPadding: Dp? = null,
     verticalPadding: Dp? = null,
-    maxLines: Int = 1
+    maxLines: Int = if (isAccessibilityFontScale()) Int.MAX_VALUE else 1
 ) {
     val tokens = LocalKudosTokens.current
     val pill = style is SubjectChipStyle.Pill
@@ -530,43 +530,45 @@ fun SubjectChip(
         }
     }
     CompositionLocalProvider(LocalContentColor provides foreground) {
-        Row(
-            modifier
-                .then(decoration)
-                .padding(
-                    horizontal = horizontalPadding ?: if (pill) 14.dp else 11.dp,
-                    vertical = verticalPadding ?: if (pill) 7.dp else 6.dp
-                ),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            if (leadingIcon != null) {
-                Icon(
-                    imageVector = leadingIcon,
-                    contentDescription = null,
-                    modifier = Modifier.size(11.sp.asDp()),
-                    tint = foreground
+        BoxWithConstraints(modifier) {
+            val bounded = constraints.hasBoundedWidth
+            Row(
+                Modifier.then(decoration)
+                    .padding(
+                        horizontal = horizontalPadding ?: if (pill) 14.dp else 11.dp,
+                        vertical = verticalPadding ?: if (pill) 7.dp else 6.dp
+                    ),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                if (leadingIcon != null) {
+                    Icon(
+                        imageVector = leadingIcon,
+                        contentDescription = null,
+                        modifier = Modifier.size(11.sp.asDp()),
+                        tint = foreground
+                    )
+                }
+                Text(
+                    text = text,
+                    // A wrapping chip must reserve the remove glyph's width beside its text.
+                    modifier = if (bounded && trailingIcon != null && maxLines > 1) Modifier.weight(1f, fill = false) else Modifier,
+                    color = foreground,
+                    fontSize = 13.sp,
+                    lineHeight = 18.sp,
+                    fontWeight = fontWeight ?: if (style == SubjectChipStyle.Tinted) FontWeight.Medium else FontWeight.Normal,
+                    style = TextStyle(fontFeatureSettings = "tnum"),
+                    maxLines = maxLines,
+                    overflow = TextOverflow.Ellipsis
                 )
-            }
-            Text(
-                text = text,
-                // A wrapping chip must reserve the remove glyph's width beside its text.
-                modifier = if (trailingIcon != null && maxLines > 1) Modifier.weight(1f, fill = false) else Modifier,
-                color = foreground,
-                fontSize = 13.sp,
-                lineHeight = 18.sp,
-                fontWeight = fontWeight ?: if (style == SubjectChipStyle.Tinted) FontWeight.Medium else FontWeight.Normal,
-                style = TextStyle(fontFeatureSettings = "tnum"),
-                maxLines = maxLines,
-                overflow = TextOverflow.Ellipsis
-            )
-            if (trailingIcon != null) {
-                Icon(
-                    imageVector = trailingIcon,
-                    contentDescription = null,
-                    modifier = Modifier.size(10.sp.asDp()),
-                    tint = foreground.copy(alpha = foreground.alpha * 0.75f)
-                )
+                if (trailingIcon != null) {
+                    Icon(
+                        imageVector = trailingIcon,
+                        contentDescription = null,
+                        modifier = Modifier.size(10.sp.asDp()),
+                        tint = foreground.copy(alpha = foreground.alpha * 0.75f)
+                    )
+                }
             }
         }
     }

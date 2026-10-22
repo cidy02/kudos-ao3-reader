@@ -2553,3 +2553,31 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   shown. The Inbox toolbar keeps its height while empty, so the header no longer rides up under
   the back button during the first load. Debug only: `--ei kudosDemoDelayMs 4000` makes demo
   pages answer late, to see loading states. Reverse: `ui/subject/SubjectSkeletons.kt`.
+- **2026-10-22 · A72's last differences (Codex 3gm).** At font scale 2 chips, the queue search's
+  placeholder and Comments' sort chip wrap instead of ending in "…" (shared `SubjectChip`,
+  `GlassFieldBar`); the queue's filter row scrolls; collection cards keep iOS's 2×2 mosaic; the
+  shared page control is iOS's capsule ("Page 1 / 4", a caret for the page list); the challenge
+  screens' Open on AO3 is a compass pill and their footers keep two columns; a comment's reply is
+  the arrow alone (its spoken label kept); Block is a raised hand; the Listening section is
+  "Kokoro Neural Engine". **One reversal, for iOS's look:** a segmented control of up to four
+  options now stays one row at the largest text by setting its labels smaller (down to the
+  ordinary size's smallest step), as iOS's fixed-size segments do; before, four segments went
+  two to a row with larger labels. Reverse: `options.size > 4` back to `> 3` in
+  `SubjectSegmentedControl`. Not faults: History (both keep AO3's order), the account Works
+  subtitle (iOS waits for its counts cache), the default user icon (both load AO3's image; the
+  demo blocks it on Android), the 2×2 symbol grid at large text (iOS draws it too, lower down),
+  Rec/Private pills (the same 15% fill on both), and the demo libraries' sample data. Kept as
+  Android's: the System theme, the font page's footer, the sync setup's checkbox, the Welcome
+  icon, and a paged assignments list (owner question 16).
+- **2026-10-22 · The last items of the 10-08 audits A14 and R1 (Grok's re-check A74, Codex 3gn).**
+  Series joins the Account shortcut grid (id `series`; old saved lists read as before); the tag
+  picker says "Choose a fandom to see its most-used … here." with no fandom chosen; the comment
+  composer says "We're checking whether this posted before trying again…" while it verifies, as
+  iOS (Check Again still never posts); a signed-out Subscribe asks "Log in to AO3" first; History
+  and Subscriptions signed out use iOS's own cards and "Log In to AO3"; a failed Account header
+  that is not a 404 says "Couldn't load your profile" with Try Again; screen-reader words as iOS's
+  (an avatar's "Opens author profile", the empty fandom index's "No sections", a blurred work's
+  Selected/Not selected while selecting, "Cycle tag", "N more fandoms", "Continue thread, N deeper
+  replies"). Not changed: the comments page's kept-copy line after any failed read (Android says
+  the copy's age where iOS says nothing after a timeout: iOS follow-up in §5c 6c), and "Works
+  Filters", whose iOS control has no Android counterpart (the lists say "Filter" as iOS's do).

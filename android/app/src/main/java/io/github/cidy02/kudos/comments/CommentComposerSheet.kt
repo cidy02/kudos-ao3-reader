@@ -69,7 +69,8 @@ fun CommentComposerSheet(
     palette: SubjectPalette,
     onDismiss: () -> Unit,
     onSubmit: () -> Unit,
-    onOpenAuthor: (String) -> Unit
+    onOpenAuthor: (String) -> Unit,
+    verifying: Boolean = false
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val tokens = LocalKudosTokens.current
@@ -277,6 +278,11 @@ fun CommentComposerSheet(
                         fontSize = 11.sp,
                         color = tokens.secondaryInk
                     )
+                }
+
+                if (verifying) {
+                    Text("We're checking whether this posted before trying again…",
+                        fontSize = 11.sp, color = tokens.secondaryInk)
                 }
 
                 Row(

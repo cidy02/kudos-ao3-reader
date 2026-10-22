@@ -25,7 +25,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Block
+import androidx.compose.material.icons.outlined.PanTool
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.People
 import androidx.compose.material.icons.outlined.Notifications
@@ -182,7 +182,7 @@ internal fun AO3AuthorHero(
                         AuthorModerationButton(action, Icons.Outlined.VolumeOff, !moderationBusy) { onModeration(action) }
                     }
                     block?.let { action ->
-                        AuthorModerationButton(action, Icons.Outlined.Block, !moderationBusy) { onModeration(action) }
+                        AuthorModerationButton(action, Icons.Outlined.PanTool, !moderationBusy) { onModeration(action) }
                     }
                 }
             }

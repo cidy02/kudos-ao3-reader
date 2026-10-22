@@ -61,6 +61,14 @@ class SettingsListeningPageTest {
     }
 
     @Test
+    fun kokoroSectionUsesTheIOSSectionAndActionTitles() {
+        compose.setContent { SettingsListeningPage(repository, engine, packInstalled = false) }
+        compose.onNodeWithText("Kokoro Neural Engine").performScrollTo().assertExists()
+        compose.onNodeWithText("Download Kokoro (Neural Engine)").performScrollTo().assertExists()
+        compose.onNodeWithText("Kokoro Pack").assertDoesNotExist()
+    }
+
+    @Test
     fun speedChangedOnListeningIsPersistedAndReadBySpeech() {
         showPage()
         compose.onNodeWithText("0.9x").performScrollTo().performClick()
@@ -232,13 +240,13 @@ class SettingsListeningPageTest {
         }
 
         compose.onNodeWithText(VOICE_PACK_DISCLOSURE).assertExists()
-        compose.onNodeWithText("Download Voice Pack").performScrollTo().performClick()
+        compose.onNodeWithText("Download Kokoro (Neural Engine)").performScrollTo().performClick()
         compose.onNodeWithText(VOICE_PACK_CONFIRM_TITLE).assertExists()
         compose.onNodeWithText(VOICE_PACK_CONFIRM_MESSAGE).assertExists()
         compose.onNodeWithText("Cancel").performClick()
         assertEquals(0, downloads)
 
-        compose.onNodeWithText("Download Voice Pack").performScrollTo().performClick()
+        compose.onNodeWithText("Download Kokoro (Neural Engine)").performScrollTo().performClick()
         compose.onNodeWithText("Download $VOICE_PACK_SIZE_LABEL").performClick()
         assertEquals(1, downloads)
 

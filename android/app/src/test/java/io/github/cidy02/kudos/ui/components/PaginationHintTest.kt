@@ -32,7 +32,7 @@ class PaginationHintTest {
     @Test fun exactPageEntryWaitsForGoAndRejectsOutOfRangeOrOverflow() {
         val loads = mutableListOf<Int>()
         compose.setContent { KudosPaginationBar(1, 5000, { loads += it }) }
-        compose.onNodeWithText("Page 1 of 5000").performClick()
+        compose.onNodeWithText("Page 1 / 5000").performClick()
         compose.onNode(hasSetTextAction()).performTextReplacement("2731")
         assertEquals(emptyList<Int>(), loads)
         compose.onNodeWithText("Go").assertIsEnabled()
@@ -47,7 +47,7 @@ class PaginationHintTest {
 
     @Test fun thePageButtonSaysItOpensThePagePickerAndOpensIt() {
         compose.setContent { KudosPaginationBar(currentPage = 2, totalPages = 9, onPageChange = {}) }
-        val button = compose.onNodeWithText("Page 2 of 9", useUnmergedTree = false)
+        val button = compose.onNodeWithText("Page 2 / 9", useUnmergedTree = false)
         button.assert(SemanticsMatcher("says \"open the page picker\"") {
             it.config.getOrNull(SemanticsActions.OnClick)?.label == "open the page picker"
         })

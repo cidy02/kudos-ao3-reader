@@ -122,20 +122,17 @@ class LargeTextScreensTest {
     }
 
     @Test
-    fun localCollectionsAtScaleTwoStackAllFourTilesAndGrowWithTheirText() {
+    fun localCollectionsAtScaleTwoKeepTwoColumnsAndWrapTheCollectionName() {
         val works = previewWorks(large = true)
         val name = "A collection of stories with a long name that must remain readable in full"
         showLocalCollections(2f, name, works)
         (listOf(name, "4 works", secondCollection) + works.flatMap { listOf(it.title, it.author) })
             .forEach(::assertReadable)
-        works.forEach { assertBelow(it.author, it.title) }
-        works.zipWithNext().forEach { (first, next) -> assertBelow(next.title, first.author) }
+        assertRow(works[0].title, works[1].title)
+        assertRow(works[2].title, works[3].title)
+        assertBelow(works[2].title, works[0].author)
         assertBelow(secondCollection, name)
         assertTrue(layout(name).lineCount > 2)
-        works.forEach {
-            assertTrue(layout(it.title).lineCount > 2)
-            assertTrue(layout(it.author).lineCount > 1)
-        }
     }
 
     @Test

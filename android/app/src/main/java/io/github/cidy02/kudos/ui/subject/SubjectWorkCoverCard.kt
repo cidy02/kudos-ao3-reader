@@ -149,7 +149,7 @@ fun SubjectWorkCoverCard(
             Modifier
                 .fillMaxSize()
                 .then(if (obscured) Modifier.blur(8.dp) else Modifier)
-                .hiddenMatureWorkSemantics(obscured, isSelecting)
+                .hiddenMatureWorkSemantics(obscured, isSelecting, isSelected)
         ) {
             CoverSurface(palette = palette, shape = shape, hero = false) {
                 Column(

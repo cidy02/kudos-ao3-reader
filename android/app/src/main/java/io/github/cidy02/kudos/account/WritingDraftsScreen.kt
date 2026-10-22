@@ -190,7 +190,7 @@ fun WritingDraftsScreen(
                         }
                         if (drafts.page.totalPages > 1) item {
                             KudosPaginationBar(drafts.page.currentPage, drafts.page.totalPages,
-                                onPageChange = { if (it != page) page = it }, stacked = accessibility)
+                                onPageChange = { if (it != page) page = it })
                         }
                     }
                 }

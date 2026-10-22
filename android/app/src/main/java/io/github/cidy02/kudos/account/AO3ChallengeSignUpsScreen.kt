@@ -2,12 +2,12 @@ package io.github.cidy02.kudos.account
 
 import androidx.lifecycle.viewmodel.initializer
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
+import androidx.compose.material3.TextButton
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material3.CircularProgressIndicator
@@ -101,18 +101,9 @@ private fun ChallengeSignUpsContent(slug: String, title: String, viewerIsOwner: 
                         PushedChallengeHeader(effectiveTitle, "Sign-ups", listOfNotNull(
                             state.total?.let { signUpCount(it, "sign-up") }, state.closeDateText.takeIf { it.isNotEmpty() }
                         ).joinToString(" · "))
-                        // iOS's segmented control, as Prompts has. The pills stay for the large
-                        // text sizes, where three segments do not fit a row.
-                        if (!large) SubjectSegmentedControl(options = SignUpFilter.entries, selected = filter,
+                        SubjectSegmentedControl(options = SignUpFilter.entries, selected = filter,
                             onSelect = { filter = it }, title = { it.label }, contentDescription = "Sign-up filter",
                             modifier = Modifier.padding(horizontal = SubjectMetrics.accountGutter).padding(top = 14.dp))
-                        else Row(Modifier.padding(top = 14.dp).horizontalScroll(rememberScrollState())
-                            .padding(horizontal = SubjectMetrics.accountGutter), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            SignUpFilter.entries.forEach { option ->
-                                SubjectChip(option.label, style = SubjectChipStyle.Pill(filter == option), palette = palette,
-                                    maxLines = Int.MAX_VALUE, modifier = Modifier.clickable { filter = option })
-                            }
-                        }
                     }
                     when {
                         state.loading && state.rows.isEmpty() -> item { SignUpsLoading() }
@@ -147,21 +138,23 @@ private fun ChallengeSignUpsContent(slug: String, title: String, viewerIsOwner: 
                                     verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(11.dp)) {
                                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                                         val match = signUpMatch(row, state.assignments)
-                                        val badge: @Composable () -> Unit = {
-                                            if (match != SignUpMatch.Unknown) SubjectChip(
-                                                if (match == SignUpMatch.Matched) "MATCHED" else "UNMATCHED",
-                                                style = if (match == SignUpMatch.Matched) SubjectChipStyle.Tinted else SubjectChipStyle.Neutral,
-                                                palette = palette, maxLines = if (large) Int.MAX_VALUE else 1)
-                                        }
-                                        if (large) {
-                                            Text(row.pseud, color = tokens.primaryInk, fontSize = 15.sp, lineHeight = 21.sp,
-                                                fontWeight = FontWeight.SemiBold)
-                                            badge()
-                                        } else Row(verticalAlignment = Alignment.CenterVertically,
+                                        Row(verticalAlignment = Alignment.CenterVertically,
                                             horizontalArrangement = Arrangement.spacedBy(7.dp)) {
                                             Text(row.pseud, color = tokens.primaryInk, fontSize = 15.sp, lineHeight = 21.sp,
-                                                fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-                                            badge()
+                                                fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f, fill = false))
+                                            if (match != SignUpMatch.Unknown) {
+                                                val matched = match == SignUpMatch.Matched
+                                                // iOS's statusChip stays a small badge at AX sizes too.
+                                                Text(if (matched) "MATCHED" else "UNMATCHED",
+                                                    fontSize = (8.5f / androidx.compose.ui.platform.LocalDensity.current.fontScale).sp,
+                                                    lineHeight = (12f / androidx.compose.ui.platform.LocalDensity.current.fontScale).sp,
+                                                    fontWeight = FontWeight.Bold, maxLines = 1,
+                                                    color = if (matched) palette.accent else tokens.secondaryInk.copy(alpha = 0.7f),
+                                                    modifier = Modifier.background(
+                                                        if (matched) palette.accent.copy(alpha = 0.18f) else androidx.compose.ui.graphics.Color.White.copy(alpha = 0.10f),
+                                                        androidx.compose.foundation.shape.RoundedCornerShape(5.dp))
+                                                        .padding(horizontal = 7.dp, vertical = 3.dp))
+                                            }
                                         }
                                         Text(signUpPromptCount(row), color = tokens.secondaryInk, fontSize = 11.5.sp, lineHeight = 17.sp)
                                         if (row.requestTagSummary.isNotEmpty()) Text(row.requestTagSummary,
@@ -177,26 +170,22 @@ private fun ChallengeSignUpsContent(slug: String, title: String, viewerIsOwner: 
                                     "Each tag summary shows one line from that person's sign-up requests.")
                             }
                             if (state.hasMore) item {
-                                SettingsPanel(Modifier.padding(top = 10.dp)) {
-                                    if (state.loading) SignUpsLoading()
-                                    SettingsActionRow("Load page ${state.loadedPages + 1} of ${state.totalPages}",
-                                        { scope.launch { model.load(more = true) } }, enabled = !state.loading && !state.terminal)
+                                if (state.loading) SignUpsLoading()
+                                TextButton(onClick = { scope.launch { model.load(more = true) } },
+                                    enabled = !state.loading && !state.terminal,
+                                    modifier = Modifier.fillMaxWidth().padding(top = 10.dp)) {
+                                    Text("Load page ${state.loadedPages + 1} of ${state.totalPages}",
+                                        color = palette.accent, fontSize = 13.sp, lineHeight = 19.sp)
                                 }
                             }
                         }
                     }
                 }
             }
-            if (authState.isSignedIn && admitted) SettingsPanel(Modifier.padding(top = 12.dp, bottom = 26.dp)) {
+            if (authState.isSignedIn && admitted) {
                 val own = ownListedSignUpID(state.rows, authState.usernameOrNull.orEmpty())
-                if (large) {
-                    SettingsActionRow("Your sign-up", { onOpenSignUp(own) })
-                    SubjectRowSeparator()
-                    ChallengePrimaryAction("Create sign-up", true, Modifier.fillMaxWidth()) { onOpenSignUp(null) }
-                } else Row(verticalAlignment = Alignment.CenterVertically) {
-                    SettingsActionRow("Your sign-up", { onOpenSignUp(own) }, modifier = Modifier.weight(1f))
-                    ChallengePrimaryAction("Create sign-up", true, Modifier.weight(1f)) { onOpenSignUp(null) }
-                }
+                ChallengeBottomActions(secondary = "Your sign-up", primary = "Create sign-up",
+                    onSecondary = { onOpenSignUp(own) }, onPrimary = { onOpenSignUp(null) })
             }
         }
     }

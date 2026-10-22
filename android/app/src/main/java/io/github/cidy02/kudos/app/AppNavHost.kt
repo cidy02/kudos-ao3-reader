@@ -996,6 +996,7 @@ fun AppNavHost(
             } else {
                 if (type == AccountListType.MyWorks && worksUsername != null) {
                     AuthorProfileScreen(
+                        onLogin = { navController.navigate(Routes.AccountLogin) },
                         onOpenAbout = { navController.navigate(Routes.authorAbout(it)) },
                         onOpenAuthor = { navController.navigate(Routes.authorProfile(it)) },
                         onNewWork = { navController.navigate(io.github.cidy02.kudos.account.WritingWorkDestination.route()) },
@@ -1301,6 +1302,7 @@ fun AppNavHost(
                 // Every way in comes through here, and a work's page passes the byline's words.
                 val author = io.github.cidy02.kudos.network.ao3.author.AO3AuthorRoute.fromByline(authorUsername)
                 AuthorProfileScreen(
+                    onLogin = { navController.navigate(Routes.AccountLogin) },
                     onOpenAbout = { navController.navigate(Routes.authorAbout(it)) },
                     onOpenAuthor = { navController.navigate(Routes.authorProfile(it)) },
                     onNewWork = { navController.navigate(io.github.cidy02.kudos.account.WritingWorkDestination.route()) },
