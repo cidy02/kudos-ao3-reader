@@ -759,11 +759,11 @@ fun AppNavHost(
                     },
                     onOpenSettings = { navController.navigate(Routes.ao3CollectionForm(slug)) },
                     onOpenMaintainers = { navController.navigate(Routes.ao3CollectionMaintainers(slug, title ?: slug)) },
-                    onOpenChallengeSettings = { owner -> navController.navigate(Routes.ao3ChallengeSettings(slug, title ?: slug, owner)) },
-                    onOpenPrompts = { owner -> navController.navigate(Routes.ao3PromptMeme(slug, title ?: slug, owner)) },
+                    onOpenChallengeSettings = { owner, kind -> navController.navigate(Routes.ao3ChallengeSettings(slug, title ?: slug, owner, kind)) },
+                    onOpenPrompts = { owner, kind -> navController.navigate(Routes.ao3PromptMeme(slug, title ?: slug, owner, kind)) },
                     onOpenSignUp = { navController.navigate(Routes.ao3ChallengeSignUp(slug, title ?: slug)) },
-                    onOpenAssignments = { owner -> navController.navigate(Routes.ao3ChallengeAssignments(slug, title ?: slug, owner, true)) },
-                    onOpenSignUps = { owner -> navController.navigate(Routes.ao3ChallengeSignUps(slug, title ?: slug, owner, true)) },
+                    onOpenAssignments = { owner, kind -> navController.navigate(Routes.ao3ChallengeAssignments(slug, title ?: slug, owner, true, kind = kind)) },
+                    onOpenSignUps = { owner, kind -> navController.navigate(Routes.ao3ChallengeSignUps(slug, title ?: slug, owner, true, kind)) },
                     settingsRepository = container.settingsRepository,
                     privacyGate = container.privacyGate,
                     onOpenWork = { work ->
@@ -780,10 +780,12 @@ fun AppNavHost(
             arguments = listOf(
                 Routes.navArgOf("collectionSlug"),
                 navArgument("collectionTitle") { type = NavType.StringType; nullable = true; defaultValue = null },
-                navArgument("owner") { type = NavType.BoolType; defaultValue = false }
+                navArgument("owner") { type = NavType.BoolType; defaultValue = false },
+                navArgument("kind") { type = NavType.StringType; nullable = true; defaultValue = null }
             )
         ) { entry ->
             val slug = Routes.routeArg(entry, "collectionSlug")
+            val challengeKind = Routes.challengeKindFromRoute(Routes.routeArg(entry, "kind"))
             val context = androidx.compose.ui.platform.LocalContext.current
             var editingSettings by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
             var settingsOpening by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(0) }
@@ -795,23 +797,24 @@ fun AppNavHost(
                 onOpenWeb = { navController.navigate(Routes.webFallback(it)) },
                 onOpenTagSet = { id, title -> navController.navigate(Routes.ao3TagSet(id, title, isModerator = true)) },
                 onOpenCollection = { navController.navigate(Routes.ao3CollectionForm(slug)) },
-                onBack = { editingSettings = false }, openingKey = settingsOpening
+                onBack = { editingSettings = false }, openingKey = settingsOpening, kind = challengeKind
             )
             else io.github.cidy02.kudos.account.AO3ChallengeSettingsScreen(
                 slug = slug, title = Routes.routeArg(entry, "collectionTitle") ?: slug,
                 viewerIsOwner = entry.arguments?.getBoolean("owner") == true,
                 repository = container.collectionDetailRepository,
+                challengeKind = challengeKind,
                 onOpenEditSettings = { settingsOpening += 1; editingSettings = true },
                 onOpenWeb = { navController.navigate(Routes.webFallback(it)) },
                 onOpenTagSet = { id, title -> navController.navigate(Routes.ao3TagSet(id, title, isModerator = true)) },
                 onOpenAssignments = { listSlug, listTitle, closed -> navController.navigate(Routes.ao3ChallengeAssignments(listSlug, listTitle,
                     viewerIsOwner = entry.arguments?.getBoolean("owner") == true,
-                    viewerIsMaintainer = entry.arguments?.getBoolean("owner") == true, knownClosed = closed)) },
+                    viewerIsMaintainer = entry.arguments?.getBoolean("owner") == true, knownClosed = closed, kind = challengeKind)) },
                 onOpenSignUps = { listSlug, listTitle -> navController.navigate(Routes.ao3ChallengeSignUps(listSlug, listTitle,
                     viewerIsOwner = entry.arguments?.getBoolean("owner") == true,
-                    viewerIsMaintainer = entry.arguments?.getBoolean("owner") == true)) },
+                    viewerIsMaintainer = entry.arguments?.getBoolean("owner") == true, kind = challengeKind)) },
                 onOpenPrompts = { slug, title ->
-                    navController.navigate(Routes.ao3PromptMeme(slug, title, entry.arguments?.getBoolean("owner") == true))
+                    navController.navigate(Routes.ao3PromptMeme(slug, title, entry.arguments?.getBoolean("owner") == true, challengeKind))
                 },
                 onOpenExternal = { url ->
                     // The fixture-only demo must never launch an OS browser that can contact AO3.
@@ -828,7 +831,8 @@ fun AppNavHost(
                 navArgument("collectionTitle") { type = NavType.StringType; defaultValue = "" },
                 navArgument("owner") { type = NavType.BoolType; defaultValue = false },
                 navArgument("maintainer") { type = NavType.BoolType; defaultValue = false },
-                navArgument("closed") { type = NavType.StringType; defaultValue = "unknown" }
+                navArgument("closed") { type = NavType.StringType; defaultValue = "unknown" },
+                navArgument("kind") { type = NavType.StringType; nullable = true; defaultValue = null }
             )
         ) { entry ->
             val slug = Routes.routeArg(entry, "collectionSlug")
@@ -838,7 +842,8 @@ fun AppNavHost(
                 viewerIsMaintainer = entry.arguments?.getBoolean("maintainer") == true,
                 knownClosed = entry.arguments?.getString("closed")?.toBooleanStrictOrNull(),
                 repository = container.collectionDetailRepository, writes = container.writeRepository,
-                onOpenWeb = { navController.navigate(Routes.webFallback(it)) })
+                onOpenWeb = { navController.navigate(Routes.webFallback(it)) },
+                kind = Routes.challengeKindFromRoute(Routes.routeArg(entry, "kind")))
         }
         sharedComposable(
             Routes.AO3ChallengeSignUps,
@@ -846,7 +851,8 @@ fun AppNavHost(
                 Routes.navArgOf("collectionSlug"),
                 navArgument("collectionTitle") { type = NavType.StringType; defaultValue = "" },
                 navArgument("owner") { type = NavType.BoolType; defaultValue = false },
-                navArgument("maintainer") { type = NavType.BoolType; defaultValue = false }
+                navArgument("maintainer") { type = NavType.BoolType; defaultValue = false },
+                navArgument("kind") { type = NavType.StringType; nullable = true; defaultValue = null }
             )
         ) { entry ->
             val slug = Routes.routeArg(entry, "collectionSlug")
@@ -856,7 +862,8 @@ fun AppNavHost(
                 viewerIsOwner = entry.arguments?.getBoolean("owner") == true,
                 viewerIsMaintainer = entry.arguments?.getBoolean("maintainer") == true,
                 repository = container.collectionDetailRepository,
-                onOpenSignUp = { id -> navController.navigate(Routes.ao3ChallengeSignUp(slug, title, id)) })
+                onOpenSignUp = { id -> navController.navigate(Routes.ao3ChallengeSignUp(slug, title, id)) },
+                kind = Routes.challengeKindFromRoute(Routes.routeArg(entry, "kind")))
         }
         sharedComposable(
             Routes.AO3ChallengeSignUp,
@@ -883,7 +890,8 @@ fun AppNavHost(
             arguments = listOf(
                 Routes.navArgOf("collectionSlug"),
                 navArgument("collectionTitle") { type = NavType.StringType; defaultValue = "" },
-                navArgument("owner") { type = NavType.BoolType; defaultValue = false }
+                navArgument("owner") { type = NavType.BoolType; defaultValue = false },
+                navArgument("kind") { type = NavType.StringType; nullable = true; defaultValue = null }
             )
         ) { entry ->
             val slug = Routes.routeArg(entry, "collectionSlug")
@@ -893,7 +901,8 @@ fun AppNavHost(
                 viewerIsOwner = entry.arguments?.getBoolean("owner") == true,
                 repository = container.collectionDetailRepository, writes = container.writeRepository,
                 onOpenSignUp = { navController.navigate(Routes.ao3ChallengeSignUp(slug, Routes.routeArg(entry, "collectionTitle").orEmpty())) },
-                onOpenWeb = { navController.navigate(Routes.webFallback(it)) }
+                onOpenWeb = { navController.navigate(Routes.webFallback(it)) },
+                kind = Routes.challengeKindFromRoute(Routes.routeArg(entry, "kind"))
             )
         }
         sharedComposable(

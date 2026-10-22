@@ -44,23 +44,23 @@ import kotlinx.coroutines.launch
 @Composable
 fun AO3ChallengeAssignmentsScreen(slug: String, title: String, viewerIsOwner: Boolean,
     viewerIsMaintainer: Boolean, knownClosed: Boolean?, repository: AO3CollectionDetailRepository,
-    writes: AO3WriteRepository, onOpenWeb: (String) -> Unit) = ProvideCollectionPalette(slug, title) {
-    ChallengeAssignmentsContent(slug, title, viewerIsOwner, viewerIsMaintainer, knownClosed, repository, writes, onOpenWeb)
+    writes: AO3WriteRepository, onOpenWeb: (String) -> Unit, kind: AO3ChallengeKind? = null) = ProvideCollectionPalette(slug, title) {
+    ChallengeAssignmentsContent(slug, title, viewerIsOwner, viewerIsMaintainer, knownClosed, repository, writes, onOpenWeb, kind)
 }
 
 @Composable
 private fun ChallengeAssignmentsContent(slug: String, title: String, viewerIsOwner: Boolean,
     viewerIsMaintainer: Boolean, knownClosed: Boolean?, repository: AO3CollectionDetailRepository,
-    writes: AO3WriteRepository, onOpenWeb: (String) -> Unit) {
+    writes: AO3WriteRepository, onOpenWeb: (String) -> Unit, kind: AO3ChallengeKind?) {
     val auth = repository.authRepository
     val generation by auth.generation.collectAsState()
     val authState by auth.state.collectAsState()
     val admittedGeneration = androidx.compose.runtime.saveable.rememberSaveable(slug) { generation }
     val model: AO3ChallengeAssignmentsState = androidx.lifecycle.viewmodel.compose.viewModel(
-        key = "AO3ChallengeAssignments:$slug:$generation:${authState.isSignedIn}:$viewerIsOwner:$viewerIsMaintainer:$knownClosed",
+        key = "AO3ChallengeAssignments:$slug:$generation:${authState.isSignedIn}:$viewerIsOwner:$viewerIsMaintainer:$knownClosed:${kind?.fieldPrefix}",
         factory = androidx.lifecycle.viewmodel.viewModelFactory {
             initializer { AO3ChallengeAssignmentsState(slug, viewerIsOwner, viewerIsMaintainer && admittedGeneration == generation,
-            knownClosed, repository, writes) }
+            knownClosed, repository, writes, kind) }
         }
     )
     val state by model.state.collectAsState()

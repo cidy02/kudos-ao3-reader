@@ -2,6 +2,7 @@ package io.github.cidy02.kudos.account
 
 import io.github.cidy02.kudos.auth.isSignedIn
 import io.github.cidy02.kudos.network.ao3.AO3Result
+import io.github.cidy02.kudos.network.ao3.account.AO3ChallengeKind
 import io.github.cidy02.kudos.network.ao3.account.AO3PromptMemePage
 import io.github.cidy02.kudos.network.ao3.account.challengeDateText
 import io.github.cidy02.kudos.network.ao3.writes.AO3WriteRepository
@@ -34,7 +35,8 @@ internal class AO3PromptMemeState(
     private val slug: String,
     private val repository: AO3CollectionDetailRepository,
     private val viewerIsOwner: Boolean,
-    private val writes: AO3WriteRepository
+    private val writes: AO3WriteRepository,
+    private val kind: AO3ChallengeKind? = null
 ) : androidx.lifecycle.ViewModel() {
     private var scheduleAttempted = false
     private val auth = repository.authRepository
@@ -104,7 +106,7 @@ internal class AO3PromptMemeState(
                 readsPromptMemeSchedule(viewerIsOwner, scheduleAttempted, state.value.closeDateText.isNotEmpty())
             ) {
                 scheduleAttempted = true
-                val schedule = repository.getChallengeSettingsForm(slug)
+                val schedule = repository.getChallengeSettingsForm(slug, kind)
                 currentCoroutineContext().ensureActive()
                 if (!ownsSession()) return
                 val raw = when (schedule) {

@@ -40,15 +40,16 @@ fun AO3ChallengeSettingsScreen(
     onOpenPrompts: (String, String) -> Unit,
     onOpenSignUps: (String, String) -> Unit = { _, _ -> },
     onOpenAssignments: (String, String, Boolean) -> Unit = { _, _, _ -> },
-    onOpenEditSettings: () -> Unit = {}
+    onOpenEditSettings: () -> Unit = {},
+    challengeKind: AO3ChallengeKind? = null
 ) {
     val auth = repository.authRepository
     val generation by auth.generation.collectAsState()
     val authState by auth.state.collectAsState()
     val model: AO3ChallengeSettingsState = androidx.lifecycle.viewmodel.compose.viewModel(
-        key = "AO3ChallengeSettings:$slug:$generation:${authState.isSignedIn}",
+        key = "AO3ChallengeSettings:$slug:$generation:${authState.isSignedIn}:${challengeKind?.fieldPrefix}",
         factory = androidx.lifecycle.viewmodel.viewModelFactory {
-            initializer { AO3ChallengeSettingsState(slug, repository) }
+            initializer { AO3ChallengeSettingsState(slug, repository, challengeKind) }
         }
     )
     val state by model.state.collectAsState()

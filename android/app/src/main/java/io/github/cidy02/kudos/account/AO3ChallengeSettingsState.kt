@@ -2,6 +2,7 @@ package io.github.cidy02.kudos.account
 
 import io.github.cidy02.kudos.auth.isSignedIn
 import io.github.cidy02.kudos.network.ao3.AO3Result
+import io.github.cidy02.kudos.network.ao3.account.AO3ChallengeKind
 import io.github.cidy02.kudos.network.ao3.account.AO3ChallengeSettingsPage
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
@@ -17,7 +18,8 @@ internal data class ChallengeSettingsUiState(
 )
 
 /** Foreground read owned by one visible screen and one authentication generation. */
-internal class AO3ChallengeSettingsState(private val slug: String, private val repository: AO3CollectionDetailRepository) : androidx.lifecycle.ViewModel() {
+internal class AO3ChallengeSettingsState(private val slug: String, private val repository: AO3CollectionDetailRepository,
+    private val kind: AO3ChallengeKind? = null) : androidx.lifecycle.ViewModel() {
     private val auth = repository.authRepository
     private val generation = auth.generation.value
     private var active = true
@@ -47,7 +49,7 @@ internal class AO3ChallengeSettingsState(private val slug: String, private val r
         loadJob = currentCoroutineContext()[Job]
         mutable.value = state.value.copy(loading = true, failure = null)
         try {
-            val result = repository.getChallengeSettings(slug)
+            val result = repository.getChallengeSettings(slug, kind)
             currentCoroutineContext().ensureActive()
             if (!active || generation != auth.generation.value) return
             mutable.value = when (result) {

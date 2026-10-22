@@ -174,6 +174,58 @@ class AO3ChallengeSettingsTest {
         assertEquals(listOf(giftUrl), client.gets)
     }
 
+    @Test fun knownKindRequestsThatFormOnlyAndUnknownKindStillProbes() = runTest {
+        val (_, memeClient, memeRepo) = challengeSetup()
+        val meme = memeRepo.getChallengeSettingsForm("winter_exchange", AO3ChallengeKind.PromptMeme) as AO3Result.Success
+        assertEquals(AO3ChallengeKind.PromptMeme, meme.value.kind)
+        assertEquals(listOf(memeUrl), memeClient.gets)
+
+        val (_, giftClient, giftRepo) = challengeSetup()
+        val gift = giftRepo.getChallengeSettingsForm("winter_exchange", AO3ChallengeKind.GiftExchange) as AO3Result.Success
+        assertEquals(AO3ChallengeKind.GiftExchange, gift.value.kind)
+        assertEquals(listOf(giftUrl), giftClient.gets)
+        assertFalse(giftClient.gets.any { it.contains("prompt_meme") })
+
+        val (_, refusedClient, refusedRepo) = challengeSetup()
+        refusedClient.replies[giftUrl] = AO3Result.Failure(AO3Error.NotFound)
+        val refused = refusedRepo.getChallengeSettingsForm("winter_exchange", AO3ChallengeKind.GiftExchange)
+        assertEquals(listOf(giftUrl), refusedClient.gets)
+        assertEquals(AO3Error.NotFound, (refused as AO3Result.Failure).error)
+
+        val (_, badClient, badRepo) = challengeSetup()
+        badClient.replies[memeUrl] = challengeResponse(memeUrl, "<html>unparseable</html>")
+        val bad = badRepo.getChallengeSettingsForm("winter_exchange", AO3ChallengeKind.PromptMeme)
+        assertEquals(listOf(memeUrl), badClient.gets)
+        assertTrue((bad as AO3Result.Failure).error is AO3Error.Parse)
+
+        val (_, unknownClient, unknownRepo) = challengeSetup()
+        unknownClient.replies[giftUrl] = AO3Result.Failure(AO3Error.NotFound)
+        val unknown = unknownRepo.getChallengeSettingsForm("winter_exchange") as AO3Result.Success
+        assertEquals(listOf(giftUrl, memeUrl), unknownClient.gets)
+        assertEquals(AO3ChallengeKind.PromptMeme, unknown.value.kind)
+        unknownClient.gets.clear()
+        unknownClient.replies[giftUrl] = challengeResponse(giftUrl, "<html>unparseable</html>")
+        val recovered = unknownRepo.getChallengeSettingsForm("winter_exchange") as AO3Result.Success
+        assertEquals(listOf(giftUrl, memeUrl), unknownClient.gets)
+        assertEquals(AO3ChallengeKind.PromptMeme, recovered.value.kind)
+        unknownClient.gets.clear()
+        unknownClient.replies.remove(giftUrl)
+        val stopped = unknownRepo.getChallengeSettingsForm("winter_exchange") as AO3Result.Success
+        assertEquals(listOf(giftUrl), unknownClient.gets)
+        assertEquals(AO3ChallengeKind.GiftExchange, stopped.value.kind)
+
+        val (_, pageClient, pageRepo) = challengeSetup()
+        val page = pageRepo.getChallengeSettings("winter_exchange", AO3ChallengeKind.PromptMeme) as AO3Result.Success
+        assertEquals(listOf(memeUrl, profileUrl), pageClient.gets)
+        assertEquals(AO3ChallengeKind.PromptMeme, page.value.settings.kind)
+        assertNull(page.value.signUpTotal)
+        val model = AO3ChallengeSettingsState("winter_exchange", pageRepo, AO3ChallengeKind.PromptMeme)
+        model.load()
+        assertEquals(listOf(memeUrl, profileUrl, memeUrl, profileUrl), pageClient.gets)
+        assertEquals(AO3ChallengeKind.PromptMeme, model.state.value.data!!.settings.kind)
+        assertNull(model.state.value.data!!.signUpTotal)
+    }
+
     @Test fun allPlaceholderDestinationsAndExternalMatchingAreSingleSourcedAndEncodeSlugs() {
         assertEquals(giftUrl, ChallengeSettingsDestinations.challengeSettingsEditView("winter_exchange", AO3ChallengeKind.GiftExchange))
         assertEquals(memeUrl, ChallengeSettingsDestinations.challengeSettingsEditView("winter_exchange", AO3ChallengeKind.PromptMeme))

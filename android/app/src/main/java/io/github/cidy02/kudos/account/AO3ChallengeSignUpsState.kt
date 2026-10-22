@@ -31,7 +31,8 @@ internal data class ChallengeSignUpsUiState(
 
 /** One visible, generation-scoped pager. Optional failures are attempts, not reasons to probe again. */
 internal class AO3ChallengeSignUpsState(private val slug: String, private val viewerIsOwner: Boolean,
-    private val viewerIsMaintainer: Boolean, private val repository: AO3CollectionDetailRepository) : androidx.lifecycle.ViewModel() {
+    private val viewerIsMaintainer: Boolean, private val repository: AO3CollectionDetailRepository,
+    private val kind: AO3ChallengeKind? = null) : androidx.lifecycle.ViewModel() {
     private val auth = repository.authRepository
     private val generation = auth.generation.value
     private var active = true
@@ -73,7 +74,7 @@ internal class AO3ChallengeSignUpsState(private val slug: String, private val vi
                 // The settings form is owner-only. Unknown/open means do not probe assignments.
                 var closed = false
                 if (viewerIsOwner) {
-                    val result = repository.getChallengeSettingsForm(slug)
+                    val result = repository.getChallengeSettingsForm(slug, kind)
                     checkSession()
                     if (result is AO3Result.Success) {
                         val form = result.value
