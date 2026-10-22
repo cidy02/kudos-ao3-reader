@@ -312,22 +312,16 @@ struct AO3CollectionsList: View {
     /// account-wide collection-items page, not a sum the app builds itself.
     /// Nothing caches a pending-item count, so the pill has no badge.
     private var scopeRail: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                SubjectChip(text: "Collections", style: .pill(isSelected: true), palette: palette)
-                Button {
-                    yourItems = AO3CollectionItemsDestination(slug: nil, title: "Your items")
-                } label: {
-                    SubjectChip(
-                        text: "Your items",
-                        style: .pill(isSelected: false),
-                        palette: palette
-                    )
-                }
-                .buttonStyle(.plain)
-                .minimumHitTarget(28)
+        // One line cut "Your items".
+        AccessibilityChipRail(horizontalPadding: 16) {
+            SubjectChip(text: "Collections", style: .pill(isSelected: true), palette: palette)
+            Button {
+                yourItems = AO3CollectionItemsDestination(slug: nil, title: "Your items")
+            } label: {
+                SubjectChip(text: "Your items", style: .pill(isSelected: false), palette: palette)
             }
-            .padding(.horizontal, 16)
+            .buttonStyle(.plain)
+            .minimumHitTarget(28)
         }
     }
 
