@@ -2539,3 +2539,17 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   its replies keep their parent (iOS `parseComment`). A selected ledger row's border and checkbox
   sit outside the blur. Reverse: `archived.isDeleted != true` in `backup/BackupMergeService.kt`;
   the `h4.heading.byline` check in `AO3CommentParser.parseOneComment`; `WorkLedgerRow`.
+- **2026-10-22 · Android's reader hides the system bars while reading; predictive back is on
+  (owner, 2026-10-21; Codex 3gk).** Bars follow the reader's chrome, as iOS's status bar does;
+  a swipe from the edge shows them for a moment without moving the page; any sheet over the
+  reader, a screen above it, or leaving it brings them back. Codex also added a "Discard
+  changes?" question to the writing forms because the brief assumed one existed; iOS does not
+  ask, so it was not landed (owner question 32). Reverse: `reader/ReaderSystemBars.kt` and
+  `enableOnBackInvokedCallback` in the manifest.
+- **2026-10-22 · Placeholder rows while AO3 lists load (owner, 2026-10-21; Codex 3gl).** Ten
+  AO3 lists draw the shape of what is coming (work rows, category panels, inbox and comment
+  rows, the author header) in place of a spinner, as iOS's `SkeletonLoading` does; thirteen
+  keep their spinner where iOS has one or no loading state. A refresh keeps the rows already
+  shown. The Inbox toolbar keeps its height while empty, so the header no longer rides up under
+  the back button during the first load. Debug only: `--ei kudosDemoDelayMs 4000` makes demo
+  pages answer late, to see loading states. Reverse: `ui/subject/SubjectSkeletons.kt`.
