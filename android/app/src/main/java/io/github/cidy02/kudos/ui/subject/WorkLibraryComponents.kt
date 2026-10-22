@@ -44,6 +44,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -124,6 +125,9 @@ fun <T> WorkCardCarousel(
     }
 }
 
+/** The part of a ledger row that blurs; selection chrome must stay outside it. */
+internal const val WORK_LEDGER_CONTENT_TAG = "workLedgerContent"
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun WorkLedgerRow(
@@ -155,102 +159,96 @@ fun WorkLedgerRow(
         SubjectPalette.fromHue(HomeFacts.workHue(fandoms, title), tokens.theme)
     }
     val shape = RoundedCornerShape(14.dp)
-    // An obscured row is blurred under "Tap to reveal", as iOS's SensitiveWorkRow; the
-    // accessibility label alone hid nothing on screen.
-    Box(modifier.fillMaxWidth().clip(shape)) {
-    if (accessibilityFontScale) {
-        Column(
-            Modifier
-                .fillMaxWidth()
-                .then(if (obscured) Modifier.blur(10.dp) else Modifier)
-                .clip(shape)
-                .background(tokens.cardFill)
-                .then(if (muted) Modifier else Modifier.background(palette.rowWash))
-                .border(if (selected) 2.dp else 0.5.dp, if (selected) tokens.accent else palette.rowBorder, shape)
-                .combinedClickable(onClick = onClick, onLongClick = onLongClick)
-                .padding(horizontal = 14.dp, vertical = 13.dp)
-                .then(
-                    if (obscured) Modifier.hiddenMatureWorkSemantics(true, selecting)
-                    else Modifier.semantics { contentDescription = "$title, by $author" }
-                ),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            SubjectKicker(
-                text = HomeFacts.primaryFandom(fandoms) ?: "Library",
-                palette = palette,
-                trailingCount = (fandoms.count { it.isNotBlank() } - 1).coerceAtLeast(0),
-                size = 9.sp,
-                ruleSpacing = 4.dp
-            )
-            WorkProgressRing(progress, state = progressState, diameter = 44.dp * fontScale, showsZeroPercent = true)
-            Row(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    title,
-                    color = tokens.primaryInk,
-                    fontSize = 16.5.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.weight(1f, fill = false)
-                )
-                if (favorite) Text("★", color = Color(0xFFFFC107), fontSize = 13.sp)
-            }
-            Text(metadata, color = tokens.secondaryInk, fontSize = 11.5.sp)
-            Column(horizontalAlignment = Alignment.End) {
-                HomeStatusTray(rating, categories, warnings, isComplete, HomeStatusArrangement.Grid, tileSize = 22.dp)
-                if (selecting) androidx.compose.material3.Checkbox(checked = selected, onCheckedChange = { onClick() })
-            }
-        }
-    } else Row(
-        Modifier
-            .fillMaxWidth()
-            .then(if (obscured) Modifier.blur(10.dp) else Modifier)
-            .clip(shape)
+    // Keep the selection chrome outside the blurred work content, as SensitiveWorkRow does.
+    Box(
+        modifier.fillMaxWidth().clip(shape)
             .background(tokens.cardFill)
             .then(if (muted) Modifier else Modifier.background(palette.rowWash))
             .border(if (selected) 2.dp else 0.5.dp, if (selected) tokens.accent else palette.rowBorder, shape)
             .combinedClickable(onClick = onClick, onLongClick = onLongClick)
-            .padding(horizontal = 14.dp, vertical = 13.dp)
             .then(
                 if (obscured) Modifier.hiddenMatureWorkSemantics(true, selecting)
                 else Modifier.semantics { contentDescription = "$title, by $author" }
-            ),
-        horizontalArrangement = Arrangement.spacedBy(13.dp),
-        verticalAlignment = Alignment.CenterVertically
+            )
     ) {
-        WorkProgressRing(progress, state = progressState, diameter = 44.dp * fontScale, showsZeroPercent = true)
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-            SubjectKicker(
-                text = HomeFacts.primaryFandom(fandoms) ?: "Library",
-                palette = palette,
-                trailingCount = (fandoms.count { it.isNotBlank() } - 1).coerceAtLeast(0),
-                size = 9.sp,
-                ruleSpacing = 4.dp
-            )
-            Row(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    title,
-                    color = tokens.primaryInk,
-                    fontSize = 16.5.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f, fill = false)
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            if (selecting) {
+                androidx.compose.material3.Checkbox(
+                    checked = selected,
+                    onCheckedChange = { onClick() },
+                    modifier = Modifier.padding(start = 14.dp)
                 )
-                if (favorite) Text("★", color = Color(0xFFFFC107), fontSize = 13.sp)
             }
-            Text(
-                metadata,
-                color = tokens.secondaryInk,
-                fontSize = 11.5.sp,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
+            Box(Modifier.weight(1f).testTag(WORK_LEDGER_CONTENT_TAG).then(if (obscured) Modifier.blur(10.dp) else Modifier)) {
+                if (accessibilityFontScale) {
+                    Column(
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp, vertical = 13.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        SubjectKicker(
+                            text = HomeFacts.primaryFandom(fandoms) ?: "Library",
+                            palette = palette,
+                            trailingCount = (fandoms.count { it.isNotBlank() } - 1).coerceAtLeast(0),
+                            size = 9.sp,
+                            ruleSpacing = 4.dp
+                        )
+                        WorkProgressRing(progress, state = progressState, diameter = 44.dp * fontScale, showsZeroPercent = true)
+                        Row(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                title,
+                                color = tokens.primaryInk,
+                                fontSize = 16.5.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                modifier = Modifier.weight(1f, fill = false)
+                            )
+                            if (favorite) Text("★", color = Color(0xFFFFC107), fontSize = 13.sp)
+                        }
+                        Text(metadata, color = tokens.secondaryInk, fontSize = 11.5.sp)
+                        HomeStatusTray(rating, categories, warnings, isComplete, HomeStatusArrangement.Grid, tileSize = 22.dp)
+                    }
+                } else Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 14.dp, vertical = 13.dp),
+                    horizontalArrangement = Arrangement.spacedBy(13.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    WorkProgressRing(progress, state = progressState, diameter = 44.dp * fontScale, showsZeroPercent = true)
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                        SubjectKicker(
+                            text = HomeFacts.primaryFandom(fandoms) ?: "Library",
+                            palette = palette,
+                            trailingCount = (fandoms.count { it.isNotBlank() } - 1).coerceAtLeast(0),
+                            size = 9.sp,
+                            ruleSpacing = 4.dp
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                title,
+                                color = tokens.primaryInk,
+                                fontSize = 16.5.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f, fill = false)
+                            )
+                            if (favorite) Text("★", color = Color(0xFFFFC107), fontSize = 13.sp)
+                        }
+                        Text(
+                            metadata,
+                            color = tokens.secondaryInk,
+                            fontSize = 11.5.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                    HomeStatusTray(rating, categories, warnings, isComplete, HomeStatusArrangement.Grid, tileSize = 22.dp)
+                }
+            }
         }
-        Column(horizontalAlignment = Alignment.End) {
-            HomeStatusTray(rating, categories, warnings, isComplete, HomeStatusArrangement.Grid, tileSize = 22.dp)
-            if (selecting) androidx.compose.material3.Checkbox(checked = selected, onCheckedChange = { onClick() })
-        }
-    }
-    if (obscured && !selecting) RevealCapsule(Modifier.align(Alignment.Center))
+        if (obscured && !selecting) RevealCapsule(Modifier.align(Alignment.Center))
     }
 }
 

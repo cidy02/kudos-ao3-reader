@@ -42,6 +42,39 @@ class AO3CommentThreadParserTest {
     }
 
     @Test
+    fun deletedCommentParsesAsTombstoneAndKeepsItsReplies() {
+        val html = """
+            <div id="comments_placeholder"><ol class="thread">
+              <li class="comment group" id="comment_1">
+                <h4 class="heading byline"><a href="/users/Reader/pseuds/Reader">Reader</a></h4>
+                <blockquote class="userstuff"><p>Earlier sibling.</p></blockquote>
+              </li>
+              <li class="comment group even" id="comment_2"><p>(Previous comment deleted.)</p></li>
+              <li><ol class="thread">
+                <li class="comment group" id="comment_3">
+                  <h4 class="heading byline"><a href="/users/Reply/pseuds/Reply">Reply</a></h4>
+                  <blockquote class="userstuff"><p>Still here.</p></blockquote>
+                </li>
+              </ol></li>
+            </ol></div>
+        """.trimIndent()
+        val thread = parser.parseThread(html, "https://archiveofourown.org/works/123?show_comments=true",
+            AO3CommentTarget.Work(123))
+        assertEquals(2, thread.comments.size)
+        assertTrue(thread.comments.first().replies.isEmpty())
+        val deleted = thread.comments.last()
+        assertEquals("comment_2", deleted.id)
+        assertTrue(deleted.isDeletedOrHidden)
+        assertFalse(deleted.isGuest)
+        assertEquals("", deleted.author.name)
+        assertEquals("(Previous comment deleted.)", deleted.body)
+        assertFalse(deleted.canReply)
+        assertEquals("comment_3", deleted.replies.single().id)
+        assertEquals("Still here.", deleted.replies.single().body)
+        assertEquals(1, deleted.replies.single().depth)
+    }
+
+    @Test
     fun handlesNoCommentsState() {
         val thread = parser.parseThread(
             html = writeResource("ao3/comments/comments_empty.html"),

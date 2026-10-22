@@ -79,6 +79,91 @@ class BackupMergeParityTest {
     }
 
     @Test
+    fun repeatedFileMergeKeepsArchivedDeletionsAndTheirLocalRecoveryDeadlines() {
+        val remote = BackupLibrarySnapshot(
+            works = listOf(work().copy(isDeleted = true, deletedAt = at(100))),
+            collections = listOf(collection().copy(isDeleted = true, deletedAt = at(100))),
+            readingQueues = listOf(queue().copy(isDeleted = true, deletedAt = at(100)))
+        )
+        val first = merge(BackupLibrarySnapshot(), remote, BackupImportMode.MERGE)
+        val workTombstone = tombstone(WORK, SyncTombstoneRecordType.SAVED_WORK)
+        val local = first.copy(tombstones = listOf(workTombstone))
+        // Twice after the first import, so the deadline cannot silently restart either.
+        var restored = local
+        repeat(2) {
+            restored = merge(restored, remote, BackupImportMode.MERGE)
+            assertTrue(restored.works.single().isDeleted)
+            assertTrue(restored.collections.single().isDeleted)
+            assertTrue(restored.readingQueues.single().isDeleted)
+            assertEquals(first.works.single().deletedAt, restored.works.single().deletedAt)
+            assertEquals(first.collections.single().deletedAt, restored.collections.single().deletedAt)
+            assertEquals(first.readingQueues.single().deletedAt, restored.readingQueues.single().deletedAt)
+            assertEquals(first.works.single().permanentDeletionScheduledAt, restored.works.single().permanentDeletionScheduledAt)
+            assertEquals(first.collections.single().permanentDeletionScheduledAt, restored.collections.single().permanentDeletionScheduledAt)
+            assertEquals(first.readingQueues.single().permanentDeletionScheduledAt, restored.readingQueues.single().permanentDeletionScheduledAt)
+            assertEquals(listOf(workTombstone), restored.tombstones)
+        }
+    }
+
+    @Test
+    fun repeatedFileMergeStillUndoesReplaceParkingForAllThreeRecordKinds() {
+        val live = BackupLibrarySnapshot(works = listOf(work()), collections = listOf(collection()), readingQueues = listOf(queue()))
+        // Replace parks works in the merge; collections and queues are parked after it, by
+        // BackupRepository.removeRecordsAbsentFromReplaceSnapshot, so they start parked here.
+        val parkedWork = merge(live, BackupLibrarySnapshot(), BackupImportMode.REPLACE_LIBRARY).works.single()
+        assertTrue(parkedWork.isDeleted)
+        val parked = live.copy(
+            works = listOf(parkedWork),
+            collections = listOf(collection().copy(isDeleted = true, deletedAt = at(300), permanentDeletionScheduledAt = at(400))),
+            readingQueues = listOf(queue().copy(isDeleted = true, deletedAt = at(300), permanentDeletionScheduledAt = at(400)))
+        )
+        var restored = parked
+        repeat(2) {
+            restored = merge(restored, live, BackupImportMode.MERGE)
+            assertFalse(restored.works.single().isDeleted)
+            assertFalse(restored.collections.single().isDeleted)
+            assertFalse(restored.readingQueues.single().isDeleted)
+            assertNull(restored.works.single().deletedAt)
+            assertNull(restored.collections.single().deletedAt)
+            assertNull(restored.readingQueues.single().deletedAt)
+            assertNull(restored.works.single().permanentDeletionScheduledAt)
+            assertNull(restored.collections.single().permanentDeletionScheduledAt)
+            assertNull(restored.readingQueues.single().permanentDeletionScheduledAt)
+        }
+    }
+
+    @Test
+    fun absentDeletedCollectionRemapsItsMembersToTheExistingLocalWork() {
+        for (mode in listOf(BackupImportMode.MERGE, BackupImportMode.RECONCILE)) {
+            val local = BackupLibrarySnapshot(works = listOf(work()))
+            val remote = BackupLibrarySnapshot(
+                works = listOf(work().copy(id = OTHER)),
+                collections = listOf(collection().copy(isDeleted = true, deletedAt = at(100), workIds = listOf(OTHER)))
+            )
+            val restored = merge(local, remote, mode)
+            assertEquals("$mode", WORK, restored.works.single().id)
+            assertTrue(restored.collections.single().isDeleted)
+            assertEquals("$mode", listOf(WORK), restored.collections.single().workIds)
+        }
+    }
+
+    @Test
+    fun deletedCollectionsNeverContestOrReserveALiveCollectionName() {
+        for (mode in listOf(BackupImportMode.MERGE, BackupImportMode.RECONCILE)) {
+            val deleted = collection().copy(isDeleted = true, deletedAt = at(100), name = "Favorites")
+            val live = collection().copy(id = OTHER, name = "Favorites")
+            for (rows in listOf(listOf(deleted, live), listOf(live, deleted))) {
+                val restored = merge(BackupLibrarySnapshot(), BackupLibrarySnapshot(collections = rows), mode)
+                assertEquals("$mode", "Favorites", restored.collections.single { !it.isDeleted }.name)
+                assertEquals("$mode", "Favorites", restored.collections.single { it.isDeleted }.name)
+            }
+            val restored = merge(BackupLibrarySnapshot(collections = listOf(live)),
+                BackupLibrarySnapshot(collections = listOf(deleted)), mode)
+            assertTrue(restored.collections.all { it.name == "Favorites" })
+        }
+    }
+
+    @Test
     fun reconcilingAnImportedDeletedCollectionKeepsItsRecoveryDeadline() {
         val remote = BackupLibrarySnapshot(collections = listOf(collection().copy(isDeleted = true, deletedAt = at(100))))
         val first = merge(BackupLibrarySnapshot(), remote)

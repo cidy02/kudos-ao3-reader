@@ -200,11 +200,11 @@ object BackupMergeService {
                 // keeps that non-empty local identifier. A custom archived name
                 // does not survive a restore onto an empty library.
                 restored.copy(assetIdentifier = BackupPaths.iosEpubAssetIdentifier(restored.id))
-            } else if (mode == BackupImportMode.MERGE && existing.isDeleted) {
-                // Recently Deleted is not in the active library. File Merge
-                // adds it back without planting a tombstone, matching iOS. The clocks then
-                // decide the fields, as iOS's `apply` does: copying the archive row put last
-                // month's reading position over today's (audit A3-2).
+            } else if (mode == BackupImportMode.MERGE && existing.isDeleted && archived.isDeleted != true) {
+                // A live archive copy can undo a Replace that parked this work.
+                // An archived deletion keeps the local recovery window and tombstone intact.
+                // The clocks decide the fields, as iOS's `apply` does: copying the archive
+                // row put last month's reading position over today's (audit A3-2).
                 summary = summary.copy(worksUpdated = summary.worksUpdated + 1)
                 val retracted = WorkRepository.retractWorkTombstone(
                     tombstonesById.values.toList(), existing.id,
@@ -1352,13 +1352,15 @@ object BackupMergeService {
                     TombstoneResolution.PRESERVE_AMBIGUOUS,
                     TombstoneResolution.NO_TOMBSTONE -> Unit
                 }
-                val restoredName = archived.name.uniqueName(names)
+                val restoredName = if (archived.isDeleted == true) archived.name else archived.name.uniqueName(names)
                 val restored = archived.toWorkCollection(
                     nameOverride = restoredName,
                     exportedAt = exportedAt
                 )
-                collectionsById[id] = restored
-                names += restoredName
+                collectionsById[id] = restored.copy(
+                    workIds = restored.workIds.map { remapWorkId(it, workIdRemap) }.distinct()
+                )
+                if (!restored.isDeleted) names += restoredName
                 created += 1
             } else if (mode == BackupImportMode.MERGE) {
                 // Add-only: keep the local name/fields. Still attach incoming
@@ -1377,7 +1379,7 @@ object BackupMergeService {
                     .toSet()
                 val added = incomingWorkIds.filter { it !in existingIds }
                 val filled = fillCollectionFields(
-                    if (existing.isDeleted) {
+                    if (existing.isDeleted && archived.isDeleted != true) {
                         existing.copy(isDeleted = false, deletedAt = null, permanentDeletionScheduledAt = null)
                     } else existing,
                     archived, incomingWins = false, exportedAt = exportedAt
@@ -1723,7 +1725,7 @@ object BackupMergeService {
             } else if (mode == BackupImportMode.MERGE) {
                 // Keep local queue name / fields. New memberships still insert below.
                 val filled = fillQueueFields(
-                    if (existing.isDeleted) {
+                    if (existing.isDeleted && archived.isDeleted != true) {
                         existing.copy(isDeleted = false, deletedAt = null, permanentDeletionScheduledAt = null)
                     } else existing,
                     archived, incomingWins = false, exportedAt = exportedAt

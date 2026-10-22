@@ -37,9 +37,9 @@ class CommentVerificationReadsTest {
 
     @Test fun replyChecksItsExactParentAndNeverGuessesAWorkPage() = runTest {
         val html = """<ol class="thread"><li class="comment" id="comment_5">
-            <h4 class="byline"><a rel="author" href="/users/other">Other</a></h4>
+            <h4 class="heading byline"><a rel="author" href="/users/other">Other</a></h4>
             <blockquote class="userstuff">Parent</blockquote><ol class="thread">
-            <li class="comment" id="comment_6"><h4 class="byline"><a rel="author" href="/users/reader">Pseud</a></h4>
+            <li class="comment" id="comment_6"><h4 class="heading byline"><a rel="author" href="/users/reader">Pseud</a></h4>
             <blockquote class="userstuff">original body</blockquote></li></ol></li></ol>"""
         val client = Client(listOf(success(html)))
         val key = CommentSubmissionKey.of(AO3CommentTarget.Chapter(42, 7), 5, "original body", "reader")

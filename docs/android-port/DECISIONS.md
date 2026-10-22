@@ -2523,3 +2523,19 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   star, Challenges' refresh. At the largest text the iPhone hides Welcome's and sync setup's rows
   under a pinned bar and keeps segmented controls small; Android scrolls and scales (iOS tail).
   What's New's version differs per app.
+- **2026-10-21 · A73: a deletion record wins a tie, and a lone figure spans its row (Claude).**
+  A soft-deleted collection whose snapshot clock equals its tombstone's is suppressed on a device
+  that never had it, on both apps: the record already describes that copy. At accessibility sizes
+  an odd figure strip's last cell spans its row, as iOS's does.
+- **2026-10-21 · Owner: three UI changes approved (owner, 23:40).** Android's reader hides the
+  system bars while reading and Android opts in to predictive back (Android's own chrome); the
+  iPhone's layouts at the largest text sizes are fixed where they cover or cut off content; and
+  Android shows placeholder rows while AO3 lists load, as iOS already does. Not approved, so not
+  built: hiding Write a comment while scrolling, a wallpaper (Material You) accent.
+- **2026-10-22 · A73 fixes (Codex 3gj): a file Merge no longer undoes a deletion the archive
+  itself records.** A work, collection or queue the archive marks deleted stays in Recently
+  Deleted with this device's deadline; a live archive copy still undoes Replace's parking (iOS
+  T-424 is the same fix). A deleted AO3 comment with surviving replies stays as a placeholder so
+  its replies keep their parent (iOS `parseComment`). A selected ledger row's border and checkbox
+  sit outside the blur. Reverse: `archived.isDeleted != true` in `backup/BackupMergeService.kt`;
+  the `h4.heading.byline` check in `AO3CommentParser.parseOneComment`; `WorkLedgerRow`.
