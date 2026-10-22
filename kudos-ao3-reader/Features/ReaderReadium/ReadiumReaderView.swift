@@ -722,8 +722,7 @@ struct ReadiumReaderView: View {
             // Signed, as every other deletion is: an unsigned tombstone is dropped by
             // the other device (`TombstoneSigning.shouldAdopt`), so this one told
             // nobody (audit A12-2).
-            SyncTombstones.recordDeletion(of: existing, in: modelContext, reason: "annotationDeleted")
-            modelContext.delete(existing)
+            ReadiumReaderPersistence.deleteAnnotation(existing, in: modelContext)
             try? modelContext.save()
             FolderSyncService.markDirty()
         } else if let locator = book.currentLocator {
@@ -757,11 +756,7 @@ struct ReadiumReaderView: View {
     /// a pair of zeros over the chapter the Mac had saved (audit A12-1). The pair
     /// is left alone when the locator's chapter cannot be found.
     private func writePosition(_ locatorString: String, at date: Date = Date()) {
-        work.applyDebouncedReadiumLocator(locatorString, at: date)
-        guard let locator = Locator(persistenceString: locatorString),
-              let index = spineIndex(for: locator) else { return }
-        work.lastSpineIndex = index
-        work.lastScrollFraction = min(max(locator.locations.progression ?? 0, 0), 1)
+        ReadiumReaderPersistence.writePosition(locatorString, to: work, sections: book.sections, at: date)
     }
 
     /// The reader's live chapter, on the same `sections`-href basis as
@@ -858,8 +853,7 @@ struct ReadiumReaderView: View {
             colorBarAnnotationID = nil
         }
         // Signed: see `toggleBookmarkAtCurrentPosition` (audit A12-2).
-        SyncTombstones.recordDeletion(of: annotation, in: modelContext, reason: "annotationDeleted")
-        modelContext.delete(annotation)
+        ReadiumReaderPersistence.deleteAnnotation(annotation, in: modelContext)
         try? modelContext.save()
         FolderSyncService.markDirty()
         refreshHighlightDecorations()

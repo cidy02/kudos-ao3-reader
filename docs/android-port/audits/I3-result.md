@@ -1,0 +1,317 @@
+# Brief I3 Audit Result: Dynamic Type Scaling in Challenges and Writing
+
+This document records the audit and replacement of fixed-size fonts (`.font(.system(size: ...))`) with `@ScaledMetric` dynamic type properties across all Swift views in:
+- `kudos-ao3-reader/Features/Challenges/`
+- `kudos-ao3-reader/Features/Writing/`
+
+## Summary Statistics
+
+- **Total view files audited**: All files in `Features/Challenges/` and `Features/Writing/`
+- **Total call sites audited**: 118 call sites (Challenges: 63, Writing: 55)
+- **Call sites updated to `@ScaledMetric`**: 86 call sites (Challenges: 39, Writing: 47)
+- **Call sites left alone**: 32 call sites (Challenges: 24, Writing: 8 — SF Symbols, small-caps design kickers/status badges, and miniature avatar monograms)
+- **Call sites needing layout work**: 3 call sites (action buttons inside fixed 44pt height frames)
+
+## Detailed Changes
+
+Each change is listed as `path:line`, old code, and new code:
+
+- **`kudos-ao3-reader/Features/Challenges/ChallengeSettingsEditSections.swift:123`**
+  - **Old**: `.font(.system(size: 13, weight: .semibold, design: .monospaced))`
+  - **New**: `.font(.system(size: optionValueSize, weight: .semibold, design: .monospaced))`
+- **`kudos-ao3-reader/Features/Challenges/ChallengeSettingsEditView.swift:263`**
+  - **Old**: `.font(.system(size: 14, design: .serif))`
+  - **New**: `.font(.system(size: instructionsFontSize, design: .serif))`
+- **`kudos-ao3-reader/Features/Challenges/ChallengeSettingsEditView.swift:270`**
+  - **Old**: `.font(.system(size: 14, design: .serif))`
+  - **New**: `.font(.system(size: instructionsFontSize, design: .serif))`
+- **`kudos-ao3-reader/Features/Challenges/ChallengeSettingsEditView.swift:296`**
+  - **Old**: `.font(.system(size: 13))`
+  - **New**: `.font(.system(size: bodySize))`
+- **`kudos-ao3-reader/Features/Challenges/ChallengeSettingsEditView.swift:309`**
+  - **Old**: `.font(.system(size: 13))`
+  - **New**: `.font(.system(size: bodySize))`
+- **`kudos-ao3-reader/Features/Challenges/ChallengeSettingsEditView.swift:313`**
+  - **Old**: `.font(.system(size: 13, weight: .semibold))`
+  - **New**: `.font(.system(size: bodySize, weight: .semibold))`
+- **`kudos-ao3-reader/Features/Challenges/ChallengeSettingsEditView.swift:361`**
+  - **Old**: `.font(.system(size: 11.5))`
+  - **New**: `.font(.system(size: captionSize))`
+- **`kudos-ao3-reader/Features/Challenges/ChallengeSettingsEditView.swift:385`**
+  - **Old**: `.font(.system(size: 13, weight: .semibold, design: .monospaced))`
+  - **New**: `.font(.system(size: optionValueSize, weight: .semibold, design: .monospaced))`
+- **`kudos-ao3-reader/Features/Challenges/ChallengeSettingsEditView.swift:415`**
+  - **Old**: `.font(.system(size: 13))`
+  - **New**: `.font(.system(size: bodySize))`
+- **`kudos-ao3-reader/Features/Challenges/ChallengeSettingsEditView.swift:475`**
+  - **Old**: `.font(.system(size: 11.5))`
+  - **New**: `.font(.system(size: captionSize))`
+- **`kudos-ao3-reader/Features/Challenges/ChallengeSettingsEditView.swift:542`**
+  - **Old**: `.font(.system(size: 15))`
+  - **New**: `.font(.system(size: toggleTitleSize))`
+- **`kudos-ao3-reader/Features/Challenges/ChallengeSettingsEditView.swift:545`**
+  - **Old**: `.font(.system(size: 11.5))`
+  - **New**: `.font(.system(size: captionSize))`
+- **`kudos-ao3-reader/Features/Challenges/ChallengeSettingsEditView.swift:563`**
+  - **Old**: `.font(.system(size: 11.5))`
+  - **New**: `.font(.system(size: captionSize))`
+- **`kudos-ao3-reader/Features/Challenges/ChallengeSettingsEditView.swift:606`**
+  - **Old**: `.font(.system(size: 14, weight: .semibold))`
+  - **New**: `.font(.system(size: saveButtonSize, weight: .semibold))`
+- **`kudos-ao3-reader/Features/Challenges/ChallengeSettingsEditView.swift:644`**
+  - **Old**: `.font(.system(size: 14))`
+  - **New**: `.font(.system(size: loadingSize))`
+- **`kudos-ao3-reader/Features/Challenges/ChallengeSettingsEditView.swift:654`**
+  - **Old**: `.font(.system(size: 15, weight: .semibold))`
+  - **New**: `.font(.system(size: stateTitleSize, weight: .semibold))`
+- **`kudos-ao3-reader/Features/Challenges/ChallengeSettingsEditView.swift:656`**
+  - **Old**: `.font(.system(size: 13))`
+  - **New**: `.font(.system(size: bodySize))`
+- **`kudos-ao3-reader/Features/Challenges/ChallengeSettingsEditView.swift:676`**
+  - **Old**: `.font(.system(size: 13, weight: .medium))`
+  - **New**: `.font(.system(size: bodySize, weight: .medium))`
+- **`kudos-ao3-reader/Features/Challenges/ChallengeSettingsEditView.swift:689`**
+  - **Old**: `.font(.system(size: 12.5))`
+  - **New**: `.font(.system(size: errorBodySize))`
+- **`kudos-ao3-reader/Features/Challenges/ChallengeSignUpView.swift:292`**
+  - **Old**: `.font(.system(size: 15))`
+  - **New**: `.font(.system(size: rowTitleSize))`
+- **`kudos-ao3-reader/Features/Challenges/ChallengeSignUpView.swift:295`**
+  - **Old**: `.font(.system(size: 11.5))`
+  - **New**: `.font(.system(size: captionSize))`
+- **`kudos-ao3-reader/Features/Challenges/ChallengeSignUpView.swift:319`**
+  - **Old**: `.font(.system(size: 14, design: .serif))`
+  - **New**: `.font(.system(size: promptEditorSize, design: .serif))`
+- **`kudos-ao3-reader/Features/Challenges/ChallengeSignUpView.swift:326`**
+  - **Old**: `.font(.system(size: 14, design: .serif))`
+  - **New**: `.font(.system(size: promptEditorSize, design: .serif))`
+- **`kudos-ao3-reader/Features/Challenges/ChallengeSignUpView.swift:334`**
+  - **Old**: `.font(.system(size: 10.5))`
+  - **New**: `.font(.system(size: promptFootnoteSize))`
+- **`kudos-ao3-reader/Features/Challenges/ChallengeSignUpView.swift:340`**
+  - **Old**: `.font(.system(size: 10.5, weight: .semibold, design: .monospaced))`
+  - **New**: `.font(.system(size: promptFootnoteSize, weight: .semibold, design: .monospaced))`
+- **`kudos-ao3-reader/Features/Challenges/ChallengeSignUpView.swift:370`**
+  - **Old**: `.font(.system(size: 11.5))`
+  - **New**: `.font(.system(size: captionSize))`
+- **`kudos-ao3-reader/Features/Challenges/ChallengeSignUpView.swift:406`**
+  - **Old**: `.font(.system(size: 15))`
+  - **New**: `.font(.system(size: rowTitleSize))`
+- **`kudos-ao3-reader/Features/Challenges/ChallengeSignUpView.swift:436`**
+  - **Old**: `.font(.system(size: 11.5))`
+  - **New**: `.font(.system(size: captionSize))`
+- **`kudos-ao3-reader/Features/Challenges/ChallengeSignUpView.swift:454`**
+  - **Old**: `.font(.system(size: 15))`
+  - **New**: `.font(.system(size: rowTitleSize))`
+- **`kudos-ao3-reader/Features/Challenges/ChallengeSignUpView.swift:479`**
+  - **Old**: `.font(.system(size: 14, weight: .semibold))`
+  - **New**: `.font(.system(size: buttonLabelSize, weight: .semibold))`
+- **`kudos-ao3-reader/Features/Challenges/ChallengeSignUpView.swift:505`**
+  - **Old**: `.font(.system(size: 14, weight: .semibold))`
+  - **New**: `.font(.system(size: buttonLabelSize, weight: .semibold))`
+- **`kudos-ao3-reader/Features/Challenges/ChallengeSignUpView.swift:548`**
+  - **Old**: `.font(.system(size: 13, weight: .medium))`
+  - **New**: `.font(.system(size: noticeTextSize, weight: .medium))`
+- **`kudos-ao3-reader/Features/Challenges/ChallengeSignUpView.swift:561`**
+  - **Old**: `.font(.system(size: 12.5))`
+  - **New**: `.font(.system(size: errorTextSize))`
+- **`kudos-ao3-reader/Features/Challenges/ChallengeSignUpView.swift:574`**
+  - **Old**: `.font(.system(size: 14))`
+  - **New**: `.font(.system(size: loadingSize))`
+- **`kudos-ao3-reader/Features/Challenges/ChallengeSignUpView.swift:584`**
+  - **Old**: `.font(.system(size: 15, weight: .semibold))`
+  - **New**: `.font(.system(size: stateTitleSize, weight: .semibold))`
+- **`kudos-ao3-reader/Features/Challenges/ChallengeSignUpView.swift:586`**
+  - **Old**: `.font(.system(size: 13))`
+  - **New**: `.font(.system(size: failureBodySize))`
+- **`kudos-ao3-reader/Features/Challenges/PromptTagsEditorView.swift:75`**
+  - **Old**: `.font(.system(size: 15, weight: .semibold))`
+  - **New**: `.font(.system(size: doneButtonSize, weight: .semibold))`
+- **`kudos-ao3-reader/Features/Challenges/PromptTagsEditorView.swift:92`**
+  - **Old**: `.font(.system(size: 15))`
+  - **New**: `.font(.system(size: inputFontSize))`
+- **`kudos-ao3-reader/Features/Challenges/TagSetView.swift:537`**
+  - **Old**: `.font(.system(size: 11, weight: .semibold))`
+  - **New**: `.font(.system(size: fieldLabelSize, weight: .semibold))`
+- **`kudos-ao3-reader/Features/Writing/AddChapterView.swift:96`**
+  - **Old**: `.font(.system(size: 11.5))`
+  - **New**: `.font(.system(size: footnoteSize))`
+- **`kudos-ao3-reader/Features/Writing/AddChapterView.swift:111`**
+  - **Old**: `.font(.system(size: 11.5))`
+  - **New**: `.font(.system(size: footnoteSize))`
+- **`kudos-ao3-reader/Features/Writing/AddChapterView.swift:315`**
+  - **Old**: `.font(.system(size: 15))`
+  - **New**: `.font(.system(size: actionTitleSize))`
+- **`kudos-ao3-reader/Features/Writing/AddChapterView.swift:336`**
+  - **Old**: `.font(.system(size: 15))`
+  - **New**: `.font(.system(size: actionTitleSize))`
+- **`kudos-ao3-reader/Features/Writing/EditMultipleWorksView.swift:68`**
+  - **Old**: `.font(.system(size: 12.5))`
+  - **New**: `.font(.system(size: noteSize))`
+- **`kudos-ao3-reader/Features/Writing/EditMultipleWorksView.swift:94`**
+  - **Old**: `.font(.system(size: 11.5))`
+  - **New**: `.font(.system(size: footnoteSize))`
+- **`kudos-ao3-reader/Features/Writing/EditMultipleWorksView.swift:113`**
+  - **Old**: `.font(.system(size: 11.5))`
+  - **New**: `.font(.system(size: footnoteSize))`
+- **`kudos-ao3-reader/Features/Writing/EditTagsView.swift:76`**
+  - **Old**: `.font(.system(size: 11.5))`
+  - **New**: `.font(.system(size: footnoteSize))`
+- **`kudos-ao3-reader/Features/Writing/EditTagsView.swift:103`**
+  - **Old**: `.font(.system(size: 11.5))`
+  - **New**: `.font(.system(size: footnoteSize))`
+- **`kudos-ao3-reader/Features/Writing/SeriesEditView.swift:229`**
+  - **Old**: `.font(.system(size: 11.5))`
+  - **New**: `.font(.system(size: footnoteSize))`
+- **`kudos-ao3-reader/Features/Writing/SeriesEditView.swift:342`**
+  - **Old**: `.font(.system(size: 11.5))`
+  - **New**: `.font(.system(size: footnoteSize))`
+- **`kudos-ao3-reader/Features/Writing/SeriesEditView.swift:377`**
+  - **Old**: `.font(.system(size: 13, weight: .semibold, design: .monospaced))`
+  - **New**: `.font(.system(size: positionNumberSize, weight: .semibold, design: .monospaced))`
+- **`kudos-ao3-reader/Features/Writing/SeriesEditView.swift:382`**
+  - **Old**: `.font(.system(size: 14.5, weight: .medium))`
+  - **New**: `.font(.system(size: workTitleSize, weight: .medium))`
+- **`kudos-ao3-reader/Features/Writing/SeriesEditView.swift:385`**
+  - **Old**: `.font(.system(size: 11.5))`
+  - **New**: `.font(.system(size: footnoteSize))`
+- **`kudos-ao3-reader/Features/Writing/SeriesEditView.swift:483`**
+  - **Old**: `.font(.system(size: 11.5))`
+  - **New**: `.font(.system(size: footnoteSize))`
+- **`kudos-ao3-reader/Features/Writing/SeriesEditView.swift:520`**
+  - **Old**: `.font(.system(size: 14.5, weight: .medium))`
+  - **New**: `.font(.system(size: workTitleSize, weight: .medium))`
+- **`kudos-ao3-reader/Features/Writing/SeriesEditView.swift:522`**
+  - **Old**: `.font(.system(size: 11.5))`
+  - **New**: `.font(.system(size: footnoteSize))`
+- **`kudos-ao3-reader/Features/Writing/WorkAssociationPickers.swift:171`**
+  - **Old**: `.font(.system(size: 14.5, weight: .medium))`
+  - **New**: `.font(.system(size: rowTitleSize, weight: .medium))`
+- **`kudos-ao3-reader/Features/Writing/WorkAssociationPickers.swift:174`**
+  - **Old**: `.font(.system(size: 11.5))`
+  - **New**: `.font(.system(size: captionSize))`
+- **`kudos-ao3-reader/Features/Writing/WorkAssociationPickers.swift:201`**
+  - **Old**: `.font(.system(size: 14.5, weight: .medium))`
+  - **New**: `.font(.system(size: rowTitleSize, weight: .medium))`
+- **`kudos-ao3-reader/Features/Writing/WorkAssociationPickers.swift:204`**
+  - **Old**: `.font(.system(size: 11.5))`
+  - **New**: `.font(.system(size: captionSize))`
+- **`kudos-ao3-reader/Features/Writing/WorkAssociationPickers.swift:283`**
+  - **Old**: `.font(.system(size: 11.5))`
+  - **New**: `.font(.system(size: captionSize))`
+- **`kudos-ao3-reader/Features/Writing/WorkAssociationPickers.swift:455`**
+  - **Old**: `.font(.system(size: 14.5, weight: .medium))`
+  - **New**: `.font(.system(size: rowTitleSize, weight: .medium))`
+- **`kudos-ao3-reader/Features/Writing/WorkAssociationPickers.swift:459`**
+  - **Old**: `.font(.system(size: 11.5))`
+  - **New**: `.font(.system(size: captionSize))`
+- **`kudos-ao3-reader/Features/Writing/WorkAssociationPickers.swift:478`**
+  - **Old**: `.font(.system(size: 11.5))`
+  - **New**: `.font(.system(size: captionSize))`
+- **`kudos-ao3-reader/Features/Writing/WorkAssociationPickers.swift:552`**
+  - **Old**: `.font(.system(size: 11.5))`
+  - **New**: `.font(.system(size: footnoteSize))`
+- **`kudos-ao3-reader/Features/Writing/WorkAssociationPickers.swift:658`**
+  - **Old**: `.font(.system(size: 11.5))`
+  - **New**: `.font(.system(size: footnoteSize))`
+- **`kudos-ao3-reader/Features/Writing/WorkEditView.swift:88`**
+  - **Old**: `.font(.system(size: 11.5))`
+  - **New**: `.font(.system(size: footnoteSize))`
+- **`kudos-ao3-reader/Features/Writing/WorkEditView.swift:732`**
+  - **Old**: `.font(.system(size: 15))`
+  - **New**: `.font(.system(size: actionRowTitleSize))`
+- **`kudos-ao3-reader/Features/Writing/WorkEditView.swift:746`**
+  - **Old**: `.font(.system(size: 11.5))`
+  - **New**: `.font(.system(size: footnoteSize))`
+- **`kudos-ao3-reader/Features/Writing/WritingDraftsView.swift:64`**
+  - **Old**: `.font(.system(size: 15, weight: .semibold))`
+  - **New**: `.font(.system(size: retryButtonSize, weight: .semibold))`
+- **`kudos-ao3-reader/Features/Writing/WritingDraftsView.swift:148`**
+  - **Old**: `.font(.system(size: 12.5))`
+  - **New**: `.font(.system(size: noticeBodySize))`
+- **`kudos-ao3-reader/Features/Writing/WritingDraftsView.swift:160`**
+  - **Old**: `.font(.system(size: 11.5))`
+  - **New**: `.font(.system(size: footnoteSize))`
+- **`kudos-ao3-reader/Features/Writing/WritingDraftsView.swift:282`**
+  - **Old**: `.font(.system(size: 19, weight: .semibold))`
+  - **New**: `.font(.system(size: titleSize, weight: .semibold))`
+- **`kudos-ao3-reader/Features/Writing/WritingDraftsView.swift:300`**
+  - **Old**: `.font(.system(size: 13.5))`
+  - **New**: `.font(.system(size: summarySize))`
+- **`kudos-ao3-reader/Features/Writing/WritingDraftsView.swift:314`**
+  - **Old**: `.font(.system(size: 11.5))`
+  - **New**: `.font(.system(size: metaSize))`
+- **`kudos-ao3-reader/Features/Writing/WritingFormFields.swift:88`**
+  - **Old**: `.font(.system(size: 15))`
+  - **New**: `.font(.system(size: rowTitleSize))`
+- **`kudos-ao3-reader/Features/Writing/WritingFormFields.swift:92`**
+  - **Old**: `.font(.system(size: 13))`
+  - **New**: `.font(.system(size: countSize))`
+- **`kudos-ao3-reader/Features/Writing/WritingPreviewView.swift:104`**
+  - **Old**: `.font(.system(size: 15))`
+  - **New**: `.font(.system(size: actionTitleSize))`
+- **`kudos-ao3-reader/Features/Writing/WritingPreviewView.swift:118`**
+  - **Old**: `.font(.system(size: 11.5))`
+  - **New**: `.font(.system(size: footnoteSize))`
+- **`kudos-ao3-reader/Features/Writing/WritingTagsEditor.swift:294`**
+  - **Old**: `.font(.system(size: 11.5))`
+  - **New**: `.font(.system(size: footnoteSize))`
+- **`kudos-ao3-reader/Features/Writing/WritingTagsEditor.swift:335`**
+  - **Old**: `.font(.system(size: 15))`
+  - **New**: `.font(.system(size: tagNameSize))`
+- **`kudos-ao3-reader/Features/Writing/WritingTagsEditor.swift:346`**
+  - **Old**: `.font(.system(size: 12, weight: .semibold, design: .monospaced))`
+  - **New**: `.font(.system(size: workCountSize, weight: .semibold, design: .monospaced))`
+- **`kudos-ao3-reader/Features/Writing/WritingTagsEditor.swift:374`**
+  - **Old**: `.font(.system(size: 10.5, weight: .medium))`
+  - **New**: `.font(.system(size: badgeTextSize, weight: .medium))`
+- **`kudos-ao3-reader/Features/Writing/WritingTagsEditor.swift:380`**
+  - **Old**: `.font(.system(size: 10.5))`
+  - **New**: `.font(.system(size: badgeTextSize))`
+- **`kudos-ao3-reader/Features/Writing/WritingTagsEditor.swift:388`**
+  - **Old**: `.font(.system(size: 11.5))`
+  - **New**: `.font(.system(size: footnoteSize))`
+- **`kudos-ao3-reader/Features/Writing/WritingTextEditor.swift:511`**
+  - **Old**: `.font(.system(size: 12.5))`
+  - **New**: `.font(.system(size: detailSize))`
+
+## Left alone
+
+- `kudos-ao3-reader/Features/Challenges/CollectionModerationView.swift:302`: `.font(.system(size: 9, weight: .bold))` — Small-caps kicker / badge (`REQUESTS`, `MEMBERSHIP`, `SUBMISSIONS`) fixed by design
+- `kudos-ao3-reader/Features/Challenges/CollectionModerationView.swift:621`: `.font(.system(size: 15))` — SF Symbol image (`Image(systemName: "checkmark")`)
+- `kudos-ao3-reader/Features/Challenges/CollectionModerationView.swift:654`: `.font(.system(size: 15))` — SF Symbol image (`Image(systemName: "xmark")`)
+- `kudos-ao3-reader/Features/Challenges/CollectionModerationView.swift:738`: `.font(.system(size: 11))` — SF Symbol image (`Image(systemName: "chevron.right")`)
+- `kudos-ao3-reader/Features/Challenges/PromptMemeView.swift:156`: `.font(.system(size: 11.5))` — SF Symbol image (`Image(systemName: "chevron.right")`)
+- `kudos-ao3-reader/Features/Challenges/PromptMemeView.swift:296`: `.font(.system(size: 9, weight: .bold))` — Small-caps kicker badge (`FILLED`) fixed by design
+- `kudos-ao3-reader/Features/Challenges/PromptMemeView.swift:302`: `.font(.system(size: 9, weight: .bold))` — Small-caps kicker badge (`CLAIMED`) fixed by design
+- `kudos-ao3-reader/Features/Challenges/PromptMemeView.swift:308`: `.font(.system(size: 9, weight: .semibold))` — Small-caps kicker badge (`OPEN`) fixed by design
+- `kudos-ao3-reader/Features/Challenges/PromptMemeView.swift:393`: `.font(.system(size: 11, weight: .semibold))` — SF Symbol image (`Image(systemName: "chevron.right")`)
+- `kudos-ao3-reader/Features/Challenges/PromptMemeView.swift:505`: `.font(.system(size: 11))` — SF Symbol image (`Image(systemName: "chevron.right")`)
+- `kudos-ao3-reader/Features/Challenges/CollectionMaintainersView.swift:243`: `.font(.system(size: 10.5, weight: .semibold))` — Small-caps kicker pill (`OWNER`, `MODERATOR`) fixed by design
+- `kudos-ao3-reader/Features/Challenges/CollectionMaintainersView.swift:281`: `.font(.system(size: 12, weight: .bold))` — Text monogram inside fixed 32x32 pt circle avatar
+- `kudos-ao3-reader/Features/Challenges/CollectionMaintainersView.swift:377`: `.font(.system(size: 15))` — SF Symbol image (`Image(systemName: "minus.circle.fill")`)
+- `kudos-ao3-reader/Features/Challenges/ChallengeSettingsView.swift:251`: `.font(.system(size: 13, weight: .semibold))` — SF Symbol image (`Image(systemName: "pencil")`)
+- `kudos-ao3-reader/Features/Challenges/ChallengeSignUpView.swift:402`: `.font(.system(size: 15))` — SF Symbol image (`Image(systemName: "plus.circle.fill")`)
+- `kudos-ao3-reader/Features/Challenges/ChallengeSignUpView.swift:412`: `.font(.system(size: 12, weight: .semibold))` — SF Symbol image (`Image(systemName: "chevron.right")`)
+- `kudos-ao3-reader/Features/Challenges/ChallengeSignUpView.swift:449`: `.font(.system(size: 15))` — SF Symbol image (`Image(systemName: "trash")`)
+- `kudos-ao3-reader/Features/Challenges/ChallengeSignUpsView.swift:244`: `.font(.system(size: 12, weight: .semibold))` — SF Symbol image (`Image(systemName: "chevron.right")`)
+- `kudos-ao3-reader/Features/Challenges/ChallengeSignUpsView.swift:263`: `.font(.system(size: 8.5, weight: .bold))` — Small-caps status badge (`OFFERS`, `REQUESTS`) fixed by design
+- `kudos-ao3-reader/Features/Challenges/ChallengeSignUpsView.swift:282`: `.font(.system(size: 11.5))` — SF Symbol image (`Image(systemName: "chevron.right")`)
+- `kudos-ao3-reader/Features/Challenges/ChallengeAssignmentsView.swift:316`: `.font(.system(size: 9, weight: .bold))` — Small-caps badge (`ASSIGNED`, `DEFAULTED`, etc.) fixed by design
+- `kudos-ao3-reader/Features/Challenges/ChallengeAssignmentsView.swift:601`: `.font(.system(size: 11))` — SF Symbol image (`Image(systemName: "chevron.right")`)
+- `kudos-ao3-reader/Features/Challenges/ChallengeAssignmentsView.swift:621`: `.font(.system(size: 8.5, weight: .bold))` — Small-caps status badge (`WRITING FOR`, `RECIPIENT`) fixed by design
+- `kudos-ao3-reader/Features/Challenges/ChallengeSettingsEditSections.swift:125`: `.font(.system(size: 11, weight: .semibold))` — SF Symbol image (`Image(systemName: "chevron.up.chevron.down")`)
+- `kudos-ao3-reader/Features/Writing/WritingTagsEditor.swift:164`: `.font(.system(size: 13))` — SF Symbol image (`Image(systemName: "magnifyingglass")`)
+- `kudos-ao3-reader/Features/Writing/WritingTagsEditor.swift:169`: `.font(.system(size: 14))` — SF Symbol image (`Image(systemName: "xmark.circle.fill")`)
+- `kudos-ao3-reader/Features/Writing/WritingTagsEditor.swift:219`: `.font(.system(size: 10, weight: .semibold))` — SF Symbol image (`Image(systemName: "arrow.triangle.swap")`)
+- `kudos-ao3-reader/Features/Writing/WritingTagsEditor.swift:351`: `.font(.system(size: 13, weight: .semibold))` — SF Symbol image (`Image(systemName: "chevron.right")`)
+- `kudos-ao3-reader/Features/Writing/WritingTagsEditor.swift:372`: `.font(.system(size: 10))` — SF Symbol image (`Image(systemName: "checkmark")`)
+- `kudos-ao3-reader/Features/Writing/WritingTagsEditor.swift:403`: `.font(.system(size: 14, weight: .semibold))` — SF Symbol image (`Image(systemName: "plus")`)
+- `kudos-ao3-reader/Features/Writing/EditTagsView.swift:183`: `.font(.system(size: 14, weight: .semibold))` — SF Symbol image (`Image(systemName: "plus")`)
+- `kudos-ao3-reader/Features/Writing/WritingFormFields.swift:36`: `.font(.system(size: 11, weight: .semibold))` — SF Symbol image (`Image(systemName: "chevron.up.chevron.down")`)
+
+## Needs layout work
+
+- `kudos-ao3-reader/Features/Challenges/ChallengeSignUpView.swift:479`: Button label "Add request" scaled with `buttonLabelSize` is contained within a fixed-height frame `.frame(height: 44)` (line 482); at large Dynamic Type sizes the label may clip vertically.
+- `kudos-ao3-reader/Features/Challenges/ChallengeSignUpView.swift:505`: Button label "Submit sign-up" scaled with `buttonLabelSize` is contained within a fixed-height frame `.frame(height: 44)` (line 509); at large Dynamic Type sizes the label may clip vertically.
+- `kudos-ao3-reader/Features/Challenges/ChallengeSettingsEditView.swift:606`: Button label "Save changes" scaled with `saveButtonSize` is contained within a fixed-height frame `.frame(height: 44)` (line 610); at large Dynamic Type sizes the label may clip vertically.
