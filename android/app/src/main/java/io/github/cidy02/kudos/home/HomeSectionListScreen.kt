@@ -740,6 +740,7 @@ private fun HomeSectionLedgerRow(
     var menuOpen by remember(work.id) { mutableStateOf(false) }
     val row: @Composable () -> Unit = {
         WorkLedgerRow(
+            downloadFraction = io.github.cidy02.kudos.ui.subject.rememberWorkDownloadFraction(work),
             title = work.title,
             author = work.author.ifBlank { "Anonymous" },
             fandoms = work.workFandoms,

@@ -171,11 +171,11 @@ data class ShellWash(val palette: SubjectPalette, val height: Dp)
 
 /**
  * The washes on screen, oldest first, so a page's own comes before that of a sheet over it.
- * The shell reads [page] to paint its top bar in the page's wash when a list runs under it.
+ * The shell reads [page] to use the newest visible wash; removing it restores the previous one.
  */
 class ShellWashes {
     private val entries = mutableStateListOf<Pair<Any, ShellWash>>()
-    val page: ShellWash? get() = entries.firstOrNull()?.second
+    val page: ShellWash? get() = entries.lastOrNull()?.second
 
     fun put(key: Any, wash: ShellWash) {
         val index = entries.indexOfFirst { it.first === key }
@@ -510,7 +510,7 @@ fun SubjectChip(
         SubjectChipStyle.Tinted -> palette?.accentOnFill ?: tokens.primaryInk
         SubjectChipStyle.Dashed -> tokens.secondaryInk
         is SubjectChipStyle.Pill -> if (style.isSelected) {
-            SubjectPalette.label(palette?.accent ?: tokens.accent)
+            SubjectPalette.label(palette?.tint ?: tokens.accent)
         } else {
             tokens.primaryInk
         }
@@ -524,7 +524,7 @@ fun SubjectChip(
             .border(0.5.dp, palette?.chipStroke ?: tokens.accent.withOpacity(0.5), shape)
         SubjectChipStyle.Dashed -> dashedChip(tokens.glassStroke(0.26))
         is SubjectChipStyle.Pill -> if (style.isSelected) {
-            Modifier.background(palette?.accent ?: tokens.accent, shape)
+            Modifier.background(palette?.tint ?: tokens.accent, shape)
         } else {
             Modifier.background(tokens.glassFill(), shape)
         }
@@ -846,7 +846,7 @@ fun AccentIconSquare(
         Icon(
             imageVector = icon,
             contentDescription = contentDescription,
-            tint = accent,
+            tint = tokens.theme.accentInk(accent),
             modifier = Modifier.size(12.sp.asDp())
         )
     }
@@ -998,7 +998,8 @@ fun FilterButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     badgeCount: Int = 0,
-    onClearFilters: (() -> Unit)? = null
+    onClearFilters: (() -> Unit)? = null,
+    filterHelp: String? = null
 ) {
     val tokens = LocalKudosTokens.current
     val tint = if (filtersActive) LocalSubjectPalette.current.accentOnFill else tokens.primaryInk
@@ -1014,6 +1015,7 @@ fun FilterButton(
                 .background(if (filtersActive) tokens.accent.withOpacity(AccentContainerOpacity) else Color.Transparent)
                 .combinedClickable(
                     role = Role.Button,
+                    onClickLabel = filterHelp,
                     onClick = onClick,
                     onLongClick = if (filtersActive && onClearFilters != null) {
                         { menuOpen = true }

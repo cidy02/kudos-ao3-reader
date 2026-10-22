@@ -11,6 +11,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.*
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.Density
@@ -96,7 +97,7 @@ class LibraryHistoryScreenTest {
                 val density = LocalDensity.current
                 CompositionLocalProvider(LocalDensity provides Density(density.density, scale), LocalPushedShellChrome provides chrome) {
                     Box {
-                        LibraryScreen(repository = library, workRepository = works, settingsRepository = settings,
+                        LibraryScreen(repository = library, workRepository = works, settingsRepository = settings, readingLogDao = database.readingLogDao(),
                             onOpenWork = { opened += it }, onOpenReader = { opened += it }, section = kind.value)
                         // Draw the real pushed screen toolbar supplied to the shell.
                         Row(Modifier.align(Alignment.TopEnd).testTag("history-toolbar")) { chrome.trailingContent?.invoke(this) }
@@ -111,8 +112,12 @@ class LibraryHistoryScreenTest {
         compose.waitUntil(15_000) { compose.onAllNodesWithText(text).fetchSemanticsNodes().isNotEmpty() }
     }
 
+    /** The page's vertical list; Favorites' scope strip scrolls sideways too. */
+    private val pageList = hasScrollAction() and
+        SemanticsMatcher.keyIsDefined(androidx.compose.ui.semantics.SemanticsProperties.VerticalScrollAxisRange)
+
     private fun reach(text: String) {
-        compose.onNode(hasScrollAction()).performScrollToNode(hasText(text))
+        compose.onNode(pageList).performScrollToNode(hasText(text))
     }
 
     private fun selectGrouping(title: String) {
@@ -131,7 +136,7 @@ class LibraryHistoryScreenTest {
         awaitText("3 works")
         // iOS WorkRow.ledgerRow also names the fandom on each work; select the group heading.
         val fandomHeading = hasText("DOCTOR WHO") and !hasClickAction()
-        compose.onNode(hasScrollAction()).performScrollToNode(fandomHeading)
+        compose.onNode(pageList).performScrollToNode(fandomHeading)
         compose.onNode(fandomHeading).assertExists()
         selectGrouping("Flat")
         awaitText("3 works · most recently read first")
@@ -226,6 +231,108 @@ class LibraryHistoryScreenTest {
         awaitText("Remove")
         compose.onNodeWithText("Remove").assertExists()
         assertFalse(runBlocking { works.getWork(dustyId)!!.isDeleted })
+    }
+
+    @Test fun storedFactsReachHistoryAndFavoritesRowsInLedgerAndDetailedButNotCompactCovers() {
+        runBlocking {
+            val active = works.getWork("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb")!!
+            works.upsert(active.copy(chapters = "4/?"))
+            for (index in 0..1) database.readingLogDao().upsertSession(
+                io.github.cidy02.kudos.data.local.entity.ReadingSessionEntity(id = "fact-$index", workID = active.id,
+                    startedAt = now.minusSeconds(3600L - index * 1800), endedAt = now.minusSeconds(1800L - index * 1800),
+                    durationSeconds = 1800.0, chapterCountAtVisit = 1, didFinish = true, lastModifiedAt = now))
+        }
+        show()
+        for (section in listOf(LibrarySectionKind.History, LibrarySectionKind.Favorites)) {
+            compose.runOnIdle { kind.value = section }
+            awaitText(section.title)
+            for (mode in listOf("Ledger", "Detailed")) {
+                compose.onNodeWithContentDescription("More").performClick()
+                compose.onNodeWithText("Layout").performClick()
+                compose.onNodeWithText(mode).performClick()
+                reach("Read ×2")
+                compose.onNodeWithText("1h").assertExists()
+                if (section == LibrarySectionKind.History) compose.onNodeWithText("3 new chapters").assertExists()
+                else compose.onNodeWithText("new chapter", substring = true).assertDoesNotExist()
+            }
+        }
+        compose.onNodeWithContentDescription("More").performClick()
+        compose.onNodeWithText("Layout").performClick()
+        compose.onNodeWithText("Compact").performClick()
+        reach("Active")
+        compose.onNodeWithText("Read ×2").assertDoesNotExist()
+        compose.onNodeWithText("1h").assertDoesNotExist()
+    }
+
+    @Test fun historyAndFavoritesFilterHelpAndHistoryOptionsUseIOSSpokenWords() {
+        show()
+        for (section in listOf(LibrarySectionKind.History, LibrarySectionKind.Favorites)) {
+            compose.runOnIdle { kind.value = section }
+            awaitText(section.title)
+            val action = compose.onNodeWithContentDescription("Filter").fetchSemanticsNode().config[SemanticsActions.OnClick]
+            assertEquals("Filter the works in this section", action.label)
+        }
+        compose.runOnIdle { kind.value = LibrarySectionKind.History }
+        awaitText("Reading History")
+        compose.onNodeWithContentDescription("History grouping").assertDoesNotExist()
+        selectGrouping("Flat")
+        // The choice is saved to settings and read back before the segment shows it.
+        compose.waitUntil(15_000) { compose.onAllNodes(hasText("Flat") and isSelected()).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNode(hasText("Flat") and isSelected()).assertHasClickAction()
+    }
+
+    @Test fun historyLayoutOffersDetailedAndLedgerAndCardExpansionOnlyInDetailed() {
+        show()
+        compose.onNodeWithContentDescription("More").performClick()
+        compose.onNodeWithText("Layout").performClick()
+        compose.onNodeWithText("Compact").assertDoesNotExist()
+        compose.onNodeWithText("Ledger").assertExists()
+        compose.onNodeWithText("Detailed").performClick()
+        compose.onNodeWithContentDescription("More").performClick()
+        compose.onNodeWithText("Expand All Cards").performClick()
+        compose.onNodeWithContentDescription("More").performClick()
+        compose.onNodeWithText("Collapse All Cards").performClick()
+    }
+
+    @Test fun favoritesLayoutIncludesWorkingCompactAndOnlyDetailedOffersExpansion() {
+        kind.value = LibrarySectionKind.Favorites
+        show()
+        compose.onNodeWithContentDescription("More").performClick()
+        compose.onNodeWithText("Layout").performClick()
+        compose.onNodeWithText("Ledger").assertExists()
+        compose.onNodeWithText("Detailed").assertExists()
+        compose.onNodeWithText("Compact").performClick()
+        reach("Active")
+        compose.onNodeWithText("Active").assertExists()
+        compose.onNodeWithContentDescription("More").performClick()
+        compose.onNodeWithText("Expand All Cards").assertDoesNotExist()
+        compose.onNodeWithText("Layout").performClick()
+        compose.onNodeWithText("Detailed").performClick()
+        compose.onNodeWithContentDescription("More").performClick()
+        compose.onNodeWithText("Expand All Cards").performClick()
+        compose.onNodeWithContentDescription("More").performClick()
+        compose.onNodeWithText("Collapse All Cards").performClick()
+    }
+
+    @Test fun privacyMenuUsesIOSWordsOnHistoryAndFavorites() {
+        runBlocking {
+            settings.updateHideMatureContent(true)
+            works.upsert(SavedWork(id = "mature", title = "Mature work", author = "A", rating = "Mature",
+                isSaved = true, isFavorite = true, lastReadDate = now))
+        }
+        show()
+        for (section in listOf(LibrarySectionKind.History, LibrarySectionKind.Favorites)) {
+            compose.runOnIdle { kind.value = section }
+            awaitText(section.title)
+            compose.onNodeWithContentDescription("More").performClick()
+            compose.onNodeWithText("Show mature").assertExists()
+            compose.onNodeWithText("Show mature works").assertDoesNotExist()
+            compose.onNodeWithText("Show mature").performClick()
+            compose.onNodeWithContentDescription("More").performClick()
+            compose.onNodeWithText("Hide mature").assertExists()
+            compose.onNodeWithText("Hide mature works").assertDoesNotExist()
+            compose.onNodeWithText("Hide mature").performClick()
+        }
     }
 
     private fun assertUnclipped(text: String) {

@@ -17,6 +17,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.cidy02.kudos.app.ProvidePushedShellChrome
 import io.github.cidy02.kudos.network.ao3.AO3Result
+import io.github.cidy02.kudos.network.ao3.AO3Error
 import io.github.cidy02.kudos.network.ao3.chapters.AO3ChapterRef
 import io.github.cidy02.kudos.ui.subject.*
 import kotlinx.coroutines.CoroutineScope
@@ -50,7 +51,9 @@ internal fun WritingChaptersScreen(
         when (val result = load()) {
             is AO3Result.Success -> chapters = result.value
             // iOS keeps rows already shown when a later read fails.
-            is AO3Result.Failure -> if (chapters == null) failure = workFormFailure(result.error)
+            is AO3Result.Failure -> if (chapters == null) failure = if (result.error == AO3Error.AuthenticationRequired) {
+                "Log in to AO3 before using this feature."
+            } else workFormFailure(result.error)
         }
     }
     chapterModel?.let { model ->

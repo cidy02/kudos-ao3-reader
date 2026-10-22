@@ -49,7 +49,7 @@ import java.time.Instant
 @Composable
 fun HomeResumeHero(
     work: SavedWork,
-    downloading: Boolean,
+    downloadFraction: Double?,
     obscured: Boolean,
     isSelecting: Boolean,
     isSelected: Boolean,
@@ -61,7 +61,7 @@ fun HomeResumeHero(
     val palette = SubjectPalette.fromHue(hue, tokens.theme)
     val shape = RoundedCornerShape(SubjectMetrics.heroRadius)
     val dim by animateFloatAsState(
-        targetValue = if (downloading) 1f else 0f,
+        targetValue = if (downloadFraction != null) 1f else 0f,
         animationSpec = tween(250),
         label = "heroDim"
     )
@@ -78,7 +78,7 @@ fun HomeResumeHero(
                 .hiddenMatureWorkSemantics(obscured, isSelecting, isSelected)
         ) {
             CoverSurface(palette = palette, shape = shape, hero = true, modifier = Modifier.fillMaxWidth()) {
-                HeroBody(work = work, palette = palette, downloading = downloading, now = now)
+                HeroBody(work = work, palette = palette, downloadFraction = downloadFraction, now = now)
             }
         }
         if (obscured && !isSelecting) {
@@ -94,7 +94,7 @@ fun HomeResumeHero(
 private fun HeroBody(
     work: SavedWork,
     palette: SubjectPalette,
-    downloading: Boolean,
+    downloadFraction: Double?,
     now: Instant
 ) {
     val tokens = LocalKudosTokens.current
@@ -121,7 +121,7 @@ private fun HeroBody(
     }
     val ring: @Composable () -> Unit = {
         WorkReadingOrDownloadRing(
-            downloading = downloading,
+            downloadFraction = downloadFraction,
             progress = fraction,
             state = if (fraction >= 1.0) "Finished" else "Reading",
             diameter = SubjectMetrics.ringDiameter * LocalDensity.current.fontScale

@@ -54,7 +54,7 @@ import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
 import io.github.cidy02.kudos.ui.subject.SectionRuleHeader
 import io.github.cidy02.kudos.ui.subject.SubjectRemoteCoverCard
 import io.github.cidy02.kudos.ui.subject.SubjectWorkCoverCard
-import io.github.cidy02.kudos.ui.subject.rememberWorkDownloading
+import io.github.cidy02.kudos.ui.subject.rememberWorkDownloadFraction
 import io.github.cidy02.kudos.works.CanonicalWorkMerge
 import io.github.cidy02.kudos.works.DownloadQueue
 import io.github.cidy02.kudos.works.WorkImporter
@@ -474,7 +474,7 @@ private fun ContinueReadingBlock(
             ) {
                 HomeResumeHero(
                     work = hero,
-                    downloading = rememberWorkDownloading(hero, downloadQueue),
+                    downloadFraction = rememberWorkDownloadFraction(hero, downloadQueue),
                     obscured = heroItem?.privacyVisibility == LibraryPrivacyVisibility.Obscured,
                     isSelecting = isSelecting,
                     isSelected = hero.id in selection
@@ -614,7 +614,7 @@ private fun SubscriptionsBlock(
                                     Box(Modifier.combinedClickable(onClick = click, onLongClick = longClick)) {
                                         if (matched != null && obscured) {
                                             io.github.cidy02.kudos.ui.subject.SubjectWorkCoverCard(
-                                                work = matched, obscured = true, downloading = false)
+                                                work = matched, obscured = true, downloadFraction = null)
                                         } else SubjectRemoteCoverCard(summary = entry.remote, showsProvenance = true)
                                     }
                                 }
@@ -671,7 +671,7 @@ private fun LocalCard(
         SubjectWorkCoverCard(
             work = work,
             obscured = obscured,
-            downloading = rememberWorkDownloading(work, downloadQueue),
+            downloadFraction = rememberWorkDownloadFraction(work, downloadQueue),
             footer = footer,
             progress = progress,
             isSelecting = isSelecting,

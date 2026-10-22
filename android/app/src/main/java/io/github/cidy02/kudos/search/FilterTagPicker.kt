@@ -38,6 +38,7 @@ import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
@@ -196,7 +197,12 @@ internal fun FilterFacetRow(title: String, state: FilterSelectionState, onClick:
         Modifier.fillMaxWidth()
             .background(if (state == FilterSelectionState.INCLUDED) color.copy(alpha = 0.10f) else Color.Transparent)
             .clickable(role = Role.Button, onClick = onClick)
-            .semantics(mergeDescendants = true) { stateDescription = state.status }
+            // The title is the label (kept as text); the state is iOS's "Included" / "Excluded",
+            // none when clear. The visible status word below is not spoken a second time.
+            .semantics(mergeDescendants = true) {
+                if (state != FilterSelectionState.CLEAR) stateDescription =
+                    if (state == FilterSelectionState.INCLUDED) "Included" else "Excluded"
+            }
             .padding(horizontal = 13.dp, vertical = 11.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -208,7 +214,8 @@ internal fun FilterFacetRow(title: String, state: FilterSelectionState, onClick:
         if (state != FilterSelectionState.CLEAR) {
             Icon(if (state == FilterSelectionState.INCLUDED) Icons.Default.AddCircle else Icons.Default.RemoveCircle,
                 null, tint = color, modifier = Modifier.size(16.dp))
-            Text(state.status, color = color, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+            Text(state.status, color = color, fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.clearAndSetSemantics {})
         }
     }
 }

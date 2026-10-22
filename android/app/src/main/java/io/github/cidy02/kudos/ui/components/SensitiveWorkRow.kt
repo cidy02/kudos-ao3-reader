@@ -69,6 +69,10 @@ import io.github.cidy02.kudos.search.LocalTagSearch
 import io.github.cidy02.kudos.search.SearchSubjectField
 import io.github.cidy02.kudos.ui.subject.SubjectPalette
 import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
+import io.github.cidy02.kudos.ui.subject.WorkReadingOrDownloadRing
+import io.github.cidy02.kudos.ui.subject.downloadDimmed
+import io.github.cidy02.kudos.ui.subject.rememberWorkDownloadFraction
+import io.github.cidy02.kudos.library.readingProgressFraction
 import androidx.compose.material3.Checkbox
 
 
@@ -181,7 +185,8 @@ fun SensitiveWorkRow(
     onLongClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
     authorIdentities: String = "",
-    authorNames: List<String> = io.github.cidy02.kudos.works.resolveTappableAuthorNames(null, author)
+    authorNames: List<String> = io.github.cidy02.kudos.works.resolveTappableAuthorNames(null, author),
+    leadingProgress: (@Composable () -> Unit)? = null
 ) {
     var expanded by remember(id) { mutableStateOf(expandAll) }
     LaunchedEffect(expandAll) { expanded = expandAll }
@@ -245,9 +250,10 @@ fun SensitiveWorkRow(
                             modifier = Modifier.padding(start = 16.dp, top = 12.dp, bottom = 12.dp)
                         )
                     }
+                    leadingProgress?.invoke()
                     Column(
                         modifier = Modifier
-                            .fillMaxWidth()
+                            .weight(1f)
                             .run { if (obscured) blur(16.dp) else this }
                             .padding(horizontal = 16.dp, vertical = 12.dp),
                         verticalArrangement = Arrangement.spacedBy(if (ledger) 12.dp else 6.dp)
@@ -792,7 +798,8 @@ fun SensitiveWorkRow(
     showsZeroStats: Boolean = LocalShowsZeroStats.current,
     mutedHistory: Boolean = false,
     ledger: Boolean = false,
-    footer: (@Composable () -> Unit)? = null
+    footer: (@Composable () -> Unit)? = null,
+    downloadFraction: Double? = rememberWorkDownloadFraction(work)
 ) {
     SensitiveWorkRow(
         id = work.id,
@@ -832,6 +839,17 @@ fun SensitiveWorkRow(
         ledger = ledger,
         footer = footer,
         savedWork = true,
-        modifier = modifier
+        modifier = modifier.downloadDimmed(if (downloadFraction != null) 1f else 0f),
+        leadingProgress = if (downloadFraction != null || work.hasStartedReading) {
+            {
+                WorkReadingOrDownloadRing(
+                    downloadFraction = downloadFraction,
+                    progress = work.readingProgressFraction(),
+                    state = null,
+                    diameter = 48.dp,
+                    modifier = Modifier.padding(start = 16.dp)
+                )
+            }
+        } else null
     )
 }

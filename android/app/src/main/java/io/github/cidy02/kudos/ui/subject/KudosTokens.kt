@@ -85,6 +85,9 @@ enum class ReaderTheme {
     fun scopePalette(userAccent: Color): SubjectPalette =
         SubjectPalette.fromColor(appTint ?: userAccent, this)
 
+    /** Readable glyph/text ink; filled controls keep the supplied colour. */
+    fun accentInk(color: Color): Color = if (isDarkFamily) color.readableOn(cardBackdrop) else color
+
     private fun glass(opacity: Double): Color =
         if (isDarkFamily) Color.White.withOpacity(opacity) else Color.Black.withOpacity(opacity * 0.55)
 
@@ -138,7 +141,7 @@ data class KudosTokens(
             return KudosTokens(
                 theme = theme,
                 accent = accent,
-                accentInk = if (theme.isDarkFamily) accent.readableOn(theme.cardBackdrop) else accent,
+                accentInk = theme.accentInk(accent),
                 background = theme.cardBackdrop,
                 panelFill = theme.glassFill(0.09),
                 cardFill = theme.cardSurface,

@@ -192,7 +192,9 @@ suspend fun applyDownload(
     ) ?: return
     if (keep) {
         workRepository.setSaved(fresh.id, true)
-        if (!fresh.hasEpub) {
+        if (fresh.hasEpub) {
+            downloadQueue?.showInstantDownload(fresh.id)
+        } else {
             val ao3Id = WorkTags.ao3WorkIdFromUrl(fresh.sourceUrl) ?: return
             downloadQueue?.enqueueLocal(ao3Id, fresh.title, fresh.sourceUrl, force = true)
         }

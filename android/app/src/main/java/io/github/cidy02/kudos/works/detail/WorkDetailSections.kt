@@ -192,7 +192,8 @@ fun WorkDetailTagSections(
     characters: List<String>,
     freeforms: List<String>,
     palette: SubjectPalette,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    hasAo3WorkId: Boolean = true
 ) {
     val searchTag = LocalTagSearch.current
     val tokens = LocalKudosTokens.current
@@ -212,7 +213,15 @@ fun WorkDetailTagSections(
         TagCluster("Additional Tags", freeforms, SearchSubjectField.FREEFORM)
     ).filter { it.tags.isNotEmpty() }
 
-    if (clusters.isEmpty()) return
+    if (clusters.isEmpty()) {
+        Text(
+            text = noWorkTagsMessage(hasAo3WorkId),
+            color = tokens.secondaryInk,
+            fontSize = 15.sp,
+            modifier = modifier.fillMaxWidth().padding(horizontal = SubjectMetrics.panelGutter)
+        )
+        return
+    }
 
     Column(
         modifier = modifier
@@ -262,6 +271,12 @@ fun WorkDetailTagSections(
             }
         }
     }
+}
+
+internal fun noWorkTagsMessage(hasAo3WorkId: Boolean): String = if (hasAo3WorkId) {
+    "AO3 hasn't provided tags for this work yet. Pull down to get the latest details from AO3."
+} else {
+    "This imported work isn't linked to AO3, so you won't see AO3 tags here."
 }
 
 /**

@@ -46,6 +46,7 @@ import io.github.cidy02.kudos.ui.subject.SubjectChipStyle
 import io.github.cidy02.kudos.ui.subject.SubjectFieldLabel
 import io.github.cidy02.kudos.ui.subject.SubjectHueSwatchRow
 import io.github.cidy02.kudos.ui.subject.SubjectPalette
+import io.github.cidy02.kudos.ui.subject.SubjectPaletteTheme
 import io.github.cidy02.kudos.ui.subject.SubjectToggle
 import io.github.cidy02.kudos.ui.subject.parseStoredColor
 import io.github.cidy02.kudos.ui.subject.subjectPanel
@@ -92,6 +93,7 @@ fun QueueEditorSheet(
     val palette = queueDraftPalette(tokens.theme, tokens.scopePalette, hue, colorHex)
     val canSave = name.isNotBlank() && !saving
 
+    SubjectPaletteTheme(palette) {
     Dialog(
         onDismissRequest = { if (!saving) onDismiss() },
         properties = DialogProperties(usePlatformDefaultWidth = false)
@@ -155,7 +157,7 @@ fun QueueEditorSheet(
                 ) {
                     Text(
                         text = if (editing) "Save" else "Create",
-                        color = if (canSave) palette.accent else tokens.tertiaryInk
+                        color = if (canSave) tokens.theme.accentInk(palette.tint) else tokens.tertiaryInk
                     )
                 }
             }
@@ -200,7 +202,7 @@ fun QueueEditorSheet(
                     SubjectToggle(
                         checked = keep,
                         onCheckedChange = { keep = it },
-                        accent = palette.accent,
+                        accent = palette.tint,
                         contentDescription = "Keep works offline"
                     )
                 }
@@ -261,6 +263,7 @@ fun QueueEditorSheet(
             text = { Text(error.orEmpty()) },
             confirmButton = { TextButton(onClick = { error = null }) { Text("OK") } }
         )
+    }
     }
 }
 

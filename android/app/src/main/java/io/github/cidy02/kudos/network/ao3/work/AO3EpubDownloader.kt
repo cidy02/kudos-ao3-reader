@@ -11,13 +11,13 @@ class AO3EpubDownloader(
     private val client: AO3Client = OkHttpAO3Client(),
     private val urlBuilder: AO3DownloadUrlBuilder = AO3DownloadUrlBuilder()
 ) {
-    suspend fun download(workId: Long): AO3Result<ByteArray> {
-        return downloadUrl(urlBuilder.epubDownloadUrl(workId))
+    suspend fun download(workId: Long, onProgress: (Double) -> Unit = {}): AO3Result<ByteArray> {
+        return downloadUrl(urlBuilder.epubDownloadUrl(workId), onProgress)
     }
 
-    suspend fun downloadUrl(url: String): AO3Result<ByteArray> {
+    suspend fun downloadUrl(url: String, onProgress: (Double) -> Unit = {}): AO3Result<ByteArray> {
         if (!isEpubDownload(url)) return AO3Result.Failure(AO3Error.Validation("Not an AO3 EPUB download."))
-        return when (val result = client.getBytes(url)) {
+        return when (val result = client.getBytesWithProgress(url, onProgress)) {
             is AO3Result.Failure -> result
             is AO3Result.Success -> validate(result.value.body, result.value.header("Content-Type"))
         }

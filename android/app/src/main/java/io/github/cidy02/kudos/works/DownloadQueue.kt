@@ -8,6 +8,8 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -15,6 +17,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.withContext
+import kotlin.math.exp
 
 /**
  * Serially downloads AO3 works via [WorkImporter], keeping network polite
@@ -26,10 +29,33 @@ class DownloadQueue(
     private val workRepository: WorkRepository,
     private val seriesRepository: AO3SeriesRepository = AO3SeriesRepository(),
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate),
-    private val processDispatcher: CoroutineDispatcher = Dispatchers.IO
+    private val processDispatcher: CoroutineDispatcher = Dispatchers.IO,
+    private val nowMillis: () -> Long = { System.nanoTime() / 1_000_000 }
 ) {
     private val _items = MutableStateFlow<List<DownloadQueueItem>>(emptyList())
     val items: StateFlow<List<DownloadQueueItem>> = _items.asStateFlow()
+
+    private val _instantDownloads = MutableStateFlow<Map<String, Double>>(emptyMap())
+    val instantDownloads: StateFlow<Map<String, Double>> = _instantDownloads.asStateFlow()
+
+    /** A keep with no fetch still fills for 0.7 s, independently of the serial queue. */
+    fun showInstantDownload(workId: String) {
+        if (_instantDownloads.value.containsKey(workId)) return
+        _instantDownloads.update { it + (workId to 0.0) }
+        val start = nowMillis()
+        scope.launch {
+            try {
+                while (true) {
+                    val elapsed = (nowMillis() - start).coerceAtLeast(0)
+                    _instantDownloads.update { it + (workId to (elapsed / 700.0).coerceAtMost(1.0)) }
+                    if (elapsed >= 700) break
+                    delay(minOf(50L, 700 - elapsed))
+                }
+            } finally {
+                _instantDownloads.update { it - workId }
+            }
+        }
+    }
 
     private val pumpMutex = Mutex()
 
@@ -70,7 +96,7 @@ class DownloadQueue(
         val seen = current.map { it.ao3WorkId }.toMutableSet()
         for (item in newItems) {
             if (seen.add(item.ao3WorkId)) {
-                current += item.copy(status = DownloadQueueStatus.Queued)
+                current += item.copy(status = DownloadQueueStatus.Queued, fraction = 0.0)
             }
         }
         _items.value = current
@@ -189,18 +215,35 @@ class DownloadQueue(
 
         updateStatus(item.ao3WorkId, DownloadQueueStatus.Downloading)
 
-        val result = withContext(processDispatcher) {
-            downloadItem(item)
+        val start = nowMillis()
+        val result = coroutineScope {
+            val creep = launch {
+                while (true) {
+                    setFraction(item.ao3WorkId, downloadPacingFraction(nowMillis() - start))
+                    delay(50)
+                }
+            }
+            try {
+                withContext(processDispatcher) {
+                    downloadItem(item) { fraction -> setFraction(item.ao3WorkId, fraction) }
+                }
+            } finally {
+                creep.cancel()
+            }
         }
 
         when (result) {
-            is WorkImportResult.Success -> updateStatus(item.ao3WorkId, DownloadQueueStatus.Done)
+            is WorkImportResult.Success -> {
+                setFraction(item.ao3WorkId, 1.0)
+                delay(300)
+                updateStatus(item.ao3WorkId, DownloadQueueStatus.Done)
+            }
             is WorkImportResult.Failure -> updateStatus(item.ao3WorkId, DownloadQueueStatus.Failed)
         }
     }
 
-    private suspend fun downloadItem(item: DownloadQueueItem): WorkImportResult {
-        item.summary?.let { return workImporter.download(it) }
+    private suspend fun downloadItem(item: DownloadQueueItem, onProgress: (Double) -> Unit): WorkImportResult {
+        item.summary?.let { return workImporter.download(it, onProgress) }
 
         val source = item.sourceUrl?.takeIf { it.isNotBlank() }
             ?: AO3URLResolver.canonicalWorkUrl(item.ao3WorkId)
@@ -209,7 +252,7 @@ class DownloadQueue(
             loadWorks = workRepository::listWorksForIdentity
         )
         if (existing != null) {
-            return workImporter.downloadExisting(existing)
+            return workImporter.downloadExisting(existing, onProgress)
         }
 
         // Minimal summary so WorkImporter can still fetch canonical metadata + EPUB.
@@ -224,7 +267,7 @@ class DownloadQueue(
             isComplete = item.isComplete.takeIf { it },
             seriesUrl = item.seriesUrl.takeIf { it.isNotBlank() }
         )
-        return workImporter.download(summary)
+        return workImporter.download(summary, onProgress)
     }
 
     private suspend fun isAlreadyDownloaded(item: DownloadQueueItem): Boolean {
@@ -249,6 +292,16 @@ class DownloadQueue(
             workRepository.restoreFromRecentlyDeleted(existing.id)
         }
         return existing.hasEpub
+    }
+
+    private fun setFraction(ao3WorkId: Long, fraction: Double) {
+        if (!fraction.isFinite()) return
+        _items.update { list ->
+            list.map { item ->
+                if (item.ao3WorkId == ao3WorkId) item.copy(fraction = maxOf(item.fraction, fraction.coerceIn(0.0, 1.0)))
+                else item
+            }
+        }
     }
 
     private fun updateStatus(ao3WorkId: Long, status: DownloadQueueStatus) {
@@ -278,5 +331,10 @@ data class DownloadQueueItem(
     val isComplete: Boolean = false,
     val seriesUrl: String = "",
     /** Preferred path: full blurb from Search/Browse/Work Detail. */
-    val summary: AO3WorkSummary? = null
+    val summary: AO3WorkSummary? = null,
+    val fraction: Double = 0.0
 )
+
+/** AO3 may pace without reporting a file size. Never claim completion from elapsed time. */
+internal fun downloadPacingFraction(elapsedMillis: Long): Double =
+    (0.9 * (1 - exp(-elapsedMillis.coerceAtLeast(0) / 4000.0))).coerceAtMost(0.899999)

@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.author
 
+import androidx.compose.ui.semantics.getOrNull
 import android.app.Application
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -205,6 +206,19 @@ class AuthorProfileSortScreenTest {
         compose.onNode(SemanticsMatcher.keyIsDefined(SemanticsActions.Dismiss))
             .performSemanticsAction(SemanticsActions.Dismiss) { it() }
         compose.waitForIdle()
+    }
+
+    @Test fun sortButtonHasIOSHelpAndActiveCountAfterApplyingSort() {
+        show(AuthorTab.Works, false)
+        val button = compose.onNodeWithContentDescription("Sort and filter")
+        assertEquals("Sort and filter the works on this page", button.fetchSemanticsNode().config[SemanticsActions.OnClick].label)
+        assertNull(button.fetchSemanticsNode().config.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.StateDescription))
+        openSheet()
+        chooseColumn("Title")
+        apply()
+        awaitText("Page 1 of 3")
+        button.assert(SemanticsMatcher.expectValue(androidx.compose.ui.semantics.SemanticsProperties.StateDescription, "1 active"))
+        assertEquals("Sort and filter the works on this page", button.fetchSemanticsNode().config[SemanticsActions.OnClick].label)
     }
 
     @Test fun applyReadsOnlyPageOneOnceDismissDoesNothingAndNextPageKeepsChoice() {

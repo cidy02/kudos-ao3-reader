@@ -28,6 +28,8 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.semantics.onClick
 import androidx.compose.material3.*
 import io.github.cidy02.kudos.ui.components.navigationEntryState
 import androidx.compose.runtime.*
@@ -459,6 +461,10 @@ fun AuthorProfileScreen(
                 val activeCount = worksSort.activeCount + worksFilters.activeCountForRefine
                 ToolbarCircleButton(onClick = { showingWorksFilters = true }, accessibilityName = "Sort and filter",
                     palette = tokens.scopePalette, isAccented = activeCount > 0,
+                    modifier = Modifier.semantics {
+                        if (activeCount > 0) stateDescription = "$activeCount active"
+                        onClick(label = "Sort and filter the works on this page") { showingWorksFilters = true; true }
+                    },
                     badge = activeCount.takeIf { it > 0 }?.toString()) {
                     Icon(Icons.Outlined.FilterList, null)
                 }

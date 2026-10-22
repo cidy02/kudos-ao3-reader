@@ -31,7 +31,8 @@ data class WorkReadingSummary(
     val totalSeconds: Double = 0.0,
     val visitCount: Int = 0,
     val finishCount: Int = 0,
-    val lastEndedAt: Instant? = null
+    val lastEndedAt: Instant? = null,
+    val chapterCountAtLastVisit: Int = 0
 )
 
 /** iOS ReadingAffinities: derived reading facts, never explicit stars or AO3 reads. */
@@ -59,7 +60,8 @@ object ReadingAffinities {
     fun summaries(sessions: List<ReadingSessionEntity>): Map<String, WorkReadingSummary> =
         sessions.groupBy { it.workID }.mapValues { (_, visits) ->
             WorkReadingSummary(visits.sumOf { it.durationSeconds }, visits.size,
-                visits.count { it.didFinish }, visits.maxOf { it.endedAt })
+                visits.count { it.didFinish }, visits.maxOf { it.endedAt },
+                visits.maxBy { it.endedAt }.chapterCountAtVisit)
         }
 
     fun authors(works: List<SavedWork>, summaries: Map<String, WorkReadingSummary>,

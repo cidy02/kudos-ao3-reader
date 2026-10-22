@@ -97,14 +97,21 @@ fun carouselCardScale(width: Dp = HomeCardMetrics.width): Float {
 enum class HomeStatusArrangement { Grid, Strip }
 
 @Composable
-fun rememberWorkDownloading(work: SavedWork, queue: DownloadQueue?): Boolean {
-    if (queue == null) return false
+fun rememberWorkDownloadFraction(
+    work: SavedWork,
+    queue: DownloadQueue? = io.github.cidy02.kudos.ui.components.LocalWorkRowEnvironment.current?.downloads
+): Double? = rememberDownloadFraction(work.id, work.ao3WorkID?.toLong() ?: WorkTags.ao3WorkIdFromUrl(work.sourceUrl), queue)
+
+@Composable
+fun rememberDownloadFraction(workId: String?, ao3WorkId: Long?, queue: DownloadQueue?): Double? {
+    if (queue == null) return null
+    val instant by queue.instantDownloads.collectAsState()
     val items by queue.items.collectAsState()
-    val ao3Id = WorkTags.ao3WorkIdFromUrl(work.sourceUrl) ?: return false
-    return items.any { item ->
-        item.ao3WorkId == ao3Id &&
+    instant[workId]?.let { return it }
+    return items.firstOrNull { item ->
+        item.ao3WorkId == ao3WorkId &&
             (item.status == DownloadQueueStatus.Queued || item.status == DownloadQueueStatus.Downloading)
-    }
+    }?.fraction
 }
 
 /**
@@ -115,7 +122,7 @@ fun rememberWorkDownloading(work: SavedWork, queue: DownloadQueue?): Boolean {
 fun SubjectWorkCoverCard(
     work: SavedWork,
     obscured: Boolean,
-    downloading: Boolean,
+    downloadFraction: Double? = rememberWorkDownloadFraction(work),
     modifier: Modifier = Modifier,
     footer: String? = null,
     progress: Double? = null,
@@ -129,7 +136,7 @@ fun SubjectWorkCoverCard(
     val palette = SubjectPalette.fromHue(hue, tokens.theme)
     val shape = RoundedCornerShape(HomeCardMetrics.radius)
     val dim by animateFloatAsState(
-        targetValue = if (downloading) 1f else 0f,
+        targetValue = if (downloadFraction != null) 1f else 0f,
         animationSpec = tween(250),
         label = "coverDim"
     )
@@ -174,8 +181,8 @@ fun SubjectWorkCoverCard(
                     )
                     Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                         when {
-                            resolved != null || downloading -> WorkReadingOrDownloadRing(
-                                downloading = downloading,
+                            resolved != null || downloadFraction != null -> WorkReadingOrDownloadRing(
+                                downloadFraction = downloadFraction,
                                 progress = resolved,
                                 state = if ((resolved ?: 0.0) >= 1.0) "Finished" else "Reading",
                                 diameter = ringDiameter

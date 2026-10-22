@@ -129,9 +129,15 @@ fun FavoriteAffinityRow(row: ReadingAffinities.Row, scope: FavoriteScope,
     Column(
         modifier.fillMaxWidth().clip(shape).background(tokens.cardFill).background(palette.cardWash)
             .border(0.5.dp, palette.cardBorder, shape)
-            .then(if (libraryDestination) Modifier.clickable(onClickLabel = "Shows these works in your Library", onClick = onOpen) else Modifier)
+            .then(if (libraryDestination) Modifier.clickable(onClickLabel = "show these works in your Library", onClick = onOpen) else Modifier)
             .semantics(mergeDescendants = true) {
-                contentDescription = "${row.name}. $log. $library"
+                contentDescription = buildString {
+                    append("${row.name}. $log.")
+                    if (newestWork != null) {
+                        append(" Newest work: ${newestWork.title}, ${affinityNewestWorkLine(newestWork)}.")
+                        if (newestWorkUnread) append(" Unread.")
+                    } else append(" $library")
+                }
                 if (authorDestination) customActions = listOf(CustomAccessibilityAction("Open author page") { onOpen(); true })
             }.padding(horizontal = 14.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
@@ -174,7 +180,7 @@ fun FavoriteAffinityRow(row: ReadingAffinities.Row, scope: FavoriteScope,
         // 1ak's second half: what this author posted most recently, and whether it was opened.
         if (newestWork != null) {
             SubjectRowSeparator(inset = 0.dp)
-            Column(Modifier.fillMaxWidth().clickable(onClickLabel = "Open this work", onClick = onOpenNewestWork),
+            Column(Modifier.fillMaxWidth().clickable(onClickLabel = "open ${newestWork.title}", onClick = onOpenNewestWork),
                 verticalArrangement = Arrangement.spacedBy(5.dp)) {
                 Text("NEWEST WORK", color = tokens.secondaryInk, fontWeight = FontWeight.Bold,
                     fontSize = 8.5.sp, lineHeight = 12.sp, letterSpacing = 0.85.sp)
@@ -202,9 +208,9 @@ internal fun FavoriteScopesStrip(preferences: FavoritePreferences,
                                  onUnread: (Boolean) -> Unit,
                                  authorRail: @Composable () -> Unit = {}) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        FavoriteSegments(FavoriteScope.entries, preferences.scope, onScope, { it.title }, "Favorites scope")
+        FavoriteSegments(FavoriteScope.entries, preferences.scope, onScope, { it.title })
         if (preferences.scope != FavoriteScope.Works) {
-            FavoriteSegments(ReadingAffinities.Order.entries, preferences.order, onOrder, { it.title }, "Favorites order")
+            FavoriteSegments(ReadingAffinities.Order.entries, preferences.order, onOrder, { it.title })
         }
         if (preferences.scope == FavoriteScope.Authors) authorRail()
         if (preferences.scope == FavoriteScope.Tags) {
@@ -249,7 +255,7 @@ private fun FavoriteAuthorFilterRail(selection: FavoriteAuthorQuickFilter, ready
 
 @Composable
 private fun <T> FavoriteSegments(options: List<T>, selectedOption: T, onSelect: (T) -> Unit,
-                                 title: (T) -> String, description: String) {
+                                 title: (T) -> String) {
     val tokens = LocalKudosTokens.current
     if (isAccessibilityFontScale()) {
         SettingsPanel {
@@ -262,7 +268,7 @@ private fun <T> FavoriteSegments(options: List<T>, selectedOption: T, onSelect: 
             }
         }
     } else SubjectSegmentedControl(options = options, selected = selectedOption, onSelect = onSelect, title = title,
-        contentDescription = description, modifier = Modifier.padding(horizontal = 16.dp))
+        modifier = Modifier.padding(horizontal = 16.dp))
 }
 
 @Composable

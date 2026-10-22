@@ -61,6 +61,21 @@ class WritingChaptersTest {
         assertEquals(0, out.client.gets.size)
     }
 
+    @Test fun unavailableAuthenticationUsesIOSChapterListSentence() {
+        compose.setContent {
+            KudosTheme(KudosThemeMode.Light) {
+                CompositionLocalProvider(LocalPushedShellChrome provides chrome) {
+                    WritingChaptersScreen("Tide", load = { AO3Result.Failure(AO3Error.AuthenticationRequired) }, onBack = {})
+                }
+            }
+        }
+        compose.waitUntil(15_000) {
+            compose.onAllNodesWithText("Log in to AO3 before using this feature.").fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.onNodeWithText("Your AO3 session expired. Please log in again.").assertDoesNotExist()
+        compose.onNodeWithText("Try Again").assertExists()
+    }
+
     @Test fun theListShowsEachChapterAndARowOpensNothingYet() {
         var reads = 0
         var fail = true

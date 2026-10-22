@@ -12,6 +12,7 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -992,7 +993,6 @@ internal fun LibrarySubjectWorkCard(
             SubjectWorkCoverCard(
                 work = work,
                 obscured = obscured,
-                downloading = false,
                 footer = footerOverride ?: if (kind == LibrarySectionKind.Finished) "Finished" else null,
                 progress = if (kind == LibrarySectionKind.ReadingNow) progress else null,
                 isSelecting = selecting,
@@ -1002,6 +1002,8 @@ internal fun LibrarySubjectWorkCard(
         LibraryWorkMenu(menuOpen, { menuOpen = false }, work, actions)
     }
 }
+
+private enum class LibrarySectionDisplayMode { Detailed, Ledger, Compact }
 
 @Composable
 internal fun LibrarySubjectLedgerRow(
@@ -1016,7 +1018,8 @@ internal fun LibrarySubjectLedgerRow(
     expandAll: Boolean = false,
     abandoned: Boolean = false,
     onKeepInProgress: (String) -> Unit = {},
-    ledger: Boolean = kind.defaultsToLedgerRows
+    ledger: Boolean = kind.defaultsToLedgerRows,
+    summary: WorkReadingSummary? = null
 ) {
     val work = display.item.work
     val obscured = display.privacyVisibility == LibraryPrivacyVisibility.Obscured
@@ -1031,6 +1034,7 @@ internal fun LibrarySubjectLedgerRow(
                     fandoms = work.workFandoms,
                     metadata = HomeFacts.localWorkMetadata(work.author, work.wordCount, work.chapters).joinToString(" · "),
                     progress = progress,
+                    downloadFraction = io.github.cidy02.kudos.ui.subject.rememberWorkDownloadFraction(work),
                     progressState = if (progress <= 0.0) null else if (progress >= 1.0) "Finished" else "Reading",
                     rating = work.rating,
                     categories = work.workCategories,
@@ -1070,6 +1074,7 @@ internal fun LibrarySubjectLedgerRow(
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
                 )
             }
+            ReadingHistoryFactsStrip(summary, kind, work.postedChapterCount)
             if (abandoned && !selecting) {
                 MoveBackToInProgressButton { onKeepInProgress(work.id) }
             }
@@ -1376,7 +1381,15 @@ private fun LibrarySectionContent(
 
     BackHandler(enabled = state.selectionMode) { onExitSelection() }
 
-    var ledger by rememberSaveable(kind) { mutableStateOf(kind.defaultsToLedgerRows) }
+    var displayMode by rememberSaveable(kind) {
+        mutableStateOf(if (kind.defaultsToLedgerRows) LibrarySectionDisplayMode.Ledger else LibrarySectionDisplayMode.Detailed)
+    }
+    val coverWidth = io.github.cidy02.kudos.ui.subject.HomeCardMetrics.width.value *
+        io.github.cidy02.kudos.ui.subject.carouselCardScale()
+    var showLayoutMenu by remember { mutableStateOf(false) }
+    val allowedModes = LibrarySectionDisplayMode.entries.filter {
+        it != LibrarySectionDisplayMode.Compact || kind == LibrarySectionKind.Favorites
+    }
     var expandAll by rememberSaveable(kind) { mutableStateOf(false) }
     var showMenu by remember { mutableStateOf(false) }
 
@@ -1399,7 +1412,8 @@ private fun LibrarySectionContent(
                     filtersActive = state.hasActiveQueryOrFilters,
                     badgeCount = state.filters.activeCount + if (state.searchQuery.isBlank()) 0 else 1,
                     onClick = onShowFilters,
-                    onClearFilters = onClearFilters
+                    onClearFilters = onClearFilters,
+                    filterHelp = "Filter the works in this section"
                 )
                 if (!showsFavoriteScopes || hasWorkContent || hasPrivacyMenu) Box {
                     ToolbarCircleButton(
@@ -1411,14 +1425,15 @@ private fun LibrarySectionContent(
                     DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
                         if (hasPrivacyMenu) {
                             DropdownMenuItem(
-                                text = { Text(if (state.revealAllActive) "Hide mature works" else "Show mature works") },
+                                text = { Text(if (state.revealAllActive) "Hide mature" else "Show mature") },
                                 onClick = { showMenu = false; onTogglePrivacy() }
                             )
                         }
                         if (!showsAffinityList) {
-                            DropdownMenuItem(text = { Text(if (ledger) "Display · Ledger" else "Display · Detailed") },
-                                onClick = { ledger = !ledger; showMenu = false })
-                            if (!ledger) DropdownMenuItem(text = { Text(if (expandAll) "Collapse All" else "Expand All") },
+                            DropdownMenuItem(text = { Text("Layout") },
+                                onClick = { showMenu = false; showLayoutMenu = true })
+                            if (displayMode == LibrarySectionDisplayMode.Detailed) DropdownMenuItem(
+                                text = { Text(if (expandAll) "Collapse All Cards" else "Expand All Cards") },
                                 onClick = { expandAll = !expandAll; showMenu = false })
                         }
                         if (!showsFavoriteScopes || hasWorkContent) DropdownMenuItem(
@@ -1427,16 +1442,24 @@ private fun LibrarySectionContent(
                             enabled = if (showsFavoriteScopes) hasWorkContent else baseItems.isNotEmpty()
                         )
                     }
+                    DropdownMenu(expanded = showLayoutMenu, onDismissRequest = { showLayoutMenu = false }) {
+                        allowedModes.forEach { mode ->
+                            DropdownMenuItem(text = { Text(mode.name) },
+                                trailingIcon = { if (displayMode == mode) Text("✓", color = tokens.scopePalette.accent) },
+                                onClick = { displayMode = mode; showLayoutMenu = false })
+                        }
+                    }
                 }
             }
         }
     )
 
-    Box(
+    BoxWithConstraints(
         Modifier
             .fillMaxSize()
             .subjectScreenWash(tokens.scopePalette)
     ) {
+        val coverColumns = ((maxWidth.value - 20) / (coverWidth + 12)).toInt().coerceAtLeast(1)
         if (showsAffinityList) {
             FavoriteAffinityList(state, onFavoriteScopeChange, onFavoriteOrderChange, onTagsUnreadChange, onOpenAffinity,
                 favoriteAuthors)
@@ -1558,7 +1581,16 @@ private fun LibrarySectionContent(
                                 SectionRuleHeader(group.title, count = group.workIds.size, modifier = Modifier.padding(top = 8.dp))
                             }
                         }
-                        items(group.workIds, key = { "${kind.id}-$it" }) { id ->
+                        if (displayMode == LibrarySectionDisplayMode.Compact) {
+                            items(group.workIds.chunked(coverColumns), key = { "covers-${it.first()}" }) { rowIds ->
+                                Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    rowIds.forEach { id ->
+                                        LibrarySubjectWorkCard(display = itemsById.getValue(id), kind = kind, actions = cardActions,
+                                            selecting = state.selectionMode, selected = id in state.selectedWorkIds)
+                                    }
+                                }
+                            }
+                        } else items(group.workIds, key = { "${kind.id}-$it" }) { id ->
                             val display = itemsById.getValue(id)
                             LibrarySubjectLedgerRow(
                                 display = display,
@@ -1569,7 +1601,8 @@ private fun LibrarySectionContent(
                                 selected = id in state.selectedWorkIds,
                                 selecting = state.selectionMode,
                                 showsZeroStats = state.showsZeroStats,
-                                ledger = ledger, expandAll = expandAll,
+                                ledger = displayMode == LibrarySectionDisplayMode.Ledger, expandAll = expandAll,
+                                summary = state.readingSummaries[id],
                                 abandoned = kind == LibrarySectionKind.History && state.historyGrouping == LibraryHistoryGrouping.State &&
                                     ReadingAbandonment.isAbandoned(display.item.work, now),
                                 onKeepInProgress = onKeepInProgress
@@ -1637,7 +1670,7 @@ private fun HistoryGroupingStrip(
         }
     } else {
         SubjectSegmentedControl(options = LibraryHistoryGrouping.entries, selected = grouping,
-            onSelect = onSelect, title = { it.title }, contentDescription = "History grouping",
+            onSelect = onSelect, title = { it.title },
             modifier = Modifier.padding(horizontal = 16.dp))
     }
 }

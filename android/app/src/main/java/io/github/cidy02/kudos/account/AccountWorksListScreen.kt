@@ -1642,7 +1642,7 @@ private fun CompactWorkCovers(
                         matched, hidden, click, longClick ->
                         Box(Modifier.combinedClickable(onClick = click, onLongClick = longClick)) {
                             SubjectWorkCoverCard(work = matched ?: work.remote.coverFace(), obscured = hidden,
-                                downloading = false, progress = matched?.readingProgressFraction())
+                                downloadFraction = null, progress = matched?.readingProgressFraction())
                         }
                     }
                 } else Box(
@@ -1654,7 +1654,7 @@ private fun CompactWorkCovers(
                     SubjectWorkCoverCard(
                         work = local ?: work.remote.coverFace(),
                         obscured = obscured,
-                        downloading = false,
+                        downloadFraction = null,
                         progress = local?.readingProgressFraction()
                     )
                 }

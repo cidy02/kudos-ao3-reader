@@ -266,7 +266,7 @@ class LibraryViewModel(
                 ) ?: continue
                 if (saved) {
                     workRepository.setSaved(id, true)
-                    if (!work.hasEpub) enqueueDownload(work)
+                    if (work.hasEpub) downloadQueue?.showInstantDownload(work.id) else enqueueDownload(work)
                 } else if (action == WorkDownloadAction.RemoveDownload) {
                     workRepository.setSaved(id, false)
                 }
@@ -394,7 +394,7 @@ class LibraryViewModel(
                 is WorkDownloadAction.KeptBy -> Unit
                 WorkDownloadAction.Download -> {
                     val work = workRepository.setSaved(workId, true) ?: return@launch
-                    if (!work.hasEpub) enqueueDownload(work)
+                    if (work.hasEpub) downloadQueue?.showInstantDownload(work.id) else enqueueDownload(work)
                 }
             }
         }

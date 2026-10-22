@@ -71,6 +71,7 @@ import io.github.cidy02.kudos.ui.subject.SubjectChipStyle
 import io.github.cidy02.kudos.ui.subject.SubjectKicker
 import io.github.cidy02.kudos.ui.subject.SubjectMetrics
 import io.github.cidy02.kudos.ui.subject.SubjectPalette
+import io.github.cidy02.kudos.ui.subject.downloadDimmed
 import io.github.cidy02.kudos.ui.subject.WorkReadingOrDownloadRing
 import io.github.cidy02.kudos.ui.subject.parseStoredColor
 import io.github.cidy02.kudos.ui.subject.withOpacity
@@ -233,7 +234,7 @@ fun WorkLedgerCard(work: SavedWork, modifier: Modifier = Modifier, content: @Com
 @Composable
 fun QueueLedgerCard(
     work: SavedWork,
-    downloading: Boolean,
+    downloadFraction: Double?,
     obscured: Boolean,
     modifier: Modifier = Modifier,
     selecting: Boolean = false,
@@ -252,7 +253,7 @@ fun QueueLedgerCard(
     }
     val metadata = HomeFacts.localWorkMetadata(work.author, work.wordCount, work.chapters)
     val tile = 22.dp
-    WorkLedgerCard(work, modifier) {
+    WorkLedgerCard(work, modifier.downloadDimmed(if (downloadFraction != null) 1f else 0f)) {
         Box {
             Row(
                 Modifier
@@ -264,7 +265,7 @@ fun QueueLedgerCard(
                 verticalAlignment = Alignment.Top
             ) {
                 WorkReadingOrDownloadRing(
-                    downloading = downloading,
+                    downloadFraction = downloadFraction,
                     progress = fraction,
                     state = state,
                     diameter = tile * 2 + 11.dp
