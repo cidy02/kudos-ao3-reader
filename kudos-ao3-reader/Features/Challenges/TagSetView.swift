@@ -58,6 +58,9 @@ struct TagSetView: View {
 
     @State private var tagSet: AO3TagSet?
     @State private var phase: Phase = .idle
+    #if DEBUG
+    @State private var debugTagEditor = false
+    #endif
 
     @State private var fandomTagnames: String = ""
     @State private var characterTagnames: String = ""
@@ -124,6 +127,10 @@ struct TagSetView: View {
         #endif
         .subjectScreenWash(palette: palette)
         .task { await loadTagSetIfNeeded() }
+        #if DEBUG
+        .task { if DebugLaunchRoute.takePush("tagseteditor") { debugTagEditor = true } }
+        .navigationDestination(isPresented: $debugTagEditor) { tagEditorScreen }
+        #endif
         .refreshable { await loadTagSet() }
             .screenTint(palette)
     }

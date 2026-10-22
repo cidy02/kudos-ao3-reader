@@ -57,6 +57,9 @@ struct SettingsPreservationPage: View {
         .sheet(isPresented: $showingAvailabilitySweep) {
             AvailabilitySweepView()
         }
+        #if DEBUG
+        .task { if DebugLaunchRoute.takeSheet("availability") { showingAvailabilitySweep = true } }
+        #endif
     }
 }
 
@@ -97,6 +100,9 @@ struct SettingsReadingQueuesPage: View {
     @State private var savedWorkMigrationTotal = 0
     @State private var savedWorkMigrationTask: Task<Void, Never>?
     @State private var notice: SettingsNotice?
+    #if DEBUG
+    @State private var debugStorage = false
+    #endif
 
     private var legacySavedWorksForQueueMigration: [SavedWork] {
         // Recently Deleted works aren't migrated into Saved for Later — queueing one
@@ -177,6 +183,12 @@ struct SettingsReadingQueuesPage: View {
                 + "with a pause between visits to AO3."
             Text(migrationMessage)
         }
+        #if DEBUG
+        .task { if DebugLaunchRoute.takePush("queuestorage") { debugStorage = true } }
+        .navigationDestination(isPresented: $debugStorage) {
+            ReadingQueueStorageView()
+        }
+        #endif
     }
 
     private var savedWorkMigrationButtonTitle: String {

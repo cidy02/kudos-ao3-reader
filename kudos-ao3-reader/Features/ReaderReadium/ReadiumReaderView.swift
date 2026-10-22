@@ -279,6 +279,9 @@ struct ReadiumReaderView: View {
                     try? store.setOverride(phonemes, for: trimmed)
                 }
             }
+            #if DEBUG
+            .task { applyDebugShot() }
+            #endif
             .sheet(item: $editingNote) { annotation in
                 ReaderNoteEditor(annotation: annotation) {
                     try? modelContext.save()
@@ -1504,6 +1507,25 @@ extension ReadiumReaderView {
     }
 
     /// Chapters / Display share the app-wide panel slot so only one opens at once.
+    #if DEBUG
+    private func applyDebugShot() {
+        if DebugLaunchRoute.takeSheet("readercontents") { router.panel = .readerChapters }
+        if DebugLaunchRoute.takeSheet("readerfind") { router.panel = .readerFind }
+        if DebugLaunchRoute.takeSheet("readerdisplay") { router.panel = .readerDisplay }
+        if DebugLaunchRoute.takeSheet("readernote") {
+            let note = ReadingAnnotation(
+                work: work,
+                kind: .highlight,
+                locatorString: #"{"href":"/chapter.xhtml","type":"application/xhtml+xml"}"#,
+                selectedText: "The TARDIS lands in a city that never switches its streetlamps off.",
+                note: ""
+            )
+            modelContext.insert(note)
+            editingNote = note
+        }
+    }
+    #endif
+
     private var readerPanelBinding: Binding<Bool> {
         Binding(
             get: {

@@ -5,7 +5,7 @@ import SwiftUI
 /// in-app, and saves with a single authenticated write. Account-security pages
 /// (password, email, username) remain one-tap web links. Section/field `?`
 /// controls open AO3's matching help content in a sheet.
-struct AO3PreferencesView: View {
+struct AO3PreferencesView: View { // swiftlint:disable:this type_body_length
     @Environment(AO3AuthService.self) private var auth
     @Environment(AppRouter.self) private var router
     @Environment(ThemeManager.self) private var themeManager
@@ -98,6 +98,14 @@ struct AO3PreferencesView: View {
             helpSheetView(state)
         }
         .task { await load() }
+        #if DEBUG
+        .task {
+            guard DebugLaunchRoute.takeSheet("prefhelp"),
+                  let url = URL(string: "https://archiveofourown.org/help/preferences_privacy")
+            else { return }
+            openHelp(AO3PreferenceHelpRef(title: "Privacy", url: url))
+        }
+        #endif
     }
 
     @ViewBuilder

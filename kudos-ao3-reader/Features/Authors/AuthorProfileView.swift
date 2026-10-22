@@ -84,6 +84,9 @@ struct AuthorProfileView: View {
                 AuthorProfileView(route: model.route, navigationTitle: tab.rawValue, initialTab: tab)
             }
             .navigationDestination(isPresented: $isBulkEditing) { bulkEditDestination }
+            #if DEBUG
+            .task { await applyAuthorDebugShot() }
+            #endif
             .navigationDestination(isPresented: $isCreatingWork) {
                 WritingWorkDestination(workID: nil) { Task { await model.refresh(auth: auth) } }
             }
@@ -626,6 +629,28 @@ private extension AuthorProfileView {
             }
         }
     }
+
+    #if DEBUG
+    /// Opens the author-page shot once the profile's own data is in.
+    private func applyAuthorDebugShot() async {
+        if DebugLaunchRoute.takeSheet("authorabout") {
+            dashboardDestination = .about
+            return
+        }
+        if DebugLaunchRoute.takeSheet("authorworksfilter") {
+            showingWorksFilters = true
+            return
+        }
+        guard DebugLaunchRoute.wantsSheet("bulkedit") else { return }
+        for _ in 0..<40 {
+            if !model.works.isEmpty { break }
+            try? await Task.sleep(for: .milliseconds(250))
+        }
+        guard !model.works.isEmpty, DebugLaunchRoute.takeSheet("bulkedit") else { return }
+        for work in model.works.prefix(2) { bulkSelection.selection.insert(work.id) }
+        isBulkEditing = true
+    }
+    #endif
 
     /// Resolved when the push happens, so it acts on the live selection rather
     /// than whatever was selected when the toolbar was built.

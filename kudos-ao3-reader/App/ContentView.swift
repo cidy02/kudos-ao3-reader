@@ -107,6 +107,7 @@ struct ContentView: View {
                 ReadingQueueService.ensureSavedForLaterQueue(in: modelContext)
                 #if DEBUG
                 DemoLibrary.seedIfRequested(in: modelContext)
+                DebugLaunchRoute.prepareShot()
                 DebugLaunchRoute.applyTab(router)
                 #endif
                 // Another yield before walking every SavedWork + fileExists — that used

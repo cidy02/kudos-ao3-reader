@@ -218,22 +218,240 @@ enum DemoLibrary {
     ]
 }
 
+/// One step Browse takes for a `shot:` route. Interpreted only inside `BrowseView`,
+/// because `FandomRoute` is private there.
+enum DebugBrowseStep: Equatable {
+    /// Push a media category's fandom index (`AO3MediaCategory`).
+    case media(name: String, fandomsURL: String)
+    /// Push that fandom's works, the way a row tap does.
+    case fandom(names: [String], title: String)
+    /// Push a tag's works page.
+    case tag(url: String, title: String)
+}
+
+/// `-KudosDebugRoute shot:<name>` (A82). `route` is an existing page route.
+/// `sheets` and `pushes` open on top once that page is up. With nothing pending,
+/// no screen reads these.
+struct DebugShot {
+    var route: String
+    var sheets: [String] = []
+    var pushes: [String] = []
+    var manageRow: String?
+    var browse: [DebugBrowseStep] = []
+}
+
+/// The A82 names, in that audit's order. One map; views only ask `takeSheet` / `takePush`.
+enum DebugShots {
+    private static let tvShows = DebugBrowseStep.media(
+        name: "TV Shows", fandomsURL: "https://archiveofourown.org/media/TV%20Shows/fandoms"
+    )
+    private static let doctorWho = DebugBrowseStep.fandom(names: ["Doctor Who"], title: "Doctor Who")
+    private static let starWars = DebugBrowseStep.tag(
+        url: "https://archiveofourown.org/tags/Star%20Wars/works", title: "Star Wars"
+    )
+    private static let neon = "queue:Neon reread"
+    private static let neonDetails = "queue-details:Neon reread"
+    private static let sodium = "work:Sodium Lights"
+    private static let readSodium = "read:Sodium Lights"
+    private static let winter = "acct:ao3collection:winter_exchange"
+    private static let posted = "acct:workedit:1001"
+    private static let starSearch = "tagsearch:Star Wars"
+
+    static let ordered: [(name: String, shot: DebugShot)] = [
+        ("libpicker", DebugShot(route: "library", sheets: ["libpicker"])),
+        ("queuesettings", DebugShot(route: neonDetails)),
+        ("newqueue", DebugShot(route: "queues", sheets: ["newqueue"])),
+        ("editqueue", DebugShot(route: neon, sheets: ["editqueue"])),
+        ("addworks", DebugShot(route: neon, sheets: ["addworks"])),
+        ("queuetag", DebugShot(route: neonDetails, sheets: ["queuetag"])),
+        ("queuetags", DebugShot(route: neonDetails, pushes: ["queuetags"])),
+        ("queuetagedit", DebugShot(route: neonDetails, pushes: ["queuetags", "queuetagedit"])),
+        ("bulktag", DebugShot(route: "library", sheets: ["bulktag"])),
+        ("addtoqueue", DebugShot(route: sodium, sheets: ["addtoqueue"])),
+        ("queuestorage", DebugShot(route: "acct:settings:readingQueues", pushes: ["queuestorage"])),
+        ("collectiondetails", DebugShot(route: "collection:Comfort reads", sheets: ["collectiondetails"])),
+        ("newcollection", DebugShot(route: "library", sheets: ["newcollection"])),
+        ("collectionreorder", DebugShot(route: "collection:Comfort reads", sheets: ["collectionreorder"])),
+        ("addtocollection", DebugShot(route: sodium, sheets: ["addtocollection"])),
+        ("fandomlist", DebugShot(route: "browse", browse: [tvShows])),
+        ("fandomworks", DebugShot(route: "browse", browse: [tvShows, doctorWho])),
+        ("tagworks", DebugShot(route: "browse", browse: [starWars])),
+        ("fandomfilter", DebugShot(route: "browse", sheets: ["fandomfilter"], browse: [tvShows])),
+        ("savesearch", DebugShot(route: starSearch, sheets: ["savesearch"])),
+        ("pagejump", DebugShot(route: starSearch, sheets: ["pagejump"])),
+        ("languagepicker", DebugShot(route: starSearch, pushes: ["languagepicker"])),
+        ("tagpicker", DebugShot(route: starSearch, sheets: ["tagpicker"])),
+        ("downloaddate", DebugShot(route: sodium, sheets: ["downloaddate"])),
+        ("seriespreserve", DebugShot(route: sodium, sheets: ["seriespreserve"])),
+        ("bookmarkform", DebugShot(route: sodium, sheets: ["bookmarkform"])),
+        ("readercontents", DebugShot(route: readSodium, sheets: ["readercontents"])),
+        ("readerfind", DebugShot(route: readSodium, sheets: ["readerfind"])),
+        ("readerdisplay", DebugShot(route: readSodium, sheets: ["readerdisplay"])),
+        ("readernote", DebugShot(route: readSodium, sheets: ["readernote"])),
+        ("pronunciations", DebugShot(route: "acct:settings:listening", pushes: ["pronunciations"])),
+        ("pronunciationedit", DebugShot(
+            route: "acct:settings:listening", sheets: ["pronunciationedit"], pushes: ["pronunciations"]
+        )),
+        ("customizetheme", DebugShot(route: "acct:settings:appearance", sheets: ["customizetheme"])),
+        ("formattingtray", DebugShot(route: "compose:Sodium Lights", sheets: ["formattingtray"])),
+        ("chapterpicker", DebugShot(route: "comments:Sodium Lights", sheets: ["chapterpicker"])),
+        ("inboxfilter", DebugShot(route: "acct:inbox", sheets: ["inboxfilter"])),
+        ("authorabout", DebugShot(route: "acct:dashboard", sheets: ["authorabout"])),
+        ("seriesdetail", DebugShot(route: "acct:series", pushes: ["seriesdetail"])),
+        ("seriesedit", DebugShot(route: "acct:seriesedit")),
+        ("seriesreorder", DebugShot(route: "acct:series", sheets: ["seriesreorder"])),
+        ("seriesremove", DebugShot(route: "acct:seriesedit", pushes: ["seriesremove"])),
+        ("authorworksfilter", DebugShot(route: "acct:works", sheets: ["authorworksfilter"])),
+        ("colitems", DebugShot(route: "acct:collections", sheets: ["colitems"])),
+        ("colsfilter", DebugShot(route: "acct:collections", sheets: ["colsfilter"])),
+        ("chsettingsedit", DebugShot(route: winter, pushes: ["chsettingsedit"], manageRow: "Challenge Settings")),
+        ("chsignupdetail", DebugShot(route: winter, pushes: ["chsignupdetail"], manageRow: "Sign-ups")),
+        ("prompttags", DebugShot(route: winter, sheets: ["prompttags"], manageRow: "Your Sign-up")),
+        ("tagset", DebugShot(route: winter, pushes: ["tagset"], manageRow: "Challenge Settings")),
+        ("tagseteditor", DebugShot(
+            route: winter, pushes: ["tagset", "tagseteditor"], manageRow: "Challenge Settings"
+        )),
+        ("writingpreview", DebugShot(route: "acct:workedit:1002", sheets: ["writingpreview"])),
+        ("chapters", DebugShot(route: posted, pushes: ["chapters"])),
+        ("chapterform", DebugShot(route: posted, pushes: ["chapterform"])),
+        ("edittags", DebugShot(route: posted, pushes: ["edittags"])),
+        ("tagseditor", DebugShot(route: posted, pushes: ["edittags", "tagseditor"])),
+        ("texteditor", DebugShot(route: posted, pushes: ["texteditor"])),
+        ("recovery", DebugShot(route: posted, pushes: ["recovery"])),
+        ("seriespicker", DebugShot(route: posted, pushes: ["seriespicker"])),
+        ("collectionsgifts", DebugShot(route: posted, pushes: ["collectionsgifts"])),
+        ("creatorspicker", DebugShot(route: posted, pushes: ["creatorspicker"])),
+        ("parentpicker", DebugShot(route: posted, pushes: ["parentpicker"])),
+        ("bulkedit", DebugShot(route: "acct:works", sheets: ["bulkedit"])),
+        ("bulktagstate", DebugShot(route: "acct:works", sheets: ["bulkedit"], pushes: ["bulktagstate"])),
+        ("bulknames", DebugShot(route: "acct:works", sheets: ["bulkedit"], pushes: ["bulknames"])),
+        ("prefhelp", DebugShot(route: "acct:preferences", sheets: ["prefhelp"])),
+        ("privacydata", DebugShot(route: "acct:settings:privacy")),
+        ("availability", DebugShot(route: "acct:settings:preservation", sheets: ["availability"])),
+        ("pairing", DebugShot(route: "acct:settings:syncFolder", sheets: ["pairing"])),
+        ("revokedevice", DebugShot(route: "acct:settings:syncFolder", sheets: ["revokedevice"])),
+        ("backupimport", DebugShot(route: "acct:settings:backup", sheets: ["backupimport"])),
+        ("aboutkudos", DebugShot(route: "acct:settings:about", sheets: ["aboutkudos"])),
+    ]
+
+    static var names: [String] { ordered.map(\.name) }
+    static let byName: [String: DebugShot] = Dictionary(
+        uniqueKeysWithValues: ordered.map { ($0.name, $0.shot) }
+    )
+}
+
+/// Identity for a debug-only `navigationDestination(item:)`.
+struct DebugPresented: Hashable, Identifiable {
+    var id: String
+}
+
 /// Simulator-only: `-KudosDebugRoute <route>` opens a screen at launch for
 /// design review. `library`, `browse`, `account`, `search`,
 /// `section:<LibrarySectionKind>`, and on Home's stack `queues`,
-/// `queue:<name>`, `queue-details:<name>`.
+/// `queue:<name>`, `queue-details:<name>`. `shot:<name>` is an A82 screen:
+/// the same page route, plus the sheet or child page named in `DebugShots`.
 @MainActor
 enum DebugLaunchRoute {
     static var value: String? { UserDefaults.standard.string(forKey: "KudosDebugRoute") }
     static var opensLogin: Bool { value == "login" }
     /// `-KudosDebugOpenFilters YES`: the routed screen opens its filter panel.
     static var opensFilters: Bool { UserDefaults.standard.bool(forKey: "KudosDebugOpenFilters") }
-    /// `-KudosDebugManageRow <label>` with `acct:ao3collection:<slug>`: opens
-    /// that Manage row (Maintainers, Moderation, Challenge Settings, Prompts…).
-    static var manageRow: String? { UserDefaults.standard.string(forKey: "KudosDebugManageRow") }
+
+    static var shotName: String? {
+        guard let value, value.hasPrefix("shot:") else { return nil }
+        let name = String(value.dropFirst("shot:".count))
+        return name.isEmpty ? nil : name
+    }
+
+    static var shot: DebugShot? { shotName.flatMap { DebugShots.byName[$0] } }
+
+    /// The page an existing helper should open. A shot uses its mapped route;
+    /// every other launch is unchanged.
+    static var pageRoute: String? { shot?.route ?? value }
+
+    /// `-KudosDebugManageRow <label>`, or the row a shot names.
+    static var manageRow: String? {
+        if let row = shot?.manageRow { return row }
+        return UserDefaults.standard.string(forKey: "KudosDebugManageRow")
+    }
+
+    /// True while this id is still pending. Does not consume it, so a parent
+    /// can stay open while a child takes a different id.
+    private static var taken: Set<String> = []
+
+    static func wantsSheet(_ id: String) -> Bool {
+        shot?.sheets.contains(id) == true && !taken.contains("s:\(id)")
+    }
+
+    static func takeSheet(_ id: String) -> Bool {
+        guard wantsSheet(id) else { return false }
+        taken.insert("s:\(id)")
+        return true
+    }
+
+    static func wantsPush(_ id: String) -> Bool {
+        shot?.pushes.contains(id) == true && !taken.contains("p:\(id)")
+    }
+
+    static func takePush(_ id: String) -> Bool {
+        guard wantsPush(id) else { return false }
+        taken.insert("p:\(id)")
+        return true
+    }
+
+    /// The first still-pending push among `ids`, consumed.
+    static func takeFirstPush(_ ids: [String]) -> String? {
+        guard let id = ids.first(where: wantsPush) else { return nil }
+        taken.insert("p:\(id)")
+        return id
+    }
+
+    static func takeBrowse() -> [DebugBrowseStep] {
+        guard let steps = shot?.browse, !steps.isEmpty, taken.insert("browse").inserted else { return [] }
+        return steps
+    }
+
+    /// Search filters, for the shots whose sheet or picker lives on that panel.
+    static var opensSearchFilters: Bool { opensFilters || wantsSearchFilters }
+
+    static var wantsSearchFilters: Bool {
+        wantsSheet("savesearch") || wantsSheet("tagpicker") || wantsPush("languagepicker")
+    }
+
+    /// A recovery copy for the notes field of work 1001, only for `shot:recovery`.
+    /// The summary editor (`shot:texteditor`) finds nothing. Both account keys:
+    /// the editor uses `auth.username ?? ""`.
+    static func prepareShot() {
+        guard shotName == "recovery" else { return }
+        var store = WritingTextRecovery()
+        let text = "Demo recovery copy for the notes field."
+        for account in ["AO3_Reader", ""] {
+            let key = store.fileURL(account: account, target: "work:1001", field: "notes")
+            let url = key.deletingPathExtension()
+                .appendingPathExtension("shot-recovery")
+                .appendingPathExtension("json")
+            if (try? store.load(from: url))?.text == text { continue }
+            try? store.save(text: text, original: "form", to: url)
+        }
+    }
+
+    /// A paired "Demo reading tablet" trusted far enough ago that Revoke shows.
+    /// When the keychain will not take the key, the sheet still has a device to name.
+    static func revokedDevice() -> TrustedDevice {
+        let key = String(repeating: "ab", count: 32)
+        let past = Date().addingTimeInterval(-(TombstoneTrustStore.undoTrustWindow + 3_600))
+        let clock = TombstoneSigning.now
+        TombstoneSigning.now = { past }
+        _ = TombstoneTrustStore.add(key, label: "Demo reading tablet")
+        TombstoneSigning.now = clock
+        if let stored = TombstoneTrustStore.trustedDevices().first(where: { $0.label == "Demo reading tablet" }) {
+            return stored
+        }
+        return TrustedDevice(publicKeyHex: key, label: "Demo reading tablet", trustedAt: past)
+    }
 
     static func applyTab(_ router: AppRouter) {
-        guard let value else { return }
+        guard let value = pageRoute else { return }
         if libraryRoutes.contains(where: value.hasPrefix) {
             router.selection = .library
         } else if value.hasPrefix("acct:") {
@@ -251,7 +469,7 @@ enum DebugLaunchRoute {
 
     /// Home's stack, once its queries have loaded.
     static func homeDestination(queues: [ReadingQueue]) -> AllReadingQueuesDestination? {
-        guard let value else { return nil }
+        guard let value = pageRoute else { return nil }
         if value == "queues" { return AllReadingQueuesDestination(initialQueueID: nil) }
         if let prefix = ["queue:", "queue-details:"].first(where: value.hasPrefix) {
             let name = String(value.dropFirst(prefix.count))
@@ -261,7 +479,7 @@ enum DebugLaunchRoute {
     }
 
     /// `queue-details:<name>` opens the queue page, then its Details.
-    static var opensQueueDetails: Bool { value?.hasPrefix("queue-details:") == true }
+    static var opensQueueDetails: Bool { pageRoute?.hasPrefix("queue-details:") == true }
 
     private static let libraryRoutes = ["collections", "collection:", "recentlyDeleted", "insights"]
 
@@ -272,14 +490,14 @@ enum DebugLaunchRoute {
     /// an `AnyHashable` would find none.
     static func applyAccount(to path: inout NavigationPath) {
         // `acct:ao3collection:<slug>` — an AO3 collection's page (fixture-served).
-        if let value, value.hasPrefix("acct:ao3collection:") {
+        if let value = pageRoute, value.hasPrefix("acct:ao3collection:") {
             let slug = String(value.dropFirst("acct:ao3collection:".count))
             path.append(AO3CollectionDestination(slug: slug, title: slug))
             return
         }
         // `acct:settings:<page>` — a Settings page by its `SettingsRoute` case name (backup,
         // syncFolder, about, …), for side-by-side screenshots with Android.
-        if let value, value.hasPrefix("acct:settings:") {
+        if let value = pageRoute, value.hasPrefix("acct:settings:") {
             let name = String(value.dropFirst("acct:settings:".count))
             if let page = SettingsRoute.allCases.first(where: { "\($0)" == name }) {
                 path.append(AccountView.Route.settings)
@@ -297,12 +515,12 @@ enum DebugLaunchRoute {
     /// `acct:workedit:<id>` opens Work Edit for that AO3 work (the fixture
     /// harness serves `/works/<id>/edit`).
     static var accountEditWorkID: Int? {
-        guard let value, value.hasPrefix("acct:workedit:") else { return nil }
+        guard let value = pageRoute, value.hasPrefix("acct:workedit:") else { return nil }
         return Int(value.dropFirst("acct:workedit:".count))
     }
 
     private static func accountTarget() -> Any? {
-        guard let value, value.hasPrefix("acct:") else { return nil }
+        guard let value = pageRoute, value.hasPrefix("acct:") else { return nil }
         switch String(value.dropFirst("acct:".count)) {
         case "dashboard": return AccountView.Route.dashboard
         case "drafts": return AccountView.Route.drafts
@@ -323,7 +541,7 @@ enum DebugLaunchRoute {
 
     /// Library's stack: `collections`, `collection:<name>`, `recentlyDeleted`, `insights`.
     static func applyLibrary(to path: inout NavigationPath, collections: [WorkCollection]) {
-        guard let value else { return }
+        guard let value = pageRoute else { return }
         switch value {
         case "collections": path.append(AllCollectionsDestination())
         case "recentlyDeleted": path.append(RecentlyDeletedDestination())
@@ -337,11 +555,11 @@ enum DebugLaunchRoute {
     }
 
     /// `work:<title>` opens that work's detail page on Home's stack.
-    static var opensReader: Bool { value?.hasPrefix("read:") == true }
+    static var opensReader: Bool { pageRoute?.hasPrefix("read:") == true }
 
     /// `homesection:<HomeSectionKind raw value>` pushes that Home section list.
     static func homeSection() -> HomeSectionKind? {
-        guard let value, value.hasPrefix("homesection:") else { return nil }
+        guard let value = pageRoute, value.hasPrefix("homesection:") else { return nil }
         return HomeSectionKind(rawValue: String(value.dropFirst("homesection:".count)))
     }
 
@@ -367,7 +585,8 @@ enum DebugLaunchRoute {
     /// Thread screen. A demo import has no AO3 id; it borrows Android's demo id
     /// for the same work (the fixture page is the same).
     static func commentsRoute(for work: SavedWork) -> AO3CommentsRoute? {
-        guard let value, ["comments:", "compose:", "thread:"].contains(where: value.hasPrefix) else { return nil }
+        guard let value = pageRoute,
+              ["comments:", "compose:", "thread:"].contains(where: value.hasPrefix) else { return nil }
         var route = AO3CommentsRoute(workID: work.ao3WorkID ?? 999_000_005, context: AO3CommentsWorkContext(
             title: work.title, authors: [work.author], fandoms: work.workFandoms,
             rating: work.rating, chapters: work.chapters
@@ -389,7 +608,7 @@ enum DebugLaunchRoute {
 
     /// `author:<username>` opens another reader's AO3 profile (fixture-served) on Home's stack.
     static var authorRoute: AO3AuthorRoute? {
-        guard let value, value.hasPrefix("author:") else { return nil }
+        guard let value = pageRoute, value.hasPrefix("author:") else { return nil }
         return AO3AuthorRoute(username: String(value.dropFirst("author:".count)))
     }
 
@@ -397,7 +616,7 @@ enum DebugLaunchRoute {
         // `mycopy:<title>` opens the same page with its My copy sheet up;
         // `read:<title>` opens the reader instead (see `opensReader`).
         let prefixes = ["work:", "mycopy:", "read:", "comments:", "compose:", "thread:"]
-        guard let value, let prefix = prefixes.first(where: value.hasPrefix) else { return nil }
+        guard let value = pageRoute, let prefix = prefixes.first(where: value.hasPrefix) else { return nil }
         let title = String(value.dropFirst(prefix.count))
         return works.first { $0.title == title }
     }

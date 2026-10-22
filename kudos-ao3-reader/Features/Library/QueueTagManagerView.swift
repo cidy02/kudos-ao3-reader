@@ -95,6 +95,13 @@ struct QueueTagManagerView: View {
         #if os(macOS)
         .navigationTitle("Manage tags")
         #endif
+        #if DEBUG
+        .task {
+            if DebugLaunchRoute.takePush("queuetagedit") {
+                editing = queue.tags.min { $0.name < $1.name }
+            }
+        }
+        #endif
         .sheet(item: $editing) { tag in
             QueueTagEditSheet(
                 tag: tag,
