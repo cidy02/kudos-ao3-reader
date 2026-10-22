@@ -13,6 +13,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavType
 import androidx.navigation.navArgument
+import io.github.cidy02.kudos.network.ao3.account.AO3ChallengeKind
 import java.net.URLEncoder
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -174,11 +175,11 @@ object Routes {
     private const val ARG_AO3_COLLECTION_TITLE = "collectionTitle"
     const val AO3CollectionDetail = "ao3-collection-detail/{$ARG_AO3_COLLECTION_SLUG}?title={$ARG_AO3_COLLECTION_TITLE}"
     const val AO3CollectionItems = "ao3-collection-items/{$ARG_AO3_COLLECTION_SLUG}?title={$ARG_AO3_COLLECTION_TITLE}&tab={tab}"
-    const val AO3ChallengeSettings = "ao3-challenge-settings/{$ARG_AO3_COLLECTION_SLUG}?title={$ARG_AO3_COLLECTION_TITLE}&owner={owner}"
-    const val AO3ChallengeAssignments = "ao3-challenge-assignments/{$ARG_AO3_COLLECTION_SLUG}?title={$ARG_AO3_COLLECTION_TITLE}&owner={owner}&maintainer={maintainer}&closed={closed}"
-    const val AO3ChallengeSignUps = "ao3-challenge-sign-ups/{$ARG_AO3_COLLECTION_SLUG}?title={$ARG_AO3_COLLECTION_TITLE}&owner={owner}&maintainer={maintainer}"
+    const val AO3ChallengeSettings = "ao3-challenge-settings/{$ARG_AO3_COLLECTION_SLUG}?title={$ARG_AO3_COLLECTION_TITLE}&owner={owner}&kind={kind}"
+    const val AO3ChallengeAssignments = "ao3-challenge-assignments/{$ARG_AO3_COLLECTION_SLUG}?title={$ARG_AO3_COLLECTION_TITLE}&owner={owner}&maintainer={maintainer}&closed={closed}&kind={kind}"
+    const val AO3ChallengeSignUps = "ao3-challenge-sign-ups/{$ARG_AO3_COLLECTION_SLUG}?title={$ARG_AO3_COLLECTION_TITLE}&owner={owner}&maintainer={maintainer}&kind={kind}"
     const val AO3ChallengeSignUp = "ao3-challenge-sign-up/{$ARG_AO3_COLLECTION_SLUG}?title={$ARG_AO3_COLLECTION_TITLE}&id={signUpId}"
-    const val AO3PromptMeme = "ao3-prompt-meme/{$ARG_AO3_COLLECTION_SLUG}?title={$ARG_AO3_COLLECTION_TITLE}&owner={owner}"
+    const val AO3PromptMeme = "ao3-prompt-meme/{$ARG_AO3_COLLECTION_SLUG}?title={$ARG_AO3_COLLECTION_TITLE}&owner={owner}&kind={kind}"
     const val AO3TagSet = "ao3-tag-set/{tagSetId}?title={tagSetTitle}&moderator={moderator}"
     const val AO3CollectionMaintainers = "ao3-collection-maintainers/{$ARG_AO3_COLLECTION_SLUG}?title={$ARG_AO3_COLLECTION_TITLE}"
     const val AO3UserCollectionItems = "ao3-user-collection-items"
@@ -190,17 +191,22 @@ object Routes {
         "ao3-collection-items/${encode(slug)}?title=${encode(title)}" + if (tab == null) "" else "&tab=${encode(tab)}"
     fun ao3CollectionModeration(slug: String, title: String, viewerIsOwner: Boolean) =
         "ao3-collection-moderation/${encode(slug)}?title=${encode(title)}&owner=$viewerIsOwner"
-    fun ao3ChallengeSettings(slug: String, title: String, viewerIsOwner: Boolean) =
-        "ao3-challenge-settings/${encode(slug)}?title=${encode(title)}&owner=$viewerIsOwner"
+    fun ao3ChallengeSettings(slug: String, title: String, viewerIsOwner: Boolean, kind: AO3ChallengeKind? = null) =
+        "ao3-challenge-settings/${encode(slug)}?title=${encode(title)}&owner=$viewerIsOwner${kindQuery(kind)}"
     fun ao3ChallengeAssignments(slug: String, title: String = "", viewerIsOwner: Boolean = false,
-        viewerIsMaintainer: Boolean = false, knownClosed: Boolean? = null) =
-        "ao3-challenge-assignments/${encode(slug)}?title=${encode(title)}&owner=$viewerIsOwner&maintainer=$viewerIsMaintainer&closed=${knownClosed?.toString() ?: "unknown"}"
-    fun ao3ChallengeSignUps(slug: String, title: String = "", viewerIsOwner: Boolean = false, viewerIsMaintainer: Boolean = false) =
-        "ao3-challenge-sign-ups/${encode(slug)}?title=${encode(title)}&owner=$viewerIsOwner&maintainer=$viewerIsMaintainer"
+        viewerIsMaintainer: Boolean = false, knownClosed: Boolean? = null, kind: AO3ChallengeKind? = null) =
+        "ao3-challenge-assignments/${encode(slug)}?title=${encode(title)}&owner=$viewerIsOwner&maintainer=$viewerIsMaintainer&closed=${knownClosed?.toString() ?: "unknown"}${kindQuery(kind)}"
+    fun ao3ChallengeSignUps(slug: String, title: String = "", viewerIsOwner: Boolean = false,
+        viewerIsMaintainer: Boolean = false, kind: AO3ChallengeKind? = null) =
+        "ao3-challenge-sign-ups/${encode(slug)}?title=${encode(title)}&owner=$viewerIsOwner&maintainer=$viewerIsMaintainer${kindQuery(kind)}"
     fun ao3ChallengeSignUp(slug: String, title: String = "", id: Int? = null) =
         "ao3-challenge-sign-up/${encode(slug)}?title=${encode(title)}" + if (id == null) "" else "&id=$id"
-    fun ao3PromptMeme(slug: String, title: String = "", viewerIsOwner: Boolean = false) =
-        "ao3-prompt-meme/${encode(slug)}?title=${encode(title)}&owner=$viewerIsOwner"
+    fun ao3PromptMeme(slug: String, title: String = "", viewerIsOwner: Boolean = false, kind: AO3ChallengeKind? = null) =
+        "ao3-prompt-meme/${encode(slug)}?title=${encode(title)}&owner=$viewerIsOwner${kindQuery(kind)}"
+    /** Absent from the address when the collection page did not name a challenge kind. */
+    private fun kindQuery(kind: AO3ChallengeKind?) = kind?.let { "&kind=${it.fieldPrefix}" }.orEmpty()
+    fun challengeKindFromRoute(raw: String?): AO3ChallengeKind? =
+        AO3ChallengeKind.entries.firstOrNull { it.fieldPrefix == raw }
     fun ao3TagSet(id: Int, title: String = "", isModerator: Boolean = false) =
         "ao3-tag-set/$id?title=${encode(title)}&moderator=$isModerator"
     fun ao3CollectionMaintainers(slug: String, title: String) =

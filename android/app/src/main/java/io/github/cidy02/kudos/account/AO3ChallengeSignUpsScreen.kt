@@ -51,23 +51,25 @@ internal fun ProvideCollectionPalette(slug: String, title: String, content: @Com
 
 @Composable
 fun AO3ChallengeSignUpsScreen(slug: String, title: String, viewerIsOwner: Boolean,
-    viewerIsMaintainer: Boolean, repository: AO3CollectionDetailRepository, onOpenSignUp: (Int?) -> Unit) =
+    viewerIsMaintainer: Boolean, repository: AO3CollectionDetailRepository, onOpenSignUp: (Int?) -> Unit,
+    kind: AO3ChallengeKind? = null) =
     ProvideCollectionPalette(slug, title) {
-        ChallengeSignUpsContent(slug, title, viewerIsOwner, viewerIsMaintainer, repository, onOpenSignUp)
+        ChallengeSignUpsContent(slug, title, viewerIsOwner, viewerIsMaintainer, repository, onOpenSignUp, kind)
     }
 
 @Composable
 private fun ChallengeSignUpsContent(slug: String, title: String, viewerIsOwner: Boolean,
-    viewerIsMaintainer: Boolean, repository: AO3CollectionDetailRepository, onOpenSignUp: (Int?) -> Unit) {
+    viewerIsMaintainer: Boolean, repository: AO3CollectionDetailRepository, onOpenSignUp: (Int?) -> Unit,
+    kind: AO3ChallengeKind?) {
     val auth = repository.authRepository
     val generation by auth.generation.collectAsState()
     val authState by auth.state.collectAsState()
     val admissionGeneration = androidx.compose.runtime.saveable.rememberSaveable(slug) { generation }
     val admitted = viewerIsMaintainer && generation == admissionGeneration
     val model: AO3ChallengeSignUpsState = androidx.lifecycle.viewmodel.compose.viewModel(
-        key = "AO3ChallengeSignUps:$slug:$generation:${authState.isSignedIn}:$viewerIsOwner:$admitted",
+        key = "AO3ChallengeSignUps:$slug:$generation:${authState.isSignedIn}:$viewerIsOwner:$admitted:${kind?.fieldPrefix}",
         factory = androidx.lifecycle.viewmodel.viewModelFactory {
-            initializer { AO3ChallengeSignUpsState(slug, viewerIsOwner, admitted, repository) }
+            initializer { AO3ChallengeSignUpsState(slug, viewerIsOwner, admitted, repository, kind) }
         }
     )
     val state by model.state.collectAsState()

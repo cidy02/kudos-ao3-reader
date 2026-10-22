@@ -57,6 +57,7 @@ import io.github.cidy02.kudos.data.preferences.SettingsRepository
 import io.github.cidy02.kudos.home.HomeFacts
 import io.github.cidy02.kudos.network.ao3.AO3Constants
 import io.github.cidy02.kudos.network.ao3.AO3Result
+import io.github.cidy02.kudos.network.ao3.account.AO3ChallengeKind
 import io.github.cidy02.kudos.network.ao3.account.AO3Collection
 import io.github.cidy02.kudos.network.ao3.account.AO3CollectionPerson
 import io.github.cidy02.kudos.network.ao3.account.AO3CollectionPeoplePage
@@ -94,11 +95,11 @@ fun AO3CollectionDetailScreen(
     onOpenModeration: (Boolean) -> Unit,
     onOpenSettings: () -> Unit,
     onOpenMaintainers: () -> Unit,
-    onOpenChallengeSettings: (Boolean) -> Unit,
-    onOpenPrompts: (Boolean) -> Unit,
+    onOpenChallengeSettings: (Boolean, AO3ChallengeKind?) -> Unit,
+    onOpenPrompts: (Boolean, AO3ChallengeKind?) -> Unit,
     onOpenSignUp: () -> Unit = {},
-    onOpenSignUps: (Boolean) -> Unit = {},
-    onOpenAssignments: (Boolean) -> Unit = {}
+    onOpenSignUps: (Boolean, AO3ChallengeKind?) -> Unit = { _, _ -> },
+    onOpenAssignments: (Boolean, AO3ChallengeKind?) -> Unit = { _, _ -> }
 ) {
     val signedIn by repository.authRepository.state.collectAsState()
     val generation by repository.authRepository.generation.collectAsState()
@@ -242,11 +243,11 @@ fun AO3CollectionDetailScreen(
                                 CollectionManageRow(action.label, action.url,
                                     { onOpenModeration(collectionShow.collection.viewerIsOwner) },
                                     onOpenSettings, onOpenMaintainers, onOpenWebFallback,
-                                    { onOpenChallengeSettings(collectionShow.collection.viewerIsOwner) },
+                                    { onOpenChallengeSettings(collectionShow.collection.viewerIsOwner, collectionShow.collection.challengeKind) },
                                     // Any participant opens Prompts; only an owner's opening asks AO3 for the close date.
-                                    { onOpenPrompts(collectionShow.collection.viewerIsOwner) }, onOpenSignUp,
-                                    { onOpenSignUps(collectionShow.collection.viewerIsOwner) },
-                                    { onOpenAssignments(collectionShow.collection.viewerIsOwner) })
+                                    { onOpenPrompts(collectionShow.collection.viewerIsOwner, collectionShow.collection.challengeKind) }, onOpenSignUp,
+                                    { onOpenSignUps(collectionShow.collection.viewerIsOwner, collectionShow.collection.challengeKind) },
+                                    { onOpenAssignments(collectionShow.collection.viewerIsOwner, collectionShow.collection.challengeKind) })
                             }
                         }
                     }

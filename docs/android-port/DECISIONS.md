@@ -2612,3 +2612,10 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   and queue decisions, as iOS's `absorb`. **Not changed:** export's 128 MB per-book limit (export
   holds each entry in memory; iOS streams up to 1 GB); a revoked device is not published to other
   phones (a new cross-device feature); backups are read whole before import.
+- **2026-10-22 · A collection's challenge settings are read from the form its kind names (both
+  apps; Grok 3gr / iOS I7).** Owner, 2026-10-07: reads AO3 will refuse are not made. Both apps
+  asked for the gift-exchange form first and fell back to the prompt meme's on "not found", one
+  refused read every time for a prompt meme. The kind is already parsed from the collection page;
+  every screen opened from it now passes it, and asks for that form only. A screen with no kind
+  in hand keeps the old order. Reverse: `readChallengeForm` in
+  `account/AO3CollectionDetailRepository.kt` (iOS `challengeSettings(slug:kind:request:)`).

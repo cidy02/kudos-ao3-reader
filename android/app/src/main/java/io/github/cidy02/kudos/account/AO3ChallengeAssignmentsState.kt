@@ -70,7 +70,7 @@ internal data class ChallengeAssignmentsUiState(
 /** One opening, first pages only. Session/role/closed-state admission precedes every list read. */
 internal class AO3ChallengeAssignmentsState(private val slug: String, private val owner: Boolean,
     private val maintainer: Boolean, private val knownClosed: Boolean?, private val repository: AO3CollectionDetailRepository,
-    private val writes: AO3WriteRepository) : androidx.lifecycle.ViewModel() {
+    private val writes: AO3WriteRepository, private val kind: AO3ChallengeKind? = null) : androidx.lifecycle.ViewModel() {
     private val auth = repository.authRepository
     private val generation = auth.generation.value
     private var active = true
@@ -110,7 +110,7 @@ internal class AO3ChallengeAssignmentsState(private val slug: String, private va
         dueAttempted = true // Failed best-effort reads stay attempted for this opening.
         dueSucceeded = false
         mutable.value = state.value.copy(dueRaw = "", dueZone = "")
-        val answer = repository.getChallengeSettingsForm(slug)
+        val answer = repository.getChallengeSettingsForm(slug, kind)
         checkSession()
         dueRefused = (answer as? AO3Result.Failure)?.error.let { it == AO3Error.Forbidden || it == AO3Error.AuthenticationRequired }
         if (answer is AO3Result.Success) {

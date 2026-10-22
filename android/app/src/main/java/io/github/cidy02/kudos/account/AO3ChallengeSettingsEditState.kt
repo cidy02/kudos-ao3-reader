@@ -19,7 +19,8 @@ internal data class ChallengeSettingsEditUiState(
 )
 
 internal class AO3ChallengeSettingsEditState(private val slug: String, private val owner: Boolean,
-    private val repository: AO3CollectionDetailRepository, private val writes: AO3WriteRepository) : androidx.lifecycle.ViewModel() {
+    private val repository: AO3CollectionDetailRepository, private val writes: AO3WriteRepository,
+    private val kind: AO3ChallengeKind? = null) : androidx.lifecycle.ViewModel() {
     private val auth = repository.authRepository
     private val generation = auth.generation.value
     private val mutable = MutableStateFlow(ChallengeSettingsEditUiState())
@@ -43,7 +44,7 @@ internal class AO3ChallengeSettingsEditState(private val slug: String, private v
         loadJob = currentCoroutineContext()[Job]
         mutable.value = state.value.copy(loading = true, failure = null)
         try {
-            val result = repository.getChallengeSettingsEdit(slug)
+            val result = repository.getChallengeSettingsEdit(slug, kind)
             currentCoroutineContext().ensureActive()
             if (!ownsSession()) return
             mutable.value = when (result) {

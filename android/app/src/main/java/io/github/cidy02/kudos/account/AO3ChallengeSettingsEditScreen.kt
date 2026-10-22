@@ -36,17 +36,17 @@ import kotlinx.coroutines.launch
 internal fun AO3ChallengeSettingsEditScreen(slug: String, title: String, viewerIsOwner: Boolean,
     repository: AO3CollectionDetailRepository, writes: AO3WriteRepository,
     onOpenWeb: (String) -> Unit, onOpenTagSet: (Int, String) -> Unit, onOpenCollection: () -> Unit,
-    onBack: () -> Unit, openingKey: Int = 0) {
+    onBack: () -> Unit, openingKey: Int = 0, kind: AO3ChallengeKind? = null) {
     val auth = repository.authRepository
     val generation by auth.generation.collectAsState()
     val authState by auth.state.collectAsState()
     // The route owns the in-memory form across a pushed tag-set/collection/browser screen.
     val model: AO3ChallengeSettingsEditState = androidx.lifecycle.viewmodel.compose.viewModel(
-        key = "challenge-edit:$slug:$generation:${authState.isSignedIn}:$openingKey",
+        key = "challenge-edit:$slug:$generation:${authState.isSignedIn}:$openingKey:${kind?.fieldPrefix}",
         factory = object : androidx.lifecycle.ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
             override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T =
-                AO3ChallengeSettingsEditState(slug, viewerIsOwner, repository, writes) as T
+                AO3ChallengeSettingsEditState(slug, viewerIsOwner, repository, writes, kind) as T
         }
     )
     val state by model.state.collectAsState()

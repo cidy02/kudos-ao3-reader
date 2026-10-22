@@ -46,24 +46,24 @@ import kotlinx.coroutines.launch
 fun AO3PromptMemeScreen(
     slug: String, title: String, viewerIsOwner: Boolean,
     repository: AO3CollectionDetailRepository, writes: AO3WriteRepository, onOpenWeb: (String) -> Unit,
-    onOpenSignUp: () -> Unit = {}
+    onOpenSignUp: () -> Unit = {}, kind: AO3ChallengeKind? = null
 ) = ProvideCollectionPalette(slug, title) {
-    PromptMemeContent(slug, title, viewerIsOwner, repository, writes, onOpenWeb, onOpenSignUp)
+    PromptMemeContent(slug, title, viewerIsOwner, repository, writes, onOpenWeb, onOpenSignUp, kind)
 }
 
 @Composable
 private fun PromptMemeContent(
     slug: String, title: String, viewerIsOwner: Boolean,
     repository: AO3CollectionDetailRepository, writes: AO3WriteRepository, onOpenWeb: (String) -> Unit,
-    onOpenSignUp: () -> Unit
+    onOpenSignUp: () -> Unit, kind: AO3ChallengeKind?
 ) {
     val auth = repository.authRepository
     val generation by auth.generation.collectAsState()
     val authState by auth.state.collectAsState()
     val model: AO3PromptMemeState = androidx.lifecycle.viewmodel.compose.viewModel(
-        key = "AO3PromptMeme:$slug:$generation:${authState.isSignedIn}:$viewerIsOwner",
+        key = "AO3PromptMeme:$slug:$generation:${authState.isSignedIn}:$viewerIsOwner:${kind?.fieldPrefix}",
         factory = androidx.lifecycle.viewmodel.viewModelFactory {
-            initializer { AO3PromptMemeState(slug, repository, viewerIsOwner, writes) }
+            initializer { AO3PromptMemeState(slug, repository, viewerIsOwner, writes, kind) }
         }
     )
     val state by model.state.collectAsState()

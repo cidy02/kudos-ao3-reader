@@ -43,6 +43,30 @@ class AO3ChallengeSettingsEditTest {
         assertEquals(emptyList<AO3ChallengeTagSet>(), model.state.value.data!!.tagSets)
     }
 
+    @Test fun knownKindReadsThatEditFormAndUnknownKindStillProbes() = runTest {
+        val (_, memeClient, memeRepo) = challengeEditSetup(meme = true)
+        val meme = memeRepo.getChallengeSettingsEdit(memeClient.slug, AO3ChallengeKind.PromptMeme) as AO3Result.Success
+        assertEquals(AO3ChallengeKind.PromptMeme, meme.value.form.kind)
+        assertEquals(listOf(memeClient.edit, memeClient.signups, memeClient.profile, memeClient.collectionEdit), memeClient.gets)
+        assertFalse(memeClient.gets.contains(memeClient.gift))
+
+        val (_, giftClient, giftRepo) = challengeEditSetup()
+        val gift = giftRepo.getChallengeSettingsEdit(giftClient.slug, AO3ChallengeKind.GiftExchange) as AO3Result.Success
+        assertEquals(AO3ChallengeKind.GiftExchange, gift.value.form.kind)
+        assertEquals(listOf(giftClient.edit, giftClient.signups, giftClient.profile, giftClient.collectionEdit), giftClient.gets)
+        assertFalse(giftClient.gets.any { it.contains("prompt_meme") })
+
+        val (_, refusedClient, refusedRepo) = challengeEditSetup(meme = true)
+        val refused = refusedRepo.getChallengeSettingsEdit(refusedClient.slug, AO3ChallengeKind.GiftExchange)
+        assertEquals(listOf(refusedClient.gift), refusedClient.gets)
+        assertEquals(AO3Error.NotFound, (refused as AO3Result.Failure).error)
+
+        val (_, unknownClient, unknownRepo) = challengeEditSetup(meme = true)
+        val unknown = unknownRepo.getChallengeSettingsEdit(unknownClient.slug) as AO3Result.Success
+        assertEquals(unknownClient.openingReads, unknownClient.gets)
+        assertEquals(AO3ChallengeKind.PromptMeme, unknown.value.form.kind)
+    }
+
     @Test fun requiredFailureAndPermissionRefusalStopReadsAndSignedOutOrNonOwnerReadNothing() = runTest {
         for (signedIn in listOf(false, true)) for (owner in listOf(false, true)) {
             val (auth, client, repository) = challengeEditSetup(signedIn = signedIn)
