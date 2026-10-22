@@ -1,17 +1,24 @@
 package io.github.cidy02.kudos.ui.subject
 
 import android.app.Application
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.material3.Text
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.dp
 import io.github.cidy02.kudos.browse.JumpBackIn
 import io.github.cidy02.kudos.browse.JumpBackInSection
+import io.github.cidy02.kudos.browse.JumpBackInSlot
 import io.github.cidy02.kudos.network.ao3.browse.AO3MediaCategory
 import io.github.cidy02.kudos.ui.theme.KudosTheme
 import io.github.cidy02.kudos.ui.theme.KudosThemeMode
@@ -71,5 +78,21 @@ class A70ScreenFixesTest {
         val second = compose.onNodeWithText("Sherlock").fetchSemanticsNode().boundsInRoot
         assertTrue("the new first card starts on screen (left ${first.left})", first.left >= 0f)
         assertTrue(first.left < second.left)
+    }
+
+    /** A72: Browse's list draws before its picks are ranked; the carousel must not arrive above the top. */
+    @Test fun jumpBackInFillingTheFirstSlotLaterIsOnScreenNotScrolledPast() {
+        var picks by mutableStateOf(emptyList<JumpBackIn.Pick>())
+        val categories = listOf(AO3MediaCategory("TV Shows", "/media/TV%20Shows/fandoms"))
+        compose.setContent { KudosTheme(KudosThemeMode.Light) {
+            LazyColumn {
+                item(key = "jump-back-in") { JumpBackInSlot(picks, categories) {} }
+                items(30, key = { it }) { Text("Panel $it", Modifier.height(90.dp)) }
+            }
+        } }
+        compose.onNodeWithText("Panel 0").assertIsDisplayed()
+        compose.runOnIdle { picks = listOf(JumpBackIn.Pick("Sherlock", "TV Shows", 100)) }
+        compose.waitForIdle()
+        compose.onNodeWithText("Sherlock").assertIsDisplayed()
     }
 }

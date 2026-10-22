@@ -182,15 +182,7 @@ fun BrowseScreen(
                             // empty never gained the carousel. Spacing lives on
                             // the children so an empty slot adds no gap.
                             item(key = "jump-back-in") {
-                                val picks = derived.jumpBackIn
-                                if (picks.isNotEmpty()) {
-                                    JumpBackInSection(
-                                        picks = picks,
-                                        categories = current.categories,
-                                        onOpenFandom = ::openFandom,
-                                        modifier = Modifier.padding(bottom = 18.dp)
-                                    )
-                                }
+                                JumpBackInSlot(derived.jumpBackIn, current.categories, ::openFandom)
                             }
                             items(current.categories, key = { it.name }) { category ->
                                 CategoryPanel(

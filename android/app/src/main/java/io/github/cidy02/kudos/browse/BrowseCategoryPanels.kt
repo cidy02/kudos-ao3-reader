@@ -91,6 +91,21 @@ fun JumpBackInSection(
     }
 }
 
+/**
+ * Browse's first list item: the carousel, or a 1dp placeholder until picks are ranked. Never
+ * zero high: LazyColumn counts a zero-height first item as scrolled past and keeps the next
+ * one at the top, so a carousel arriving after the categories grew out of sight (A72).
+ */
+@Composable
+fun JumpBackInSlot(
+    picks: List<JumpBackIn.Pick>,
+    categories: List<AO3MediaCategory>,
+    onOpenFandom: (String) -> Unit
+) {
+    if (picks.isEmpty()) Box(Modifier.fillMaxWidth().height(1.dp))
+    else JumpBackInSection(picks, categories, onOpenFandom, Modifier.padding(bottom = 18.dp))
+}
+
 @Composable
 private fun JumpBackInCard(
     pick: JumpBackIn.Pick,
