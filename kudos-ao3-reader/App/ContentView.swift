@@ -37,6 +37,9 @@ struct ContentView: View {
     @State private var dismissedSyncFolderOnboardingThisSession = false
     /// Shake-to-report bug reporter (also reachable from Settings → About).
     @State private var showingBugReport = false
+    #if DEBUG
+    @State private var showingDebugLogin = false
+    #endif
     /// Changelog entries this device hasn't seen yet — empty means no "What's New"
     /// sheet. Populated once onboarding is done (a fresh install has nothing to
     /// show; the welcome flow covers that case instead).
@@ -64,6 +67,8 @@ struct ContentView: View {
             .overlay {
                 if DebugLaunchRoute.value == "comments" { CommentsDemoView() }
             }
+            .sheet(isPresented: $showingDebugLogin) { DebugLoginView() }
+            .task { if DebugLaunchRoute.opensLogin { showingDebugLogin = true } }
             // `-KudosDebugRoute bugreport`: the shake-to-report sheet, for side-by-side shots.
             .task { if DebugLaunchRoute.value == "bugreport" { showingBugReport = true } }
             #endif
