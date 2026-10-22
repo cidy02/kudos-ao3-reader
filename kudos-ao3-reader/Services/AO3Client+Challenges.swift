@@ -6,22 +6,46 @@ import SwiftSoup
 /// Matching and tag-set association are Open-on-AO3 URLs, not writes.
 extension AO3Client {
 
-    func challengeSettings(slug: String, request: URLRequest) async throws -> AO3ChallengeSettingsForm {
+    /// A known collection kind asks for that edit form only. A nil kind keeps the
+    /// gift-exchange request, then the prompt-meme form when AO3 answers not-found
+    /// or the gift page does not parse.
+    func challengeSettings(
+        slug: String, request: URLRequest, kind: AO3ChallengeKind? = nil
+    ) async throws -> AO3ChallengeSettingsForm {
+        try await Self.challengeSettings(slug: slug, kind: kind) { url in
+            var pageRequest = request
+            pageRequest.url = url
+            return try await authenticatedPageHTML(for: pageRequest)
+        }
+    }
+
+    static func challengeSettings(
+        slug: String,
+        kind: AO3ChallengeKind?,
+        fetchPage: (URL) async throws -> String
+    ) async throws -> AO3ChallengeSettingsForm {
+        if let kind {
+            let html = try await fetchPage(challengeSettingsEditURL(slug: slug, kind: kind))
+            return try parseChallengeSettingsForm(html, slug: slug, kind: kind)
+        }
         let giftURL = AO3ChallengeURL.giftExchangeEdit(slug: slug)
-        var giftRequest = request
-        giftRequest.url = giftURL
         do {
-            let html = try await authenticatedPageHTML(for: giftRequest)
-            if let form = try? Self.parseChallengeSettingsForm(html, slug: slug, kind: .giftExchange) {
+            let html = try await fetchPage(giftURL)
+            if let form = try? parseChallengeSettingsForm(html, slug: slug, kind: .giftExchange) {
                 return form
             }
         } catch AO3Error.notFound {
             // Fall through to prompt meme.
         }
-        var memeRequest = request
-        memeRequest.url = AO3ChallengeURL.promptMemeEdit(slug: slug)
-        let html = try await authenticatedPageHTML(for: memeRequest)
-        return try Self.parseChallengeSettingsForm(html, slug: slug, kind: .promptMeme)
+        let html = try await fetchPage(AO3ChallengeURL.promptMemeEdit(slug: slug))
+        return try parseChallengeSettingsForm(html, slug: slug, kind: .promptMeme)
+    }
+
+    static func challengeSettingsEditURL(slug: String, kind: AO3ChallengeKind) -> URL {
+        switch kind {
+        case .giftExchange: AO3ChallengeURL.giftExchangeEdit(slug: slug)
+        case .promptMeme: AO3ChallengeURL.promptMemeEdit(slug: slug)
+        }
     }
 
     func challengeSignUps(

@@ -9,6 +9,8 @@ import SwiftUI
 struct ChallengeSignUpsView: View {
     let collectionSlug: String
     var collectionTitle: String = ""
+    /// Kind already read from the collection page. Nil keeps the gift-then-meme probe.
+    var challengeKind: AO3ChallengeKind?
 
     @Environment(AO3AuthService.self) private var auth
     @Environment(ThemeManager.self) private var theme
@@ -503,7 +505,9 @@ struct ChallengeSignUpsView: View {
     private func loadSchedule() async {
         guard let request = try? auth.authenticatedRequest(
             for: AO3ChallengeURL.giftExchangeEdit(slug: collectionSlug)
-        ), let form = try? await AO3Client.shared.challengeSettings(slug: collectionSlug, request: request)
+        ), let form = try? await AO3Client.shared.challengeSettings(
+            slug: collectionSlug, request: request, kind: challengeKind
+        )
         else { return }
         if !form.settings.signupOpen {
             closeDateText = "closed"
