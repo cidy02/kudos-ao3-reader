@@ -3,16 +3,15 @@ package io.github.cidy02.kudos.account
 import androidx.lifecycle.viewmodel.initializer
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.outlined.Explore
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -68,7 +67,6 @@ private fun ChallengeAssignmentsContent(slug: String, title: String, viewerIsOwn
     val scope = rememberCoroutineScope()
     val tokens = LocalKudosTokens.current
     val palette = tokens.scopePalette
-    val large = isAccessibilityFontScale()
     val disabled = state.busy || state.loading || state.terminal
     var segment by androidx.compose.runtime.saveable.rememberSaveable(model) { mutableStateOf(AssignmentSegment.Unmatched) }
     LaunchedEffect(model) { model.loadOnAppear() }
@@ -109,17 +107,9 @@ private fun ChallengeAssignmentsContent(slug: String, title: String, viewerIsOwn
                     Spacer(Modifier.height(76.dp))
                     SubjectHeaderBlock(kicker = title.ifEmpty { slug }, title = "Assignments", subtitle = state.subtitle,
                         palette = palette, gutter = SubjectMetrics.accountGutter)
-                    // iOS's segmented control, as Prompts has. The pills stay for the large text
-                    // sizes, where three segments do not fit a row.
-                    if (!large) SubjectSegmentedControl(options = AssignmentSegment.entries, selected = segment,
+                    SubjectSegmentedControl(options = AssignmentSegment.entries, selected = segment,
                         onSelect = { segment = it }, title = { it.label }, contentDescription = "Assignment filter",
                         modifier = Modifier.padding(horizontal = SubjectMetrics.accountGutter).padding(top = 14.dp))
-                    else Row(Modifier.padding(top = 14.dp).horizontalScroll(rememberScrollState()).padding(horizontal = SubjectMetrics.accountGutter),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        AssignmentSegment.entries.forEach { option -> SubjectChip(option.label,
-                            style = SubjectChipStyle.Pill(segment == option), palette = palette,
-                            maxLines = Int.MAX_VALUE, modifier = Modifier.clickable { segment = option }) }
-                    }
                 }
                 when {
                     state.loading && !state.loaded -> item { AssignmentsLoading() }
@@ -185,8 +175,12 @@ private fun ChallengeAssignmentsContent(slug: String, title: String, viewerIsOwn
                                         AssignmentText((if (names.size == 2) "The givers for ${names[0]} and ${names[1]} defaulted, and no pinch hitter has covered them yet."
                                             else "The giver for ${names[0]} defaulted, and no pinch hitter has covered it yet.") +
                                             " Only AO3 can match participants, so cover this with a pinch hit or assign someone on AO3.")
+                                        SubjectChip("Open on AO3", style = SubjectChipStyle.Pill(false),
+                                            leadingIcon = if (isAccessibilityFontScale()) null else Icons.Outlined.Explore,
+                                            modifier = Modifier.clickable {
+                                                onOpenWeb(AO3ChallengeSignUpsUrls.assignments(slug, SignUpAssignmentList.PinchHits))
+                                            })
                                     }
-                                    SettingsActionRow("Open on AO3", { onOpenWeb(AO3ChallengeSignUpsUrls.assignments(slug, SignUpAssignmentList.PinchHits)) })
                                 }
                             }
                             AssignmentSegment.PinchHits -> {
@@ -224,16 +218,13 @@ private fun ChallengeAssignmentsContent(slug: String, title: String, viewerIsOwn
                 }
             }
         }
-        if (viewerIsOwner && authState.isSignedIn && state.loaded) SettingsPanel(Modifier.padding(top = 12.dp, bottom = 26.dp)) {
-            val actions: @Composable RowScope.() -> Unit = {
-                SettingsActionRow("Report a default", { model.pick(AssignmentWrite.Default) }, modifier = Modifier.weight(1f), enabled = !disabled && state.reportable.isNotEmpty())
-                ChallengePrimaryAction("Claim a pinch hit", !disabled && state.unmatched.isNotEmpty(), Modifier.weight(1f)) { model.pick(AssignmentWrite.Claim) }
-            }
-            if (large) {
-                SettingsActionRow("Report a default", { model.pick(AssignmentWrite.Default) }, enabled = !disabled && state.reportable.isNotEmpty())
-                ChallengePrimaryAction("Claim a pinch hit", !disabled && state.unmatched.isNotEmpty(), Modifier.fillMaxWidth()) { model.pick(AssignmentWrite.Claim) }
-            } else Row(content = actions)
-        }
+        if (viewerIsOwner && authState.isSignedIn && state.loaded) ChallengeBottomActions(
+            secondary = "Report a default", primary = "Claim a pinch hit",
+            secondaryEnabled = !disabled && state.reportable.isNotEmpty(),
+            primaryEnabled = !disabled && state.unmatched.isNotEmpty(),
+            onSecondary = { model.pick(AssignmentWrite.Default) },
+            onPrimary = { model.pick(AssignmentWrite.Claim) }
+        )
     }
 }
 
@@ -291,4 +282,28 @@ internal fun loadMoreLabel(list: SignUpAssignmentList) = when (list) {
     SignUpAssignmentList.Open -> "Load more open assignments"
     SignUpAssignmentList.Defaults -> "Load more defaulted assignments"
     SignUpAssignmentList.PinchHits -> "Load more pinch hits"
+}
+
+/** Both challenge indexes keep two equally sized, wrapping actions at the bottom, even at AX. */
+@Composable
+internal fun ChallengeBottomActions(
+    secondary: String, primary: String,
+    secondaryEnabled: Boolean = true, primaryEnabled: Boolean = true,
+    onSecondary: () -> Unit, onPrimary: () -> Unit
+) {
+    val tokens = LocalKudosTokens.current
+    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(top = 12.dp, bottom = 26.dp),
+        horizontalArrangement = Arrangement.spacedBy(9.dp), verticalAlignment = Alignment.CenterVertically) {
+        listOf(Triple(secondary, secondaryEnabled, onSecondary), Triple(primary, primaryEnabled, onPrimary))
+            .forEachIndexed { index, (label, enabled, action) ->
+                Box(Modifier.weight(1f).alpha(if (enabled) 1f else 0.45f)
+                    .background(if (index == 1) tokens.scopePalette.accent else tokens.glassFill(0.10), RoundedCornerShape(12.dp))
+                    .clickable(enabled = enabled, onClick = action).heightIn(min = 44.dp)
+                    .padding(horizontal = 10.dp, vertical = 10.dp), contentAlignment = Alignment.Center) {
+                    Text(label, color = if (index == 1) tokens.scopePalette.labelOnAccent else tokens.primaryInk,
+                        fontSize = 14.sp, lineHeight = 20.sp, fontWeight = FontWeight.SemiBold,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                }
+            }
+    }
 }

@@ -217,7 +217,7 @@ fun AO3CollectionItemsScreen(
                 state.page?.takeIf { it.totalPages > 1 }?.let { page ->
                     item {
                         KudosPaginationBar(page.currentPage, page.totalPages,
-                            onPageChange = { scope.launch { model.load(tab, it) } }, enabled = !state.busy, stacked = isAccessibilityFontScale(),
+                            onPageChange = { scope.launch { model.load(tab, it) } }, enabled = !state.busy,
                             modifier = Modifier.padding(top = 14.dp).padding(horizontal = SubjectMetrics.accountGutter).subjectPanel())
                     }
                 }

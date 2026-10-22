@@ -487,13 +487,7 @@ fun CommentsScreen(
                     "All comments"
                 }
 
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 10.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
+                CommentsFilterRail {
                     // Chapter pill
                     SubjectChip(
                         text = chapterPillTitle,
@@ -945,4 +939,16 @@ internal fun offlineCommentsLine(keptAt: Long, now: Long): String {
         else -> count(minutes / (60 * 24), "day")
     }
     return "You're offline. These comments are from $from and may be out of date."
+}
+
+/** iOS CommentsView.filterRail gives each control its own row at accessibility sizes. */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+internal fun CommentsFilterRail(content: @Composable () -> Unit) {
+    androidx.compose.foundation.layout.FlowRow(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
+        maxItemsInEachRow = if (io.github.cidy02.kudos.ui.subject.isAccessibilityFontScale()) 1 else 2,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(7.dp)
+    ) { content() }
 }

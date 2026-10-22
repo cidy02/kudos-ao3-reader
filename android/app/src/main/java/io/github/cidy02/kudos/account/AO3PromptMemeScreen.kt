@@ -181,7 +181,7 @@ private fun PromptMemeContent(
                                     modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
                             }
                             KudosPaginationBar(currentPage, totalPages, onPageChange = { page -> scope.launch { model.load(page) } },
-                                enabled = !state.loading && state.promptInFlight == null, stacked = large,
+                                enabled = !state.loading && state.promptInFlight == null,
                                 modifier = Modifier.padding(horizontal = SubjectMetrics.accountGutter).padding(top = 4.dp))
                         }
                     }

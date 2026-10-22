@@ -15,6 +15,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.contentDescription
@@ -30,9 +31,8 @@ import androidx.compose.ui.unit.sp
  * iOS `Picker` `.segmented` / `SubjectSegmentedControl`: a glass track with a
  * filled segment for the selection. Labels scale down instead of wrapping.
  *
- * At an accessibility text size four segments in one row cut their labels even at the
- * smallest step ("Bookma…" on the writer's profile, seen at twice the text size): more than
- * three then sit two to a row, and a label may take a second line.
+ * Up to four labels retain iOS's single track. The auto-size floor follows iOS's
+ * fixed-size labels at AX sizes; five or more keep Android's existing two-column layout.
  */
 @Composable
 fun <T> SubjectSegmentedControl(
@@ -47,6 +47,7 @@ fun <T> SubjectSegmentedControl(
     val track = RoundedCornerShape(9.dp)
     val segment = RoundedCornerShape(7.dp)
     val large = isAccessibilityFontScale()
+    val fontScale = LocalDensity.current.fontScale
     // On a Settings page iOS uses the native segmented control: a white pill on light themes (A70b).
     val selectedFill = if (LocalSettingsFormGround.current && !tokens.theme.isDarkFamily) Color.White
         else tokens.glassFill(0.16)
@@ -62,7 +63,7 @@ fun <T> SubjectSegmentedControl(
             .padding(2.dp),
         verticalArrangement = Arrangement.spacedBy(2.dp)
     ) {
-      options.chunked(if (large && options.size > 3) 2 else options.size.coerceAtLeast(1)).forEach { row ->
+      options.chunked(if (large && options.size > 4) 2 else options.size.coerceAtLeast(1)).forEach { row ->
       Row(horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
         row.forEach { option ->
             val isSelected = option == selected
@@ -82,12 +83,11 @@ fun <T> SubjectSegmentedControl(
                     color = if (isSelected) tokens.primaryInk else tokens.secondaryInk,
                     fontSize = 13.sp,
                     fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
-                    // A second line is for a label of several words. One word given two lines was
-                    // broken across them ("Bookmar / ks") where it could have been set smaller.
-                    maxLines = if (large && ' ' in label.trim()) 2 else 1,
+                    // iOS's fixed-size segment labels fit one track even at AX sizes.
+                    maxLines = 1,
                     textAlign = TextAlign.Center,
                     overflow = TextOverflow.Ellipsis,
-                    autoSize = TextAutoSize.StepBased(minFontSize = 9.sp, maxFontSize = 13.sp)
+                    autoSize = TextAutoSize.StepBased(minFontSize = (9f / fontScale.coerceAtLeast(1f)).sp, maxFontSize = 13.sp)
                 )
             }
         }

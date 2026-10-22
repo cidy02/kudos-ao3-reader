@@ -61,7 +61,7 @@ fun GlassFieldBar(
                 leading()
                 Box(Modifier.weight(1f)) {
                     if (text.isEmpty()) {
-                        Text(placeholder, color = tokens.secondaryInk, fontSize = 16.sp, maxLines = 1)
+                        Text(placeholder, color = tokens.secondaryInk, fontSize = 16.sp)
                     }
                     inner()
                 }
