@@ -2513,3 +2513,13 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   edit. Android restores the clock as written. iOS now does too; a queue already on the device
   still keeps the newer of the two clocks, on both apps. Reverse: the one `hadExistingQueue` branch
   in `KudosBackupService`'s queue loop.
+- **2026-10-21 · A71's differences that are not Android's to change (Claude, with Codex 3gh/3gi).**
+  The harness's own: the reader in Light (the DEBUG theme extra now saves the theme), Library
+  sections showing Home's tab (the debug route opens them from Home), Comments titled "A Test
+  Work" (the route carries no work), the queue's Details page (now the queue page). Demo data:
+  fixture counts and dates, "Finished" order, which works are AO3-linked (Android's demo links
+  four; the iPhone's none). Kept on Android as information iOS lacks: verified author links in
+  the accent, affinity tags and the unfold control on tagged cards, a History row's favourite
+  star, Challenges' refresh. At the largest text the iPhone hides Welcome's and sync setup's rows
+  under a pinned bar and keeps segmented controls small; Android scrolls and scales (iOS tail).
+  What's New's version differs per app.
