@@ -11,6 +11,8 @@ struct ChallengeSettingsView: View {
     let collectionSlug: String
     var collectionTitle: String = ""
     var viewerIsOwner: Bool
+    /// Kind already read from the collection page. Nil keeps the gift-then-meme probe.
+    var challengeKind: AO3ChallengeKind?
 
     @Environment(AO3AuthService.self) private var auth
     @Environment(ThemeManager.self) private var theme
@@ -127,7 +129,8 @@ struct ChallengeSettingsView: View {
                         ChallengeSettingsEditView(
                             collectionSlug: collectionSlug,
                             collectionTitle: effectiveTitle,
-                            viewerIsOwner: viewerIsOwner
+                            viewerIsOwner: viewerIsOwner,
+                            challengeKind: challengeKind
                         )
                     }
                     .subjectPanel()
@@ -198,7 +201,8 @@ struct ChallengeSettingsView: View {
         SubjectFormRow(label: "Prompts", value: "Claim and fill", showsDisclosure: true)
             .subjectRowNavigation(accessibilityLabel: "Prompts") {
                 PromptMemeView(
-                    collectionSlug: collectionSlug, collectionTitle: effectiveTitle, viewerIsOwner: viewerIsOwner
+                    collectionSlug: collectionSlug, collectionTitle: effectiveTitle, viewerIsOwner: viewerIsOwner,
+                    challengeKind: challengeKind
                 )
             }
             .panelSegment(0, of: 2, gutter: gutter)
@@ -413,7 +417,8 @@ struct ChallengeSettingsView: View {
             .subjectRowNavigation(accessibilityLabel: "Sign-ups") {
                 ChallengeSignUpsView(
                     collectionSlug: collectionSlug,
-                    collectionTitle: effectiveTitle
+                    collectionTitle: effectiveTitle,
+                    challengeKind: challengeKind
                 )
             }
             .buttonStyle(.plain)
@@ -533,7 +538,9 @@ private extension ChallengeSettingsView {
             let request = try auth.authenticatedRequest(
                 for: AO3ChallengeURL.giftExchangeEdit(slug: collectionSlug)
             )
-            let form = try await AO3Client.shared.challengeSettings(slug: collectionSlug, request: request)
+            let form = try await AO3Client.shared.challengeSettings(
+                slug: collectionSlug, request: request, kind: challengeKind
+            )
             settingsForm = form
 
             // Best-effort: a collection with no tag set is the common case, and a
@@ -596,7 +603,8 @@ extension ChallengeSettingsView {
         ChallengeAssignmentsView(
             collectionSlug: collectionSlug,
             collectionTitle: effectiveTitle,
-            viewerIsOwner: viewerIsOwner
+            viewerIsOwner: viewerIsOwner,
+            challengeKind: challengeKind
         )
     }
 

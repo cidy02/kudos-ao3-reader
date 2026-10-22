@@ -362,7 +362,9 @@ struct AO3CollectionDetailView: View {
         // not just signUpsURL's presence.
         if show.dashboard.signUpsURL != nil, show.isMaintainer {
             rows.append(AnyView(manageRow("Sign-ups") {
-                ChallengeSignUpsView(collectionSlug: slug, collectionTitle: title)
+                ChallengeSignUpsView(
+                    collectionSlug: slug, collectionTitle: title, challengeKind: show.collection.challengeKind
+                )
             }))
         }
         if show.dashboard.assignmentsURL != nil, show.isMaintainer {
@@ -370,7 +372,8 @@ struct AO3CollectionDetailView: View {
                 ChallengeAssignmentsView(
                     collectionSlug: slug,
                     collectionTitle: title,
-                    viewerIsOwner: show.collection.viewerIsOwner
+                    viewerIsOwner: show.collection.viewerIsOwner,
+                    challengeKind: show.collection.challengeKind
                 )
             }))
         }
@@ -379,7 +382,8 @@ struct AO3CollectionDetailView: View {
             rows.append(AnyView(manageRow("Prompts") {
                 PromptMemeView(
                     collectionSlug: slug, collectionTitle: title,
-                    viewerIsOwner: show.collection.viewerIsOwner
+                    viewerIsOwner: show.collection.viewerIsOwner,
+                    challengeKind: show.collection.challengeKind
                 )
             }))
         }
@@ -400,7 +404,8 @@ struct AO3CollectionDetailView: View {
                 ChallengeSettingsView(
                     collectionSlug: slug,
                     collectionTitle: title,
-                    viewerIsOwner: show.collection.viewerIsOwner
+                    viewerIsOwner: show.collection.viewerIsOwner,
+                    challengeKind: show.collection.challengeKind
                 )
             }))
         }
