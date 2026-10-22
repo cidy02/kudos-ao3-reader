@@ -85,6 +85,17 @@ class AO3ChallengeSignUpsScreenTest {
         assertEquals(0, client.posts)
     }
 
+    @Test fun matchBadgeFollowsThePseudRatherThanTheTrailingEdge() {
+        show()
+        awaitText("AO3_Reader")
+        awaitText("MATCHED")
+        val name = compose.onNodeWithText("AO3_Reader", useUnmergedTree = true).getUnclippedBoundsInRoot()
+        val badge = compose.onAllNodesWithText("MATCHED", useUnmergedTree = true).onFirst().getUnclippedBoundsInRoot()
+        assertTrue(badge.left >= name.right)
+        // The row's 7dp gap plus the badge's own 7dp padding before its text; the trailing edge is far.
+        assertTrue(badge.left - name.right <= androidx.compose.ui.unit.Dp(16f))
+    }
+
     @Test fun failedOptionalReadLeavesListAndUnknownFiltersHonest() {
         show(failAssignments = true)
         awaitText("AO3_Reader")
@@ -122,12 +133,18 @@ class AO3ChallengeSignUpsScreenTest {
         compose.setContent {
             KudosTheme(themeMode = mode) {
                 val density = LocalDensity.current
-                CompositionLocalProvider(LocalDensity provides Density(density.density, 1.8f)) {
+                CompositionLocalProvider(LocalDensity provides Density(density.density, 2f)) {
                     AO3ChallengeSignUpsScreen("winter_exchange", "Winter Exchange 2026", true, true, repo, {})
                 }
             }
         }
         awaitText("AO3_Reader")
+        val all = compose.onNodeWithText("All", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        val unmatched = compose.onNodeWithText("Unmatched", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        assertEquals(all.center.y, unmatched.center.y, 1f)
+        val own = compose.onNodeWithText("Your sign-up").fetchSemanticsNode().boundsInRoot
+        val create = compose.onNodeWithText("Create sign-up").fetchSemanticsNode().boundsInRoot
+        assertTrue(own.right < create.left)
         for (theme in listOf(KudosThemeMode.Light, KudosThemeMode.Dark, KudosThemeMode.Sepia, KudosThemeMode.Oled)) {
             compose.runOnIdle { mode = theme }
             val long = "The Keeper of Every Lamp Along the Snowbound Harbor"

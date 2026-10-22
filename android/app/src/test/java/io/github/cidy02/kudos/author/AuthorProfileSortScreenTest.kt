@@ -56,13 +56,27 @@ class AuthorProfileSortScreenTest {
         }
     }
 
+    private var logins = 0
+    private val subscriptionCalls = mutableListOf<String>()
+    private val subscriptionClient = object : io.github.cidy02.kudos.network.ao3.writes.AO3AuthenticatedClient {
+        override fun username(): String? = null
+        override fun sessionGeneration(): Int? = 0
+        override suspend fun getAuthenticated(url: String): AO3Result<AO3HttpResponse> {
+            subscriptionCalls += url
+            error("A signed-out subscription must ask before any request")
+        }
+        override suspend fun postAuthenticated(url: String, formFields: List<Pair<String, String>>, headers: Map<String, String>): AO3Result<AO3HttpResponse> {
+            subscriptionCalls += url
+            error("A signed-out subscription must never post")
+        }
+    }
     private var visible by mutableStateOf(true)
     private val openedAbout = mutableListOf<AO3AuthorRoute>()
     private val openedWeb = mutableListOf<String>()
     private var theme by mutableStateOf(KudosThemeMode.Light)
     private val washes = ShellWashes()
     private var expectedPalette: SubjectPalette? = null
-    private fun show(initialTab: AuthorTab, dashboard: Boolean) {
+    private fun show(initialTab: AuthorTab, dashboard: Boolean, withSubscriptionWrites: Boolean = false) {
         val chrome = PushedShellChrome()
         val repo = AO3AuthorRepository(publicClient = client, parseDispatcher = Dispatchers.Unconfined,
             pageCache = AO3PageCache(ttlMillis = 0, staleMillis = 0))
@@ -73,12 +87,39 @@ class AuthorProfileSortScreenTest {
                     Column {
                         Row { chrome.trailingContent?.invoke(this) }
                         if (visible) AuthorProfileScreen("Avery_Archive", onOpenAbout = { openedAbout += it }, initialTab = initialTab, authorRepository = repo, onOpenWork = {},
-                            isDashboard = dashboard, onOpenWeb = { openedWeb += it })
+                            isDashboard = dashboard, onOpenWeb = { openedWeb += it }, onLogin = { logins++ },
+                            seriesWrites = if (withSubscriptionWrites) io.github.cidy02.kudos.network.ao3.writes.AO3WriteRepository(subscriptionClient) else null)
                     }
                 }
             }
         }
         awaitText(when (initialTab) { AuthorTab.Series -> "The Dawn Cycle"; AuthorTab.About -> "Bio"; else -> "Two Voices at Dawn" })
+    }
+
+    @Test fun signedOutSubscribeAsksBeforeAnyRequestAndLoginOpensTheLoginRoute() {
+        // Give the public dashboard a subscribe form, as AO3 does for a guest.
+        responseBody = { url, body ->
+            if (url.toHttpUrl().encodedPath == "/users/Avery_Archive") org.jsoup.Jsoup.parse(body).apply {
+                select("form[action*=/subscriptions]").remove()
+                body().append("""<form action="/users/Avery_Archive/subscriptions" method="post">
+                    <input name="authenticity_token" value="test"><input name="subscription[subscribable_id]" value="42">
+                    <input name="subscription[subscribable_type]" value="User"><input type="submit" value="Subscribe">
+                    </form>""")
+            }.outerHtml() else body
+        }
+        show(AuthorTab.Works, false, withSubscriptionWrites = true)
+        val readsBefore = requests.size
+        compose.onNodeWithText("Subscribe").performClick()
+        compose.onNodeWithText("Log in to AO3").assertExists()
+        compose.onNodeWithText("Log in to your AO3 account to do this.").assertExists()
+        compose.onNodeWithText("Cancel").performClick()
+        assertEquals(0, logins)
+        compose.onNodeWithText("Subscribe").performClick()
+        compose.onNodeWithText("Log In").performClick()
+        assertEquals(1, logins)
+        assertTrue(subscriptionCalls.isEmpty())
+        assertTrue(openedWeb.isEmpty())
+        assertEquals(readsBefore, requests.size)
     }
 
     @Test fun returningFromAChildKeepsSeriesWithoutEvenAnExpiredCacheRead() {

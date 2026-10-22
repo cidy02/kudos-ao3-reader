@@ -96,7 +96,7 @@ fun WorkCoverCard(
                 onLongClick = onLongClick
             )
             .then(
-                if (obscured) Modifier.hiddenMatureWorkSemantics(true, isSelecting)
+                if (obscured) Modifier.hiddenMatureWorkSemantics(true, isSelecting, isSelected)
                 else Modifier.semantics { this.contentDescription = a11y }
             ),
         shape = MaterialTheme.shapes.large,

@@ -75,7 +75,7 @@ fun HomeResumeHero(
         Box(
             Modifier
                 .then(if (obscured) Modifier.blur(6.dp) else Modifier)
-                .hiddenMatureWorkSemantics(obscured, isSelecting)
+                .hiddenMatureWorkSemantics(obscured, isSelecting, isSelected)
         ) {
             CoverSurface(palette = palette, shape = shape, hero = true, modifier = Modifier.fillMaxWidth()) {
                 HeroBody(work = work, palette = palette, downloading = downloading, now = now)

@@ -123,9 +123,9 @@ class AO3PromptMemeScreenTest {
     @Test fun pageReplacesRowsAndLongSummaryStaysWholeWithOneRead() {
         show()
         awaitText("Lanterns after closing")
-        reach("Page 1 of 2")
+        reach("Page 1 / 2")
         compose.onNodeWithContentDescription("Next Page").performClick()
-        awaitText("Page 2 of 2")
+        awaitText("Page 2 / 2")
         reach("The orchard beyond the timetable")
         compose.onNodeWithText("Lanterns after closing").assertDoesNotExist()
         compose.onNodeWithText("the smell of warm bread.", substring = true).assertExists()
@@ -139,16 +139,16 @@ class AO3PromptMemeScreenTest {
     @Test fun failedFurtherPageShowsWarningAboveOldPageAndReaderCanRetry() {
         show { it.replies[promptSecondUrl] = AO3Result.Failure(AO3Error.Forbidden) }
         awaitText("Lanterns after closing")
-        reach("Page 1 of 2")
+        reach("Page 1 / 2")
         compose.onNodeWithContentDescription("Next Page").performClick()
         compose.waitUntil(15_000) { client.gets.size == 4 }
         reach("Couldn't load that page:", substring = true)
         awaitText("Couldn't load that page:", substring = true)
         compose.onNodeWithText("Lanterns after closing").assertExists()
-        reach("Page 1 of 2")
+        reach("Page 1 / 2")
         compose.runOnIdle { client.replies.remove(promptSecondUrl) }
         compose.onNodeWithContentDescription("Next Page").performClick()
-        awaitText("Page 2 of 2")
+        awaitText("Page 2 / 2")
         assertEquals(listOf(promptSecondUrl, promptSecondUrl), client.gets.drop(3))
         noWrites()
     }
@@ -196,7 +196,7 @@ class AO3PromptMemeScreenTest {
         action("Release", 702).assertIsNotEnabled()
         reach("Fill it")
         action("Fill it", 703).assertIsNotEnabled()
-        reach("Page 1 of 2")
+        reach("Page 1 / 2")
         compose.onNodeWithContentDescription("Next Page").assertIsNotEnabled()
         assertEquals(4, client.gets.size)
         val doc = Jsoup.parse(challengeFixture("ao3_demo_meme_requests_1"))

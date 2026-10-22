@@ -44,6 +44,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -75,10 +78,17 @@ import androidx.compose.material3.Checkbox
  * on the blurred surface: before a click on the same chain it would take the click's action
  * too. iOS says the same words (`Features/Privacy/MatureContent.swift`); audits A18-5, A19-8.
  */
-fun Modifier.hiddenMatureWorkSemantics(obscured: Boolean, selecting: Boolean = false): Modifier =
-    if (!obscured) this else clearAndSetSemantics {
-        contentDescription = if (selecting) "Hidden mature work" else "Hidden mature work. Activate to reveal."
+fun Modifier.hiddenMatureWorkSemantics(
+    obscured: Boolean, selecting: Boolean = false, isSelected: Boolean = false
+): Modifier = if (!obscured) this else clearAndSetSemantics {
+    contentDescription = if (selecting) "Hidden mature work" else "Hidden mature work. Activate to reveal."
+    if (selecting) {
+        selected = isSelected
+        stateDescription = if (isSelected) "Selected" else "Not selected"
+        // TalkBack says "Double-tap to" before this, so iOS's hint "Double-tap to select this work." reads whole.
+        onClick(label = "${if (isSelected) "deselect" else "select"} this work", action = null)
     }
+}
 
 /**
  * Dense AO3 work summary for Search / Browse / Account lists.
@@ -211,14 +221,13 @@ fun SensitiveWorkRow(
             .combinedClickable(
                 onClick = cardTap,
                 onLongClick = onLongClick,
-                // iOS's hints while selecting ("Double-tap to select this work.").
-                onClickLabel = if (!selecting) null else if (selected) "deselect this work" else "select this work"
+                onClickLabel = if (obscured || !selecting) null else if (selected) "deselect this work" else "select this work"
             )
             // After the click, so its action stays: a blurred row is one button that says
             // nothing of the work. It used to read out the title and author it had just
             // blurred (audit A18-5; iOS `SensitiveWorkRow`, the same words as `WorkLedgerRow`).
             .then(
-                if (obscured) Modifier.hiddenMatureWorkSemantics(true, selecting)
+                if (obscured) Modifier.hiddenMatureWorkSemantics(true, selecting, selected)
                 else Modifier.semantics { contentDescription = "$title, by ${author.ifBlank { "Anonymous" }}" }
             )
 

@@ -115,7 +115,7 @@ internal const val VOICE_PACK_DISCLOSURE = "The Int8 Voice Pack downloads its pu
     "can receive your IP address and basic connection details under its privacy policy."
 
 /**
- * iOS `sherpaDownloadSection`: "Kokoro Pack", with Download (confirmed first), progress and
+ * iOS `coreMLDownloadSection`: "Kokoro Neural Engine", with Download (confirmed first), progress and
  * Cancel, Retry after a failure, and the installed state. [packFailedToOpen] keeps Android's
  * note for a pack that is here but would not open.
  */
@@ -124,7 +124,7 @@ internal fun ListeningVoicePackSection(voicePack: VoicePackUi, packFailedToOpen:
     var confirming by remember { mutableStateOf(false) }
     val tokens = LocalKudosTokens.current
     SettingsSection(
-        label = "Kokoro Pack",
+        label = "Kokoro Neural Engine",
         footnote = if (packFailedToOpen) {
             "The installed voice pack could not be opened. $VOICE_PACK_DISCLOSURE"
         } else VOICE_PACK_DISCLOSURE
@@ -168,7 +168,7 @@ internal fun ListeningVoicePackSection(voicePack: VoicePackUi, packFailedToOpen:
                 SettingsActionRow("Retry Download", onClick = { confirming = true })
             }
             VoicePackState.NotDownloaded ->
-                SettingsActionRow("Download Voice Pack", onClick = { confirming = true })
+                SettingsActionRow("Download Kokoro (Neural Engine)", onClick = { confirming = true })
         }
     }
     if (confirming) {

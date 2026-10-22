@@ -394,7 +394,7 @@ fun FandomLetterIndex(
         modifier
             .clearAndSetSemantics {
                 contentDescription = "Fandom index"
-                stateDescription = current ?: "No letters available"
+                stateDescription = current ?: "No sections"
                 if (letters.isNotEmpty()) {
                     progressBarRangeInfo = ProgressBarRangeInfo(
                         letters.indexOf(current).coerceAtLeast(0).toFloat(),

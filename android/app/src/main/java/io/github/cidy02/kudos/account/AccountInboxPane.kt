@@ -1102,17 +1102,12 @@ private fun InboxPaginationControls(
     enabled: Boolean,
     onLoadPage: (Int) -> Unit
 ) {
-    if (io.github.cidy02.kudos.ui.subject.isAccessibilityFontScale()) {
-        io.github.cidy02.kudos.ui.components.LargeTextPager(page, totalPages, onLoadPage, Modifier.subjectPanel().padding(horizontal = 8.dp, vertical = 8.dp), enabled)
-        return
-    }
     // The shared pager, with its page picker and exact page field, as iOS's Inbox uses the
     // shared `SearchPaginationBar` (A63 F21); Previous and Next alone were all the Inbox had.
     io.github.cidy02.kudos.ui.components.KudosPaginationBar(
         currentPage = page,
         totalPages = totalPages,
         onPageChange = onLoadPage,
-        modifier = Modifier.subjectPanel(),
         enabled = enabled
     )
 }

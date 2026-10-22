@@ -167,7 +167,7 @@ fun WorkLedgerRow(
             .border(if (selected) 2.dp else 0.5.dp, if (selected) tokens.accent else palette.rowBorder, shape)
             .combinedClickable(onClick = onClick, onLongClick = onLongClick)
             .then(
-                if (obscured) Modifier.hiddenMatureWorkSemantics(true, selecting)
+                if (obscured) Modifier.hiddenMatureWorkSemantics(true, selecting, selected)
                 else Modifier.semantics { contentDescription = "$title, by $author" }
             )
     ) {

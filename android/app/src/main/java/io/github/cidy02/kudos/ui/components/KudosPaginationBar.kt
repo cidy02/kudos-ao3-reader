@@ -1,5 +1,12 @@
 package io.github.cidy02.kudos.ui.components
 
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.size
@@ -57,8 +64,8 @@ import kotlin.math.roundToInt
 
 /**
  * Shared pagination control for Search / Browse / Account lists.
- * First · Prev · Page X of Y · Next · Last, where the centre is a button that
- * opens a scrubber for the long jump.
+ * iOS SearchPaginationBar's capsule: previous, Page X / Y with a page-picker caret, next.
+ * Long presses retain First / Last; the centre opens the existing exact-page sheet.
  *
  * The arrows answer the common move — one page at a time. Reaching page 2,731 of
  * 5,000 with them is not a navigation model, which is what the scrubber is for: a
@@ -70,12 +77,14 @@ fun KudosPaginationBar(
     totalPages: Int,
     onPageChange: (Int) -> Unit,
     modifier: Modifier = Modifier,
-    enabled: Boolean = true,
-    stacked: Boolean = false
+    enabled: Boolean = true
 ) {
     if (totalPages <= 1) return
 
     var showScrubber by remember { mutableStateOf(false) }
+    val tokens = LocalKudosTokens.current
+    val textMeasurer = rememberTextMeasurer()
+    val density = LocalDensity.current
 
     if (showScrubber) {
         PageScrubberSheet(
@@ -109,19 +118,24 @@ fun KudosPaginationBar(
             )
         }
     }
-    val position: @Composable () -> Unit = {
+    val position: @Composable (String) -> Unit = { positionText ->
         // iOS's hint, "Opens the page picker.", as TalkBack says it: "double-tap to open the page picker".
         TextButton(
             onClick = { showScrubber = true },
             enabled = enabled && totalPages > 1,
-            modifier = Modifier.semantics { onClick(label = "open the page picker", action = null) }
+            modifier = Modifier.semantics {
+                contentDescription = "Page $currentPage of $totalPages"
+                onClick(label = "open the page picker", action = null)
+            }
         ) {
             Text(
-                text = "Page $currentPage of $totalPages",
+                text = positionText,
                 lineHeight = 20.sp,
-                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
-                color = MaterialTheme.colorScheme.onSurface
+                style = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp, fontWeight = FontWeight.SemiBold),
+                color = tokens.primaryInk
             )
+            Icon(Icons.Default.KeyboardArrowUp, contentDescription = null,
+                tint = tokens.secondaryInk, modifier = Modifier.padding(start = 5.dp).size(12.dp))
         }
     }
     val trailing: @Composable () -> Unit = {
@@ -131,6 +145,7 @@ fun KudosPaginationBar(
                 .minimumInteractiveComponentSize()
                 .size(40.dp)
                 .clip(CircleShape)
+                .background(if (navEnabled) tokens.scopePalette.chipFill else Color.Transparent)
                 .combinedClickable(
                     enabled = navEnabled,
                     role = Role.Button,
@@ -143,23 +158,24 @@ fun KudosPaginationBar(
             Icon(
                 Icons.AutoMirrored.Outlined.KeyboardArrowRight,
                 contentDescription = "Next Page",
-                tint = if (navEnabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                tint = if (navEnabled) tokens.scopePalette.accentOnFill else tokens.secondaryInk.copy(alpha = 0.38f)
             )
         }
     }
-    if (stacked) {
-        Column(modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-            position()
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                leading()
-                trailing()
-            }
-        }
-    } else {
-        Row(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically) {
+    // All hosts keep the capsule at AX sizes too. Try the same whole label variants as iOS.
+    BoxWithConstraints(modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+        val labelWidth = (constraints.maxWidth - with(density) { 160.dp.roundToPx() }).coerceAtLeast(0)
+        val labelStyle = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+        val label = listOf("Page $currentPage / $totalPages", "$currentPage / $totalPages", "$currentPage")
+            .firstOrNull { textMeasurer.measure(it, labelStyle, softWrap = false).size.width <= labelWidth }
+            ?: "$currentPage"
+        Row(Modifier.clip(CircleShape)
+            .background(if (tokens.theme.isDarkFamily) Color(0xFF787880).copy(alpha = 0.34f) else tokens.glassFill(0.24))
+            .border(0.5.dp, tokens.glassStroke(0.14), CircleShape)
+            .padding(horizontal = 6.dp, vertical = 5.dp),
+            horizontalArrangement = Arrangement.spacedBy(3.dp), verticalAlignment = Alignment.CenterVertically) {
             leading()
-            position()
+            position(label)
             trailing()
         }
     }

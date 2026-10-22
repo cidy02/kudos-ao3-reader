@@ -145,11 +145,17 @@ class AO3ChallengeAssignmentsScreenTest {
         var theme by mutableStateOf(KudosThemeMode.Light)
         compose.setContent { KudosTheme(theme) {
             val density = LocalDensity.current
-            CompositionLocalProvider(LocalDensity provides Density(density.density, 1.8f)) {
+            CompositionLocalProvider(LocalDensity provides Density(density.density, 2f)) {
                 AO3ChallengeAssignmentsScreen("winter_exchange", "Winter Exchange 2026", true, true, true, repo, writes, {})
             }
         } }
         awaitText("Two sign-ups lost their giver")
+        val matched = compose.onNodeWithText("Matched", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        val pinch = compose.onNodeWithText("Pinch hits", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        assertEquals(matched.center.y, pinch.center.y, 1f)
+        val report = compose.onNodeWithText("Report a default").fetchSemanticsNode().boundsInRoot
+        val claim = compose.onNodeWithText("Claim a pinch hit").fetchSemanticsNode().boundsInRoot
+        assertTrue(report.right < claim.left)
         compose.onNodeWithText("Pinch hits").performClick()
         for (mode in listOf(KudosThemeMode.Light, KudosThemeMode.Dark, KudosThemeMode.Sepia, KudosThemeMode.Oled)) {
             compose.runOnIdle { theme = mode }

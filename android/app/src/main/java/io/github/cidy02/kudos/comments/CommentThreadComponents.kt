@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -385,7 +386,8 @@ fun CommentConversationRow(
                         .fillMaxWidth()
                         .height(44.dp)
                         // Here the rest of the thread opens in the app (iOS sends it to the website).
-                        .clickable(onClickLabel = "open the rest of this thread", onClick = onContinueThread),
+                        .clickable(onClick = onContinueThread)
+                        .semantics(mergeDescendants = true) { contentDescription = "Continue thread, $countText" },
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
@@ -463,7 +465,8 @@ fun CommentPostRow(
                 .then(
                     if (comment.author.username != null) {
                         Modifier
-                            .clickable { handlers.onOpenAuthor(comment.author.username) }
+                            // iOS's hint "Opens author profile"; TalkBack says "Double-tap to open author profile".
+                            .clickable(onClickLabel = "open author profile") { handlers.onOpenAuthor(comment.author.username) }
                             .semantics { contentDescription = "View ${comment.author.name}'s profile" }
                     } else Modifier
                 )
@@ -989,7 +992,7 @@ fun ContentUnavailableView(
     }
 }
 
-/** Threads use plain accent text; Inbox retains iOS CommentReplyButton's capsule. */
+/** Threads use an accent arrow; Inbox retains iOS CommentReplyButton's labelled capsule. */
 @Composable
 internal fun CommentReplyButton(
     accessibilityLabel: String,
@@ -1000,7 +1003,7 @@ internal fun CommentReplyButton(
     val tokens = LocalKudosTokens.current
     val tint = plainAccent ?: tokens.primaryInk
     Box(
-        Modifier.heightIn(min = 44.dp)
+        Modifier.sizeIn(minWidth = 44.dp, minHeight = 44.dp)
             .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
             .semantics { contentDescription = accessibilityLabel },
         contentAlignment = Alignment.Center
@@ -1013,7 +1016,7 @@ internal fun CommentReplyButton(
         ) {
             Icon(Icons.AutoMirrored.Filled.Reply, contentDescription = null,
                 tint = tint, modifier = Modifier.size(14.dp))
-            Text("Reply", color = tint, fontSize = 12.sp,
+            if (plainAccent == null) Text("Reply", color = tint, fontSize = 12.sp,
                 fontWeight = if (plainAccent == null) FontWeight.SemiBold else FontWeight.Medium)
         }
     }

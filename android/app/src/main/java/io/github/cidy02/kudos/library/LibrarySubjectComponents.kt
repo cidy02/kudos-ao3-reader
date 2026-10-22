@@ -3,6 +3,8 @@ package io.github.cidy02.kudos.library
 import androidx.compose.foundation.ExperimentalFoundationApi
 import io.github.cidy02.kudos.home.HomeFacts
 import androidx.compose.material.icons.outlined.Person
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.background
@@ -28,6 +30,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -58,13 +61,15 @@ fun CollectionCard(
 ) {
     val tokens = LocalKudosTokens.current
     val accessibility = isAccessibilityFontScale()
+    val cardWidth = if (accessibility) (LocalConfiguration.current.screenWidthDp.dp - 32.dp).coerceAtLeast(1.dp)
+        else SubjectWorkCardMetrics.width
+    val mosaicHeight = 221.dp * (cardWidth / SubjectWorkCardMetrics.width)
     val palette = remember(collection.hue, collection.colorHex, collection.name, tokens.theme) {
         collectionDraftPalette(collection.name, collection.hue, collection.colorHex, tokens.theme)
     }
     Column(
         modifier
-            .width(if (accessibility) (LocalConfiguration.current.screenWidthDp.dp - 32.dp).coerceAtLeast(1.dp)
-                else SubjectWorkCardMetrics.width)
+            .width(cardWidth)
             .combinedClickable(onClick = onClick, onLongClick = onLongClick)
             .semantics {
                 // "1 work", as the line under the tile and as iOS's label say it.
@@ -79,7 +84,7 @@ fun CollectionCard(
             Box(
                 Modifier
                     .fillMaxWidth()
-                    .height(221.dp)
+                    .height(mosaicHeight)
                     .clip(shape)
                     .background(palette.cardWash),
                 contentAlignment = Alignment.Center
@@ -97,28 +102,23 @@ fun CollectionCard(
             Column(
                 Modifier
                     .fillMaxWidth()
-                    .then(if (accessibility) Modifier else Modifier.height(221.dp))
+                    .then(if (accessibility) Modifier.heightIn(min = mosaicHeight) else Modifier.height(mosaicHeight))
                     .clip(shape)
                     .background(tokens.glassFill(0.06))
                     .border(0.5.dp, tokens.glassStroke(0.07), shape)
                     .padding(10.dp),
                 verticalArrangement = Arrangement.spacedBy(7.dp)
             ) {
-                if (accessibility) {
-                    slots.forEach { work ->
-                        if (work == null) {
-                            MosaicPlaceholder(Modifier.fillMaxWidth().height(54.dp))
-                        } else {
-                            MosaicWorkTile(work, Modifier.fillMaxWidth())
-                        }
-                    }
-                } else {
-                    slots.chunked(2).forEach { row ->
-                        Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-                            row.forEach { work ->
-                                val cell = Modifier.weight(1f).fillMaxHeight()
-                                if (work == null) MosaicPlaceholder(cell) else MosaicWorkTile(work, cell)
-                            }
+                slots.chunked(2).forEachIndexed { rowIndex, row ->
+                    // Keep Android's full preview text while preserving iOS's two columns.
+                    val rowModifier = if (accessibility) {
+                        Modifier.heightIn(min = (mosaicHeight - 27.dp) / 2).height(IntrinsicSize.Min)
+                    } else Modifier.weight(1f)
+                    Row(rowModifier, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                        row.forEachIndexed { columnIndex, work ->
+                            val cell = Modifier.weight(1f).fillMaxHeight()
+                                .testTag("Collection mosaic slot ${rowIndex * 2 + columnIndex}")
+                            if (work == null) MosaicPlaceholder(cell) else MosaicWorkTile(work, cell)
                         }
                     }
                 }
@@ -263,7 +263,7 @@ private fun MosaicWorkTile(work: SavedWork, modifier: Modifier) {
             autoSize = if (accessibility) null
                 else androidx.compose.foundation.text.TextAutoSize.StepBased(minFontSize = 8.sp, maxFontSize = 9.5.sp, stepSize = 0.25.sp)
         )
-        Spacer(if (accessibility) Modifier.height(4.dp) else Modifier.weight(1f).height(4.dp))
+        Spacer(Modifier.weight(1f).height(4.dp))
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
             Icon(Icons.Outlined.Person, contentDescription = null, tint = authorInk, modifier = Modifier.size(8.dp))
             Text(

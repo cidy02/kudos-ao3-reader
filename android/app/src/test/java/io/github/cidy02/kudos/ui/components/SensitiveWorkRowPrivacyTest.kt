@@ -1,6 +1,10 @@
 package io.github.cidy02.kudos.ui.components
 
 import android.app.Application
+import androidx.compose.foundation.layout.Column
+import androidx.compose.runtime.*
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -118,6 +122,42 @@ class SensitiveWorkRowPrivacyTest {
         // The tree a screen reader is given (the unmerged one keeps cleared nodes, for tools).
         compose.onAllNodesWithText("A Private Title", substring = true).assertCountEquals(0)
         compose.onNodeWithContentDescription("Hidden mature work. Activate to reveal.").assertExists()
+    }
+
+    @Test fun blurredSelectionStatesAndHintsReachRowsLedgerRowsAndCovers() {
+        var chosen by mutableStateOf(false)
+        var toggles = 0
+        compose.setContent {
+            KudosTheme(KudosThemeMode.Light) {
+                Column {
+                    SensitiveWorkRow(work = work, onOpenWork = {}, obscured = true,
+                        selecting = true, selected = chosen, onSelect = { toggles++ })
+                    io.github.cidy02.kudos.ui.subject.WorkLedgerRow(
+                        title = work.title, author = work.author, fandoms = emptyList(), metadata = "",
+                        progress = 0.0, progressState = null, rating = "Explicit", categories = emptyList(),
+                        warnings = emptyList(), isComplete = null, obscured = true, favorite = false,
+                        selected = chosen, selecting = true, onClick = { toggles++ }, onLongClick = {})
+                    io.github.cidy02.kudos.ui.subject.SubjectWorkCoverCard(work, true, false,
+                        isSelecting = true, isSelected = chosen)
+                }
+            }
+        }
+        for (selected in listOf(false, true)) {
+            compose.runOnIdle { chosen = selected }
+            compose.onAllNodesWithText("A Private Title", substring = true).assertCountEquals(0)
+            val nodes = compose.onAllNodesWithContentDescription("Hidden mature work").fetchSemanticsNodes()
+            assertEquals(3, nodes.size)
+            for (node in nodes) {
+                assertEquals(selected, node.config[SemanticsProperties.Selected])
+                assertEquals(if (selected) "Selected" else "Not selected", node.config[SemanticsProperties.StateDescription])
+                assertEquals("${if (selected) "deselect" else "select"} this work",
+                    node.config[SemanticsActions.OnClick].label)
+            }
+        }
+        // clearAndSetSemantics must keep the real row/ledger click action.
+        compose.onAllNodesWithContentDescription("Hidden mature work")[0].performSemanticsAction(SemanticsActions.OnClick)
+        compose.onAllNodesWithContentDescription("Hidden mature work")[1].performSemanticsAction(SemanticsActions.OnClick)
+        assertEquals(2, toggles)
     }
 
     @Test fun aRowInTheClearStillOpensAFandomSearch() {

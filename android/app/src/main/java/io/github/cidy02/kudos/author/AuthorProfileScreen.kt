@@ -94,7 +94,8 @@ fun AuthorProfileScreen(
     readingQueueRepository: io.github.cidy02.kudos.library.ReadingQueueRepository? = null,
     /** Opens the new-work form. Offered on the reader's own Works and Dashboard, as iOS's "+". */
     onNewWork: (() -> Unit)? = null,
-    onOpenAuthor: (AO3AuthorRoute) -> Unit = {}
+    onOpenAuthor: (AO3AuthorRoute) -> Unit = {},
+    onLogin: () -> Unit = {}
 ) {
     val account by ((authRepository ?: seriesFormRepository?.auth)?.state?.collectAsState() ?: remember {
         mutableStateOf<io.github.cidy02.kudos.auth.AO3AuthState>(io.github.cidy02.kudos.auth.AO3AuthState.SignedOut) })
@@ -164,6 +165,7 @@ fun AuthorProfileScreen(
     // Subscribe and Unsubscribe on an author's page (iOS `toggleSubscription`). The button opened
     // the form's submit address in the web view, where it does nothing.
     var subscriptionBusy by remember { mutableStateOf(false) }
+    var showingSubscriptionLogin by remember(route.id, sessionGeneration) { mutableStateOf(false) }
     var confirmingUnsubscribe by remember(route.id, sessionGeneration) {
         mutableStateOf<io.github.cidy02.kudos.network.ao3.author.AO3AuthorSubscriptionForm?>(null) }
     var profileMessage by remember(route.id, sessionGeneration) { mutableStateOf<String?>(null) }
@@ -282,6 +284,7 @@ fun AuthorProfileScreen(
     }
 
     fun submitSubscription(form: io.github.cidy02.kudos.network.ao3.author.AO3AuthorSubscriptionForm) {
+        if (signedInUsername == null) { showingSubscriptionLogin = true; return }
         val writes = seriesWrites ?: return
         if (subscriptionBusy || headerLoading) return
         val expectedRoute = route
@@ -570,6 +573,20 @@ fun AuthorProfileScreen(
             })
     }
 
+    if (showingSubscriptionLogin) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { showingSubscriptionLogin = false },
+            title = { Text("Log in to AO3") },
+            text = { Text("Log in to your AO3 account to do this.") },
+            confirmButton = {
+                androidx.compose.material3.TextButton(onClick = { showingSubscriptionLogin = false; onLogin() }) { Text("Log In") }
+            },
+            dismissButton = {
+                androidx.compose.material3.TextButton(onClick = { showingSubscriptionLogin = false }) { Text("Cancel") }
+            }
+        )
+    }
+
     confirmingUnsubscribe?.let { form ->
         androidx.compose.material3.AlertDialog(
             onDismissRequest = { confirmingUnsubscribe = null },
@@ -715,6 +732,7 @@ fun AuthorProfileScreen(
                                 isOwnProfile = signedInUsername?.equals(route.username, ignoreCase = true) == true,
                                 onSubscription = { form ->
                                     when {
+                                        signedInUsername == null -> showingSubscriptionLogin = true
                                         seriesWrites == null -> onOpenWeb(form.actionUrl)
                                         // Leaving is asked first; joining is done at once (iOS).
                                         form.isSubscribed -> confirmingUnsubscribe = form

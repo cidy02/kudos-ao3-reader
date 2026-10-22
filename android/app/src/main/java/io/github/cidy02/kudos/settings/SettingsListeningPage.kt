@@ -106,34 +106,7 @@ internal fun SettingsListeningPage(
                     onValueChangeFinished = updateRate,
                     accessibilityLabel = "Audition speed"
                 )
-                val speeds = listOf(0.9f to "0.9x", 1f to "1.0x (default)", 1.1f to "1.1x")
-                // iOS sets the three side by side, the one in use dimmed. They were three lines
-                // of text down the panel. At the large text sizes they stay lines: three do not
-                // fit a row.
-                if (io.github.cidy02.kudos.ui.subject.isAccessibilityFontScale()) speeds.forEach { (rate, label) ->
-                    SettingsActionRow(label, onClick = { updateRate(rate) }, enabled = speech.rate != rate)
-                } else androidx.compose.foundation.layout.Row(
-                    Modifier.fillMaxWidth().padding(horizontal = 13.dp).padding(bottom = 10.dp),
-                    horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)
-                ) {
-                    val tokens = io.github.cidy02.kudos.ui.subject.LocalKudosTokens.current
-                    speeds.forEach { (rate, label) ->
-                        val inUse = speech.rate == rate
-                        androidx.compose.foundation.layout.Box(
-                            Modifier.weight(1f).heightIn(min = 44.dp)
-                                // iOS's bordered buttons: tinted with the accent, the one in use dimmed (A70b).
-                                .background(if (inUse) tokens.glassFill(0.05) else tokens.scopePalette.accent.copy(alpha = 0.15f),
-                                    androidx.compose.foundation.shape.RoundedCornerShape(10.dp))
-                                .clickable(enabled = !inUse, role = androidx.compose.ui.semantics.Role.Button) { updateRate(rate) }
-                                .padding(horizontal = 6.dp, vertical = 8.dp),
-                            contentAlignment = androidx.compose.ui.Alignment.Center
-                        ) {
-                            androidx.compose.material3.Text(label, fontSize = 13.sp, lineHeight = 17.sp,
-                                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                                color = if (inUse) tokens.secondaryInk.copy(alpha = 0.45f) else tokens.scopePalette.accent)
-                        }
-                    }
-                }
+                ListeningSpeedPresets(speech.rate, updateRate)
                 SubjectRowSeparator()
                 if (auditionRequested) {
                     SubjectFormRow("Playing Sample")
@@ -253,4 +226,34 @@ internal enum class ListeningSample(val label: String, val text: String) {
     PlainNarration("Plain Narration", "The afternoon sun cast long shadows across the empty hallway. " +
         "Dust motes danced in the fading light, settling slowly onto the " +
         "forgotten furniture as silence reclaimed the room.")
+}
+
+/** The same tinted preset buttons at every size; accessibility lays them one per row. */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+internal fun ListeningSpeedPresets(rate: Float, onSelect: (Float) -> Unit) {
+    val large = io.github.cidy02.kudos.ui.subject.isAccessibilityFontScale()
+    val tokens = LocalKudosTokens.current
+    androidx.compose.foundation.layout.FlowRow(
+        Modifier.fillMaxWidth().padding(horizontal = 13.dp).padding(bottom = 10.dp),
+        maxItemsInEachRow = if (large) 1 else 3,
+        horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp),
+        verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)
+    ) {
+        listOf(0.9f to "0.9x", 1f to "1.0x (default)", 1.1f to "1.1x").forEach { (preset, label) ->
+            val inUse = rate == preset
+            Box(
+                Modifier.weight(1f).heightIn(min = 44.dp)
+                    .background(if (inUse) tokens.glassFill(0.05) else tokens.scopePalette.accent.copy(alpha = 0.15f),
+                        androidx.compose.foundation.shape.RoundedCornerShape(10.dp))
+                    .clickable(enabled = !inUse, role = androidx.compose.ui.semantics.Role.Button) { onSelect(preset) }
+                    .padding(horizontal = 6.dp, vertical = 8.dp),
+                contentAlignment = androidx.compose.ui.Alignment.Center
+            ) {
+                Text(label, fontSize = 13.sp, lineHeight = 17.sp,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    color = if (inUse) tokens.secondaryInk.copy(alpha = 0.45f) else tokens.scopePalette.accent)
+            }
+        }
+    }
 }

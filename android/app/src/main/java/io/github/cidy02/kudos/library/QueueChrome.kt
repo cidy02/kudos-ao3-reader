@@ -6,6 +6,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -257,7 +259,7 @@ fun QueueLedgerCard(
                     .fillMaxWidth()
                     .then(if (obscured) Modifier.blur(8.dp) else Modifier)
                     .padding(horizontal = 16.dp, vertical = 15.dp)
-                    .hiddenMatureWorkSemantics(obscured, selecting),
+                    .hiddenMatureWorkSemantics(obscured, selecting, selected),
                 horizontalArrangement = Arrangement.spacedBy(13.dp),
                 verticalAlignment = Alignment.Top
             ) {
@@ -351,7 +353,7 @@ fun QueueHeaderDetails(
             Box(Modifier.clickable(onClick = onAddTag)) { QueueRowTagLabel("+ Tag", dashed = true) }
         }
         Row(
-            Modifier.padding(horizontal = SubjectMetrics.gutter).fillMaxWidth(),
+            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = SubjectMetrics.gutter),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             QueueQuickFilter.entries.forEach { filter ->
