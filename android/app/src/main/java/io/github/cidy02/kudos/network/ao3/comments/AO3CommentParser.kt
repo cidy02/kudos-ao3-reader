@@ -174,6 +174,19 @@ class AO3CommentParser(
     }
 
     private fun parseOneComment(element: Element, depth: Int): AO3Comment? {
+        // AO3 leaves only its placeholder words when a deleted comment has surviving replies.
+        // Keep the node so parseThread attaches those replies to their original parent (iOS parseComment).
+        if (element.selectFirst("h4.heading.byline") == null) {
+            return AO3Comment(
+                id = element.id().ifBlank { null },
+                author = AO3CommentAuthor(name = ""),
+                date = "",
+                body = element.normalizedText(),
+                depth = depth,
+                isDeletedOrHidden = true,
+                isGuest = false
+            )
+        }
         // The body first, the older markup's .comment-text only when there is none (as before).
         val bodyElement = element.selectFirst("blockquote.userstuff, .userstuff")
             ?: element.selectFirst(".comment-text")
