@@ -119,52 +119,26 @@ class AO3CollectionDetailRepository(
         return AO3Result.Success(loaded)
     }
 
-    /** Shared 3ba settings-form read only: gift probe, then meme fallback. No profile/tallies. */
-    suspend fun getChallengeSettingsForm(slug: String): AO3Result<AO3ChallengeSettings> {
+    /** Settings form only. A known kind asks for that form; a null kind keeps gift, then meme. */
+    suspend fun getChallengeSettingsForm(slug: String, kind: AO3ChallengeKind? = null): AO3Result<AO3ChallengeSettings> {
         val generation = authRepository.generation.value
         val parser = AO3ChallengeSettingsParser()
         fun checkSession() {
             if (generation != authRepository.generation.value) throw CancellationException()
         }
-        val gift = fetch(ChallengeSettingsDestinations.challengeSettingsEditView(slug, AO3ChallengeKind.GiftExchange)) {
-            parser.parseSettings(it, AO3ChallengeKind.GiftExchange)
-        }
-        checkSession()
-        return when (gift) {
-            is AO3Result.Success -> gift
-            is AO3Result.Failure -> {
-                if (gift.error != AO3Error.NotFound && gift.error !is AO3Error.Parse) return gift
-                when (val meme = fetch(ChallengeSettingsDestinations.challengeSettingsEditView(slug, AO3ChallengeKind.PromptMeme)) {
-                    parser.parseSettings(it, AO3ChallengeKind.PromptMeme)
-                }) {
-                    is AO3Result.Failure -> return meme
-                    is AO3Result.Success -> meme
-                }
-            }
-        }
+        return readChallengeForm(slug, kind, ::checkSession) { html, target -> parser.parseSettings(html, target) }
     }
 
     /** Edit opening: settings, first sign-ups page, profile, collection edit. No assignment reads. */
-    suspend fun getChallengeSettingsEdit(slug: String): AO3Result<AO3ChallengeSettingsEditPage> {
+    suspend fun getChallengeSettingsEdit(slug: String, kind: AO3ChallengeKind? = null): AO3Result<AO3ChallengeSettingsEditPage> {
         val generation = authRepository.generation.value
         if (!authRepository.state.value.isSignedIn) return AO3Result.Failure(AO3Error.Validation("Log in to AO3 before using this feature."))
         fun checkSession() { if (generation != authRepository.generation.value) throw CancellationException() }
         val parser = AO3ChallengeSettingsFormParser()
-        val gift = fetch(ChallengeSettingsDestinations.challengeSettingsEditView(slug, AO3ChallengeKind.GiftExchange)) {
-            parser.parse(it, slug, AO3ChallengeKind.GiftExchange)
-        }
-        checkSession()
-        val form = when (gift) {
-            is AO3Result.Success -> gift.value
-            is AO3Result.Failure -> {
-                if (gift.error != AO3Error.NotFound && gift.error !is AO3Error.Parse) return gift
-                when (val meme = fetch(ChallengeSettingsDestinations.challengeSettingsEditView(slug, AO3ChallengeKind.PromptMeme)) {
-                    parser.parse(it, slug, AO3ChallengeKind.PromptMeme)
-                }) {
-                    is AO3Result.Success -> meme.value
-                    is AO3Result.Failure -> return meme
-                }
-            }
+        val loaded = readChallengeForm(slug, kind, ::checkSession) { html, target -> parser.parse(html, slug, target) }
+        val form = when (loaded) {
+            is AO3Result.Success -> loaded.value
+            is AO3Result.Failure -> return loaded
         }
         checkSession()
         val signups = fetch(ChallengeSettingsDestinations.signUpPage(slug)) { AO3ChallengeSettingsParser().parseSignUpCount(it) }
@@ -186,13 +160,13 @@ class AO3CollectionDetailRepository(
         }
 
     /** Corrected 3ba: at most four sequential page reads; never read any assignment page. */
-    suspend fun getChallengeSettings(slug: String): AO3Result<AO3ChallengeSettingsPage> {
+    suspend fun getChallengeSettings(slug: String, kind: AO3ChallengeKind? = null): AO3Result<AO3ChallengeSettingsPage> {
         val generation = authRepository.generation.value
         val parser = AO3ChallengeSettingsParser()
         fun checkSession() {
             if (generation != authRepository.generation.value) throw CancellationException()
         }
-        val settings = when (val form = getChallengeSettingsForm(slug)) {
+        val settings = when (val form = getChallengeSettingsForm(slug, kind)) {
             is AO3Result.Failure -> return form
             is AO3Result.Success -> form.value
         }
@@ -303,6 +277,35 @@ class AO3CollectionDetailRepository(
         val url = AO3CollectionItemsUrls.userPage(username, tab, page)
             ?: return AO3Result.Failure(AO3Error.Parse("AO3 didn't give a collection-items page for this account."))
         return fetch(url) { AO3CollectionItemsParser().parseUser(it, username, tab, page) }
+    }
+
+    /**
+     * One settings form. [kind] null keeps today's order: gift exchange, then the prompt meme
+     * when that page is missing or does not parse. Any other gift failure stops there.
+     */
+    private suspend fun <T> readChallengeForm(
+        slug: String,
+        kind: AO3ChallengeKind?,
+        checkSession: () -> Unit,
+        parse: (String, AO3ChallengeKind) -> T
+    ): AO3Result<T> {
+        suspend fun read(target: AO3ChallengeKind) = fetch(
+            ChallengeSettingsDestinations.challengeSettingsEditView(slug, target)
+        ) { parse(it, target) }
+        if (kind != null) {
+            val result = read(kind)
+            checkSession()
+            return result
+        }
+        val gift = read(AO3ChallengeKind.GiftExchange)
+        checkSession()
+        return when (gift) {
+            is AO3Result.Success -> gift
+            is AO3Result.Failure -> {
+                if (gift.error != AO3Error.NotFound && gift.error !is AO3Error.Parse) gift
+                else read(AO3ChallengeKind.PromptMeme)
+            }
+        }
     }
 
     /** Existing AO3 client read; signed-in by default, public only when explicitly requested. */

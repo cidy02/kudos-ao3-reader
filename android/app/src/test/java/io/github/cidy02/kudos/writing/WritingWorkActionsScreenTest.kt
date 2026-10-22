@@ -132,9 +132,11 @@ class WritingWorkActionsScreenTest {
         show()
         compose.runOnIdle { setup.client.postBody = workPreviewHtml(995001) }
         reach("Preview on AO3"); compose.onNodeWithText("Preview on AO3").performClick(); awaitText("Draft was successfully created.")
+        // The notice precedes Default's row formatting; the heading is published with the ready rows.
+        awaitText("Preview title")
         reach("Post work", "Writing work preview")
         compose.runOnIdle { setup.client.postBody = "<main id=main><div class='flash error'>AO3 refuses this post.</div></main>" }
-        compose.onNodeWithText("Post work").performClick(); confirmPost()
+        compose.onNodeWithText("Post work").assertIsEnabled().performClick(); confirmPost()
         awaitText("AO3 could not post this"); compose.onNodeWithText("AO3 refuses this post.").assertExists()
         compose.onNodeWithText("OK").performClick()
         compose.onNodeWithTag("Writing work preview").assertExists(); assertEquals(0, leaves)

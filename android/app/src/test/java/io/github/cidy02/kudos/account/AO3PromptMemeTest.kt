@@ -230,6 +230,15 @@ class AO3PromptMemeTest {
         assertNull(model.state.value.data)
     }
 
+    @Test fun knownPromptMemeAsksForThatScheduleFormOnly() = runTest {
+        val (_, client, repository) = promptMemeSetup()
+        val model = AO3PromptMemeState("summer_meme", repository, viewerIsOwner = true,
+            writes = promptMemeWrites(client, repository.authRepository), kind = AO3ChallengeKind.PromptMeme)
+        model.load(readSchedule = true)
+        assertEquals(listOf(promptSettingsUrl, promptFirstUrl), client.gets)
+        assertFalse(client.gets.contains(promptGiftUrl))
+    }
+
     @Test fun addressesEncodeSlugAndFillOpensMemeNotRequests() {
         assertTrue(AO3PromptMemeUrls.requests("a/b", 2).contains("a%2Fb/requests?page=2"))
         assertEquals("https://archiveofourown.org/collections/summer_meme/prompt_meme", AO3PromptMemeUrls.meme("summer_meme"))

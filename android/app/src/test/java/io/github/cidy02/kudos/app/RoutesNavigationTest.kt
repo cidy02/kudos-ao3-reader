@@ -7,6 +7,7 @@ import androidx.navigation.NavType
 import androidx.navigation.navArgument
 import androidx.navigation.testing.TestNavHostController
 import androidx.test.core.app.ApplicationProvider
+import io.github.cidy02.kudos.network.ao3.account.AO3ChallengeKind
 import org.junit.Assert.assertEquals
 import org.junit.Before
 import org.junit.Test
@@ -49,7 +50,29 @@ class RoutesNavigationTest {
             ) { }
             composable(Routes.AO3ChallengeSettings, arguments = listOf(
                 Routes.navArgOf("collectionSlug"), Routes.navArgOf("collectionTitle"),
-                navArgument("owner") { type = NavType.BoolType; defaultValue = false }
+                navArgument("owner") { type = NavType.BoolType; defaultValue = false },
+                navArgument("kind") { type = NavType.StringType; nullable = true; defaultValue = null }
+            )) { }
+            composable(Routes.AO3ChallengeAssignments, arguments = listOf(
+                Routes.navArgOf("collectionSlug"),
+                navArgument("collectionTitle") { type = NavType.StringType; defaultValue = "" },
+                navArgument("owner") { type = NavType.BoolType; defaultValue = false },
+                navArgument("maintainer") { type = NavType.BoolType; defaultValue = false },
+                navArgument("closed") { type = NavType.StringType; defaultValue = "unknown" },
+                navArgument("kind") { type = NavType.StringType; nullable = true; defaultValue = null }
+            )) { }
+            composable(Routes.AO3ChallengeSignUps, arguments = listOf(
+                Routes.navArgOf("collectionSlug"),
+                navArgument("collectionTitle") { type = NavType.StringType; defaultValue = "" },
+                navArgument("owner") { type = NavType.BoolType; defaultValue = false },
+                navArgument("maintainer") { type = NavType.BoolType; defaultValue = false },
+                navArgument("kind") { type = NavType.StringType; nullable = true; defaultValue = null }
+            )) { }
+            composable(Routes.AO3PromptMeme, arguments = listOf(
+                Routes.navArgOf("collectionSlug"),
+                navArgument("collectionTitle") { type = NavType.StringType; defaultValue = "" },
+                navArgument("owner") { type = NavType.BoolType; defaultValue = false },
+                navArgument("kind") { type = NavType.StringType; nullable = true; defaultValue = null }
             )) { }
             composable(Routes.AO3TagSet, arguments = listOf(
                 navArgument("tagSetId") { type = NavType.IntType },
@@ -147,6 +170,24 @@ class RoutesNavigationTest {
         assertEquals("Challenge", Routes.titleFor(entry.destination.route))
         assertEquals(true, Routes.hasSubjectHeader(entry.destination.route))
         assertEquals(true, Routes.hidesTabBar(entry.destination.route))
+    }
+
+    @Test fun knownChallengeKindRoundTripsOnEverySettingsRoute() {
+        val kind = AO3ChallengeKind.PromptMeme
+        val routes = listOf(
+            Routes.ao3ChallengeSettings("summer_meme", "Summer", true, kind),
+            Routes.ao3ChallengeAssignments("summer_meme", "Summer", true, true, false, kind),
+            Routes.ao3ChallengeSignUps("summer_meme", "Summer", true, true, kind),
+            Routes.ao3PromptMeme("summer_meme", "Summer", true, kind)
+        )
+        for (route in routes) {
+            navController.navigate(route)
+            val entry = navController.currentBackStackEntry!!
+            assertEquals("prompt_meme", Routes.routeArg(entry, "kind"))
+            assertEquals(AO3ChallengeKind.PromptMeme, Routes.challengeKindFromRoute(Routes.routeArg(entry, "kind")))
+        }
+        navController.navigate(Routes.ao3ChallengeSettings("summer_meme", "Summer", true))
+        assertEquals(null, Routes.routeArg(navController.currentBackStackEntry!!, "kind"))
     }
 
     @Test fun tagSetUsesItsOwnNumberTitleAndModeratorFlagWithSubjectChrome() {

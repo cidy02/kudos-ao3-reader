@@ -9,10 +9,12 @@ import io.github.cidy02.kudos.reader.ReaderSpeechSource
 import kotlin.coroutines.ContinuationInterceptor
 import kotlin.coroutines.coroutineContext
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.job
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
@@ -55,7 +57,7 @@ class ReaderSpeechControllerTest {
             val call = engine.calls.receive()
             assertSame(Dispatchers.Default, call.dispatcher)
         } finally {
-            controller.shutdown()
+            controller.shutdownAndJoin()
         }
     }
 
@@ -79,7 +81,7 @@ class ReaderSpeechControllerTest {
             remote.onSkipToPrevious()
             assertEquals(listOf("next chapter", "previous chapter", "next chapter", "previous chapter"), calls)
         } finally {
-            controller.shutdown()
+            controller.shutdownAndJoin()
         }
     }
 
@@ -113,7 +115,7 @@ class ReaderSpeechControllerTest {
             assertTrue(engine.calls.tryReceive().isFailure)
         } finally {
             release.complete(Unit)
-            controller.shutdown()
+            controller.shutdownAndJoin()
             ioPool.shutdown()
             ioPool.awaitTermination(5, java.util.concurrent.TimeUnit.SECONDS)
             advanceUntilIdle()
@@ -150,7 +152,7 @@ class ReaderSpeechControllerTest {
         } finally {
             oldRelease.complete(Unit)
             newRelease.complete(Unit)
-            controller.shutdown()
+            controller.shutdownAndJoin()
             runCurrent()
         }
     }
@@ -182,7 +184,7 @@ class ReaderSpeechControllerTest {
         } finally {
             oldRelease.complete(Unit)
             newRelease.complete(Unit)
-            controller.shutdown()
+            controller.shutdownAndJoin()
             runCurrent()
         }
     }
@@ -208,7 +210,7 @@ class ReaderSpeechControllerTest {
             controller.resume()
             assertEquals("Previous chapter start.", engine.calls.receive().text)
         } finally {
-            controller.shutdown()
+            controller.shutdownAndJoin()
         }
     }
 
@@ -224,7 +226,7 @@ class ReaderSpeechControllerTest {
             assertEquals("New locator.", engine.calls.receive().text)
             assertEquals(SpeechStatus.PLAYING, controller.status.value)
         } finally {
-            controller.shutdown()
+            controller.shutdownAndJoin()
         }
     }
 
@@ -247,8 +249,18 @@ class ReaderSpeechControllerTest {
             assertEquals("New paused locator.", engine.calls.receive().text)
             assertEquals(1, pulls)
         } finally {
-            controller.shutdown()
+            controller.shutdownAndJoin()
         }
+    }
+
+    private suspend fun ReaderSpeechController.shutdownAndJoin() {
+        val scope = org.robolectric.util.ReflectionHelpers.getField<CoroutineScope>(this, "scope")
+        val job = scope.coroutineContext.job
+        shutdown()
+        assertTrue("Shutdown must cancel the controller's scope", job.isCancelled)
+        // runTest does not own this scope; Default may still be dispatching cancellation to Main.
+        job.join()
+        assertTrue(job.isCompleted)
     }
 
     private data class Call(
