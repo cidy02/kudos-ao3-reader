@@ -132,6 +132,19 @@ struct BulkNameListRow: View {
     }
 }
 
+#if DEBUG
+/// The name-list editor is private to this file. The bulk-edit shot pushes it from here.
+struct DebugBulkNameEditor: View {
+    let title: String
+    let placeholder: String
+    @Binding var names: [String]
+
+    var body: some View {
+        BulkNameListEditor(title: title, placeholder: placeholder, names: $names)
+    }
+}
+#endif
+
 private struct BulkNameListEditor: View {
     let title: String
     let placeholder: String

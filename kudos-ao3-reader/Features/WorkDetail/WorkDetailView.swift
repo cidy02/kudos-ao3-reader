@@ -166,7 +166,17 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
                 appearedAt = Date()
                 dismissIfAuthorBylineConflict()
                 #if DEBUG
-                if DebugLaunchRoute.value?.hasPrefix("mycopy:") == true { showingMyCopy = true }
+                if DebugLaunchRoute.pageRoute?.hasPrefix("mycopy:") == true { showingMyCopy = true }
+                if DebugLaunchRoute.takeSheet("addtoqueue") { showingAddToQueue = true }
+                if DebugLaunchRoute.takeSheet("addtocollection") { showingAddToCollection = true }
+                if DebugLaunchRoute.takeSheet("downloaddate") { showingDownloadedDateEditor = true }
+                if DebugLaunchRoute.takeSheet("seriespreserve") {
+                    seriesPrompt = ReadingQueueService.seriesPrompt(
+                        for: nil, threshold: autoPreserveSeriesWorkThreshold, previewFailed: true
+                    )
+                    showingSeriesQueuePrompt = true
+                }
+                if DebugLaunchRoute.takeSheet("bookmarkform") { workActions.startBookmark() }
                 #endif
             }
         }

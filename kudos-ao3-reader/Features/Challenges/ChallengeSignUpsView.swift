@@ -6,7 +6,7 @@ import SwiftUI
 /// state joined client-side with assignment records. Provides All / Matched /
 /// Unmatched segmented filtering, a single-line request tag summary per row, and
 /// shortcuts to view or create your own sign-up.
-struct ChallengeSignUpsView: View {
+struct ChallengeSignUpsView: View { // swiftlint:disable:this type_body_length
     let collectionSlug: String
     var collectionTitle: String = ""
     /// Kind already read from the collection page. Nil keeps the gift-then-meme probe.
@@ -37,6 +37,9 @@ struct ChallengeSignUpsView: View {
     @State private var matchError: String?
     /// The challenge's total, not the pages fetched; `nil` until known.
     @State private var signUpTotal: Int?
+    #if DEBUG
+    @State private var debugSignUp: AO3ChallengeSignUp?
+    #endif
 
     enum SignUpFilter: String, CaseIterable, Hashable, Sendable {
         case all = "All"
@@ -138,6 +141,22 @@ struct ChallengeSignUpsView: View {
                 .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { bottomBarHeight = $0 }
         }
         .task { await loadSignUpsIfNeeded() }
+        #if DEBUG
+        .task {
+            guard DebugLaunchRoute.wantsPush("chsignupdetail") else { return }
+            for _ in 0..<40 {
+                if let first = pages.rows.first {
+                    if DebugLaunchRoute.takePush("chsignupdetail") { debugSignUp = first }
+                    return
+                }
+                if case .failed = phase { return }
+                try? await Task.sleep(for: .milliseconds(250))
+            }
+        }
+        .navigationDestination(item: $debugSignUp) { signUp in
+            ChallengeSignUpDetailView(signUp: signUp, collectionTitle: effectiveTitle, palette: palette)
+        }
+        #endif
         .refreshable { await loadSignUps(resetPage: true) }
             .screenTint(palette)
     }

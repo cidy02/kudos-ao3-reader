@@ -226,6 +226,10 @@ struct CommentsView: View {
                     didApplyDebugThreadRoute = true
                     openThread(rootID)
                 }
+                if DebugLaunchRoute.takeSheet("chapterpicker") {
+                    model.scope = .byChapter
+                    showingChapterPicker = true
+                }
                 #endif
             }
             .onChange(of: model.workContext) { _, context in
@@ -1389,6 +1393,9 @@ struct CommentComposerSheet: View {
                     showingFormattingTray = true
                 }
             }
+            #if DEBUG
+            .task { if DebugLaunchRoute.takeSheet("formattingtray") { showingFormattingTray = true } }
+            #endif
             .sheet(isPresented: $showingFormattingTray, onDismiss: {
                 // Put the cursor back. Closing the tray onto a sheet with no
                 // keyboard, after picking a tag that just moved the caret, is

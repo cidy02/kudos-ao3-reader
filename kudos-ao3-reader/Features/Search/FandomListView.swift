@@ -131,6 +131,9 @@ struct FandomListView: View {
             // there is no cross-type mismatch to get wrong here (see WorkZoomKey
             // for the one that bit the work cards).
             .workCardZoomDestination(BrowseZoomKey.category(category.id), in: zoomNamespace)
+            #if DEBUG
+            .task { if DebugLaunchRoute.takeSheet("fandomfilter") { showingFilters = true } }
+            #endif
             .filterPanelPresentation(isPresented: $showingFilters) {
                 FandomListFilterSheet(
                     options: $draftFilterOptions,

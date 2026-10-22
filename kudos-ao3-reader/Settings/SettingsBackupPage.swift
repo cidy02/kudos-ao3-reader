@@ -141,6 +141,16 @@ struct SettingsBackupPage: View {
         // separate sheet Replace used to open on top of that. Presenting is
         // simply `pendingImport` being non-nil, so nothing can get out of step
         // with it — which is what the old boolean-plus-optional pairing did.
+        #if DEBUG
+        .task {
+            guard DebugLaunchRoute.takeSheet("backupimport"),
+                  let directory = DemoNetworkBlock.fixtureDirectory
+            else { return }
+            let url = directory.appendingPathComponent("cross-platform/android-export.kudosbackup")
+            guard FileManager.default.fileExists(atPath: url.path) else { return }
+            importBackup(.success([url]))
+        }
+        #endif
         .sheet(item: $pendingImport) { pending in
             BackupImportSheet(
                 manifest: pending.manifest,
