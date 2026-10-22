@@ -35,6 +35,9 @@ class MainActivity : FragmentActivity() {
         super.onCreate(savedInstanceState)
         io.github.cidy02.kudos.reader.readium.ReaderFragmentRestore.after(this, savedInstanceState)
         enableEdgeToEdge()
+        // A restored window must start outside immersion until a resumed reader takes ownership.
+        androidx.core.view.WindowCompat.getInsetsController(window, window.decorView)
+            .show(androidx.core.view.WindowInsetsCompat.Type.systemBars())
         // "Open with Kudos" / "Share to Kudos" — the manifest advertises these
         // mime types, so something has to actually read the incoming Intent.
         // Once: a restart hands the same Intent back, and the file was offered a second time.
