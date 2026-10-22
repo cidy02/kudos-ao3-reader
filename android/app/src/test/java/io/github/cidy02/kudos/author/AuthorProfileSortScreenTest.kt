@@ -15,6 +15,7 @@ import io.github.cidy02.kudos.network.ao3.*
 import io.github.cidy02.kudos.network.ao3.author.*
 import io.github.cidy02.kudos.network.ao3.search.AO3SearchFilters
 import io.github.cidy02.kudos.search.SearchFilterSheet
+import io.github.cidy02.kudos.ui.subject.*
 import io.github.cidy02.kudos.ui.theme.KudosTheme
 import io.github.cidy02.kudos.ui.theme.KudosThemeMode
 import java.io.File
@@ -58,13 +59,17 @@ class AuthorProfileSortScreenTest {
     private var visible by mutableStateOf(true)
     private val openedAbout = mutableListOf<AO3AuthorRoute>()
     private val openedWeb = mutableListOf<String>()
+    private var theme by mutableStateOf(KudosThemeMode.Light)
+    private val washes = ShellWashes()
+    private var expectedPalette: SubjectPalette? = null
     private fun show(initialTab: AuthorTab, dashboard: Boolean) {
         val chrome = PushedShellChrome()
         val repo = AO3AuthorRepository(publicClient = client, parseDispatcher = Dispatchers.Unconfined,
             pageCache = AO3PageCache(ttlMillis = 0, staleMillis = 0))
         compose.setContent {
-            KudosTheme(KudosThemeMode.Light) {
-                CompositionLocalProvider(LocalPushedShellChrome provides chrome) {
+            KudosTheme(theme, accentColorHex = "#7954B3") {
+                expectedPalette = LocalKudosTokens.current.scopePalette
+                CompositionLocalProvider(LocalPushedShellChrome provides chrome, LocalShellWashes provides washes) {
                     Column {
                         Row { chrome.trailingContent?.invoke(this) }
                         if (visible) AuthorProfileScreen("Avery_Archive", onOpenAbout = { openedAbout += it }, initialTab = initialTab, authorRepository = repo, onOpenWork = {},
@@ -266,18 +271,43 @@ class AuthorProfileSortScreenTest {
         assertEquals("kudos_count", indexReads().last().toHttpUrl().queryParameter("work_search[sort_column]"))
     }
 
-    @Test fun funnelOnlyBelongsToWorksAndScopeTapReadsOnceWithoutReloadingHeader() {
+    @Test fun anotherReadersPageUsesTheAppScopePaletteAcrossAllThemes() {
         show(AuthorTab.Works, false)
-        compose.onNodeWithText("In collections").performClick()
-        compose.waitForIdle()
-        compose.waitUntil(15_000) { requests.any { it.toHttpUrl().encodedPath.endsWith("/works/collected") } }
-        assertEquals(3, requests.size)
-        compose.onNodeWithText("In collections").performClick(); compose.waitForIdle()
-        assertEquals(3, requests.size)
+        for (mode in listOf(KudosThemeMode.Light, KudosThemeMode.Dark, KudosThemeMode.Sepia, KudosThemeMode.Oled)) {
+            compose.runOnIdle { theme = mode }
+            compose.waitForIdle()
+            // Read the actual palette registered by subjectScreenWash, including the shell's wash.
+            compose.runOnIdle { assertEquals(expectedPalette, washes.page?.palette) }
+        }
+    }
+
+    @Test fun anotherReaderHasNoOwnWorksScopesAndTheFunnelOnlyBelongsToWorks() {
+        show(AuthorTab.Works, false)
+        compose.onNodeWithText("In collections").assertDoesNotExist()
+        compose.onNodeWithText("Gifts").assertDoesNotExist()
+        compose.onNodeWithContentDescription("Sort and filter").assertExists()
+        assertEquals(2, requests.size)
         compose.onNodeWithText("Series", ignoreCase = true).performClick(); compose.waitForIdle()
         compose.onNodeWithContentDescription("Sort and filter").assertDoesNotExist()
         compose.onNodeWithText("Bookmarks", ignoreCase = true).performClick(); compose.waitForIdle()
         compose.onNodeWithContentDescription("Sort and filter").assertDoesNotExist()
+    }
+
+    @Test fun scopeIsAMenuAndChoosingAPseudChangesTheRoute() {
+        show(AuthorTab.Works, false)
+        compose.onNodeWithText("Scope").assertExists()
+        compose.onNodeWithText("NightShift").assertDoesNotExist()
+        compose.onNodeWithContentDescription("Author scope").performClick()
+        compose.onNodeWithText("NightShift").performClick()
+        // The reads run when the screen settles; waitUntil's polling did not let them run.
+        compose.waitForIdle()
+        assertTrue(indexReads().any { "/pseuds/NightShift/works" in it })
+        compose.onNodeWithContentDescription("Author scope").performClick()
+        compose.onNodeWithText("All Pseuds").performClick()
+        compose.waitForIdle()
+        // Back on the whole account: its list is kept from the first visit, not read again.
+        compose.onNodeWithContentDescription("Author scope").assertTextContains("All Pseuds")
+        assertEquals(1, indexReads().count { "/pseuds/" !in it })
     }
 
     @Test fun sortSheetWordsAndWrappingAcrossAllThemesAtDoubleTextSize() {

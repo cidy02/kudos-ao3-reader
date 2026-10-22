@@ -44,7 +44,7 @@ class OwnWorksScreenTest {
     private var theme by mutableStateOf(KudosThemeMode.Light)
     private var scale by mutableFloatStateOf(1f)
     private val title = "The Cartographer’s \"Second\" Tide & 星"
-    private fun show(username: String = "AO3_Reader", signedIn: Boolean = true) {
+    private fun show(username: String = "AO3_Reader", signedIn: Boolean = true, initialTab: AuthorTab = AuthorTab.Works) {
         setup = runBlocking { workFormSetup(signedIn) }
         val client = object : AO3Client, AO3AuthenticatedClient {
             override fun username() = setup.auth.username()
@@ -72,13 +72,15 @@ class OwnWorksScreenTest {
                             chrome.onBack?.let { back -> androidx.compose.material3.TextButton(onClick = back) { androidx.compose.material3.Text("Back") } }
                             chrome.trailingContent?.invoke(this)
                         }
-                        AuthorProfileScreen(username, onOpenAbout = {}, authorRepository = repo, authRepository = setup.auth, seriesWrites = writes,
+                        AuthorProfileScreen(username, initialTab = initialTab, onOpenAbout = {}, authorRepository = repo, authRepository = setup.auth, seriesWrites = writes,
                             workFormRepository = forms, onOpenWork = {})
                     }
                 }
             }
         }
-        if (signedIn && username == "AO3_Reader") {
+        if (initialTab == AuthorTab.Series) {
+            compose.waitUntil(15_000) { compose.onAllNodesWithText("The Dawn Cycle").fetchSemanticsNodes().isNotEmpty() }
+        } else if (signedIn && username == "AO3_Reader") {
             compose.waitUntil(15_000) { compose.onAllNodesWithContentDescription("Select Works").fetchSemanticsNodes().isNotEmpty() }
         } else {
             val expectedTitle = if (username == "AO3_Reader") title else "Two Voices at Dawn"
@@ -88,6 +90,21 @@ class OwnWorksScreenTest {
     private fun idleRequests(count: Int) {
         compose.waitForIdle()
         compose.waitUntil(15_000) { requests.size >= count }
+    }
+
+    @Test fun ownWorksRetainScopesAndChangingScopeReadsOnlyTheIndex() {
+        show()
+        compose.waitForIdle()
+        val headersBefore = requests.count { it.toHttpUrl().encodedPath == "/users/AO3_Reader" }
+        compose.onNodeWithText("In collections").performClick()
+        compose.waitUntil(15_000) { requests.any { it.toHttpUrl().encodedPath.endsWith("/works/collected") } }
+        compose.waitForIdle()
+        assertEquals(1, requests.count { it.toHttpUrl().encodedPath.endsWith("/works/collected") })
+        assertEquals(headersBefore, requests.count { it.toHttpUrl().encodedPath == "/users/AO3_Reader" })
+        compose.onNodeWithText("Gifts").assertExists()
+        compose.onNodeWithText("In collections").performClick()
+        compose.waitForIdle()
+        assertEquals(1, requests.count { it.toHttpUrl().encodedPath.endsWith("/works/collected") })
     }
 
     @Test fun ownActionsAndBulkBarAreAbsentForAnotherProfileAndSignedOutReader() {
@@ -229,6 +246,16 @@ class OwnWorksScreenTest {
                 layouts.forEach { assertFalse(it.didOverflowHeight); assertFalse(it.isLineEllipsized(it.lineCount - 1)) }
             }
         }
+    }
+
+    @Test fun ownSeriesShowsItsTotalsExactlyOnceAlongsideTheAccountAndSectionHeading() {
+        show(initialTab = AuthorTab.Series)
+        compose.onAllNodesWithText("5 works, 54,679 words in the 2 loaded series").assertCountEquals(1)
+        compose.onNodeWithText("AO3_Reader").assertExists()
+        // The section header, and The Hidden Cycle's own kicker (a series with no fandom).
+        compose.onAllNodesWithText("SERIES").assertCountEquals(2)
+        compose.onNodeWithText("2").assertExists()
+        compose.onNodeWithText("Load More").assertExists()
     }
 
     @Test fun ownWorksShapeShowsTotalsLineAndHidesFourProfileTabs() {

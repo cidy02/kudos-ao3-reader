@@ -17,6 +17,15 @@ class MyCopySummaryTest {
         assertEquals("This imported work doesn't include the website where it was first posted.", sentence(""))
     }
 
+    @Test fun progressDistinguishesKnownZeroFromUnknownAsIosDoes() {
+        val work = io.github.cidy02.kudos.core.model.SavedWork(title = "Work", author = "Writer")
+        assertEquals("—", myCopyProgressLabel(work))
+        assertEquals("0%", myCopyProgressLabel(work.copy(legacyReaderProgress = 0.0)))
+        assertEquals("0%", myCopyProgressLabel(work.copy(
+            readiumLocator = """{"locations":{"totalProgression":0}}""")))
+        assertEquals("42%", myCopyProgressLabel(work.copy(legacyReaderProgress = 0.42)))
+    }
+
     @Test
     fun theLineCountsWhatIsKeptInIosOrder() {
         assertEquals("Downloaded · 1 queue · 1 collection", myCopySummary(true, 1, 1, 0))

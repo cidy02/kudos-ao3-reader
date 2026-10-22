@@ -143,7 +143,9 @@ fun WorkLedgerRow(
     selected: Boolean,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    selecting: Boolean = false,
+    muted: Boolean = false
 ) {
     val tokens = LocalKudosTokens.current
     val fontScale = LocalDensity.current.fontScale
@@ -162,12 +164,13 @@ fun WorkLedgerRow(
                 .fillMaxWidth()
                 .then(if (obscured) Modifier.blur(10.dp) else Modifier)
                 .clip(shape)
-                .background(palette.rowWash)
+                .background(tokens.cardFill)
+                .then(if (muted) Modifier else Modifier.background(palette.rowWash))
                 .border(if (selected) 2.dp else 0.5.dp, if (selected) tokens.accent else palette.rowBorder, shape)
                 .combinedClickable(onClick = onClick, onLongClick = onLongClick)
                 .padding(horizontal = 14.dp, vertical = 13.dp)
                 .then(
-                    if (obscured) Modifier.hiddenMatureWorkSemantics(true)
+                    if (obscured) Modifier.hiddenMatureWorkSemantics(true, selecting)
                     else Modifier.semantics { contentDescription = "$title, by $author" }
                 ),
             verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -179,7 +182,7 @@ fun WorkLedgerRow(
                 size = 9.sp,
                 ruleSpacing = 4.dp
             )
-            WorkProgressRing(progress, state = progressState, diameter = 44.dp * fontScale)
+            WorkProgressRing(progress, state = progressState, diameter = 44.dp * fontScale, showsZeroPercent = true)
             Row(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     title,
@@ -191,25 +194,29 @@ fun WorkLedgerRow(
                 if (favorite) Text("★", color = Color(0xFFFFC107), fontSize = 13.sp)
             }
             Text(metadata, color = tokens.secondaryInk, fontSize = 11.5.sp)
-            HomeStatusTray(rating, categories, warnings, isComplete, HomeStatusArrangement.Grid, tileSize = 22.dp)
+            Column(horizontalAlignment = Alignment.End) {
+                HomeStatusTray(rating, categories, warnings, isComplete, HomeStatusArrangement.Grid, tileSize = 22.dp)
+                if (selecting) androidx.compose.material3.Checkbox(checked = selected, onCheckedChange = { onClick() })
+            }
         }
     } else Row(
         Modifier
             .fillMaxWidth()
             .then(if (obscured) Modifier.blur(10.dp) else Modifier)
             .clip(shape)
-            .background(palette.rowWash)
+            .background(tokens.cardFill)
+            .then(if (muted) Modifier else Modifier.background(palette.rowWash))
             .border(if (selected) 2.dp else 0.5.dp, if (selected) tokens.accent else palette.rowBorder, shape)
             .combinedClickable(onClick = onClick, onLongClick = onLongClick)
             .padding(horizontal = 14.dp, vertical = 13.dp)
             .then(
-                if (obscured) Modifier.hiddenMatureWorkSemantics(true)
+                if (obscured) Modifier.hiddenMatureWorkSemantics(true, selecting)
                 else Modifier.semantics { contentDescription = "$title, by $author" }
             ),
         horizontalArrangement = Arrangement.spacedBy(13.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        WorkProgressRing(progress, state = progressState, diameter = 44.dp * fontScale)
+        WorkProgressRing(progress, state = progressState, diameter = 44.dp * fontScale, showsZeroPercent = true)
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
             SubjectKicker(
                 text = HomeFacts.primaryFandom(fandoms) ?: "Library",
@@ -238,9 +245,12 @@ fun WorkLedgerRow(
                 overflow = TextOverflow.Ellipsis
             )
         }
-        HomeStatusTray(rating, categories, warnings, isComplete, HomeStatusArrangement.Grid, tileSize = 22.dp)
+        Column(horizontalAlignment = Alignment.End) {
+            HomeStatusTray(rating, categories, warnings, isComplete, HomeStatusArrangement.Grid, tileSize = 22.dp)
+            if (selecting) androidx.compose.material3.Checkbox(checked = selected, onCheckedChange = { onClick() })
+        }
     }
-    if (obscured) RevealCapsule(Modifier.align(Alignment.Center))
+    if (obscured && !selecting) RevealCapsule(Modifier.align(Alignment.Center))
     }
 }
 

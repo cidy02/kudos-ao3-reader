@@ -130,10 +130,11 @@ internal fun VerifiedAuthorByline(
     identities: String,
     authorNames: List<String> = io.github.cidy02.kudos.works.resolveTappableAuthorNames(null, author),
     compact: Boolean = false,
-    onOpenAuthor: (String) -> Unit = LocalOpenAuthor.current
+    onOpenAuthor: (String) -> Unit = LocalOpenAuthor.current,
+    includesBy: Boolean = false
 ) {
     AuthorBylineRow(authorNames, author, LocalKudosTokens.current.scopePalette.accent,
-        compact = compact,
+        compact = compact, includesBy = includesBy,
         isLinked = { io.github.cidy02.kudos.network.ao3.author.AO3AuthorIdentities.byline(identities, it) != null },
         onOpenAuthor = { name ->
             io.github.cidy02.kudos.network.ao3.author.AO3AuthorIdentities.byline(identities, name)?.let(onOpenAuthor)
@@ -190,13 +191,14 @@ private fun AuthorBylineRow(
     accent: androidx.compose.ui.graphics.Color,
     isLinked: (String) -> Boolean,
     onOpenAuthor: (String) -> Unit,
-    compact: Boolean = false
+    compact: Boolean = false,
+    includesBy: Boolean = false
 ) {
     val tokens = LocalKudosTokens.current
     val fontSize = if (compact) 12.sp else 15.5.sp
     if (authorNames.isEmpty()) {
         Text(
-            text = displayAuthor.ifBlank { "Anonymous" },
+            text = (if (includesBy) "by " else "") + displayAuthor.ifBlank { "Anonymous" },
             color = tokens.secondaryInk,
             fontSize = fontSize,
             maxLines = if (compact) 1 else 2,
@@ -213,6 +215,7 @@ private fun AuthorBylineRow(
         horizontalArrangement = Arrangement.spacedBy(4.dp),
         itemVerticalAlignment = Alignment.CenterVertically
     ) {
+        if (includesBy) Text("by", color = tokens.secondaryInk, fontSize = fontSize)
         authorNames.forEachIndexed { index, name ->
             Row(verticalAlignment = Alignment.CenterVertically) {
                 // A name AO3 never linked to an account (a file from elsewhere, an old copy not yet

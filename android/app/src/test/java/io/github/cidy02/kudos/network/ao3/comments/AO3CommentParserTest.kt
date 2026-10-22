@@ -32,6 +32,16 @@ class AO3CommentThreadParserTest {
     }
 
     @Test
+    fun keepsTheDemoCommentsParagraphBreaks() {
+        val html = listOf("src/debug/assets", "app/src/debug/assets", "android/app/src/debug/assets")
+            .map { java.io.File("$it/fixtures/ao3_comments_page.html") }.first(java.io.File::isFile).readText()
+        val thread = parser.parseThread(html, "https://archiveofourown.org/works/424242?show_comments=true",
+            AO3CommentTarget.Work(424242))
+        assertEquals("That quiet thank you said everything.\n\nAbsolutely broke me.",
+            thread.comments.first { it.id == "comment_1001" }.body)
+    }
+
+    @Test
     fun handlesNoCommentsState() {
         val thread = parser.parseThread(
             html = writeResource("ao3/comments/comments_empty.html"),

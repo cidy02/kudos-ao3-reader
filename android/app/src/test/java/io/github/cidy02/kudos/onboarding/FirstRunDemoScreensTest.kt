@@ -155,7 +155,10 @@ class FirstRunDemoScreensTest {
 
     private fun assertReadable(text: String) {
         val node = compose.onNodeWithText(text, useUnmergedTree = true)
-        node.performScrollTo().assertIsDisplayed()
+        // What's New's title and Done sit in a fixed header above its scrolling notes (as iOS's
+        // sheet), so only text inside a scrolling area is scrolled to.
+        runCatching { node.performScrollTo() }
+        node.assertIsDisplayed()
         val layouts = mutableListOf<TextLayoutResult>()
         node.performSemanticsAction(SemanticsActions.GetTextLayoutResult) { assertTrue(it(layouts)) }
         val result = layouts.single()

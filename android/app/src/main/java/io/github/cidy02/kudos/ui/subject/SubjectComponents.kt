@@ -716,13 +716,14 @@ fun WorkProgressRing(
     modifier: Modifier = Modifier,
     state: String? = null,
     diameter: Dp = SubjectMetrics.ringDiameter,
-    tint: Color? = null
+    tint: Color? = null,
+    showsZeroPercent: Boolean = false
 ) {
     BoxWithConstraints(
         modifier.sizeIn(maxWidth = diameter, maxHeight = diameter).aspectRatio(1f),
         contentAlignment = Alignment.Center
     ) {
-        WorkProgressRingSized(progress, state, minOf(maxWidth, maxHeight, diameter), tint)
+        WorkProgressRingSized(progress, state, minOf(maxWidth, maxHeight, diameter), tint, showsZeroPercent)
     }
 }
 
@@ -731,7 +732,8 @@ private fun WorkProgressRingSized(
     progress: Double,
     state: String?,
     diameter: Dp,
-    tint: Color?
+    tint: Color?,
+    showsZeroPercent: Boolean
 ) {
     val modifier: Modifier = Modifier
     val tokens = LocalKudosTokens.current
@@ -795,7 +797,7 @@ private fun WorkProgressRingSized(
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier.padding(stroke + 2.dp)
         ) {
-            if (percent > 0 || state != null) {
+            if (showsZeroPercent || percent > 0 || state != null) {
                 Text(
                     text = "$percent%",
                     color = tokens.primaryInk,
