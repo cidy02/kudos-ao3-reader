@@ -90,6 +90,9 @@ struct CommentsView: View {
     /// The thread being pushed, if any. AO3 gives Thread / Parent Thread their own
     /// isolated-thread pages, so these navigate rather than scrolling in place.
     @State private var pushedThread: CommentThreadRoute?
+    #if DEBUG
+    @State private var didApplyDebugThreadRoute = false
+    #endif
 
     init(
         workID: Int, context: AO3CommentsWorkContext, initialChapterPosition: Int? = nil,
@@ -218,6 +221,12 @@ struct CommentsView: View {
                 await model.loadInitial(auth: auth)
                 reportResolvedWorkContext()
                 await applyInitialFocusIfNeeded(proxy: proxy)
+                #if DEBUG
+                if !didApplyDebugThreadRoute, let rootID = DebugLaunchRoute.threadRootID(in: model) {
+                    didApplyDebugThreadRoute = true
+                    openThread(rootID)
+                }
+                #endif
             }
             .onChange(of: model.workContext) { _, context in
                 if !context.authors.isEmpty || !context.authorIdentities.isEmpty {
