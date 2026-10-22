@@ -11,6 +11,7 @@ import io.github.cidy02.kudos.app.KudosApp
 import io.github.cidy02.kudos.network.ao3.DemoNetwork
 import io.github.cidy02.kudos.ui.subject.DebugRoutes
 import io.github.cidy02.kudos.ui.theme.KudosThemeMode
+import io.github.cidy02.kudos.app.toAppTheme
 import io.github.cidy02.kudos.works.ExternalFileImport
 import java.util.Locale
 
@@ -55,6 +56,14 @@ class MainActivity : FragmentActivity() {
                 "sepia" -> KudosThemeMode.Sepia
                 "oled" -> KudosThemeMode.Oled
                 else -> null
+            }
+            // The screenshot pairs set a theme per launch. Saving it as well lets the screens that
+            // read the stored theme follow it (the reader with Match on, Settings' Appearance row),
+            // as `-appTheme` does on iOS (A71: the reader stayed Light in every column).
+            sessionTheme?.let { mode ->
+                (application as KudosApplication).launchIo {
+                    container.settingsRepository.updateAppTheme(mode.toAppTheme())
+                }
             }
 
             val onboardingExtra = intent?.getBooleanExtra("hasCompletedOnboarding", false) == true ||

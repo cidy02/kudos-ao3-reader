@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.backup
 
+import androidx.core.content.edit
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -437,8 +438,10 @@ class SyncRepository(
                     work.remoteEpubPending ||
                         (work.hasEpub && BackupPaths.normalizeIdForComparison(work.id) !in snapshot.epubWorkIds)
                 }
-                context.getSharedPreferences("pronunciation-sync", Context.MODE_PRIVATE).edit()
-                    .putString("nativeManifestDigest", BackupPaths.sha256(manifestBytes)).commit()
+                // Written before the sync reports success, hence commit.
+                context.getSharedPreferences("pronunciation-sync", Context.MODE_PRIVATE).edit(commit = true) {
+                    putString("nativeManifestDigest", BackupPaths.sha256(manifestBytes))
+                }
                 settingsRepository.updateSyncLastManifestDigest(
                     if (settled) BackupPaths.sha256(manifestBytes) else null
                 )

@@ -30,7 +30,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -121,7 +122,9 @@ internal fun CustomizeThemeSheet(
                         }
                     }
                 } else {
-                    val windowHeight = LocalConfiguration.current.screenHeightDp
+                    val windowHeight = with(LocalDensity.current) {
+                        LocalWindowInfo.current.containerSize.height.toDp().value
+                    }
                     // Leave room for reachable form rows in Android's compact landscape window.
                     val previewHeight = if (windowHeight < 600) (windowHeight * 0.28f).dp
                         else (windowHeight * 0.42f).coerceIn(240f, 380f).dp
