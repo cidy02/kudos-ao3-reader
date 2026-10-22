@@ -38,6 +38,8 @@ class KokoroTTSController(private val context: Context) : TTSService {
         pronunciationScope = fandom to workID
     }
 
+    // Kudos logs with android.util.Log; Timber comes in only as another library's dependency.
+    @android.annotation.SuppressLint("LogNotTimber")
     private fun resolvedLexicon(): String = try {
         val tokensFile = File(TTSDownloadWorker.modelDirectory(context), "tokens.txt")
         val tokens = if (!tokensFile.isFile) emptySet() else tokensFile.readLines().mapNotNull { line ->
