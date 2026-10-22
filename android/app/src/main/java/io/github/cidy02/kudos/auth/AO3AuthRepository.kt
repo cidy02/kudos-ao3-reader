@@ -73,6 +73,16 @@ class AO3AuthRepository(
      */
     suspend fun awaitSavedSession() = savedSessionRead.await()
 
+    /** A warm screenshot launch can enter the fixture session after an ordinary signed-out launch. */
+    internal suspend fun useDebugDemoSession() {
+        if (io.github.cidy02.kudos.BuildConfig.DEBUG &&
+            io.github.cidy02.kudos.network.ao3.DemoNetwork.isActive &&
+            io.github.cidy02.kudos.network.ao3.DemoNetwork.signedIn &&
+            mutableState.value != AO3AuthState.SignedIn("AO3_Reader")) {
+            readAndCheckSavedSession()
+        }
+    }
+
     private suspend fun readAndCheckSavedSession() {
         // Design review only (iOS AO3AuthService `DemoNetworkBlock.demoSignedIn`): a local demo
         // session; every AO3 request in the demo is answered by the fixtures.

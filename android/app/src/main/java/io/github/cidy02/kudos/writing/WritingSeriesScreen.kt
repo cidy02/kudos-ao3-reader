@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.writing
 
+import io.github.cidy02.kudos.app.DebugShotEffect
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.*
@@ -60,6 +61,8 @@ internal fun WritingSeriesContent(model: WritingSeriesState, title: String, subt
     var textField by remember(model) { mutableStateOf<String?>(null) }
     var ordering by remember(model) { mutableStateOf(reorderOnly) }
     var removing by remember(model) { mutableStateOf(false) }
+    DebugShotEffect("series-editor", ready = form != null) { removing = true }
+
     var confirmRemoval by remember(model) { mutableStateOf<AO3SeriesWorkRow?>(null) }
     var summaryPreview by remember(model) { mutableStateOf<String?>(null) }
     LaunchedEffect(form?.summary) {

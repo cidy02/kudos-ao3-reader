@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.browse
 
+import io.github.cidy02.kudos.app.DebugShotEffect
 import io.github.cidy02.kudos.ui.subject.SubjectSkeletonList
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
@@ -70,6 +71,8 @@ fun FandomListScreen(
     var groupsVariants by navigationEntryState("fandom-list:${category.name}:groupsVariants") { true }
     var options by navigationEntryState("fandom-list:${category.name}:options") { FandomListFilterOptions() }
     var showFilters by remember(category.name) { mutableStateOf(false) }
+    DebugShotEffect("fandom-list") { showFilters = true }
+
     val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
     val palette = fandomListPalette(category.name)

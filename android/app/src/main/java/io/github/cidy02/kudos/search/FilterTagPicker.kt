@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.search
 
+import io.github.cidy02.kudos.app.DebugShotEffect
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -68,6 +69,8 @@ internal fun FilterTagRow(
     repository: AO3TagAutocompleteRepository?, fandomContext: List<String>, onChange: (String, String) -> Unit
 ) {
     var picking by remember { mutableStateOf(false) }
+    DebugShotEffect("filter-tags", ready = kind == "fandom") { picking = true }
+
     val includedTags = AO3SearchFilters.commaSeparatedValues(included)
     val excludedTags = AO3SearchFilters.commaSeparatedValues(excluded)
     val selected = (includedTags + excludedTags).distinct().sorted()

@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.ui.components
 
+import io.github.cidy02.kudos.app.DebugShotEffect
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.ui.graphics.Color
@@ -82,6 +83,8 @@ fun KudosPaginationBar(
     if (totalPages <= 1) return
 
     var showScrubber by remember { mutableStateOf(false) }
+    DebugShotEffect("pagination", ready = enabled) { showScrubber = true }
+
     val tokens = LocalKudosTokens.current
     val textMeasurer = rememberTextMeasurer()
     val density = LocalDensity.current

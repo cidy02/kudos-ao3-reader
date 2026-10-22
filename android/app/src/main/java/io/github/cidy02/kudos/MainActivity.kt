@@ -26,7 +26,7 @@ class MainActivity : FragmentActivity() {
         if (BuildConfig.DEBUG && DemoNetwork.isRequested(intent)) {
             DemoNetwork.activate(
                 applicationContext.assets,
-                signedIn = intent?.getBooleanExtra(DemoNetwork.SIGNED_IN_EXTRA, false) == true
+                signedIn = isShotIntent(intent) || intent?.getBooleanExtra(DemoNetwork.SIGNED_IN_EXTRA, false) == true
             )
         } else {
             DemoNetwork.markNotDemo()
@@ -118,7 +118,7 @@ class MainActivity : FragmentActivity() {
             val isDemoRequested = DemoNetwork.isRequested(intent)
             val hasThemeExtra = intent.hasExtra("kudosTheme")
             if (isDemoRequested) {
-                DemoNetwork.activate(applicationContext.assets)
+                DemoNetwork.activate(applicationContext.assets, signedIn = isShotIntent(intent))
                 val container = (application as KudosApplication).container
                 (application as KudosApplication).launchIo {
                     DemoLibrary.seed(container, applicationContext)
@@ -132,9 +132,15 @@ class MainActivity : FragmentActivity() {
         }
     }
 
+    private fun isShotIntent(intent: Intent?): Boolean = BuildConfig.DEBUG &&
+        intent?.getStringExtra(DebugRoutes.EXTRA)?.startsWith("shot:") == true
+
     private fun publishDebugRoute(intent: Intent?) {
         // A second request for the same preview should reopen it after dismissal.
-        if (BuildConfig.DEBUG) debugRouteRequest.value++
+        if (BuildConfig.DEBUG) {
+            io.github.cidy02.kudos.app.DebugShotRequests.clear()
+            debugRouteRequest.value++
+        }
         debugRoute.value = if (BuildConfig.DEBUG) intent?.getStringExtra(DebugRoutes.EXTRA) else null
     }
 }

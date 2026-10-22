@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.library
 
+import io.github.cidy02.kudos.app.DebugShotEffect
 import io.github.cidy02.kudos.ui.components.workDeletionMessage
 
 import io.github.cidy02.kudos.works.finishedActionLabel
@@ -247,6 +248,8 @@ fun LibraryScreen(
     var bulkTagOpen by remember { mutableStateOf(false) }
     var bulkAddToCollectionOpen by remember { mutableStateOf(false) }
     var showFilters by remember { mutableStateOf(false) }
+    DebugShotEffect("library", ready = !state.loading) { showFilters = true }
+
     var confirmRemoveFromHistory by remember { mutableStateOf<String?>(null) }
     var confirmDeleteCollection by remember { mutableStateOf<String?>(null) }
     var confirmRemoveFromQueues by remember { mutableStateOf<String?>(null) }

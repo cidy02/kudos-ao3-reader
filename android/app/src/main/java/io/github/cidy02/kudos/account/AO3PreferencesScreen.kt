@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.account
 
+import io.github.cidy02.kudos.app.DebugShotEffect
 import androidx.compose.foundation.layout.Box
 import androidx.compose.material3.Snackbar
 import androidx.compose.material3.TextButton
@@ -144,6 +145,9 @@ fun AO3PreferencesScreen(
     }
 
     LaunchedEffect(username) { load() }
+    DebugShotEffect("preferences", ready = snapshot != null) {
+        snapshot?.sections?.firstNotNullOfOrNull { it.help }?.let(::openHelp)
+    }
 
     fun save() {
         val snap = snapshot ?: return

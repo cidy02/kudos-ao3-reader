@@ -364,6 +364,8 @@ fun KudosApp(
                             container = container,
                             themeMode = themeMode,
                             showLibraryRequest = showLibraryRequest,
+                            debugShotName = debugRoute?.takeIf { BuildConfig.DEBUG && it.startsWith("shot:") }?.removePrefix("shot:"),
+                            debugRouteRequest = debugRouteRequest,
                             startRoute = debugRoute?.takeIf { BuildConfig.DEBUG && preview == null && it.startsWith(DebugRoutes.NAV_PREFIX) }
                                 ?.removePrefix(DebugRoutes.NAV_PREFIX),
                             onCycleTheme = {

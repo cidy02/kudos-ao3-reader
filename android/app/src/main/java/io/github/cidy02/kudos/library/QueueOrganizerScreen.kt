@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.library
 
+import io.github.cidy02.kudos.app.DebugShotEffect
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
@@ -114,6 +115,8 @@ fun QueueOrganizerScreen(
     var selected by remember { mutableStateOf<Set<String>>(emptySet()) }
     var menu by remember { mutableStateOf(false) }
     var creating by remember { mutableStateOf(false) }
+    DebugShotEffect("queue-organizer") { creating = true }
+
     var editing by remember { mutableStateOf<ReadingQueue?>(null) }
     var tagging by remember { mutableStateOf(false) }
     var pendingDelete by remember { mutableStateOf<List<ReadingQueue>>(emptyList()) }

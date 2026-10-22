@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.library
 
+import io.github.cidy02.kudos.app.DebugShotEffect
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -65,6 +66,8 @@ fun CollectionsScreen(
     var collections by remember { mutableStateOf<List<WorkCollection>>(emptyList()) }
     var works by remember { mutableStateOf<List<SavedWork>>(emptyList()) }
     var showCreate by remember { mutableStateOf(false) }
+    DebugShotEffect("collections") { showCreate = true }
+
     var deleteCandidate by remember { mutableStateOf<WorkCollection?>(null) }
     val scope = rememberCoroutineScope()
 

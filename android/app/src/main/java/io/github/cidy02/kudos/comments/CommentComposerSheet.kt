@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.comments
 
+import io.github.cidy02.kudos.app.DebugShotEffect
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.foundation.background
@@ -84,6 +85,7 @@ fun CommentComposerSheet(
         mutableStateOf(TextFieldValue(draft, TextRange(draft.length)))
     }
     var showFormattingTray by remember { mutableStateOf(false) }
+    DebugShotEffect("comment-composer") { showFormattingTray = true }
 
     // The draft comes back through the model's flow a frame after the field sent it. Each late echo
     // was taken for a change from outside and put over what had been typed since: typed fast,

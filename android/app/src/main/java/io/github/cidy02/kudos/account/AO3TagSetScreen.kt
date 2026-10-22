@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.account
 
+import io.github.cidy02.kudos.app.DebugShotEffect
 import androidx.lifecycle.viewmodel.initializer
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
@@ -56,6 +57,8 @@ fun AO3TagSetScreen(
     val state by model.state.collectAsState()
     val scope = rememberCoroutineScope()
     var editing by remember(model) { mutableStateOf(false) }
+    DebugShotEffect("tag-set", ready = state.data != null) { editing = true }
+
     val tokens = LocalKudosTokens.current
     val palette = tokens.scopePalette
     val large = isAccessibilityFontScale()

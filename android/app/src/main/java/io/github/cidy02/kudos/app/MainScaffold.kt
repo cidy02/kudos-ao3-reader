@@ -119,12 +119,38 @@ fun MainScaffold(
     themeMode: KudosThemeMode,
     onCycleTheme: () -> Unit,
     startRoute: String? = null,
+    debugShotName: String? = null,
+    debugRouteRequest: Int = 0,
     /** Raised by one each time something above the shell asks for the Library tab. */
     showLibraryRequest: Int = 0
 ) {
     val navController = rememberNavController()
     androidx.compose.runtime.LaunchedEffect(showLibraryRequest) {
         if (showLibraryRequest > 0) navController.navigateShellRoot(Routes.Library)
+    }
+    val debugContext = androidx.compose.ui.platform.LocalContext.current
+    LaunchedEffect(debugShotName, debugRouteRequest) {
+        if (io.github.cidy02.kudos.BuildConfig.DEBUG && debugShotName != null &&
+            io.github.cidy02.kudos.network.ao3.DemoNetwork.isActive) {
+            DebugShotRequests.clear()
+            container.authRepository.awaitSavedSession()
+            container.authRepository.useDebugDemoSession()
+            DemoLibrary.seed(container, debugContext.applicationContext)
+            if (debugShotName == "revokedevice" || debugShotName == "pairing") {
+                DemoLibrary.seedShotDevice(container.settingsRepository)
+            }
+            val works = container.database.workDao().getAll()
+            val queue = container.readingQueueRepository.listQueues().first { it.name == "Neon reread" }
+            val collection = container.workRepository.allCollections().first { it.name == "Comfort reads" }
+            val work = works.first { it.title == "Sodium Lights" }
+            val reader = works.first { it.title == "The Long Way Down" }
+            val shot = debugShot(debugShotName, queue.id, collection.id, work.id, reader.id)
+                ?: return@LaunchedEffect
+            DebugShotRequests.open(debugShotName, shot)
+            navController.navigate(shot.route) {
+                popUpTo(navController.graph.id) { inclusive = true }
+            }
+        }
     }
     // Debug launch extra `kudosDebugRoute nav:<route>` opens a screen directly (like iOS -KudosDebugRoute).
     androidx.compose.runtime.LaunchedEffect(startRoute) {

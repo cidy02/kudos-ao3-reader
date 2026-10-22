@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.backup
 
+import io.github.cidy02.kudos.app.DebugShotEffect
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -72,6 +73,14 @@ fun BackupScreen(
     var statusIsError by remember { mutableStateOf(false) }
     var pendingImport by remember { mutableStateOf<PendingBackupImport?>(null) }
     var showResetConfirm by remember { mutableStateOf(false) }
+    DebugShotEffect("backup") {
+        val bytes = withContext(Dispatchers.IO) {
+            context.assets.open("fixtures/android-export.kudosbackup").use { it.readBytes() }
+        }
+        val pack = withContext(Dispatchers.IO) { BackupImporter.importV2Zip(bytes) }
+        pendingImport = PendingBackupImport(bytes, repository.previewImport(pack), pack.manifest,
+            settingsRepository.settings.first().sync.isEnabled)
+    }
 
     val exportLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument("application/zip")

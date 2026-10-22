@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.library
 
+import io.github.cidy02.kudos.app.DebugShotEffect
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -301,6 +302,8 @@ private fun LibraryMultiSelectRow(
     title: String, options: List<Pair<String, String>>, selection: Set<String>, onChange: (Set<String>) -> Unit
 ) {
     var picking by remember { mutableStateOf(false) }
+    DebugShotEffect("library-picker", ready = title == "Fandoms" && options.isNotEmpty()) { picking = true }
+
     SubjectFormRow(
         title, value = if (selection.isEmpty()) "Any" else "${selection.size} selected",
         showsDisclosure = true, onClick = { picking = true }

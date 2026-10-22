@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.works.detail
 
+import io.github.cidy02.kudos.app.DebugShotEffect
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -122,6 +123,7 @@ fun WorkDetailMyCopySheet(
     val tokens = LocalKudosTokens.current
     val context = LocalContext.current
     var showingDownloadedDateEditor by remember { mutableStateOf(false) }
+    DebugShotEffect("my-copy") { showingDownloadedDateEditor = true }
 
     val epubFile = remember(work?.id) {
         work?.id?.let { id ->
