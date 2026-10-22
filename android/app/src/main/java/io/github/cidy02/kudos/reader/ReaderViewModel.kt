@@ -23,6 +23,7 @@ import io.github.cidy02.kudos.reader.settings.ReaderPreferences
 import io.github.cidy02.kudos.reader.settings.ReaderSettingsMapper
 import io.github.cidy02.kudos.reader.settings.ReaderSpeechPreferences
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
@@ -86,6 +87,23 @@ class ReaderViewModel(
     }
 
     init {
+        repository.attachProgressWriter(
+            scheduler = object : TrailingWriteScheduler {
+                private var trailing: Job? = null
+                override fun schedule(delayMillis: Long, block: () -> Unit) {
+                    trailing?.cancel()
+                    trailing = viewModelScope.launch {
+                        if (delayMillis > 0) delay(delayMillis)
+                        block()
+                    }
+                }
+                override fun cancel() {
+                    trailing?.cancel()
+                    trailing = null
+                }
+            },
+            write = { progress -> saver.schedule(progress, 0) }
+        )
         load()
         viewModelScope.launch {
             settingsRepository.speechPreferences.collect { speech ->
@@ -149,9 +167,9 @@ class ReaderViewModel(
     }
 
     /**
-     * Called by the navigator host on each location, including the open landing.
-     * The landing is not a read and is not saved (iOS seeds the persistence
-     * baseline so the first identical callback stays quiet).
+     * Called by the navigator host on each location. The same locator as the
+     * seed stays quiet. A different one is written now, or when the two-second
+     * window ends. An empty locator is not a place.
      */
     fun onProgress(progress: ReaderProgress) {
         updateReading { it.copy(
@@ -159,8 +177,7 @@ class ReaderViewModel(
             viewport = it.viewport?.takeIf { viewport -> viewport.spineIndex == progress.spineIndex }
         ) }
         if (isScrubbing) return
-        if (!repository.observeLocation(workId, progress)) return
-        saver.onProgress(progress)
+        repository.noteLocation(workId, progress)
     }
 
     fun setScrubbing(scrubbing: Boolean) {
@@ -176,7 +193,7 @@ class ReaderViewModel(
         if (!EndOfWorkActions.isAtEndOfPublication(viewport, spineCountForEof)) return
         autoFinishedThisSession = true
         enqueueSessionLifecycle {
-            saver.flush()
+            flushDeferredProgress()
             (_state.value as? ReaderUiState.Reading)?.liveProgress?.let { repository.persistLocation(workId, it) }
             repository.finishAtPublicationEnd(workId)
             updateReading { it.copy(
@@ -194,7 +211,7 @@ class ReaderViewModel(
 
     fun pauseReadingSession() {
         enqueueSessionLifecycle {
-            saver.flush()
+            flushDeferredProgress()
             flushScrubPosition()
             repository.finishReading(workId)?.let { readingLogService.pauseSession(it) }
         }
@@ -206,12 +223,19 @@ class ReaderViewModel(
 
     fun close() {
         enqueueSessionLifecycle {
-            saver.flush()
+            flushDeferredProgress()
             flushScrubPosition()
             isScrubbing = false
             repository.finishReading(workId)?.let { readingLogService.endSession(it) }
             repository.close(workId)
         }
+    }
+
+    /** Writes a place the two-second window was still holding, then anything the saver has. */
+    private suspend fun flushDeferredProgress() {
+        val held = repository.takeUnpersistedLocation(workId)
+        saver.flush()
+        if (held != null) repository.persistLocation(workId, held)
     }
 
     private suspend fun flushScrubPosition() {
@@ -232,7 +256,7 @@ class ReaderViewModel(
 
     fun reloadAfterRebuild() {
         enqueueSessionLifecycle {
-            saver.flush()
+            flushDeferredProgress()
             flushScrubPosition()
             load()
         }
@@ -242,7 +266,7 @@ class ReaderViewModel(
         enqueueSessionLifecycle {
             // The position first: both writes replace the whole row, and a debounced save
             // landing after this one put "not finished" back (audit A5-1).
-            saver.flush()
+            flushDeferredProgress()
             repository.setFinished(workId, true)
             updateReading { reading ->
                 reading.copy(

@@ -647,7 +647,7 @@ fun SettingsFolderSyncPage(repository: SettingsRepository, settings: KudosSettin
     LaunchedEffect(metadataCheck) {
         if (metadata.lastChecked == null) metadataCheck?.run()
     }
-    var lastSyncFolded by remember { mutableStateOf(0) }
+    var lastSyncResult by remember { mutableStateOf<SyncResult.Success?>(null) }
     var syncBusy by remember { mutableStateOf(false) }
 
     fun syncNow() {
@@ -655,7 +655,7 @@ fun SettingsFolderSyncPage(repository: SettingsRepository, settings: KudosSettin
         syncBusy = true
         scope.launch {
             val result = syncRepository?.runSync() as? SyncResult.Success
-            lastSyncFolded = result?.foldedConflicts ?: 0
+            lastSyncResult = result
             syncBusy = false
         }
     }
@@ -760,14 +760,10 @@ fun SettingsFolderSyncPage(repository: SettingsRepository, settings: KudosSettin
                 metadata.error?.let { SettingsFootnote(it) }
                 // The stored error covers manual, lifecycle and background worker runs.
                 settings.sync.lastError?.takeIf { connected && it.isNotBlank() }?.let { SettingsFootnote(it) }
-                if (connected && lastSyncFolded > 0) {
-                    SettingsFootnote(
-                        if (lastSyncFolded == 1) {
-                            "Merged 1 conflicting copy from another device."
-                        } else {
-                            "Merged $lastSyncFolded conflicting copies from other devices."
-                        }
-                    )
+                if (connected) {
+                    for (line in lastSyncResult?.footnoteLines().orEmpty()) {
+                        SettingsFootnote(line)
+                    }
                 }
                 SettingsFootnote(
                     "Kudos stores your library data, including reading history, in the folder you " +

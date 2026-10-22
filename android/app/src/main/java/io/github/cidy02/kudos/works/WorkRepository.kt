@@ -38,6 +38,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.yield
 
 /**
  * Library work persistence. Soft-delete / Recently Deleted follows Apple
@@ -264,6 +265,30 @@ class WorkRepository(
                 batch.forEach { work -> reindexSearchForWork(work.id) }
             }
         )
+    }
+
+    /**
+     * iOS `PersistenceMigrationService.backfillEPUBDigests`. At most
+     * [DIGEST_BACKFILL_PER_PASS] books per launch. The hash is streamed, then
+     * the column is written only if it is still empty, so an import that
+     * finished meanwhile keeps the digest it stored.
+     */
+    suspend fun backfillEpubDigests(limit: Int = DIGEST_BACKFILL_PER_PASS): Int {
+        val pending = workDao.worksMissingEpubDigest(limit)
+        var filled = 0
+        for (entity in pending) {
+            currentCoroutineContext().ensureActive()
+            val work = entity.toDomain()
+            if (!work.hasEpub || work.epubDigest.isNotEmpty()) continue
+            val file = runCatching { fileStore.workEpubPath(work.id).toFile() }.getOrNull()
+                ?: continue
+            val digest = withContext(Dispatchers.IO) {
+                io.github.cidy02.kudos.backup.BackupPaths.sha256(file)
+            } ?: continue
+            if (workDao.fillEpubDigestIfBlank(work.id, digest) > 0) filled += 1
+            yield()
+        }
+        return filled
     }
 
     /**
@@ -1168,6 +1193,9 @@ class WorkRepository(
     }
 
     companion object {
+        /** iOS `PersistenceMigrationService.digestBackfillPerPass`. */
+        const val DIGEST_BACKFILL_PER_PASS = 100
+
         /** CollectionWorkPicker.candidates: includes unkept history, excludes queue-only rows. */
         fun collectionCandidates(works: List<SavedWork>, memberIds: Set<String>): List<SavedWork> =
             works.filter { !it.isDeleted && !it.isQueueOnlyWork && it.id !in memberIds }

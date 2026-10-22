@@ -2599,3 +2599,16 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
 - **2026-10-22 · Two A75 findings (Grok).** At launch every work whose EPUB is gone stops offering
   it, queued or not, as iOS (`WorkRepository.repairMissingEpubFlags`); connecting a sync folder
   from Settings records it as configured, so Disconnect does not bring the first-run prompt back.
+- **2026-10-22 · A75's data findings (Grok 3gq).** (1) **The reader saves the first place after
+  opening that differs from the stored one, as iOS** (`ReadiumProgressPersistence.note`): this
+  reverses 3r's rule (2026-10-02, "the first location callback is not a read"). iOS today writes
+  it, and with no earlier phone position that write retires the Mac percent
+  (`applyDebouncedReadiumLocator`); an empty locator is never a place. Reverse:
+  `reader/ReaderProgressGate.kt` before this change. (2) A font restored beside a case-variant row
+  or file goes in under `-restored-N` and the selection stays on the file the reader picked, or
+  falls back to the system font if that file is gone (iOS `KudosBackup.swift:3296`, `:3458`).
+  (3) Existing books get a content hash at launch, 100 a pass, written into backups (additive key).
+  (4) The restore says when a promised EPUB never arrived; a sync's footnotes count restored works
+  and queue decisions, as iOS's `absorb`. **Not changed:** export's 128 MB per-book limit (export
+  holds each entry in memory; iOS streams up to 1 GB); a revoked device is not published to other
+  phones (a new cross-device feature); backups are read whole before import.
