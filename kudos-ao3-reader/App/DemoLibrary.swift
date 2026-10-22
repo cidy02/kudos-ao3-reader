@@ -361,14 +361,17 @@ enum DebugLaunchRoute {
     }
 
     /// `comments:<title>` opens that work's page, then its Comments (fixture-served),
-    /// for side-by-side screenshots with Android's `comments/<ao3 id>`. A demo import has no
-    /// AO3 id; it borrows Android's demo id for the same work (the fixture page is the same).
+    /// for side-by-side screenshots with Android's `comments/<ao3 id>`; `compose:<title>` opens
+    /// the comment composer over them. A demo import has no AO3 id; it borrows Android's demo id
+    /// for the same work (the fixture page is the same).
     static func commentsRoute(for work: SavedWork) -> AO3CommentsRoute? {
-        guard value?.hasPrefix("comments:") == true else { return nil }
-        return AO3CommentsRoute(workID: work.ao3WorkID ?? 999_000_005, context: AO3CommentsWorkContext(
+        guard let value, value.hasPrefix("comments:") || value.hasPrefix("compose:") else { return nil }
+        var route = AO3CommentsRoute(workID: work.ao3WorkID ?? 999_000_005, context: AO3CommentsWorkContext(
             title: work.title, authors: [work.author], fandoms: work.workFandoms,
             rating: work.rating, chapters: work.chapters
         ))
+        route.composes = value.hasPrefix("compose:")
+        return route
     }
 
     /// `author:<username>` opens another reader's AO3 profile (fixture-served) on Home's stack.
@@ -380,7 +383,7 @@ enum DebugLaunchRoute {
     static func homeWork(in works: [SavedWork]) -> SavedWork? {
         // `mycopy:<title>` opens the same page with its My copy sheet up;
         // `read:<title>` opens the reader instead (see `opensReader`).
-        let prefixes = ["work:", "mycopy:", "read:", "comments:"]
+        let prefixes = ["work:", "mycopy:", "read:", "comments:", "compose:"]
         guard let value, let prefix = prefixes.first(where: value.hasPrefix) else { return nil }
         let title = String(value.dropFirst(prefix.count))
         return works.first { $0.title == title }
