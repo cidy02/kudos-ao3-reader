@@ -105,15 +105,9 @@ private fun PromptMemeContent(
                     Spacer(Modifier.height(76.dp))
                     SubjectHeaderBlock(kicker = title.ifEmpty { slug }, title = "Prompts", subtitle = subtitle,
                         palette = palette, gutter = SubjectMetrics.accountGutter)
-                    if (large) SettingsPanel(Modifier.padding(top = 14.dp)) {
-                        AO3PromptMemeFilter.entries.forEachIndexed { index, option ->
-                            if (index > 0) SubjectRowSeparator()
-                            Text(option.label, color = if (filter == option) palette.accent else tokens.primaryInk,
-                                fontSize = 13.sp, lineHeight = 19.sp, fontWeight = FontWeight.Medium,
-                                modifier = Modifier.fillMaxWidth().semantics { selected = filter == option }
-                                    .clickable(role = Role.RadioButton) { filter = option }.padding(14.dp))
-                        }
-                    } else SubjectSegmentedControl(options = AO3PromptMemeFilter.entries, selected = filter,
+                    // One row at every size, as iOS's segmented picker (A76): the shared control sets
+                    // its labels smaller at the largest text rather than stacking.
+                    SubjectSegmentedControl(options = AO3PromptMemeFilter.entries, selected = filter,
                         onSelect = { filter = it }, title = { it.label }, contentDescription = "Prompt filter",
                         modifier = Modifier.padding(horizontal = SubjectMetrics.accountGutter).padding(top = 14.dp))
                 }

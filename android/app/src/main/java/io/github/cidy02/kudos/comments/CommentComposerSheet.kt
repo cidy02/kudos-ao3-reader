@@ -17,6 +17,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.foundation.text.TextAutoSize
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
@@ -73,6 +77,7 @@ fun CommentComposerSheet(
     verifying: Boolean = false
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val textFocus = remember { FocusRequester() }
     val tokens = LocalKudosTokens.current
 
     var textFieldValue by remember {
@@ -153,6 +158,9 @@ fun CommentComposerSheet(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     textAlign = TextAlign.Center,
+                    // Whole at the largest text, as iOS's fixed-size sheet title: it sets smaller first.
+                    autoSize = TextAutoSize.StepBased(
+                        minFontSize = (10f / LocalDensity.current.fontScale.coerceAtLeast(1f)).sp, maxFontSize = 16.sp),
                     modifier = Modifier.weight(1f)
                 )
 
@@ -261,8 +269,11 @@ fun CommentComposerSheet(
                     cursorBrush = SolidColor(palette.accent),
                     // The field had no name: a screen reader said only "edit box" (iOS names it).
                     modifier = Modifier.fillMaxWidth()
+                        .focusRequester(textFocus)
                         .semantics { contentDescription = if (isEdit) "Edit comment text" else "Comment text" }
                 )
+                // iOS raises the keyboard as the composer opens.
+                LaunchedEffect(Unit) { runCatching { textFocus.requestFocus() } }
             }
 
             // Honesty note & identity row & drag taller footer
