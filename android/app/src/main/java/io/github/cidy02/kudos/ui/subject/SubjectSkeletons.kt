@@ -75,6 +75,8 @@ private fun systemAnimationsEnabled(): Boolean {
 }
 
 /** Text dimensions use sp, including Android's font scaling; a narrow parent may shrink widths. */
+// Callers pass the sizes by position; modifier stays after them.
+@Suppress("ModifierParameter")
 @Composable
 fun SubjectSkeletonBlock(
     height: Int = 13,
@@ -96,6 +98,8 @@ fun SubjectSkeletonBlock(
 enum class SubjectSkeletonShape { Work, Fandom, Category, Inbox }
 
 /** Counts follow SkeletonLoading.swift and AccountInboxViews.loadingRows. */
+// Callers pass the sizes by position; modifier stays after them.
+@Suppress("ModifierParameter")
 @Composable
 fun SubjectSkeletonList(
     label: String,
