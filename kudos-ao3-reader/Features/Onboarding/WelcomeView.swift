@@ -8,6 +8,8 @@ struct WelcomeView: View {
     /// Called when the user taps Continue; the host persists completion.
     var onContinue: () -> Void
 
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     var body: some View {
         OnboardingScaffold {
             header
@@ -68,21 +70,50 @@ struct WelcomeView: View {
         VStack(spacing: 14) {
             if let url = URL(string: AppLinks.repository) {
                 Link(destination: url) {
-                    Label("View on GitHub", systemImage: "chevron.left.forwardslash.chevron.right")
-                        .font(.subheadline.weight(.medium))
+                    githubLabel
                 }
                 .accessibilityHint("Opens the project's source code in your browser")
             }
 
             Button(action: onContinue) {
-                Text("Continue")
-                    .font(.headline)
-                    .frame(maxWidth: .infinity)
+                actionTitle("Continue")
             }
             .buttonStyle(.borderedProminent)
             .accentFill()
             .prominentLabel()
             .controlSize(.large)
+            .onboardingWrapsButton(at: dynamicTypeSize.isAccessibilitySize)
+        }
+    }
+
+    @ViewBuilder
+    private var githubLabel: some View {
+        if dynamicTypeSize.isAccessibilitySize {
+            // One line was cut once the type outgrew the row.
+            Label {
+                Text("View on GitHub")
+                    .fixedSize(horizontal: false, vertical: true)
+                    .multilineTextAlignment(.center)
+            } icon: {
+                Image(systemName: "chevron.left.forwardslash.chevron.right")
+            }
+            .font(.subheadline.weight(.medium))
+        } else {
+            Label("View on GitHub", systemImage: "chevron.left.forwardslash.chevron.right")
+                .font(.subheadline.weight(.medium))
+        }
+    }
+
+    @ViewBuilder
+    private func actionTitle(_ text: String) -> some View {
+        let title = Text(text).font(.headline)
+        if dynamicTypeSize.isAccessibilitySize {
+            title
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity)
+        } else {
+            title.frame(maxWidth: .infinity)
         }
     }
 }

@@ -459,6 +459,8 @@ struct SubjectKicker: View {
             .tracking(size * 0.11)
             .lineLimit(shrinks ? 1 : lineLimit)
             .minimumScaleFactor(shrinks ? 0.5 : 1)
+            // A Button label centres its lines; a kicker that wraps stays flush left.
+            .multilineTextAlignment(.leading)
 
             Capsule()
                 .fill(palette.accent)

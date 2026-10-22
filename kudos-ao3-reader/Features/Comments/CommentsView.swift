@@ -19,6 +19,24 @@ nonisolated struct AO3CommentsRoute: Hashable {
     var composes = false
 }
 
+/// Ordinary sizes keep the floating pill in a bottom safe-area inset. Accessibility
+/// sizes pin the same control under the list so it cannot cover a row.
+private struct CommentWriteBarPlacement<Bar: View>: ViewModifier {
+    var accessibilitySize: Bool
+    @ViewBuilder var bar: () -> Bar
+
+    func body(content: Content) -> some View {
+        if accessibilitySize {
+            VStack(spacing: 0) {
+                content
+                bar()
+            }
+        } else {
+            content.safeAreaInset(edge: .bottom) { bar() }
+        }
+    }
+}
+
 /// Native AO3 comments for a work: all comments or per-chapter, threaded, with
 /// reply/compose and the per-comment actions AO3 actually exposes. Pushed from
 /// Work Detail and presented as a sheet from the reader's actions menu.
@@ -189,7 +207,12 @@ struct CommentsView: View {
                 )
             }
             // `subjectScreenWash` already hides the floating tab bar.
-            .safeAreaInset(edge: .bottom) { writeCommentBar }
+            // At accessibility sizes the inset did not keep the list clear of the
+            // pill, and the pill covered "All comments". The bar then sits under
+            // the list, full width, on its own ground.
+            .modifier(CommentWriteBarPlacement(accessibilitySize: dynamicTypeSize.isAccessibilitySize) {
+                writeCommentBar
+            })
             .refreshable { await model.load(auth: auth, forceRefresh: true) }
             .task {
                 await model.loadInitial(auth: auth)
@@ -840,16 +863,64 @@ struct CommentsView: View {
     @ViewBuilder
     private var writeCommentBar: some View {
         if case .loaded = model.phase {
-            // Spec 1f's centred 44pt pill, in the page's own accent rather than the
-            // app tint — this is the one filled control on a washed screen, which
-            // is exactly what `solidButton*` names. Still floating over the page
-            // backdrop with no opaque slab behind it: the safe-area inset (plus the
-            // list's trailing spacer) keeps content from sitting underneath, and
-            // the artboard's scrim would put the slab back. Shown whether or not
-            // the reader is signed in — logged out it opens the AO3 login sheet
-            // instead of composing, so it is never a dead end.
-            let title = auth.isLoggedIn ? "Write a comment" : "Log in to comment"
-            Button {
+            if dynamicTypeSize.isAccessibilitySize {
+                accessibleWriteCommentBar
+            } else {
+                floatingWriteCommentBar
+            }
+        }
+    }
+
+    /// Full-width, on the page's raised surface, with the label free to wrap.
+    /// Stays put under the list (not a scroll-away control, and not an overlay).
+    private var accessibleWriteCommentBar: some View {
+        let title = auth.isLoggedIn ? "Write a comment" : "Log in to comment"
+        return Button {
+            if auth.isLoggedIn {
+                model.startComposer(auth: auth)
+            } else {
+                showingLogin = true
+            }
+        } label: {
+            HStack(spacing: 9) {
+                Image(systemName: auth.isLoggedIn
+                    ? "pencil" : "person.crop.circle.badge.questionmark")
+                    .font(.system(size: 14, weight: .semibold))
+                Text(title)
+                    .font(.system(size: writeCommentButtonSize, weight: .semibold))
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .foregroundStyle(palette.solidButtonLabel)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .background(
+                RoundedRectangle(cornerRadius: 14, style: .continuous).fill(palette.accent)
+            )
+        }
+        .buttonStyle(.plain)
+        .disabled(model.isOffline)
+        .opacity(model.isOffline ? 0.45 : 1)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .frame(maxWidth: .infinity)
+        .background(theme.appTheme.cardSurface.ignoresSafeArea(edges: .bottom))
+        .accessibilityLabel(title)
+    }
+
+    @ViewBuilder
+    private var floatingWriteCommentBar: some View {
+        // Spec 1f's centred 44pt pill, in the page's own accent rather than the
+        // app tint — this is the one filled control on a washed screen, which
+        // is exactly what `solidButton*` names. Still floating over the page
+        // backdrop with no opaque slab behind it: the safe-area inset (plus the
+        // list's trailing spacer) keeps content from sitting underneath, and
+        // the artboard's scrim would put the slab back. Shown whether or not
+        // the reader is signed in — logged out it opens the AO3 login sheet
+        // instead of composing, so it is never a dead end.
+        let title = auth.isLoggedIn ? "Write a comment" : "Log in to comment"
+        Button {
                 if auth.isLoggedIn {
                     model.startComposer(auth: auth)
                 } else {
@@ -895,7 +966,6 @@ struct CommentsView: View {
             .padding(.top, 2)
             .padding(.bottom, 0)
             .accessibilityLabel(title)
-        }
     }
 
     // MARK: Sheets + bindings

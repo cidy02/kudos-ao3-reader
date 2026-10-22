@@ -12,6 +12,7 @@ struct SyncFolderOnboardingView: View {
     var onFinished: () -> Void
 
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var dontRemindAgain = false
     @State private var choosingFolder = false
     @State private var isConnecting = false
@@ -86,7 +87,7 @@ struct SyncFolderOnboardingView: View {
 
     private var footer: some View {
         VStack(spacing: 14) {
-            Toggle("Don't remind me again", isOn: $dontRemindAgain)
+            dontRemindToggle
                 .font(.subheadline)
                 .accentFill()
 
@@ -96,20 +97,58 @@ struct SyncFolderOnboardingView: View {
                 if isConnecting {
                     ProgressView().frame(maxWidth: .infinity).accentFill()
                 } else {
-                    Text("Choose Sync Folder")
-                        .font(.headline)
-                        .frame(maxWidth: .infinity)
+                    chooseFolderTitle
                 }
             }
             .buttonStyle(.borderedProminent)
             .accentFill()
             .prominentLabel()
             .controlSize(.large)
+            .onboardingWrapsButton(at: dynamicTypeSize.isAccessibilitySize)
             .disabled(isConnecting)
 
-            Button("Not Now", action: dismissWithoutConnecting)
+            notNowButton
                 .font(.subheadline.weight(.medium))
                 .disabled(isConnecting)
+        }
+    }
+
+    @ViewBuilder
+    private var notNowButton: some View {
+        if dynamicTypeSize.isAccessibilitySize {
+            Button(action: dismissWithoutConnecting) {
+                Text("Not Now")
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        } else {
+            Button("Not Now", action: dismissWithoutConnecting)
+        }
+    }
+
+    /// One line cut this to "Don't remin…" at AX5. The switch stays; the words wrap.
+    @ViewBuilder
+    private var dontRemindToggle: some View {
+        if dynamicTypeSize.isAccessibilitySize {
+            Toggle(isOn: $dontRemindAgain) {
+                Text("Don't remind me again")
+                    .fixedSize(horizontal: false, vertical: true)
+                    .multilineTextAlignment(.leading)
+            }
+        } else {
+            Toggle("Don't remind me again", isOn: $dontRemindAgain)
+        }
+    }
+
+    @ViewBuilder
+    private var chooseFolderTitle: some View {
+        let title = Text("Choose Sync Folder").font(.headline)
+        if dynamicTypeSize.isAccessibilitySize {
+            title
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity)
+        } else {
+            title.frame(maxWidth: .infinity)
         }
     }
 
