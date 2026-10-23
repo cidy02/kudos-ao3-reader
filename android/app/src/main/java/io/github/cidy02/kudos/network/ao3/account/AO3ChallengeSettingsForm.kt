@@ -61,6 +61,12 @@ data class AO3ChallengeSettingsForm(
                 if (!scheduleIsEditable && (served.name == field("time_zone") || challengeDateKeys.any {
                         served.name == field(it) || served.name == field("${it}_string")
                     })) return@forEachIndexed
+                val companionBox = controls.firstOrNull { it.name == served.name && it.type == "checkbox" }
+                if (served.type == "hidden" && companionBox != null) {
+                    // Following iOS submittedHiddenFields: a ticked, enabled checkbox's value replaces its
+                    // companion "0" rather than sending both; a disabled box keeps its companion "0".
+                    if (!companionBox.disabled && this@AO3ChallengeSettingsForm[served.name] == "1") return@forEachIndexed
+                }
                 val changed = changes[served.name].takeIf { index == controls.indexOfLast { it.name == served.name && it.type != "hidden" } }
                 val control = if (changed == null || served.type == "hidden") served else when (served.type) {
                     "checkbox" -> served.copy(browserChecked = changed == "1")
