@@ -1,5 +1,8 @@
 package io.github.cidy02.kudos.reader
 
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -125,27 +128,30 @@ fun ReaderContentsSheet(
                     ) {
                         items(entries, key = { "${it.depth}:${it.href}:${it.title}" }) { entry ->
                             val percent = startPercent(entry)
-                            SwipeActionRow(
-                                leading = emptyList(),
-                                trailing = buildList {
-                                    add(SwipeAction("Go", Icons.AutoMirrored.Filled.ArrowForward, tokens.scopePalette.accent) {
-                                        onSelectEntry(entry)
+                            val actions = buildList {
+                                add(SwipeAction("Go", Icons.AutoMirrored.Filled.ArrowForward, tokens.scopePalette.accent) {
+                                    onSelectEntry(entry)
+                                })
+                                if (percent != null) {
+                                    if (onBookmarkEntry != null) add(SwipeAction("Bookmark", Icons.Filled.Bookmark, Color(0xFFFF9500)) {
+                                        onBookmarkEntry(entry)
                                     })
-                                    if (percent != null) {
-                                        if (onBookmarkEntry != null) add(SwipeAction("Bookmark", Icons.Filled.Bookmark, Color(0xFFFF9500)) {
-                                            onBookmarkEntry(entry)
-                                        })
-                                        if (onAddNoteToEntry != null) add(SwipeAction("Add Note", Icons.Filled.BorderColor, Color.Gray) {
-                                            onAddNoteToEntry(entry)
-                                        })
-                                    }
+                                    if (onAddNoteToEntry != null) add(SwipeAction("Add Note", Icons.Filled.BorderColor, Color.Gray) {
+                                        onAddNoteToEntry(entry)
+                                    })
                                 }
-                            ) {
+                            }
+                            SwipeActionRow(leading = emptyList(), trailing = actions) {
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .background(tokens.background)
                                         .clickable { onSelectEntry(entry) }
+                                        // TalkBack can't swipe a row open: the same actions are in its
+                                        // actions menu, as iOS's swipe actions are in VoiceOver's rotor.
+                                        .semantics {
+                                            customActions = actions.map { CustomAccessibilityAction(it.label) { it.onClick(); true } }
+                                        }
                                         .padding(
                                             start = (20 + entry.depth * 16).dp,
                                             end = 20.dp,

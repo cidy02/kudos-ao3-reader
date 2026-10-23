@@ -140,7 +140,8 @@ private fun PronunciationSettingsSheet(store: KokoroPronunciationStore, onDismis
                 } else item {
                     SettingsSection(label = "Corrections",
                         footnote = "Read Aloud checks these before its own dictionary, so a correction here always wins.") {
-                        entries.forEach { (word, ipa) ->
+                        entries.toList().forEachIndexed { index, (word, ipa) ->
+                            if (index > 0) SubjectRowSeparator()
                             SubjectFormRow(word, value = ipa, valueMaxLines = 3, onClick = { editing = word to ipa })
                             SettingsActionRow("Delete $word", destructive = true, onClick = {
                                 scope.launch {
@@ -151,7 +152,6 @@ private fun PronunciationSettingsSheet(store: KokoroPronunciationStore, onDismis
                                     } catch (_: Exception) { message = "Could not delete correction. Try again." }
                                 }
                             })
-                            SubjectRowSeparator()
                         }
                     }
                 }

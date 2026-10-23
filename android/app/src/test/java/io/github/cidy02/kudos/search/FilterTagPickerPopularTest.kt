@@ -45,6 +45,21 @@ class FilterTagPickerPopularTest {
         assertEquals("Star Wars", excluded)
     }
 
+    /** A86: after a comma the next tag is empty, so the library's fandoms wait for typing, as when the field is empty. */
+    @Test fun aTrailingCommaWaitsForTheNextTagBeforeSuggesting() {
+        compose.setContent {
+            KudosTheme(KudosThemeMode.Light) {
+                FilterTagRow("Fandoms", "fandom", "", "", listOf("Naruto"), null, emptyList(), onChange = { _, _ -> })
+            }
+        }
+        compose.onNodeWithText("Fandoms").performClick()
+        compose.onNode(hasSetTextAction()).performTextInput("Doctor Who, ")
+        compose.onNodeWithText("Naruto").assertDoesNotExist()
+        compose.onNode(hasSetTextAction()).performTextInput("Na")
+        compose.onNode(hasScrollToNodeAction()).performScrollToNode(hasText("Naruto"))
+        compose.onNodeWithText("Naruto").assertExists()
+    }
+
     @Test fun emptyNonFandomQueryExplainsHowToGetPopularTags() {
         var kind by mutableStateOf("character")
         compose.setContent {
