@@ -40,21 +40,23 @@ struct WorkBulkTagSheet: View {
                         ? "Your changes apply to the selected work."
                         : "Your changes apply to all \(works.count) selected works.")
                 }
+                .appThemedRows()
 
                 if allTags.isEmpty {
                     Section {
                         Text("You have no tags yet. Add one above to organize your Library.")
                             .foregroundStyle(.secondary)
                     }
+                    .appThemedRows()
                 } else {
                     Section("Your tags") {
                         ForEach(allTags) { tag in
                             row(for: tag)
                         }
                     }
+                    .appThemedRows()
                 }
             }
-            .appThemedRows()
             .appThemedScroll()
             .navigationTitle("Tag")
             #if os(iOS)

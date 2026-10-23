@@ -14,6 +14,7 @@ struct WritingTextEditor: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
     @Environment(ThemeManager.self) private var theme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     /// 1bv's serif at 15.5, scaled with Dynamic Type.
     @ScaledMetric(relativeTo: .body) private var editorFontSize = 15.5
     @ScaledMetric(relativeTo: .caption) private var tagLabelFontSize = 13
@@ -98,6 +99,8 @@ struct WritingTextEditor: View {
             }
             Text("Recovery copy on this device · Save from the work form")
                 .font(.caption).foregroundStyle(.secondary)
+                // Whole at the largest text: the editor above gives way, not this line.
+                .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .trailing)
                 .padding(.horizontal)
             #if os(iOS)
@@ -131,7 +134,14 @@ struct WritingTextEditor: View {
                 moreMenu
             }
             ToolbarItem(placement: .confirmationAction) {
-                Button("Done") { close() }
+                // A mark at the accessibility sizes, as the app's other sheets draw Done:
+                // the word no longer fitted beside the four icons and went into "…".
+                if dynamicTypeSize.isAccessibilitySize {
+                    Button { close() } label: { Image(systemName: "checkmark") }
+                        .accessibilityLabel("Done")
+                } else {
+                    Button("Done") { close() }
+                }
             }
         }
         // 1bo's delete alert shape: named, destructive, never the default.
@@ -262,7 +272,15 @@ struct WritingTextEditor: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 11)
-        .background(.regularMaterial)
+        // Sepia, Dark and OLED take the app's own ground, as Android's bar does; the
+        // material was the system's light grey under Sepia.
+        .background {
+            if let base = theme.appTheme.appBaseBackground {
+                base.overlay(theme.appTheme.glassFill(0.09))
+            } else {
+                Rectangle().fill(.regularMaterial)
+            }
+        }
         .overlay(alignment: .top) {
             Rectangle()
                 .fill(theme.appTheme.glassStroke(0.12))
@@ -333,7 +351,23 @@ struct WritingTextEditor: View {
         if tag == .link { showLink = true } else { controller?.command(tag.element) }
     }
 
+    /// At the accessibility sizes the sheet scrolls and the copy keeps a fixed height, so
+    /// the heading, the notes and the actions wrap whole instead of ending in "…".
     private var recoverySheet: some View {
+        Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                ScrollView { recoveryContent }
+            } else {
+                recoveryContent
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        // The sheet was the system's white under Sepia. Light keeps it.
+        .background((theme.appTheme.appBaseBackground ?? .clear).ignoresSafeArea())
+        .interactiveDismissDisabled()
+    }
+
+    private var recoveryContent: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text("Recover unfinished text?").font(.headline)
             if let copy = recovery {
@@ -352,6 +386,17 @@ struct WritingTextEditor: View {
                     Text("The text on the form has changed since this copy began. Review the copy before restoring it.")
                 }
                 WritingRecoveryCopyText(text: recovery.text)
+                    .frame(height: dynamicTypeSize.isAccessibilitySize ? 240 : nil)
+                // The copy is drawn a line at a time (T-431), so selecting it takes a line at a time;
+                // this copies all of it, as the single Text it used to be did (A83).
+                Button("Copy text") {
+                    #if os(iOS)
+                    UIPasteboard.general.string = recovery.text
+                    #else
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(recovery.text, forType: .string)
+                    #endif
+                }
                 Button("Restore local copy") {
                     controller?.restore(recovery.text)
                     // Straight into the form and a fresh recovery copy, rather
@@ -368,8 +413,9 @@ struct WritingTextEditor: View {
                 }
             }
         }
+        // Each line its full height once the sheet scrolls (the accessibility sizes).
+        .fixedSize(horizontal: false, vertical: dynamicTypeSize.isAccessibilitySize)
         .padding()
-        .interactiveDismissDisabled()
     }
 
     private func start() {
@@ -477,6 +523,7 @@ struct WritingChapterEditorActions {
 
 struct WritingTextEditorRow: View {
     @Environment(AO3AuthService.self) private var auth
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     @ScaledMetric(relativeTo: .footnote) private var detailSize: CGFloat = 12.5
 
@@ -504,7 +551,7 @@ struct WritingTextEditorRow: View {
                     Text(detail)
                         .font(.system(size: detailSize))
                         .foregroundStyle(.secondary)
-                        .lineLimit(2)
+                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.horizontal, 14)
                         .padding(.top, -8)
@@ -534,8 +581,6 @@ struct WritingTextEditorRow: View {
     }
 }
 
-/// OD1's preview model: the buffer parsed as AO3 HTML and reduced to the blocks
-/// `AO3RichTextView` draws, with the same parser AO3's pages use here.
 /// The editor's Preview. Lazy: drawn whole, a chapter at AO3's 510,000-character limit
 /// stalls the screen, as it froze Android's for seconds (T-358).
 struct WritingRenderedPreview: View {
@@ -573,6 +618,8 @@ struct WritingRecoveryCopyText: View {
     }
 }
 
+/// OD1's preview model: the buffer parsed as AO3 HTML and reduced to the blocks
+/// `AO3RichTextView` draws, with the same parser AO3's pages use here.
 nonisolated enum WritingBufferPreview {
     enum State: Equatable {
         case rendered(AO3RichText)

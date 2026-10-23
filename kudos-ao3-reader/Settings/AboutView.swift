@@ -28,8 +28,9 @@ struct AboutView: View {
                 }
 
                 Section("License") {
-                    Text("Kudos is free to use, study, share, and change under the "
-                        + "**GNU Affero General Public License v3.0 (AGPL-3.0)**.")
+                    // A concatenated String is not Markdown: this drew the asterisks.
+                    let license = Text("GNU Affero General Public License v3.0 (AGPL-3.0)").bold()
+                    Text("Kudos is free to use, study, share, and change under the \(license).")
                 }
 
                 Section("Open-Source Components") {

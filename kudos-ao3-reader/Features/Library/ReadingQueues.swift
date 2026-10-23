@@ -470,6 +470,7 @@ struct AddToQueueView: View {
                             .disabled(newName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     }
                 }
+                .appThemedRows()
 
                 Section {
                     ForEach(sortedQueues) { queue in
@@ -497,6 +498,7 @@ struct AddToQueueView: View {
                 } footer: {
                     Text("A queue with Keep works offline turned on keeps its works downloaded for you.")
                 }
+                .appThemedRows()
 
                 if hasSeries {
                     Section {
@@ -545,9 +547,11 @@ struct AddToQueueView: View {
                     } footer: {
                         Text("Kudos adds series works only after you choose Add Series, one work at a time.")
                     }
+                    .appThemedRows()
                 }
             }
             .formStyle(.grouped)
+            .appThemedScroll()
             .navigationTitle("Add to Queue")
             #if !os(macOS)
                 .navigationBarTitleDisplayMode(.inline)

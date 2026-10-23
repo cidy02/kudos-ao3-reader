@@ -294,6 +294,7 @@ struct SeriesReorderView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(ThemeManager.self) private var theme
     @Environment(AO3AuthService.self) private var auth
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     @ScaledMetric(relativeTo: .subheadline) private var workTitleSize: CGFloat = 14.5
     @ScaledMetric(relativeTo: .footnote) private var positionNumberSize: CGFloat = 13
@@ -397,7 +398,11 @@ struct SeriesReorderView: View {
     /// The number is the position *after* dragging, not the one AO3 currently
     /// holds: it is what Save will write.
     private func orderRow(_ row: AO3SeriesWorkRow, position index: Int) -> some View {
-        HStack(spacing: 12) {
+        // The position over the title at the accessibility sizes, as the collection
+        // reorder row: beside it the title was cut ("A Lamp at the Crossi…").
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 3)) : AnyLayout(HStackLayout(spacing: 12))
+        return layout {
             Text("\(index)")
                 .font(.system(size: positionNumberSize, weight: .semibold, design: .monospaced))
                 .foregroundStyle(accountPalette.accent)
@@ -405,7 +410,7 @@ struct SeriesReorderView: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text(row.title.isEmpty ? "Untitled work" : row.title)
                     .font(.system(size: workTitleSize, weight: .medium))
-                    .lineLimit(2)
+                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
                 if let metadata = row.metadataText {
                     Text(metadata).font(.system(size: footnoteSize)).foregroundStyle(.secondary)
                 }
@@ -457,6 +462,7 @@ struct SeriesRemoveWorksView: View {
 
     @Environment(ThemeManager.self) private var theme
     @Environment(AO3AuthService.self) private var auth
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     @ScaledMetric(relativeTo: .subheadline) private var workTitleSize: CGFloat = 14.5
     @ScaledMetric(relativeTo: .caption) private var footnoteSize: CGFloat = 11.5
@@ -542,7 +548,9 @@ struct SeriesRemoveWorksView: View {
     private func row(_ row: AO3SeriesWorkRow) -> some View {
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 3) {
-                Text(Self.title(row)).font(.system(size: workTitleSize, weight: .medium)).lineLimit(2)
+                // Whole at the accessibility sizes, as Android's.
+                Text(Self.title(row)).font(.system(size: workTitleSize, weight: .medium))
+                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
                 if let metadata = row.metadataText {
                     Text(metadata).font(.system(size: footnoteSize)).foregroundStyle(.secondary)
                 }

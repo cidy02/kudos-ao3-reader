@@ -560,7 +560,9 @@ struct WorkCreatorsPickerView: View {
         .cardList()
         // Rows at their own padding, not the List minimum (L3-FORM-1).
         .environment(\.defaultMinListRowHeight, 0)
-        .navigationTitle("Co-creators")
+        // Blank, as WritingTagsEditor's: the header block names the page, and a title
+        // set before the wash outranks its blank one, so the bar named it a second time.
+        .navigationTitle("")
         .subjectScreenWash(palette: palette)
     }
 
@@ -673,14 +675,21 @@ struct WorkParentWorkPickerView: View {
         .cardList()
         // Rows at their own padding, not the List minimum (L3-FORM-1).
         .environment(\.defaultMinListRowHeight, 0)
-        .navigationTitle("Inspired by")
+        // Blank, as above: the header block already says "Inspired by".
+        .navigationTitle("")
         .subjectScreenWash(palette: palette)
     }
 
     private var sourcePanel: some View {
         VStack(spacing: 0) {
             SubjectFormRow(label: "URL", arrangement: .control) {
-                TextField("https://archiveofourown.org/works/…", text: $parentWork.url)
+                // Wraps rather than scrolling out of sight ("https://archiv…" at the
+                // largest text); a return typed into it is dropped, as a URL has none.
+                TextField("https://archiveofourown.org/works/…", text: Binding(
+                    get: { parentWork.url },
+                    set: { parentWork.url = $0.replacingOccurrences(of: "\n", with: "") }
+                ), axis: .vertical)
+                    .lineLimit(1...4)
                     #if os(iOS)
                     .textInputAutocapitalization(.never)
                     #endif
