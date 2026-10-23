@@ -82,11 +82,14 @@ struct SaveSearchSheet: View {
                 }
             }
             .cardList()
-            .subjectScreenWash(palette: palette)
+            // Inside the wash, as New queue's sheet does: the wash empties the
+            // title for pages that name themselves in a header block, and the
+            // innermost title wins, so set after it this one never showed.
             .navigationTitle("Save Search")
             #if !os(macOS)
                 .navigationBarTitleDisplayMode(.inline)
             #endif
+            .subjectScreenWash(palette: palette)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }

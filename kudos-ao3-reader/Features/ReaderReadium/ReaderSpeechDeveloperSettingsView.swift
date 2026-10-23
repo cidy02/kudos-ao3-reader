@@ -66,6 +66,7 @@ struct ReaderSpeechDeveloperSettingsView: View {
                     + "yet — playback prefetches one ahead, so expect a "
                     + "sentence or two of delay.")
             }
+            .appThemedRows()
 
             Section {
                 // No "Target" control. `KokoroPhonemeBudget.preferredTarget`
@@ -86,6 +87,7 @@ struct ReaderSpeechDeveloperSettingsView: View {
                     + "175–250. Estimates run about 15% high, so a target of "
                     + "175 lands near 152 real phonemes.")
             }
+            .appThemedRows()
 
             Section {
                 Toggle("Break at dialogue", isOn: $dialogueBarrier).accentFill()
@@ -100,6 +102,7 @@ struct ReaderSpeechDeveloperSettingsView: View {
                     + "chapter or after restarting Read Aloud — not "
                     + "mid-chapter.")
             }
+            .appThemedRows()
 
             Section {
                 Button("Reset to shipped defaults", role: .destructive) {
@@ -110,9 +113,9 @@ struct ReaderSpeechDeveloperSettingsView: View {
                     ? "Some values differ from the shipped defaults."
                     : "Everything matches the shipped defaults.")
             }
+            .appThemedRows()
         }
         .appThemedScroll()
-        .appThemedRows()
         .navigationTitle("Developer Settings")
         .navigationBarTitleDisplayMode(.inline)
         // Any write invalidates the cached snapshot the playback path reads.

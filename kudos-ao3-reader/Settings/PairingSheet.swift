@@ -227,17 +227,20 @@ private struct RevokeDeviceSheet: View {
         NavigationStack {
             Form {
                 Section("Why are you removing this device?") {
+                    // Hidden label: the section already asks, and an inline picker
+                    // drew "Reason" as a row of its own inside the card.
                     Picker("Reason", selection: $reason) {
                         Text("Stolen or compromised").tag(TombstoneRevokeReason.stolenOrCompromised)
                         Text("Retired or sold").tag(TombstoneRevokeReason.retiredOrSold)
                     }
                     .pickerStyle(.inline)
+                    .labelsHidden()
                 }
+                .appThemedRows()
             }
-            .navigationTitle("Revoke \(device.label.isEmpty ? "This Device" : device.label)")
-            #if os(iOS)
-            .navigationBarTitleDisplayMode(.inline)
-            #endif
+            .appThemedScroll()
+            // A device's name is the user's own and often long ("Revoke Demo readi…").
+            .wrappingInlineTitle("Revoke \(device.label.isEmpty ? "This Device" : device.label)")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
@@ -298,91 +301,100 @@ struct PairingSheet: View {
 
     private var pairingForm: some View {
         Form {
-            Section {
-                Text("Scan another device's code to trust its deletions here, or show your code "
-                    + "so it can trust deletions from this device.")
-                    .foregroundStyle(.secondary)
-            }
-
-            Section {
-                #if os(iOS)
-                Button {
-                    showScanner = true
-                } label: {
-                    Label("Scan a QR Code", systemImage: "qrcode.viewfinder")
-                }
-                #endif
-
-                Button {
-                    showQR.toggle()
-                } label: {
-                    Label(showQR ? "Hide My QR Code" : "Show My QR Code", systemImage: "qrcode")
-                }
-
-                if showQR, let image = QRCodeGenerator.image(for: PairingKeyCodec.encode(deviceHex)) {
-                    HStack {
-                        Spacer()
-                        image
-                            .interpolation(.none)
-                            .resizable()
-                            .scaledToFit()
-                            .frame(maxWidth: 220, maxHeight: 220)
-                            .padding(.vertical, 4)
-                        Spacer()
-                    }
-                }
-
-                Button {
-                    copyKey()
-                } label: {
-                    Label("Copy My Key", systemImage: "doc.on.doc")
-                }
-            }
-
-            Section {
-                DisclosureGroup("Advanced: paste a key manually", isExpanded: $showAdvanced) {
-                    TextField("Other device's key", text: $pasteText)
-                        .font(.system(.caption, design: .monospaced))
-                        #if canImport(UIKit)
-                        .textInputAutocapitalization(.never)
-                        #endif
-                        .autocorrectionDisabled()
-                    Toggle("I got this key from my other device", isOn: $confirmedFromOwnDevice).accentFill()
-                    Button("Trust") {
-                        trustPasted()
-                    }
-                    .disabled(!PairingTrustGate.canTrust(
-                        pastedText: pasteText,
-                        confirmedFromOwnDevice: confirmedFromOwnDevice
-                    ))
-                }
-            }
-
-            if let errorMessage {
+            // Group so .appThemedRows() reaches every section (not from the Form itself).
+            Group {
                 Section {
-                    Text(errorMessage)
-                        .foregroundStyle(.red)
+                    Text("Scan another device's code to trust its deletions here, or show your code "
+                        + "so it can trust deletions from this device.")
+                        .foregroundStyle(.secondary)
+                }
+
+                Section {
+                    #if os(iOS)
+                    Button {
+                        showScanner = true
+                    } label: {
+                        Label("Scan a QR Code", systemImage: "qrcode.viewfinder")
+                    }
+                    #endif
+
+                    Button {
+                        showQR.toggle()
+                    } label: {
+                        Label(showQR ? "Hide My QR Code" : "Show My QR Code", systemImage: "qrcode")
+                    }
+
+                    if showQR, let image = QRCodeGenerator.image(for: PairingKeyCodec.encode(deviceHex)) {
+                        HStack {
+                            Spacer()
+                            image
+                                .interpolation(.none)
+                                .resizable()
+                                .scaledToFit()
+                                .frame(maxWidth: 220, maxHeight: 220)
+                                .padding(.vertical, 4)
+                            Spacer()
+                        }
+                    }
+
+                    Button {
+                        copyKey()
+                    } label: {
+                        Label("Copy My Key", systemImage: "doc.on.doc")
+                    }
+                }
+
+                Section {
+                    DisclosureGroup("Advanced: paste a key manually", isExpanded: $showAdvanced) {
+                        TextField("Other device's key", text: $pasteText)
+                            .font(.system(.caption, design: .monospaced))
+                            #if canImport(UIKit)
+                            .textInputAutocapitalization(.never)
+                            #endif
+                            .autocorrectionDisabled()
+                        Toggle("I got this key from my other device", isOn: $confirmedFromOwnDevice).accentFill()
+                        Button("Trust") {
+                            trustPasted()
+                        }
+                        .disabled(!PairingTrustGate.canTrust(
+                            pastedText: pasteText,
+                            confirmedFromOwnDevice: confirmedFromOwnDevice
+                        ))
+                    }
+                }
+
+                if let errorMessage {
+                    Section {
+                        Text(errorMessage)
+                            .foregroundStyle(.red)
+                    }
                 }
             }
+            .appThemedRows()
         }
+        .appThemedScroll()
     }
 
     private func trustedNameStep(_ hex: String) -> some View {
         Form {
-            Section {
-                Text("This device is now trusted. Give it a name you will recognize later.")
-                    .foregroundStyle(.secondary)
-            }
-            Section {
-                TextField("e.g. Sam's iPhone", text: $trustLabel)
-                Button("Done") {
-                    if !trustLabel.isEmpty {
-                        TombstoneTrustStore.rename(hex, label: trustLabel)
+            Group {
+                Section {
+                    Text("This device is now trusted. Give it a name you will recognize later.")
+                        .foregroundStyle(.secondary)
+                }
+                Section {
+                    TextField("e.g. Sam's iPhone", text: $trustLabel)
+                    Button("Done") {
+                        if !trustLabel.isEmpty {
+                            TombstoneTrustStore.rename(hex, label: trustLabel)
+                        }
+                        dismiss()
                     }
-                    dismiss()
                 }
             }
+            .appThemedRows()
         }
+        .appThemedScroll()
     }
 
     private func copyKey() {

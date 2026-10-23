@@ -1041,7 +1041,7 @@ struct CommentsView: View {
                         } label: {
                             HStack {
                                 Label(chapter.displayName, systemImage: "book")
-                                    .lineLimit(1)
+                                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
                                 Spacer()
                                 if chapter == model.selectedChapter, model.scope == .byChapter {
                                     Image(systemName: "checkmark")
@@ -1059,9 +1059,9 @@ struct CommentsView: View {
                     // no per-chapter counts without shouting about it.
                     Text("AO3 doesn't show comment totals for each chapter. Choose a chapter to see its comments.")
                 }
+                .appThemedRows()
             }
             .appThemedScroll()
-            .appThemedRows()
             // The chapter index used to be fetched only as a side effect of
             // switching scope to By Chapter. The pill that opens this sheet can
             // now be tapped while the scope is still All, so the sheet asks for

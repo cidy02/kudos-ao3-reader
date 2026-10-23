@@ -635,12 +635,14 @@ struct AddToCollectionView: View {
                             .disabled(newName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     }
                 }
+                .appThemedRows()
 
                 if collections.isEmpty {
                     Section {
                         Text("You have no collections yet. Create one above to group works together.")
                             .foregroundStyle(.secondary)
                     }
+                    .appThemedRows()
                 } else {
                     Section("Collections") {
                         ForEach(collections) { collection in
@@ -664,9 +666,11 @@ struct AddToCollectionView: View {
                             .buttonStyle(.plain)
                         }
                     }
+                    .appThemedRows()
                 }
             }
             .formStyle(.grouped)
+            .appThemedScroll()
             .navigationTitle("Add to Collection")
             #if !os(macOS)
                 .navigationBarTitleDisplayMode(.inline)

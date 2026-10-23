@@ -39,6 +39,7 @@ struct WritingTagsEditor: View {
     @Environment(ThemeManager.self) private var theme
     @Environment(\.writingOtherWorks) private var otherWorks
     @Environment(\.writingEditedWorkID) private var editedWorkID
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     let title: String
     @Binding var values: [String]
@@ -334,7 +335,7 @@ struct WritingTagsEditor: View {
                     Text(name)
                         .font(.system(size: tagNameSize))
                         .foregroundStyle(.primary)
-                        .lineLimit(2)
+                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
                     badgeLine(badge)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)

@@ -68,9 +68,10 @@ struct RecentlyDeletedView: View {
                 list(entries)
             }
         }
-        .subjectScreenWash(palette: palette)
-        // 1bg's grammar: the title bar takes the count while selecting.
+        // 1bg's grammar: the title bar takes the count while selecting. Inside the wash:
+        // its blank title is the outer one, and set after it the count never showed.
         .navigationTitle(isSelecting ? "\(selection.count) selected" : "")
+        .subjectScreenWash(palette: palette)
         .toolbar { toolbarContent(entries) }
         #if os(iOS)
         // Select mode owns the bottom edge with its action bar.

@@ -30,8 +30,8 @@ struct BulkTagStatePicker: View {
                 Text("Tap an option once to add it to every selected work, twice to remove it, "
                     + "or three times to leave it unchanged.")
             }
+            .appThemedRows()
         }
-        .appThemedRows()
         .appThemedScroll()
         .navigationTitle(title)
         #if os(iOS)
@@ -156,7 +156,7 @@ private struct BulkNameListEditor: View {
     var body: some View {
         List {
             if !names.isEmpty {
-                Section("Added") {
+                Section {
                     ForEach(names, id: \.self) { name in
                         Button {
                             names.removeAll { $0 == name }
@@ -165,18 +165,31 @@ private struct BulkNameListEditor: View {
                         }
                         .accessibilityLabel("Remove \(name)")
                     }
+                    // In a card list a row without a card is the system's white
+                    // band, which is what these were under Sepia.
+                    .cardRow()
+                } header: {
+                    // A card list's own header, as the series page draws "Works".
+                    SectionRuleHeader(title: "Added", count: names.count)
+                        .textCase(nil)
+                        .listRowInsets(EdgeInsets())
                 }
             }
             Section {
-                TextField(placeholder, text: $entry)
-                    // iOS-only modifier; macOS has no software keyboard to tell.
-                    #if os(iOS)
-                    .textInputAutocapitalization(.never)
-                    #endif
-                    .autocorrectionDisabled()
-                    .onSubmit(add)
-                Button("Add", action: add)
-                    .disabled(trimmed.isEmpty)
+                // One card, as the app's other "New … Add" rows.
+                HStack {
+                    TextField(placeholder, text: $entry)
+                        // iOS-only modifier; macOS has no software keyboard to tell.
+                        #if os(iOS)
+                        .textInputAutocapitalization(.never)
+                        #endif
+                        .autocorrectionDisabled()
+                        .onSubmit(add)
+                    Button("Add", action: add)
+                        .buttonStyle(.borderless)
+                        .disabled(trimmed.isEmpty)
+                }
+                .cardRow()
             }
             // A row, not the section's footer: a plain list paints a footer on a white band
             // (see Search's saved searches).

@@ -138,6 +138,37 @@ extension View {
         #endif
     }
 
+    /// An inline title that wraps onto a second line where the system's would
+    /// end in "…" between the bar's buttons ("Add to Neon rer…", "Bookmark on
+    /// A…" at the largest text). Capped near the size the system's own inline
+    /// title stops growing at, since the bar does not grow taller. `isActive: false`
+    /// leaves the screen's own title as it was (a large title that only needs this
+    /// at the accessibility sizes).
+    @ViewBuilder
+    func wrappingInlineTitle(_ title: String, isActive: Bool = true) -> some View {
+        #if os(iOS)
+        if isActive {
+            navigationTitle(title)
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .principal) {
+                        Text(title)
+                            .font(.headline)
+                            .lineLimit(2)
+                            .multilineTextAlignment(.center)
+                            .minimumScaleFactor(0.8)
+                            .dynamicTypeSize(...DynamicTypeSize.xxLarge)
+                            .accessibilityAddTraits(.isHeader)
+                    }
+                }
+        } else {
+            navigationTitle(title)
+        }
+        #else
+        navigationTitle(title)
+        #endif
+    }
+
     /// Wash, floating glass chrome, no navigation bar, and a reinstated back
     /// swipe — everything `SubjectScreenScaffold` does except owning the
     /// scrolling container. Apply it to a `List` to get the redesign's chrome

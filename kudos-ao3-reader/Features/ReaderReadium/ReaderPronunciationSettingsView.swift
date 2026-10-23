@@ -69,6 +69,7 @@ struct ReaderPronunciationSettingsView: View {
                         ?? "Checks the rest of this chapter without playing audio. "
                             + "It lists names Read Aloud would guess so you can correct them first.")
                 }
+                .appThemedRows()
             }
 
             if entries.isEmpty && guessed.isEmpty {
@@ -82,6 +83,7 @@ struct ReaderPronunciationSettingsView: View {
                         )
                     }
                 }
+                .appThemedRows()
             } else {
                 Section {
                     ForEach(entries) { entry in
@@ -107,6 +109,7 @@ struct ReaderPronunciationSettingsView: View {
                             + "so a correction here always wins."
                     )
                 }
+                .appThemedRows()
             }
 
             if !guessed.isEmpty {
@@ -133,10 +136,10 @@ struct ReaderPronunciationSettingsView: View {
                             + "them. The number shows how often each appeared. Tap one to correct it."
                     )
                 }
+                .appThemedRows()
             }
         }
         .appThemedScroll()
-        .appThemedRows()
         .navigationTitle("Pronunciations")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -371,6 +374,7 @@ struct ReaderPronunciationEditor: View {
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                 }
+                .appThemedRows()
                 Section {
                     TextField("her-MY-oh-nee", text: $ipa)
                         .monospaced()
@@ -394,9 +398,9 @@ struct ReaderPronunciationEditor: View {
                                 + "if you want to type pronunciations as syllables instead."
                     )
                 }
+                .appThemedRows()
             }
             .appThemedScroll()
-            .appThemedRows()
             .navigationTitle(word.isEmpty ? "Add Pronunciation" : word)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
