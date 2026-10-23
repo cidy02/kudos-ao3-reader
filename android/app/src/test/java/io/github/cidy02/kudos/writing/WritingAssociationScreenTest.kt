@@ -219,16 +219,23 @@ class WritingAssociationScreenTest {
         assertEquals(0, setup.client.posts)
     }
 
-    @Test fun manyCollectionRowsStayLazyAndSearchShowsNamesAfterAnAnswer() {
+    @Test fun manyCollectionRowsStayLazyAndAnswersDoNotScrollTheSearchAway() {
         show(995001L)
         compose.runOnIdle {
             repeat(150) { form.addCollection(AO3CollectionOffer("held_$it", "Long held collection $it 星")) }
         }
         open("Add to collections", "Collections and gifts")
-        compose.onNodeWithContentDescription("Search").performTextReplacement("demo")
+        val before = compose.onNodeWithContentDescription("Search").fetchSemanticsNode().boundsInRoot
+        compose.onNodeWithContentDescription("Search").performTextReplacement("Long")
+        compose.waitUntil(15_000) { client.gets.isNotEmpty() }
+        compose.waitForIdle()
+        val after = compose.onNodeWithContentDescription("Search").fetchSemanticsNode().boundsInRoot
+        assertEquals("An answer must not jump past the ordinary search row", before.top, after.top, 0.1f)
+        assertTrue(compose.onAllNodesWithText("Long held collection", substring = true).fetchSemanticsNodes().size < 150)
+        compose.onNodeWithTag("Writing association picker").performScrollToNode(hasContentDescription("Add Demo Two"))
         awaitText("Demo Two")
         compose.onNodeWithContentDescription("Add Demo Two").assertIsDisplayed()
-        compose.onNodeWithContentDescription("Search").assertIsDisplayed()
-        assertTrue(compose.onAllNodesWithText("Long held collection", substring = true).fetchSemanticsNodes().size < 150)
+        compose.onNodeWithContentDescription("Search").assertIsNotDisplayed()
+        assertEquals(0, client.posts)
     }
 }

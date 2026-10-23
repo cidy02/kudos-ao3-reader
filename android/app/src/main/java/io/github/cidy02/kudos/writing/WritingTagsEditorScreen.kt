@@ -1,7 +1,6 @@
 package io.github.cidy02.kudos.writing
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -30,7 +29,6 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
@@ -57,7 +55,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
 internal fun WritingTagsEditorScreen(
     kind: WritingTagKind,
@@ -99,7 +96,6 @@ internal fun WritingTagsEditorScreen(
     val palette = tokens.scopePalette
     val drag = remember(model) { WritingChipDrag() }
     val list = rememberLazyListState()
-    var fieldHeight by remember { mutableIntStateOf(0) }
     Column(Modifier.fillMaxSize().subjectScreenWash(palette).imePadding()) {
         Spacer(Modifier.windowInsetsTopHeight(WindowInsets.statusBars))
         Spacer(Modifier.height(76.dp))
@@ -109,23 +105,14 @@ internal fun WritingTagsEditorScreen(
             val recentRows = writingChipRows(recent, width, chosen = false)
             val otherRows = writingChipRows(otherWorkTagNames(kind, loadedWorks, values, excludingWorkID), width, chosen = false)
             val localGroups = listOf("Recently used" to recentRows, "From your other works" to otherRows) // iOS order (A64 F01)
-            val suggestionIndex = 2 + chosenRows.size + localGroups.sumOf { (_, rows) -> if (rows.isEmpty()) 0 else rows.size + 1 }
-            // Keep the pinned input and the suggestions in the viewport when the
-            // keyboard takes space, even if hundreds of chosen chips precede them.
-            LaunchedEffect(state.term, hasRows, fieldHeight) {
-                if (state.term.isNotEmpty() && hasRows && fieldHeight > 0) {
-                    list.scrollToItem(suggestionIndex, scrollOffset = -fieldHeight)
-                }
-            }
             LazyColumn(Modifier.fillMaxSize().testTag("Writing tags editor"), state = list,
                 contentPadding = PaddingValues(bottom = 24.dp)) {
                 item {
                     SubjectHeaderBlock(kicker = "Edit tags", title = kind.title, subtitle = writingTagSubtitle(values),
                         palette = palette, gutter = SubjectMetrics.accountGutter)
                 }
-                stickyHeader {
-                    Column(Modifier.onSizeChanged { fieldHeight = it.height }
-                        .testTag("Writing pinned field").writingPinnedFieldGround(list, 1, palette).padding(horizontal = SubjectMetrics.accountGutter)
+                item {
+                    Column(Modifier.testTag("Writing pinned field").padding(horizontal = SubjectMetrics.accountGutter)
                         .padding(top = 18.dp, bottom = 8.dp).subjectPanel(cornerRadius = 12.dp)) {
                         SubjectTextFieldRow("Add a tag", state.term, "Add a tag", model::type, autocorrect = false,
                             fieldOnly = true, onSubmit = { model.add() }, leading = {

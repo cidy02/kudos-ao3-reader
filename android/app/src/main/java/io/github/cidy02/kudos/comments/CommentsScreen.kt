@@ -33,7 +33,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.SwapVert
-import androidx.compose.material.icons.outlined.Book
+import androidx.compose.material.icons.automirrored.outlined.MenuBook
 import androidx.compose.material.icons.outlined.ChatBubbleOutline
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.ErrorOutline
@@ -354,7 +354,8 @@ fun CommentsScreen(
                 viewModel.selectChapter(chapter)
                 showingChapterPicker = false
             },
-            onDismiss = { showingChapterPicker = false }
+            onDismiss = { showingChapterPicker = false },
+            palette = palette
         )
     }
 
@@ -517,7 +518,7 @@ fun CommentsScreen(
                                 showingChapterPicker = true
                             },
                         style = SubjectChipStyle.Pill(isSelected = scopeMode == CommentScope.ByChapter),
-                        leadingIcon = Icons.Outlined.Book,
+                        leadingIcon = chapterPickerBookIcon,
                         trailingIcon = Icons.Filled.KeyboardArrowDown,
                         palette = palette
                     )
@@ -753,6 +754,8 @@ fun CommentsScreen(
     }
 }
 
+internal val chapterPickerBookIcon = Icons.AutoMirrored.Outlined.MenuBook
+
 /**
  * Chapter picker sheet matching iOS `chapterPicker` (CommentsView.swift:893).
  */
@@ -768,7 +771,8 @@ fun ChapterPickerSheet(
     totalComments: Int?,
     onSelectAll: () -> Unit,
     onSelectChapter: (AO3ChapterRef) -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    palette: SubjectPalette = LocalKudosTokens.current.scopePalette
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)
     val tokens = LocalKudosTokens.current
@@ -779,7 +783,7 @@ fun ChapterPickerSheet(
         containerColor = tokens.background
     ) {
         ChapterPickerContent(chapters, chaptersLoading, chaptersFailed, chaptersFailureMessage,
-            selectedChapter, isScopeAll, totalComments, onSelectAll, onSelectChapter)
+            selectedChapter, isScopeAll, totalComments, onSelectAll, onSelectChapter, palette)
     }
 }
 
@@ -787,7 +791,8 @@ fun ChapterPickerSheet(
 internal fun ChapterPickerContent(
     chapters: List<AO3ChapterRef>, chaptersLoading: Boolean = false, chaptersFailed: Boolean = false,
     chaptersFailureMessage: String? = null, selectedChapter: AO3ChapterRef?, isScopeAll: Boolean,
-    totalComments: Int?, onSelectAll: () -> Unit, onSelectChapter: (AO3ChapterRef) -> Unit
+    totalComments: Int?, onSelectAll: () -> Unit, onSelectChapter: (AO3ChapterRef) -> Unit,
+    palette: SubjectPalette = LocalKudosTokens.current.scopePalette
 ) {
     val tokens = LocalKudosTokens.current
     Column(
@@ -826,23 +831,23 @@ internal fun ChapterPickerContent(
                         Icon(
                             imageVector = Icons.Outlined.ChatBubbleOutline,
                             contentDescription = null,
-                            tint = if (isScopeAll) tokens.accentInk else tokens.secondaryInk,
+                            tint = palette.accent,
                             modifier = Modifier.size(18.dp)
                         )
                         Text(
                             text = "All Comments",
                             fontSize = 15.sp,
                             fontWeight = if (isScopeAll) FontWeight.SemiBold else FontWeight.Normal,
-                            color = if (isScopeAll) tokens.accentInk else tokens.primaryInk
+                            color = palette.accent
                         )
                     }
-                    if (isScopeAll) Icon(Icons.Outlined.Check, null, tint = tokens.accentInk)
+                    if (isScopeAll) Icon(Icons.Outlined.Check, null, tint = palette.accent)
                     if (totalComments != null) {
                         Text(
                             text = java.text.NumberFormat.getIntegerInstance().format(totalComments),
                             fontSize = 13.sp,
                             fontFamily = FontFamily.Monospace,
-                            color = tokens.secondaryInk
+                            color = palette.accent.copy(alpha = if (isScopeAll) 1f else 0.6f)
                         )
                     }
                 }
@@ -864,7 +869,7 @@ internal fun ChapterPickerContent(
                     } else {
                         androidx.compose.material3.CircularProgressIndicator(
                             modifier = Modifier.size(22.dp).semantics { contentDescription = "Loading chapters" },
-                            strokeWidth = 2.dp, color = tokens.accentInk)
+                            strokeWidth = 2.dp, color = palette.accent)
                     }
                 }
             }
@@ -890,16 +895,16 @@ internal fun ChapterPickerContent(
                             modifier = Modifier.weight(1f, fill = false)
                         ) {
                             Icon(
-                                imageVector = Icons.Outlined.Book,
+                                imageVector = chapterPickerBookIcon,
                                 contentDescription = null,
-                                tint = if (isSelected) tokens.accentInk else tokens.secondaryInk,
+                                tint = palette.accent,
                                 modifier = Modifier.size(18.dp)
                             )
                             Text(
                                 text = chapter.displayName,
                                 fontSize = 15.sp,
                                 fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
-                                color = if (isSelected) tokens.accentInk else tokens.primaryInk,
+                                color = palette.accent,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
@@ -908,7 +913,7 @@ internal fun ChapterPickerContent(
                             Icon(
                                 imageVector = Icons.Default.Check,
                                 contentDescription = null,
-                                tint = tokens.accentInk,
+                                tint = palette.accent,
                                 modifier = Modifier.size(16.dp)
                             )
                         }

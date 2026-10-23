@@ -158,7 +158,8 @@ internal fun WritingSeriesContent(model: WritingSeriesState, title: String, subt
                                 maxLines = if (isAccessibilityFontScale()) Int.MAX_VALUE else 2)
                             if (row.metadataText.isNotEmpty()) Text(row.metadataText, color = tokens.secondaryInk, fontSize = 11.5.sp, lineHeight = 17.sp)
                         }
-                        if (row.isDraft) SubjectStateBadge("Draft", tokens.secondaryInk)
+                        if (row.isDraft) SubjectChip(text = "Draft", style = SubjectChipStyle.Neutral, palette = palette,
+                            modifier = Modifier.semantics { contentDescription = "Draft" })
                         if (ordering) Icon(Icons.Filled.DragHandle, contentDescription = null, tint = tokens.tertiaryInk,
                             modifier = Modifier.testTag("Series reorder handle"))
                         if (removing && currentRows.size > 1) IconButton(onClick = { confirmRemoval = row }, enabled = !state.saving) {

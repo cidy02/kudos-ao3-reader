@@ -1071,13 +1071,13 @@ internal fun ReaderDisplaySheet(
         CustomizeThemeSheet(settingsRepository, customFontRepository, onDismiss = { showCustomizeTheme = false })
     }
     val tokens = LocalKudosTokens.current
-    val controlInk = tokens.theme.appTint ?: tokens.scopePalette.accent
+    val controlInk = tokens.accentInk
     val twoPage = !preferences.scroll && preferences.columnCount >= 2
     // iOS offers the two-page spread on iPad and Mac, never on a phone. It also shows here while
     // it is on, so a phone that has it on can turn it off.
     val wide = LocalConfiguration.current.screenWidthDp >= 600
     val currentFontId = preferences.fontFamily ?: "system"
-    CompositionLocalProvider(LocalSettingsFormGround provides true) {
+    CompositionLocalProvider(LocalSettingsFormGround provides (tokens.theme != ReaderTheme.Light)) {
     listeningContent { speechContent ->
         Column(
             modifier = Modifier
@@ -1107,14 +1107,16 @@ internal fun ReaderDisplaySheet(
 
             SettingsGroupLabel("Appearance", Modifier.padding(top = 14.dp))
             SettingsPanel {
-                SubjectSegmentedControl(
-                    options = ReaderColorTheme.entries,
-                    selected = preferences.theme,
-                    onSelect = onThemeChange,
-                    title = { if (it == ReaderColorTheme.Oled) "OLED" else it.name },
-                    contentDescription = "Theme",
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 10.dp)
-                )
+                CompositionLocalProvider(LocalSettingsFormGround provides true) {
+                    SubjectSegmentedControl(
+                        options = ReaderColorTheme.entries,
+                        selected = preferences.theme,
+                        onSelect = onThemeChange,
+                        title = { if (it == ReaderColorTheme.Oled) "OLED" else it.name },
+                        contentDescription = "Theme",
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 10.dp)
+                    )
+                }
                 SubjectRowSeparator()
                 SettingsActionRow(
                     label = "Customize Theme…",
@@ -1145,14 +1147,16 @@ internal fun ReaderDisplaySheet(
                     "Choose whether you turn pages or scroll while reading."
                 }
             ) {
-                SubjectSegmentedControl(
-                    options = listOf(true, false),
-                    selected = preferences.scroll,
-                    onSelect = onScrollModeChange,
-                    title = { scroll -> if (scroll) "Scrolled" else "Paged" },
-                    contentDescription = "Layout",
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 10.dp)
-                )
+                CompositionLocalProvider(LocalSettingsFormGround provides true) {
+                    SubjectSegmentedControl(
+                        options = listOf(true, false),
+                        selected = preferences.scroll,
+                        onSelect = onScrollModeChange,
+                        title = { scroll -> if (scroll) "Scrolled" else "Paged" },
+                        contentDescription = "Layout",
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 10.dp)
+                    )
+                }
                 if (wide || twoPage) {
                     SubjectRowSeparator()
                     SubjectFormRow(

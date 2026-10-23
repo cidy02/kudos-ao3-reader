@@ -82,6 +82,8 @@ class ActionParityFormsTest {
         await { queues.listWorks(queue.id).size == 2 }
         compose.onNodeWithText("To read").performClick()
         await { queues.listWorks(queue.id).isEmpty() }
+        // The form is busy (its field disabled) until the membership change settles.
+        compose.waitUntil(15_000) { compose.onAllNodes(hasSetTextAction()).fetchSemanticsNodes().isNotEmpty() }
         compose.onNode(hasSetTextAction()).performTextInput("Another queue")
         compose.onNodeWithText("Add", useUnmergedTree = true).performClick()
         await { queues.listQueues().any { it.name == "Another queue" && queues.listWorks(it.id).size == 2 } }

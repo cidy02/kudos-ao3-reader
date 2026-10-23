@@ -403,6 +403,7 @@ fun SearchScreen(
                                 SearchResultsHeader(
                                     filters = filters,
                                     page = resultsState.page,
+                                    palette = resultsPalette ?: LocalKudosTokens.current.scopePalette,
                                     onPageCount = 0,
                                     isPaging = isPaging,
                                     onSortSelected = { sort ->
@@ -425,6 +426,7 @@ fun SearchScreen(
                             SearchResultsList(
                                 works = resultsState.works,
                                 page = resultsState.page,
+                                palette = resultsPalette ?: LocalKudosTokens.current.scopePalette,
                                 filters = filters,
                                 expandAll = expandAllCards,
                                 isPaging = isPaging,
@@ -1047,6 +1049,7 @@ private fun MatchRow(
 private fun SearchResultsHeader(
     filters: AO3SearchFilters,
     page: AO3SearchPage,
+    palette: SubjectPalette,
     onPageCount: Int,
     isPaging: Boolean,
     onSortSelected: (AO3SearchSort) -> Unit,
@@ -1075,6 +1078,7 @@ private fun SearchResultsHeader(
                 totalPages = page.totalPages,
                 onPageChange = onPage,
                 enabled = !isPaging,
+                palette = palette,
                 modifier = Modifier.padding(horizontal = 8.dp)
             )
         }
@@ -1085,6 +1089,7 @@ private fun SearchResultsHeader(
 private fun SearchResultsList(
     works: List<CanonicalWork>,
     page: AO3SearchPage,
+    palette: SubjectPalette,
     filters: AO3SearchFilters,
     expandAll: Boolean,
     isPaging: Boolean,
@@ -1112,6 +1117,7 @@ private fun SearchResultsList(
                 SearchResultsHeader(
                     filters = filters,
                     page = page,
+                    palette = palette,
                     onPageCount = works.size,
                     isPaging = isPaging,
                     onSortSelected = onSortSelected,
@@ -1144,6 +1150,7 @@ private fun SearchResultsList(
                         totalPages = page.totalPages,
                         onPageChange = onPage,
                         enabled = !isPaging,
+                        palette = palette,
                         modifier = Modifier.padding(horizontal = 8.dp)
                     )
                 }

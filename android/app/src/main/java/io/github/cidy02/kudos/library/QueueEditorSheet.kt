@@ -35,6 +35,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -50,6 +51,7 @@ import io.github.cidy02.kudos.ui.subject.SubjectFieldLabel
 import io.github.cidy02.kudos.ui.subject.SubjectHueSwatchRow
 import io.github.cidy02.kudos.ui.subject.SubjectPalette
 import io.github.cidy02.kudos.ui.subject.SubjectPaletteTheme
+import io.github.cidy02.kudos.ui.subject.SubjectRowSeparator
 import io.github.cidy02.kudos.ui.subject.SubjectToggle
 import io.github.cidy02.kudos.ui.subject.parseStoredColor
 import io.github.cidy02.kudos.ui.subject.subjectPanel
@@ -221,26 +223,11 @@ fun QueueEditorSheet(
                 )
                 if (!editing) {
                     SubjectFieldLabel("Start from", Modifier.padding(top = 14.dp))
-                    Column(Modifier.fillMaxWidth().subjectPanel()) {
-                        SeedRow(
-                            label = "Empty",
-                            subtitle = null,
-                            selected = !seed,
-                            enabled = true,
-                            onClick = { seed = false }
-                        )
-                        SeedRow(
-                            label = "Saved for Later",
-                            subtitle = if (seedCount == null) null else if (seedCount == 0) {
-                                "You have no works in Saved for Later to copy."
-                            } else {
-                                "Copy $seedCount work${if (seedCount == 1) "" else "s"}. They stay in Saved for Later."
-                            },
-                            selected = seed,
-                            enabled = (seedCount ?: 0) > 0,
-                            onClick = { seed = true }
-                        )
-                    }
+                    QueueSeedPanel(
+                        seed = seed,
+                        seedCount = seedCount,
+                        onSeedChange = { seed = it }
+                    )
                 }
             }
         }
@@ -308,6 +295,35 @@ private fun TagToggleRow(
 }
 
 @Composable
+internal fun QueueSeedPanel(
+    seed: Boolean,
+    seedCount: Int?,
+    onSeedChange: (Boolean) -> Unit
+) {
+    Column(Modifier.fillMaxWidth().subjectPanel()) {
+        SeedRow(
+            label = "Empty",
+            subtitle = null,
+            selected = !seed,
+            enabled = true,
+            onClick = { onSeedChange(false) }
+        )
+        SubjectRowSeparator(inset = 48.dp, modifier = Modifier.testTag("Queue seed separator"))
+        SeedRow(
+            label = "Saved for Later",
+            subtitle = if (seedCount == null) null else if (seedCount == 0) {
+                "You have no works in Saved for Later to copy."
+            } else {
+                "Copy $seedCount work${if (seedCount == 1) "" else "s"}. They stay in Saved for Later."
+            },
+            selected = seed,
+            enabled = (seedCount ?: 0) > 0,
+            onClick = { onSeedChange(true) }
+        )
+    }
+}
+
+@Composable
 private fun SeedRow(
     label: String,
     subtitle: String?,
@@ -321,11 +337,20 @@ private fun SeedRow(
             .fillMaxWidth()
             .selectable(selected = selected, enabled = enabled, role = androidx.compose.ui.semantics.Role.RadioButton, onClick = onClick)
             .semantics(mergeDescendants = true) {}
-            .padding(horizontal = 8.dp, vertical = 4.dp),
+            .padding(horizontal = 13.dp, vertical = 11.dp),
+        horizontalArrangement = Arrangement.spacedBy(11.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        RadioButton(selected = selected, onClick = null, enabled = enabled)
-        Column(Modifier.weight(1f)) {
+        RadioButton(
+            selected = selected,
+            onClick = null,
+            enabled = enabled,
+            modifier = Modifier.testTag("Queue seed radio $label")
+        )
+        Column(
+            Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
             Text(label, color = if (enabled) tokens.primaryInk else tokens.tertiaryInk, fontSize = 15.sp)
             if (subtitle != null) {
                 Text(subtitle, color = tokens.secondaryInk, fontSize = 12.sp)

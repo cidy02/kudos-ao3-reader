@@ -24,6 +24,7 @@ import io.github.cidy02.kudos.data.preferences.SettingsRepository
 import io.github.cidy02.kudos.reader.settings.ReaderSpeechPreferences
 import io.github.cidy02.kudos.settings.SettingsListeningContent
 import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
+import io.github.cidy02.kudos.ui.subject.ReaderTheme
 import io.github.cidy02.kudos.ui.subject.LocalSettingsFormGround
 import io.github.cidy02.kudos.ui.subject.SubjectMetrics
 import io.github.cidy02.kudos.ui.subject.ToolbarCircleButton
@@ -51,21 +52,31 @@ internal fun ReaderSpeechSettingsSheet(
         containerColor = tokens.background,
         contentColor = tokens.primaryInk
     ) {
-        CompositionLocalProvider(LocalSettingsFormGround provides true) {
-            Column {
-                Row(
-                    Modifier.fillMaxWidth().padding(horizontal = SubjectMetrics.accountGutter),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("Read Aloud", color = tokens.primaryInk, fontSize = 17.sp,
-                        fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-                    ToolbarCircleButton(onClick = dismiss, accessibilityName = "Done") {
-                        Icon(Icons.Filled.Check, contentDescription = null, tint = tokens.scopePalette.accent)
-                    }
+        ReaderSpeechSettingsContent(dismiss, listeningContent)
+    }
+}
+
+/** The same production content, without the dialog window, for card-ground regression tests. */
+@Composable
+internal fun ReaderSpeechSettingsContent(
+    onDone: () -> Unit,
+    listeningContent: @Composable (@Composable (@Composable () -> Unit) -> Unit) -> Unit
+) {
+    val tokens = LocalKudosTokens.current
+    CompositionLocalProvider(LocalSettingsFormGround provides (tokens.theme != ReaderTheme.Light)) {
+        Column {
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = SubjectMetrics.accountGutter),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("Read Aloud", color = tokens.primaryInk, fontSize = 17.sp,
+                    fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                ToolbarCircleButton(onClick = onDone, accessibilityName = "Done") {
+                    Icon(Icons.Filled.Check, contentDescription = null, tint = tokens.scopePalette.accent)
                 }
-                listeningContent { content ->
-                    LazyColumn(Modifier.fillMaxWidth().padding(bottom = 24.dp)) { item { content() } }
-                }
+            }
+            listeningContent { content ->
+                LazyColumn(Modifier.fillMaxWidth().padding(bottom = 24.dp)) { item { content() } }
             }
         }
     }

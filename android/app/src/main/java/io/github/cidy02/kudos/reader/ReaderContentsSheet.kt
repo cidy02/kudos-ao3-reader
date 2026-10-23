@@ -101,7 +101,7 @@ fun ReaderContentsSheet(
                 modifier = Modifier.weight(1f))
             if (onDone != null) {
                 ToolbarCircleButton(onClick = onDone, accessibilityName = "Done") {
-                    Icon(Icons.Filled.Check, contentDescription = null, tint = tokens.theme.appTint ?: tokens.scopePalette.accent)
+                    Icon(Icons.Filled.Check, contentDescription = null, tint = tokens.accentInk)
                 }
             }
         }

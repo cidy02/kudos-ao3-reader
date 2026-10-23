@@ -66,6 +66,7 @@ import io.github.cidy02.kudos.settings.SettingsActionRow
 import io.github.cidy02.kudos.settings.SettingsSection
 import io.github.cidy02.kudos.settings.SubjectSliderRow
 import io.github.cidy02.kudos.ui.subject.KudosTokens
+import io.github.cidy02.kudos.ui.subject.LocalSettingsFormGround
 import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
 import io.github.cidy02.kudos.ui.subject.LocalSubjectPalette
 import io.github.cidy02.kudos.ui.subject.ReaderTheme
@@ -121,7 +122,8 @@ internal fun CustomizeThemeContent(
             }.getOrNull() }
         }
     }
-        CompositionLocalProvider(LocalKudosTokens provides tokens, LocalSubjectPalette provides tokens.scopePalette) {
+        CompositionLocalProvider(LocalKudosTokens provides tokens, LocalSubjectPalette provides tokens.scopePalette,
+            LocalSettingsFormGround provides true) {
             Column(Modifier.fillMaxWidth().fillMaxHeight(0.95f).navigationBarsPadding()) {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) {
                     if (choosingFont) TextButton(onClick = { choosingFont = false }) { Text("Back") }
