@@ -131,7 +131,12 @@ struct AddLibraryWorksSheet: View {
     }
 
     private func row(_ work: SavedWork) -> some View {
-        HStack(spacing: 12) {
+        // The circle under the text at the accessibility sizes: beside it the byline's
+        // column was too narrow for one AO3 name, which broke mid-word and was cut
+        // ("by un- / cle_iroh…"). Full width, it reads whole, as the other work rows do.
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8)) : AnyLayout(HStackLayout(spacing: 12))
+        return layout {
             VStack(alignment: .leading, spacing: 2) {
                 Text(work.title)
                     .font(.subheadline.weight(.medium))
@@ -150,7 +155,7 @@ struct AddLibraryWorksSheet: View {
                     )
                 }
             }
-            Spacer(minLength: 8)
+            if !dynamicTypeSize.isAccessibilitySize { Spacer(minLength: 8) }
             Image(systemName: selection.contains(work.id) ? "checkmark.circle.fill" : "circle")
                 .foregroundStyle(selection.contains(work.id) ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
                 .imageScale(.large)
