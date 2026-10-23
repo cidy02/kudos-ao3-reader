@@ -41,11 +41,12 @@ struct ReaderSpeechAuditionHarness: View {
     var body: some View {
         Section {
             // At the largest text the label and value shared one row and the value was cut to
-            // "Plain…rration" (A69 #27); there the value gets a line of its own.
+            // "Plain…rration" (A69 #27); there the value gets a line of its own, in a menu whose
+            // label wraps (A88c: the system picker's one-line value was still cut on its own row).
             if dynamicTypeSize.isAccessibilitySize {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Sample Text")
-                    samplePicker.labelsHidden()
+                    sampleMenu
                 }
             } else {
                 samplePicker
@@ -84,9 +85,7 @@ struct ReaderSpeechAuditionHarness: View {
                             Text(Self.label(for: candidate))
                                 .frame(maxWidth: .infinity)
                         }
-                        .buttonStyle(.bordered)
-                        .foregroundStyle(.accentInk)
-                        .accentFill()
+                        .buttonStyle(RatePillStyle())
                         .disabled(abs(rate - candidate) < 0.001)
                     }
                 }
@@ -138,6 +137,31 @@ struct ReaderSpeechAuditionHarness: View {
         }
     }
 
+    /// The picker behind a label that wraps, as `WritingChoiceRow` does.
+    private var sampleMenu: some View {
+        Menu {
+            samplePicker
+                .pickerStyle(.inline)
+                .labelsHidden()
+        } label: {
+            Self.sampleMenuLabel(selectedSample.rawValue)
+        }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .accessibilityLabel("Sample Text")
+        .accessibilityValue(selectedSample.rawValue)
+    }
+
+    static func sampleMenuLabel(_ title: String) -> some View {
+        HStack(spacing: 4) {
+            Text(title)
+                .multilineTextAlignment(.leading)
+            Image(systemName: "chevron.up.chevron.down")
+                .font(.system(size: 11, weight: .semibold))
+        }
+        .foregroundStyle(.tint)
+    }
+
     /// 0.9 is the widely recommended audiobook-narration rate; 1.0 is what
     /// Kudos currently defaults to. 1.1 gives the comparison a third point so
     /// the middle is not just an endpoint.
@@ -164,6 +188,26 @@ struct ReaderSpeechAuditionHarness: View {
             ? ReaderSpeechPreferences.bestVoice(for: language, from: voices)
             : voices.first { $0.identifier == voiceID }
         return selected.map { ReaderSpeechPreferences.displayName(for: $0) } ?? "Automatic"
+    }
+}
+
+/// The comparison rates. `.bordered` drew the current rate, which is disabled, as near-white
+/// text on pale glass in Light and Sepia (A88c). Here it's the primary ink on a neutral fill in
+/// every theme, and the others keep the accent. It's still a disabled button, so it can't be
+/// tapped and VoiceOver says "dimmed".
+struct RatePillStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var isEnabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .padding(.vertical, 7)
+            .padding(.horizontal, 12)
+            .foregroundStyle(isEnabled ? AnyShapeStyle(.accentInk) : AnyShapeStyle(.primary))
+            .background(
+                isEnabled ? AnyShapeStyle(.accentFill.opacity(0.15)) : AnyShapeStyle(.quaternary),
+                in: Capsule()
+            )
+            .opacity(configuration.isPressed ? 0.6 : 1)
     }
 }
 #endif

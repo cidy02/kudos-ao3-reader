@@ -96,10 +96,23 @@ struct SettingsReaderPage: View {
 /// Voice, speed and pitch for the Readium read-aloud player. Developer Settings
 /// stay where they were, behind their own link inside this section.
 struct SettingsListeningPage: View {
+    #if DEBUG
+    @State private var debugPronunciations = false
+    #endif
+
     var body: some View {
         SettingsPageForm(route: .listening) {
             ReaderSpeechSettingsSection()
         }
+        #if DEBUG
+        // On the page, not on the Read Aloud section that holds the Pronunciations row: the form
+        // builds that section only once it scrolls into view, so at the largest text its `.task`
+        // never ran and the shot stopped on this page (A88c).
+        .task { if DebugLaunchRoute.takePush("pronunciations") { debugPronunciations = true } }
+        .navigationDestination(isPresented: $debugPronunciations) {
+            ReaderPronunciationSettingsView(onScanChapter: nil)
+        }
+        #endif
     }
 }
 #endif
