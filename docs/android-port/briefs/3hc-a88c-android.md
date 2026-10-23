@@ -29,7 +29,8 @@ hand-wrapped, don't reformat. No new dependencies.
    plain (only the chosen row coloured).
 6. **The "DRAFT" badge** (`seriesremove`, `seriesreorder`) reads "Draft" on the iPhone. If the badge is
    shared, check each place it appears against iOS before changing it.
-7. **The works pages' card dates** (`fandomworks`, `tagworks`) read "09 Jul 2026" on Android and "07/09/2026"
+7. *(Withdrawn after dispatch, 12:35: owner Q28 is open and keeps each app's own date form until
+   answered, so this item is not landed.)* **The works pages' card dates** (`fandomworks`, `tagworks`) read "09 Jul 2026" on Android and "07/09/2026"
    on the iPhone: iOS's `WorkStat.displayDate` (`UIComponents/WorkStatLabel.swift:1090-1117`; MM/dd/yyyy,
    en_US_POSIX, UTC). Android already has the same function, `WorkDetailDates.displayDate`
    (`works/detail/WorkDetailDates.kt:15`): use it for the remote work card's date wherever iOS's

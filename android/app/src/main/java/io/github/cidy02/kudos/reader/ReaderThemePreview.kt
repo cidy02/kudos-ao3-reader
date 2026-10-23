@@ -23,7 +23,7 @@ internal fun readerThemePreviewHTML(settings: KudosSettings, fontData: String? =
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <style>
         $face
-        html { background: ${hex(prefs.theme.backgroundColor())}; color: ${hex(prefs.theme.textColor())}; }
+        html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; background: ${hex(prefs.theme.backgroundColor())}; color: ${hex(prefs.theme.textColor())}; }
         body { margin: 0; padding: 0.5em ${margin}px 0.7em;
           font-family: $family; font-size: ${reader.readerFontPt}px;
           font-weight: ${if (prefs.bold) "700" else "400"}; line-height: ${prefs.lineHeight};

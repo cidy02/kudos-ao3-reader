@@ -39,6 +39,14 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.cidy02.kudos.settings.SettingsActionRow
+import io.github.cidy02.kudos.settings.SettingsLinkRow
+import io.github.cidy02.kudos.settings.SettingsPanel
+import io.github.cidy02.kudos.ui.subject.LocalSettingsFormGround
+import io.github.cidy02.kudos.ui.subject.SubjectMetrics
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.outlined.QrCode2
 import io.github.cidy02.kudos.settings.SettingsSection
 import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
 import io.github.cidy02.kudos.ui.subject.SubjectRowSeparator
@@ -285,6 +293,21 @@ private fun PairingBottomSheet(
     onTrusted: () -> Unit
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val tokens = LocalKudosTokens.current
+    // iOS's grouped form: the page's ground with card-surface groups, as the Read Aloud sheet's.
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState,
+        containerColor = tokens.background, contentColor = tokens.primaryInk) {
+        PairingSheetContent(trustStore, onDismiss, onTrusted)
+    }
+}
+
+/** The pairing sheet's content, apart from its window so a test can host it. */
+@Composable
+internal fun PairingSheetContent(
+    trustStore: TombstoneTrustStore,
+    onDismiss: () -> Unit,
+    onTrusted: () -> Unit
+) {
     val clipboard = LocalClipboardManager.current
     val scope = rememberCoroutineScope()
 
@@ -301,16 +324,16 @@ private fun PairingBottomSheet(
         deviceHex = TombstoneSigning.publicKeyHex()
     }
 
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
+    val tokens = LocalKudosTokens.current
+    CompositionLocalProvider(LocalSettingsFormGround provides true) {
         Column(
             modifier = Modifier
-                .padding(horizontal = 20.dp)
                 .padding(bottom = 24.dp)
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = SubjectMetrics.accountGutter),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -321,88 +344,100 @@ private fun PairingBottomSheet(
                 )
                 TextButton(onClick = onDismiss) { Text("Close") }
             }
-            Text(
-                "Scan this device's code from your other device. Kudos on Android never scans a code itself.",
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            SettingsPanel {
+                Text(
+                    "Scan this device's code from your other device. Kudos on Android never scans a code itself.",
+                    color = tokens.secondaryInk,
+                    modifier = Modifier.padding(horizontal = 13.dp, vertical = 12.dp)
+                )
+            }
 
             if (justTrustedHex == null) {
-                PairingAction(
-                    label = if (showQr) "Hide My QR Code" else "Show My QR Code",
-                    onClick = { showQr = !showQr },
-                    enabled = deviceHex.isNotBlank()
-                )
+                // One card of icon rows, as iOS's (A88b); its Scan a QR Code is iOS's only.
+                SettingsPanel {
+                    SettingsActionRow(
+                        label = if (showQr) "Hide My QR Code" else "Show My QR Code",
+                        onClick = { showQr = !showQr },
+                        icon = Icons.Outlined.QrCode2,
+                        enabled = deviceHex.isNotBlank()
+                    )
 
-                if (showQr && deviceHex.isNotBlank()) {
-                    val payload = PairingKeyCodec.encode(deviceHex)
-                    val bitmap = remember(deviceHex) { QrCodeGenerator.encode(payload) }
-                    Image(
-                        bitmap = bitmap.asImageBitmap(),
-                        contentDescription = "QR code of this device's public key",
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(220.dp)
+                    if (showQr && deviceHex.isNotBlank()) {
+                        val payload = PairingKeyCodec.encode(deviceHex)
+                        val bitmap = remember(deviceHex) { QrCodeGenerator.encode(payload) }
+                        Image(
+                            bitmap = bitmap.asImageBitmap(),
+                            contentDescription = "QR code of this device's public key",
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(220.dp)
+                        )
+                    }
+
+                    SubjectRowSeparator(inset = 47.dp)
+                    SettingsActionRow(
+                        label = "Copy My Key",
+                        onClick = {
+                            clipboard.setText(AnnotatedString(PairingKeyCodec.encode(deviceHex)))
+                        },
+                        icon = Icons.Outlined.ContentCopy,
+                        enabled = deviceHex.isNotBlank()
                     )
                 }
 
-                PairingAction(
-                    label = "Copy My Key",
-                    onClick = {
-                        clipboard.setText(AnnotatedString(PairingKeyCodec.encode(deviceHex)))
-                    },
-                    enabled = deviceHex.isNotBlank()
-                )
-
-                PairingAction(
-                    label = "Advanced: paste a key manually",
-                    onClick = { showAdvanced = !showAdvanced }
-                )
-
-                if (showAdvanced) {
-                    OutlinedTextField(
-                        value = pasteText,
-                        onValueChange = { pasteText = it; error = null },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                        label = { Text("Other device's key") },
-                        placeholder = { Text("kudos-pub-v1:… or 64-char hex") }
-                    )
-                    SubjectFormRow(
-                        label = "I got this key from my other device",
-                        modifier = Modifier.subjectPanel(),
-                        trailing = {
-                            SubjectToggle(
-                                checked = confirmedFromOwnDevice,
-                                onCheckedChange = { confirmedFromOwnDevice = it },
-                                contentDescription = "I got this key from my other device"
-                            )
-                        }
+                // iOS's DisclosureGroup: the field, the confirmation and Trust open under it.
+                SettingsPanel {
+                    SettingsLinkRow(
+                        label = "Advanced: paste a key manually",
+                        onClick = { showAdvanced = !showAdvanced },
+                        expanded = showAdvanced
                     )
 
-                    PairingAction(
-                        label = "Trust",
-                        onClick = {
-                            val hex = PairingKeyCodec.decode(pasteText)
-                            if (hex == null) {
-                                error = "Not a recognizable Kudos device key."
-                                return@PairingAction
+                    if (showAdvanced) {
+                        OutlinedTextField(
+                            value = pasteText,
+                            onValueChange = { pasteText = it; error = null },
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 13.dp),
+                            singleLine = true,
+                            label = { Text("Other device's key") },
+                            placeholder = { Text("kudos-pub-v1:… or 64-char hex") }
+                        )
+                        SubjectFormRow(
+                            label = "I got this key from my other device",
+                            trailing = {
+                                SubjectToggle(
+                                    checked = confirmedFromOwnDevice,
+                                    onCheckedChange = { confirmedFromOwnDevice = it },
+                                    contentDescription = "I got this key from my other device"
+                                )
                             }
-                            scope.launch {
-                                if (trustStore.trust(hex)) {
-                                    justTrustedHex = hex
-                                } else {
-                                    error = "That key can't be trusted (it may be revoked)."
+                        )
+                        SettingsActionRow(
+                            label = "Trust",
+                            onClick = {
+                                val hex = PairingKeyCodec.decode(pasteText)
+                                if (hex == null) {
+                                    error = "Not a recognizable Kudos device key."
+                                    return@SettingsActionRow
                                 }
-                            }
-                        },
-                        enabled = PairingTrustGate.canTrust(pasteText, confirmedFromOwnDevice)
-                    )
-                    error?.let {
-                        Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                                scope.launch {
+                                    if (trustStore.trust(hex)) {
+                                        justTrustedHex = hex
+                                    } else {
+                                        error = "That key can't be trusted (it may be revoked)."
+                                    }
+                                }
+                            },
+                            enabled = PairingTrustGate.canTrust(pasteText, confirmedFromOwnDevice)
+                        )
                     }
                 }
+                error?.let {
+                    Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(horizontal = SubjectMetrics.accountGutter))
+                }
 
-                SelectionContainer {
+                SelectionContainer(Modifier.padding(horizontal = SubjectMetrics.accountGutter)) {
                     Text(
                         deviceHex.ifBlank { "Generating…" },
                         fontFamily = FontFamily.Monospace,
@@ -414,44 +449,32 @@ private fun PairingBottomSheet(
                 // Trusted just now — name it locally. Never pre-filled from
                 // the QR/pasted payload; the field starts blank.
                 Text(
-                    "This device is now trusted. Give it a name you will recognize later."
+                    "This device is now trusted. Give it a name you will recognize later.",
+                    modifier = Modifier.padding(horizontal = SubjectMetrics.accountGutter)
                 )
                 OutlinedTextField(
                     value = trustLabel,
                     onValueChange = { trustLabel = it },
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = SubjectMetrics.accountGutter),
                     singleLine = true,
                     label = { Text("Device name") },
                     placeholder = { Text("e.g. Sam's iPhone") }
                 )
-                PairingAction(
-                    label = "Done",
-                    onClick = {
-                        val hex = justTrustedHex ?: return@PairingAction
-                        scope.launch {
-                            if (trustLabel.isNotBlank()) trustStore.rename(hex, trustLabel)
-                            onTrusted()
+                SettingsPanel {
+                    SettingsActionRow(
+                        label = "Done",
+                        onClick = {
+                            val hex = justTrustedHex ?: return@SettingsActionRow
+                            scope.launch {
+                                if (trustLabel.isNotBlank()) trustStore.rename(hex, trustLabel)
+                                onTrusted()
+                            }
                         }
-                    }
-                )
+                    )
+                }
             }
         }
     }
-}
-
-/** Pairing actions share the settings form chrome on both pages. */
-@Composable
-private fun PairingAction(
-    label: String,
-    onClick: () -> Unit,
-    enabled: Boolean = true
-) {
-    SettingsActionRow(
-        label = label,
-        onClick = onClick,
-        enabled = enabled,
-        modifier = Modifier.subjectPanel()
-    )
 }
 
 @Composable

@@ -307,6 +307,7 @@ fun FandomWorksScreen(
                                     totalPages = current.page.totalPages,
                                     onPageChange = { load(it) },
                                     enabled = !current.loading,
+                                    palette = palette,
                                     modifier = Modifier.padding(horizontal = 16.dp)
                                 )
                             }
@@ -337,6 +338,7 @@ fun FandomWorksScreen(
                                     totalPages = current.page.totalPages,
                                     onPageChange = { load(it) },
                                     enabled = !current.loading,
+                                    palette = palette,
                                     modifier = Modifier.padding(horizontal = 16.dp)
                                 )
                             }

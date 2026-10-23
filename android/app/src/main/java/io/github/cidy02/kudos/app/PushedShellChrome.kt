@@ -21,6 +21,7 @@ class PushedShellChrome {
     var hideTabBar by mutableStateOf(false)
     var hasSubjectHeader by mutableStateOf<Boolean?>(null)
     var customTitle by mutableStateOf<String?>(null)
+    var wholeTitleOnly by mutableStateOf(false)
     var pageBackground by mutableStateOf<Color?>(null)
     var onBack by mutableStateOf<(() -> Unit)?>(null)
     var trailingContent by mutableStateOf<(@Composable RowScope.() -> Unit)?>(null)
@@ -70,6 +71,7 @@ class PushedShellChrome {
         hideTabBar = false
         hasSubjectHeader = null
         customTitle = null
+        wholeTitleOnly = false
         pageBackground = null
         onBack = null
         trailingContent = null
@@ -85,6 +87,7 @@ fun ProvidePushedShellChrome(
     hasSubjectHeader: Boolean? = true,
     hideTabBar: Boolean = false,
     customTitle: String? = null,
+    wholeTitleOnly: Boolean = false,
     onBack: (() -> Unit)? = null,
     trailingContent: (@Composable RowScope.() -> Unit)? = null,
     scrollKey: String? = null,
@@ -97,6 +100,7 @@ fun ProvidePushedShellChrome(
             chrome.hideTabBar = hideTabBar
             chrome.hasSubjectHeader = hasSubjectHeader
             chrome.customTitle = customTitle
+            chrome.wholeTitleOnly = wholeTitleOnly
             chrome.pageBackground = pageBackground
             chrome.onBack = onBack
             chrome.trailingContent = trailingContent

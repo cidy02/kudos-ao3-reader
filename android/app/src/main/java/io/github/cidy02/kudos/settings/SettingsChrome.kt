@@ -56,6 +56,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -283,7 +284,8 @@ fun SettingsActionRow(
     icon: ImageVector? = null,
     enabled: Boolean = true,
     contentDescription: String? = null,
-    destructive: Boolean = false
+    destructive: Boolean = false,
+    tint: Color? = null
 ) {
     val tokens = LocalKudosTokens.current
     val color = when {
@@ -292,7 +294,7 @@ fun SettingsActionRow(
         // The palette's accent, which is tuned to be read on each theme's page. The raw
         // accent (AO3 red by default) is about 1.8 to 1 on a dark panel: "Export Backup…"
         // and "Submit sign-up" could barely be read in Dark and OLED (audit A6).
-        else -> tokens.scopePalette.accent
+        else -> tint ?: tokens.scopePalette.accent
     }
     SettingsIconRow(
         label = label,
@@ -313,13 +315,18 @@ fun SettingsLinkRow(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     icon: ImageVector? = null,
-    value: String? = null
+    value: String? = null,
+    /** Set for a row that opens in place, as iOS's `DisclosureGroup`: the chevron turns down while open. */
+    expanded: Boolean? = null
 ) {
     val tokens = LocalKudosTokens.current
     Row(
         modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
+            .then(if (expanded == null) Modifier else Modifier.semantics {
+                stateDescription = if (expanded) "Expanded" else "Collapsed"
+            })
             .padding(horizontal = 13.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -340,7 +347,7 @@ fun SettingsLinkRow(
             imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
             contentDescription = null,
             tint = tokens.tertiaryInk,
-            modifier = Modifier.size(18.dp)
+            modifier = Modifier.size(18.dp).rotate(if (expanded == true) 90f else 0f)
         )
     }
 }

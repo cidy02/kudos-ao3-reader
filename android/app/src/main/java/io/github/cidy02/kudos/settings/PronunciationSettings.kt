@@ -1,5 +1,7 @@
 package io.github.cidy02.kudos.settings
 
+import io.github.cidy02.kudos.ui.subject.LocalSettingsFormGround
+import androidx.compose.runtime.CompositionLocalProvider
 import io.github.cidy02.kudos.app.DebugShotEffect
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -8,7 +10,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.testTag
 import androidx.compose.material.icons.outlined.ChatBubbleOutline
-import io.github.cidy02.kudos.ui.subject.subjectPanel
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -75,6 +76,17 @@ fun PronunciationsRow() {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun PronunciationSettingsSheet(store: KokoroPronunciationStore, onDismiss: () -> Unit) {
+    val ground = LocalKudosTokens.current.background
+    PronunciationSettingsContent(store, onDismiss) { content ->
+        ModalBottomSheet(onDismissRequest = onDismiss, containerColor = ground,
+            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) { content() }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun PronunciationSettingsContent(store: KokoroPronunciationStore, onDismiss: () -> Unit,
+    presentContent: @Composable (@Composable () -> Unit) -> Unit = { it() }) {
     val tokens = LocalKudosTokens.current
     val scope = rememberCoroutineScope()
     val clipboard = LocalClipboardManager.current
@@ -109,8 +121,8 @@ internal fun PronunciationSettingsSheet(store: KokoroPronunciationStore, onDismi
             title = { Text("Pasted Corrections") }, text = { Text(result) },
             confirmButton = { TextButton(onClick = { pastedResult = null }) { Text("OK") } })
     }
-    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = tokens.background,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
+    presentContent {
+        CompositionLocalProvider(LocalSettingsFormGround provides true) {
         Column(Modifier.fillMaxHeight(0.9f).padding(bottom = 24.dp)) {
             SubjectFormRow("Pronunciations", trailing = {
                 Box {
@@ -169,12 +181,14 @@ internal fun PronunciationSettingsSheet(store: KokoroPronunciationStore, onDismi
             }
         }
     }
+    }
 }
 
 @Composable
 internal fun PronunciationEmptyState() {
     val tokens = LocalKudosTokens.current
-    Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp).fillMaxWidth().subjectPanel()
+    CompositionLocalProvider(LocalSettingsFormGround provides true) {
+    Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp).fillMaxWidth().settingsPanelGround()
         .testTag("Pronunciation empty card").padding(horizontal = 24.dp, vertical = 32.dp),
         horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Box(Modifier.size(48.dp).testTag("Pronunciation speech bubble"), contentAlignment = Alignment.Center) {
@@ -186,6 +200,7 @@ internal fun PronunciationEmptyState() {
         Text("No corrections yet", color = tokens.primaryInk, textAlign = TextAlign.Center)
         Text("Add a word here to fix how Read Aloud says it. Corrections apply to every work.",
             color = tokens.secondaryInk, textAlign = TextAlign.Center)
+    }
     }
 }
 

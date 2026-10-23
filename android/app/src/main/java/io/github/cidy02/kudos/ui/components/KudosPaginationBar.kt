@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.ui.components
 
+import io.github.cidy02.kudos.ui.subject.SubjectPalette
 import androidx.compose.foundation.text.TextAutoSize
 import io.github.cidy02.kudos.app.DebugShotEffect
 import androidx.compose.foundation.border
@@ -77,7 +78,8 @@ fun KudosPaginationBar(
     totalPages: Int,
     onPageChange: (Int) -> Unit,
     modifier: Modifier = Modifier,
-    enabled: Boolean = true
+    enabled: Boolean = true,
+    palette: SubjectPalette = LocalKudosTokens.current.scopePalette
 ) {
     if (totalPages <= 1) return
 
@@ -93,7 +95,8 @@ fun KudosPaginationBar(
             currentPage = currentPage,
             totalPages = totalPages,
             onSelect = onPageChange,
-            onDismiss = { showPageJump = false }
+            onDismiss = { showPageJump = false },
+            palette = palette
         )
     }
 
@@ -147,7 +150,7 @@ fun KudosPaginationBar(
                 .minimumInteractiveComponentSize()
                 .size(40.dp)
                 .clip(CircleShape)
-                .background(if (navEnabled) tokens.scopePalette.chipFill else Color.Transparent)
+                .background(if (navEnabled) palette.chipFill else Color.Transparent)
                 .combinedClickable(
                     enabled = navEnabled,
                     role = Role.Button,
@@ -160,7 +163,7 @@ fun KudosPaginationBar(
             Icon(
                 Icons.AutoMirrored.Outlined.KeyboardArrowRight,
                 contentDescription = "Next Page",
-                tint = if (navEnabled) tokens.scopePalette.accentOnFill else tokens.secondaryInk.copy(alpha = 0.38f)
+                tint = if (navEnabled) palette.accentOnFill else tokens.secondaryInk.copy(alpha = 0.38f)
             )
         }
     }
@@ -190,17 +193,19 @@ private fun PageJumpSheet(
     currentPage: Int,
     totalPages: Int,
     onSelect: (Int) -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    palette: SubjectPalette
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState,
         containerColor = LocalKudosTokens.current.background) {
-        PageJumpContent(currentPage, totalPages, onSelect, onDismiss)
+        PageJumpContent(currentPage, totalPages, onSelect, onDismiss, palette)
     }
 }
 
 @Composable
-internal fun PageJumpContent(currentPage: Int, totalPages: Int, onSelect: (Int) -> Unit, onDismiss: () -> Unit) {
+internal fun PageJumpContent(currentPage: Int, totalPages: Int, onSelect: (Int) -> Unit, onDismiss: () -> Unit,
+    palette: SubjectPalette = LocalKudosTokens.current.scopePalette) {
     val tokens = LocalKudosTokens.current
     var pageInput by remember(currentPage) { mutableStateOf(currentPage.toString()) }
     val enteredPage = pageInput.toIntOrNull()?.takeIf { it > 0 }?.coerceAtMost(maxOf(totalPages, 1))
@@ -248,10 +253,10 @@ internal fun PageJumpContent(currentPage: Int, totalPages: Int, onSelect: (Int) 
                                         .heightIn(min = 44.dp)
                                         .clip(RoundedCornerShape(11.dp))
                                         .background(
-                                            if (selected) tokens.scopePalette.chipFill
+                                            if (selected) palette.chipFill
                                             else tokens.glassFill(0.08)
                                         )
-                                        .border(0.5.dp, if (selected) tokens.scopePalette.chipStroke
+                                        .border(0.5.dp, if (selected) palette.chipStroke
                                             else tokens.glassStroke(0.13), RoundedCornerShape(11.dp))
                                         .selectable(selected = selected, role = Role.RadioButton) { pageInput = page.toString() }
                                         .semantics { contentDescription = "Page $page" },
@@ -263,7 +268,7 @@ internal fun PageJumpContent(currentPage: Int, totalPages: Int, onSelect: (Int) 
                                         autoSize = TextAutoSize.StepBased(minFontSize = 9.sp, maxFontSize = 16.sp),
                                         lineHeight = 20.sp,
                                         fontWeight = FontWeight.SemiBold,
-                                        color = if (selected) tokens.scopePalette.accentOnFill
+                                        color = if (selected) palette.accentOnFill
                                         else tokens.primaryInk
                                     )
                                 }

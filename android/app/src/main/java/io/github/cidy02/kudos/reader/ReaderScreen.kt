@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.reader
 
+import io.github.cidy02.kudos.ui.subject.LocalSettingsFormGround
 import io.github.cidy02.kudos.app.DebugShotEffect
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.offset
@@ -1070,11 +1071,13 @@ internal fun ReaderDisplaySheet(
         CustomizeThemeSheet(settingsRepository, customFontRepository, onDismiss = { showCustomizeTheme = false })
     }
     val tokens = LocalKudosTokens.current
+    val controlInk = tokens.theme.appTint ?: tokens.scopePalette.accent
     val twoPage = !preferences.scroll && preferences.columnCount >= 2
     // iOS offers the two-page spread on iPad and Mac, never on a phone. It also shows here while
     // it is on, so a phone that has it on can turn it off.
     val wide = LocalConfiguration.current.screenWidthDp >= 600
     val currentFontId = preferences.fontFamily ?: "system"
+    CompositionLocalProvider(LocalSettingsFormGround provides true) {
     listeningContent { speechContent ->
         Column(
             modifier = Modifier
@@ -1097,9 +1100,8 @@ internal fun ReaderDisplaySheet(
                     modifier = Modifier.weight(1f)
                 )
                 ToolbarCircleButton(onClick = onDone, accessibilityName = "Done") {
-                    // The accent that reads on every theme, on all three of the reader's sheets: this
-                    // tick was the ink's colour and Find in Work's the raw accent.
-                    Icon(Icons.Filled.Check, contentDescription = null, tint = tokens.scopePalette.accent)
+                    // Use the actual reader tint, including Sepia's fixed warm brown.
+                    Icon(Icons.Filled.Check, contentDescription = null, tint = controlInk)
                 }
             }
 
@@ -1116,6 +1118,7 @@ internal fun ReaderDisplaySheet(
                 SubjectRowSeparator()
                 SettingsActionRow(
                     label = "Customize Theme…",
+                    tint = controlInk,
                     icon = Icons.Outlined.Tune,
                     onClick = { showCustomizeTheme = true }
                 )
@@ -1194,6 +1197,7 @@ internal fun ReaderDisplaySheet(
                 }
             }
         }
+    }
     }
 }
 
