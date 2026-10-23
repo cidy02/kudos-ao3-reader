@@ -2,6 +2,13 @@ package io.github.cidy02.kudos.reader
 
 import android.util.Base64
 import android.webkit.WebView
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -28,6 +35,14 @@ import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
@@ -40,6 +55,8 @@ import io.github.cidy02.kudos.core.model.KudosSettings
 import io.github.cidy02.kudos.core.model.ReaderFontCatalog
 import io.github.cidy02.kudos.data.preferences.SettingsRepository
 import io.github.cidy02.kudos.files.CustomFontRepository
+import io.github.cidy02.kudos.reader.settings.backgroundColor
+import io.github.cidy02.kudos.reader.settings.textColor
 import io.github.cidy02.kudos.reader.settings.ReaderColorTheme
 import io.github.cidy02.kudos.reader.settings.ReaderSettingsMapper
 import io.github.cidy02.kudos.settings.SettingsActionRow
@@ -52,7 +69,6 @@ import io.github.cidy02.kudos.ui.subject.ReaderTheme
 import io.github.cidy02.kudos.ui.subject.SectionRuleHeader
 import io.github.cidy02.kudos.ui.subject.SubjectFormRow
 import io.github.cidy02.kudos.ui.subject.SubjectRowSeparator
-import io.github.cidy02.kudos.ui.subject.SubjectSegmentedControl
 import io.github.cidy02.kudos.ui.subject.SubjectToggle
 import io.github.cidy02.kudos.ui.subject.ToolbarCircleButton
 import kotlinx.coroutines.Dispatchers
@@ -129,34 +145,60 @@ internal fun CustomizeThemeSheet(
                     val previewHeight = if (windowHeight < 600) (windowHeight * 0.28f).dp
                         else (windowHeight * 0.42f).coerceIn(240f, 380f).dp
                     val html = readerThemePreviewHTML(settings, fontData)
-                    AndroidView(
-                        factory = { context -> WebView(context).apply {
-                            this.settings.javaScriptEnabled = false
-                            this.settings.allowFileAccess = false
-                            this.settings.allowContentAccess = false
-                            this.settings.blockNetworkLoads = true
-                            isVerticalScrollBarEnabled = false
-                            isHorizontalScrollBarEnabled = false
-                        } },
-                        update = { web ->
-                            if (web.tag != html) {
-                                web.tag = html
-                                web.loadDataWithBaseURL(null, html, "text/html", "UTF-8", null)
+                    Box(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 10.dp)
+                        .clip(androidx.compose.foundation.shape.RoundedCornerShape(16.dp))) {
+                        AndroidView(
+                            factory = { context -> WebView(context).apply {
+                                this.settings.javaScriptEnabled = false
+                                this.settings.allowFileAccess = false
+                                this.settings.allowContentAccess = false
+                                this.settings.blockNetworkLoads = true
+                                isVerticalScrollBarEnabled = false
+                                isHorizontalScrollBarEnabled = false
+                            } },
+                            update = { web ->
+                                if (web.tag != html) {
+                                    web.tag = html
+                                    web.loadDataWithBaseURL(null, html, "text/html", "UTF-8", null)
+                                }
+                            },
+                            onReset = null,
+                            onRelease = { it.destroy() },
+                            modifier = Modifier.fillMaxWidth().height(previewHeight)
+                        )
+                        Box(Modifier.fillMaxWidth().height(36.dp).align(Alignment.BottomCenter)
+                            .background(Brush.verticalGradient(listOf(theme.backgroundColor().copy(alpha = 0f), theme.backgroundColor()))))
+                    }
+                    Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 10.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.Top) {
+                        ReaderColorTheme.entries.forEach { option ->
+                            val selected = option == theme
+                            val title = if (option == ReaderColorTheme.Oled) "OLED" else option.name
+                            Column(Modifier.weight(1f)
+                                .selectable(selected = selected, role = Role.RadioButton) {
+                                    scope.launch { repository.updateEffectiveReaderTheme(ReaderSettingsMapper.toReaderThemeSetting(option)) }
+                                }.semantics { contentDescription = title },
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                                Box(Modifier.padding(4.dp).size(54.dp), contentAlignment = Alignment.Center) {
+                                    Box(Modifier.size(54.dp).background(option.backgroundColor(), CircleShape)
+                                        .border(if (selected) 3.dp else 1.dp,
+                                            if (selected) tokens.accent else tokens.primaryInk.copy(alpha = 0.12f), CircleShape),
+                                        contentAlignment = Alignment.Center) {
+                                        Text("Aa", color = option.textColor(), fontSize = 18.sp,
+                                            fontWeight = FontWeight.SemiBold, fontFamily = FontFamily.Serif,
+                                            modifier = Modifier.clearAndSetSemantics {})
+                                    }
+                                    if (selected) Icon(Icons.Filled.Check, contentDescription = null,
+                                        tint = tokens.scopePalette.labelOnAccent,
+                                        modifier = Modifier.align(Alignment.TopEnd).size(16.dp).background(tokens.accent, CircleShape))
+                                }
+                                Text(title, color = if (selected) tokens.primaryInk else tokens.secondaryInk,
+                                    fontSize = 11.sp, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                                    modifier = Modifier.clearAndSetSemantics {})
                             }
-                        },
-                        onReset = null,
-                        onRelease = { it.destroy() },
-                        modifier = Modifier.fillMaxWidth().height(previewHeight).padding(horizontal = 20.dp, vertical = 10.dp)
-                    )
-                    SubjectSegmentedControl(
-                        options = ReaderColorTheme.entries, selected = theme,
-                        onSelect = { scope.launch {
-                            repository.updateEffectiveReaderTheme(ReaderSettingsMapper.toReaderThemeSetting(it))
-                        } },
-                        title = { if (it == ReaderColorTheme.Oled) "OLED" else it.name },
-                        contentDescription = "Theme",
-                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp)
-                    )
+                        }
+                    }
                     Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
                         SectionRuleHeader("Text", Modifier.padding(horizontal = 20.dp, vertical = 10.dp))
                         SettingsSection(footnote = null, top = 0.dp) {

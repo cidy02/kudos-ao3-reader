@@ -6,6 +6,8 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
 import androidx.compose.foundation.combinedClickable
@@ -34,7 +36,6 @@ import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -42,8 +43,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.Column
-import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
@@ -54,23 +55,20 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.material3.Slider
 import androidx.compose.material3.TextButton
+import io.github.cidy02.kudos.ui.subject.SubjectFieldLabel
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import kotlin.math.roundToInt
 
 /**
  * Shared pagination control for Search / Browse / Account lists.
  * iOS SearchPaginationBar's capsule: previous, Page X / Y with a page-picker caret, next.
  * Long presses retain First / Last; the centre opens the existing exact-page sheet.
  *
- * The arrows answer the common move — one page at a time. Reaching page 2,731 of
- * 5,000 with them is not a navigation model, which is what the scrubber is for: a
- * slider addresses a long ordered set in one gesture where stepping cannot.
+ * The field addresses any page exactly; nearby tiles stage a draft before Go loads it.
  */
 @Composable
 fun KudosPaginationBar(
@@ -82,19 +80,19 @@ fun KudosPaginationBar(
 ) {
     if (totalPages <= 1) return
 
-    var showScrubber by remember { mutableStateOf(false) }
-    DebugShotEffect("pagination", ready = enabled) { showScrubber = true }
+    var showPageJump by remember { mutableStateOf(false) }
+    DebugShotEffect("pagination", ready = enabled) { showPageJump = true }
 
     val tokens = LocalKudosTokens.current
     val textMeasurer = rememberTextMeasurer()
     val density = LocalDensity.current
 
-    if (showScrubber) {
-        PageScrubberSheet(
+    if (showPageJump) {
+        PageJumpSheet(
             currentPage = currentPage,
             totalPages = totalPages,
             onSelect = onPageChange,
-            onDismiss = { showScrubber = false }
+            onDismiss = { showPageJump = false }
         )
     }
 
@@ -124,7 +122,7 @@ fun KudosPaginationBar(
     val position: @Composable (String) -> Unit = { positionText ->
         // iOS's hint, "Opens the page picker.", as TalkBack says it: "double-tap to open the page picker".
         TextButton(
-            onClick = { showScrubber = true },
+            onClick = { showPageJump = true },
             enabled = enabled && totalPages > 1,
             modifier = Modifier.semantics {
                 contentDescription = "Page $currentPage of $totalPages"
@@ -184,17 +182,10 @@ fun KudosPaginationBar(
     }
 }
 
-/**
- * The long jump.
- *
- * **The slider does not load anything while you drag.** Pagination is a network
- * fetch, so a live-bound slider would fire a request per tick and rate-limit the
- * reader out of AO3 in one gesture. The sheet holds a draft, previews it in the
- * readout, and commits once on Go — which is what makes a slider affordable here.
- */
+/** Exact page entry and nearby tiles; only Go commits the draft (iOS PageJumpSheet). */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun PageScrubberSheet(
+private fun PageJumpSheet(
     currentPage: Int,
     totalPages: Int,
     onSelect: (Int) -> Unit,
@@ -202,129 +193,88 @@ private fun PageScrubberSheet(
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var pageInput by remember(currentPage) { mutableStateOf(currentPage.toString()) }
-    val enteredPage = pageInput.trim().toIntOrNull()?.takeIf { it in 1..totalPages }
+    val enteredPage = pageInput.toIntOrNull()?.takeIf { it > 0 }?.coerceAtMost(maxOf(totalPages, 1))
     val draftPage = enteredPage ?: currentPage.coerceIn(1, maxOf(totalPages, 1))
     fun go() {
-        val target = enteredPage ?: return
+        val target = draftPage
         if (target != currentPage) onSelect(target)
         onDismiss()
     }
 
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .imePadding()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 24.dp)
-                .padding(bottom = 32.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            Text(
-                text = "$draftPage",
-                lineHeight = 40.sp,
-                style = MaterialTheme.typography.displaySmall.copy(fontWeight = FontWeight.SemiBold)
-            )
-            Text(
-                text = "of $totalPages",
-                lineHeight = 20.sp,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+        Column(Modifier.fillMaxWidth().fillMaxHeight(0.9f).imePadding().padding(bottom = 24.dp)) {
+            Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = onDismiss) { Icon(Icons.Default.Close, contentDescription = "Cancel") }
+                Text("Go to page", Modifier.weight(1f), fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+                IconButton(onClick = { go() }, enabled = draftPage != currentPage) {
+                    Icon(Icons.Default.Check, contentDescription = "Go to page $draftPage")
+                }
+            }
+            Column(
+                Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 24.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                SubjectFieldLabel("Page number")
+                OutlinedTextField(
+                    value = pageInput, onValueChange = { pageInput = it.filter { char -> char in '0'..'9' } }, singleLine = true,
+                    placeholder = { Text("Page") },
+                    trailingIcon = { Text("of $totalPages", Modifier.padding(horizontal = 12.dp)) },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Go),
+                    keyboardActions = KeyboardActions(onGo = { if (draftPage != currentPage) go() }),
+                    modifier = Modifier.fillMaxWidth().semantics { contentDescription = "Page number" }
+                )
 
-            OutlinedTextField(
-                value = pageInput, onValueChange = { pageInput = it }, singleLine = true,
-                label = { Text("Page") }, isError = enteredPage == null,
-                supportingText = { Text("Enter a page from 1 to $totalPages") },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Go),
-                keyboardActions = KeyboardActions(onGo = { go() }), modifier = Modifier.fillMaxWidth()
-            )
-
-            Slider(
-                value = draftPage.toFloat(),
-                onValueChange = { pageInput = it.roundToInt().coerceIn(1, totalPages).toString() },
-                valueRange = 1f..maxOf(totalPages, 2).toFloat(),
-                // Continuous, *not* `steps = totalPages - 2`. A stepped Material
-                // slider draws a tick per step, and AO3 lists run to 5,000 pages —
-                // that is 4,998 ticks smeared into a solid bar, and a lot of them to
-                // lay out. The readout rounds instead, so the thumb still resolves to
-                // a whole page.
-                modifier = Modifier.fillMaxWidth()
-            )
-
-            // iOS's "Nearby": ten pages around the one chosen, a tap away. A tile sets the draft,
-            // as the slider does, and nothing loads until Go.
-            val nearby = nearbyPageWindow(draftPage, totalPages)
-            if (nearby.size > 1) {
-                Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        text = "Nearby",
-                        lineHeight = 16.sp,
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    nearby.chunked(5).forEach { rowPages ->
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            rowPages.forEach { page ->
-                                val selected = page == draftPage
-                                Box(
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .heightIn(min = 44.dp)
-                                        .clip(RoundedCornerShape(11.dp))
-                                        .background(
-                                            if (selected) MaterialTheme.colorScheme.primaryContainer
-                                            else MaterialTheme.colorScheme.surfaceVariant
+                // Tiles stage a draft; nothing loads until Go.
+                val nearby = nearbyPageWindow(draftPage, totalPages)
+                if (nearby.size > 1) {
+                    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        SubjectFieldLabel("Nearby")
+                        nearby.chunked(5).forEach { rowPages ->
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                rowPages.forEach { page ->
+                                    val selected = page == draftPage
+                                    Box(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .heightIn(min = 44.dp)
+                                            .clip(RoundedCornerShape(11.dp))
+                                            .background(
+                                                if (selected) MaterialTheme.colorScheme.primaryContainer
+                                                else MaterialTheme.colorScheme.surfaceVariant
+                                            )
+                                            .selectable(selected = selected, role = Role.RadioButton) { pageInput = page.toString() }
+                                            .semantics { contentDescription = "Page $page" },
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            text = "%,d".format(page),
+                                            maxLines = 1,
+                                            lineHeight = 20.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer
+                                            else MaterialTheme.colorScheme.onSurface
                                         )
-                                        .selectable(selected = selected, role = Role.RadioButton) { pageInput = page.toString() }
-                                        .semantics { contentDescription = "Page $page" },
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text(
-                                        text = "%,d".format(page),
-                                        maxLines = 1,
-                                        lineHeight = 20.sp,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer
-                                        else MaterialTheme.colorScheme.onSurface
-                                    )
+                                    }
                                 }
+                                repeat(5 - rowPages.size) { Spacer(Modifier.weight(1f)) }
                             }
-                            repeat(5 - rowPages.size) { Spacer(Modifier.weight(1f)) }
                         }
                     }
                 }
-            }
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                TextButton(onClick = { pageInput = "1" }, enabled = draftPage > 1) {
-                    Text("First page", lineHeight = 20.sp)
-                }
-                TextButton(
-                    onClick = { pageInput = maxOf(totalPages, 1).toString() },
-                    enabled = draftPage < totalPages
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Text("Last (${"%,d".format(totalPages)})", lineHeight = 20.sp)
-                }
-            }
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f)) {
-                    Text("Cancel", lineHeight = 20.sp)
-                }
-                Button(
-                    onClick = { go() },
-                    enabled = enteredPage != null && enteredPage != currentPage,
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Text("Go", lineHeight = 20.sp)
+                    TextButton(onClick = { pageInput = "1" }, enabled = draftPage > 1) {
+                        Text("First page", lineHeight = 20.sp)
+                    }
+                    TextButton(
+                        onClick = { pageInput = maxOf(totalPages, 1).toString() },
+                        enabled = draftPage < totalPages
+                    ) {
+                        Text("Last (${"%,d".format(totalPages)})", lineHeight = 20.sp)
+                    }
                 }
             }
         }

@@ -19,6 +19,32 @@ import org.robolectric.annotation.Config
 class FilterTagPickerPopularTest {
     @get:Rule val compose = createComposeRule()
 
+    @Test fun emptyFandomQueryKeepsSelectedStatesAndWaitsForTypingToSuggest() {
+        var included by mutableStateOf("Doctor Who")
+        var excluded by mutableStateOf("Star Wars")
+        compose.setContent {
+            KudosTheme(KudosThemeMode.Light) {
+                FilterTagRow("Fandoms", "fandom", included, excluded, listOf("Naruto"), null, emptyList(),
+                    onChange = { yes, no -> included = yes; excluded = no })
+            }
+        }
+        compose.onNodeWithText("Fandoms").performClick()
+        compose.onNodeWithText("SELECTED").assertExists()
+        compose.onNodeWithText("RESULTS").assertExists()
+        compose.onNodeWithText("Type above to search AO3 fandoms.").assertExists()
+        compose.onNodeWithText("Naruto").assertDoesNotExist()
+        compose.onNode(hasText("Doctor Who") and SemanticsMatcher.expectValue(
+            androidx.compose.ui.semantics.SemanticsProperties.StateDescription, "Included")).assertExists()
+        compose.onNode(hasText("Star Wars") and SemanticsMatcher.expectValue(
+            androidx.compose.ui.semantics.SemanticsProperties.StateDescription, "Excluded")).assertExists()
+        compose.onNode(hasSetTextAction()).performTextInput("Naru")
+        // Below the Selected rows; the default Robolectric screen is too short to draw it unscrolled.
+        compose.onNode(hasScrollToNodeAction()).performScrollToNode(hasText("Naruto"))
+        compose.onNodeWithText("Naruto").assertExists().performClick()
+        assertEquals("Doctor Who, Naruto", included)
+        assertEquals("Star Wars", excluded)
+    }
+
     @Test fun emptyNonFandomQueryExplainsHowToGetPopularTags() {
         var kind by mutableStateOf("character")
         compose.setContent {

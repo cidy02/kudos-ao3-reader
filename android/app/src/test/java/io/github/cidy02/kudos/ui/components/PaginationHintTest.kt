@@ -9,7 +9,6 @@ import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextReplacement
 import org.junit.Assert.assertEquals
 import androidx.compose.ui.test.SemanticsMatcher
@@ -29,19 +28,23 @@ import org.robolectric.annotation.Config
 class PaginationHintTest {
     @get:Rule val compose = createComposeRule()
 
-    @Test fun exactPageEntryWaitsForGoAndRejectsOutOfRangeOrOverflow() {
+    /** iOS PageJumpSheet.draftPage: a page past the end clamps to the last; zero, an overflow or
+     *  an empty field reads as the current page, so Go has nothing to do. */
+    @Test fun exactPageEntryWaitsForGoAndClampsLikeIOS() {
         val loads = mutableListOf<Int>()
         compose.setContent { KudosPaginationBar(1, 5000, { loads += it }) }
         compose.onNodeWithText("Page 1 / 5000").performClick()
         compose.onNode(hasSetTextAction()).performTextReplacement("2731")
         assertEquals(emptyList<Int>(), loads)
-        compose.onNodeWithText("Go").assertIsEnabled()
-        listOf("0", "5001", "99999999999999999999", "").forEach { invalid ->
-            compose.onNode(hasSetTextAction()).performTextReplacement(invalid)
-            compose.onNodeWithText("Go").assertIsNotEnabled()
+        compose.onNodeWithContentDescription("Go to page 2731").assertIsEnabled()
+        compose.onNode(hasSetTextAction()).performTextReplacement("5001")
+        compose.onNodeWithContentDescription("Go to page 5000").assertIsEnabled()
+        listOf("0", "99999999999999999999", "").forEach { nothingToDo ->
+            compose.onNode(hasSetTextAction()).performTextReplacement(nothingToDo)
+            compose.onNodeWithContentDescription("Go to page 1").assertIsNotEnabled()
         }
         compose.onNode(hasSetTextAction()).performTextReplacement("2731")
-        compose.onNodeWithText("Go").performScrollTo().performClick()
+        compose.onNodeWithContentDescription("Go to page 2731").performClick()
         assertEquals(listOf(2731), loads)
     }
 
@@ -53,9 +56,9 @@ class PaginationHintTest {
         })
         // The label is added beside the button's own action, not in place of it: what TalkBack's
         // double-tap calls still opens the picker.
-        compose.onNodeWithText("Go").assertDoesNotExist()
+        compose.onNodeWithText("Go to page").assertDoesNotExist()
         button.performSemanticsAction(SemanticsActions.OnClick)
-        compose.onNodeWithText("Go").assertExists()
+        compose.onNodeWithText("Go to page").assertExists()
     }
 
     /** Port of iOS SearchPaginationTests.swift:45 arrowsUseTapForAdjacentAndLongPressForEnds. */

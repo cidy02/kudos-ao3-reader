@@ -165,6 +165,7 @@ fun QueueSettingsScreen(
         Spacer(Modifier.height(WindowInsets.systemBars.asPaddingValues().calculateTopPadding() + 56.dp))
         SubjectHeaderBlock(
             kicker = ReadingQueueFacts.kicker("Home", isDetails = true),
+            kickerMaxLines = if (io.github.cidy02.kudos.ui.subject.isAccessibilityFontScale()) Int.MAX_VALUE else 1,
             title = current.displayName,
             subtitle = ReadingQueueFacts.subtitle(works.size, preserved, storedBytes),
             palette = palette,
