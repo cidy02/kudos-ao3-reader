@@ -788,14 +788,21 @@ struct AO3CollectionItemCard: View {
     }
 
     private var footerRow: some View {
-        row(spacing: 12) {
+        // The byline on a line of its own: beside Remove and the date it had what was
+        // left of the row and was cut to "AO3_Reader…", the "(Member)" lost with it.
+        VStack(alignment: .leading, spacing: 6) {
             if !item.creatorByline.isEmpty {
                 Text(item.creatorByline)
                     .font(.system(size: captionSize))
                     .foregroundStyle(.secondary)
-                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
                     .fixedSize(horizontal: false, vertical: true)
             }
+            actionRow
+        }
+    }
+
+    private var actionRow: some View {
+        row(spacing: 12) {
             if item.removeIsEditable || isRemoved {
                 Button {
                     staging.setRemoved(!isRemoved, for: item)
