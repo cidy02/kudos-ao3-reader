@@ -104,7 +104,7 @@ class KokoroTTSController(private val context: Context) : TTSService {
     }
 
     /** Opens the pack if it is not open yet; false when it is missing or will not open. */
-    fun ensureReady(): Boolean {
+    override fun ensureReady(): Boolean {
         if (disposed || failedToOpen) return false
         if (tts == null) initEngine()
         return tts != null
@@ -218,7 +218,7 @@ class KokoroTTSController(private val context: Context) : TTSService {
     }
 
     /** Wait for outstanding native synthesis before releasing the model. No new work after disposal. */
-    fun shutdown() {
+    override fun shutdown() {
         if (disposed) return
         disposed = true
         val job = synthesisJob
@@ -243,6 +243,7 @@ class KokoroTTSController(private val context: Context) : TTSService {
     }
 
     override fun setPitch(pitch: Float) {
-        // No-op for Kokoro
+        // No-op for Kokoro: sherpa-onnx's Kokoro has no pitch control (iOS
+        // SherpaKokoroTTSService.setPitch is a no-op for the same reason).
     }
 }

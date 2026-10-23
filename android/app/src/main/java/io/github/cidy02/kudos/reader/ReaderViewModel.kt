@@ -21,6 +21,7 @@ import io.github.cidy02.kudos.network.ao3.writes.AO3WriteRepository
 import io.github.cidy02.kudos.reader.settings.ReaderColorTheme
 import io.github.cidy02.kudos.reader.settings.ReaderPreferences
 import io.github.cidy02.kudos.reader.settings.ReaderSettingsMapper
+import io.github.cidy02.kudos.reader.settings.ReaderSpeechPreferences
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -116,7 +117,8 @@ class ReaderViewModel(
                         val mapped = repository.preferencesFor(settings)
                         updatePreferences { current -> mapped.copy(
                             speechRate = current.speechRate, speechPitch = current.speechPitch,
-                            speechVoiceIdentifier = current.speechVoiceIdentifier
+                            speechVoiceIdentifier = current.speechVoiceIdentifier,
+                            speechEngine = current.speechEngine
                         ) }
                     }
                 }
@@ -477,9 +479,15 @@ class ReaderViewModel(
         viewModelScope.launch { settingsRepository.updateSpeechVoiceIdentifier(id) }
     }
 
+    /**
+     * Settings › Listening's Pitch, stored as iOS stores it (0.75–1.25), so the reader's slider
+     * and Listening's are one setting. It was this reading's only, 0.5–2.0, and the next change
+     * to any speech setting put it back to 1.0.
+     */
     fun setSpeechPitch(pitch: Float) {
-        val clamped = pitch.coerceIn(0.5f, 2.0f)
+        val clamped = ReaderSpeechPreferences.clampPitch(pitch)
         updatePreferences { it.copy(speechPitch = clamped) }
+        viewModelScope.launch { settingsRepository.updateSpeechPitch(clamped) }
     }
 
     fun setFontFamily(family: String?) {

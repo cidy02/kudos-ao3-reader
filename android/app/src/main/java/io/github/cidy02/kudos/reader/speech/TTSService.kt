@@ -17,10 +17,18 @@ interface TTSService {
     fun setVoice(id: String)
     fun setRate(rate: Float)
     fun setPitch(pitch: Float)
+    /**
+     * Settings › Listening's Engine ([io.github.cidy02.kudos.reader.settings.ReaderTTSEngineKind]
+     * raw value, "" for Automatic). Only [AutomaticTTSService] has more than one engine to choose.
+     */
+    fun setEngine(engine: String) = Unit
+    fun ensureReady(): Boolean = status.value != SpeechStatus.UNAVAILABLE
+    fun shutdown() = Unit
 }
 
 /** Shared application path for the reader and Settings' sample playback. */
 fun TTSService.applySpeechPreferences(preferences: ReaderPreferences) {
+    setEngine(preferences.speechEngine)
     setRate(preferences.speechRate)
     setPitch(preferences.speechPitch)
     setVoice(preferences.speechVoiceIdentifier ?: "0")
