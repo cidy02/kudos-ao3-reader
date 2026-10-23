@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.reader
 
+import io.github.cidy02.kudos.settings.SettingsGroupLabel
 import androidx.compose.foundation.text.TextAutoSize
 import android.util.Base64
 import android.webkit.WebView
@@ -46,6 +47,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.unit.dp
@@ -67,7 +69,6 @@ import io.github.cidy02.kudos.ui.subject.KudosTokens
 import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
 import io.github.cidy02.kudos.ui.subject.LocalSubjectPalette
 import io.github.cidy02.kudos.ui.subject.ReaderTheme
-import io.github.cidy02.kudos.ui.subject.SectionRuleHeader
 import io.github.cidy02.kudos.ui.subject.SubjectFormRow
 import io.github.cidy02.kudos.ui.subject.SubjectRowSeparator
 import io.github.cidy02.kudos.ui.subject.SubjectToggle
@@ -77,10 +78,25 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
+/** Presentation is separate so the production content can be tested without a dialog window. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun CustomizeThemeSheet(repository: SettingsRepository, customFontRepository: CustomFontRepository? = null,
+    onDismiss: () -> Unit) {
+    val settings by repository.settings.collectAsState(initial = KudosSettings.Defaults)
+    val theme = ReaderSettingsMapper().resolveTheme(settings.reader, settings.app)
+    val tokens = KudosTokens.of(ReaderTheme.valueOf(theme.name), LocalKudosTokens.current.accent)
+    ModalBottomSheet(onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        containerColor = tokens.background, contentColor = tokens.primaryInk) {
+        CustomizeThemeContent(repository, customFontRepository, onDismiss)
+    }
+}
+
 /** Both Customize Theme entries use this sheet and the same saved reader preferences. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun CustomizeThemeSheet(
+internal fun CustomizeThemeContent(
     repository: SettingsRepository,
     customFontRepository: CustomFontRepository? = null,
     onDismiss: () -> Unit
@@ -105,12 +121,6 @@ internal fun CustomizeThemeSheet(
             }.getOrNull() }
         }
     }
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        containerColor = tokens.background,
-        contentColor = tokens.primaryInk
-    ) {
         CompositionLocalProvider(LocalKudosTokens provides tokens, LocalSubjectPalette provides tokens.scopePalette) {
             Column(Modifier.fillMaxWidth().fillMaxHeight(0.95f).navigationBarsPadding()) {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -158,6 +168,7 @@ internal fun CustomizeThemeSheet(
                                 isHorizontalScrollBarEnabled = false
                             } },
                             update = { web ->
+                                web.settings.textZoom = 100
                                 if (web.tag != html) {
                                     web.tag = html
                                     web.loadDataWithBaseURL(null, html, "text/html", "UTF-8", null)
@@ -202,9 +213,10 @@ internal fun CustomizeThemeSheet(
                         }
                     }
                     Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
-                        SectionRuleHeader("Text", Modifier.padding(horizontal = 20.dp, vertical = 10.dp))
+                        SettingsGroupLabel("Text", Modifier.padding(vertical = 10.dp))
                         SettingsSection(footnote = null, top = 0.dp) {
-                            SubjectFormRow("Font", value = ReaderFontCatalog.name(reader.readerFontId, fonts),
+                            SubjectFormRow("Font", modifier = Modifier.testTag("Theme font row"),
+                                value = ReaderFontCatalog.name(reader.readerFontId, fonts), showsDisclosure = true,
                                 onClick = { choosingFont = true })
                             SubjectRowSeparator()
                             SubjectFormRow("Bold Text", trailing = {
@@ -213,7 +225,7 @@ internal fun CustomizeThemeSheet(
                                     contentDescription = "Bold Text")
                             })
                         }
-                        SectionRuleHeader("Accessibility & Layout", Modifier.padding(horizontal = 20.dp, vertical = 10.dp))
+                        SettingsGroupLabel("Accessibility & Layout", Modifier.padding(vertical = 10.dp))
                         SettingsSection(top = 0.dp,
                             footnote = "Turn Customize off to use comfortable defaults. Your Bold Text and font choices still apply.") {
                             SubjectFormRow("Customize", trailing = {
@@ -252,7 +264,6 @@ internal fun CustomizeThemeSheet(
                 }
             }
         }
-    }
 }
 
 @Composable

@@ -1,6 +1,11 @@
 package io.github.cidy02.kudos.browse
 
 import android.app.Application
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.view.View
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalView
 import android.content.Context
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -68,10 +73,13 @@ class FandomResultsParityTest {
     }
 
     private val washes = ShellWashes()
+    private lateinit var view: View
+    private var mode by mutableStateOf(KudosThemeMode.Light)
 
     private fun show(tag: Boolean = false, fandom: String = "A fandom") {
         val chrome = PushedShellChrome()
-        compose.setContent { if (visible) KudosTheme(KudosThemeMode.Light) {
+        compose.setContent { if (visible) KudosTheme(mode) {
+            view = LocalView.current
             CompositionLocalProvider(LocalPushedShellChrome provides chrome, LocalShellWashes provides washes) {
                 Box {
                     FandomWorksScreen(fandom, works, {}, repository = repository, isTag = tag, workImporter = importer)
@@ -158,6 +166,33 @@ class FandomResultsParityTest {
         compose.onNodeWithContentDescription("0 Filters").assertExists()
         compose.onNodeWithText("Doctor Who").assertDoesNotExist()
         compose.runOnIdle { assertEquals(HomeFacts.coverHue("Star Wars - All Media Types"), washes.page!!.palette.hue, 0.000001) }
+    }
+
+    @Test fun fandomPagersUseThePagesBrownRatherThanTheGlobalAccent() = checkPagerPalette(false)
+    @Test fun tagPagersUseThePagesBrownRatherThanTheGlobalAccent() = checkPagerPalette(true)
+    private fun checkPagerPalette(tag: Boolean) {
+        show(tag = tag, fandom = "Star Wars - All Media Types")
+        for (theme in listOf(KudosThemeMode.Light, KudosThemeMode.Sepia, KudosThemeMode.Dark, KudosThemeMode.Oled)) {
+            compose.runOnIdle { mode = theme }
+            val next = compose.onAllNodesWithContentDescription("Next Page")[0].fetchSemanticsNode().boundsInRoot
+            val palette = washes.page!!.palette
+            val image = run {
+                lateinit var bitmap: Bitmap
+                compose.runOnIdle { bitmap = Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888); view.draw(Canvas(bitmap)) }
+                bitmap
+            }
+            val expectedInk = palette.accentOnFill
+            val matches = (next.top.toInt() until next.bottom.toInt()).sumOf { y ->
+                (next.left.toInt() until next.right.toInt()).count { x ->
+                    val pixel = Color(image.getPixel(x, y))
+                    kotlin.math.abs(pixel.red - expectedInk.red) < 0.012f &&
+                        kotlin.math.abs(pixel.green - expectedInk.green) < 0.012f &&
+                        kotlin.math.abs(pixel.blue - expectedInk.blue) < 0.012f
+                }
+            }
+            image.recycle()
+            assertTrue("Page next arrow uses its subject ink ($theme)", matches > 3)
+        }
     }
 
     companion object {

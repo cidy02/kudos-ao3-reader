@@ -41,6 +41,7 @@ class WritingTextEditorScreenTest {
     private val delivered = mutableListOf<String>()
     private var leaves = 0
     private lateinit var lifecycle: LifecycleRegistry
+    private lateinit var chrome: PushedShellChrome
 
     private fun show(theme: KudosThemeMode = KudosThemeMode.Light, large: Boolean = false,
         recovery: Boolean = false) {
@@ -50,7 +51,7 @@ class WritingTextEditorScreenTest {
             val key = store.fileURL("Writer", "work:17", "content")
             store.save("<p>Recovered lantern.</p>", "earlier", store.sessionURL(key))
         }
-        val chrome = PushedShellChrome()
+        chrome = PushedShellChrome()
         compose.setContent {
             KudosTheme(theme) {
                 val density = LocalDensity.current
@@ -79,6 +80,14 @@ class WritingTextEditorScreenTest {
     private fun awaitText(text: String) {
         compose.waitUntil(15_000) { compose.onAllNodesWithText(text).fetchSemanticsNodes().isNotEmpty() }
         compose.waitForIdle()
+    }
+
+    @Test fun editorRegistersTheWholeTitlePolicyAndKeepsItsAccessiblePaneName() {
+        show(large = true)
+        awaitText("CHAPTER 13")
+        compose.runOnIdle { assertTrue(chrome.wholeTitleOnly); assertEquals("Chapter text", chrome.customTitle) }
+        compose.onNode(SemanticsMatcher.expectValue(androidx.compose.ui.semantics.SemanticsProperties.PaneTitle,
+            "Chapter text")).assertExists()
     }
 
     @Test fun topButtonsTagOrderNotesAndDoneDeliverExactlyTheRawBuffer() {

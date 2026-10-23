@@ -1,5 +1,7 @@
 package io.github.cidy02.kudos.reader
 
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.CustomAccessibilityAction
@@ -18,7 +20,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
@@ -38,6 +40,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -98,7 +101,7 @@ fun ReaderContentsSheet(
                 modifier = Modifier.weight(1f))
             if (onDone != null) {
                 ToolbarCircleButton(onClick = onDone, accessibilityName = "Done") {
-                    Icon(Icons.Filled.Check, contentDescription = null, tint = tokens.scopePalette.accent)
+                    Icon(Icons.Filled.Check, contentDescription = null, tint = tokens.theme.appTint ?: tokens.scopePalette.accent)
                 }
             }
         }
@@ -126,7 +129,7 @@ fun ReaderContentsSheet(
                     LazyColumn(
                         contentPadding = PaddingValues(bottom = 16.dp)
                     ) {
-                        items(entries, key = { "${it.depth}:${it.href}:${it.title}" }) { entry ->
+                        itemsIndexed(entries, key = { _, entry -> "${entry.depth}:${entry.href}:${entry.title}" }) { index, entry ->
                             val percent = startPercent(entry)
                             val actions = buildList {
                                 add(SwipeAction("Go", Icons.AutoMirrored.Filled.ArrowForward, tokens.scopePalette.accent) {
@@ -177,6 +180,7 @@ fun ReaderContentsSheet(
                                     )
                                 }
                             }
+                            if (index < entries.lastIndex) HorizontalDivider(Modifier.testTag("Contents separator").padding(start = 20.dp), thickness = 0.5.dp, color = tokens.separator)
                         }
                     }
                 }

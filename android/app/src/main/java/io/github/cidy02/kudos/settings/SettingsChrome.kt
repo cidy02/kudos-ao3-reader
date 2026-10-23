@@ -283,7 +283,8 @@ fun SettingsActionRow(
     icon: ImageVector? = null,
     enabled: Boolean = true,
     contentDescription: String? = null,
-    destructive: Boolean = false
+    destructive: Boolean = false,
+    tint: Color? = null
 ) {
     val tokens = LocalKudosTokens.current
     val color = when {
@@ -292,7 +293,7 @@ fun SettingsActionRow(
         // The palette's accent, which is tuned to be read on each theme's page. The raw
         // accent (AO3 red by default) is about 1.8 to 1 on a dark panel: "Export Backup…"
         // and "Submit sign-up" could barely be read in Dark and OLED (audit A6).
-        else -> tokens.scopePalette.accent
+        else -> tint ?: tokens.scopePalette.accent
     }
     SettingsIconRow(
         label = label,
