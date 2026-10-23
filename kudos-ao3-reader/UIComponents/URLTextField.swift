@@ -9,9 +9,11 @@ import UIKit
 /// ("archiveo- / fourown.org" at the largest text), and a hyphen in an address
 /// reads as part of it. Neither a modifier nor `typesettingLanguage` turns that off
 /// (a "zxx" typesetting language was tried and the field still hyphenated), so
-/// this is a `UITextView` whose paragraph style has hyphenation off: a long word
-/// still breaks where it must, with nothing added. Line breaks are dropped, typed
-/// or pasted, and Return ends editing, as the one-line field did.
+/// this is a `UITextView` that wraps at any character, as an address bar does: a
+/// long word breaks where the line is full, with nothing added. Hyphenation off was
+/// not enough: word wrapping still adds a hyphen where it has to split a word wider
+/// than the field (T-440 still showed "archiveo-" at AX5). Line breaks are dropped,
+/// typed or pasted, and Return ends editing, as the one-line field did.
 struct URLTextField: View {
     let placeholder: String
     @Binding var text: String
@@ -32,7 +34,7 @@ struct URLTextField: View {
     }
 }
 
-private struct URLTextView: UIViewRepresentable {
+struct URLTextView: UIViewRepresentable {
     @Binding var text: String
     let maxLines: Int
     let accessibilityLabel: String
@@ -48,6 +50,7 @@ private struct URLTextView: UIViewRepresentable {
         view.textColor = .label
         view.textContainerInset = .zero
         view.textContainer.lineFragmentPadding = 0
+        view.textContainer.lineBreakMode = .byCharWrapping
         view.isScrollEnabled = false
         view.keyboardType = .URL
         view.autocapitalizationType = .none
@@ -84,6 +87,7 @@ private struct URLTextView: UIViewRepresentable {
     static func attributes(font: UIFont?, alignment: NSTextAlignment) -> [NSAttributedString.Key: Any] {
         let paragraph = NSMutableParagraphStyle()
         paragraph.alignment = alignment
+        paragraph.lineBreakMode = .byCharWrapping
         paragraph.hyphenationFactor = 0
         paragraph.usesDefaultHyphenation = false
         return [
