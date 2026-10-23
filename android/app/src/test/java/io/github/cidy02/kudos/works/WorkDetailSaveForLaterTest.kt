@@ -140,6 +140,8 @@ class WorkDetailSaveForLaterTest {
         compose.waitUntil(5_000) { compose.onAllNodesWithText("Parity queue").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText("Parity queue").performClick()
         compose.waitUntil(5_000) { runBlocking { queues.listWorks(queue.id).isEmpty() } }
+        // The removal ends with a refresh that still reads the database; Done comes back when it has.
+        compose.waitUntil(5_000) { compose.onAllNodes(hasText("Done") and isNotEnabled()).fetchSemanticsNodes().isEmpty() }
         assertNotNull(runBlocking { works.getWork(anchor.id) })
     }
 
