@@ -138,17 +138,20 @@ extension View {
         #endif
     }
 
-    /// An inline title that wraps onto a second line where the system's would
-    /// end in "…" between the bar's buttons ("Add to Neon rer…", "Bookmark on
-    /// A…" at the largest text). Capped near the size the system's own inline
-    /// title stops growing at, since the bar does not grow taller. `isActive: false`
+    /// An inline title capped near the size the system's own title stops growing
+    /// at, since the bar does not grow taller. Long subject names belong in the
+    /// scrolling content: the bar can still constrain this to one line. Hide its
+    /// accessibility element when that content supplies the full heading instead.
+    /// `isActive: false`
     /// leaves the screen's own title as it was (a large title that only needs this
     /// at the accessibility sizes).
     @ViewBuilder
-    func wrappingInlineTitle(_ title: String, isActive: Bool = true) -> some View {
+    func wrappingInlineTitle(
+        _ title: String, isActive: Bool = true, accessibilityHidden: Bool = false
+    ) -> some View {
         #if os(iOS)
         if isActive {
-            navigationTitle(title)
+            navigationTitle(accessibilityHidden ? "" : title)
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .principal) {
@@ -159,6 +162,7 @@ extension View {
                             .minimumScaleFactor(0.8)
                             .dynamicTypeSize(...DynamicTypeSize.xxLarge)
                             .accessibilityAddTraits(.isHeader)
+                            .accessibilityHidden(accessibilityHidden)
                     }
                 }
         } else {

@@ -24,6 +24,51 @@ struct KokoroPronunciationStoreTests {
         #expect(throws: (any Error).self) { try store.setOverride("hɜɹmˈIəni", for: "Hermione") }
     }
 
+    @Test func aMissingEditingFileIsAnEmptyStore() throws {
+        #expect(try temporaryStore().loadForEditing() == KokoroPronunciationStore.empty)
+    }
+
+    @Test func anUnreadableEditingFileThrows() throws {
+        let url = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("kokoro-pron-directory-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: url) }
+        let store = KokoroPronunciationStore(url: url)
+        #expect(throws: (any Error).self) { try store.loadForEditing() }
+    }
+
+    @Test func failedReadsDoNotOverwriteTheSavedFile() throws {
+        let url = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("kokoro-pron-invalid-\(UUID().uuidString).json")
+        let original = Data("{broken corrections".utf8)
+        try original.write(to: url)
+        defer { try? FileManager.default.removeItem(at: url) }
+        let store = KokoroPronunciationStore(url: url)
+
+        #expect(throws: (any Error).self) { try store.loadForEditing() }
+        #expect(throws: (any Error).self) { try store.updateGlobal(["New": "n"]) }
+        #expect(throws: (any Error).self) { try store.updateGlobal(removing: ["Old"]) }
+        #expect(throws: (any Error).self) { try store.setOverride("n", for: "New") }
+        #expect(throws: (any Error).self) { try store.removeOverride(for: "Old") }
+        #expect(try Data(contentsOf: url) == original)
+    }
+
+    @Test func batchEditsPreserveUnrelatedCorrectionsAndLayers() throws {
+        let store = temporaryStore()
+        try store.setOverride("old", for: "Old")
+        try store.setOverride("keep", for: "Keep")
+        try store.setOverride("f", for: "Name", in: .fandom("Fandom"))
+        try store.setOverride("w", for: "Name", in: .work("42"))
+
+        try store.updateGlobal(["New": "new", "Other": "other"], removing: ["Old"])
+        let imported = try store.loadForEditing()
+        #expect(imported.global == ["New": "new", "Other": "other", "Keep": "keep"])
+        #expect(imported.fandoms == ["Fandom": ["Name": "f"]])
+        #expect(imported.works == ["42": ["Name": "w"]])
+        try store.updateGlobal(removing: ["New", "Other"])
+        #expect(try store.loadForEditing().global == ["Keep": "keep"])
+    }
+
     @Test func setThenReadRoundTrips() throws {
         let store = temporaryStore()
         #expect(store.overrides().isEmpty)

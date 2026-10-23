@@ -61,6 +61,25 @@ struct CollectionWorkPickerTests {
         #expect(revealed.map(\.id) == [tame.id, explicit.id])
     }
 
+    @Test func hidingSelectedMatureWorksCountsOnlyWhatWillBeAdded() throws {
+        let context = try makeContext()
+        let first = try insertWork(into: context, title: "First")
+        let mature = try insertWork(into: context, title: "Mature")
+        mature.rating = "Mature"
+        let last = try insertWork(into: context, title: "Last")
+        let works = [first, mature, last]
+        let selection: Set<UUID> = [last.id, mature.id, first.id, UUID()]
+        let gate = PrivacyGate()
+
+        let revealed = AddLibraryWorksSheet.nameable(works, gate: gate, hideMature: false)
+        #expect(AddLibraryWorksSheet.selectedWorks(from: revealed, selection: selection).count == 3)
+        let hidden = AddLibraryWorksSheet.nameable(works, gate: gate, hideMature: true)
+        let chosen = AddLibraryWorksSheet.selectedWorks(from: hidden, selection: selection)
+        #expect(chosen.map(\.id) == [first.id, last.id])
+        #expect(AddLibraryWorksSheet.confirmationTitle(count: chosen.count) == "Add 2")
+        #expect(AddLibraryWorksSheet.selectedWorks(from: hidden, selection: [mature.id]).isEmpty)
+    }
+
     /// A collection's page drops what Hide mode hides (it used to show it in full);
     /// Blur mode keeps the work, for its row to blur.
     @Test func aCollectionsPageDropsWhatHideModeHides() throws {
