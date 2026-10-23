@@ -62,7 +62,8 @@ enum UserFacingError {
         isOffline(code) || isUnreachable(code) ? "wifi.slash" : "exclamationmark.triangle"
     }
 
-    private static func isOffline(_ code: URLError.Code) -> Bool {
+    /// The app's one list of "this device is offline": Comments reads it too.
+    static func isOffline(_ code: URLError.Code) -> Bool {
         [.notConnectedToInternet, .dataNotAllowed, .internationalRoamingOff].contains(code)
     }
 

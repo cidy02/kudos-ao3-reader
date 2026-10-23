@@ -1220,7 +1220,7 @@ final class CommentsModel {
     // this class body fits SwiftLint's `type_body_length` limit. `isOfflineError`
     // stays here because it is `private` and called from this file.
     private static func isOfflineError(_ error: Error) -> Bool {
-        (error as? URLError)?.code == .notConnectedToInternet
+        (error as? URLError).map { UserFacingError.isOffline($0.code) } ?? false
     }
 }
 
