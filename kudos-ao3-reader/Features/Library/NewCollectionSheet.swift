@@ -27,6 +27,7 @@ struct NewCollectionSheet: View {
     @State private var colorHex: String?
     @State private var keepsWorksOffline = false
     @State private var showsOnHome = false
+    @State private var saveFailed = false
 
     @ScaledMetric(relativeTo: .caption) private var footnoteSize: CGFloat = 11.5
 
@@ -94,6 +95,12 @@ struct NewCollectionSheet: View {
         .presentationDetents([.large])
         .presentationDragIndicator(.visible)
         #endif
+        // As New queue: the sheet stays, holding what was typed, so Create can be tried again.
+        .alert("Could not save", isPresented: $saveFailed) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("The collection wasn't saved. Try again.")
+        }
     }
 
     private var collectionPanel: some View {
@@ -157,7 +164,12 @@ struct NewCollectionSheet: View {
         collection.keepsWorksOffline = keepsWorksOffline
         collection.showsOnHome = showsOnHome
         context.insert(collection)
-        context.saveBestEffort(reason: "Creating collection failed")
+        // Unsaved, the half-made collection is dropped so a second Create can't make two.
+        guard context.saveBestEffort(reason: "Creating collection failed") else {
+            context.rollback()
+            saveFailed = true
+            return
+        }
         dismiss()
     }
 }

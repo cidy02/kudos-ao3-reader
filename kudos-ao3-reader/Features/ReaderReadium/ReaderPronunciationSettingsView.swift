@@ -177,9 +177,14 @@ struct ReaderPronunciationSettingsView: View {
         }
         .sheet(item: $editing) { entry in
             ReaderPronunciationEditor(word: entry.word, ipa: entry.ipa) { word, ipa in
-                // The word is the key, so a rename is a remove plus an add.
-                if word != entry.word { remove(entry.word) }
-                save(word: word, ipa: ipa)
+                // The word is the key, so a rename is an add plus a remove: the add first,
+                // so a failed save leaves the old correction where it was.
+                guard save(word: word, ipa: ipa) else { return false }
+                if word != entry.word {
+                    remove(entry.word)
+                    reload()
+                }
+                return true
             }
         }
         #if DEBUG
@@ -217,15 +222,21 @@ struct ReaderPronunciationSettingsView: View {
         }
     }
 
-    private func save(word: String, ipa: String) {
+    /// False when the correction was not written (the editor then stays open and says so).
+    private func save(word: String, ipa: String) -> Bool {
         let word = word.trimmingCharacters(in: .whitespacesAndNewlines)
         let ipa = ipa.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !word.isEmpty, !ipa.isEmpty else { return }
-        try? store.setOverride(ipa, for: word)
+        guard !word.isEmpty, !ipa.isEmpty else { return false }
+        do {
+            try store.setOverride(ipa, for: word)
+        } catch {
+            return false
+        }
         // A corrected word stops being a guess, so drop it rather than
         // leaving it to be re-offered.
         try? guesses.forget(word)
         reload()
+        return true
     }
 
     /// Read `[word](/phonemes/)` entries from the clipboard.
@@ -346,11 +357,13 @@ struct ReaderPronunciationEditor: View {
 
     @State var word: String
     @State var ipa: String
-    let onSave: (String, String) -> Void
+    /// Returns whether the correction was saved: false keeps the editor open and says so.
+    let onSave: (String, String) -> Bool
 
     /// The phonemes a respelling resolves to, shown live so the reader can see
     /// what will actually be stored before committing to it.
     @State private var preview: String?
+    @State private var saveFailed = false
 
     /// Respelling needs the real G2P, which lives behind the voice pack. Ask
     /// the availability flag rather than the installer: `readyManager()` seeds
@@ -409,8 +422,7 @@ struct ReaderPronunciationEditor: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") {
-                        onSave(word, resolvedIPA)
-                        dismiss()
+                        if onSave(word, resolvedIPA) { dismiss() } else { saveFailed = true }
                     }
                     .disabled(
                         word.trimmingCharacters(in: .whitespaces).isEmpty
@@ -422,6 +434,12 @@ struct ReaderPronunciationEditor: View {
         .presentationDetents([.medium])
         .presentationDragIndicator(.visible)
         .task(id: ipa) { await updatePreview() }
+        // Android's words; the editor keeps the word and pronunciation for another try.
+        .alert("Could not save", isPresented: $saveFailed) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("Could not save correction. Try again.")
+        }
     }
 
     /// Convert the respelling on each edit. Cheap enough to run per keystroke:
