@@ -18,6 +18,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.BorderColor
 import androidx.compose.material.icons.filled.Delete
@@ -35,6 +36,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -44,6 +46,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.cidy02.kudos.core.model.ReadingAnnotation
 import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
+import io.github.cidy02.kudos.ui.subject.SwipeAction
+import io.github.cidy02.kudos.ui.subject.SwipeActionRow
+import io.github.cidy02.kudos.ui.subject.isAccessibilityFontScale
 import io.github.cidy02.kudos.ui.subject.SubjectSegmentedControl
 import io.github.cidy02.kudos.ui.subject.ToolbarCircleButton
 import kotlin.math.roundToInt
@@ -119,52 +124,51 @@ fun ReaderContentsSheet(
                         contentPadding = PaddingValues(bottom = 16.dp)
                     ) {
                         items(entries, key = { "${it.depth}:${it.href}:${it.title}" }) { entry ->
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable { onSelectEntry(entry) }
-                                    .padding(
-                                        start = (20 + entry.depth * 16).dp,
-                                        end = 20.dp,
-                                        top = 12.dp,
-                                        bottom = 12.dp
-                                    ),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
+                            val percent = startPercent(entry)
+                            SwipeActionRow(
+                                leading = emptyList(),
+                                trailing = buildList {
+                                    add(SwipeAction("Go", Icons.AutoMirrored.Filled.ArrowForward, tokens.scopePalette.accent) {
+                                        onSelectEntry(entry)
+                                    })
+                                    if (percent != null) {
+                                        if (onBookmarkEntry != null) add(SwipeAction("Bookmark", Icons.Filled.Bookmark, Color(0xFFFF9500)) {
+                                            onBookmarkEntry(entry)
+                                        })
+                                        if (onAddNoteToEntry != null) add(SwipeAction("Add Note", Icons.Filled.BorderColor, Color.Gray) {
+                                            onAddNoteToEntry(entry)
+                                        })
+                                    }
+                                }
                             ) {
-                                Text(
-                                    text = entry.title,
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    color = tokens.primaryInk,
-                                    maxLines = 2,
-                                    overflow = TextOverflow.Ellipsis,
-                                    modifier = Modifier.weight(1f)
-                                )
-
                                 Row(
-                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .background(tokens.background)
+                                        .clickable { onSelectEntry(entry) }
+                                        .padding(
+                                            start = (20 + entry.depth * 16).dp,
+                                            end = 20.dp,
+                                            top = 12.dp,
+                                            bottom = 12.dp
+                                        ),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    if (onBookmarkEntry != null && startPercent(entry) != null) {
-                                        TextButton(onClick = { onBookmarkEntry(entry) }) {
-                                            Text("Bookmark", color = tokens.secondaryInk)
-                                        }
-                                    }
-                                    if (onAddNoteToEntry != null && startPercent(entry) != null) {
-                                        TextButton(onClick = { onAddNoteToEntry(entry) }) {
-                                            Text("Add Note", color = tokens.secondaryInk)
-                                        }
-                                    }
-                                    // Where the chapter starts, as iOS prints it and in the
-                                    // unit the bookmark rows and the position card use.
-                                    startPercent(entry)?.let { percent ->
-                                        Text(
-                                            text = "$percent%",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            fontFamily = FontFamily.Monospace,
-                                            color = tokens.secondaryInk
-                                        )
-                                    }
+                                    Text(
+                                        text = entry.title,
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        color = tokens.primaryInk,
+                                        maxLines = if (isAccessibilityFontScale()) 5 else 2,
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    if (percent != null) Text(
+                                        text = "$percent%",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontFamily = FontFamily.Monospace,
+                                        color = tokens.secondaryInk
+                                    )
                                 }
                             }
                         }

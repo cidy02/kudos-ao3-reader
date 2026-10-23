@@ -167,7 +167,7 @@ fun CollectionEditorSheet(
             ) {
                 if (!editing) TextButton(onClick = onDismiss, enabled = !saving) { Text("Cancel") }
                 Text(
-                    text = if (editing) "Details" else "New collection",
+                    text = if (editing) name else "New collection",
                     modifier = Modifier.weight(1f),
                     color = tokens.primaryInk,
                     fontSize = 17.sp,
@@ -184,23 +184,7 @@ fun CollectionEditorSheet(
                 }
             }
 
-            Column(
-                Modifier
-                    .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 16.dp)
-                    .padding(bottom = 28.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                SubjectFieldLabel("Collection", Modifier.padding(top = 12.dp))
-                SubjectFieldLabel("Name", Modifier.padding(top = 4.dp))
-                OutlinedTextField(
-                    value = name,
-                    onValueChange = { name = it; if (editing) save(close = false) },
-                    modifier = Modifier.fillMaxWidth(),
-                    placeholder = { Text("Comfort reads") },
-                    singleLine = true
-                )
-
+            val descriptionField: @Composable () -> Unit = {
                 SubjectFieldLabel("Description", Modifier.padding(top = 10.dp))
                 OutlinedTextField(
                     value = description,
@@ -209,6 +193,27 @@ fun CollectionEditorSheet(
                     placeholder = { Text("Optional") },
                     minLines = 2
                 )
+            }
+            Column(
+                Modifier
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 16.dp)
+                    .padding(bottom = 28.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                if (!editing) {
+                    SubjectFieldLabel("Collection", Modifier.padding(top = 12.dp))
+                    SubjectFieldLabel("Name", Modifier.padding(top = 4.dp))
+                    OutlinedTextField(
+                        value = name,
+                        onValueChange = { name = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        placeholder = { Text("Comfort reads") },
+                        singleLine = true
+                    )
+
+                    descriptionField()
+                }
 
                 SubjectFieldLabel("Colour", Modifier.padding(top = 10.dp))
                 SubjectHueSwatchRow(
@@ -227,6 +232,8 @@ fun CollectionEditorSheet(
                         "Your chosen colour stays the same if you rename the collection."
                     }
                 )
+
+                if (editing) descriptionField()
 
                 SubjectFieldLabel("Behaviour", Modifier.padding(top = 16.dp))
                 Column(

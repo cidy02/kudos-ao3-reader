@@ -9,7 +9,7 @@ Native SwiftUI + SwiftData reader for Archive of Our Own (iOS/iPadOS/macOS, AGPL
 ## High-level architecture
 
 - **UI**: SwiftUI, 4 tabs + global Search (`App/ContentView.swift` TabView; routing via `AppRouter`).
-- **Models**: all `@Model` classes in `Models/Models.swift` (`SavedWork`, `WorkCollection`, `ReadingQueue`, `ReadingQueueMembership`, `Tag`, `Bookmark`, `CustomFont`, `SavedSearch`, `SyncTombstone`). Remote value types in `Models/AO3Models.swift`.
+- **Models**: the `@Model` classes in `Models/` — `Models.swift` holds `SavedWork`, `WorkCollection`, `ReadingQueue`, `ReadingQueueMembership`, `Tag`, `Bookmark`, `CustomFont`, `ReadingAnnotation`, `SyncTombstone`; `SavedSearch`, `ReadingSession`, `ReadingFavorite` and `FandomReadWatermark` each have their own file. Remote value types in `Models/AO3Models.swift`.
 - **Services**: `Services/` — one file per concern (see ARCHITECTURE_MAP).
 - **Reader**: iOS → Readium (`Features/ReaderReadium/`); macOS → legacy WKWebView reader (`Features/Reader/`, `#if os(macOS)`). Readium SPM products are `platformFilter = ios`.
 - **Concurrency**: `@MainActor` almost everywhere that touches SwiftData; `AO3Client` is an actor.
@@ -21,16 +21,13 @@ Native SwiftUI + SwiftData reader for Archive of Our Own (iOS/iPadOS/macOS, AGPL
 | Xcode | Xcode-beta at `/Applications/Xcode-beta.app` is the active toolchain (`xcode-select -p`). `Scripts/build-macos.sh` pins a stable build for macOS. |
 | Test destination | A booted iOS Simulator UDID supplied as `KUDOS_CASEFOLD_SIMULATOR_UDID` (or first argument to `Scripts/test.sh` / `Scripts/verify.sh`). The test harness mounts its case-sensitive APFS volume inside that app container. |
 | Parallel tests | **Disabled** (`Scripts/test-casefold-fonts.sh` passes `-parallel-testing-enabled NO`): `PersistenceOperationGate` is a process-wide static lock; parallel suites contend it and flake. Persistence-touching suites are `@Suite(.serialized)`. |
-| Signing | Simulator/tests: `CODE_SIGNING_ALLOWED=NO`. Device builds need a team in Xcode's Accounts pane. ⚠️ Policy drift: AGENTS.md says keep `DEVELOPMENT_TEAM` scrubbed to `""`, but commit `bcfe335`'s follow-ups carry `NQH85H7343` — human decision pending; don't "fix" either way without asking. |
-| Test destination | `platform=iOS Simulator,name=iPhone 17,OS=26.5` (canonical, used in TASKS.md verification notes). |
-| Parallel tests | **Disabled** (`Scripts/test.sh` passes `-parallel-testing-enabled NO`): `PersistenceOperationGate` is a process-wide static lock; parallel suites contend it and flake. Persistence-touching suites are `@Suite(.serialized)`. |
-| Signing | Simulator/tests: `CODE_SIGNING_ALLOWED=NO`. Device builds need a team in Xcode's Accounts pane. macOS **Release** must not ad-hoc-sign (`CODE_SIGN_IDENTITY[sdk=macosx*] = "-"` is Debug-only) and must set `ENABLE_HARDENED_RUNTIME = YES`; `Scripts/check-macos-release-entitlements.sh` is the gate. A local Apple Development sign is not a distribution sign — Developer ID Application is still required for notarization. ⚠️ Policy drift: AGENTS.md says keep `DEVELOPMENT_TEAM` scrubbed to `""`, but commit `bcfe335`'s follow-ups carry `NQH85H7343` — human decision pending; don't "fix" either way without asking. |
+| Signing | Simulator/tests: `CODE_SIGNING_ALLOWED=NO`. Device builds need a team in Xcode's Accounts pane. macOS **Release** must not ad-hoc-sign (`CODE_SIGN_IDENTITY[sdk=macosx*] = "-"` is Debug-only) and must set `ENABLE_HARDENED_RUNTIME = YES`; `Scripts/check-macos-release-entitlements.sh` is the gate. A local Apple Development sign is not a distribution sign — Developer ID Application is still required for notarization. ⚠️ AGENTS.md says keep `DEVELOPMENT_TEAM` scrubbed to `""`, and `project.pbxproj` has `""`; `Scripts/check-invariants.sh` also accepts `NQH85H7343`, which it records as owner-approved to stay public (2026-08-16), and rejects any other team. Don't "fix" either way without asking. |
 | Release config | Historical: Release builds once crashed the beta Swift compiler in vendored SwiftSoup (T-66 note). Verify before assuming Release works. |
 
 ## Branch / workflow rules (supersedes AGENTS.md's old "just commit to main")
 
 - `main` = last human-approved state. **Do not commit directly to it.**
-- `merge-test` = integration branch (linear chain of every feature since T-65). Features stack on the latest tip: `merge-test` ← `indexing-implementation` ← `release-hardening` (current tip).
+- `merge-test` = integration branch (linear chain of every feature since T-65). Features stack on the tip that `TASKS.md`'s newest rows name.
 - One focused branch per feature/fix pass; a `TASKS.md` row (T-xx) per branch with verification evidence; adversarial review before merge.
 - **UI approval gate** (TASKS.md, "UI Consistency & Density Audit"): UI changes need human screenshot review before merging to `main`. Do not merge to `main` yourself.
 - `kudos-ao3-reader-android` is a separate product line — never merge it.
@@ -55,7 +52,7 @@ Native SwiftUI + SwiftData reader for Archive of Our Own (iOS/iPadOS/macOS, AGPL
 ## Definition of done (all of it, before saying "done")
 
 1. **`Scripts/verify.sh`** — the whole gate in one command: mechanical invariants (`Scripts/check-invariants.sh`) → lint → full iOS suite → macOS build → `git diff --check`. All green, no exceptions. (iOS-only APIs must be `#if os(iOS)`-guarded or step 4 fails.)
-2. New behavior has tests (see REGRESSION_TEST_MATRIX for suite placement). Suite count only goes up (216 tests / 29 suites as of T-74).
+2. New behavior has tests (see REGRESSION_TEST_MATRIX for suite placement). Suite count only goes up (Swift: 2,294 `@Test` functions in 252 suites, plus 122 XCTest methods in 5 classes; Android: 3,308 `@Test` functions in `android/app/src/test`; as of 2026-10-22, counted by `git grep`, not by a test run).
 3. If your change makes any statement in `docs/*.md` false, update that doc **in the same commit** — stale docs become hallucination sources (this file's own AGENTS.md predecessor rotted exactly that way).
 4. `TASKS.md` row updated with what was verified and what remains **manual** — honesty about unverified device/UI behavior is a project convention.
 5. Merge-bound branches get an adversarial review per [`ADVERSARIAL_REVIEW_TEMPLATE.md`](ADVERSARIAL_REVIEW_TEMPLATE.md). Multi-part work should be prompted per [`TASK_PROMPT_TEMPLATE.md`](TASK_PROMPT_TEMPLATE.md).

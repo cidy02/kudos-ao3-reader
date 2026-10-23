@@ -4,6 +4,7 @@ import io.github.cidy02.kudos.app.DebugShotEffect
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -11,6 +12,14 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
@@ -68,6 +77,7 @@ private fun PronunciationSettingsSheet(store: KokoroPronunciationStore, onDismis
     var editing by remember { mutableStateOf<Pair<String, String>?>(null) }
     DebugShotEffect("pronunciation-list") { editing = "" to "" }
 
+    var menuOpen by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
     suspend fun reload() {
         try {
@@ -87,51 +97,67 @@ private fun PronunciationSettingsSheet(store: KokoroPronunciationStore, onDismis
     }
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = tokens.background,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
-        LazyColumn(Modifier.fillMaxHeight(0.9f).padding(bottom = 24.dp)) {
-            item { SubjectFormRow("Pronunciations", trailing = { TextButton(onClick = onDismiss) { Text("Done") } }) }
-            item {
-                SettingsSection(label = if (entries.isEmpty()) "No corrections yet" else "Corrections",
-                    footnote = if (entries.isEmpty()) "Add a word here to fix how Read Aloud says it. Corrections apply to every work."
-                        else "Read Aloud checks these before its own dictionary, so a correction here always wins.") {
-                    entries.forEach { (word, ipa) ->
-                        SubjectFormRow(word, value = ipa, valueMaxLines = 3, onClick = { editing = word to ipa })
-                        SettingsActionRow("Delete $word", destructive = true, onClick = {
-                            scope.launch {
+        Column(Modifier.fillMaxHeight(0.9f).padding(bottom = 24.dp)) {
+            SubjectFormRow("Pronunciations", trailing = {
+                Box {
+                    IconButton(onClick = { menuOpen = true }) { Icon(Icons.Default.MoreVert, contentDescription = "More") }
+                    DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                        DropdownMenuItem(text = { Text("Add Pronunciation") }, onClick = { menuOpen = false; editing = "" to "" })
+                        DropdownMenuItem(text = { Text("Paste Corrections") }, onClick = {
+                            menuOpen = false
+                            val text = clipboard.getText()?.text.orEmpty()
+                            val parsed = KokoroInlinePronunciation.entries(text)
+                            if (parsed.isEmpty()) {
+                                message = if (text.isEmpty()) "The clipboard is empty."
+                                    else "No corrections found. The format is [word](/phonemes/)."
+                            } else scope.launch {
                                 try {
-                                    withContext(Dispatchers.IO) { store.removeOverride(word) }
+                                    withContext(Dispatchers.IO) { store.apply(PronunciationCorrections(global = parsed.toMap())) }
                                     reload()
+                                    message = if (parsed.size == 1) "Added 1 correction." else "Added ${parsed.size} corrections."
                                 } catch (error: CancellationException) { throw error
-                                } catch (_: Exception) { message = "Could not delete correction. Try again." }
+                                } catch (_: Exception) { message = "Could not save corrections. Try again." }
                             }
                         })
-                        SubjectRowSeparator()
+                        DropdownMenuItem(text = { Text("Copy All") }, enabled = entries.isNotEmpty(), onClick = {
+                            menuOpen = false
+                            clipboard.setText(AnnotatedString(KokoroInlinePronunciation.text(entries)))
+                            message = if (entries.size == 1) "Copied 1 correction." else "Copied ${entries.size} corrections."
+                        })
                     }
-                    SettingsActionRow("Add Pronunciation", onClick = { editing = "" to "" })
-                    SubjectRowSeparator()
-                    SettingsActionRow("Paste Corrections", onClick = {
-                        val text = clipboard.getText()?.text.orEmpty()
-                        val parsed = KokoroInlinePronunciation.entries(text)
-                        if (parsed.isEmpty()) {
-                            message = if (text.isEmpty()) "The clipboard is empty."
-                                else "No corrections found. The format is [word](/phonemes/)."
-                        } else scope.launch {
-                            try {
-                                withContext(Dispatchers.IO) { store.apply(PronunciationCorrections(global = parsed.toMap())) }
-                                reload()
-                                message = if (parsed.size == 1) "Added 1 correction." else "Added ${parsed.size} corrections."
-                            } catch (error: CancellationException) { throw error
-                            } catch (_: Exception) { message = "Could not save corrections. Try again." }
-                        }
-                    })
-                    SubjectRowSeparator()
-                    SettingsActionRow("Copy All", enabled = entries.isNotEmpty(), onClick = {
-                        clipboard.setText(AnnotatedString(KokoroInlinePronunciation.text(entries)))
-                        message = if (entries.size == 1) "Copied 1 correction." else "Copied ${entries.size} corrections."
-                    })
                 }
+                TextButton(onClick = onDismiss) { Text("Done") }
+            })
+            LazyColumn(Modifier.weight(1f)) {
+                if (entries.isEmpty()) item {
+                    Column(Modifier.fillMaxWidth().padding(horizontal = 32.dp, vertical = 40.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Text("No corrections yet", color = tokens.primaryInk, textAlign = TextAlign.Center)
+                        Text("Add a word here to fix how Read Aloud says it. Corrections apply to every work.",
+                            color = tokens.secondaryInk, textAlign = TextAlign.Center)
+                    }
+                } else item {
+                    SettingsSection(label = "Corrections",
+                        footnote = "Read Aloud checks these before its own dictionary, so a correction here always wins.") {
+                        entries.forEach { (word, ipa) ->
+                            SubjectFormRow(word, value = ipa, valueMaxLines = 3, onClick = { editing = word to ipa })
+                            SettingsActionRow("Delete $word", destructive = true, onClick = {
+                                scope.launch {
+                                    try {
+                                        withContext(Dispatchers.IO) { store.removeOverride(word) }
+                                        reload()
+                                    } catch (error: CancellationException) { throw error
+                                    } catch (_: Exception) { message = "Could not delete correction. Try again." }
+                                }
+                            })
+                            SubjectRowSeparator()
+                        }
+                    }
+                }
+                item { SettingsFootnote(PRONUNCIATION_ENGINE_LIMIT) }
+                message?.let { item { SettingsFootnote(it) } }
             }
-            item { SettingsFootnote(PRONUNCIATION_ENGINE_LIMIT) }
-            message?.let { item { SettingsFootnote(it) } }
         }
     }
 }
@@ -155,12 +181,12 @@ fun PronunciationEditor(word: String, ipa: String, store: KokoroPronunciationSto
         Column(Modifier.fillMaxWidth().imePadding().verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
             SubjectFormRow(if (word.isEmpty()) "Add Pronunciation" else word)
             SettingsSection(label = "Word", footnote = null) {
-                SubjectTextFieldRow("Word", editedWord, "Word", { editedWord = it }, autocorrect = false)
+                SubjectTextFieldRow("Word", editedWord, "Word", { editedWord = it }, autocorrect = false, fieldOnly = true)
             }
             SettingsSection(label = "Pronunciation", footnote = "Enter phonemes such as hɜɹmˈIəni. " +
                 "This Android voice engine cannot convert syllables such as her-MY-oh-nee to phonemes.") {
                 SubjectTextFieldRow("Pronunciation", pronunciation, "her-MY-oh-nee", { pronunciation = it },
-                    autocorrect = false, stackedLabel = true)
+                    autocorrect = false, fieldOnly = true)
             }
             SettingsFootnote(PRONUNCIATION_ENGINE_LIMIT)
             error?.let { SettingsFootnote(it) }

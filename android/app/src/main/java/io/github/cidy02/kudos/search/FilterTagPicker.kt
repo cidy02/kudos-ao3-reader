@@ -130,8 +130,8 @@ internal fun FilterTagRow(
         val needle = WorkSearchIndex.normalize(currentToken)
         // Arbitrary comma-separated entry and library suggestions remain Android extras.
         val typed = AO3SearchFilters.commaSeparatedValues(query)
-        val suggestions = if (showingPopular) popular else typed + candidates.filter {
-            needle.isEmpty() || WorkSearchIndex.normalize(it).contains(needle)
+        val suggestions = if (showingPopular) popular else if (query.isBlank()) emptyList() else typed + candidates.filter {
+            WorkSearchIndex.normalize(it).contains(needle)
         } + remote
         val matches = suggestions.distinct().filter { it !in selected }
         ModalBottomSheet(

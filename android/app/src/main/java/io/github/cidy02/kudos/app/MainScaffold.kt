@@ -158,7 +158,9 @@ fun MainScaffold(
                 ?: return@LaunchedEffect
             DebugShotRequests.open(debugShotName, shot)
             navController.navigate(shot.route) {
-                popUpTo(navController.graph.id) { inclusive = true }
+                // Keep the shell's root under the shot. With the whole graph popped, a screen that goes
+                // back (a failed load, a close) left an empty stack and the app closed (A82b).
+                popUpTo(navController.graph.findStartDestination().id)
             }
         }
     }

@@ -160,7 +160,7 @@ class A72LayoutTest {
         assertTrue(previous.right <= position.left)
         assertTrue(position.right <= next.left)
         compose.onNodeWithContentDescription("Page 1 of 4").performClick()
-        compose.onNodeWithText("Go").assertExists()
+        compose.onNodeWithText("Go to page").assertExists()
     }
 
     @Test fun narrowPageCapsuleUsesAWholeShorterLabelAndKeepsTheFullSpokenPosition() {

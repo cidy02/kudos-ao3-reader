@@ -326,6 +326,7 @@ fun SubjectHeaderBlock(
     kickerTrailingCount: Int = 0,
     subtitle: String? = null,
     gutter: Dp = SubjectMetrics.headerGutter,
+    kickerMaxLines: Int = 1,
     trailing: (@Composable () -> Unit)? = null
 ) {
     val tokens = LocalKudosTokens.current
@@ -342,7 +343,8 @@ fun SubjectHeaderBlock(
             palette = palette,
             trailingCount = kickerTrailingCount,
             ruleWidth = SubjectMetrics.pageRuleWidth,
-            ruleSpacing = 7.dp
+            ruleSpacing = 7.dp,
+            maxLines = kickerMaxLines
         )
         Text(
             text = title,
