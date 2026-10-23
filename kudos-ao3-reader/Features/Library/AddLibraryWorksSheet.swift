@@ -24,6 +24,7 @@ struct AddLibraryWorksSheet: View {
     @Environment(AppRouter.self) private var router
     @Environment(PrivacyGate.self) private var gate
     @AppStorage("hideMatureContent") private var hideMature = true
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     @Query(filter: #Predicate<SavedWork> { !$0.isPendingDeletion }, sort: \SavedWork.dateAdded, order: .reverse)
     private var allWorks: [SavedWork]
@@ -104,23 +105,20 @@ struct AddLibraryWorksSheet: View {
                     .searchable(text: $query, prompt: "Search your library")
                 }
             }
-            .navigationTitle("Add to \(destinationName)")
-            #if !os(macOS)
-                .navigationBarTitleDisplayMode(.inline)
-            #endif
-                .toolbar {
-                    ToolbarItem(placement: .cancellationAction) {
-                        Button("Cancel") { dismiss() }
-                    }
-                    ToolbarItem(placement: .confirmationAction) {
-                        Button(Self.confirmationTitle(count: selection.count)) { addSelected(from: eligible) }
-                            .disabled(selection.isEmpty)
-                    }
-                    // Every works list offers the reveal while Hide Mature is on.
-                    if hideMature, !hiddenOnly {
-                        ToolbarItem(placement: .primaryAction) { MatureRevealToggle() }
-                    }
+            .wrappingInlineTitle("Add to \(destinationName)")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
                 }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(Self.confirmationTitle(count: selection.count)) { addSelected(from: eligible) }
+                        .disabled(selection.isEmpty)
+                }
+                // Every works list offers the reveal while Hide Mature is on.
+                if hideMature, !hiddenOnly {
+                    ToolbarItem(placement: .primaryAction) { MatureRevealToggle() }
+                }
+            }
         }
         .presentationDragIndicator(.visible)
     }
@@ -131,13 +129,13 @@ struct AddLibraryWorksSheet: View {
                 Text(work.title)
                     .font(.subheadline.weight(.medium))
                     .foregroundStyle(.primary)
-                    .lineLimit(2)
+                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
                 if !work.author.isEmpty {
                     AO3AuthorBylineView(
                         displayText: work.author,
                         identities: work.verifiedAuthorIdentities,
                         font: .caption,
-                        compact: true,
+                        compact: !dynamicTypeSize.isAccessibilitySize,
                         onOpenRoute: { route in
                             dismiss()
                             router.openAuthorProfile(route)

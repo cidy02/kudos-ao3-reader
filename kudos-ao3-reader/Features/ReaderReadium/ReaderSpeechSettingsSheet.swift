@@ -25,11 +25,13 @@ struct ReaderSpeechSettingsSheet: View {
                     characterTags: characterTags,
                     onScanChapter: onScanChapter
                 )
+                // On the sections, not the Form: a row background doesn't
+                // reach rows from the container (see `SettingsView`).
+                .appThemedRows()
             }
             // Themed like the Pronunciation sheet beside it (Sepia rows and ground).
             .formStyle(.grouped)
             .appThemedScroll()
-            .appThemedRows()
             .navigationTitle("Read Aloud")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

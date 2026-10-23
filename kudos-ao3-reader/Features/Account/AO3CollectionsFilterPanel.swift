@@ -167,6 +167,19 @@ struct AO3CollectionsFilterPanel: View {
             .disabled(editor.draft == AO3CollectionsFilter())
         .padding(.horizontal, SubjectMetrics.gutter)
         .padding(.vertical, 12)
-        .background(.bar)
+        // The page's own ground, as Challenge settings' pinned Save bar: `.bar` was the
+        // system's white under Light and Sepia, where the inactive Reset all but vanished.
+        .background(
+            LinearGradient(
+                colors: [
+                    theme.appTheme.cardBackdrop,
+                    theme.appTheme.cardBackdrop.opacity(0.96),
+                    theme.appTheme.cardBackdrop.opacity(0)
+                ],
+                startPoint: .bottom,
+                endPoint: .top
+            )
+            .ignoresSafeArea()
+        )
     }
 }

@@ -57,11 +57,13 @@ struct AccountInboxFilterSheet: View {
                 .padding(.bottom, 40)
                 .padding(.horizontal, SubjectMetrics.accountGutter)
             }
-            .subjectScreenWash(palette: themeManager.scopePalette)
+            // Inside the wash, which empties the title for pages with a header
+            // block: the innermost title wins (as Save Search's).
             .navigationTitle("Inbox Filters")
             #if os(iOS)
                 .navigationBarTitleDisplayMode(.inline)
             #endif
+                .subjectScreenWash(palette: themeManager.scopePalette)
                 .toolbar {
                     ToolbarItem(placement: .confirmationAction) {
                         Button { dismiss() } label: {

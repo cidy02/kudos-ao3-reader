@@ -71,7 +71,6 @@ struct WhatsNewView: View {
                     }
                 }
             }
-            .appThemedRows()
             .appThemedScroll()
             .navigationTitle("What's New")
             #if !os(macOS)
