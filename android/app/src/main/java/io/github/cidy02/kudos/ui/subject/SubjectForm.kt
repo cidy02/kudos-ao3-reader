@@ -427,14 +427,8 @@ private fun HueSlider(hue: Float, onChange: (Float) -> Unit) {
     }
 }
 
-private fun carouselTint(theme: ReaderTheme, hue: Double): Color {
-    val (saturation, brightness) = when (theme) {
-        ReaderTheme.Dark, ReaderTheme.Oled -> 0.38 to 0.78
-        ReaderTheme.Light -> 0.42 to 0.75
-        ReaderTheme.Sepia -> 0.34 to 0.70
-    }
-    return hsb(hue, saturation, brightness)
-}
+private fun carouselTint(theme: ReaderTheme, hue: Double): Color =
+    requireNotNull(io.github.cidy02.kudos.home.HomeFacts.carouselQueueTint(theme, hue, null))
 
 fun parseStoredColor(hex: String): Color? {
     val raw = hex.trim().removePrefix("#")

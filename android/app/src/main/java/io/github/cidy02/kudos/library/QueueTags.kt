@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.library
 
+import io.github.cidy02.kudos.settings.SubjectTextFieldRow
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.input.ImeAction
@@ -318,87 +319,26 @@ fun QueueTagManager(
         }.getOrDefault(emptyList())
     }
 
-    val used = tags.filter { (counts[it.id] ?: 0) > 0 }.sortedByDescending { counts[it.id] ?: 0 }
-    val unused = tags.filter { (counts[it.id] ?: 0) == 0 }.sortedBy { it.name.lowercase() }
-    val tally = if (tags.isEmpty()) {
-        "No tags on this queue yet"
-    } else {
-        val n = tags.size
-        "$n tag${if (n == 1) "" else "s"} across $workCount work${if (workCount == 1) "" else "s"}"
-    }
-
-    Column(
-        Modifier
-            .fillMaxSize()
-            .subjectScreenWash(palette)
-            .verticalScroll(rememberScrollState())
-    ) {
-        Spacer(Modifier.height(WindowInsets.systemBars.asPaddingValues().calculateTopPadding() + 56.dp))
-        SubjectHeaderBlock(
-            kicker = queue.displayName,
-            title = "Tags",
-            subtitle = tally,
-            palette = palette
-        )
-        if (used.isNotEmpty()) {
-            SubjectFieldLabel("In this queue", Modifier.padding(start = 16.dp, top = 18.dp))
-            TagRows(used, counts, others.isNotEmpty()) { tag, action ->
-                when (action) {
-                    TagAction.Edit -> editing = tag
-                    TagAction.Copy -> copying = tag
-                    TagAction.Remove -> pending = tag
-                    TagAction.Show -> onShowOnlyTag(tag.name)
+    QueueTagManagerContent(queue, palette, tags, counts, others.isNotEmpty(), workCount, draft,
+        onDraftChange = { draft = it },
+        onAdd = {
+            val name = draft.trim()
+            if (name.isNotEmpty()) scope.launch {
+                if (tags.none { it.name.equals(name, ignoreCase = true) }) {
+                    repository.toggleSharedTag(listOf(queue.id), name)
                 }
+                draft = ""
+                reload += 1
             }
-        }
-        if (unused.isNotEmpty()) {
-            SubjectFieldLabel("Unused", Modifier.padding(start = 16.dp, top = 18.dp))
-            TagRows(unused, counts, others.isNotEmpty()) { tag, action ->
-                when (action) {
-                    TagAction.Edit -> editing = tag
-                    TagAction.Copy -> copying = tag
-                    TagAction.Remove -> pending = tag
-                    TagAction.Show -> onShowOnlyTag(tag.name)
-                }
+        },
+        onAction = { tag, action ->
+            when (action) {
+                TagAction.Edit -> editing = tag
+                TagAction.Copy -> copying = tag
+                TagAction.Remove -> pending = tag
+                TagAction.Show -> onShowOnlyTag(tag.name)
             }
-            FormFootnote("Unused tags stay here until you remove them. You can apply them later.")
-        }
-        SubjectFieldLabel("Add", Modifier.padding(start = 16.dp, top = 18.dp))
-        Row(
-            Modifier
-                .padding(horizontal = 16.dp)
-                .fillMaxWidth()
-                .subjectPanel()
-                .padding(horizontal = 12.dp, vertical = 4.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(Icons.Filled.Add, contentDescription = null, tint = palette.accent)
-            val addTag: () -> Unit = addTag@ {
-                val name = draft.trim()
-                if (name.isEmpty()) return@addTag
-                scope.launch {
-                    if (tags.none { it.name.equals(name, ignoreCase = true) }) {
-                        repository.toggleSharedTag(listOf(queue.id), name)
-                    }
-                    draft = ""
-                    reload += 1
-                }
-            }
-            OutlinedTextField(
-                value = draft,
-                onValueChange = { draft = it },
-                modifier = Modifier.weight(1f),
-                placeholder = { Text("New tag") },
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                keyboardActions = KeyboardActions(onDone = { addTag() }),
-                singleLine = true
-            )
-            TextButton(onClick = addTag, enabled = draft.isNotBlank()) {
-                Text("Add", color = palette.accent)
-            }
-        }
-        FormFootnote("A tag you use here is the same tag on your works.")
-    }
+        })
 
     editing?.let { tag ->
         QueueTagEditDialog(
@@ -442,38 +382,88 @@ fun QueueTagManager(
     }
     pending?.let { tag ->
         val count = counts[tag.id] ?: 0
-        AlertDialog(
-            onDismissRequest = { pending = null },
-            title = {
-                Text(
-                    if (count == 0) "Remove “${tag.name}” from this queue?"
-                    else "Remove “${tag.name}” from $count work${if (count == 1) "" else "s"}?"
-                )
-            },
-            text = {
-                Text(
-                    when (count) {
-                        0 -> "This tag stays on your other works and queues."
-                        1 -> "That work keeps its other tags. Works outside this queue keep this tag."
-                        else -> "Those works keep their other tags. Works outside this queue keep this tag."
-                    }
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    pending = null
-                    scope.launch {
-                        repository.stripQueueTag(queue.id, tag.id)
-                        reload += 1
-                    }
-                }) { Text("Remove") }
-            },
-            dismissButton = { TextButton(onClick = { pending = null }) { Text("Cancel") } }
-        )
+        QueueTagRemovalDialog(tag, count, onDismiss = { pending = null }, onConfirm = {
+            pending = null
+            scope.launch {
+                repository.stripQueueTag(queue.id, tag.id)
+                reload += 1
+            }
+        })
     }
 }
 
-private enum class TagAction { Edit, Copy, Remove, Show }
+@Composable
+internal fun QueueTagRemovalDialog(tag: Tag, count: Int, onDismiss: () -> Unit, onConfirm: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(if (count == 0) "Remove “${tag.name}” from this queue?"
+                else "Remove “${tag.name}” from $count work${if (count == 1) "" else "s"}?")
+        },
+        text = {
+            Text(when (count) {
+                0 -> "This tag stays on your other works and queues."
+                1 -> "That work keeps its other tags. Works outside this queue keep this tag."
+                else -> "Those works keep their other tags. Works outside this queue keep this tag."
+            })
+        },
+        confirmButton = { TextButton(onClick = onConfirm) { Text("Remove") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+    )
+}
+
+@Composable
+internal fun QueueTagManagerContent(
+    queue: ReadingQueue, palette: SubjectPalette, tags: List<Tag>, counts: Map<String, Int>,
+    canCopy: Boolean, workCount: Int, draft: String, onDraftChange: (String) -> Unit,
+    onAdd: () -> Unit, onAction: (Tag, TagAction) -> Unit
+) {
+    val used = tags.filter { (counts[it.id] ?: 0) > 0 }.sortedByDescending { counts[it.id] ?: 0 }
+    val unused = tags.filter { (counts[it.id] ?: 0) == 0 }.sortedBy { it.name.lowercase() }
+    val tally = if (tags.isEmpty()) {
+        "No tags on this queue yet"
+    } else {
+        val n = tags.size
+        "$n tag${if (n == 1) "" else "s"} across $workCount work${if (workCount == 1) "" else "s"}"
+    }
+
+    Column(
+        Modifier
+            .fillMaxSize()
+            .subjectScreenWash(palette)
+            .verticalScroll(rememberScrollState())
+    ) {
+        Spacer(Modifier.height(WindowInsets.systemBars.asPaddingValues().calculateTopPadding() + 56.dp))
+        SubjectHeaderBlock(
+            kicker = queue.displayName,
+            title = "Tags",
+            subtitle = tally,
+            palette = palette
+        )
+        if (used.isNotEmpty()) {
+            SubjectFieldLabel("In this queue", Modifier.padding(start = 16.dp, top = 18.dp))
+            TagRows(used, counts, canCopy, onAction)
+        }
+        if (unused.isNotEmpty()) {
+            SubjectFieldLabel("Unused", Modifier.padding(start = 16.dp, top = 18.dp))
+            TagRows(unused, counts, canCopy, onAction)
+            FormFootnote("Unused tags stay here until you remove them. You can apply them later.", Modifier.padding(horizontal = 16.dp))
+        }
+        SubjectFieldLabel("Add", Modifier.padding(start = 16.dp, top = 18.dp))
+        Column(Modifier.padding(horizontal = 16.dp).fillMaxWidth().subjectPanel()) {
+            SubjectTextFieldRow("New tag", draft, "New tag", onDraftChange, fieldOnly = true,
+                onSubmit = onAdd,
+                leading = { Icon(Icons.Filled.Add, contentDescription = null, tint = palette.accent) },
+                trailing = {
+                    TextButton(onClick = onAdd, enabled = draft.isNotBlank()) { Text("Add", color = palette.accent) }
+                })
+        }
+        FormFootnote("A tag you use here is the same tag on your works.", Modifier.padding(horizontal = 16.dp))
+    }
+
+}
+
+internal enum class TagAction { Edit, Copy, Remove, Show }
 
 @Composable
 private fun TagRows(
@@ -522,7 +512,7 @@ private fun BoxMenuRow(
     menu: @Composable () -> Unit
 ) {
     Row(
-        Modifier.fillMaxWidth().clickable(onClick = onOpen).padding(horizontal = 4.dp),
+        Modifier.fillMaxWidth().clickable(onClick = onOpen).padding(horizontal = 4.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(label, modifier = Modifier.weight(1f).padding(start = 8.dp), color = LocalKudosTokens.current.primaryInk)
@@ -543,6 +533,33 @@ internal fun QueueTagEditDialog(
     onRemove: () -> Unit,
     onDismiss: () -> Unit,
     onChanged: () -> Unit
+) {
+    QueueTagEditContent(repository, queueId, tag, siblings, siblingCounts, count, onRemove, onDismiss, onChanged) {
+            close, title, text, confirm, dismiss ->
+        AlertDialog(onDismissRequest = close, title = { Text(title) }, text = text,
+            confirmButton = confirm, dismissButton = dismiss)
+    }
+}
+
+/** Owns the editor and confirmation state; the host supplies the dialog window. */
+@Composable
+internal fun QueueTagEditContent(
+    repository: ReadingQueueRepository,
+    queueId: String,
+    tag: Tag,
+    siblings: List<Tag>,
+    siblingCounts: Map<String, Int> = emptyMap(),
+    count: Int,
+    onRemove: () -> Unit,
+    onDismiss: () -> Unit,
+    onChanged: () -> Unit,
+    presentDialog: @Composable (
+        onDismissRequest: () -> Unit,
+        title: String,
+        text: @Composable () -> Unit,
+        confirmButton: @Composable () -> Unit,
+        dismissButton: @Composable () -> Unit
+    ) -> Unit
 ) {
     val scope = rememberCoroutineScope()
     var name by remember(tag.id) { mutableStateOf(tag.name) }
@@ -569,16 +586,16 @@ internal fun QueueTagEditDialog(
         }
     }
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Edit tag") },
-        text = {
+    presentDialog(
+        onDismiss,
+        "Edit tag",
+        {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Name") }, singleLine = true,
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                     keyboardActions = KeyboardActions(onDone = { rename() }))
                 Text(
-                    text = if (conflict != null) {
+                    if (conflict != null) {
                         "You already have a tag called “${conflict?.name}”."
                     } else {
                         "Renaming this tag also renames it on your works and other queues."
@@ -590,7 +607,7 @@ internal fun QueueTagEditDialog(
                     SubjectFieldLabel("Merge into another tag")
                     siblings.forEach { sibling ->
                         Text(
-                            text = "${sibling.name} · ${(siblingCounts[sibling.id] ?: 0).compactCount()}",
+                            "${sibling.name} · ${(siblingCounts[sibling.id] ?: 0).compactCount()}",
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable { mergeTarget = sibling }
@@ -599,7 +616,7 @@ internal fun QueueTagEditDialog(
                         )
                     }
                     Text(
-                        text = when (count) {
+                        when (count) {
                             0 -> "No work in this queue uses “${tag.name}”. Merging removes the tag from this queue."
                             1 -> "The 1 work in this queue gets the tag you pick, and “${tag.name}” leaves the queue. You can't undo this in Kudos."
                             else -> "All $count works in this queue get the tag you pick, and “${tag.name}” leaves the queue. You can't undo this in Kudos."
@@ -615,20 +632,20 @@ internal fun QueueTagEditDialog(
                 }
             }
         },
-        confirmButton = {
+        {
             TextButton(
                 onClick = { rename() },
                 enabled = !blocked
             ) { Text("Save") }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+        { TextButton(onClick = onDismiss) { Text("Cancel") } }
     )
     mergeTarget?.let { target ->
-        AlertDialog(
-            onDismissRequest = { mergeTarget = null },
-            title = { Text("Merge “${tag.name}” into “${target.name}”?") },
-            text = { Text(queueTagMergeMessage(tag.name, count)) },
-            confirmButton = {
+        presentDialog(
+            { mergeTarget = null },
+            "Merge “${tag.name}” into “${target.name}”?",
+            { Text(queueTagMergeMessage(tag.name, count)) },
+            {
                 TextButton(onClick = {
                     scope.launch {
                         repository.mergeQueueTag(queueId, tag.id, target.id)
@@ -637,7 +654,7 @@ internal fun QueueTagEditDialog(
                     }
                 }) { Text("Merge") }
             },
-            dismissButton = { TextButton(onClick = { mergeTarget = null }) { Text("Cancel") } }
+            { TextButton(onClick = { mergeTarget = null }) { Text("Cancel") } }
         )
     }
 }

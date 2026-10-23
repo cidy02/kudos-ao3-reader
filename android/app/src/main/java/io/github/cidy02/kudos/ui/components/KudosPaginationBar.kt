@@ -193,6 +193,15 @@ private fun PageJumpSheet(
     onDismiss: () -> Unit
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState,
+        containerColor = LocalKudosTokens.current.background) {
+        PageJumpContent(currentPage, totalPages, onSelect, onDismiss)
+    }
+}
+
+@Composable
+internal fun PageJumpContent(currentPage: Int, totalPages: Int, onSelect: (Int) -> Unit, onDismiss: () -> Unit) {
+    val tokens = LocalKudosTokens.current
     var pageInput by remember(currentPage) { mutableStateOf(currentPage.toString()) }
     val enteredPage = pageInput.toIntOrNull()?.takeIf { it > 0 }?.coerceAtMost(maxOf(totalPages, 1))
     val draftPage = enteredPage ?: currentPage.coerceIn(1, maxOf(totalPages, 1))
@@ -202,81 +211,81 @@ private fun PageJumpSheet(
         onDismiss()
     }
 
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
-        Column(Modifier.fillMaxWidth().fillMaxHeight(0.9f).imePadding().padding(bottom = 24.dp)) {
-            Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = onDismiss) { Icon(Icons.Default.Close, contentDescription = "Cancel") }
-                Text("Go to page", Modifier.weight(1f), fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
-                IconButton(onClick = { go() }, enabled = draftPage != currentPage) {
-                    Icon(Icons.Default.Check, contentDescription = "Go to page $draftPage")
-                }
+    Column(Modifier.fillMaxWidth().fillMaxHeight(0.9f).imePadding().padding(bottom = 24.dp)) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onDismiss) { Icon(Icons.Default.Close, contentDescription = "Cancel") }
+            Text("Go to page", Modifier.weight(1f), fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+            IconButton(onClick = { go() }, enabled = draftPage != currentPage) {
+                Icon(Icons.Default.Check, contentDescription = "Go to page $draftPage")
             }
-            Column(
-                Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 24.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                SubjectFieldLabel("Page number")
-                OutlinedTextField(
-                    value = pageInput, onValueChange = { pageInput = it.filter { char -> char in '0'..'9' } }, singleLine = true,
-                    placeholder = { Text("Page") },
-                    trailingIcon = { Text("of ${"%,d".format(totalPages)}", Modifier.padding(horizontal = 12.dp)) },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Go),
-                    keyboardActions = KeyboardActions(onGo = { if (draftPage != currentPage) go() }),
-                    modifier = Modifier.fillMaxWidth().semantics { contentDescription = "Page number" }
-                )
+        }
+        Column(
+            Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            SubjectFieldLabel("Page number")
+            OutlinedTextField(
+                value = pageInput, onValueChange = { pageInput = it.filter { char -> char in '0'..'9' } }, singleLine = true,
+                placeholder = { Text("Page") },
+                trailingIcon = { Text("of ${"%,d".format(totalPages)}", Modifier.padding(horizontal = 12.dp)) },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Go),
+                keyboardActions = KeyboardActions(onGo = { if (draftPage != currentPage) go() }),
+                modifier = Modifier.fillMaxWidth().semantics { contentDescription = "Page number" }
+            )
 
-                // Tiles stage a draft; nothing loads until Go.
-                val nearby = nearbyPageWindow(draftPage, totalPages)
-                if (nearby.size > 1) {
-                    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        SubjectFieldLabel("Nearby")
-                        nearby.chunked(5).forEach { rowPages ->
-                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                rowPages.forEach { page ->
-                                    val selected = page == draftPage
-                                    Box(
-                                        modifier = Modifier
-                                            .weight(1f)
-                                            .heightIn(min = 44.dp)
-                                            .clip(RoundedCornerShape(11.dp))
-                                            .background(
-                                                if (selected) MaterialTheme.colorScheme.primaryContainer
-                                                else MaterialTheme.colorScheme.surfaceVariant
-                                            )
-                                            .selectable(selected = selected, role = Role.RadioButton) { pageInput = page.toString() }
-                                            .semantics { contentDescription = "Page $page" },
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Text(
-                                            text = "%,d".format(page),
-                                            maxLines = 1,
-                                            autoSize = TextAutoSize.StepBased(minFontSize = 9.sp, maxFontSize = 16.sp),
-                                            lineHeight = 20.sp,
-                                            fontWeight = FontWeight.SemiBold,
-                                            color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer
-                                            else MaterialTheme.colorScheme.onSurface
+            // Tiles stage a draft; nothing loads until Go.
+            val nearby = nearbyPageWindow(draftPage, totalPages)
+            if (nearby.size > 1) {
+                Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    SubjectFieldLabel("Nearby")
+                    nearby.chunked(5).forEach { rowPages ->
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            rowPages.forEach { page ->
+                                val selected = page == draftPage
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .heightIn(min = 44.dp)
+                                        .clip(RoundedCornerShape(11.dp))
+                                        .background(
+                                            if (selected) tokens.scopePalette.chipFill
+                                            else tokens.glassFill(0.08)
                                         )
-                                    }
+                                        .border(0.5.dp, if (selected) tokens.scopePalette.chipStroke
+                                            else tokens.glassStroke(0.13), RoundedCornerShape(11.dp))
+                                        .selectable(selected = selected, role = Role.RadioButton) { pageInput = page.toString() }
+                                        .semantics { contentDescription = "Page $page" },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = "%,d".format(page),
+                                        maxLines = 1,
+                                        autoSize = TextAutoSize.StepBased(minFontSize = 9.sp, maxFontSize = 16.sp),
+                                        lineHeight = 20.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = if (selected) tokens.scopePalette.accentOnFill
+                                        else tokens.primaryInk
+                                    )
                                 }
-                                repeat(5 - rowPages.size) { Spacer(Modifier.weight(1f)) }
                             }
+                            repeat(5 - rowPages.size) { Spacer(Modifier.weight(1f)) }
                         }
                     }
                 }
+            }
 
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                TextButton(onClick = { pageInput = "1" }, enabled = draftPage > 1) {
+                    Text("First page", lineHeight = 20.sp)
+                }
+                TextButton(
+                    onClick = { pageInput = maxOf(totalPages, 1).toString() },
+                    enabled = draftPage < totalPages
                 ) {
-                    TextButton(onClick = { pageInput = "1" }, enabled = draftPage > 1) {
-                        Text("First page", lineHeight = 20.sp)
-                    }
-                    TextButton(
-                        onClick = { pageInput = maxOf(totalPages, 1).toString() },
-                        enabled = draftPage < totalPages
-                    ) {
-                        Text("Last (${"%,d".format(totalPages)})", lineHeight = 20.sp)
-                    }
+                    Text("Last (${"%,d".format(totalPages)})", lineHeight = 20.sp)
                 }
             }
         }

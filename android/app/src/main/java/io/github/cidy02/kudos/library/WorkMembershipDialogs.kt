@@ -55,6 +55,23 @@ internal fun AddToCollectionDialog(
     onSetMembership: (collectionId: String, member: Boolean) -> Unit,
     onDismiss: () -> Unit
 ) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Add to Collection") },
+        text = { AddToCollectionContent(workId, collections, workRepository, scope, onSetMembership) },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Done") } }
+    )
+}
+
+/** The dialog's checklist, also usable without a separate window. */
+@Composable
+internal fun AddToCollectionContent(
+    workId: String,
+    collections: List<WorkCollection>,
+    workRepository: WorkRepository,
+    scope: CoroutineScope,
+    onSetMembership: (collectionId: String, member: Boolean) -> Unit
+) {
     var newName by remember(workId) { mutableStateOf("") }
     var memberIds by remember(workId) { mutableStateOf<Set<String>>(emptySet()) }
     var membershipLoaded by remember(workId) { mutableStateOf(false) }
@@ -65,102 +82,93 @@ internal fun AddToCollectionDialog(
         }.getOrDefault(emptySet())
         membershipLoaded = true
     }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Add to Collection") },
-        text = {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = 420.dp)
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    OutlinedTextField(
-                        value = newName,
-                        onValueChange = { newName = it },
-                        label = { Text("New collection") },
-                        singleLine = true,
-                        modifier = Modifier.weight(1f)
-                    )
-                    TextButton(
-                        enabled = newName.trim().isNotEmpty(),
-                        onClick = {
-                            val name = newName.trim()
-                            if (name.isEmpty()) return@TextButton
-                            newName = ""
-                            // Create-or-match by name and attach; update local
-                            // checklist from the returned membership list.
-                            scope.launch {
-                                val updated = runCatching {
-                                    workRepository.addToCollection(workId, name)
-                                }.getOrDefault(emptyList())
-                                memberIds = updated.map { it.id }.toSet()
-                            }
-                        }
-                    ) { Text("Add") }
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(max = 420.dp)
+            .verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            OutlinedTextField(
+                value = newName,
+                onValueChange = { newName = it },
+                label = { Text("New collection") },
+                singleLine = true,
+                modifier = Modifier.weight(1f)
+            )
+            TextButton(
+                enabled = newName.trim().isNotEmpty(),
+                onClick = {
+                    val name = newName.trim()
+                    if (name.isEmpty()) return@TextButton
+                    newName = ""
+                    // Create-or-match by name and attach; update local
+                    // checklist from the returned membership list.
+                    scope.launch {
+                        val updated = runCatching {
+                            workRepository.addToCollection(workId, name)
+                        }.getOrDefault(emptyList())
+                        memberIds = updated.map { it.id }.toSet()
+                    }
                 }
-                if (collections.isEmpty()) {
-                    Text(
-                        "You have no collections yet. Create one above to group works together.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                } else {
-                    Text(
-                        text = "Collections",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    collections
-                        .sortedByDescending { it.createdAt ?: it.dateAdded }
-                        .forEach { collection ->
-                            val isMember = collection.id in memberIds
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    // One control with a state TalkBack can say (audit A13).
-                                    .toggleable(value = isMember, enabled = membershipLoaded, role = Role.Checkbox) { next ->
-                                        memberIds = if (next) {
-                                            memberIds + collection.id
-                                        } else {
-                                            memberIds - collection.id
-                                        }
-                                        onSetMembership(collection.id, next)
-                                    }
-                                    .padding(vertical = 2.dp),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Checkbox(
-                                    checked = isMember,
-                                    onCheckedChange = null,
-                                    enabled = membershipLoaded
-                                )
-                                Text(
-                                    text = collection.name,
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    modifier = Modifier.weight(1f)
-                                )
-                                Text(
-                                    text = collection.workIds.size.toString(),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        }
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = onDismiss) { Text("Done") }
+            ) { Text("Add") }
         }
-    )
+        if (collections.isEmpty()) {
+            Text(
+                "You have no collections yet. Create one above to group works together.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        } else {
+            Text(
+                text = "Collections",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            collections
+                .sortedByDescending { it.createdAt ?: it.dateAdded }
+                .forEach { collection ->
+                    val isMember = collection.id in memberIds
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            // One control with a state TalkBack can say (audit A13).
+                            .toggleable(value = isMember, enabled = membershipLoaded, role = Role.Checkbox) { next ->
+                                memberIds = if (next) {
+                                    memberIds + collection.id
+                                } else {
+                                    memberIds - collection.id
+                                }
+                                onSetMembership(collection.id, next)
+                            }
+                            .padding(vertical = 2.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Checkbox(
+                            checked = isMember,
+                            onCheckedChange = null,
+                            enabled = membershipLoaded
+                        )
+                        Text(
+                            text = collection.name,
+                            style = MaterialTheme.typography.bodyLarge,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Text(
+                            text = collection.workIds.size.toString(),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+        }
+    }
 }
 
 /** Library and Work Detail use the same immediate membership toggles. */

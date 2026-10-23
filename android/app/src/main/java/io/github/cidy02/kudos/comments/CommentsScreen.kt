@@ -63,6 +63,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.testTag
+import io.github.cidy02.kudos.ui.subject.subjectPanel
+import io.github.cidy02.kudos.ui.subject.SubjectRowSeparator
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalConfiguration
@@ -775,27 +778,40 @@ fun ChapterPickerSheet(
         sheetState = sheetState,
         containerColor = tokens.background
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp, vertical = 8.dp)
-                .padding(bottom = 32.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Text(
-                text = "Browse Comments by Chapter",
-                fontSize = 17.sp,
-                fontWeight = FontWeight.Bold,
-                color = tokens.primaryInk,
-                modifier = Modifier.padding(bottom = 4.dp)
-            )
+        ChapterPickerContent(chapters, chaptersLoading, chaptersFailed, chaptersFailureMessage,
+            selectedChapter, isScopeAll, totalComments, onSelectAll, onSelectChapter)
+    }
+}
 
+@Composable
+internal fun ChapterPickerContent(
+    chapters: List<AO3ChapterRef>, chaptersLoading: Boolean = false, chaptersFailed: Boolean = false,
+    chaptersFailureMessage: String? = null, selectedChapter: AO3ChapterRef?, isScopeAll: Boolean,
+    totalComments: Int?, onSelectAll: () -> Unit, onSelectChapter: (AO3ChapterRef) -> Unit
+) {
+    val tokens = LocalKudosTokens.current
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 20.dp, vertical = 8.dp)
+            .padding(bottom = 32.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Text(
+            text = "Browse Comments by Chapter",
+            fontSize = 17.sp,
+            fontWeight = FontWeight.Bold,
+            color = tokens.primaryInk,
+            modifier = Modifier.padding(bottom = 4.dp)
+        )
+
+        Column(Modifier.fillMaxWidth().subjectPanel().testTag("Chapter choices")) {
             // "All comments" option
             Surface(
                 onClick = onSelectAll,
-                shape = RoundedCornerShape(10.dp),
-                color = if (isScopeAll) tokens.glassFill(0.16) else tokens.glassFill(0.06),
+                shape = androidx.compose.ui.graphics.RectangleShape,
+                color = androidx.compose.ui.graphics.Color.Transparent,
                 modifier = Modifier.fillMaxWidth().semantics { selected = isScopeAll }
             ) {
                 Row(
@@ -855,11 +871,12 @@ fun ChapterPickerSheet(
 
             // Chapter list
             for (chapter in chapters) {
+                SubjectRowSeparator(modifier = Modifier.testTag("Chapter separator"))
                 val isSelected = !isScopeAll && selectedChapter?.chapterId == chapter.chapterId
                 Surface(
                     onClick = { onSelectChapter(chapter) },
-                    shape = RoundedCornerShape(10.dp),
-                    color = if (isSelected) tokens.glassFill(0.16) else tokens.glassFill(0.06),
+                    shape = androidx.compose.ui.graphics.RectangleShape,
+                    color = androidx.compose.ui.graphics.Color.Transparent,
                     modifier = Modifier.fillMaxWidth().semantics { selected = isSelected }
                 ) {
                     Row(
@@ -898,15 +915,14 @@ fun ChapterPickerSheet(
                     }
                 }
             }
-
-            Text(
-                text = "AO3 doesn't show comment totals for each chapter. Choose a chapter to see its comments.",
-                fontSize = 12.sp,
-                color = tokens.secondaryInk,
-                lineHeight = 16.sp,
-                modifier = Modifier.padding(start = 4.dp, end = 4.dp, top = 4.dp)
-            )
         }
+        Text(
+            text = "AO3 doesn't show comment totals for each chapter. Choose a chapter to see its comments.",
+            fontSize = 12.sp,
+            color = tokens.secondaryInk,
+            lineHeight = 16.sp,
+            modifier = Modifier.padding(start = 4.dp, end = 4.dp, top = 4.dp)
+        )
     }
 }
 

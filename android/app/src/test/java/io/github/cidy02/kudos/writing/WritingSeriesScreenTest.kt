@@ -1,6 +1,5 @@
 package io.github.cidy02.kudos.writing
 
-import org.junit.Ignore
 import android.app.Application
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -31,15 +30,14 @@ import org.robolectric.annotation.GraphicsMode
 @Config(sdk = [34], application = Application::class, qualifiers = "w411dp-h2400dp")
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class WritingSeriesScreenTest {
-    @Ignore("3gx, held for 3gy: \"Draft\" is not found")
     @Test fun reorderRowsHaveHandlesAndDraftBesideTheTitle() {
         show(reorderOnly = true)
         compose.onAllNodesWithTag("Series reorder handle", useUnmergedTree = true).assertCountEquals(3)
-        val draft = compose.onNodeWithText("Draft", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        val draft = compose.onNodeWithContentDescription("Draft", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
         val title = compose.onNodeWithText("The Last Window", substring = true, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
-        assertTrue(draft.left >= title.right)
+        assertTrue("Draft follows the title", draft.left >= title.right)
+        assertTrue("Draft shares the title row", draft.top < title.bottom && title.top < draft.bottom)
     }
-
 
     @get:Rule val compose = createComposeRule()
     private lateinit var setup: SeriesSetup
