@@ -1,5 +1,7 @@
 package io.github.cidy02.kudos.reader
 
+import io.github.cidy02.kudos.ui.subject.LocalSettingsFormGround
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.foundation.background
@@ -77,6 +79,7 @@ internal fun ReaderNoteEditor(
     val focus = remember(annotation.id) { FocusRequester() }
     val color = ReadingAnnotationColor.fromRaw(annotation.colorRaw)
 
+    CompositionLocalProvider(LocalSettingsFormGround provides true) {
     Column(
         Modifier.fillMaxWidth().imePadding().verticalScroll(rememberScrollState())
             .navigationBarsPadding().padding(bottom = 24.dp)
@@ -129,6 +132,7 @@ internal fun ReaderNoteEditor(
                     icon = Icons.Filled.Delete, destructive = true)
             }
         }
+    }
     }
     LaunchedEffect(annotation.id) { focus.requestFocus() }
 }

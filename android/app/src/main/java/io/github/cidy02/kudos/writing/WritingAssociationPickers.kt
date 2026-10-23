@@ -11,7 +11,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AddCircleOutline
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.RemoveCircle
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
@@ -129,7 +129,7 @@ internal fun WritingAssociationPicker(
                     val empty = rows.isEmpty()
                     item { AssociationSection("Your collections", form.collections.size) }
                     stickyHeader {
-                        Column(Modifier.subjectWash(palette, SubjectMetrics.defaultWashHeight)
+                        Column(Modifier.testTag("Writing pinned field").writingPinnedFieldGround(list, 2, palette)
                             .padding(horizontal = SubjectMetrics.accountGutter).padding(top = 8.dp)
                             .writingSuggestionPanel(first = true, last = false)) {
                             SubjectTextFieldRow("Search", searchState.query, "Search all collections by name", search::type, autocorrect = false)
@@ -174,7 +174,7 @@ internal fun WritingAssociationPicker(
                         AssociationPanelRow(index, form.gifts.size, continuation = true) {
                             SubjectFormRow(name, trailing = {
                                 IconButton(onClick = { model.removeGift(name) }) {
-                                    Icon(Icons.Default.Close, "Remove $name", tint = SubjectPalette.fromHue(0.0, tokens.theme).accent, modifier = Modifier.size(18.dp))
+                                    Icon(Icons.Default.RemoveCircle, "Remove $name", tint = SubjectPalette.fromHue(0.0, tokens.theme).accent, modifier = Modifier.size(18.dp))
                                 }
                             })
                         }

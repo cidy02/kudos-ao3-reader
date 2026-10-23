@@ -2685,3 +2685,14 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   writing recovery). Unit tests that switch on the demo network turn it off again
   (`DemoNetwork.resetForTests`): the flag is sticky by design, and 3ha's two tests that left it on made
   sixteen later account and signed-out tests fail.
+- **2026-10-23 · A88c's first half (Codex 3hb; reviewed by Claude-CLI as A93), with the fandom list and
+  the pairing sheet (Claude).** The writing editor's bar title is drawn only when it fits whole: iOS sets
+  one, but its crowded bar shows none. Find and Note keep focusing their field on open, as iOS does
+  (`ReaderSearchView.swift:280`, `ReaderNoteEditor.swift:98`). The iPhone's shots showed no keyboard only
+  because the Simulator hides it while a hardware keyboard is connected, so 3hb's item 9 was withdrawn. The
+  works pages' pager and page jump take the page's palette. The pairing sheet is iOS's grouped form: an
+  intro card, one card of icon rows, and Advanced as a row that opens in place
+  (`SettingsLinkRow(expanded =)`). The fandom list's rows are `cardRow()` cards, and Group variants is a
+  tinted chip with its icon, as iOS's. A93's five P3s (the pinned field iOS doesn't pin, four more
+  pagers, the reader sheets' cards in Light, Customize Theme's cards, the accent ink outside Sepia) go to
+  3hd.

@@ -50,8 +50,9 @@ Sent on:
 - **Android 3hb (Codex):** the seam, ⊖, sheet cards, queue tags' Add, the editor's title, Customize
   Theme, page jump and the pager's colours, the reader sheets in Sepia, and Find/Note's opening focus.
 - **Android 3hc (Gemini, account 2):** collection reorder's card, the collection form's card, New
-  queue's radios, Add Works' bylines, the comments chapter picker, "Draft", and the works pages' card
-  dates in iOS's MM/dd/yyyy.
+  queue's radios, Add Works' bylines, the comments chapter picker, and "Draft". Its seventh item, the
+  works pages' card dates in iOS's MM/dd/yyyy, is withdrawn: owner Q28 is open, and until it's answered
+  each app keeps its own form (Claude-CLI caught it). Gemini's change for it isn't landed.
 - **iOS I16 (Claude-CLI):** the Sample Text value at AX5, the current-speed pill, and the AX5
   pronunciation shot route.
 

@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.library
 
+import androidx.compose.material3.ButtonDefaults
 import io.github.cidy02.kudos.settings.SubjectTextFieldRow
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -160,6 +161,23 @@ private fun SharedTagSheet(
     toggle: suspend (String) -> Unit,
     onDismiss: () -> Unit
 ) {
+    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        SharedTagContent(title, footnote, emptyNote, noun, palette, key, load, toggle, onDismiss)
+    }
+}
+
+@Composable
+internal fun SharedTagContent(
+    title: String,
+    footnote: String,
+    emptyNote: String,
+    noun: String,
+    palette: SubjectPalette,
+    key: Any,
+    load: suspend () -> SharedTags,
+    toggle: suspend (String) -> Unit,
+    onDismiss: () -> Unit
+) {
     val tokens = LocalKudosTokens.current
     val scope = rememberCoroutineScope()
     var all by remember { mutableStateOf<List<Tag>>(emptyList()) }
@@ -173,7 +191,6 @@ private fun SharedTagSheet(
         coverage = shared.coverage
     }
 
-    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Column(
             Modifier
                 .fillMaxSize()
@@ -222,8 +239,9 @@ private fun SharedTagSheet(
                     )
                     TextButton(
                         onClick = addTag,
-                        enabled = draft.isNotBlank()
-                    ) { Text("Add", color = palette.accent) }
+                        enabled = draft.isNotBlank(),
+                        colors = ButtonDefaults.textButtonColors(contentColor = palette.accent)
+                    ) { Text("Add") }
                 }
                 FormFootnote(footnote)
                 if (all.isNotEmpty()) SubjectFieldLabel("Your tags", Modifier.padding(top = 12.dp))
@@ -283,7 +301,6 @@ private fun SharedTagSheet(
                 }
             }
         }
-    }
 }
 
 /** Shared vocabulary for one queue. Counts are works in this queue only. */
@@ -455,7 +472,8 @@ internal fun QueueTagManagerContent(
                 onSubmit = onAdd,
                 leading = { Icon(Icons.Filled.Add, contentDescription = null, tint = palette.accent) },
                 trailing = {
-                    TextButton(onClick = onAdd, enabled = draft.isNotBlank()) { Text("Add", color = palette.accent) }
+                    TextButton(onClick = onAdd, enabled = draft.isNotBlank(),
+                        colors = ButtonDefaults.textButtonColors(contentColor = palette.accent)) { Text("Add") }
                 })
         }
         FormFootnote("A tag you use here is the same tag on your works.", Modifier.padding(horizontal = 16.dp))

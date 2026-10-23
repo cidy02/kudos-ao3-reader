@@ -37,6 +37,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.disabled
+import androidx.compose.ui.semantics.paneTitle
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
@@ -123,7 +124,7 @@ internal fun WritingTextEditorContent(
     BackHandler(enabled = session.recoveries.isEmpty() && !showLink && session.error == null && !showDeleteChapter, onBack = leave)
     // The field's name in the bar, as iOS's inline title ("Chapter text", "Summary", "End notes"):
     // 3gx removed the large heading, which had been the only place it was named.
-    ProvidePushedShellChrome(hasSubjectHeader = true, hideTabBar = true, customTitle = title, onBack = {
+    ProvidePushedShellChrome(hasSubjectHeader = true, hideTabBar = true, customTitle = title, wholeTitleOnly = true, onBack = {
         if (session.recoveries.isEmpty()) leave()
     }, trailingContent = {
         EditorToolbarButton(if (session.isPreviewing) "Edit" else "Preview",
@@ -169,7 +170,8 @@ internal fun WritingTextEditorContent(
         }
     }
 
-    Column(Modifier.fillMaxSize().subjectScreenWash(palette).imePadding().navigationBarsPadding()) {
+    Column(Modifier.fillMaxSize().subjectScreenWash(palette).imePadding().navigationBarsPadding()
+        .semantics { paneTitle = title }) {
         Spacer(Modifier.windowInsetsTopHeight(WindowInsets.statusBars))
         Spacer(Modifier.height(76.dp))
         val words = session.wordCount?.let { "${NumberFormat.getIntegerInstance().format(it)} ${if (it == 1) "word" else "words"}" }

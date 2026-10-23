@@ -110,7 +110,6 @@ fun ReaderSearchSheet(
     val model = remember(publication) { ReaderSearchModel(scope, { ReaderSearch.open(publication, it) }) }
     val state by model.state.collectAsState()
     var query by remember(publication) { mutableStateOf("") }
-    val focus = remember { FocusRequester() }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val chapterKey = sections.firstOrNull { it.spineIndex == currentSpineIndex }
         ?.let { ReaderSectionBuilder.hrefKey(it.href) }
@@ -145,6 +144,27 @@ fun ReaderSearchSheet(
             )
         }
     ) {
+        ReaderSearchContent(query, { query = it; model.search(it, chapterKey) },
+            { model.search(query, chapterKey, debounce = false) }, state, groups, currentSpineIndex, tokens,
+            dismiss, onSelectHit, onBookmarkHit, model::loadMoreIfNeeded)
+    }
+}
+
+@Composable
+internal fun ReaderSearchContent(
+    query: String,
+    onQueryChange: (String) -> Unit,
+    onSearch: () -> Unit,
+    state: ReaderSearchState,
+    groups: List<ReaderSearchGrouping.Group<ReaderSearchHit>>,
+    currentSpineIndex: Int?,
+    tokens: KudosTokens,
+    dismiss: () -> Unit,
+    onSelectHit: (ReaderSearchHit) -> Unit,
+    onBookmarkHit: (ReaderSearchHit) -> Unit,
+    onLoadMore: (Int) -> Unit
+) {
+    val focus = remember { FocusRequester() }
         CompositionLocalProvider(LocalKudosTokens provides tokens, LocalContentColor provides tokens.primaryInk) {
             LaunchedEffect(focus) { focus.requestFocus() }
             Column(Modifier.fillMaxWidth().fillMaxHeight(0.85f).navigationBarsPadding()) {
@@ -163,8 +183,7 @@ fun ReaderSearchSheet(
                 BasicTextField(
                     value = query,
                     onValueChange = {
-                        query = it
-                        model.search(it, chapterKey)
+                        onQueryChange(it)
                     },
                     singleLine = true,
                     textStyle = MaterialTheme.typography.bodyLarge.copy(color = tokens.primaryInk),
@@ -174,7 +193,7 @@ fun ReaderSearchSheet(
                         autoCorrectEnabled = false,
                         imeAction = ImeAction.Search
                     ),
-                    keyboardActions = KeyboardActions(onSearch = { model.search(query, chapterKey, debounce = false) }),
+                    keyboardActions = KeyboardActions(onSearch = { onSearch() }),
                     modifier = Modifier.semantics { contentDescription = "Find in Work" }.padding(horizontal = 16.dp).padding(bottom = 12.dp)
                         .fillMaxWidth().focusRequester(focus),
                     decorationBox = { field ->
@@ -191,8 +210,7 @@ fun ReaderSearchSheet(
                             }
                             if (query.isNotEmpty()) {
                                 IconButton(onClick = {
-                                    query = ""
-                                    model.reset()
+                                    onQueryChange("")
                                     focus.requestFocus()
                                 }) {
                                     Icon(Icons.Filled.Cancel, contentDescription = "Clear search", tint = tokens.secondaryInk)
@@ -231,7 +249,7 @@ fun ReaderSearchSheet(
                                 groups.forEach { group ->
                                     item(key = "group:${group.spineIndex}") { SearchGroupTitle(group.title) }
                                     items(group.results, key = { it.id }) { hit ->
-                                        LaunchedEffect(hit.id) { model.loadMoreIfNeeded(hit.id) }
+                                        LaunchedEffect(hit.id) { onLoadMore(hit.id) }
                                         SearchResultRow(
                                             hit = hit,
                                             onGo = {
@@ -255,7 +273,6 @@ fun ReaderSearchSheet(
                 }
             }
         }
-    }
 }
 
 @Composable

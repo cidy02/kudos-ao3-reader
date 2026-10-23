@@ -5,8 +5,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material.icons.outlined.Description
-import androidx.compose.ui.draw.clip
-import io.github.cidy02.kudos.ui.subject.subjectPanel
+import io.github.cidy02.kudos.ui.subject.cardRow
+import androidx.compose.material.icons.outlined.FilterNone
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -141,9 +141,11 @@ fun FandomListSortRail(
         SortPill("Most works", sort == FandomFamilySort.FamilyTotal, palette) {
             onSort(FandomFamilySort.FamilyTotal)
         }
+        // iOS: a tinted rect with `square.stack` while on, neutral while off; the pills are the sort.
         SubjectChip(
             text = "Group variants",
-            style = SubjectChipStyle.Pill(isSelected = groupsVariants),
+            style = if (groupsVariants) SubjectChipStyle.Tinted else SubjectChipStyle.Neutral,
+            leadingIcon = Icons.Outlined.FilterNone,
             palette = palette,
             modifier = Modifier.toggleable(
                 value = groupsVariants,
@@ -281,7 +283,7 @@ private fun WorksGlyph() {
 /** iOS `.cardRow()`: each fandom, and each family with its tags, is a card of its own. */
 @Composable
 private fun Modifier.fandomCard(): Modifier =
-    padding(horizontal = 16.dp, vertical = 5.dp).fillMaxWidth().clip(RoundedCornerShape(16.dp)).subjectPanel(16.dp)
+    padding(horizontal = 16.dp, vertical = 5.dp).fillMaxWidth().cardRow()
 
 @Composable
 private fun FamilyBlock(

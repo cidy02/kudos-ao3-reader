@@ -467,15 +467,9 @@ fun MainScaffold(
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
                     }
                     if (pushedChrome.customTitle != null) {
-                        // Takes only what the buttons leave: at twice the text size a long title pushed
-                        // the text editor's Done off the bar (A88b).
-                        Text(
-                            text = pushedChrome.customTitle.orEmpty(),
-                            color = tokens.primaryInk,
-                            fontSize = 17.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
+                        PushedBarTitle(
+                            title = pushedChrome.customTitle.orEmpty(),
+                            wholeOnly = pushedChrome.wholeTitleOnly,
                             modifier = Modifier.weight(1f).padding(start = 12.dp)
                         )
                     } else {

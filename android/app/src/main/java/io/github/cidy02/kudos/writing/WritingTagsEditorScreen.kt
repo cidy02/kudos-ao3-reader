@@ -124,9 +124,8 @@ internal fun WritingTagsEditorScreen(
                         palette = palette, gutter = SubjectMetrics.accountGutter)
                 }
                 stickyHeader {
-                    // Opaque token wash keeps the scrolled chips out from under the field.
                     Column(Modifier.onSizeChanged { fieldHeight = it.height }
-                        .subjectWash(palette, SubjectMetrics.defaultWashHeight).padding(horizontal = SubjectMetrics.accountGutter)
+                        .testTag("Writing pinned field").writingPinnedFieldGround(list, 1, palette).padding(horizontal = SubjectMetrics.accountGutter)
                         .padding(top = 18.dp, bottom = 8.dp).subjectPanel(cornerRadius = 12.dp)) {
                         SubjectTextFieldRow("Add a tag", state.term, "Add a tag", model::type, autocorrect = false,
                             fieldOnly = true, onSubmit = { model.add() }, leading = {

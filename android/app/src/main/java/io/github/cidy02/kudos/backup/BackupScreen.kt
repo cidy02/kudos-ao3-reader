@@ -1,5 +1,7 @@
 package io.github.cidy02.kudos.backup
 
+import io.github.cidy02.kudos.ui.subject.LocalSettingsFormGround
+import androidx.compose.runtime.CompositionLocalProvider
 import io.github.cidy02.kudos.app.DebugShotEffect
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -405,6 +407,7 @@ internal fun ImportBackupChoices(
 ) {
     val preview = pending.preview
     val tokens = LocalKudosTokens.current
+    CompositionLocalProvider(LocalSettingsFormGround provides true) {
     Column(Modifier.fillMaxHeight(0.9f)) {
             Row(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = SubjectMetrics.accountGutter),
@@ -564,6 +567,7 @@ internal fun ImportBackupChoices(
                 }
             }
         }
+    }
 }
 
 private fun userFacingError(prefix: String, error: Throwable): String {
