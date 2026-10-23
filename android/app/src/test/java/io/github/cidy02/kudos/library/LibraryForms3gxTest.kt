@@ -1,6 +1,5 @@
 package io.github.cidy02.kudos.library
 
-import org.junit.Ignore
 import android.app.Application
 import android.content.Context
 import androidx.compose.foundation.layout.Column
@@ -78,13 +77,15 @@ class LibraryForms3gxTest {
         compose.onNode(hasText("Mint") and SemanticsMatcher.expectValue(SemanticsProperties.Selected, true)).assertExists()
     }
 
-    @Ignore("3gx, held for 3gy: Compose never goes idle (the dialog opens and works on the emulator)")
-
     @Test fun collectionPickerShowsNewestCreatedFirst() {
         val old = WorkCollection(id = "old", name = "Alpha", createdAt = Instant.EPOCH)
         val recent = WorkCollection(id = "new", name = "Zulu", createdAt = Instant.EPOCH.plusSeconds(10))
         runBlocking { works.upsert(SavedWork(id = "one", title = "Story", author = "Writer")) }
-        show { AddToCollectionDialog("one", listOf(old, recent), works, rememberCoroutineScope(), { _, _ -> }, {}) }
+        val collections = listOf(old, recent)
+        show { AddToCollectionContent("one", collections, works, rememberCoroutineScope(), { _, _ -> }) }
+        compose.waitUntil(5_000) {
+            compose.onAllNodes(hasText("Zulu") and isToggleable() and isEnabled()).fetchSemanticsNodes().isNotEmpty()
+        }
         assertTrue(compose.onNodeWithText("Zulu").fetchSemanticsNode().boundsInRoot.top <
             compose.onNodeWithText("Alpha").fetchSemanticsNode().boundsInRoot.top)
     }

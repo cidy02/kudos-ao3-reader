@@ -1,14 +1,21 @@
 package io.github.cidy02.kudos.library
 
-import org.junit.Ignore
 import android.app.Application
 import android.content.Context
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.room.Room
@@ -16,6 +23,7 @@ import androidx.test.core.app.ApplicationProvider
 import io.github.cidy02.kudos.app.LocalPushedShellChrome
 import io.github.cidy02.kudos.app.PushedShellChrome
 import io.github.cidy02.kudos.core.model.SavedWork
+import io.github.cidy02.kudos.core.model.Tag
 import io.github.cidy02.kudos.data.local.KudosDatabase
 import io.github.cidy02.kudos.files.WorkFileStore
 import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
@@ -37,25 +45,26 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35], application = Application::class, qualifiers = "w411dp-h900dp")
 class TagSheetParityTest {
-    @Ignore("3gx, held for 3gy: OutOfMemoryError, as above")
     @Test fun mergeChoicesSpeakTheirScopeAndConfirmationRepeatsIt() {
         val queues = ReadingQueueRepository(database)
         val queue = runBlocking { queues.createQueue("Read", tagNames = listOf("Comfort", "Rereads")) }
         val tags = runBlocking { queues.tagsForQueue(queue.id) }
         val source = tags.first { it.name == "Rereads" }
         val target = tags.first { it.name == "Comfort" }
-        compose.setContent { KudosTheme(KudosThemeMode.Light) {
-            QueueTagEditDialog(queues, queue.id, source, listOf(target), mapOf(target.id to 12), 3,
-                onRemove = {}, onDismiss = {}, onChanged = {})
+        compose.setContent { if (visible.value) KudosTheme(KudosThemeMode.Light) {
+            InlineTagEditor(queues, queue.id, source, listOf(target), mapOf(target.id to 12), 3)
         } }
         compose.onNodeWithContentDescription("Merge into Comfort, 12 works in this queue").performClick()
-        compose.onNodeWithText(queueTagMergeMessage(source.name, 3)).assertExists()
-        assertFalse(queueTagMergeMessage(source.name, 0).contains("undo"))
+        val confirmation = "Merge “${source.name}” into “${target.name}”?"
+        val expected = "All 3 works in this queue get the tag you pick, and “Rereads” leaves the queue. You can't undo this in Kudos."
+        compose.onNode(hasText(expected) and hasAnyAncestor(hasTestTag(confirmation))).assertExists()
+        assertEquals("No work in this queue uses “Rereads”. Merging removes the tag from this queue.",
+            queueTagMergeMessage(source.name, 0))
     }
 
     @Test fun workTagNameCanBeAddedFromTheKeyboard() {
         runBlocking { works.upsert(SavedWork(id = "one", title = "First", author = "A")) }
-        compose.setContent { KudosTheme(KudosThemeMode.Light) {
+        compose.setContent { if (visible.value) KudosTheme(KudosThemeMode.Light) {
             WorkBulkTagSheet(works, listOf("one"), LocalKudosTokens.current.scopePalette, {})
         } }
         compose.onNode(hasSetTextAction()).performTextInput("Comfort")
@@ -63,25 +72,43 @@ class TagSheetParityTest {
         compose.waitUntil(5_000) { runBlocking { works.userTagsForWork("one").any { it.name == "Comfort" } } }
     }
 
-
-    @Ignore("3gx, held for 3gy: OutOfMemoryError: the dialog window re-measures without end under Robolectric (the dialog opens and works on the emulator)")
-
-
     @Test fun aConflictingRenameCannotBeSavedAndCopyNeedsAnotherQueue() {
         val queues = ReadingQueueRepository(database)
         val queue = runBlocking { queues.createQueue("Read", tagNames = listOf("Comfort", "Rereads")) }
+        val tags = runBlocking { queues.tagsForQueue(queue.id) }
+        val source = tags.first { it.name == "Rereads" }
+        val editing = mutableStateOf(false)
         compose.setContent { if (visible.value) KudosTheme(KudosThemeMode.Light) {
-            QueueTagManager(queues, queue, LocalKudosTokens.current.scopePalette, 0, {}, {})
+            if (editing.value) InlineTagEditor(queues, queue.id, source, tags.filter { it.id != source.id }, count = 0)
+            else QueueTagManager(queues, queue, LocalKudosTokens.current.scopePalette, 0, {}, {})
         } }
         compose.waitUntil(5_000) { compose.onAllNodesWithText("Rereads").fetchSemanticsNodes().isNotEmpty() }
         compose.onAllNodesWithContentDescription("0 works in this queue", useUnmergedTree = true).assertCountEquals(2)
         compose.onNodeWithText("Rereads").performClick()
         compose.onNodeWithText("Copy tag to another queue").assertIsNotEnabled()
-        compose.onNodeWithText("Rename").performClick()
+        // The manager/menu was checked above; the large editor runs in the activity window.
+        compose.runOnIdle { editing.value = true }
         compose.onNodeWithText("Name").performTextReplacement("Comfort")
         compose.onNodeWithText("Save").assertIsNotEnabled()
         compose.waitUntil(5_000) { compose.onAllNodesWithText("You already have a tag called “Comfort”.").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText("Save").assertIsNotEnabled()
+    }
+
+    @Composable
+    private fun InlineTagEditor(
+        repository: ReadingQueueRepository, queueId: String, tag: Tag, siblings: List<Tag>,
+        counts: Map<String, Int> = emptyMap(), count: Int, onRemove: () -> Unit = {}
+    ) {
+        Box(Modifier.fillMaxSize()) {
+            QueueTagEditContent(repository, queueId, tag, siblings, counts, count, onRemove, {}, {}) {
+                    _, title, body, confirm, dismiss ->
+                Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).testTag(title)) {
+                    Text(title)
+                    Box(Modifier.weight(1f, fill = false)) { body() }
+                    Row { dismiss(); confirm() }
+                }
+            }
+        }
     }
 
     @get:Rule val compose = createComposeRule()
@@ -103,20 +130,19 @@ class TagSheetParityTest {
         directory.toFile().deleteRecursively()
     }
 
-    @Ignore("3gx, held for 3gy: OutOfMemoryError, as above")
-
     @Test fun editTagPutsMergeBeforeTheRemoveSection() {
         val queues = ReadingQueueRepository(database)
         val queue = runBlocking { queues.createQueue("Rereads", tagNames = listOf("Rereads", "Comfort")) }
+        val tags = runBlocking { queues.tagsForQueue(queue.id) }
+        val source = tags.first { it.name == "Rereads" }
+        val removing = mutableStateOf(false)
         compose.setContent {
             if (visible.value) KudosTheme(KudosThemeMode.Light) {
-                QueueTagManager(queues, queue, LocalKudosTokens.current.scopePalette, workCount = 0,
-                    onBack = {}, onShowOnlyTag = {})
+                if (removing.value) QueueTagRemovalDialog(source, 0, onDismiss = { removing.value = false }, onConfirm = {})
+                else InlineTagEditor(queues, queue.id, source, tags.filter { it.id != source.id }, count = 0,
+                    onRemove = { removing.value = true })
             }
         }
-        compose.waitUntil(5_000) { compose.onAllNodesWithText("Rereads").fetchSemanticsNodes().isNotEmpty() }
-        compose.onNodeWithText("Rereads").performClick()
-        compose.onNodeWithText("Rename").performClick()
         val name = compose.onNodeWithText("Name").fetchSemanticsNode().boundsInRoot
         val merge = compose.onNodeWithText("MERGE INTO ANOTHER TAG").fetchSemanticsNode().boundsInRoot
         val remove = compose.onNodeWithText("REMOVE").fetchSemanticsNode().boundsInRoot
@@ -139,7 +165,7 @@ class TagSheetParityTest {
         }
         compose.waitUntil(5_000) { compose.onAllNodesWithTag("Tag selection mark", useUnmergedTree = true)
             .fetchSemanticsNodes().size == 3 }
-        compose.onNodeWithText("Tag").assertExists()
+        compose.onNode(hasText("Tag") and hasAnyAncestor(isDialog())).assertExists()
         compose.onNodeWithText("Your changes apply to all 2 selected works.").assertExists()
         compose.onNodeWithText("All").assertDoesNotExist()
         val marks = compose.onAllNodesWithTag("Tag selection mark", useUnmergedTree = true).fetchSemanticsNodes()
@@ -151,8 +177,6 @@ class TagSheetParityTest {
         compose.waitUntil(5_000) { runBlocking { works.userTagsForWork("two").any { it.name == "SomeTag" } } }
         assertEquals(listOf("UnusedTag"), runBlocking { works.userTagsForWork("outside").map { it.name } })
     }
-
-    @Ignore("3gx, held for 3gy: two nodes match \"Tag\"")
 
     @Test fun aQueuePagesSelectedWorksOpenWorkTagsInsteadOfQueueVocabulary() {
         val queues = ReadingQueueRepository(database)
@@ -181,7 +205,7 @@ class TagSheetParityTest {
         compose.onNodeWithText("Select").performClick()
         compose.onNodeWithText("Select All").performClick()
         compose.onNodeWithText("+ TAG").performClick()
-        compose.onNodeWithText("Tag").assertExists()
+        compose.onNode(hasText("Tag") and hasAnyAncestor(isDialog())).assertExists()
         compose.onNodeWithText("Your changes apply to all 2 selected works.").assertExists()
         compose.onNode(hasSetTextAction()).performTextInput("Comfort")
         compose.onNodeWithText("Add").performClick()

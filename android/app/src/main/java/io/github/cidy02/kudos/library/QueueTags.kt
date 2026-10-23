@@ -442,35 +442,34 @@ fun QueueTagManager(
     }
     pending?.let { tag ->
         val count = counts[tag.id] ?: 0
-        AlertDialog(
-            onDismissRequest = { pending = null },
-            title = {
-                Text(
-                    if (count == 0) "Remove “${tag.name}” from this queue?"
-                    else "Remove “${tag.name}” from $count work${if (count == 1) "" else "s"}?"
-                )
-            },
-            text = {
-                Text(
-                    when (count) {
-                        0 -> "This tag stays on your other works and queues."
-                        1 -> "That work keeps its other tags. Works outside this queue keep this tag."
-                        else -> "Those works keep their other tags. Works outside this queue keep this tag."
-                    }
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    pending = null
-                    scope.launch {
-                        repository.stripQueueTag(queue.id, tag.id)
-                        reload += 1
-                    }
-                }) { Text("Remove") }
-            },
-            dismissButton = { TextButton(onClick = { pending = null }) { Text("Cancel") } }
-        )
+        QueueTagRemovalDialog(tag, count, onDismiss = { pending = null }, onConfirm = {
+            pending = null
+            scope.launch {
+                repository.stripQueueTag(queue.id, tag.id)
+                reload += 1
+            }
+        })
     }
+}
+
+@Composable
+internal fun QueueTagRemovalDialog(tag: Tag, count: Int, onDismiss: () -> Unit, onConfirm: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(if (count == 0) "Remove “${tag.name}” from this queue?"
+                else "Remove “${tag.name}” from $count work${if (count == 1) "" else "s"}?")
+        },
+        text = {
+            Text(when (count) {
+                0 -> "This tag stays on your other works and queues."
+                1 -> "That work keeps its other tags. Works outside this queue keep this tag."
+                else -> "Those works keep their other tags. Works outside this queue keep this tag."
+            })
+        },
+        confirmButton = { TextButton(onClick = onConfirm) { Text("Remove") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+    )
 }
 
 private enum class TagAction { Edit, Copy, Remove, Show }
@@ -544,6 +543,33 @@ internal fun QueueTagEditDialog(
     onDismiss: () -> Unit,
     onChanged: () -> Unit
 ) {
+    QueueTagEditContent(repository, queueId, tag, siblings, siblingCounts, count, onRemove, onDismiss, onChanged) {
+            close, title, text, confirm, dismiss ->
+        AlertDialog(onDismissRequest = close, title = { Text(title) }, text = text,
+            confirmButton = confirm, dismissButton = dismiss)
+    }
+}
+
+/** Owns the editor and confirmation state; the host supplies the dialog window. */
+@Composable
+internal fun QueueTagEditContent(
+    repository: ReadingQueueRepository,
+    queueId: String,
+    tag: Tag,
+    siblings: List<Tag>,
+    siblingCounts: Map<String, Int> = emptyMap(),
+    count: Int,
+    onRemove: () -> Unit,
+    onDismiss: () -> Unit,
+    onChanged: () -> Unit,
+    presentDialog: @Composable (
+        onDismissRequest: () -> Unit,
+        title: String,
+        text: @Composable () -> Unit,
+        confirmButton: @Composable () -> Unit,
+        dismissButton: @Composable () -> Unit
+    ) -> Unit
+) {
     val scope = rememberCoroutineScope()
     var name by remember(tag.id) { mutableStateOf(tag.name) }
     var conflict by remember(tag.id) { mutableStateOf<Tag?>(null) }
@@ -569,16 +595,16 @@ internal fun QueueTagEditDialog(
         }
     }
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Edit tag") },
-        text = {
+    presentDialog(
+        onDismiss,
+        "Edit tag",
+        {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Name") }, singleLine = true,
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                     keyboardActions = KeyboardActions(onDone = { rename() }))
                 Text(
-                    text = if (conflict != null) {
+                    if (conflict != null) {
                         "You already have a tag called “${conflict?.name}”."
                     } else {
                         "Renaming this tag also renames it on your works and other queues."
@@ -590,7 +616,7 @@ internal fun QueueTagEditDialog(
                     SubjectFieldLabel("Merge into another tag")
                     siblings.forEach { sibling ->
                         Text(
-                            text = "${sibling.name} · ${(siblingCounts[sibling.id] ?: 0).compactCount()}",
+                            "${sibling.name} · ${(siblingCounts[sibling.id] ?: 0).compactCount()}",
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable { mergeTarget = sibling }
@@ -599,7 +625,7 @@ internal fun QueueTagEditDialog(
                         )
                     }
                     Text(
-                        text = when (count) {
+                        when (count) {
                             0 -> "No work in this queue uses “${tag.name}”. Merging removes the tag from this queue."
                             1 -> "The 1 work in this queue gets the tag you pick, and “${tag.name}” leaves the queue. You can't undo this in Kudos."
                             else -> "All $count works in this queue get the tag you pick, and “${tag.name}” leaves the queue. You can't undo this in Kudos."
@@ -615,20 +641,20 @@ internal fun QueueTagEditDialog(
                 }
             }
         },
-        confirmButton = {
+        {
             TextButton(
                 onClick = { rename() },
                 enabled = !blocked
             ) { Text("Save") }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+        { TextButton(onClick = onDismiss) { Text("Cancel") } }
     )
     mergeTarget?.let { target ->
-        AlertDialog(
-            onDismissRequest = { mergeTarget = null },
-            title = { Text("Merge “${tag.name}” into “${target.name}”?") },
-            text = { Text(queueTagMergeMessage(tag.name, count)) },
-            confirmButton = {
+        presentDialog(
+            { mergeTarget = null },
+            "Merge “${tag.name}” into “${target.name}”?",
+            { Text(queueTagMergeMessage(tag.name, count)) },
+            {
                 TextButton(onClick = {
                     scope.launch {
                         repository.mergeQueueTag(queueId, tag.id, target.id)
@@ -637,7 +663,7 @@ internal fun QueueTagEditDialog(
                     }
                 }) { Text("Merge") }
             },
-            dismissButton = { TextButton(onClick = { mergeTarget = null }) { Text("Cancel") } }
+            { TextButton(onClick = { mergeTarget = null }) { Text("Cancel") } }
         )
     }
 }

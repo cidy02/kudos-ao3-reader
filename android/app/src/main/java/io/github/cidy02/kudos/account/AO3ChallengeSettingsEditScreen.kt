@@ -109,7 +109,7 @@ internal fun AO3ChallengeSettingsEditScreen(slug: String, title: String, viewerI
                 modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp))
             val choiceList = androidx.compose.foundation.lazy.rememberLazyListState(
                 initialFirstVisibleItemIndex = picked.options.indexOfFirst { it.first == picked.selected }.coerceAtLeast(0))
-            LazyColumn(Modifier.heightIn(max = 450.dp), state = choiceList) {
+            LazyColumn(Modifier.heightIn(max = 450.dp).testTag("Challenge settings choices"), state = choiceList) {
                 items(picked.options) { (value, caption) ->
                     SubjectFormRow(caption, onClick = {
                         if (picked.pick != null) picked.pick.invoke(value) else model.change(picked.name, value)

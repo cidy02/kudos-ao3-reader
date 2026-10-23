@@ -1,11 +1,13 @@
 package io.github.cidy02.kudos.browse
 
-import org.junit.Ignore
 import android.app.Application
 import android.content.Context
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.test.*
@@ -43,6 +45,7 @@ class FandomResultsParityTest {
     private var answer = AO3Result.Success(AO3HttpResponse("https://archiveofourown.org/works", 200, emptyMap(), page())) as AO3Result<AO3HttpResponse>
     private var gate: CompletableDeferred<Unit>? = null
     private var requests = 0
+    private var visible by mutableStateOf(true)
     private val client = object : AO3Client {
         override suspend fun get(url: String, headers: Map<String, String>): AO3Result<AO3HttpResponse> {
             requests++
@@ -54,11 +57,16 @@ class FandomResultsParityTest {
     private val importer = io.github.cidy02.kudos.works.WorkImporter(works,
         io.github.cidy02.kudos.network.ao3.work.AO3WorkMetadataRepository(client),
         io.github.cidy02.kudos.network.ao3.work.AO3EpubDownloader(client), WorkFileStore(directory), directory.toFile())
-    @After fun close() { database.close(); directory.toFile().deleteRecursively() }
+    @After fun close() {
+        compose.runOnIdle { visible = false }
+        compose.waitForIdle()
+        database.close()
+        directory.toFile().deleteRecursively()
+    }
 
     private fun show(tag: Boolean = false) {
         val chrome = PushedShellChrome()
-        compose.setContent { KudosTheme(KudosThemeMode.Light) {
+        compose.setContent { if (visible) KudosTheme(KudosThemeMode.Light) {
             CompositionLocalProvider(LocalPushedShellChrome provides chrome) {
                 Box {
                     FandomWorksScreen("A fandom", works, {}, repository = repository, isTag = tag, workImporter = importer)
@@ -66,17 +74,17 @@ class FandomResultsParityTest {
                 }
             }
         } }
-        compose.waitUntil(5_000) { requests == 1 }
-        compose.onNodeWithText("Original work").assertExists()
+        // Parsing runs on Dispatchers.Default after the request has started.
+        compose.waitUntil(5_000) { compose.onAllNodesWithText("Original work").fetchSemanticsNodes().isNotEmpty() }
+        assertEquals(1, requests)
     }
-
-    @Ignore("3gx, held for 3gy: \"Original work\" is not found")
 
     @Test fun pagingKeepsUsableRowsClearsSelectionAndKeepsThemAfterFailure() {
         show()
         compose.onNodeWithContentDescription("More").performClick()
         compose.onNodeWithText("Select").performClick()
         compose.onNodeWithText("Original work").performClick()
+        compose.onNodeWithText("1 selected").assertExists()
         val pending = CompletableDeferred<Unit>()
         gate = pending
         answer = AO3Result.Failure(AO3Error.Forbidden)
@@ -87,33 +95,39 @@ class FandomResultsParityTest {
         compose.onNodeWithText("Select works").assertExists()
         compose.onAllNodesWithContentDescription("Next Page")[0].assertIsNotEnabled()
         pending.complete(Unit)
-        compose.waitForIdle()
+        compose.waitUntil(5_000) { compose.onAllNodesWithText(AO3Error.Forbidden.displayMessage()).fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText("Original work").assertExists()
         compose.onAllNodesWithContentDescription("Next Page")[0].assertIsEnabled()
     }
 
-    @Ignore("3gx, held for 3gy: times out after 5 s")
-
     @Test fun aFailedFandomIndexRefreshKeepsTheExistingRows() {
         answer = AO3Result.Success(AO3HttpResponse("https://archiveofourown.org/media/Test/fandoms", 200, emptyMap(),
-            "<ol class='fandom index group'><li><a class='tag' href='/tags/Original/works'>Original fandom</a> (12)</li></ol>"))
-        compose.setContent { KudosTheme(KudosThemeMode.Light) {
+            """<ol class="fandom index group"><li><a class="tag" href="/tags/Original/works">Original fandom</a> (12)</li></ol>"""))
+        compose.setContent { if (visible) KudosTheme(KudosThemeMode.Light) {
             FandomListScreen(io.github.cidy02.kudos.network.ao3.browse.AO3MediaCategory("Test", "/media/Test/fandoms"),
                 {}, {}, {}, repository = repository)
         } }
         compose.waitUntil(5_000) { compose.onAllNodesWithText("Original fandom").fetchSemanticsNodes().isNotEmpty() }
+        val pending = CompletableDeferred<Unit>()
+        gate = pending
         answer = AO3Result.Failure(AO3Error.Forbidden)
-        compose.onRoot().performTouchInput { swipeDown() }
-        compose.waitUntil(5_000) { requests >= 2 }
+        compose.onNode(hasScrollToIndexAction()).performTouchInput {
+            swipeDown(startY = top + 20f, endY = bottom - 20f, durationMillis = 700)
+        }
+        compose.waitUntil(5_000) { requests == 2 }
         compose.onNodeWithText("Original fandom").assertExists()
+        compose.runOnIdle { pending.complete(Unit) }
+        compose.waitForIdle()
+        compose.onNodeWithText("Original fandom").assertExists()
+        compose.onNodeWithText("Couldn't load fandoms").assertDoesNotExist()
     }
-
-    @Ignore("3gx, held for 3gy: performScrollTo finds no \"Fandoms\"")
 
     @Test fun aGenericTagsFilterOffersTheFandomPicker() {
         show(tag = true)
         compose.onNodeWithContentDescription("Filter").performClick()
-        compose.onNodeWithText("Fandoms").performScrollTo().assertHasClickAction()
+        compose.onNodeWithTag("AO3 filter form").performScrollToNode(hasText("Fandoms"))
+        compose.onNodeWithText("Fandoms").assertHasClickAction().performClick()
+        compose.onNodeWithText("Type above to search AO3 fandoms.").assertExists()
     }
 
     companion object {

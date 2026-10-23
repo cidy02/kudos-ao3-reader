@@ -58,116 +58,127 @@ fun SaveSearchSheet(
     onSave: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    val tokens = LocalKudosTokens.current
-    val palette = SubjectPalette.fromHue(HomeFacts.workHue(emptyList(), name), tokens.theme)
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)
-    val chips = saveSearchChips(filters)
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
         containerColor = Color.Transparent,
         dragHandle = { BottomSheetDefaults.DragHandle() }
     ) {
+        SaveSearchContent(filters, name, onNameChange, onSave, onDismiss)
+    }
+}
+
+@Composable
+internal fun SaveSearchContent(
+    filters: AO3SearchFilters,
+    name: String,
+    onNameChange: (String) -> Unit,
+    onSave: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    val tokens = LocalKudosTokens.current
+    val palette = SubjectPalette.fromHue(HomeFacts.workHue(emptyList(), name), tokens.theme)
+    val chips = saveSearchChips(filters)
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .subjectScreenWash(palette)
+            .verticalScroll(rememberScrollState())
+            .padding(bottom = 28.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 8.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+            Text(
+                text = "Save Search",
+                modifier = Modifier.weight(1f),
+                color = tokens.primaryInk,
+                fontSize = 17.sp,
+                fontWeight = FontWeight.SemiBold,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+            )
+            TextButton(
+                onClick = onSave,
+                enabled = name.trim().isNotEmpty()
+            ) { Text("Save") }
+        }
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .subjectScreenWash(palette)
-                .verticalScroll(rememberScrollState())
-                .padding(bottom = 28.dp)
+                .padding(horizontal = SubjectMetrics.accountGutter)
+                .padding(top = 14.dp)
+                .subjectPanel()
+                .padding(horizontal = 14.dp, vertical = 12.dp)
         ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 8.dp, vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                TextButton(onClick = onDismiss) { Text("Cancel") }
-                Text(
-                    text = "Save Search",
-                    modifier = Modifier.weight(1f),
-                    color = tokens.primaryInk,
-                    fontSize = 17.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                )
-                TextButton(
-                    onClick = onSave,
-                    enabled = name.trim().isNotEmpty()
-                ) { Text("Save") }
-            }
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = SubjectMetrics.accountGutter)
-                    .padding(top = 14.dp)
-                    .subjectPanel()
-                    .padding(horizontal = 14.dp, vertical = 12.dp)
-            ) {
-                BasicTextField(
-                    value = name,
-                    onValueChange = onNameChange,
-                    singleLine = true,
-                    textStyle = TextStyle(color = tokens.primaryInk, fontSize = 17.sp),
-                    modifier = Modifier.fillMaxWidth().semantics { contentDescription = "Name" },
-                    decorationBox = { inner ->
-                        Box(Modifier.fillMaxWidth()) {
-                            if (name.isEmpty()) {
-                                Text("Name", color = tokens.secondaryInk, fontSize = 17.sp)
-                            }
-                            inner()
+            BasicTextField(
+                value = name,
+                onValueChange = onNameChange,
+                singleLine = true,
+                textStyle = TextStyle(color = tokens.primaryInk, fontSize = 17.sp),
+                modifier = Modifier.fillMaxWidth().semantics { contentDescription = "Name" },
+                decorationBox = { inner ->
+                    Box(Modifier.fillMaxWidth()) {
+                        if (name.isEmpty()) {
+                            Text("Name", color = tokens.secondaryInk, fontSize = 17.sp)
                         }
-                    }
-                )
-            }
-            Text(
-                text = "The name comes from your search. You can change it to anything.",
-                color = tokens.secondaryInk,
-                fontSize = 11.5.sp,
-                modifier = Modifier.padding(
-                    start = SubjectMetrics.accountGutter,
-                    end = SubjectMetrics.accountGutter,
-                    top = 6.dp
-                )
-            )
-            SectionRuleHeader(
-                title = "What gets saved",
-                modifier = Modifier.padding(top = 20.dp)
-            )
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = SubjectMetrics.accountGutter)
-                    .padding(top = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                if (chips.isEmpty()) {
-                    Text(
-                        text = "You haven't chosen any filters, so only the name will be saved.",
-                        color = tokens.secondaryInk,
-                        fontSize = 12.5.sp,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .subjectPanel()
-                            .padding(horizontal = 14.dp, vertical = 12.dp)
-                    )
-                } else {
-                    FlowRow(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .subjectPanel()
-                            .padding(horizontal = 14.dp, vertical = 13.dp),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        chips.forEach { SaveSearchSummaryChip(it) }
+                        inner()
                     }
                 }
+            )
+        }
+        Text(
+            text = "The name comes from your search. You can change it to anything.",
+            color = tokens.secondaryInk,
+            fontSize = 11.5.sp,
+            modifier = Modifier.padding(
+                start = SubjectMetrics.accountGutter,
+                end = SubjectMetrics.accountGutter,
+                top = 6.dp
+            )
+        )
+        SectionRuleHeader(
+            title = "What gets saved",
+            modifier = Modifier.padding(top = 20.dp)
+        )
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = SubjectMetrics.accountGutter)
+                .padding(top = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            if (chips.isEmpty()) {
                 Text(
-                    text = "Only the choices you changed are saved.",
+                    text = "You haven't chosen any filters, so only the name will be saved.",
                     color = tokens.secondaryInk,
-                    fontSize = 11.5.sp
+                    fontSize = 12.5.sp,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .subjectPanel()
+                        .padding(horizontal = 14.dp, vertical = 12.dp)
                 )
+            } else {
+                FlowRow(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .subjectPanel()
+                        .padding(horizontal = 14.dp, vertical = 13.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    chips.forEach { SaveSearchSummaryChip(it) }
+                }
             }
+            Text(
+                text = "Only the choices you changed are saved.",
+                color = tokens.secondaryInk,
+                fontSize = 11.5.sp
+            )
         }
     }
 }
