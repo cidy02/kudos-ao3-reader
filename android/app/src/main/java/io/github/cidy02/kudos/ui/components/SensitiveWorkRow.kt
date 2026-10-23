@@ -278,7 +278,7 @@ fun SensitiveWorkRow(
                                 rating = rating, categories = categories, warnings = warnings, isComplete = isComplete,
                                 figures = ledgerMetadata(language, wordCount, chapters, comments, kudos, bookmarks, hits,
                                     showsZeroStats, includesPerformance = bookmark == null && figuresIncludePerformance),
-                                dateText = bookmark?.date ?: dateText,
+                                dateText = bookmark?.date ?: io.github.cidy02.kudos.works.detail.WorkDetailDates.displayDate(dateText),
                                 dateLabel = if (bookmark == null) "Updated" else "Bookmarked",
                                 badges = bookmark?.badges.orEmpty(), footnote = bookmark?.footnote,
                                 isFavorite = isFavorite && !selecting,
@@ -448,10 +448,11 @@ fun SensitiveWorkRow(
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     if (dateText.isNotBlank()) {
+                                        val displayDate = io.github.cidy02.kudos.works.detail.WorkDetailDates.displayDate(dateText)
                                         CardMetaLine(
-                                            text = dateText,
+                                            text = displayDate,
                                             icon = androidx.compose.material.icons.Icons.Outlined.Event,
-                                            accessibilityLabel = "Updated $dateText",
+                                            accessibilityLabel = "Updated $displayDate",
                                             color = if (mutedHistory) tokens.secondaryInk else MaterialTheme.colorScheme.onSurfaceVariant
                                         )
                                     } else {

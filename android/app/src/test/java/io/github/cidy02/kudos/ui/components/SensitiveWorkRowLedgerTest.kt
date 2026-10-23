@@ -55,7 +55,7 @@ class SensitiveWorkRowLedgerTest {
 
         compose.onNodeWithText("DOCTOR WHO").assertExists()
         compose.onNodeWithText("English  ·  1,200 words  ·  1/1  ·  3 kudos").assertExists()
-        compose.onNodeWithContentDescription("Updated 09 Jul 2026").assertExists()
+        compose.onNodeWithContentDescription("Updated 07/09/2026").assertExists()
         // No row of word chips: the tray of four symbols says them.
         compose.onAllNodesWithText("Teen").assertCountEquals(0)
         compose.onAllNodesWithText("Relationships").assertCountEquals(0)
@@ -101,6 +101,7 @@ class SensitiveWorkRowLedgerTest {
         compose.onAllNodesWithText("A city that never sleeps.").assertCountEquals(0)
         compose.onNodeWithContentDescription("Bookmarked 07 Jul 2026").assertExists()
         compose.onAllNodesWithText("09 Jul 2026").assertCountEquals(0)
+        compose.onAllNodesWithText("07/09/2026").assertCountEquals(0)
         // Language, words and chapters only: the kudos are the work's, not the bookmark's.
         compose.onNodeWithText("English  ·  1,200 words  ·  1/1").assertExists()
         // Nothing is folded away on a bookmark's card.

@@ -1,9 +1,6 @@
 package io.github.cidy02.kudos.library
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -13,16 +10,14 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DragHandle
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.key
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.graphicsLayer
@@ -45,7 +40,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.zIndex
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
@@ -60,6 +54,8 @@ import io.github.cidy02.kudos.core.model.WorkCollection
 import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
 import io.github.cidy02.kudos.ui.subject.SubjectFieldLabel
 import io.github.cidy02.kudos.ui.subject.SubjectHeaderBlock
+import io.github.cidy02.kudos.ui.subject.SubjectRowSeparator
+import io.github.cidy02.kudos.ui.subject.subjectPanel
 import io.github.cidy02.kudos.ui.subject.subjectScreenWash
 import io.github.cidy02.kudos.works.WorkRepository
 import kotlinx.coroutines.launch
@@ -152,8 +148,7 @@ internal fun CollectionReorderContent(
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+                .padding(horizontal = 16.dp)
         ) {
             item {
                 SubjectHeaderBlock(
@@ -166,88 +161,91 @@ internal fun CollectionReorderContent(
             }
 
             item {
-                SubjectFieldLabel("Reading order", Modifier.padding(top = 8.dp, bottom = 4.dp))
+                SubjectFieldLabel("Reading order", Modifier.padding(top = 8.dp, bottom = 8.dp))
             }
 
-            itemsIndexed(ordered, key = { _, work -> work.id }) { index, work ->
-                DisposableEffect(work.id) { onDispose { bounds.remove(work.id) } }
-                val position = index + 1
-                val shape = RoundedCornerShape(12.dp)
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .zIndex(if (dragged == work.id) 1f else 0f)
-                        .onGloballyPositioned { bounds[work.id] = it.boundsInRoot() }
-                        .graphicsLayer {
-                            if (dragged == work.id) { translationX = displacement.x; translationY = displacement.y }
-                        }
-                        .clip(shape)
-                        .background(tokens.glassFill(0.09))
-                        .border(0.5.dp, tokens.glassStroke(0.13), shape)
-                        .pointerInput(work.id, ordered, saving) {
-                            // shortcut: drops target visible rows; accessibility moves reach off-screen rows.
-                            if (!saving) detectDragGesturesAfterLongPress(
-                                onDragStart = { offset ->
-                                    dragged = work.id
-                                    displacement = Offset.Zero
-                                    point = (bounds[work.id]?.topLeft ?: Offset.Zero) + offset
-                                },
-                                onDrag = { change, amount -> change.consume(); point += amount; displacement += amount },
-                                onDragEnd = {
-                                    val held = dragged
-                                    val from = ordered.indexOfFirst { it.id == held }
-                                    val target = bounds.entries.firstOrNull { it.key != held && it.value.contains(point) }?.key
-                                    val to = ordered.indexOfFirst { it.id == target }
-                                    onMove(from, to)
-                                    dragged = null
-                                },
-                                onDragCancel = { dragged = null })
-                        }
-                        .padding(horizontal = 12.dp, vertical = 10.dp)
-                        .semantics(mergeDescendants = true) {
-                            stateDescription = "Drag to reorder."
-                            if (!saving) customActions = buildList {
-                                if (index > 0) add(CustomAccessibilityAction("Move up") { onMove(index, index - 1); true })
-                                if (index < ordered.lastIndex) add(CustomAccessibilityAction("Move down") { onMove(index, index + 1); true })
+            item {
+                Column(Modifier.fillMaxWidth().subjectPanel().testTag("Collection reorder rows")) {
+                    for ((index, work) in ordered.withIndex()) {
+                        if (index > 0) SubjectRowSeparator(modifier = Modifier.testTag("Collection reorder separator"))
+                        key(work.id) {
+                            DisposableEffect(work.id) { onDispose { bounds.remove(work.id) } }
+                            val position = index + 1
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .zIndex(if (dragged == work.id) 1f else 0f)
+                                    .onGloballyPositioned { bounds[work.id] = it.boundsInRoot() }
+                                    .graphicsLayer {
+                                        if (dragged == work.id) { translationX = displacement.x; translationY = displacement.y }
+                                    }
+                                    .pointerInput(work.id, ordered, saving) {
+                                        // shortcut: drops target visible rows; accessibility moves reach off-screen rows.
+                                        if (!saving) detectDragGesturesAfterLongPress(
+                                            onDragStart = { offset ->
+                                                dragged = work.id
+                                                displacement = Offset.Zero
+                                                point = (bounds[work.id]?.topLeft ?: Offset.Zero) + offset
+                                            },
+                                            onDrag = { change, amount -> change.consume(); point += amount; displacement += amount },
+                                            onDragEnd = {
+                                                val held = dragged
+                                                val from = ordered.indexOfFirst { it.id == held }
+                                                val target = bounds.entries.firstOrNull { it.key != held && it.value.contains(point) }?.key
+                                                val to = ordered.indexOfFirst { it.id == target }
+                                                onMove(from, to)
+                                                dragged = null
+                                            },
+                                            onDragCancel = { dragged = null })
+                                    }
+                                    .padding(horizontal = 12.dp, vertical = 10.dp)
+                                    .semantics(mergeDescendants = true) {
+                                        stateDescription = "Drag to reorder."
+                                        if (!saving) customActions = buildList {
+                                            if (index > 0) add(CustomAccessibilityAction("Move up") { onMove(index, index - 1); true })
+                                            if (index < ordered.lastIndex) add(CustomAccessibilityAction("Move down") { onMove(index, index + 1); true })
+                                        }
+                                        contentDescription = if (work.author.isEmpty()) {
+                                            "$position. ${work.title}"
+                                        } else {
+                                            "$position. ${work.title}, ${work.author}"
+                                        }
+                                    },
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Text(
+                                    text = "$position",
+                                    color = palette.accent,
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    fontFamily = FontFamily.Monospace,
+                                    modifier = Modifier.widthIn(min = 24.dp)
+                                )
+                                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                    Text(
+                                        text = work.title,
+                                        color = tokens.primaryInk,
+                                        fontSize = 15.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    if (work.author.isNotEmpty()) {
+                                        Text(
+                                            text = work.author,
+                                            color = tokens.secondaryInk,
+                                            fontSize = 12.sp,
+                                            maxLines = Int.MAX_VALUE,
+                                            overflow = TextOverflow.Clip
+                                        )
+                                    }
+                                }
+                                Icon(Icons.Filled.DragHandle, contentDescription = null, tint = tokens.tertiaryInk,
+                                    modifier = Modifier.testTag("Collection reorder handle"))
                             }
-                            contentDescription = if (work.author.isEmpty()) {
-                                "$position. ${work.title}"
-                            } else {
-                                "$position. ${work.title}, ${work.author}"
-                            }
-                        },
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Text(
-                        text = "$position",
-                        color = palette.accent,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        fontFamily = FontFamily.Monospace,
-                        modifier = Modifier.widthIn(min = 24.dp)
-                    )
-                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                        Text(
-                            text = work.title,
-                            color = tokens.primaryInk,
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.Medium,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        if (work.author.isNotEmpty()) {
-                            Text(
-                                text = work.author,
-                                color = tokens.secondaryInk,
-                                fontSize = 12.sp,
-                                maxLines = Int.MAX_VALUE,
-                                overflow = TextOverflow.Clip
-                            )
                         }
                     }
-                    Icon(Icons.Filled.DragHandle, contentDescription = null, tint = tokens.tertiaryInk,
-                        modifier = Modifier.testTag("Collection reorder handle"))
                 }
             }
 

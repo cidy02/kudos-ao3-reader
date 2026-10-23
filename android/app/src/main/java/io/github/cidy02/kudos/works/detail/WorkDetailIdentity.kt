@@ -132,10 +132,11 @@ internal fun VerifiedAuthorByline(
     authorNames: List<String> = io.github.cidy02.kudos.works.resolveTappableAuthorNames(null, author),
     compact: Boolean = false,
     onOpenAuthor: (String) -> Unit = LocalOpenAuthor.current,
-    includesBy: Boolean = false
+    includesBy: Boolean = false,
+    tinted: Boolean = true
 ) {
     AuthorBylineRow(authorNames, author, LocalKudosTokens.current.scopePalette.accent,
-        compact = compact, includesBy = includesBy,
+        compact = compact, includesBy = includesBy, tinted = tinted,
         isLinked = { io.github.cidy02.kudos.network.ao3.author.AO3AuthorIdentities.byline(identities, it) != null },
         onOpenAuthor = { name ->
             io.github.cidy02.kudos.network.ao3.author.AO3AuthorIdentities.byline(identities, name)?.let(onOpenAuthor)
@@ -193,7 +194,8 @@ private fun AuthorBylineRow(
     isLinked: (String) -> Boolean,
     onOpenAuthor: (String) -> Unit,
     compact: Boolean = false,
-    includesBy: Boolean = false
+    includesBy: Boolean = false,
+    tinted: Boolean = true
 ) {
     val tokens = LocalKudosTokens.current
     val fontSize = if (compact) 12.sp else 15.5.sp
@@ -225,9 +227,9 @@ private fun AuthorBylineRow(
                 val linked = isLinked(name)
                 Text(
                     text = name,
-                    color = if (linked) accent else tokens.secondaryInk,
+                    color = if (linked && tinted) accent else tokens.secondaryInk,
                     fontSize = fontSize,
-                    fontWeight = if (compact) FontWeight.Normal else FontWeight.Medium,
+                    fontWeight = if (compact || !tinted) FontWeight.Normal else FontWeight.Medium,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier
