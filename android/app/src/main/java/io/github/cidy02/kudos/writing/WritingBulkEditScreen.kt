@@ -248,7 +248,8 @@ internal fun BulkOptionsScreen(picker: BulkPicker, options: List<AO3FormOption>,
                         val name = trimWritingTag(entry)
                         onChange { if (name in it.collectionsToAdd) it else it.copy(collectionsToAdd = it.collectionsToAdd + name) }
                         entry = ""
-                    }, enabled = trimWritingTag(entry).isNotEmpty()) { Text("Add", color = palette.accent) }
+                    }, enabled = trimWritingTag(entry).isNotEmpty(),
+                        colors = androidx.compose.material3.ButtonDefaults.textButtonColors(contentColor = palette.accent)) { Text("Add") }
                 }
             }
             item { WorkFormFootnote("Enter the collection name exactly as it appears on AO3. If AO3 doesn't recognize it, you will see that when you save.") }

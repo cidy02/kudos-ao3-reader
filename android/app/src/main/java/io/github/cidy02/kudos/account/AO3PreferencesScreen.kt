@@ -26,6 +26,8 @@ import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
+import io.github.cidy02.kudos.ui.subject.cardRow
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.automirrored.outlined.HelpOutline
 import androidx.compose.material.icons.outlined.HelpOutline
 import androidx.compose.material.icons.outlined.AlternateEmail
@@ -477,7 +479,7 @@ internal fun PreferenceHelpSheet(
     }
 ) {
     presentSheet(LocalKudosTokens.current.sheetGround) {
-        PreferenceHelpContent(ref, result, onRetry, onOpenOnAO3)
+        PreferenceHelpContent(ref, result, onRetry, onOpenOnAO3, onDone = onDismiss)
     }
 }
 
@@ -486,9 +488,19 @@ internal fun PreferenceHelpContent(
     ref: io.github.cidy02.kudos.network.ao3.preferences.AO3PreferenceHelpRef,
     result: AO3Result<io.github.cidy02.kudos.network.ao3.preferences.AO3PreferenceHelpContent>?,
     onRetry: () -> Unit,
-    onOpenOnAO3: () -> Unit
+    onOpenOnAO3: () -> Unit,
+    /** iOS's ✓ beside the title (A88d); the sheet passes its dismissal. */
+    onDone: (() -> Unit)? = null
 ) {
     val tokens = LocalKudosTokens.current
+    val title: @Composable (String) -> Unit = { text ->
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(text, style = MaterialTheme.typography.titleLarge, color = tokens.primaryInk, modifier = Modifier.weight(1f))
+            if (onDone != null) io.github.cidy02.kudos.ui.subject.ToolbarCircleButton(onClick = onDone, accessibilityName = "Done") {
+                Icon(Icons.Filled.Check, contentDescription = null, tint = tokens.scopePalette.accent)
+            }
+        }
+    }
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -499,11 +511,11 @@ internal fun PreferenceHelpContent(
     ) {
         when (result) {
             null -> {
-                Text(ref.title, style = MaterialTheme.typography.titleLarge, color = tokens.primaryInk)
+                title(ref.title)
                 io.github.cidy02.kudos.ui.components.LoadingStateCard("Loading help…")
             }
             is AO3Result.Failure -> {
-                Text(ref.title, style = MaterialTheme.typography.titleLarge, color = tokens.primaryInk)
+                title(ref.title)
                 io.github.cidy02.kudos.ui.components.ErrorStateCard(
                     title = "Couldn't load help",
                     message = result.error.displayMessage(),
@@ -515,10 +527,10 @@ internal fun PreferenceHelpContent(
             }
             is AO3Result.Success -> {
                 val content = result.value
-                Text(content.title, style = MaterialTheme.typography.titleLarge, color = tokens.primaryInk)
+                title(content.title)
                 content.entries.forEach { entry ->
                     Column(
-                        modifier = Modifier.fillMaxWidth().subjectPanel().padding(14.dp),
+                        modifier = Modifier.fillMaxWidth().cardRow().padding(14.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Text(entry.heading, style = MaterialTheme.typography.titleSmall, color = tokens.primaryInk)
