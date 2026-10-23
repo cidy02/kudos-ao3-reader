@@ -1,6 +1,5 @@
 package io.github.cidy02.kudos.library
 
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -160,32 +159,8 @@ fun CollectionEditorSheet(
                 .windowInsetsPadding(WindowInsets.safeDrawing)
                 .windowInsetsPadding(WindowInsets.ime)
         ) {
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 8.dp, vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                if (!editing) TextButton(onClick = onDismiss, enabled = !saving) { Text("Cancel") }
-                Text(
-                    text = if (editing) name else "New collection",
-                    modifier = Modifier.weight(1f),
-                    color = tokens.primaryInk,
-                    fontSize = 17.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                TextButton(
-                    onClick = { save(close = true) },
-                    enabled = canSave
-                ) {
-                    Text(
-                        text = if (editing) "Done" else "Create",
-                        color = if (canSave) tokens.theme.accentInk(palette.tint) else tokens.tertiaryInk
-                    )
-                }
-            }
+            CollectionEditorHeader(if (editing) name else "New collection", editing, saving, canSave,
+                onDismiss = onDismiss, onSave = { save(close = true) })
 
             val descriptionField: @Composable () -> Unit = {
                 SubjectFieldLabel("Description", Modifier.padding(top = 10.dp))
@@ -329,4 +304,22 @@ fun collectionDraftPalette(
     if (picked != null) return SubjectPalette.fromColor(picked, theme)
     if (hue != null) return SubjectPalette.fromHue(hue, theme)
     return fallback
+}
+
+@Composable
+internal fun CollectionEditorHeader(
+    title: String, editing: Boolean, saving: Boolean, canSave: Boolean,
+    onDismiss: () -> Unit, onSave: () -> Unit
+) {
+    val tokens = LocalKudosTokens.current
+    Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically) {
+        if (!editing) TextButton(onClick = onDismiss, enabled = !saving) { Text("Cancel") }
+        Text(title, Modifier.weight(1f), color = tokens.primaryInk, fontSize = 17.sp,
+            fontWeight = FontWeight.SemiBold)
+        TextButton(onClick = onSave, enabled = canSave) {
+            Text(if (editing) "Done" else "Create",
+                color = if (canSave) tokens.theme.accentInk(tokens.scopePalette.tint) else tokens.tertiaryInk)
+        }
+    }
 }

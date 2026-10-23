@@ -113,9 +113,14 @@ fun FandomWorksScreen(
     }
     val savedByUrl = remember(savedWorks) { BrowseLocalIndicators.index(savedWorks) }
     val browseDefault = remember { AO3BrowseRepository.browseBaseline() }
-    val activeFilters = remember(filters, fandomName) { activeFilterCount(filters, excluding = fandomName) }
+    val loadedPage = (state as? FandomWorksState.Loaded)?.page
+    val heroSummary = loadedPage?.summary?.completing(fandomName, loadedPage.currentPage, loadedPage.works.size)
+    // The fixed fandoms narrow this page even though the repository supplies them separately.
+    val displayedFilters = if (isTag) filters else filters.copy(fandom = includedFandoms.joinToString(", "))
+    val activeFilters = activeFilterCount(displayedFilters, excluding = heroSummary?.subject)
     val narrowed = filters != browseDefault
-    val palette = fandomListPalette(fandomName)
+    val palette = io.github.cidy02.kudos.ui.subject.SubjectPalette.fromHue(
+        io.github.cidy02.kudos.home.HomeFacts.coverHue(heroSummary?.subject ?: fandomName), LocalKudosTokens.current.theme)
     
     val context = LocalContext.current
     val autocompleteRepository = remember {
@@ -278,7 +283,7 @@ fun FandomWorksScreen(
                                             page = current.page.currentPage,
                                             onPageCount = current.page.works.size
                                         ),
-                                        filterLabels = summaryLabels(filters, excluding = fandomName),
+                                        filterLabels = summaryLabels(displayedFilters, excluding = heroSummary?.subject),
                                         subjectCategory = summary.subjectCategory(current.page.works),
                                         onEditFilters = { showFilterSheet = true },
                                         // iOS: the page's own head, with the sort beside the

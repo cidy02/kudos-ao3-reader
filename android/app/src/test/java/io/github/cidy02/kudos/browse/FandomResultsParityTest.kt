@@ -20,6 +20,9 @@ import io.github.cidy02.kudos.data.local.KudosDatabase
 import io.github.cidy02.kudos.files.WorkFileStore
 import io.github.cidy02.kudos.network.ao3.*
 import io.github.cidy02.kudos.network.ao3.browse.AO3BrowseRepository
+import io.github.cidy02.kudos.ui.subject.LocalShellWashes
+import io.github.cidy02.kudos.ui.subject.ShellWashes
+import io.github.cidy02.kudos.home.HomeFacts
 import io.github.cidy02.kudos.ui.theme.*
 import io.github.cidy02.kudos.works.WorkRepository
 import java.nio.file.Files
@@ -64,12 +67,14 @@ class FandomResultsParityTest {
         directory.toFile().deleteRecursively()
     }
 
-    private fun show(tag: Boolean = false) {
+    private val washes = ShellWashes()
+
+    private fun show(tag: Boolean = false, fandom: String = "A fandom") {
         val chrome = PushedShellChrome()
         compose.setContent { if (visible) KudosTheme(KudosThemeMode.Light) {
-            CompositionLocalProvider(LocalPushedShellChrome provides chrome) {
+            CompositionLocalProvider(LocalPushedShellChrome provides chrome, LocalShellWashes provides washes) {
                 Box {
-                    FandomWorksScreen("A fandom", works, {}, repository = repository, isTag = tag, workImporter = importer)
+                    FandomWorksScreen(fandom, works, {}, repository = repository, isTag = tag, workImporter = importer)
                     Row(Modifier.align(Alignment.TopEnd)) { chrome.trailingContent?.invoke(this) }
                 }
             }
@@ -128,6 +133,31 @@ class FandomResultsParityTest {
         compose.onNodeWithTag("AO3 filter form").performScrollToNode(hasText("Fandoms"))
         compose.onNodeWithText("Fandoms").assertHasClickAction().performClick()
         compose.onNodeWithText("Type above to search AO3 fandoms.").assertExists()
+    }
+
+    @Test fun fandomChipAndCountDescribeTheFixedFandomWhenTheResultHeadingNamesAnotherSubject() {
+        answer = AO3Result.Success(AO3HttpResponse("https://archiveofourown.org/works", 200, emptyMap(),
+            "<div id='main'><h2 class='heading'>1 - 1 of 12 Works in Star Wars - All Media Types</h2>" + page() + "</div>"))
+        show(fandom = "Doctor Who")
+        compose.onNodeWithText("Doctor Who").assertExists()
+        compose.onNodeWithContentDescription("1 Filters").assertExists()
+        compose.onNodeWithContentDescription("0 Filters").assertDoesNotExist()
+    }
+
+    @Test fun fandomWashUsesTheResultSubjectAndNotTheNavigationFandom() {
+        answer = AO3Result.Success(AO3HttpResponse("https://archiveofourown.org/works", 200, emptyMap(),
+            "<div id='main'><h2 class='heading'>1 - 1 of 12 Works in Star Wars - All Media Types</h2>" + page() + "</div>"))
+        show(fandom = "Doctor Who")
+        compose.runOnIdle { assertEquals(HomeFacts.coverHue("Star Wars - All Media Types"), washes.page!!.palette.hue, 0.000001) }
+    }
+
+    @Test fun tagWashAlsoUsesTheResultSubjectAndDoesNotInventAFandomFilter() {
+        answer = AO3Result.Success(AO3HttpResponse("https://archiveofourown.org/works", 200, emptyMap(),
+            "<div id='main'><h2 class='heading'>1 - 1 of 12 Works in Star Wars - All Media Types</h2>" + page() + "</div>"))
+        show(tag = true, fandom = "Doctor Who")
+        compose.onNodeWithContentDescription("0 Filters").assertExists()
+        compose.onNodeWithText("Doctor Who").assertDoesNotExist()
+        compose.runOnIdle { assertEquals(HomeFacts.coverHue("Star Wars - All Media Types"), washes.page!!.palette.hue, 0.000001) }
     }
 
     companion object {
