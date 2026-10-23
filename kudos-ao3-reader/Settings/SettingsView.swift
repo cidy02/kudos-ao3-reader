@@ -443,36 +443,41 @@ struct ReplaceLibraryConfirmationView: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("This backup") {
-                    LabeledContent("Works in your library", value: "\(localWorks.count)")
-                    LabeledContent("Works in this backup", value: "\(manifest.works.count)")
-                    LabeledContent("Will be added", value: "\(willAdd)")
-                    LabeledContent("Will be removed", value: "\(willRemove)")
-                    LabeledContent("In both", value: "\(inBoth)")
-                }
-                if backupIsMuchSmaller {
+                // Themed as the import sheet it follows (A87: white under Sepia).
+                Group {
+                    Section("This backup") {
+                        LabeledContent("Works in your library", value: "\(localWorks.count)")
+                        LabeledContent("Works in this backup", value: "\(manifest.works.count)")
+                        LabeledContent("Will be added", value: "\(willAdd)")
+                        LabeledContent("Will be removed", value: "\(willRemove)")
+                        LabeledContent("In both", value: "\(inBoth)")
+                    }
+                    if backupIsMuchSmaller {
+                        Section {
+                            Text("This backup has far fewer works than your current library.")
+                                .foregroundStyle(.orange)
+                        }
+                    }
                     Section {
-                        Text("This backup has far fewer works than your current library.")
-                            .foregroundStyle(.orange)
+                        Toggle(isOn: $acknowledgedRemoval) {
+                            Text("Remove \(willRemove) works that are not in this backup")
+                        }
+                        .accentFill()
+                        if syncIsConnected {
+                            Toggle("Pause Library Sync on this device", isOn: $pauseSync).accentFill()
+                            Text("If you leave Library Sync on, it will add the removed works back. "
+                                + "Pause it on this device?")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        }
+                        safetyBackupStatus
+                    } footer: {
+                        Text(Self.replaceFooterText)
                     }
                 }
-                Section {
-                    Toggle(isOn: $acknowledgedRemoval) {
-                        Text("Remove \(willRemove) works that are not in this backup")
-                    }
-                    .accentFill()
-                    if syncIsConnected {
-                        Toggle("Pause Library Sync on this device", isOn: $pauseSync).accentFill()
-                        Text("If you leave Library Sync on, it will add the removed works back. "
-                            + "Pause it on this device?")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
-                    safetyBackupStatus
-                } footer: {
-                    Text(Self.replaceFooterText)
-                }
+                .appThemedRows()
             }
+            .appThemedScroll()
             .navigationTitle("Replace Library")
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)

@@ -459,6 +459,9 @@ final class CommentsModel {
                 ) else { return }
                 guard isCurrent(expected, auth) else { return }
                 chapterPageWasKept = isKeptAfterFailure
+                // A kept or cached page marks the screen loaded, but nothing is shown until the
+                // work's details below: keep the spinner rather than "No Comments Yet" (A87).
+                if page == nil { phase = .loading }
                 presentedPage = Self.chapterPage(
                     chapterPage,
                     including: focusedPage,
