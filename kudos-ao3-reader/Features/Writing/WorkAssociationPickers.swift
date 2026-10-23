@@ -560,10 +560,12 @@ struct WorkCreatorsPickerView: View {
         .cardList()
         // Rows at their own padding, not the List minimum (L3-FORM-1).
         .environment(\.defaultMinListRowHeight, 0)
-        // Blank, as WritingTagsEditor's: the header block names the page, and a title
-        // set before the wash outranks its blank one, so the bar named it a second time.
-        .navigationTitle("")
+        // No iOS title: the header block names the page, and a title set before the wash
+        // outranked its blank one, so the bar named it a second time. macOS keeps its title.
         .subjectScreenWash(palette: palette)
+        #if os(macOS)
+        .navigationTitle("Co-creators")
+        #endif
     }
 
     @ViewBuilder
@@ -631,6 +633,7 @@ struct WorkParentWorkPickerView: View {
     let languageOptions: [AO3FormOption]
 
     @Environment(ThemeManager.self) private var theme
+    @FocusState private var urlFocused: Bool
 
     @ScaledMetric(relativeTo: .caption) private var footnoteSize: CGFloat = 11.5
 
@@ -675,20 +678,27 @@ struct WorkParentWorkPickerView: View {
         .cardList()
         // Rows at their own padding, not the List minimum (L3-FORM-1).
         .environment(\.defaultMinListRowHeight, 0)
-        // Blank, as above: the header block already says "Inspired by".
-        .navigationTitle("")
+        // As above: the header block already says "Inspired by"; macOS keeps its title.
         .subjectScreenWash(palette: palette)
+        #if os(macOS)
+        .navigationTitle("Inspired by")
+        #endif
     }
 
     private var sourcePanel: some View {
         VStack(spacing: 0) {
             SubjectFormRow(label: "URL", arrangement: .control) {
                 // Wraps rather than scrolling out of sight ("https://archiv…" at the
-                // largest text); a return typed into it is dropped, as a URL has none.
+                // largest text). A URL has no line breaks: a pasted one loses them, and Return
+                // ends editing, as it did in the one-line field.
                 TextField("https://archiveofourown.org/works/…", text: Binding(
                     get: { parentWork.url },
-                    set: { parentWork.url = $0.replacingOccurrences(of: "\n", with: "") }
+                    set: { typed in
+                        if typed.contains(where: \.isNewline) { urlFocused = false }
+                        parentWork.url = typed.filter { !$0.isNewline }
+                    }
                 ), axis: .vertical)
+                    .focused($urlFocused)
                     .lineLimit(1...4)
                     #if os(iOS)
                     .textInputAutocapitalization(.never)
