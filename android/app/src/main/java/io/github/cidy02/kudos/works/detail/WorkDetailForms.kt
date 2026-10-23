@@ -11,6 +11,8 @@ import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.outlined.Layers
 import androidx.compose.material.icons.outlined.Cancel
 import androidx.compose.material.icons.outlined.Warning
+import androidx.compose.material.icons.automirrored.outlined.ListAlt
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ModalBottomSheet
@@ -38,6 +40,7 @@ import io.github.cidy02.kudos.settings.SettingsActionRow
 import io.github.cidy02.kudos.settings.SettingsSection
 import io.github.cidy02.kudos.settings.SubjectTextFieldRow
 import io.github.cidy02.kudos.ui.subject.*
+import io.github.cidy02.kudos.ui.components.WorkActionLabels
 
 /** Grouped form sheets on the same surfaces as My Copy, with no Material field/button chrome. */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -217,14 +220,20 @@ internal fun WorkDetailQueueForm(
     DetailForm("Add to Queue", onClose, allowDismiss = !working, registerShellChrome = registerShellChrome,
         actions = { FormToolbarAction("Done", !working, onClose) }) {
         item { SettingsSection(footnote = null) {
-            SubjectTextFieldRow("New queue", newName, "New queue", onName, fieldOnly = true, enabled = !working)
-            SettingsActionRow("Add", onCreate, enabled = newName.trim().isNotEmpty() && !working)
+            SubjectTextFieldRow("New queue", newName, "New queue", onName, fieldOnly = true, enabled = !working,
+                onSubmit = { if (newName.isNotBlank() && !working) onCreate() },
+                trailing = {
+                    TextButton(onClick = onCreate, enabled = newName.isNotBlank() && !working) { Text("Add") }
+                })
         } }
         item { SettingsSection(label = "Queues",
             footnote = "A queue with Keep works offline turned on keeps its works downloaded for you.") {
             queues.forEachIndexed { index, queue ->
                 if (index > 0) SubjectRowSeparator()
-                SubjectFormRow(queue.displayName, onClick = { if (!working && !preserving) onAdd(queue) }, trailing = {
+                SubjectFormRow(queue.displayName,
+                    leadingIcon = if (queue.kindRaw == io.github.cidy02.kudos.core.model.ReadingQueueKind.SAVED_FOR_LATER)
+                        WorkActionLabels.savedForLaterIcon else Icons.AutoMirrored.Outlined.ListAlt,
+                    onClick = { if (!working && !preserving) onAdd(queue) }, trailing = {
                     if (queue.id == workingQueueId) CircularProgressIndicator(color = LocalKudosTokens.current.scopePalette.accent,
                         trackColor = LocalKudosTokens.current.separator, modifier = Modifier.size(20.dp))
                     else if (queue.id in selected) Text("✓", color = LocalKudosTokens.current.scopePalette.accent, fontSize = 15.sp, lineHeight = 21.sp,

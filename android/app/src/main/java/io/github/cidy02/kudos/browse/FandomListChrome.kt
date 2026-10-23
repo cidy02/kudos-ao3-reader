@@ -23,6 +23,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -54,6 +56,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.foundation.layout.Spacer
 import io.github.cidy02.kudos.home.HomeFacts
@@ -448,8 +451,7 @@ fun FandomListFilterSheet(
     groupsVariants: Boolean,
     library: FandomLibraryIndex,
     palette: SubjectPalette,
-    onApply: (FandomListFilterOptions) -> Unit,
-    onDismiss: () -> Unit
+    onApply: (FandomListFilterOptions) -> Unit
 ) {
     var draft by remember(options) { mutableStateOf(options) }
     val tallies = remember(families, library) { FandomFamilyFilters.tallies(families, library) }
@@ -457,10 +459,12 @@ fun FandomListFilterSheet(
         FandomFamilyFilters.tagCount(FandomFamilyFilters.apply(families, draft, library))
     }
     val tokens = LocalKudosTokens.current
-    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = tokens.theme.cardBackdrop) {
+    ModalBottomSheet(onDismissRequest = { onApply(draft) }, containerColor = tokens.theme.cardBackdrop,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .fillMaxHeight(0.9f)
                 .padding(horizontal = 16.dp)
                 .padding(bottom = 28.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp)
@@ -472,59 +476,61 @@ fun FandomListFilterSheet(
                     enabled = draft.hasActiveFilters
                 ) { Text("Reset") }
             }
-            SheetLabel("Minimum works")
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                MinimumWorks.entries.forEach { choice ->
-                    SubjectChip(
-                        text = choice.title,
-                        style = SubjectChipStyle.Pill(draft.minimumWorks == choice),
-                        palette = palette,
-                        modifier = Modifier.clickable { draft = draft.copy(minimumWorks = choice) }
+            Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
+                SheetLabel("Minimum works")
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    MinimumWorks.entries.forEach { choice ->
+                        SubjectChip(
+                            text = choice.title,
+                            style = SubjectChipStyle.Pill(draft.minimumWorks == choice),
+                            palette = palette,
+                            modifier = Modifier.clickable { draft = draft.copy(minimumWorks = choice) }
+                        )
+                    }
+                }
+                if (draft.minimumWorks != MinimumWorks.Any) {
+                    val hidden = tallies.tagsBelowMinimumWorks(draft.minimumWorks)
+                    val floor = draft.minimumWorks.title.removeSuffix("+")
+                    Text(
+                        text = "${groupedCount(hidden)} tags will be hidden because they have fewer than $floor works.",
+                        color = tokens.secondaryInk,
+                        fontSize = 11.5.sp
                     )
                 }
+                Spacer(Modifier.height(16.dp))
+                SheetLabel("Tag kinds")
+                FilterToggle("Hide RPF tags", tagCountLabel(tallies.rpfTags), draft.hideRPF, palette.accent) {
+                    draft = draft.copy(hideRPF = it)
+                }
+                FilterToggle("Hide All Media Types umbrellas", tagCountLabel(tallies.allMediaTypesTags), draft.hideAllMediaTypes, palette.accent) {
+                    draft = draft.copy(hideAllMediaTypes = it)
+                }
+                FilterToggle("Hide Related Fandoms groupings", tagCountLabel(tallies.relatedFandomsTags), draft.hideRelatedFandoms, palette.accent) {
+                    draft = draft.copy(hideRelatedFandoms = it)
+                }
+                Spacer(Modifier.height(16.dp))
+                SheetLabel("Yours")
+                FilterToggle("Favourited only", tagCountLabel(tallies.favouritedTags), draft.favouritedOnly, palette.accent) {
+                    draft = draft.copy(favouritedOnly = it)
+                }
+                FilterToggle("I have downloads from", tagCountLabel(tallies.downloadTags), draft.downloadsOnly, palette.accent) {
+                    draft = draft.copy(downloadsOnly = it)
+                }
+                Spacer(Modifier.height(16.dp))
+                SheetLabel("Grouping")
+                FilterToggle(
+                    title = "Only fandoms with more than one tag",
+                    detail = if (groupsVariants) {
+                        val count = tallies.multiTagFamilies
+                        if (count == 1) "1 fandom" else "${groupedCount(count)} fandoms"
+                    } else {
+                        "Turn on Group variants to use this filter"
+                    },
+                    checked = draft.multiTagOnly && groupsVariants,
+                    accent = palette.accent,
+                    enabled = groupsVariants
+                ) { draft = draft.copy(multiTagOnly = it) }
             }
-            if (draft.minimumWorks != MinimumWorks.Any) {
-                val hidden = tallies.tagsBelowMinimumWorks(draft.minimumWorks)
-                val floor = draft.minimumWorks.title.removeSuffix("+")
-                Text(
-                    text = "${groupedCount(hidden)} tags will be hidden because they have fewer than $floor works.",
-                    color = tokens.secondaryInk,
-                    fontSize = 11.5.sp
-                )
-            }
-            Spacer(Modifier.height(16.dp))
-            SheetLabel("Tag kinds")
-            FilterToggle("Hide RPF tags", tagCountLabel(tallies.rpfTags), draft.hideRPF, palette.accent) {
-                draft = draft.copy(hideRPF = it)
-            }
-            FilterToggle("Hide All Media Types umbrellas", tagCountLabel(tallies.allMediaTypesTags), draft.hideAllMediaTypes, palette.accent) {
-                draft = draft.copy(hideAllMediaTypes = it)
-            }
-            FilterToggle("Hide Related Fandoms groupings", tagCountLabel(tallies.relatedFandomsTags), draft.hideRelatedFandoms, palette.accent) {
-                draft = draft.copy(hideRelatedFandoms = it)
-            }
-            Spacer(Modifier.height(16.dp))
-            SheetLabel("Yours")
-            FilterToggle("Favourited only", tagCountLabel(tallies.favouritedTags), draft.favouritedOnly, palette.accent) {
-                draft = draft.copy(favouritedOnly = it)
-            }
-            FilterToggle("I have downloads from", tagCountLabel(tallies.downloadTags), draft.downloadsOnly, palette.accent) {
-                draft = draft.copy(downloadsOnly = it)
-            }
-            Spacer(Modifier.height(16.dp))
-            SheetLabel("Grouping")
-            FilterToggle(
-                title = "Only fandoms with more than one tag",
-                detail = if (groupsVariants) {
-                    val count = tallies.multiTagFamilies
-                    if (count == 1) "1 fandom" else "${groupedCount(count)} fandoms"
-                } else {
-                    "Turn on Group variants to use this filter"
-                },
-                checked = draft.multiTagOnly && groupsVariants,
-                accent = palette.accent,
-                enabled = groupsVariants
-            ) { draft = draft.copy(multiTagOnly = it) }
             TextButton(
                 onClick = { onApply(draft) },
                 modifier = Modifier

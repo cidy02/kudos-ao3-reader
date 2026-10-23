@@ -44,6 +44,7 @@ import io.github.cidy02.kudos.ui.subject.SubjectMetrics
 import io.github.cidy02.kudos.ui.subject.SubjectPalette
 import io.github.cidy02.kudos.ui.subject.SubjectStatCell
 import io.github.cidy02.kudos.ui.subject.SubjectStatStrip
+import io.github.cidy02.kudos.ui.subject.isAccessibilityFontScale
 import java.text.NumberFormat
 
 /**
@@ -245,13 +246,17 @@ private fun SearchSubjectPageHeader(
         }
     }
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        val stackSort = isAccessibilityFontScale()
         SubjectHeaderBlock(
             kicker = "Search results",
             title = "${numberFormat.format(summary.total)} $worksLabel",
             subtitle = summary.subject,
             palette = palette,
-            trailing = sortControl
+            trailing = if (stackSort) null else sortControl
         )
+        if (stackSort && sortControl != null) Box(Modifier.padding(horizontal = SubjectMetrics.headerGutter)) {
+            sortControl()
+        }
         SubjectStatStrip(
             cells = listOf(
                 SubjectStatCell(numberFormat.format(summary.total), "Works"),

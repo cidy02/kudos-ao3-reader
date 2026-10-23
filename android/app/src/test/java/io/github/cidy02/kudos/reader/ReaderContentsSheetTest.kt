@@ -5,6 +5,12 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipeLeft
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Density
 import io.github.cidy02.kudos.reader.readium.ReadiumTocAdapter
 import io.github.cidy02.kudos.ui.theme.KudosTheme
 import io.github.cidy02.kudos.ui.theme.KudosThemeMode
@@ -20,6 +26,37 @@ import org.robolectric.annotation.Config
 @Config(sdk = [34], application = Application::class)
 class ReaderContentsSheetTest {
     @get:Rule val compose = createComposeRule()
+
+    @Test fun chapterActionsAreRevealedBySwipeAndNeedAKnownPosition() {
+        val ready = ReaderTocEntry("Chapter 1: The Arcade", "ch1.xhtml")
+        val pending = ReaderTocEntry("Chapter 2: Nine Minutes", "ch2.xhtml")
+        val selected = mutableListOf<ReaderTocEntry>()
+        val bookmarked = mutableListOf<ReaderTocEntry>()
+        val noted = mutableListOf<ReaderTocEntry>()
+        compose.setContent {
+            KudosTheme(KudosThemeMode.Light) {
+                CompositionLocalProvider(LocalDensity provides Density(LocalDensity.current.density, 2f)) {
+                    ReaderContentsSheet(listOf(ready, pending), emptyList(), emptyList(),
+                        onSelectEntry = { selected += it }, onSelectAnnotation = {}, onDeleteAnnotation = {},
+                        onBookmarkEntry = { bookmarked += it }, onAddNoteToEntry = { noted += it },
+                        startPercent = { if (it == ready) 0 else null })
+                }
+            }
+        }
+        compose.onNodeWithText("Bookmark").assertDoesNotExist()
+        compose.onNodeWithText("Add Note").assertDoesNotExist()
+        compose.onNodeWithText(ready.title).performTouchInput { swipeLeft() }
+        compose.onNodeWithText("Bookmark").assertIsDisplayed().performClick()
+        assertEquals(listOf(ready), bookmarked)
+        compose.onNodeWithText(ready.title).performTouchInput { swipeLeft() }
+        compose.onNodeWithText("Add Note").performClick()
+        assertEquals(listOf(ready), noted)
+        compose.onNodeWithText(pending.title).performTouchInput { swipeLeft() }
+        compose.onNodeWithText("Bookmark").assertDoesNotExist()
+        compose.onNodeWithText("Add Note").assertDoesNotExist()
+        compose.onNodeWithText("Go").performClick()
+        assertEquals(listOf(pending), selected)
+    }
 
     @Test fun theSheetHasATitleADoneAndEachChaptersStart() {
         var done = 0

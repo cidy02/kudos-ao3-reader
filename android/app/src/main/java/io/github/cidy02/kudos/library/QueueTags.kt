@@ -23,6 +23,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.RemoveCircle
+import androidx.compose.material.icons.outlined.Circle
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -40,6 +43,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -219,15 +223,35 @@ private fun SharedTagSheet(
                         all.forEachIndexed { index, tag ->
                             if (index > 0) SubjectRowSeparator()
                             val state = coverage[tag.id] ?: TagCoverage.None
-                            SubjectFormRow(
+                            val toggleTag: () -> Unit = {
+                                scope.launch {
+                                    toggle(tag.name)
+                                    reload += 1
+                                }
+                            }
+                            if (noun == "work") Row(
+                                Modifier.fillMaxWidth().clickable(onClick = toggleTag)
+                                    .semantics(mergeDescendants = true) { stateDescription = BulkTags.spoken(state, noun) }
+                                    .padding(horizontal = 13.dp, vertical = 11.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                Icon(
+                                    when (state) {
+                                        TagCoverage.All -> Icons.Filled.CheckCircle
+                                        TagCoverage.Some -> Icons.Filled.RemoveCircle
+                                        TagCoverage.None -> Icons.Outlined.Circle
+                                    },
+                                    contentDescription = null,
+                                    tint = if (state == TagCoverage.None) tokens.secondaryInk else palette.accent,
+                                    modifier = Modifier.testTag("Tag selection mark")
+                                )
+                                Text(tag.name, Modifier.weight(1f), color = tokens.primaryInk, fontSize = 14.5.sp)
+                                if (state == TagCoverage.Some) Text("some", color = tokens.secondaryInk, fontSize = 13.sp)
+                            } else SubjectFormRow(
                                 label = tag.name,
                                 modifier = Modifier.semantics { stateDescription = BulkTags.spoken(state, noun) },
-                                onClick = {
-                                    scope.launch {
-                                        toggle(tag.name)
-                                        reload += 1
-                                    }
-                                },
+                                onClick = toggleTag,
                                 trailing = {
                                     Text(
                                         text = when (state) {
@@ -519,7 +543,7 @@ private fun QueueTagEditDialog(
         onDismissRequest = onDismiss,
         title = { Text("Edit tag") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Name") }, singleLine = true)
                 Text(
                     text = if (conflict?.name == trimmed) {
@@ -532,10 +556,6 @@ private fun QueueTagEditDialog(
                     fontSize = 12.sp,
                     color = LocalKudosTokens.current.secondaryInk
                 )
-                TextButton(onClick = onRemove) {
-                    Text(if (count == 0) "Remove from this queue" else "Remove tag from $count work${if (count == 1) "" else "s"}",
-                        color = androidx.compose.material3.MaterialTheme.colorScheme.error)
-                }
                 if (siblings.isNotEmpty()) {
                     SubjectFieldLabel("Merge into another tag")
                     siblings.forEach { sibling ->
@@ -556,6 +576,11 @@ private fun QueueTagEditDialog(
                         fontSize = 12.sp,
                         color = LocalKudosTokens.current.secondaryInk
                     )
+                }
+                SubjectFieldLabel("Remove")
+                TextButton(onClick = onRemove) {
+                    Text(if (count == 0) "Remove from this queue" else "Remove tag from $count work${if (count == 1) "" else "s"}",
+                        color = androidx.compose.material3.MaterialTheme.colorScheme.error)
                 }
             }
         },

@@ -294,8 +294,7 @@ fun FandomListScreen(
             onApply = {
                 options = it
                 showFilters = false
-            },
-            onDismiss = { showFilters = false }
+            }
         )
     }
 }
