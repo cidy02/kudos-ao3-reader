@@ -47,21 +47,29 @@ nonisolated struct KokoroPronunciationStore: Sendable {
         self.url = url ?? Self.defaultURL()
     }
 
+    /// Playback's forgiving read. The pre-move file is brought over only when the current one is
+    /// missing (through `loadForEditing`); an unreadable current file reads as empty and is left
+    /// alone, where it used to be overwritten with the older pre-move copy (A91).
     func load() -> File {
-        if let data = try? Data(contentsOf: url),
-           let file = try? JSONDecoder().decode(File.self, from: data) {
-            return file
+        (try? loadForEditing()) ?? Self.empty
+    }
+
+    /// Editing must distinguish a missing file from an unreadable one, so it never
+    /// reports an empty list or overwrites corrections after a failed read.
+    func loadForEditing() throws -> File {
+        do {
+            return try JSONDecoder().decode(File.self, from: Data(contentsOf: url))
+        } catch CocoaError.fileReadNoSuchFile {
+            guard url == Self.defaultURL() else { return Self.empty }
         }
-        // Fall back to the pre-move location exactly once, so a reader who
-        // made corrections before they were moved out of the backup-excluded
-        // model directory does not silently lose them.
-        if url == Self.defaultURL(),
-           let data = try? Data(contentsOf: Self.legacyURL()),
-           let file = try? JSONDecoder().decode(File.self, from: data) {
-            try? save(file)
-            return file
+        let file: File
+        do {
+            file = try JSONDecoder().decode(File.self, from: Data(contentsOf: Self.legacyURL()))
+        } catch CocoaError.fileReadNoSuchFile {
+            return Self.empty
         }
-        return Self.empty
+        try save(file)
+        return file
     }
 
     func save(_ file: File) throws {
@@ -70,6 +78,14 @@ nonisolated struct KokoroPronunciationStore: Sendable {
         // Deliberately NOT excluded from backup — see `defaultURL()`.
         let data = try JSONEncoder().encode(file)
         try data.write(to: url, options: .atomic)
+    }
+
+    /// Apply a paste, rename or multi-delete in one write, preserving every other layer.
+    func updateGlobal(_ overrides: [String: String] = [:], removing words: [String] = []) throws {
+        var file = try loadForEditing()
+        for word in words { file.global[word] = nil }
+        file.global.merge(overrides) { _, new in new }
+        try save(file)
     }
 
     /// Which layer an override belongs to. Work beats fandom beats global,
@@ -96,7 +112,7 @@ nonisolated struct KokoroPronunciationStore: Sendable {
     /// case-sensitive custom lexicon before the lower-cased one, so `Anna`
     /// and `anna` are deliberately distinct entries rather than folded.
     func setOverride(_ ipa: String, for word: String, in layer: Layer = .global) throws {
-        var file = load()
+        var file = try loadForEditing()
         switch layer {
         case .global: file.global[word] = ipa
         case .fandom(let key): file.fandoms[key, default: [:]][word] = ipa
@@ -108,7 +124,7 @@ nonisolated struct KokoroPronunciationStore: Sendable {
     /// Remove one override, and drop the layer's dictionary when it empties
     /// so the file does not accumulate empty objects per work.
     func removeOverride(for word: String, in layer: Layer = .global) throws {
-        var file = load()
+        var file = try loadForEditing()
         switch layer {
         case .global:
             file.global[word] = nil
