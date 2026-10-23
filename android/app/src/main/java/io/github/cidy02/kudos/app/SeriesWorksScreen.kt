@@ -53,7 +53,6 @@ import io.github.cidy02.kudos.network.ao3.series.AO3SeriesRepository
 import io.github.cidy02.kudos.ui.components.EmptyStateCard
 import io.github.cidy02.kudos.ui.components.ErrorStateCard
 import io.github.cidy02.kudos.author.AuthorLoadMoreRow
-import io.github.cidy02.kudos.ui.components.KudosSectionHeader
 import io.github.cidy02.kudos.ui.components.SelectableRemoteWorkRow
 import io.github.cidy02.kudos.ui.components.SensitiveWorkRow
 import io.github.cidy02.kudos.ui.components.rememberRemoteWorkSelection
@@ -76,7 +75,8 @@ fun SeriesWorksScreen(
     onOpenAo3: (String) -> Unit = {},
     formRepository: io.github.cidy02.kudos.network.ao3.writing.AO3SeriesFormRepository? = null,
     writes: io.github.cidy02.kudos.network.ao3.writes.AO3WriteRepository? = null,
-    onOpenAuthor: (io.github.cidy02.kudos.network.ao3.author.AO3AuthorRoute) -> Unit = {}
+    onOpenAuthor: (io.github.cidy02.kudos.network.ao3.author.AO3AuthorRoute) -> Unit = {},
+    cardFacts: String = ""
 ) {
     val sessionGeneration by seriesRepository.sessionChanges.collectAsState()
     var editing by remember(seriesUrl) { mutableStateOf<Boolean?>(null) }
@@ -217,7 +217,7 @@ fun SeriesWorksScreen(
     ) {
         Spacer(Modifier.windowInsetsTopHeight(WindowInsets.statusBars))
         Spacer(Modifier.height(56.dp))
-        SubjectHeaderBlock(kicker = "Series", title = title, palette = palette)
+        if (state !is SeriesWorksState.Loaded) SubjectHeaderBlock(kicker = "Series", title = title, palette = palette)
 
         when (val current = state) {
             SeriesWorksState.Loading -> SubjectSkeletonList("Loading series", count = 4)
@@ -250,21 +250,14 @@ fun SeriesWorksScreen(
                         // the title.
                         item {
                             val detail = current.detail
-                            io.github.cidy02.kudos.author.AO3SeriesRow(
-                                series = io.github.cidy02.kudos.network.ao3.author.AO3AuthorSeriesSummary(
-                                    id = 0, title = detail.title, creators = detail.creators,
-                                    creatorIdentities = detail.creatorIdentities,
-                                    fandoms = detail.page.works.firstOrNull()?.fandoms.orEmpty().take(1),
-                                    summary = detail.summary, words = detail.words, workCount = detail.workCount,
-                                    dateUpdated = detail.dateUpdated, isComplete = detail.isComplete, url = seriesUrl,
-                                    bookmarkCount = detail.bookmarkCount),
-                                displayMode = io.github.cidy02.kudos.author.AuthorDisplayMode.Ledger,
-                                onOpenSeries = null, showsTitle = false, onOpenAuthor = onOpenAuthor)
+                            io.github.cidy02.kudos.author.SeriesDetailCard(
+                                series = seriesDetailCard(detail, seriesUrl, cardFacts),
+                                onOpenAuthor = onOpenAuthor)
                         }
                         item {
-                            KudosSectionHeader(
+                            io.github.cidy02.kudos.ui.subject.SectionRuleHeader(
                                 title = "Works",
-                                subtitle = "Page ${current.page.currentPage} of ${current.page.totalPages}"
+                                count = current.page.works.size.takeIf { it > 0 }
                             )
                         }
                         items(current.page.works, key = { it.id }) { work ->
@@ -315,4 +308,24 @@ private sealed interface SeriesWorksState {
         val page get() = detail.page
     }
     data class Error(val message: String, val page: Int) : SeriesWorksState
+}
+
+/** Only navigation context already read from AO3; never requests another page. */
+internal fun seriesCardFacts(series: io.github.cidy02.kudos.network.ao3.author.AO3AuthorSeriesSummary): String =
+    org.json.JSONObject().put("fandoms", org.json.JSONArray(series.fandoms)).put("restricted", series.isRestricted)
+        .put("bookmarks", series.bookmarkCount).put("updated", series.dateUpdated).toString()
+
+internal fun seriesDetailCard(detail: io.github.cidy02.kudos.network.ao3.series.AO3SeriesDetailPage,
+    url: String, facts: String): io.github.cidy02.kudos.network.ao3.author.AO3AuthorSeriesSummary {
+    val seed = runCatching { org.json.JSONObject(facts) }.getOrNull()
+    val fandoms = seed?.optJSONArray("fandoms")?.let { tags -> (0 until tags.length()).mapNotNull { tags.opt(it) as? String } }
+        ?: detail.page.works.flatMap { it.fandoms }.distinct()
+    return io.github.cidy02.kudos.network.ao3.author.AO3AuthorSeriesSummary(
+        id = Regex("/series/([0-9]+)").find(url)?.groupValues?.get(1)?.toLongOrNull() ?: 0,
+        title = detail.title, creators = detail.creators, creatorIdentities = detail.creatorIdentities,
+        fandoms = fandoms, isRestricted = seed?.optBoolean("restricted") ?: false,
+        summary = detail.summary, words = detail.words, workCount = detail.workCount,
+        dateUpdated = detail.dateUpdated.ifBlank { seed?.optString("updated").orEmpty() },
+        isComplete = detail.isComplete, url = url,
+        bookmarkCount = detail.bookmarkCount ?: seed?.optInt("bookmarks", -1)?.takeIf { it >= 0 })
 }

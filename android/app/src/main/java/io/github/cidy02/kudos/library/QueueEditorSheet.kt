@@ -1,5 +1,8 @@
 package io.github.cidy02.kudos.library
 
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.ui.semantics.contentDescription
+
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.selected
 import androidx.compose.foundation.clickable
@@ -76,7 +79,7 @@ fun QueueEditorSheet(
     var knownTags by remember { mutableStateOf<List<Tag>>(emptyList()) }
     var newTag by remember { mutableStateOf<String?>(null) }
     var seed by remember(existing?.id) { mutableStateOf(false) }
-    var seedCount by remember(existing?.id) { mutableIntStateOf(0) }
+    var seedCount by remember(existing?.id) { mutableStateOf<Int?>(null) }
     var saving by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
 
@@ -92,6 +95,44 @@ fun QueueEditorSheet(
 
     val palette = queueDraftPalette(tokens.theme, tokens.scopePalette, hue, colorHex)
     val canSave = name.isNotBlank() && !saving
+
+    val submit: () -> Unit = {
+        if (canSave) {
+            saving = true
+            scope.launch {
+                val saved = runCatching {
+                    if (editing) {
+                        repository.updateQueue(
+                            existing!!.id,
+                            QueueEdit(
+                                name = name,
+                                hue = hue,
+                                colorHex = colorHex,
+                                keepsWorksOffline = keep,
+                                // The description is edited on the queue's own page.
+                                notes = existing.notes,
+                                tagNames = tags
+                            )
+                        )
+                        repository.getQueue(existing.id)
+                    } else {
+                        repository.createQueue(
+                            name = name,
+                            hue = hue,
+                            colorHex = colorHex,
+                            keepsWorksOffline = keep,
+                            tagNames = tags,
+                            seedFromSavedForLater = seed
+                        )
+                    }
+                }
+                saving = false
+                saved.getOrNull()?.let(onSaved) ?: run {
+                    error = saved.exceptionOrNull()?.message ?: "Could not save this queue."
+                }
+            }
+        }
+    }
 
     SubjectPaletteTheme(palette) {
     Dialog(
@@ -118,41 +159,7 @@ fun QueueEditorSheet(
                     fontWeight = FontWeight.SemiBold
                 )
                 TextButton(
-                    onClick = {
-                        saving = true
-                        scope.launch {
-                            val saved = runCatching {
-                                if (editing) {
-                                    repository.updateQueue(
-                                        existing!!.id,
-                                        QueueEdit(
-                                            name = name,
-                                            hue = hue,
-                                            colorHex = colorHex,
-                                            keepsWorksOffline = keep,
-                                            // The description is edited on the queue's own page.
-                                            notes = existing.notes,
-                                            tagNames = tags
-                                        )
-                                    )
-                                    repository.getQueue(existing.id)
-                                } else {
-                                    repository.createQueue(
-                                        name = name,
-                                        hue = hue,
-                                        colorHex = colorHex,
-                                        keepsWorksOffline = keep,
-                                        tagNames = tags,
-                                        seedFromSavedForLater = seed
-                                    )
-                                }
-                            }
-                            saving = false
-                            saved.getOrNull()?.let(onSaved) ?: run {
-                                error = saved.exceptionOrNull()?.message ?: "Could not save this queue."
-                            }
-                        }
-                    },
+                    onClick = { submit() },
                     enabled = canSave
                 ) {
                     Text(
@@ -172,7 +179,9 @@ fun QueueEditorSheet(
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().semantics { contentDescription = "Name" },
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Done),
+                    keyboardActions = androidx.compose.foundation.text.KeyboardActions(onDone = { submit() }),
                     placeholder = { Text("Case fic pile") },
                     singleLine = true
                 )
@@ -222,13 +231,13 @@ fun QueueEditorSheet(
                         )
                         SeedRow(
                             label = "Saved for Later",
-                            subtitle = if (seedCount == 0) {
+                            subtitle = if (seedCount == null) null else if (seedCount == 0) {
                                 "You have no works in Saved for Later to copy."
                             } else {
                                 "Copy $seedCount work${if (seedCount == 1) "" else "s"}. They stay in Saved for Later."
                             },
                             selected = seed,
-                            enabled = seedCount > 0,
+                            enabled = (seedCount ?: 0) > 0,
                             onClick = { seed = true }
                         )
                     }
@@ -310,10 +319,12 @@ private fun SeedRow(
     Row(
         Modifier
             .fillMaxWidth()
+            .selectable(selected = selected, enabled = enabled, role = androidx.compose.ui.semantics.Role.RadioButton, onClick = onClick)
+            .semantics(mergeDescendants = true) {}
             .padding(horizontal = 8.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        RadioButton(selected = selected, onClick = onClick, enabled = enabled)
+        RadioButton(selected = selected, onClick = null, enabled = enabled)
         Column(Modifier.weight(1f)) {
             Text(label, color = if (enabled) tokens.primaryInk else tokens.tertiaryInk, fontSize = 15.sp)
             if (subtitle != null) {

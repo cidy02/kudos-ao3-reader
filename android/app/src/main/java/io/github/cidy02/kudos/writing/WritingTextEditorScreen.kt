@@ -121,7 +121,9 @@ internal fun WritingTextEditorContent(
     }
 
     BackHandler(enabled = session.recoveries.isEmpty() && !showLink && session.error == null && !showDeleteChapter, onBack = leave)
-    ProvidePushedShellChrome(hasSubjectHeader = true, hideTabBar = true, onBack = {
+    // The field's name in the bar, as iOS's inline title ("Chapter text", "Summary", "End notes"):
+    // 3gx removed the large heading, which had been the only place it was named.
+    ProvidePushedShellChrome(hasSubjectHeader = true, hideTabBar = true, customTitle = title, onBack = {
         if (session.recoveries.isEmpty()) leave()
     }, trailingContent = {
         EditorToolbarButton(if (session.isPreviewing) "Edit" else "Preview",
@@ -170,8 +172,6 @@ internal fun WritingTextEditorContent(
     Column(Modifier.fillMaxSize().subjectScreenWash(palette).imePadding().navigationBarsPadding()) {
         Spacer(Modifier.windowInsetsTopHeight(WindowInsets.statusBars))
         Spacer(Modifier.height(76.dp))
-        Text(title, color = tokens.primaryInk, fontSize = 22.sp, lineHeight = 29.sp,
-            fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(horizontal = 16.dp))
         val words = session.wordCount?.let { "${NumberFormat.getIntegerInstance().format(it)} ${if (it == 1) "word" else "words"}" }
         // At accessibility size the figure gets its own line; don't clip the shared header's one-line count.
         val accessibility = isAccessibilityFontScale()

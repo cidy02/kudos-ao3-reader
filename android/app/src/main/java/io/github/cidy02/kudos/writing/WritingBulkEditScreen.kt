@@ -1,5 +1,13 @@
 package io.github.cidy02.kudos.writing
 
+import androidx.compose.foundation.clickable
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.material.icons.filled.AddCircle
+import androidx.compose.material.icons.filled.RemoveCircle
+import androidx.compose.material.icons.outlined.Circle
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import io.github.cidy02.kudos.app.DebugShotEffect
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.*
@@ -25,7 +33,7 @@ import io.github.cidy02.kudos.ui.subject.*
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
-private data class BulkPicker(val title: String, val field: String, val mode: String)
+internal data class BulkPicker(val title: String, val field: String, val mode: String)
 
 @Composable
 fun WritingBulkEditScreen(model: WritingBulkEditState, focus: String?, onBack: () -> Unit,
@@ -172,17 +180,28 @@ private fun BulkHeader(title: String, subtitle: String? = null) {
 }
 
 @Composable
-private fun BulkRow(label: String, value: String, index: Int, total: Int, enabled: Boolean, click: () -> Unit) {
+private fun BulkRow(label: String, value: String, index: Int, total: Int, enabled: Boolean, spokenValue: String? = null, mark: String? = null, click: () -> Unit) {
     val tokens = LocalKudosTokens.current
     Column(Modifier.padding(horizontal = SubjectMetrics.accountGutter).writingSuggestionPanel(index == 0, index == total - 1).alpha(if (enabled) 1f else 0.55f)) {
-        SubjectFormRow(label, showsDisclosure = enabled, onClick = if (enabled) click else null,
+        if (mark != null) Row(
+            Modifier.fillMaxWidth().clickable(enabled = enabled, onClick = click)
+                .semantics(mergeDescendants = true) { stateDescription = spokenValue ?: value }
+                .padding(horizontal = 13.dp, vertical = 11.dp),
+            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Icon(when (mark) { "Add" -> Icons.Filled.AddCircle; "Remove" -> Icons.Filled.RemoveCircle; else -> Icons.Outlined.Circle },
+                null, tint = tokens.secondaryInk, modifier = Modifier.testTag("Bulk option mark"))
+            Text(label, Modifier.weight(1f), color = tokens.primaryInk, fontSize = 14.5.sp,
+                textDecoration = if (mark == "Remove") TextDecoration.LineThrough else TextDecoration.None)
+            Text(value, color = tokens.secondaryInk, fontSize = 13.sp)
+        } else SubjectFormRow(label, showsDisclosure = enabled, onClick = if (enabled) click else null,
             trailing = { Text(value, color = tokens.secondaryInk, fontSize = 13.sp, lineHeight = 18.sp, modifier = Modifier.widthIn(max = 160.dp)) })
         if (index < total - 1) SubjectRowSeparator()
     }
 }
 
 @Composable
-private fun BulkOptionsScreen(picker: BulkPicker, options: List<AO3FormOption>, changes: AO3BulkEditChanges,
+internal fun BulkOptionsScreen(picker: BulkPicker, options: List<AO3FormOption>, changes: AO3BulkEditChanges,
     onChange: ((AO3BulkEditChanges) -> AO3BulkEditChanges) -> Unit, onBack: () -> Unit) {
     val tokens = LocalKudosTokens.current
     val palette = tokens.scopePalette
@@ -193,14 +212,17 @@ private fun BulkOptionsScreen(picker: BulkPicker, options: List<AO3FormOption>, 
         item { BulkHeader(picker.title) }
         val shown = if (picker.mode == "scalar") listOf(AO3FormOption("", "Leave as is")) + options.filter { it.value.isNotEmpty() }
             else if (picker.mode == "names") changes.collectionsToAdd.map { AO3FormOption(it, it) } else options
+        if (picker.mode == "names" && shown.isNotEmpty()) item { WorkFormSection("Added") }
         itemsIndexed(shown) { index, option ->
             val value = when (picker.mode) {
-                "tri" -> if (option.value in changes.added[picker.field].orEmpty()) "Add" else if (option.value in changes.removed[picker.field].orEmpty()) "Remove" else "Unchanged"
+                "tri" -> if (option.value in changes.added[picker.field].orEmpty()) "Add" else if (option.value in changes.removed[picker.field].orEmpty()) "Remove" else ""
                 "scalar" -> if (changes.scalars[picker.field].orEmpty() == option.value) "Selected" else ""
                 "multi" -> if (option.value in changes.collectionsToRemove) "Selected" else ""
                 else -> "Remove"
             }
-            BulkRow(option.title, value, index, shown.size, true) {
+            BulkRow(option.title, value, index, shown.size, true,
+                spokenValue = if (picker.mode == "tri" && value.isEmpty()) "Unchanged" else null,
+                mark = if (picker.mode == "tri") value else if (picker.mode == "names") "Remove" else null) {
                 onChange { old -> when (picker.mode) {
                     "scalar" -> old.copy(scalars = old.scalars + (picker.field to option.value))
                     "multi" -> old.copy(collectionsToRemove = if (option.value in old.collectionsToRemove) old.collectionsToRemove - option.value else old.collectionsToRemove + option.value)

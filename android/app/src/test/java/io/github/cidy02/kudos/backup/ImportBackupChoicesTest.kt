@@ -29,13 +29,16 @@ class ImportBackupChoicesTest {
     fun replaceIsOfferedWhenABookmarkWouldBeRemovedAndNotOnlyWhenThereAreWorks() {
         show(preview(localWorkCount = 0, hasReplaceableRecords = true))
         compose.onNodeWithText("Replace Library…").assertExists()
+        compose.onNodeWithText("Merge adds works that are not already here. It does not delete local works or apply unsigned deletion claims from the file.").assertDoesNotExist()
         compose.onNodeWithText("Restore from Backup").assertDoesNotExist()
     }
 
     @Test
-    fun anEmptyLibraryOffersRestoreAlone() {
+    fun anEmptyLibraryOffersMergeWithTheSameExplanation() {
         show(preview(localWorkCount = 0, hasReplaceableRecords = false))
-        compose.onNodeWithText("Restore from Backup").assertExists()
+        compose.onNodeWithText("Merge").assertExists()
+        compose.onNodeWithText("Restore from Backup").assertDoesNotExist()
+        compose.onNodeWithText("Merge keeps everything already on this device and adds anything you don't have from the backup. It removes nothing.").assertExists()
         compose.onNodeWithText("Replace Library…").assertDoesNotExist()
     }
 

@@ -499,11 +499,18 @@ class ReadingQueueRepository(
     suspend fun tagRenameConflict(tagId: String, proposed: String): Tag? {
         val trimmed = proposed.trim()
         if (trimmed.isEmpty()) return null
-        val other = tagDao.getByNameCaseInsensitive(trimmed) ?: return null
-        return if (other.id == tagId) null else other.toDomain()
+        return otherTagNamed(trimmed, tagId)?.toDomain()
     }
 
-    /** Exact-name collisions consolidate every link, as iOS's tag uniqueness constraint does. */
+    /**
+     * iOS `localizedCaseInsensitiveCompare`, the tag itself left out: SQLite's NOCASE folds ASCII
+     * only ("Émotions" and "émotions" passed), and with case variants already side by side its
+     * LIMIT 1 could return the tag being renamed (A89). The user's tags are few.
+     */
+    private suspend fun otherTagNamed(name: String, exceptId: String): TagEntity? =
+        tagDao.getAll().firstOrNull { it.id != exceptId && it.name.equals(name, ignoreCase = true) }
+
+    /** Renaming never merges tags; the explicit queue-scoped merge is a separate action. */
     suspend fun renameUserTag(tagId: String, proposed: String) {
         database.withTransaction {
             val current = tagDao.getById(tagId) ?: return@withTransaction
@@ -511,15 +518,9 @@ class ReadingQueueRepository(
             if (trimmed.isEmpty() || trimmed == current.name) return@withTransaction
             val workIds = tagDao.getWorkIdsForTag(tagId)
             val queueIds = tagDao.getQueueIdsForTag(tagId)
-            val target = tagDao.getByName(trimmed)
-            if (target != null && target.id != tagId) {
-                for (workId in workIds) tagDao.addToWork(WorkTagCrossRef(workId, target.id))
-                for (queueId in queueIds) readingLogDao.upsertQueueTag(QueueTagCrossRef(queueId, target.id))
-                tagDao.deleteById(tagId)
-            } else {
-                // UPDATE preserves foreign-key links; INSERT OR REPLACE cascades them away.
-                tagDao.rename(tagId, trimmed)
-            }
+            if (otherTagNamed(trimmed, tagId) != null) return@withTransaction
+            // UPDATE preserves foreign-key links; INSERT OR REPLACE cascades them away.
+            tagDao.rename(tagId, trimmed)
             val now = clock()
             for (workId in workIds) {
                 val work = workDao.getById(workId)?.toDomain() ?: continue

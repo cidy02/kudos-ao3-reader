@@ -570,3 +570,18 @@ that revoked, and re-pairing a retired device all work as on iOS.
   path out of Android.
 
 Until answered: A.
+
+## 34. A new queue or collection with a name you already use (Android) (2026-10-23)
+
+When you create a reading queue or a local collection whose name matches one you have, Android
+quietly uses the one you have (`ReadingQueueRepository.kt:260`, `WorkRepository.kt:937`): the sheet
+closes as if it made a new one, and what you chose in it (colour, keep offline, tags, starting from
+Saved for Later) is dropped. The iPhone makes a second queue or collection with the same name
+(`ReadingQueueService.swift:166-180`). Found by Codex (A84a) and checked by the CLI session (A89).
+
+- **A (what stands).** Android reuses the one you have.
+- **B.** As the iPhone: a second one with the same name. Each has its own id, so backups and sync
+  keep both apart.
+- **C.** Both apps refuse the name and say it is taken.
+
+Until answered: A. With A or C, Android should at least say so rather than close as if it made one.

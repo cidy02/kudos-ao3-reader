@@ -292,7 +292,6 @@ fun CommentFormattingTray(
                                         modifier = Modifier.weight(1f).heightIn(min = CommentFormattingLayout.tileMinHeight.dp)
                                             .clickable {
                                                 onValueChange(CommentMarkup.applyTag(tag, value))
-                                                if (tag != CommentMarkupTag.Heading) onDismiss()
                                             },
                                         shape = RoundedCornerShape(11.dp),
                                         color = tokens.glassFill(0.09)

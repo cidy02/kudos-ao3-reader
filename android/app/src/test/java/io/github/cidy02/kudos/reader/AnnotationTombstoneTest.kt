@@ -101,6 +101,16 @@ class AnnotationTombstoneTest {
         TombstoneSigning.resetForTests()
     }
 
+    @Test fun searchAndToolbarBookmarksAtOnePositionReuseTheSavedBookmark() = runTest {
+        fun place(highlight: String, position: Int) = ReaderLocatorCodec.encodeEnvelope(
+            """{"href":"chapter.xhtml","type":"application/xhtml+xml","locations":{"position":$position},"text":{"highlight":"$highlight"}}""")!!
+        val toolbar = annotationRepository.addBookmark(WORK_ID, place("", 7), 0.2, 1)
+        val search = annotationRepository.addBookmark(WORK_ID, place("found text", 7), 0.2, 1)
+        assertEquals(toolbar.id, search.id)
+        annotationRepository.addBookmark(WORK_ID, place("other page", 8), 0.3, 1)
+        assertEquals(2, annotationRepository.observeForWork(WORK_ID).first().size)
+    }
+
     @Test
     fun remoteDeleteRemovesExistingAnnotationMembershipAndLinkFromRoomAndNextExport() = runTest {
         val work = SavedWork(id = WORK_ID, title = "Work", author = "Writer", dateAdded = ANNOTATION_CREATED)

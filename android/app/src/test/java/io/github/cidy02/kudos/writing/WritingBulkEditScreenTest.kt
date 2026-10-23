@@ -26,6 +26,36 @@ import org.robolectric.annotation.GraphicsMode
 @Config(sdk = [34], application = Application::class, qualifiers = "w411dp-h2800dp")
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class WritingBulkEditScreenTest {
+    @Test fun unchangedIsSpokenWithoutAnExtraVisibleWord() {
+        var changes by mutableStateOf(io.github.cidy02.kudos.network.ao3.writing.AO3BulkEditChanges(workIDs = emptyList()))
+        compose.setContent { KudosTheme(KudosThemeMode.Light) {
+            BulkOptionsScreen(BulkPicker("Archive warnings", "warnings", "tri"),
+                listOf(io.github.cidy02.kudos.network.ao3.writing.AO3FormOption("none", "No warnings")), changes,
+                { changes = it(changes) }, {})
+        } }
+        compose.onNodeWithText("Unchanged").assertDoesNotExist()
+        compose.onNode(hasText("No warnings") and SemanticsMatcher.expectValue(
+            androidx.compose.ui.semantics.SemanticsProperties.StateDescription, "Unchanged")).assertExists()
+        compose.onNodeWithText("No warnings").performClick()
+        compose.onNodeWithText("Add").assertExists()
+        compose.onNodeWithText("No warnings").performClick()
+        compose.onNodeWithText("Remove").assertExists()
+        val layouts = mutableListOf<androidx.compose.ui.text.TextLayoutResult>()
+        compose.onNodeWithText("No warnings", useUnmergedTree = true).performSemanticsAction(
+            androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult) { it(layouts) }
+        assertEquals(androidx.compose.ui.text.style.TextDecoration.LineThrough, layouts.single().layoutInput.style.textDecoration)
+        compose.onNodeWithTag("Bulk option mark", useUnmergedTree = true).assertExists()
+    }
+
+    @Test fun addedCollectionNamesHaveAHeading() {
+        compose.setContent { KudosTheme(KudosThemeMode.Light) {
+            BulkOptionsScreen(BulkPicker("Add to collections", "collections", "names"), emptyList(),
+                io.github.cidy02.kudos.network.ao3.writing.AO3BulkEditChanges(workIDs = emptyList(), collectionsToAdd = listOf("Winter")), {}, {})
+        } }
+        compose.onNodeWithText("ADDED").assertExists()
+    }
+
+
     @get:Rule val compose = createComposeRule()
     private val client = BulkRecordingClient(listOf(11, 22, 33))
     private val model = WritingBulkEditState(client.ids, AO3WriteRepository(client), 7)

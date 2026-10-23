@@ -161,10 +161,14 @@ internal fun AO3ChallengeSettingsEditScreen(slug: String, title: String, viewerI
                         } }
                         item { ChallengeEditPanel {
                             val key = form.field("signup_instructions_general")
+                            SubjectFieldLabel("Sign-up instructions", Modifier.padding(horizontal = 13.dp, vertical = 8.dp))
                             SubjectTextFieldRow("Sign-up instructions", form[key], "Describe the challenge for people signing up…",
-                                { model.change(key, it) }, multiline = true, enabled = !busy && form.editable(key))
+                                { model.change(key, it) }, multiline = true, fieldOnly = true, enabled = !busy && form.editable(key))
                         } }
                         item { ChallengeSection("Schedule") }
+                        items(challengeDateKeys.mapNotNull { date -> form.dateField(date)?.let { form.fieldErrors[it] } }.distinct()) {
+                            ChallengeEditMessage(it)
+                        }
                         val labels = listOf("Sign-ups open", "Sign-ups close", "Works due", "Works revealed", "Creators revealed")
                         challengeDateKeys.forEachIndexed { index, date ->
                             if (index == 2) item { ChallengeEditPanel {
@@ -178,7 +182,6 @@ internal fun AO3ChallengeSettingsEditScreen(slug: String, title: String, viewerI
                                 if (form[key].isEmpty() && form.editable(key)) SettingsActionRow("Set", {
                                     dateEditing = key to java.time.LocalDateTime.now(java.time.ZoneOffset.UTC)
                                 }, enabled = !busy)
-                                form.fieldErrors[key]?.let { ChallengeEditMessage(it) }
                             } } }
                         }
                         item {
@@ -187,6 +190,8 @@ internal fun AO3ChallengeSettingsEditScreen(slug: String, title: String, viewerI
                                 else "Kudos couldn't read the challenge's time zone. Dates are view-only and won't be saved.")
                             ChallengeSection("Sign-up limits")
                         }
+                        items(listOf("requests_num_required", "requests_num_allowed", "offers_num_required", "offers_num_allowed")
+                            .mapNotNull { form.fieldErrors[form.field(it)] }.distinct()) { ChallengeEditMessage(it) }
                         for (noun in if (form.kind == AO3ChallengeKind.GiftExchange) listOf("Requests", "Offers") else listOf("Requests")) item {
                             ChallengeEditPanel {
                                 val required = form.field("${noun.lowercase()}_num_required")
@@ -204,7 +209,6 @@ internal fun AO3ChallengeSettingsEditScreen(slug: String, title: String, viewerI
                                         }
                                     }
                                 })
-                                listOfNotNull(form.fieldErrors[required], form.fieldErrors[allowed]).forEach { ChallengeEditMessage(it) }
                             }
                         }
                         item { ChallengeFootnote("Request restrictions") }

@@ -1,5 +1,9 @@
 package io.github.cidy02.kudos.search
 
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -68,6 +72,7 @@ fun SaveSearchSheet(
             modifier = Modifier
                 .fillMaxWidth()
                 .subjectScreenWash(palette)
+                .verticalScroll(rememberScrollState())
                 .padding(bottom = 28.dp)
         ) {
             Row(
@@ -103,7 +108,7 @@ fun SaveSearchSheet(
                     onValueChange = onNameChange,
                     singleLine = true,
                     textStyle = TextStyle(color = tokens.primaryInk, fontSize = 17.sp),
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().semantics { contentDescription = "Name" },
                     decorationBox = { inner ->
                         Box(Modifier.fillMaxWidth()) {
                             if (name.isEmpty()) {

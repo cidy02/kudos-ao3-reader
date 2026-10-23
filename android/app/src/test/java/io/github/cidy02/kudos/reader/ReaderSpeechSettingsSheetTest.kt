@@ -19,6 +19,7 @@ import io.github.cidy02.kudos.reader.speech.TTSService
 import io.github.cidy02.kudos.reader.speech.TTSVoice
 import io.github.cidy02.kudos.settings.SettingsListeningContent
 import io.github.cidy02.kudos.settings.VoicePackUi
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.Assert.*
@@ -72,6 +73,25 @@ class ReaderSpeechSettingsSheetTest {
     private fun longPress() {
         compose.onNodeWithContentDescription("Read aloud").performTouchInput { longClick() }
         compose.waitForIdle()
+    }
+
+    @Test fun displayIncludesTheSharedSpeechControlsPackStatusAndSwitchLabels() {
+        compose.setContent { io.github.cidy02.kudos.ui.theme.KudosTheme(io.github.cidy02.kudos.ui.theme.KudosThemeMode.Light) {
+            ReaderDisplaySheet(ReaderPreferences(scroll = false, columnCount = 2), repository, keepScreenAwake = false,
+                onFontSizeChange = {}, onThemeChange = {}, listeningContent = { frame ->
+                    SettingsListeningContent(repository, audition, true, VoicePackUi.fixed(true), frame)
+                })
+        } }
+        compose.onNodeWithContentDescription("Two-page spread").performScrollTo().assertExists()
+        compose.onNodeWithContentDescription("Keep screen awake").assertExists()
+        compose.onNodeWithText("Audition Voice").performScrollTo().assertExists()
+        compose.onNodeWithText("Voice Pack Downloaded").performScrollTo().assertExists()
+        compose.onNodeWithText(io.github.cidy02.kudos.settings.VOICE_PACK_DISCLOSURE).performScrollTo().assertExists()
+        compose.onNodeWithText("Read author's notes").performScrollTo().assertExists()
+        compose.onNodeWithText("Reset Read Aloud").performScrollTo().assertExists()
+        compose.onNodeWithText("Voice").performScrollTo().performClick()
+        compose.onNodeWithText("Test voice B · On device").performClick()
+        compose.waitUntil(5_000) { kotlinx.coroutines.runBlocking { repository.speechPreferences.first().voiceIdentifier } == "7" }
     }
 
     @Test fun longPressOpensReadAloudAndReusesListeningControlsInsteadOfDisplay() {

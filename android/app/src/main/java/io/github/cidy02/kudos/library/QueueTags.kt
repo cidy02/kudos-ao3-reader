@@ -1,5 +1,10 @@
 package io.github.cidy02.kudos.library
 
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.ImeAction
+import io.github.cidy02.kudos.ui.subject.compactCount
+import androidx.compose.ui.semantics.contentDescription
 import io.github.cidy02.kudos.app.DebugShotEffect
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
@@ -23,6 +28,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.RemoveCircle
+import androidx.compose.material.icons.outlined.Circle
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -40,6 +48,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -76,10 +85,12 @@ object BulkTags {
         })
 
     /** What TalkBack says of a row (iOS's accessibility values). */
-    fun spoken(coverage: TagCoverage, noun: String): String = when (coverage) {
+    fun spoken(coverage: TagCoverage, noun: String, singleQueue: Boolean = false): String = if (singleQueue) {
+        if (coverage == TagCoverage.All) "on this queue" else "not on this queue"
+    } else when (coverage) {
         TagCoverage.All -> "on every selected $noun"
         TagCoverage.Some -> "on some selected ${noun}s"
-        TagCoverage.None -> "not applied"
+        TagCoverage.None -> if (noun == "queue") "not on the selected queues" else "not applied"
     }
 }
 
@@ -182,36 +193,39 @@ private fun SharedTagSheet(
                 Modifier.verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                SubjectFieldLabel("Add")
+                if (noun != "work") SubjectFieldLabel("Add")
                 Row(
                     Modifier.fillMaxWidth().subjectPanel().padding(horizontal = 12.dp, vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(Icons.Filled.Add, contentDescription = null, tint = palette.accent)
+                    val addTag: () -> Unit = addTag@ {
+                        val name = draft.trim()
+                        if (name.isEmpty()) return@addTag
+                        val existing = all.firstOrNull { it.name.equals(name, ignoreCase = true) }
+                        scope.launch {
+                            // Typing a tag only ever adds it: one already on everything stays.
+                            if (existing == null || coverage[existing.id] != TagCoverage.All) toggle(name)
+                            draft = ""
+                            reload += 1
+                        }
+                    }
                     OutlinedTextField(
                         value = draft,
                         onValueChange = { draft = it },
                         modifier = Modifier.weight(1f),
                         placeholder = { Text("New tag") },
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                        keyboardActions = KeyboardActions(onDone = { addTag() }),
                         singleLine = true
                     )
                     TextButton(
-                        onClick = {
-                            val name = draft.trim()
-                            if (name.isEmpty()) return@TextButton
-                            val existing = all.firstOrNull { it.name.equals(name, ignoreCase = true) }
-                            scope.launch {
-                                // Typing a tag only ever adds it: one already on everything stays.
-                                if (existing == null || coverage[existing.id] != TagCoverage.All) toggle(name)
-                                draft = ""
-                                reload += 1
-                            }
-                        },
+                        onClick = addTag,
                         enabled = draft.isNotBlank()
                     ) { Text("Add", color = palette.accent) }
                 }
                 FormFootnote(footnote)
-                SubjectFieldLabel("Your tags", Modifier.padding(top = 12.dp))
+                if (all.isNotEmpty()) SubjectFieldLabel("Your tags", Modifier.padding(top = 12.dp))
                 if (all.isEmpty()) {
                     FormFootnote(emptyNote)
                 } else {
@@ -219,20 +233,40 @@ private fun SharedTagSheet(
                         all.forEachIndexed { index, tag ->
                             if (index > 0) SubjectRowSeparator()
                             val state = coverage[tag.id] ?: TagCoverage.None
-                            SubjectFormRow(
+                            val toggleTag: () -> Unit = {
+                                scope.launch {
+                                    toggle(tag.name)
+                                    reload += 1
+                                }
+                            }
+                            if (noun == "work") Row(
+                                Modifier.fillMaxWidth().clickable(onClick = toggleTag)
+                                    .semantics(mergeDescendants = true) { stateDescription = BulkTags.spoken(state, noun, noun == "queue" && (key as? List<*>)?.size == 1) }
+                                    .padding(horizontal = 13.dp, vertical = 11.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                Icon(
+                                    when (state) {
+                                        TagCoverage.All -> Icons.Filled.CheckCircle
+                                        TagCoverage.Some -> Icons.Filled.RemoveCircle
+                                        TagCoverage.None -> Icons.Outlined.Circle
+                                    },
+                                    contentDescription = null,
+                                    tint = if (state == TagCoverage.None) tokens.secondaryInk else palette.accent,
+                                    modifier = Modifier.testTag("Tag selection mark")
+                                )
+                                Text(tag.name, Modifier.weight(1f), color = tokens.primaryInk, fontSize = 14.5.sp)
+                                if (state == TagCoverage.Some) Text("some", color = tokens.secondaryInk, fontSize = 13.sp)
+                            } else SubjectFormRow(
                                 label = tag.name,
-                                modifier = Modifier.semantics { stateDescription = BulkTags.spoken(state, noun) },
-                                onClick = {
-                                    scope.launch {
-                                        toggle(tag.name)
-                                        reload += 1
-                                    }
-                                },
+                                modifier = Modifier.semantics { stateDescription = BulkTags.spoken(state, noun, noun == "queue" && (key as? List<*>)?.size == 1) },
+                                onClick = toggleTag,
                                 trailing = {
                                     Text(
                                         text = when (state) {
-                                            TagCoverage.All -> "All"
-                                            TagCoverage.Some -> "Some"
+                                            TagCoverage.All -> ""
+                                            TagCoverage.Some -> "some"
                                             TagCoverage.None -> ""
                                         },
                                         color = if (state == TagCoverage.All) palette.accent else tokens.secondaryInk,
@@ -308,7 +342,7 @@ fun QueueTagManager(
         )
         if (used.isNotEmpty()) {
             SubjectFieldLabel("In this queue", Modifier.padding(start = 16.dp, top = 18.dp))
-            TagRows(used, counts) { tag, action ->
+            TagRows(used, counts, others.isNotEmpty()) { tag, action ->
                 when (action) {
                     TagAction.Edit -> editing = tag
                     TagAction.Copy -> copying = tag
@@ -319,7 +353,7 @@ fun QueueTagManager(
         }
         if (unused.isNotEmpty()) {
             SubjectFieldLabel("Unused", Modifier.padding(start = 16.dp, top = 18.dp))
-            TagRows(unused, counts) { tag, action ->
+            TagRows(unused, counts, others.isNotEmpty()) { tag, action ->
                 when (action) {
                     TagAction.Edit -> editing = tag
                     TagAction.Copy -> copying = tag
@@ -339,27 +373,29 @@ fun QueueTagManager(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(Icons.Filled.Add, contentDescription = null, tint = palette.accent)
+            val addTag: () -> Unit = addTag@ {
+                val name = draft.trim()
+                if (name.isEmpty()) return@addTag
+                scope.launch {
+                    if (tags.none { it.name.equals(name, ignoreCase = true) }) {
+                        repository.toggleSharedTag(listOf(queue.id), name)
+                    }
+                    draft = ""
+                    reload += 1
+                }
+            }
             OutlinedTextField(
                 value = draft,
                 onValueChange = { draft = it },
                 modifier = Modifier.weight(1f),
                 placeholder = { Text("New tag") },
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                keyboardActions = KeyboardActions(onDone = { addTag() }),
                 singleLine = true
             )
-            TextButton(
-                onClick = {
-                    val name = draft.trim()
-                    if (name.isEmpty()) return@TextButton
-                    scope.launch {
-                        if (tags.none { it.name.equals(name, ignoreCase = true) }) {
-                            repository.toggleSharedTag(listOf(queue.id), name)
-                        }
-                        draft = ""
-                        reload += 1
-                    }
-                },
-                enabled = draft.isNotBlank()
-            ) { Text("Add", color = palette.accent) }
+            TextButton(onClick = addTag, enabled = draft.isNotBlank()) {
+                Text("Add", color = palette.accent)
+            }
         }
         FormFootnote("A tag you use here is the same tag on your works.")
     }
@@ -370,6 +406,7 @@ fun QueueTagManager(
             queueId = queue.id,
             tag = tag,
             siblings = tags.filter { it.id != tag.id },
+            siblingCounts = counts,
             count = counts[tag.id] ?: 0,
             onDismiss = { editing = null },
             onRemove = { editing = null; pending = tag },
@@ -442,6 +479,7 @@ private enum class TagAction { Edit, Copy, Remove, Show }
 private fun TagRows(
     tags: List<Tag>,
     counts: Map<String, Int>,
+    canCopy: Boolean,
     onAction: (Tag, TagAction) -> Unit
 ) {
     val tokens = LocalKudosTokens.current
@@ -452,7 +490,8 @@ private fun TagRows(
             val count = counts[tag.id] ?: 0
             BoxMenuRow(
                 label = tag.name,
-                value = count.toString(),
+                value = count.compactCount(),
+                spokenValue = "$count works in this queue",
                 open = open,
                 onOpen = { open = true },
                 onDismiss = { open = false },
@@ -461,7 +500,7 @@ private fun TagRows(
                 DropdownMenuItem(text = { Text("Rename") }, onClick = { open = false; onAction(tag, TagAction.Edit) })
                 DropdownMenuItem(text = { Text("Merge into…") }, onClick = { open = false; onAction(tag, TagAction.Edit) })
                 DropdownMenuItem(text = { Text("Show only this tag") }, onClick = { open = false; onAction(tag, TagAction.Show) })
-                DropdownMenuItem(text = { Text("Copy tag to another queue") }, onClick = { open = false; onAction(tag, TagAction.Copy) })
+                DropdownMenuItem(text = { Text("Copy tag to another queue") }, enabled = canCopy, onClick = { open = false; onAction(tag, TagAction.Copy) })
                 DropdownMenuItem(
                     text = { Text("Remove from $count work${if (count == 1) "" else "s"}") },
                     onClick = { open = false; onAction(tag, TagAction.Remove) }
@@ -475,6 +514,7 @@ private fun TagRows(
 private fun BoxMenuRow(
     label: String,
     value: String,
+    spokenValue: String,
     open: Boolean,
     onOpen: () -> Unit,
     onDismiss: () -> Unit,
@@ -486,18 +526,19 @@ private fun BoxMenuRow(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(label, modifier = Modifier.weight(1f).padding(start = 8.dp), color = LocalKudosTokens.current.primaryInk)
-        Text(value, color = tokensInk, fontSize = 15.sp)
+        Text(value, modifier = Modifier.semantics { contentDescription = spokenValue }, color = tokensInk, fontSize = 15.sp)
         Icon(Icons.Filled.MoreVert, contentDescription = "Tag actions", tint = tokensInk)
         DropdownMenu(expanded = open, onDismissRequest = onDismiss) { menu() }
     }
 }
 
 @Composable
-private fun QueueTagEditDialog(
+internal fun QueueTagEditDialog(
     repository: ReadingQueueRepository,
     queueId: String,
     tag: Tag,
     siblings: List<Tag>,
+    siblingCounts: Map<String, Int> = emptyMap(),
     count: Int,
     onRemove: () -> Unit,
     onDismiss: () -> Unit,
@@ -505,26 +546,39 @@ private fun QueueTagEditDialog(
 ) {
     val scope = rememberCoroutineScope()
     var name by remember(tag.id) { mutableStateOf(tag.name) }
-    var conflict by remember { mutableStateOf<Tag?>(null) }
+    var conflict by remember(tag.id) { mutableStateOf<Tag?>(null) }
+    var checkedName by remember(tag.id) { mutableStateOf(tag.name) }
     var mergeTarget by remember { mutableStateOf<Tag?>(null) }
     val trimmed = name.trim()
-    val blocked = trimmed.isEmpty() || trimmed == tag.name || (conflict != null && conflict?.name != trimmed)
+    val blocked = trimmed.isEmpty() || trimmed == tag.name || conflict != null || checkedName != trimmed
 
     LaunchedEffect(trimmed) {
-        conflict = if (trimmed.isEmpty() || trimmed == tag.name) null
-        else runCatching { repository.tagRenameConflict(tag.id, trimmed) }.getOrNull()
+        val lookup = runCatching {
+            if (trimmed.isEmpty() || trimmed == tag.name) null else repository.tagRenameConflict(tag.id, trimmed)
+        }
+        if (lookup.isSuccess) {
+            conflict = lookup.getOrNull()
+            checkedName = trimmed
+        }
+    }
+
+    val rename: () -> Unit = {
+        if (!blocked) scope.launch {
+            repository.renameUserTag(tag.id, trimmed)
+            onChanged()
+        }
     }
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Edit tag") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Name") }, singleLine = true)
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Name") }, singleLine = true,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                    keyboardActions = KeyboardActions(onDone = { rename() }))
                 Text(
-                    text = if (conflict?.name == trimmed) {
-                        "Saving merges these tags on all works and queues."
-                    } else if (conflict != null) {
+                    text = if (conflict != null) {
                         "You already have a tag called “${conflict?.name}”."
                     } else {
                         "Renaming this tag also renames it on your works and other queues."
@@ -532,18 +586,15 @@ private fun QueueTagEditDialog(
                     fontSize = 12.sp,
                     color = LocalKudosTokens.current.secondaryInk
                 )
-                TextButton(onClick = onRemove) {
-                    Text(if (count == 0) "Remove from this queue" else "Remove tag from $count work${if (count == 1) "" else "s"}",
-                        color = androidx.compose.material3.MaterialTheme.colorScheme.error)
-                }
                 if (siblings.isNotEmpty()) {
                     SubjectFieldLabel("Merge into another tag")
                     siblings.forEach { sibling ->
                         Text(
-                            text = sibling.name,
+                            text = "${sibling.name} · ${(siblingCounts[sibling.id] ?: 0).compactCount()}",
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable { mergeTarget = sibling }
+                                .semantics { contentDescription = "Merge into ${sibling.name}, ${siblingCounts[sibling.id] ?: 0} works in this queue" }
                                 .padding(vertical = 8.dp)
                         )
                     }
@@ -557,16 +608,16 @@ private fun QueueTagEditDialog(
                         color = LocalKudosTokens.current.secondaryInk
                     )
                 }
+                SubjectFieldLabel("Remove")
+                TextButton(onClick = onRemove) {
+                    Text(if (count == 0) "Remove from this queue" else "Remove tag from $count work${if (count == 1) "" else "s"}",
+                        color = androidx.compose.material3.MaterialTheme.colorScheme.error)
+                }
             }
         },
         confirmButton = {
             TextButton(
-                onClick = {
-                    scope.launch {
-                        repository.renameUserTag(tag.id, trimmed)
-                        onChanged()
-                    }
-                },
+                onClick = { rename() },
                 enabled = !blocked
             ) { Text("Save") }
         },
@@ -576,7 +627,7 @@ private fun QueueTagEditDialog(
         AlertDialog(
             onDismissRequest = { mergeTarget = null },
             title = { Text("Merge “${tag.name}” into “${target.name}”?") },
-            text = { Text("You can't undo this in Kudos.") },
+            text = { Text(queueTagMergeMessage(tag.name, count)) },
             confirmButton = {
                 TextButton(onClick = {
                     scope.launch {
@@ -589,4 +640,10 @@ private fun QueueTagEditDialog(
             dismissButton = { TextButton(onClick = { mergeTarget = null }) { Text("Cancel") } }
         )
     }
+}
+
+internal fun queueTagMergeMessage(name: String, count: Int): String = when (count) {
+    0 -> "No work in this queue uses “$name”. Merging removes the tag from this queue."
+    1 -> "The 1 work in this queue gets the tag you pick, and “$name” leaves the queue. You can't undo this in Kudos."
+    else -> "All $count works in this queue get the tag you pick, and “$name” leaves the queue. You can't undo this in Kudos."
 }

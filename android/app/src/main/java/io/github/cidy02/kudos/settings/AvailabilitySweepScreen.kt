@@ -100,7 +100,7 @@ fun AvailabilitySweepScreen(
         }
     }
 
-    SettingsPage(title = "Check Availability") {
+    SettingsPage(title = "Check Availability", kicker = "") {
         item {
             SettingsSection(footnote = null, label = "Before you start") {
                 Column(

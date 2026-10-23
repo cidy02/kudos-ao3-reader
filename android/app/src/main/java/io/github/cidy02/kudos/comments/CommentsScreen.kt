@@ -1,5 +1,9 @@
 package io.github.cidy02.kudos.comments
 
+import androidx.compose.material.icons.outlined.Check
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.semantics.selected
 import io.github.cidy02.kudos.app.DebugShotEffect
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
@@ -330,10 +334,12 @@ fun CommentsScreen(
     if (showingChapterPicker) {
         val chaptersLoading by viewModel.chaptersLoading.collectAsState()
         val chaptersFailed by viewModel.chaptersFailed.collectAsState()
+        val chaptersFailureMessage by viewModel.chaptersFailureMessage.collectAsState()
         ChapterPickerSheet(
             chapters = chapters,
             chaptersLoading = chaptersLoading,
             chaptersFailed = chaptersFailed,
+            chaptersFailureMessage = chaptersFailureMessage,
             selectedChapter = selectedChapter,
             isScopeAll = scopeMode == CommentScope.All,
             totalComments = (state as? CommentsUiState.Loaded)?.thread?.totalComments,
@@ -753,6 +759,7 @@ fun ChapterPickerSheet(
     chapters: List<AO3ChapterRef>,
     chaptersLoading: Boolean = false,
     chaptersFailed: Boolean = false,
+    chaptersFailureMessage: String? = null,
     selectedChapter: AO3ChapterRef?,
     isScopeAll: Boolean,
     totalComments: Int?,
@@ -771,6 +778,7 @@ fun ChapterPickerSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
                 .padding(horizontal = 20.dp, vertical = 8.dp)
                 .padding(bottom = 32.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -788,7 +796,7 @@ fun ChapterPickerSheet(
                 onClick = onSelectAll,
                 shape = RoundedCornerShape(10.dp),
                 color = if (isScopeAll) tokens.glassFill(0.16) else tokens.glassFill(0.06),
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth().semantics { selected = isScopeAll }
             ) {
                 Row(
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
@@ -812,9 +820,10 @@ fun ChapterPickerSheet(
                             color = if (isScopeAll) tokens.accentInk else tokens.primaryInk
                         )
                     }
+                    if (isScopeAll) Icon(Icons.Outlined.Check, null, tint = tokens.accentInk)
                     if (totalComments != null) {
                         Text(
-                            text = totalComments.toString(),
+                            text = java.text.NumberFormat.getIntegerInstance().format(totalComments),
                             fontSize = 13.sp,
                             fontFamily = FontFamily.Monospace,
                             color = tokens.secondaryInk
@@ -834,7 +843,7 @@ fun ChapterPickerSheet(
                     if (chaptersFailed) {
                         Text("Couldn't Load Chapters", fontSize = 15.sp, fontWeight = FontWeight.SemiBold,
                             color = tokens.primaryInk)
-                        Text("Check your connection and try again.", fontSize = 13.sp, lineHeight = 18.sp,
+                        Text(chaptersFailureMessage ?: "Check your connection and try again.", fontSize = 13.sp, lineHeight = 18.sp,
                             color = tokens.secondaryInk)
                     } else {
                         androidx.compose.material3.CircularProgressIndicator(
@@ -851,7 +860,7 @@ fun ChapterPickerSheet(
                     onClick = { onSelectChapter(chapter) },
                     shape = RoundedCornerShape(10.dp),
                     color = if (isSelected) tokens.glassFill(0.16) else tokens.glassFill(0.06),
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth().semantics { selected = isSelected }
                 ) {
                     Row(
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),

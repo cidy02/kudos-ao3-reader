@@ -304,40 +304,10 @@ fun SelectableRemoteWorkRow(
     work: AO3WorkSummary,
     selected: Boolean,
     onToggle: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    expandAll: Boolean = false
 ) {
-    androidx.compose.material3.Card(
-        onClick = onToggle,
-        colors = androidx.compose.material3.CardDefaults.cardColors(
-            containerColor = if (selected) {
-                MaterialTheme.colorScheme.primaryContainer
-            } else {
-                MaterialTheme.colorScheme.surfaceContainerLow
-            }
-        ),
-        modifier = modifier
-            .fillMaxWidth()
-            .semantics { contentDescription = if (selected) "${work.title}, selected" else work.title }
-    ) {
-        Row(
-            modifier = Modifier.padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            androidx.compose.material3.Checkbox(checked = selected, onCheckedChange = { onToggle() })
-            androidx.compose.foundation.layout.Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = work.title,
-                    style = MaterialTheme.typography.titleMedium,
-                    maxLines = 1,
-                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
-                )
-                Text(
-                    text = work.authorText,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
-    }
+    SensitiveWorkRow(work = work, onOpenWork = { onToggle() }, modifier = modifier,
+        ledger = true, selecting = true, selected = selected, selectionAllowsDetails = true,
+        expandAll = expandAll, onLongClick = onToggle)
 }

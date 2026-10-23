@@ -1,5 +1,7 @@
 package io.github.cidy02.kudos.library
 
+import androidx.compose.ui.semantics.selected
+import androidx.compose.material.icons.outlined.Check
 import io.github.cidy02.kudos.app.DebugShotEffect
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.CoroutineStart
@@ -81,7 +83,8 @@ fun QueueSettingsScreen(
     settingsRepository: SettingsRepository? = null,
     epubBytes: (String) -> Long = { 0L },
     onOpenWork: (String) -> Unit = {},
-    onShowOnlyTag: (String) -> Unit = {}
+    onShowOnlyTag: (String) -> Unit = {},
+    origin: String = "Library"
 ) {
     val tokens = LocalKudosTokens.current
     val scope = rememberCoroutineScope()
@@ -164,7 +167,7 @@ fun QueueSettingsScreen(
     ) {
         Spacer(Modifier.height(WindowInsets.systemBars.asPaddingValues().calculateTopPadding() + 56.dp))
         SubjectHeaderBlock(
-            kicker = ReadingQueueFacts.kicker("Home", isDetails = true),
+            kicker = ReadingQueueFacts.kicker(origin, isDetails = true),
             kickerMaxLines = if (io.github.cidy02.kudos.ui.subject.isAccessibilityFontScale()) Int.MAX_VALUE else 1,
             title = current.displayName,
             subtitle = ReadingQueueFacts.subtitle(works.size, preserved, storedBytes),
@@ -262,6 +265,9 @@ fun QueueSettingsScreen(
                     SubjectHueSwatches.all.forEach { swatch ->
                         DropdownMenuItem(
                             text = { Text(swatch.name) },
+                            modifier = Modifier.semantics { selected = SubjectHueSwatches.matches(swatch, current.hue) && current.colorHex == null },
+                            trailingIcon = { if (SubjectHueSwatches.matches(swatch, current.hue) && current.colorHex == null)
+                                androidx.compose.material3.Icon(Icons.Outlined.Check, null, tint = palette.accent) },
                             onClick = {
                                 colourMenu = false
                                 scope.launch {

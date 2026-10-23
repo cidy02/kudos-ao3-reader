@@ -51,6 +51,8 @@ class BulkTagsTest {
         assertEquals("on every selected work", BulkTags.spoken(TagCoverage.All, "work"))
         assertEquals("on some selected works", BulkTags.spoken(TagCoverage.Some, "work"))
         assertEquals("not applied", BulkTags.spoken(TagCoverage.None, "work"))
+        assertEquals("on this queue", BulkTags.spoken(TagCoverage.All, "queue", singleQueue = true))
+        assertEquals("not on this queue", BulkTags.spoken(TagCoverage.None, "queue", singleQueue = true))
     }
 
     @Test fun aTapPutsATagOnTheRestAndOnlyATagOnEveryWorkComesOff() = runTest {

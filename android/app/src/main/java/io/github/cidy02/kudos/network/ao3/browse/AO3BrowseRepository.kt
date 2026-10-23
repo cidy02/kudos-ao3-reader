@@ -48,7 +48,7 @@ class AO3BrowseRepository(
         }
     }
 
-    suspend fun fandoms(category: AO3MediaCategory): AO3Result<List<AO3Fandom>> {
+    suspend fun fandoms(category: AO3MediaCategory, bypassCache: Boolean = false): AO3Result<List<AO3Fandom>> {
         // Demo pages come from fixtures. A disk cache written by a live session
         // would replay real AO3 lists, and writing the fixture list back would
         // poison the next non-demo Browse open.
@@ -56,7 +56,7 @@ class AO3BrowseRepository(
         val cached = if (demo) null else cache?.load()
         val entry = cached?.get(category.name)
         val now = Instant.ofEpochMilli(clock.nowMillis())
-        if (entry != null && !FandomCatalogCache.isStale(entry, now)) {
+        if (!bypassCache && entry != null && !FandomCatalogCache.isStale(entry, now)) {
             return AO3Result.Success(entry.fandoms)
         }
         val url = AO3BrowseUrls.resolveAo3Url(category.fandomsPath)
@@ -124,7 +124,7 @@ class AO3BrowseRepository(
                 is AO3Result.Failure -> return result
                 is AO3Result.Success -> {
                     val id = AO3FandomUnion.filterID(result.value.body, name)
-                        ?: return AO3Result.Failure(AO3Error.Parse("Couldn't resolve every fandom in this family. Try again."))
+                        ?: return searchRepository.search((filters ?: browseBaseline()).copy(fandom = names.joinToString(", ")), page)
                     synchronized(fandomFilterIDs) {
                         if (fandomFilterIDs.size >= 128) fandomFilterIDs.remove(fandomFilterIDs.keys.first())
                         fandomFilterIDs[name] = id

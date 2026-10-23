@@ -106,6 +106,8 @@ class CommentsViewModel(
 
     private val _chaptersFailed = MutableStateFlow(false)
     val chaptersFailed: StateFlow<Boolean> = _chaptersFailed.asStateFlow()
+    private val _chaptersFailureMessage = MutableStateFlow<String?>(null)
+    val chaptersFailureMessage = _chaptersFailureMessage.asStateFlow()
     /** True while the chapter list is being asked for: the picker shows that, not an empty sheet. */
     private val _chaptersLoading = MutableStateFlow(false)
     val chaptersLoading: StateFlow<Boolean> = _chaptersLoading.asStateFlow()
@@ -280,6 +282,7 @@ class CommentsViewModel(
         pendingVerification = null
         _chapters.value = emptyList()
         chaptersViewer = null
+        _chaptersFailureMessage.value = null
         _chaptersFailed.value = false
         _selectedChapter.value = null
         openedOnChapter = false
@@ -510,6 +513,7 @@ class CommentsViewModel(
         if (chapterIndexRepository == null || (_chapters.value.isNotEmpty() && chaptersViewer == viewer)) return
         viewModelScope.launch {
             // Asked again: the last failure is no longer what is known.
+            _chaptersFailureMessage.value = null
             _chaptersFailed.value = false
             _chaptersLoading.value = true
             val res = try { chapterIndexRepository.chapters(target.workId) } finally { _chaptersLoading.value = false }
@@ -518,6 +522,7 @@ class CommentsViewModel(
                 is AO3Result.Success -> {
                     _chapters.value = res.value
                     chaptersViewer = viewer
+                    _chaptersFailureMessage.value = null
                     _chaptersFailed.value = false
                     // The chapter Chapter Comments named from a byline gets its title and true number.
                     _selectedChapter.value?.let { chosen ->
@@ -535,6 +540,7 @@ class CommentsViewModel(
                 }
                 is AO3Result.Failure -> {
                     _chaptersFailed.value = true
+                    _chaptersFailureMessage.value = res.error.displayMessage()
                 }
             }
         }
