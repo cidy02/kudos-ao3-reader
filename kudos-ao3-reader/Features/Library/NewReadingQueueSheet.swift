@@ -53,7 +53,8 @@ struct NewReadingQueueSheet: View {
     /// Owned by the sheet rather than the three hosts: they each held `name` and
     /// `hue` already, and two more bindings apiece would be three identical
     /// copies of state that only this sheet reads.
-    let onCreate: (NewQueueOptions) -> Void
+    /// Returns whether the queue was saved: false keeps the sheet open and says so.
+    let onCreate: (NewQueueOptions) -> Bool
     let onCancel: () -> Void
     /// Edit Queue: title and confirm read "Edit queue" / "Save", and Start
     /// from is left out. Set through `init(name:hue:editing:onSave:onCancel:)`.
@@ -70,6 +71,7 @@ struct NewReadingQueueSheet: View {
     /// modal, so nothing can change the count while it is open, and counting
     /// memberships on every body evaluation would walk the whole shelf.
     @State private var seedCount: Int?
+    @State private var saveFailed = false
 
     @ScaledMetric(relativeTo: .subheadline) private var nameFieldSize: CGFloat = 16
     @ScaledMetric(relativeTo: .subheadline) private var seedTitleSize: CGFloat = 14.5
@@ -140,8 +142,10 @@ struct NewReadingQueueSheet: View {
                         Button("Cancel", action: onCancel)
                     }
                     ToolbarItem(placement: .confirmationAction) {
-                        Button(isEditing ? "Save" : "Create") { onCreate(options) }
-                            .disabled(trimmedName.isEmpty)
+                        Button(isEditing ? "Save" : "Create") {
+                            if !onCreate(options) { saveFailed = true }
+                        }
+                        .disabled(trimmedName.isEmpty)
                     }
                 }
         }
@@ -163,6 +167,12 @@ struct NewReadingQueueSheet: View {
             TextField("Tag", text: $newTagName)
             Button("Add", action: addNewTag)
             Button("Cancel", role: .cancel) {}
+        }
+        // Android's words. The sheet stays, holding what was typed, so Save can be tried again.
+        .alert("Could not save", isPresented: $saveFailed) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("The queue wasn't saved. Try again.")
         }
     }
 
@@ -223,7 +233,12 @@ struct NewReadingQueueSheet: View {
             #if os(iOS)
             .textInputAutocapitalization(.words)
             #endif
-            .onSubmit { onCreate(options) }
+            // Return creates too, so it reports a failed save the same way; an empty name
+            // does nothing, as the disabled Create.
+            .onSubmit {
+                guard !trimmedName.isEmpty else { return }
+                if !onCreate(options) { saveFailed = true }
+            }
             .padding(.horizontal, 13)
             .padding(.vertical, 11)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -338,7 +353,7 @@ extension NewReadingQueueSheet {
         name: Binding<String>,
         hue: Binding<Double?>,
         editing options: NewQueueOptions,
-        onSave: @escaping (NewQueueOptions) -> Void,
+        onSave: @escaping (NewQueueOptions) -> Bool,
         onCancel: @escaping () -> Void
     ) {
         self.init(name: name, hue: hue, onCreate: onSave, onCancel: onCancel)
@@ -374,10 +389,20 @@ struct EditReadingQueueSheet: View {
                 colorHex: queue.colorHex
             ),
             onSave: { options in
-                if ReadingQueueService.updateQueue(queue, name: name, hue: hue, options: options, in: context) {
+                let offlineTurnedOn = ReadingQueueService.updateQueue(
+                    queue, name: name, hue: hue, options: options, in: context
+                )
+                // `updateQueue` saved best-effort; this asks whether that stuck (a no-op when
+                // it did). Unsaved, the edit is undone on the queue and the sheet keeps it.
+                guard context.saveBestEffort(reason: "Saving queue changes failed") else {
+                    context.rollback()
+                    return false
+                }
+                if offlineTurnedOn {
                     ReadingQueueService.preserveMissingWorks(in: queue, context: context)
                 }
                 dismiss()
+                return true
             },
             onCancel: { dismiss() }
         )

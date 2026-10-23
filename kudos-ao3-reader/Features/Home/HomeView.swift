@@ -633,22 +633,29 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
         try? context.save()
     }
 
-    private func createQueue(_ options: NewQueueOptions) {
+    /// False keeps the sheet open: the queue did not save (`NewReadingQueueSheet` says so).
+    private func createQueue(_ options: NewQueueOptions) -> Bool {
         let trimmed = newQueueName.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
-        let hue = newQueueHue
-        newQueueName = ""
-        newQueueHue = nil
-        showingNewQueue = false
+        guard !trimmed.isEmpty else { return false }
         _ = ReadingQueueService.createQueue(
             named: trimmed,
-            hue: hue,
+            hue: newQueueHue,
             colorHex: options.colorHex,
             keepsWorksOffline: options.keepsWorksOffline,
             seededFrom: options.seed,
             tagNames: options.tagNames,
             in: context
         )
+        // `createQueue` saved best-effort; this asks whether that stuck (a no-op when it
+        // did). Unsaved, the half-made queue is dropped so a second Create can't make two.
+        guard context.saveBestEffort(reason: "Saving reading queue failed") else {
+            context.rollback()
+            return false
+        }
+        newQueueName = ""
+        newQueueHue = nil
+        showingNewQueue = false
+        return true
     }
 
     // MARK: Card details

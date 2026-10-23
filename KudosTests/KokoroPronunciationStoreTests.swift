@@ -18,6 +18,12 @@ struct KokoroPronunciationStoreTests {
         return KokoroPronunciationStore(url: url)
     }
 
+    /// I11: the editor reports a failed write instead of closing as if it saved.
+    @Test func anUnwritableFileThrows() {
+        let store = KokoroPronunciationStore(url: URL(fileURLWithPath: "/dev/null/kokoro-pron.json"))
+        #expect(throws: (any Error).self) { try store.setOverride("hɜɹmˈIəni", for: "Hermione") }
+    }
+
     @Test func setThenReadRoundTrips() throws {
         let store = temporaryStore()
         #expect(store.overrides().isEmpty)
