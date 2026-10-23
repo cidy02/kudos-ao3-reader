@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Text
@@ -39,13 +40,22 @@ import kotlinx.coroutines.launch
 
 @Composable
 fun SettingsListeningPage(repository: SettingsRepository) {
+    SettingsListeningContent(repository) { content -> SettingsPage(title = "Listening", content = content) }
+}
+
+/** Shared form content; the reader supplies its sheet frame and owns no audition playback. */
+@Composable
+internal fun SettingsListeningContent(
+    repository: SettingsRepository,
+    frame: @Composable (LazyListScope.() -> Unit) -> Unit
+) {
     val context = LocalContext.current.applicationContext
     val service = remember(context) { AutomaticTTSService(context) }
     DisposableEffect(service) {
         onDispose { service.shutdown() }
     }
     val voicePack = rememberVoicePackUi(context)
-    SettingsListeningPage(repository, service, voicePack.installed, voicePack)
+    SettingsListeningContent(repository, service, voicePack.installed, voicePack, frame)
 }
 
 /** The production page accepts the existing engine seam so tests can report real catalog-shaped data. */
@@ -55,6 +65,19 @@ internal fun SettingsListeningPage(
     service: TTSService,
     packInstalled: Boolean = false,
     voicePack: VoicePackUi = VoicePackUi.fixed(packInstalled)
+) {
+    SettingsListeningContent(repository, service, packInstalled, voicePack) { content ->
+        SettingsPage(title = "Listening", content = content)
+    }
+}
+
+@Composable
+internal fun SettingsListeningContent(
+    repository: SettingsRepository,
+    service: TTSService,
+    packInstalled: Boolean,
+    voicePack: VoicePackUi,
+    frame: @Composable (LazyListScope.() -> Unit) -> Unit
 ) {
     val installed = packInstalled || voicePack.installed
     val speech by repository.speechPreferences.collectAsState(initial = ReaderSpeechPreferences())
@@ -84,7 +107,7 @@ internal fun SettingsListeningPage(
         onDispose { service.stop() }
     }
 
-    SettingsPage(title = "Listening") {
+    frame {
         item {
             SettingsSection(
                 label = "Audition Voice",

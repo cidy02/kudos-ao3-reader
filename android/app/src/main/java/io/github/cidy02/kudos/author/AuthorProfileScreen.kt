@@ -98,7 +98,8 @@ fun AuthorProfileScreen(
     /** Opens the new-work form. Offered on the reader's own Works and Dashboard, as iOS's "+". */
     onNewWork: (() -> Unit)? = null,
     onOpenAuthor: (AO3AuthorRoute) -> Unit = {},
-    onLogin: () -> Unit = {}
+    onLogin: () -> Unit = {},
+    onOpenAuthorTab: (AO3AuthorRoute, AuthorTab) -> Unit = { _, _ -> }
 ) {
     val account by ((authRepository ?: seriesFormRepository?.auth)?.state?.collectAsState() ?: remember {
         mutableStateOf<io.github.cidy02.kudos.auth.AO3AuthState>(io.github.cidy02.kudos.auth.AO3AuthState.SignedOut) })
@@ -876,7 +877,7 @@ fun AuthorProfileScreen(
                             }
                         }
                     }
-                    onOpenDashboardList?.let { open -> DashboardSeeAll("bookmarks") { open(AccountListType.Bookmarks) } }
+                    DashboardSeeAll("bookmarks") { onOpenAuthorTab(route, AuthorTab.Bookmarks) }
                 }
             } else if (!isDashboard) {
                 val tabHasContent = when (tab) {

@@ -31,6 +31,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.ChatBubbleOutline
 import androidx.compose.material.icons.filled.Favorite
@@ -81,6 +82,24 @@ data class ReaderFanRoundAction(
     val isEmphasized: Boolean = false,
     val action: () -> Unit,
     val longPressAction: (() -> Unit)? = null
+)
+
+internal enum class ReaderSettingsSheet { Display, Speech }
+
+/** The fan's tap still toggles playback; holding it opens the dedicated speech form. */
+internal fun readerReadAloudAction(
+    active: Boolean,
+    enabled: Boolean,
+    onSettings: (ReaderSettingsSheet) -> Unit,
+    onToggle: () -> Unit
+) = ReaderFanRoundAction(
+    id = "readAloud",
+    icon = Icons.AutoMirrored.Filled.VolumeUp,
+    accessibilityLabel = if (active) "Stop reading aloud" else "Read aloud",
+    isEnabled = enabled,
+    isEmphasized = active,
+    action = onToggle,
+    longPressAction = { onSettings(ReaderSettingsSheet.Speech) }
 )
 
 /** Menu contents only; the glass composables below stay unchanged. */
