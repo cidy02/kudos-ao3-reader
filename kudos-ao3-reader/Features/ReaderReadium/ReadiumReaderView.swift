@@ -1512,6 +1512,7 @@ extension ReadiumReaderView {
         if DebugLaunchRoute.takeSheet("readercontents") { router.panel = .readerChapters }
         if DebugLaunchRoute.takeSheet("readerfind") { router.panel = .readerFind }
         if DebugLaunchRoute.takeSheet("readerdisplay") { router.panel = .readerDisplay }
+        if DebugLaunchRoute.takeSheet("readerspeech") { showingSpeechSettings = true }
         if DebugLaunchRoute.takeSheet("readernote") {
             let note = ReadingAnnotation(
                 work: work,
@@ -1520,8 +1521,15 @@ extension ReadiumReaderView {
                 selectedText: "The TARDIS lands in a city that never switches its streetlamps off.",
                 note: ""
             )
-            modelContext.insert(note)
-            editingNote = note
+            // One demo highlight per work, not one per launch (A83).
+            if let existing = annotations.first(where: {
+                $0.locatorString == note.locatorString && $0.selectedText == note.selectedText
+            }) {
+                editingNote = existing
+            } else {
+                modelContext.insert(note)
+                editingNote = note
+            }
         }
     }
     #endif
