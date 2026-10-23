@@ -248,19 +248,22 @@ class WritingTagsEditorScreenTest {
         assertEquals(0, tags.posts)
     }
 
-    @Test fun longChosenListsAreLazyAndTypingBringsSuggestionsBelowThePinnedField() {
+    @Test fun longChosenListsStayLazyAndTypingKeepsTheFieldUntilTheReaderScrolls() {
         show(null)
         compose.runOnIdle { form.writingTags(WritingTagKind.Freeform, List(150) { "Chosen tag $it" }) }
         open(WritingTagKind.Freeform)
         compose.onNodeWithContentDescription("Remove Chosen tag 149").assertDoesNotExist()
+        val before = compose.onNodeWithContentDescription("Add a tag").fetchSemanticsNode().boundsInRoot
         compose.onNodeWithContentDescription("Add a tag").performTextReplacement("demo")
+        compose.waitUntil(15_000) { tags.gets.isNotEmpty() }
+        compose.waitForIdle()
+        val after = compose.onNodeWithContentDescription("Add a tag").fetchSemanticsNode().boundsInRoot
+        assertEquals("Typing and the answer leave the ordinary input row in place", before.top, after.top, 0.1f)
+        compose.onNodeWithTag("Writing tags editor").performScrollToNode(hasContentDescription("Add Demo First"))
         awaitText("Demo First")
-        compose.onNodeWithContentDescription("Add a tag").assertIsDisplayed()
         compose.onNodeWithContentDescription("Add Demo First").assertIsDisplayed()
-        compose.onNodeWithText("SUGGESTIONS").assertIsDisplayed()
-        val input = compose.onNodeWithContentDescription("Add a tag").fetchSemanticsNode().boundsInRoot
-        val suggestion = compose.onNodeWithContentDescription("Add Demo First").fetchSemanticsNode().boundsInRoot
-        assertTrue(suggestion.top >= input.bottom)
+        // A focused field stays composed in the lazy list; it has scrolled out of view.
+        compose.onNodeWithContentDescription("Add a tag").assertIsNotDisplayed()
         assertEquals(150, form.state.value.form!!.additionalTags.size)
         assertEquals(0, tags.posts)
     }
@@ -274,8 +277,9 @@ class WritingTagsEditorScreenTest {
         assertTextFits(compose.onNodeWithText(long, useUnmergedTree = true))
         compose.onNodeWithContentDescription("Remove $long").assertIsDisplayed()
         compose.onNodeWithContentDescription("Add a tag").performTextReplacement("a long typed name with several words and 星")
-        awaitText("Posts as typed")
         val term = "a long typed name with several words and 星"
+        compose.onNodeWithTag("Writing tags editor").performScrollToNode(hasContentDescription("Add $term"))
+        awaitText("Posts as typed")
         assertTextFits(compose.onNode(hasText(term) and hasAnyAncestor(hasContentDescription("Add $term")), useUnmergedTree = true))
         compose.onNodeWithTag("Writing tags editor").performScrollToNode(hasText(WritingTagFootnote))
         assertTextFits(compose.onNodeWithText(WritingTagFootnote, useUnmergedTree = true))

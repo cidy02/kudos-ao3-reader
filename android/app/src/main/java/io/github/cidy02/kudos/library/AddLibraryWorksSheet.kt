@@ -82,84 +82,125 @@ internal fun AddLibraryWorksSheet(
     val chosen = AddLibraryWorks.chosen(eligible, selection)
 
     ModalBottomSheet(onDismissRequest = onDismiss, modifier = Modifier.fillMaxWidth()) {
-        Column(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 28.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Add to $destinationName", style = MaterialTheme.typography.titleLarge,
-                    maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-                // Every works list offers the reveal while Hide Mature is on.
-                if (privacy.hideMatureContent && eligible.isNotEmpty()) {
-                    TextButton(onClick = onToggleMature) { Text(if (reveal.revealAll) "Hide mature" else "Show mature") }
-                }
+        AddLibraryWorksContent(
+            destinationName = destinationName,
+            scopeName = scopeName,
+            candidates = candidates,
+            eligible = eligible,
+            matches = matches,
+            chosen = chosen,
+            query = query,
+            onQueryChange = { query = it },
+            selection = selection,
+            onSelectionChange = { selection = it },
+            privacy = privacy,
+            reveal = reveal,
+            onToggleMature = onToggleMature,
+            onDismiss = onDismiss,
+            onAdd = onAdd,
+            openAuthor = openAuthor
+        )
+    }
+}
+
+@Composable
+internal fun AddLibraryWorksContent(
+    destinationName: String,
+    scopeName: String,
+    candidates: List<SavedWork>,
+    eligible: List<SavedWork>,
+    matches: List<SavedWork>,
+    chosen: List<SavedWork>,
+    query: String,
+    onQueryChange: (String) -> Unit,
+    selection: Set<String>,
+    onSelectionChange: (Set<String>) -> Unit,
+    privacy: PrivacySettings,
+    reveal: PrivacyRevealState,
+    onToggleMature: () -> Unit,
+    onDismiss: () -> Unit,
+    onAdd: (List<SavedWork>) -> Unit,
+    openAuthor: (String) -> Unit = io.github.cidy02.kudos.works.detail.LocalOpenAuthor.current
+) {
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 28.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Add to $destinationName", style = MaterialTheme.typography.titleLarge,
+                maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+            // Every works list offers the reveal while Hide Mature is on.
+            if (privacy.hideMatureContent && eligible.isNotEmpty()) {
+                TextButton(onClick = onToggleMature) { Text(if (reveal.revealAll) "Hide mature" else "Show mature") }
             }
-            when {
-                // Hide Mature can empty the picker on its own; that is not "nothing to add".
-                eligible.isEmpty() && candidates.isNotEmpty() -> EmptyStateCard(
-                    title = "Mature works are hidden",
-                    message = "Hide Mature is hiding every work you can add here.",
-                    primaryActionLabel = "Show mature",
-                    onPrimaryAction = onToggleMature
+        }
+        when {
+            // Hide Mature can empty the picker on its own; that is not "nothing to add".
+            eligible.isEmpty() && candidates.isNotEmpty() -> EmptyStateCard(
+                title = "Mature works are hidden",
+                message = "Hide Mature is hiding every work you can add here.",
+                primaryActionLabel = "Show mature",
+                onPrimaryAction = onToggleMature
+            )
+            eligible.isEmpty() -> EmptyStateCard(
+                title = "No works to add",
+                message = "Your Library has no works you can add to this $scopeName."
+            )
+            else -> {
+                OutlinedTextField(
+                    value = query,
+                    onValueChange = onQueryChange,
+                    label = { Text("Search your library") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
                 )
-                eligible.isEmpty() -> EmptyStateCard(
-                    title = "No works to add",
-                    message = "Your Library has no works you can add to this $scopeName."
-                )
-                else -> {
-                    OutlinedTextField(
-                        value = query,
-                        onValueChange = { query = it },
-                        label = { Text("Search your library") },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true
+                if (matches.isEmpty()) {
+                    EmptyStateCard(
+                        title = "No matching works",
+                        message = "Your Library has no works matching “$query”.",
+                        primaryActionLabel = "Clear Search",
+                        onPrimaryAction = { onQueryChange("") }
                     )
-                    if (matches.isEmpty()) {
-                        EmptyStateCard(
-                            title = "No matching works",
-                            message = "Your Library has no works matching “$query”.",
-                            primaryActionLabel = "Clear Search",
-                            onPrimaryAction = { query = "" }
-                        )
-                    }
-                    LazyColumn(
-                        modifier = Modifier.fillMaxWidth().heightIn(max = 400.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        items(matches, key = { it.id }) { work ->
-                            val selected = work.id in selection
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    // One control with a state TalkBack can say (audit A13).
-                                    .toggleable(value = selected, role = Role.Checkbox) {
-                                        selection = if (it) selection + work.id else selection - work.id
-                                    }
-                                    .padding(vertical = 4.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(12.dp)
-                            ) {
-                                Checkbox(checked = selected, onCheckedChange = null)
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(work.title.ifBlank { "Untitled work" }, style = MaterialTheme.typography.bodyLarge,
-                                        maxLines = 2, overflow = TextOverflow.Ellipsis)
-                                    if (work.author.isNotBlank()) {
-                                        io.github.cidy02.kudos.works.detail.VerifiedAuthorByline(
-                                            work.author, work.authorIdentitiesJSON,
-                                            onOpenAuthor = { onDismiss(); openAuthor(it) }
-                                        )
-                                    }
+                }
+                LazyColumn(
+                    modifier = Modifier.fillMaxWidth().heightIn(max = 400.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(matches, key = { it.id }) { work ->
+                        val selected = work.id in selection
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                // One control with a state TalkBack can say (audit A13).
+                                .toggleable(value = selected, role = Role.Checkbox) {
+                                    onSelectionChange(if (it) selection + work.id else selection - work.id)
+                                }
+                                .padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Checkbox(checked = selected, onCheckedChange = null)
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(work.title.ifBlank { "Untitled work" }, style = MaterialTheme.typography.bodyLarge,
+                                    maxLines = 2, overflow = TextOverflow.Ellipsis)
+                                if (work.author.isNotBlank()) {
+                                    io.github.cidy02.kudos.works.detail.VerifiedAuthorByline(
+                                        work.author, work.authorIdentitiesJSON,
+                                        includesBy = true,
+                                        compact = !io.github.cidy02.kudos.ui.subject.isAccessibilityFontScale(),
+                                        onOpenAuthor = { onDismiss(); openAuthor(it) }
+                                    )
                                 }
                             }
                         }
                     }
                 }
             }
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f)) { Text("Cancel") }
-                Button(onClick = { onAdd(chosen) }, modifier = Modifier.weight(1f), enabled = chosen.isNotEmpty()) {
-                    Text(AddLibraryWorks.confirmationTitle(chosen.size))
-                }
+        }
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f)) { Text("Cancel") }
+            Button(onClick = { onAdd(chosen) }, modifier = Modifier.weight(1f), enabled = chosen.isNotEmpty()) {
+                Text(AddLibraryWorks.confirmationTitle(chosen.size))
             }
         }
     }

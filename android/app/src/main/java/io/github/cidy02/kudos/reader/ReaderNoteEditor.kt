@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.reader
 
+import io.github.cidy02.kudos.ui.subject.ReaderTheme
 import io.github.cidy02.kudos.ui.subject.LocalSettingsFormGround
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.rememberUpdatedState
@@ -79,7 +80,7 @@ internal fun ReaderNoteEditor(
     val focus = remember(annotation.id) { FocusRequester() }
     val color = ReadingAnnotationColor.fromRaw(annotation.colorRaw)
 
-    CompositionLocalProvider(LocalSettingsFormGround provides true) {
+    CompositionLocalProvider(LocalSettingsFormGround provides (tokens.theme != ReaderTheme.Light)) {
     Column(
         Modifier.fillMaxWidth().imePadding().verticalScroll(rememberScrollState())
             .navigationBarsPadding().padding(bottom = 24.dp)

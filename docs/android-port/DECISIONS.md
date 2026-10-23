@@ -2696,3 +2696,16 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   tinted chip with its icon, as iOS's. A93's five P3s (the pinned field iOS doesn't pin, four more
   pagers, the reader sheets' cards in Light, Customize Theme's cards, the accent ink outside Sepia) go to
   3hd.
+- **2026-10-23 · A88c's second half and A93's P3s (Gemini 3hc, finished by Codex as 3hc2 after
+  Claude-CLI's A94; Codex 3hd).**
+  - The tags editor's field and the collections search are ordinary rows that scroll away, as on iOS
+    (`WritingTagsEditor.swift`, `WorkAssociationPickers.swift` List rows). Pinning them caused the wash
+    seam. The scroll that kept suggestions in view while typing went with the pin: with the field in
+    the list it would scroll the field being typed in out of view, and iOS doesn't scroll either.
+  - The reader's sheets keep glass cards in Light and opaque ones in Sepia, Dark and OLED, as sampled
+    from the iPhone. Customize Theme is opaque like Pronunciations.
+  - The search results', an AO3 collection's and moderation's pagers take the page's palette, as
+    iOS's; the prompt meme already did.
+  - Add Works' bylines read "by" and tint a linked author, as iOS does. The iPhone's grey was its demo,
+    which gives works no author identities.
+  - The works pages' card dates stay as each app writes them (owner Q28).

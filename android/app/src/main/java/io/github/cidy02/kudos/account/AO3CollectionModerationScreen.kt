@@ -178,7 +178,7 @@ fun AO3CollectionModerationScreen(
                             }
                         }
                         data?.queue?.takeIf { it.totalPages > 1 }?.let { queue -> item {
-                            KudosPaginationBar(queue.currentPage, queue.totalPages,
+                            KudosPaginationBar(queue.currentPage, queue.totalPages, palette = palette,
                                 onPageChange = { scope.launch { model.loadPage(it) } }, enabled = !state.busy,
                                 modifier = Modifier.padding(top = 4.dp)
                                     .padding(horizontal = SubjectMetrics.accountGutter).subjectPanel())

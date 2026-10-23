@@ -310,6 +310,7 @@ fun AO3CollectionDetailScreen(
                     KudosPaginationBar(
                         currentPage = model.currentPage(segment),
                         totalPages = totalPages,
+                        palette = palette,
                         enabled = phase != AO3CollectionDetailPhase.Loading,
                         onPageChange = { page -> scope.launch { model.load(segment, page) } },
                         modifier = Modifier

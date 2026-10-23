@@ -1,7 +1,6 @@
 package io.github.cidy02.kudos.writing
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -42,7 +41,6 @@ internal enum class WorkAssociation(val title: String) {
     Series("Series"), CollectionsGifts("Collections and gifts"), Creators("Co-creators"), Parent("Inspired by")
 }
 
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
 internal fun WritingAssociationPicker(
     kind: WorkAssociation, form: AO3WorkForm, model: WritingWorkFormState,
@@ -61,12 +59,6 @@ internal fun WritingAssociationPicker(
         term.isEmpty() || offer.title.contains(term, true) || offer.name.contains(term, true)
     }
     val foundCollections = searchState.offers.filter { offer -> form.collections.none { it.name.equals(offer.name, true) } }
-    LaunchedEffect(searchState.query, foundCollections.firstOrNull()?.name) {
-        if (kind == WorkAssociation.CollectionsGifts && searchState.query.isNotEmpty()) {
-            // Search stays pinned; the first answer is reachable above the keyboard even with many held rows.
-            list.scrollToItem(if (foundCollections.isEmpty()) 2 else 3 + visibleCollections.size)
-        }
-    }
     var gift by remember(kind, model) { mutableStateOf("") }
     var languageChoice by remember { mutableStateOf(false) }
     DisposableEffect(search) { onDispose { search.close() } }
@@ -128,8 +120,8 @@ internal fun WritingAssociationPicker(
                     val rows = visibleCollections.map { it to false } + foundCollections.map { it to true }
                     val empty = rows.isEmpty()
                     item { AssociationSection("Your collections", form.collections.size) }
-                    stickyHeader {
-                        Column(Modifier.testTag("Writing pinned field").writingPinnedFieldGround(list, 2, palette)
+                    item {
+                        Column(Modifier.testTag("Writing pinned field")
                             .padding(horizontal = SubjectMetrics.accountGutter).padding(top = 8.dp)
                             .writingSuggestionPanel(first = true, last = false)) {
                             SubjectTextFieldRow("Search", searchState.query, "Search all collections by name", search::type, autocorrect = false)

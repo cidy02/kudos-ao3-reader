@@ -3,7 +3,7 @@ package io.github.cidy02.kudos.settings
 import io.github.cidy02.kudos.app.DebugShotEffect
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.width
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -49,6 +49,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.input.KeyboardCapitalization
@@ -175,8 +176,10 @@ fun SubjectTextFieldRow(
         // iOS's trailing fields; a long value still scrolls. A tap anywhere in the box reaches it.
         // The width is measured here: the field's own intrinsic width runs one edit behind and
         // cut the last character.
-        Box(Modifier.fillMaxWidth().clickable(remember { MutableInteractionSource() }, indication = null,
-            enabled = enabled) { focus.requestFocus() },
+        // A clickable parent merges SetText away from the field's focus semantics.
+        Box(Modifier.fillMaxWidth().pointerInput(enabled) {
+            if (enabled) detectTapGestures { focus.requestFocus() }
+        },
             contentAlignment = if (stacked) Alignment.CenterStart else Alignment.CenterEnd) {
             BasicTextField(value = value, onValueChange = onValueChange, enabled = enabled,
                 singleLine = !multiline, minLines = if (multiline) 2 else 1, maxLines = if (multiline) 6 else 1,

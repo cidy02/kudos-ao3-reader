@@ -98,9 +98,9 @@ class Brief3hbContentTest {
         node.performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
         return layouts.single().layoutInput.style.color
     }
-    private fun assertCard(label: String) {
+    private fun assertCard(label: String, expected: Color? = null) {
         val row = compose.onNodeWithText(label, useUnmergedTree = true).performScrollTo().fetchSemanticsNode().boundsInRoot
-        assertColor(tokens.cardFill, pixel(Offset(with(compose.density) { 20.dp.toPx() }, row.center.y)))
+        assertColor(expected ?: tokens.cardFill, pixel(Offset(with(compose.density) { 20.dp.toPx() }, row.center.y)))
     }
     private fun assertAccentPixels(node: SemanticsNodeInteraction, expected: Color) {
         val bounds = node.fetchSemanticsNode().boundsInRoot
@@ -117,44 +117,41 @@ class Brief3hbContentTest {
         assertTrue("Expected the control's actual tint, found $matches pixels", matches > 3)
     }
 
-    private fun washAt(y: Float): Color {
-        val position = y / with(compose.density) { SubjectMetrics.defaultWashHeight.toPx() }
-        val stops = tokens.scopePalette.washStops
-        val high = stops.indexOfFirst { it.location >= position }.takeIf { it >= 0 } ?: stops.lastIndex
-        val color = if (high == 0) stops.first().color else {
-            val low = stops[high - 1]
-            val upper = stops[high]
-            lerp(low.color, upper.color, ((position - low.location) / (upper.location - low.location)).coerceIn(0f, 1f))
-        }
-        return color.compositeOver(tokens.background)
-    }
-    private fun checkPinnedField(listTag: String) {
+    private fun checkScrollingField(listTag: String) {
         for (theme in themes) {
             compose.runOnIdle { mode = theme }
-            compose.onNodeWithTag(listTag).performScrollToIndex(0)
-            val initial = compose.onNodeWithTag("Writing pinned field").fetchSemanticsNode().boundsInRoot
-            val at = Offset(2f, initial.top + 2f)
-            assertColor(washAt(at.y), pixel(at))
-            compose.onNodeWithTag(listTag).performScrollToIndex(20)
-            val pinned = compose.onNodeWithTag("Writing pinned field").fetchSemanticsNode().boundsInRoot
-            assertTrue("Field has pinned above its initial position", pinned.top < initial.top)
-            assertColor(tokens.background, pixel(Offset(2f, pinned.top + 2f)))
+            val list = compose.onNodeWithTag(listTag)
+            list.performScrollToIndex(0)
+            val field = compose.onNodeWithTag("Writing pinned field").fetchSemanticsNode().boundsInRoot
+            // The page's one wash runs on through the field's row: no edge where it starts or ends
+            // (the field's own wash drew a jump of about 0.04 at its top).
+            for (edge in listOf(field.top, field.bottom)) {
+                assertColor(pixel(Offset(2f, edge - 3f)), pixel(Offset(2f, edge + 3f)))
+            }
+            list.performScrollToIndex(20)
+            // An ordinary row scrolls away; a focused one stays composed in the lazy list, out of view.
+            if (compose.onAllNodesWithTag("Writing pinned field").fetchSemanticsNodes().isNotEmpty()) {
+                compose.onNodeWithTag("Writing pinned field").assertIsNotDisplayed()
+            }
         }
     }
-    @Test fun tagsKeepOneWashAndGainAnOpaqueGroundOnlyWhenPinned() {
+    @Test fun tagsFieldScrollsAwayUnderOneContinuousWash() {
         var values by mutableStateOf(List(150) { "Chosen tag $it" })
         show { WritingTagsEditorScreen(WritingTagKind.Freeform, values, null, null, { values = it }, { values },
             rememberCoroutineScope(), {}) }
-        checkPinnedField("Writing tags editor")
+        // Typing must not jump past the input now that it is an ordinary row.
+        compose.onNodeWithContentDescription("Add a tag").performTextInput("Comfort")
+        compose.onNodeWithTag("Writing pinned field").assertIsDisplayed()
+        checkScrollingField("Writing tags editor")
     }
-    @Test fun collectionsKeepOneWashAndGainTheSameOpaquePinnedGround() {
+    @Test fun collectionsSearchScrollsAwayUnderOneContinuousWash() {
         val model = runBlocking { workFormSetup().model(null).also { it.load(); it.openCollections() } }
         show {
             val state by model.state.collectAsState()
             val form = state.form!!.copy(collections = List(80) { AO3CollectionOffer("collection$it", "Collection $it") })
             WritingAssociationPicker(WorkAssociation.CollectionsGifts, form, model, null, onBack = {})
         }
-        checkPinnedField("Writing association picker")
+        checkScrollingField("Writing association picker")
     }
     @Test fun giftRemovePaintsAFilledMinusCircleAndStillRemovesOnlyThatRecipient() {
         val model = runBlocking { workFormSetup().model(null).also { it.load(); it.addGift("Writer"); it.addGift("Other") } }
@@ -171,21 +168,61 @@ class Brief3hbContentTest {
         compose.runOnIdle { assertFalse(model.state.value.form!!.gifts.contains("Writer")); assertTrue(model.state.value.form!!.gifts.contains("Other")) }
     }
 
-    @Test fun displayCardsUseSpeechSheetsElevatedGroundInLightAndSepia() {
+    @Test fun displayCardsUseGlassInLightAndOpaqueGroundInSepiaDarkAndOled() {
         show { ReaderDisplaySheet(ReaderPreferences(), settings, keepScreenAwake = false,
             onFontSizeChange = {}, onThemeChange = {}, listeningContent = { frame -> frame {} }) }
-        for (theme in listOf(KudosThemeMode.Light, KudosThemeMode.Sepia)) {
+        for (theme in themes) {
             compose.runOnIdle { mode = theme }
-            assertCard("Customize Theme…")
-            assertCard("Keep screen awake")
+            compose.waitForIdle()
+            assertCard("Customize Theme…", readerCardGround())
+            assertCard("Keep screen awake", readerCardGround())
         }
     }
-    @Test fun noteCardsUseSpeechSheetsElevatedGroundInLightAndSepia() {
+    @Test fun noteCardsUseGlassInLightAndOpaqueGroundInSepiaDarkAndOled() {
         show { ReaderNoteEditor(ReadingAnnotation(workID = "work", note = "Saved note", selectedText = "Quoted words"), {}, {}, {}, {}) }
-        for (theme in listOf(KudosThemeMode.Light, KudosThemeMode.Sepia)) {
+        for (theme in themes) {
             compose.runOnIdle { mode = theme }
-            assertCard("Quoted words")
-            assertCard("Delete Highlight")
+            compose.waitForIdle()
+            assertCard("Quoted words", readerCardGround())
+            assertCard("Delete Highlight", readerCardGround())
+        }
+    }
+    private fun readerCardGround(): Color = if (mode == KudosThemeMode.Light)
+        tokens.glassFill(0.09).compositeOver(tokens.background) else tokens.cardFill
+
+    @Test fun displayKeepsWhiteSelectedPillsInLight() {
+        show { ReaderDisplaySheet(ReaderPreferences(), settings, keepScreenAwake = false,
+            onFontSizeChange = {}, onThemeChange = {}, listeningContent = { frame -> frame {} }) }
+        listOf("Theme", "Layout").forEach { description ->
+            val pill = compose.onNode(isSelected() and hasAnyAncestor(hasContentDescription(description)),
+                useUnmergedTree = true).performScrollTo().fetchSemanticsNode().boundsInRoot
+            assertColor(Color.White, pixel(Offset(pill.left + with(compose.density) { 5.dp.toPx() }, pill.center.y)))
+        }
+    }
+    @Test fun speechCardsUseGlassInLightAndOpaqueGroundInSepiaDarkAndOled() {
+        show { ReaderSpeechSettingsContent({}, listeningContent = { frame -> frame {
+            SettingsSection(footnote = null) { SubjectFormRow("Sample Text", value = "Plain Narration") }
+            SettingsSection(footnote = null) { SubjectFormRow("Engine", value = "Automatic") }
+        } }) }
+        for (theme in themes) {
+            compose.runOnIdle { mode = theme }
+            compose.waitForIdle()
+            assertCard("Sample Text", readerCardGround())
+            assertCard("Engine", readerCardGround())
+        }
+    }
+    @Test fun customizeThemeUsesOpaqueCardsIncludingTheFontPicker() {
+        show { CustomizeThemeContent(settings, onDismiss = {}) }
+        for (theme in themes) {
+            runBlocking { settings.updateEffectiveReaderTheme(ReaderThemeSetting.valueOf(theme.name)) }
+            compose.runOnIdle { mode = theme }
+            compose.waitForIdle()
+            assertCard("Font")
+            assertCard("Customize")
+            assertCard("Reset Theme")
+            compose.onNodeWithText("Font").performScrollTo().performClick()
+            assertCard("System")
+            compose.onNodeWithText("Back").performClick()
         }
     }
     @Test fun pronunciationEmptyAndCorrectionsCardsUseElevatedGround() {
@@ -313,8 +350,7 @@ class Brief3hbContentTest {
             assertAccentPixels(compose.onNodeWithContentDescription("Next Page"), palette.accentOnFill)
         }
     }
-    @Test fun sepiaContentsDoneAndDisplayControlsUseTheActualSepiaAccent() {
-        mode = KudosThemeMode.Sepia
+    @Test fun contentsDoneAndDisplayControlsUseAccentInkInEveryTheme() {
         var display by mutableStateOf(false)
         show {
             if (display) ReaderDisplaySheet(ReaderPreferences(), settings, keepScreenAwake = false,
@@ -322,10 +358,15 @@ class Brief3hbContentTest {
             else ReaderContentsSheet(emptyList(), emptyList(), emptyList(), onSelectEntry = {},
                 onSelectAnnotation = {}, onDeleteAnnotation = {}, onDone = {})
         }
-        assertAccentPixels(compose.onNodeWithContentDescription("Done"), tokens.accentInk)
-        compose.runOnIdle { display = true }
-        assertAccentPixels(compose.onNodeWithContentDescription("Done"), tokens.accentInk)
-        assertEquals(tokens.accentInk, textColor(compose.onNodeWithText("Customize Theme…", useUnmergedTree = true)))
+        for (theme in themes) {
+            compose.runOnIdle { mode = theme; display = false }
+            compose.waitForIdle()
+            assertAccentPixels(compose.onNodeWithContentDescription("Done"), tokens.accentInk)
+            compose.runOnIdle { display = true }
+            compose.waitForIdle()
+            assertAccentPixels(compose.onNodeWithContentDescription("Done"), tokens.accentInk)
+            assertEquals(tokens.accentInk, textColor(compose.onNodeWithText("Customize Theme…", useUnmergedTree = true)))
+        }
     }
     @Test fun contentsChaptersHaveDividersBetweenRowsAndKeepNavigation() {
         val entries = (1..3).map { ReaderTocEntry("Chapter $it", "$it.xhtml") }

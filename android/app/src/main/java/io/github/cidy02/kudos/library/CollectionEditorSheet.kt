@@ -17,6 +17,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -24,6 +25,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -31,6 +33,8 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import io.github.cidy02.kudos.core.model.WorkCollection
 import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
+import io.github.cidy02.kudos.ui.subject.LocalSettingsFormGround
+import io.github.cidy02.kudos.settings.settingsPanelGround
 import io.github.cidy02.kudos.ui.subject.ReaderTheme
 import io.github.cidy02.kudos.ui.subject.SubjectFieldLabel
 import io.github.cidy02.kudos.ui.subject.SubjectHueSwatchRow
@@ -39,7 +43,6 @@ import io.github.cidy02.kudos.ui.subject.SubjectPaletteTheme
 import io.github.cidy02.kudos.ui.subject.SubjectRowSeparator
 import io.github.cidy02.kudos.ui.subject.SubjectToggle
 import io.github.cidy02.kudos.ui.subject.parseStoredColor
-import io.github.cidy02.kudos.ui.subject.subjectPanel
 import io.github.cidy02.kudos.ui.subject.subjectScreenWash
 import io.github.cidy02.kudos.ui.components.coverHue
 import io.github.cidy02.kudos.works.DownloadQueue
@@ -162,112 +165,25 @@ fun CollectionEditorSheet(
             CollectionEditorHeader(if (editing) name else "New collection", editing, saving, canSave,
                 onDismiss = onDismiss, onSave = { save(close = true) })
 
-            val descriptionField: @Composable () -> Unit = {
-                SubjectFieldLabel("Description", Modifier.padding(top = 10.dp))
-                OutlinedTextField(
-                    value = description,
-                    onValueChange = { description = it; if (editing) save(close = false) },
-                    modifier = Modifier.fillMaxWidth(),
-                    placeholder = { Text("Optional") },
-                    minLines = 2
-                )
-            }
-            Column(
-                Modifier
-                    .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 16.dp)
-                    .padding(bottom = 28.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                if (!editing) {
-                    SubjectFieldLabel("Collection", Modifier.padding(top = 12.dp))
-                    SubjectFieldLabel("Name", Modifier.padding(top = 4.dp))
-                    OutlinedTextField(
-                        value = name,
-                        onValueChange = { name = it },
-                        modifier = Modifier.fillMaxWidth(),
-                        placeholder = { Text("Comfort reads") },
-                        singleLine = true
-                    )
-
-                    descriptionField()
-                }
-
-                if (editing) SubjectFieldLabel("Colour", Modifier.padding(top = 10.dp))
-                SubjectHueSwatchRow(
-                    hue = hue,
-                    colorHex = colorHex,
-                    onChange = { nextHue, nextHex ->
-                        hue = nextHue
-                        colorHex = nextHex
-                        if (editing) save(close = false)
-                    }
-                )
-                FormFootnote(
-                    if (hue == null && colorHex == null) {
-                        "Kudos picks a colour from the collection name. Renaming it may change this colour."
-                    } else {
-                        "Your chosen colour stays the same if you rename the collection."
-                    }
-                )
-
-                if (editing) descriptionField()
-
-                SubjectFieldLabel("Behaviour", Modifier.padding(top = 16.dp))
-                Column(
-                    Modifier
-                        .fillMaxWidth()
-                        .subjectPanel()
-                ) {
-                    Row(
-                        Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 14.dp, vertical = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "Keep downloads",
-                            modifier = Modifier.weight(1f),
-                            color = tokens.primaryInk,
-                            fontSize = 15.sp
-                        )
-                        SubjectToggle(
-                            checked = keepsWorksOffline,
-                            onCheckedChange = { keepsWorksOffline = it; if (editing) save(close = false) },
-                            accent = palette.tint,
-                            contentDescription = "Keep downloads"
-                        )
-                    }
-                    SubjectRowSeparator()
-                    Row(
-                        Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 14.dp, vertical = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "Show on Home",
-                            modifier = Modifier.weight(1f),
-                            color = tokens.primaryInk,
-                            fontSize = 15.sp
-                        )
-                        SubjectToggle(
-                            checked = showsOnHome,
-                            onCheckedChange = { showsOnHome = it; if (editing) save(close = false) },
-                            accent = palette.tint,
-                            contentDescription = "Show on Home"
-                        )
-                    }
-                }
-                FormFootnote(
-                    "Keep downloads keeps a downloaded copy of every work in this collection. " +
-                        "Show on Home adds the collection above Recently Updated."
-                )
-
-                if (!editing) FormFootnote(
-                    "This collection stays on this device. AO3 doesn't see it, and it isn't shared with your other devices."
-                )
-            }
+            CollectionEditorContent(
+                editing = editing,
+                name = name,
+                onNameChange = { name = it },
+                description = description,
+                onDescriptionChange = { description = it; if (editing) save(close = false) },
+                hue = hue,
+                colorHex = colorHex,
+                onColorChange = { nextHue, nextHex ->
+                    hue = nextHue
+                    colorHex = nextHex
+                    if (editing) save(close = false)
+                },
+                keepsWorksOffline = keepsWorksOffline,
+                onKeepsWorksOfflineChange = { keepsWorksOffline = it; if (editing) save(close = false) },
+                showsOnHome = showsOnHome,
+                onShowsOnHomeChange = { showsOnHome = it; if (editing) save(close = false) },
+                palette = palette
+            )
         }
     }
 
@@ -279,6 +195,168 @@ fun CollectionEditorSheet(
             confirmButton = { TextButton(onClick = { error = null }) { Text("OK") } }
         )
     }
+    }
+}
+
+@Composable
+internal fun CollectionEditorContent(
+    editing: Boolean,
+    name: String,
+    onNameChange: (String) -> Unit,
+    description: String,
+    onDescriptionChange: (String) -> Unit,
+    hue: Double?,
+    colorHex: String?,
+    onColorChange: (Double?, String?) -> Unit,
+    keepsWorksOffline: Boolean,
+    onKeepsWorksOfflineChange: (Boolean) -> Unit,
+    showsOnHome: Boolean,
+    onShowsOnHomeChange: (Boolean) -> Unit,
+    palette: SubjectPalette = LocalKudosTokens.current.scopePalette
+) {
+    val tokens = LocalKudosTokens.current
+    CompositionLocalProvider(LocalSettingsFormGround provides (editing && tokens.theme != ReaderTheme.Light)) {
+        Column(
+            Modifier
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 16.dp)
+                .padding(bottom = 28.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            if (!editing) {
+                SubjectFieldLabel("Collection", Modifier.padding(top = 12.dp))
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .settingsPanelGround()
+                        .testTag("Collection panel")
+                ) {
+                    Column(
+                        Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        SubjectFieldLabel("Name")
+                        OutlinedTextField(
+                            value = name,
+                            onValueChange = onNameChange,
+                            modifier = Modifier.fillMaxWidth(),
+                            placeholder = { Text("Comfort reads") },
+                            singleLine = true
+                        )
+                    }
+                    SubjectRowSeparator(modifier = Modifier.testTag("Collection panel separator"))
+                    Column(
+                        Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        SubjectFieldLabel("Description")
+                        OutlinedTextField(
+                            value = description,
+                            onValueChange = onDescriptionChange,
+                            modifier = Modifier.fillMaxWidth(),
+                            placeholder = { Text("Optional") },
+                            minLines = 2
+                        )
+                    }
+                    SubjectRowSeparator(modifier = Modifier.testTag("Collection panel separator"))
+                    SubjectHueSwatchRow(
+                        hue = hue,
+                        colorHex = colorHex,
+                        onChange = onColorChange,
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 11.dp)
+                    )
+                }
+            } else {
+                SubjectFieldLabel("Colour", Modifier.padding(top = 10.dp))
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .settingsPanelGround()
+                        .testTag("Collection colour panel")
+                ) {
+                    SubjectHueSwatchRow(
+                        hue = hue,
+                        colorHex = colorHex,
+                        onChange = onColorChange,
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 11.dp)
+                    )
+                }
+            }
+            FormFootnote(
+                if (hue == null && colorHex == null) {
+                    "Kudos picks a colour from the collection name. Renaming it may change this colour."
+                } else {
+                    "Your chosen colour stays the same if you rename the collection."
+                }
+            )
+
+            if (editing) {
+                SubjectFieldLabel("Description", Modifier.padding(top = 10.dp))
+                OutlinedTextField(
+                    value = description,
+                    onValueChange = onDescriptionChange,
+                    modifier = Modifier.fillMaxWidth(),
+                    placeholder = { Text("Optional") },
+                    minLines = 2
+                )
+            }
+
+            SubjectFieldLabel("Behaviour", Modifier.padding(top = 16.dp))
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .settingsPanelGround()
+                    .testTag("Collection behaviour panel")
+            ) {
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 14.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Keep downloads",
+                        modifier = Modifier.weight(1f),
+                        color = tokens.primaryInk,
+                        fontSize = 15.sp
+                    )
+                    SubjectToggle(
+                        checked = keepsWorksOffline,
+                        onCheckedChange = onKeepsWorksOfflineChange,
+                        accent = palette.tint,
+                        contentDescription = "Keep downloads"
+                    )
+                }
+                SubjectRowSeparator()
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 14.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Show on Home",
+                        modifier = Modifier.weight(1f),
+                        color = tokens.primaryInk,
+                        fontSize = 15.sp
+                    )
+                    SubjectToggle(
+                        checked = showsOnHome,
+                        onCheckedChange = onShowsOnHomeChange,
+                        accent = palette.tint,
+                        contentDescription = "Show on Home"
+                    )
+                }
+            }
+            FormFootnote(
+                "Keep downloads keeps a downloaded copy of every work in this collection. " +
+                    "Show on Home adds the collection above Recently Updated."
+            )
+
+            if (!editing) FormFootnote(
+                "This collection stays on this device. AO3 doesn't see it, and it isn't shared with your other devices."
+            )
+        }
     }
 }
 
