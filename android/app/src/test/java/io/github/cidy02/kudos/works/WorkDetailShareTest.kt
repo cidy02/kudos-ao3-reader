@@ -9,6 +9,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -65,9 +66,13 @@ class WorkDetailShareTest {
                         onDismiss = { showing = false })
                 }
             }
+            // The dialog is absent until LaunchedEffect's archived-original check returns from IO.
+            compose.waitUntil(5_000) {
+                compose.onAllNodesWithText("Rebuild this work?").fetchSemanticsNodes().size == 1
+            }
             compose.onNodeWithText("Rebuild this work?").assertExists()
             org.junit.Assert.assertFalse(rebuilt)
-            compose.onNodeWithText("Rebuild").performClick()
+            compose.onNodeWithText("Rebuild").assertIsEnabled().performClick()
             compose.waitUntil(5_000) {
                 compose.onAllNodesWithText("Couldn't Rebuild").fetchSemanticsNodes().isNotEmpty()
             }
