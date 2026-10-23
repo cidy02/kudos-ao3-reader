@@ -54,7 +54,6 @@ import androidx.compose.foundation.layout.systemBarsIgnoringVisibility
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.Check
@@ -253,7 +252,7 @@ private fun ReaderReading(
     // Sheets
     var showTocSheet by remember { mutableStateOf(false) }
     var tocInitialTab by remember { mutableIntStateOf(0) }
-    var showDisplaySheet by remember { mutableStateOf(false) }
+    var settingsSheet by remember { mutableStateOf<ReaderSettingsSheet?>(null) }
     var showSearchSheet by remember { mutableStateOf(false) }
     var confirmVoicePack by remember { mutableStateOf(false) }
     val annotationPreferences = remember(context) { context.getSharedPreferences("reader-annotations", Context.MODE_PRIVATE) }
@@ -270,7 +269,7 @@ private fun ReaderReading(
 
     ReaderSystemBars(
         chromeVisible = chromeVisible,
-        overlayVisible = showTocSheet || showDisplaySheet || showSearchSheet ||
+        overlayVisible = showTocSheet || settingsSheet != null || showSearchSheet ||
             state.editingAnnotationId != null || confirmVoicePack || pronunciationTarget != null || rebuildingOriginal
     )
 
@@ -380,7 +379,8 @@ private fun ReaderReading(
                 when (name) {
                     "readercontents" -> showTocSheet = true
                     "readerfind" -> showSearchSheet = true
-                    "readerdisplay" -> showDisplaySheet = true
+                    "readerdisplay" -> settingsSheet = ReaderSettingsSheet.Display
+                    "readerspeech" -> settingsSheet = ReaderSettingsSheet.Speech
                     "readernote" -> {
                         val progress = state.liveProgress ?: return@DebugShotEffect
                         val locator = ReadiumNavigatorController.locatorFromJson(progress.locatorJson.orEmpty())
@@ -664,7 +664,7 @@ private fun ReaderReading(
                             },
                             onFind = { showSearchSheet = true },
                             onComments = onOpenComments,
-                            onSettings = { showDisplaySheet = true },
+                            onSettings = { settingsSheet = ReaderSettingsSheet.Display },
                             onRebuild = if (staleConversion) ({ rebuildingOriginal = true }) else null
                         )
 
@@ -691,13 +691,11 @@ private fun ReaderReading(
                             // Read Aloud
                             val speechActive = speechStatus == SpeechStatus.PLAYING || speechStatus == SpeechStatus.PAUSED
                             add(
-                                ReaderFanRoundAction(
-                                    id = "readAloud",
-                                    icon = Icons.AutoMirrored.Filled.VolumeUp,
-                                    accessibilityLabel = if (speechActive) "Stop reading aloud" else "Read aloud",
-                                    isEnabled = ReaderContentText.isAvailable(publication),
-                                    isEmphasized = speechActive,
-                                    action = {
+                                readerReadAloudAction(
+                                    active = speechActive,
+                                    enabled = ReaderContentText.isAvailable(publication),
+                                    onSettings = { settingsSheet = it },
+                                    onToggle = {
                                         if (speechActive) {
                                             speechController.stop()
                                             showTtsControls = false
@@ -712,8 +710,7 @@ private fun ReaderReading(
                                                 ))
                                             }
                                         }
-                                    },
-                                    longPressAction = { showDisplaySheet = true }
+                                    }
                                 )
                             )
 
@@ -1001,12 +998,24 @@ private fun ReaderReading(
                 }
             }
 
-            if (showDisplaySheet) {
+            if (settingsSheet == ReaderSettingsSheet.Speech) {
+                CompositionLocalProvider(LocalKudosTokens provides tokens) {
+                    ReaderSpeechSettingsSheet(
+                        repository = settingsRepository ?: viewModel.readerSettingsRepository,
+                        onDismiss = { speech ->
+                            speechController.configure(speech.applyTo(state.preferences), state.work.title)
+                            settingsSheet = null
+                        }
+                    )
+                }
+            }
+
+            if (settingsSheet == ReaderSettingsSheet.Display) {
                 val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
                 val availableVoices by speechController.availableVoices.collectAsState()
                 // The sheet takes the reader's theme, as iOS's does, not the app's.
                 ModalBottomSheet(
-                    onDismissRequest = { showDisplaySheet = false },
+                    onDismissRequest = { settingsSheet = null },
                     sheetState = sheetState,
                     containerColor = tokens.background
                 ) {
@@ -1025,7 +1034,7 @@ private fun ReaderReading(
                             voicePackFailure = speechController.downloadFailure.collectAsState().value,
                             onCancelVoicePack = speechController::cancelDownload,
                             onDownloadVoicePack = { confirmVoicePack = true },
-                            onDone = { showDisplaySheet = false },
+                            onDone = { settingsSheet = null },
                             onFontSizeChange = viewModel::setFontSizePercent,
                             onThemeChange = viewModel::setColorTheme,
                             onScrollModeChange = viewModel::setScrollMode,

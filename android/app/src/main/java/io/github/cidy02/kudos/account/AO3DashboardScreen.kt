@@ -27,7 +27,8 @@ fun AO3DashboardScreen(
     modifier: Modifier = Modifier,
     /** The session the page is the reader's own in: without it the page did not know it was. */
     authRepository: io.github.cidy02.kudos.auth.AO3AuthRepository? = null,
-    onNewWork: (() -> Unit)? = null
+    onNewWork: (() -> Unit)? = null,
+    onOpenAuthorTab: (io.github.cidy02.kudos.network.ao3.author.AO3AuthorRoute, io.github.cidy02.kudos.author.AuthorTab) -> Unit = { _, _ -> }
 ) {
     if (username.isNullOrBlank()) {
         ProvidePushedShellChrome()
@@ -47,6 +48,7 @@ fun AO3DashboardScreen(
         onOpenWeb = onOpenWeb,
         isDashboard = true,
         onOpenDashboardList = onOpenList,
+        onOpenAuthorTab = onOpenAuthorTab,
         onOpenAO3Collections = onOpenAO3Collections,
         modifier = modifier,
         authRepository = authRepository,
