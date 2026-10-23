@@ -297,6 +297,9 @@ enum DebugShots {
         ("chapterpicker", DebugShot(route: "comments:Sodium Lights", sheets: ["chapterpicker"])),
         ("inboxfilter", DebugShot(route: "acct:inbox", sheets: ["inboxfilter"])),
         ("authorabout", DebugShot(route: "acct:dashboard", sheets: ["authorabout"])),
+        // Two screens Android lacked until 3gu (A81 rows 63 and 85); not in A82's list.
+        ("authorbookmarks", DebugShot(route: "acct:dashboard", sheets: ["authorbookmarks"])),
+        ("readerspeech", DebugShot(route: readSodium, sheets: ["readerspeech"])),
         ("seriesdetail", DebugShot(route: "acct:series", pushes: ["seriesdetail"])),
         ("seriesedit", DebugShot(route: "acct:seriesedit")),
         ("seriesreorder", DebugShot(route: "acct:series", sheets: ["seriesreorder"])),
@@ -441,10 +444,14 @@ enum DebugLaunchRoute {
     static func revokedDevice() -> TrustedDevice {
         let key = String(repeating: "ab", count: 32)
         let past = Date().addingTimeInterval(-(TombstoneTrustStore.undoTrustWindow + 3_600))
-        let clock = TombstoneSigning.now
-        TombstoneSigning.now = { past }
-        _ = TombstoneTrustStore.add(key, label: "Demo reading tablet")
-        TombstoneSigning.now = clock
+        // Only the demo's own trust store gets the made-up key (A83); elsewhere the sheet still
+        // has a device to name.
+        if DemoNetworkBlock.isActive {
+            let clock = TombstoneSigning.now
+            TombstoneSigning.now = { past }
+            _ = TombstoneTrustStore.add(key, label: "Demo reading tablet")
+            TombstoneSigning.now = clock
+        }
         if let stored = TombstoneTrustStore.trustedDevices().first(where: { $0.label == "Demo reading tablet" }) {
             return stored
         }

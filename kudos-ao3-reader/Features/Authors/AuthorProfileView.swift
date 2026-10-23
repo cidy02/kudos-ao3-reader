@@ -637,6 +637,10 @@ private extension AuthorProfileView {
             dashboardDestination = .about
             return
         }
+        if DebugLaunchRoute.takeSheet("authorbookmarks") {
+            dashboardDestination = .bookmarks
+            return
+        }
         if DebugLaunchRoute.takeSheet("authorworksfilter") {
             showingWorksFilters = true
             return

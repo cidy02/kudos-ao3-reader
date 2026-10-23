@@ -438,6 +438,7 @@ final class CommentsModel {
             }
 
             var presentedPage = focusedPage
+            var chapterPageWasKept = false
             if pendingInitialFocusesChapter {
                 var chapter = Self.chapterRef(in: focusedPage)
                 if chapter == nil, let requestedChapterPosition {
@@ -457,6 +458,7 @@ final class CommentsModel {
                     1, auth: auth, forceRefresh: false, expected: expected
                 ) else { return }
                 guard isCurrent(expected, auth) else { return }
+                chapterPageWasKept = isKeptAfterFailure
                 presentedPage = Self.chapterPage(
                     chapterPage,
                     including: focusedPage,
@@ -481,9 +483,12 @@ final class CommentsModel {
             rebuildDisplayThreads()
             currentPageNumber = 1
             initialFocusCommentID = rootID
-            isOffline = false
-            isFromCache = false
-            isKeptAfterFailure = false
+            // The chapter's first page may be the copy kept after a failed read: its notice stays (A83).
+            if !chapterPageWasKept {
+                isOffline = false
+                isFromCache = false
+                isKeptAfterFailure = false
+            }
             phase = .loaded
             if let replyID = pendingInitialReplyCommentID,
                let target = presentedPage.comments
