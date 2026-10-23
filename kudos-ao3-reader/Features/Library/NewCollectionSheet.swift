@@ -178,6 +178,7 @@ struct CollectionReorderSheet: View {
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
     @Environment(ThemeManager.self) private var themeManager
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var ordered: [SavedWork]
 
     init(collection: WorkCollection, works: [SavedWork]) {
@@ -296,7 +297,11 @@ struct CollectionReorderSheet: View {
     /// The number is the position after dragging — what Done will write — as
     /// on 1br, "because the number is the thing being written".
     private func orderRow(_ work: SavedWork, position: Int) -> some View {
-        HStack(spacing: 12) {
+        // The position over the title at the accessibility sizes: beside it the
+        // title broke mid-word and was cut ("Unanswere / d Is Not U…").
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 3)) : AnyLayout(HStackLayout(spacing: 12))
+        return layout {
             Text("\(position)")
                 .font(.system(size: positionSize, weight: .semibold, design: .monospaced))
                 .foregroundStyle(palette.accent)
@@ -306,7 +311,7 @@ struct CollectionReorderSheet: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text(work.title)
                     .font(.system(size: titleSize, weight: .medium))
-                    .lineLimit(2)
+                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
                 // Unclipped, as before the redesign: a multi-creator byline is
                 // how two works with the same title are told apart.
                 if !work.author.isEmpty {

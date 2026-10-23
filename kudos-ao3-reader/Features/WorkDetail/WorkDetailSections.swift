@@ -583,7 +583,9 @@ struct DownloadedDateEditor: View {
         NavigationStack {
             Form {
                 DatePicker("Downloaded", selection: $date, in: ...Date(), displayedComponents: .date).accentFill()
+                    .appThemedRows()
             }
+            .appThemedScroll()
             .navigationTitle("Downloaded")
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)

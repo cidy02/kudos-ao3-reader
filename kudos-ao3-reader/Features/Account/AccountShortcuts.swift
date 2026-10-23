@@ -138,6 +138,7 @@ struct AccountShortcutsEditor: View {
                             + "destination in the sections below.")
                     }
                 }
+                .appThemedRows()
 
                 if !available.isEmpty {
                     Section("Not on the grid") {
@@ -145,6 +146,7 @@ struct AccountShortcutsEditor: View {
                             row(shortcut, isChosen: false)
                         }
                     }
+                    .appThemedRows()
                 }
 
                 Section {
@@ -153,8 +155,8 @@ struct AccountShortcutsEditor: View {
                     }
                     .disabled(chosen == AccountShortcut.defaults)
                 }
+                .appThemedRows()
             }
-            .appThemedRows()
             .appThemedScroll()
             .navigationTitle("Shortcuts")
             #if os(iOS)

@@ -192,6 +192,7 @@ private struct AO3BookmarkComposer: View {
     let auth: AO3AuthService
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
         NavigationStack {
@@ -211,8 +212,8 @@ private struct AO3BookmarkComposer: View {
                         Text("Separate your bookmark tags with commas.")
                     }
                     Section {
-                        Toggle("Private", isOn: $actions.bookmarkInput.isPrivate).accentFill()
-                        Toggle("Recommend", isOn: $actions.bookmarkInput.isRec).accentFill()
+                        toggle("Private", isOn: $actions.bookmarkInput.isPrivate)
+                        toggle("Recommend", isOn: $actions.bookmarkInput.isRec)
                     }
                     if let error = actions.bookmarkError {
                         Section {
@@ -225,24 +226,35 @@ private struct AO3BookmarkComposer: View {
             }
             .formStyle(.grouped)
             .appThemedScroll()
-            .navigationTitle(actions.bookmarkIsUpdate ? "Edit Bookmark on AO3" : "Bookmark on AO3")
-            #if !os(macOS)
-                .navigationBarTitleDisplayMode(.inline)
-            #endif
-                .toolbar {
-                    ToolbarItem(placement: .cancellationAction) {
-                        Button("Cancel") { dismiss() }.disabled(actions.isWorking)
-                    }
-                    ToolbarItem(placement: .confirmationAction) {
-                        if actions.isWorking {
-                            ProgressView().accentFill()
-                        } else {
-                            Button("Save") { actions.submitBookmark(workID: workID, auth: auth) }
-                        }
+            .wrappingInlineTitle(actions.bookmarkIsUpdate ? "Edit Bookmark on AO3" : "Bookmark on AO3")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }.disabled(actions.isWorking)
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    if actions.isWorking {
+                        ProgressView().accentFill()
+                    } else {
+                        Button("Save") { actions.submitBookmark(workID: workID, auth: auth) }
                     }
                 }
-                .presentationDragIndicator(.visible)
-                .interactiveDismissDisabled(actions.isWorking)
+            }
+            .presentationDragIndicator(.visible)
+            .interactiveDismissDisabled(actions.isWorking)
+        }
+    }
+
+    /// The label over its switch at the accessibility sizes: beside it,
+    /// "Recommend" broke as "Recom- / mend". VoiceOver reads the toggle's own label.
+    @ViewBuilder
+    private func toggle(_ title: String, isOn: Binding<Bool>) -> some View {
+        if dynamicTypeSize.isAccessibilitySize {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(title).accessibilityHidden(true)
+                Toggle(title, isOn: isOn).labelsHidden().accentFill()
+            }
+        } else {
+            Toggle(title, isOn: isOn).accentFill()
         }
     }
 }

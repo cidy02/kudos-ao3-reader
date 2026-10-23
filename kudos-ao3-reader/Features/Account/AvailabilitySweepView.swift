@@ -11,6 +11,7 @@ struct AvailabilitySweepView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(ThemeManager.self) private var theme
     @Environment(PrivacyGate.self) private var gate
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @AppStorage("hideMatureContent") private var hideMature = true
     @AppStorage("matureContentMode") private var matureMode: MaturePrivacyMode = .obscure
 
@@ -40,7 +41,9 @@ struct AvailabilitySweepView: View {
             }
             .cardList()
             .environment(\.defaultMinListRowHeight, 0)
-            .navigationTitle("Check Availability")
+            // A large title can't wrap: "Check Avail…" at the largest text. There, the
+            // inline two-line title instead.
+            .wrappingInlineTitle("Check Availability", isActive: dynamicTypeSize.isAccessibilitySize)
             .navigationDestination(for: SavedWork.self) { WorkDetailView(work: $0) }
             .toolbar {
                 // Stop interrupts on the leading edge; Done closes from the

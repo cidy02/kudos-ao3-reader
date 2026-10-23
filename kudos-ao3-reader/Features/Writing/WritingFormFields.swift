@@ -13,6 +13,8 @@ struct WritingChoiceRow: View {
     @Binding var value: String
     let options: [AO3FormOption]
 
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     private var currentTitle: String {
         options.first { $0.value == value }?.title ?? (value.isEmpty ? "Select…" : value)
     }
@@ -30,8 +32,11 @@ struct WritingChoiceRow: View {
                 .labelsHidden()
             } label: {
                 HStack(spacing: 4) {
+                    // Two lines, and whole at the accessibility sizes: AO3's own
+                    // "Please select a language" was cut to "Please select a la…".
                     Text(currentTitle)
-                        .lineLimit(1)
+                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
+                        .multilineTextAlignment(.trailing)
                     Image(systemName: "chevron.up.chevron.down")
                         .font(.system(size: 11, weight: .semibold))
                 }

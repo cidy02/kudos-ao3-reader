@@ -289,7 +289,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                         // itself a sheet of this screen, which cannot present a second
                         // one over it, so "Save Search…" did nothing there.
                         #if DEBUG
-                        .task { if DebugLaunchRoute.takeSheet("savesearch") { showingSaveDialog = true } }
+                        .task { if DebugLaunchRoute.takeSheet("savesearch") { presentSaveDialog() } }
                         #endif
                         .sheet(isPresented: $showingSaveDialog, onDismiss: { saveName = "" }) {
                             SaveSearchSheet(

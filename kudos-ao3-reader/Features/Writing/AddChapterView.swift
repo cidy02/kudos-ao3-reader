@@ -5,6 +5,7 @@ struct AddChapterView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(ThemeManager.self) private var theme
     @Environment(AO3AuthService.self) private var auth
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     @State private var form: AO3ChapterForm
     @State private var editingGeneration: Int?
@@ -174,7 +175,11 @@ struct AddChapterView: View {
             // 1bq's "After chapter 12". Only the words around the field change:
             // it still edits, and posts, the same position value.
             SubjectFormRow(label: "Position", arrangement: .control) {
-                HStack(spacing: 6) {
+                // The words over the field at the accessibility sizes: beside it,
+                // "After chapter" broke onto a second line and was cut.
+                let layout = dynamicTypeSize.isAccessibilitySize
+                    ? AnyLayout(VStackLayout(alignment: .leading, spacing: 4)) : AnyLayout(HStackLayout(spacing: 6))
+                layout {
                     Text("After chapter").foregroundStyle(.secondary)
                     TextField("?", text: Binding(
                         get: { Self.afterChapterText(position: form.position) },

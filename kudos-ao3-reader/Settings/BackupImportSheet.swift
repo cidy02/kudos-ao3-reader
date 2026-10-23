@@ -51,11 +51,13 @@ struct BackupImportSheet: View {
     private var chooseStep: some View {
         NavigationStack {
             Form {
-                contentsSection
-                mergeSection
-                if hasReplaceableRecords { replaceSection }
+                Group {
+                    contentsSection
+                    mergeSection
+                    if hasReplaceableRecords { replaceSection }
+                }
+                .appThemedRows()
             }
-            .appThemedRows()
             .appThemedScroll()
             .navigationTitle("Import Backup")
             #if os(iOS)

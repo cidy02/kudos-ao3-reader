@@ -5,7 +5,7 @@ import SwiftUI
 /// in-app, and saves with a single authenticated write. Account-security pages
 /// (password, email, username) remain one-tap web links. Section/field `?`
 /// controls open AO3's matching help content in a sheet.
-struct AO3PreferencesView: View { // swiftlint:disable:this type_body_length
+struct AO3PreferencesView: View {
     @Environment(AO3AuthService.self) private var auth
     @Environment(AppRouter.self) private var router
     @Environment(ThemeManager.self) private var themeManager
@@ -311,23 +311,9 @@ struct AO3PreferencesView: View { // swiftlint:disable:this type_body_length
 
     @ViewBuilder
     private func helpContentList(_ content: AO3PreferenceHelpContent) -> some View {
+        // No title card: the sheet's own title is the same words (`helpSheetTitle`), and a
+        // second copy with a "?" pushed the help itself below the fold.
         List {
-            Section {
-                HStack(spacing: 10) {
-                    Text(content.title)
-                        .font(.headline)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    Image(systemName: "questionmark.circle.fill")
-                        .font(.title3)
-                        .foregroundStyle(.tint)
-                        .accessibilityHidden(true)
-                }
-                .cardRow()
-                .accessibilityElement(children: .combine)
-                .accessibilityAddTraits(.isHeader)
-                .accessibilityLabel(content.title)
-            }
-
             Section {
                 ForEach(content.entries) { entry in
                     VStack(alignment: .leading, spacing: 8) {
