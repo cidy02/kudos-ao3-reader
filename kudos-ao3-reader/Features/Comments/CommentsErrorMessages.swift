@@ -47,7 +47,7 @@ extension CommentsModel {
             return "AO3 couldn't find these comments — the work may be hidden or deleted."
         case AO3Error.forbidden:
             return "AO3 declined the request. The work may be restricted to logged-in users."
-        case let error as URLError where error.code == .notConnectedToInternet:
+        case let error as URLError where UserFacingError.isOffline(error.code):
             return "You're offline. Comments will load when you're back online."
         default:
             return (error as? LocalizedError)?.errorDescription
