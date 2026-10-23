@@ -39,6 +39,7 @@ struct ReaderPronunciationSettingsView: View {
     @State private var isAdding = false
     @State private var showingImportResult = false
     @State private var importMessage = ""
+    @State private var alertTitle = "Pasted Corrections"
     @State private var isScanning = false
     @State private var scanMessage: String?
     /// Only a scan can produce these — nothing else here has the chapter text.
@@ -165,7 +166,7 @@ struct ReaderPronunciationSettingsView: View {
                 }
             }
         }
-        .alert("Pasted Corrections", isPresented: $showingImportResult) {
+        .alert(alertTitle, isPresented: $showingImportResult) {
             Button("OK") {}
         } message: {
             Text(importMessage)
@@ -177,14 +178,7 @@ struct ReaderPronunciationSettingsView: View {
         }
         .sheet(item: $editing) { entry in
             ReaderPronunciationEditor(word: entry.word, ipa: entry.ipa) { word, ipa in
-                // The word is the key, so a rename is an add plus a remove: the add first,
-                // so a failed save leaves the old correction where it was.
-                guard save(word: word, ipa: ipa) else { return false }
-                if word != entry.word {
-                    remove(entry.word)
-                    reload()
-                }
-                return true
+                save(word: word, ipa: ipa, replacing: entry.word)
             }
         }
         #if DEBUG
@@ -194,9 +188,14 @@ struct ReaderPronunciationSettingsView: View {
     }
 
     private func reload() {
-        entries = store.overrides()
-            .map { Entry(word: $0.key, ipa: $0.value) }
-            .sorted { $0.word.localizedStandardCompare($1.word) == .orderedAscending }
+        do {
+            entries = try store.loadForEditing().global
+                .map { Entry(word: $0.key, ipa: $0.value) }
+                .sorted { $0.word.localizedStandardCompare($1.word) == .orderedAscending }
+        } catch {
+            showStorageError("Could not read corrections. Your saved file has been kept.")
+            return
+        }
         // Anything already corrected is no longer a guess — it resolves from
         // tier 1 now — so keep it out of the list even if the store still has
         // it from before the correction.
@@ -223,18 +222,18 @@ struct ReaderPronunciationSettingsView: View {
     }
 
     /// False when the correction was not written (the editor then stays open and says so).
-    private func save(word: String, ipa: String) -> Bool {
+    private func save(word: String, ipa: String, replacing oldWord: String? = nil) -> Bool {
         let word = word.trimmingCharacters(in: .whitespacesAndNewlines)
         let ipa = ipa.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !word.isEmpty, !ipa.isEmpty else { return false }
         do {
-            try store.setOverride(ipa, for: word)
+            try store.updateGlobal([word: ipa], removing: oldWord.map { [$0] } ?? [])
         } catch {
             return false
         }
         // A corrected word stops being a guess, so drop it rather than
         // leaving it to be re-offered.
-        try? guesses.forget(word)
+        forgetGuesses([word])
         reload()
         return true
     }
@@ -245,6 +244,7 @@ struct ReaderPronunciationSettingsView: View {
     /// not parse leaves the reader with no idea whether the app or their text
     /// was at fault.
     private func importFromClipboard() {
+        alertTitle = "Pasted Corrections"
         let text = UIPasteboard.general.string ?? ""
         let parsed = KokoroInlinePronunciation.entries(in: text)
         guard !parsed.isEmpty else {
@@ -254,21 +254,25 @@ struct ReaderPronunciationSettingsView: View {
             showingImportResult = true
             return
         }
-        // Last wins on duplicates — the parser preserves them deliberately so
-        // this choice is made here rather than hidden in the parse.
-        for entry in parsed {
-            try? store.setOverride(entry.phonemes, for: entry.word)
-            try? guesses.forget(entry.word)
+        do {
+            // Last wins on duplicates; one atomic write avoids a partial import.
+            let overrides = Dictionary(parsed.map { ($0.word, $0.phonemes) }) { _, new in new }
+            try store.updateGlobal(overrides)
+        } catch {
+            showStorageError("Could not save corrections. Try again.")
+            return
         }
         importMessage = parsed.count == 1
             ? "Added 1 correction."
             : "Added \(parsed.count) corrections."
         showingImportResult = true
+        forgetGuesses(parsed.map(\.word))
         reload()
     }
 
     /// Put every correction on the clipboard in the shared notation.
     private func copyAll() {
+        alertTitle = "Pasted Corrections"
         let rendered = KokoroInlinePronunciation.text(
             for: entries.map { .init(word: $0.word, phonemes: $0.ipa) }
         )
@@ -281,8 +285,20 @@ struct ReaderPronunciationSettingsView: View {
 
     /// Swiping a guess away means "stop offering me this one".
     private func dismissGuesses(at offsets: IndexSet) {
-        for index in offsets { try? guesses.forget(guessed[index].word) }
+        forgetGuesses(offsets.map { guessed[$0].word })
         reload()
+    }
+
+    private func forgetGuesses(_ words: [String]) {
+        // Best-effort: guessed words are derived (at worst one is offered again). A failure here
+        // must not replace the result the reader was just shown, or fire under the editor (A91).
+        for word in words { try? guesses.forget(word) }
+    }
+
+    private func showStorageError(_ message: String) {
+        alertTitle = "Could not update pronunciations"
+        importMessage = message
+        showingImportResult = true
     }
 
     private func runScan() {
@@ -338,12 +354,12 @@ struct ReaderPronunciationSettingsView: View {
     }
 
     private func delete(at offsets: IndexSet) {
-        for index in offsets { remove(entries[index].word) }
-        reload()
-    }
-
-    private func remove(_ word: String) {
-        try? store.removeOverride(for: word)
+        do {
+            try store.updateGlobal(removing: offsets.map { entries[$0].word })
+            reload()
+        } catch {
+            showStorageError("Could not delete correction. Try again.")
+        }
     }
 }
 
