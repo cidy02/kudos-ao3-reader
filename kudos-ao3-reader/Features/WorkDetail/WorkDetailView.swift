@@ -169,7 +169,13 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
                 if DebugLaunchRoute.pageRoute?.hasPrefix("mycopy:") == true { showingMyCopy = true }
                 if DebugLaunchRoute.takeSheet("addtoqueue") { showingAddToQueue = true }
                 if DebugLaunchRoute.takeSheet("addtocollection") { showingAddToCollection = true }
-                if DebugLaunchRoute.takeSheet("downloaddate") { showingDownloadedDateEditor = true }
+                if DebugLaunchRoute.takeSheet("downloaddate") {
+                    showingMyCopy = true
+                    Task {
+                        try? await Task.sleep(for: .seconds(1))
+                        showingDownloadedDateEditor = true
+                    }
+                }
                 if DebugLaunchRoute.takeSheet("seriespreserve") {
                     seriesPrompt = ReadingQueueService.seriesPrompt(
                         for: nil, threshold: autoPreserveSeriesWorkThreshold, previewFailed: true

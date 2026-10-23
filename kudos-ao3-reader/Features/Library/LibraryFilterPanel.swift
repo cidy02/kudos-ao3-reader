@@ -11,6 +11,9 @@ struct LibraryFilterPanel: View {
     let works: [SavedWork]
     /// The user's own tag names, for the "Your Tags" facet.
     let userTagNames: [String]
+    #if DEBUG
+    @State private var debugFandomPicker = false
+    #endif
 
     /// 1an's group labels (uppercase, tracked), as the AO3 panel draws them.
     var body: some View {
@@ -22,6 +25,18 @@ struct LibraryFilterPanel: View {
             #endif
                 .toolbar { actionButtons }
         }
+        #if DEBUG
+        // From the panel: the Fandoms row sits below the fold, and a row a Form has not drawn
+        // never runs its task.
+        .task {
+            guard DebugLaunchRoute.takeSheet("libpicker") else { return }
+            try? await Task.sleep(for: .seconds(1))
+            debugFandomPicker = true
+        }
+        .sheet(isPresented: $debugFandomPicker) {
+            LibraryOptionPicker(title: "Fandoms", options: distinct(\.workFandoms), selection: $filters.fandoms)
+        }
+        #endif
     }
 
     @ToolbarContentBuilder
@@ -225,9 +240,6 @@ private struct LibraryMultiSelectField: View {
         .sheet(isPresented: $showPicker) {
             LibraryOptionPicker(title: title, options: options, selection: $selection)
         }
-        #if DEBUG
-        .task { if DebugLaunchRoute.takeSheet("libpicker") { showPicker = true } }
-        #endif
     }
 }
 
