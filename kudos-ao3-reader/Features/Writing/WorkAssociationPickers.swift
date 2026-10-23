@@ -705,6 +705,10 @@ struct WorkParentWorkPickerView: View {
                     #endif
                     .autocorrectionDisabled()
                     .multilineTextAlignment(.trailing)
+                    // Wrapped, the field hyphenated it as English ("archiveo- fourown.org"),
+                    // a hyphen that reads as part of the address. "zxx" (no linguistic
+                    // content) has no hyphenation dictionary, so it breaks without one.
+                    .typesettingLanguage(Locale.Language(identifier: "zxx"))
                     #if os(iOS)
                         .keyboardType(.URL)
                     #endif
