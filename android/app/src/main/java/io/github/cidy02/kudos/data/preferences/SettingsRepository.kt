@@ -73,6 +73,11 @@ private fun decodeRecentWritingTags(raw: String?): Map<String, List<String>> {
 class SettingsRepository(
     private val dataStore: DataStore<Preferences>
 ) {
+    val groupsFandomVariants: Flow<Boolean> = dataStore.data.map { it[booleanPreferencesKey("browse.fandoms.groupsVariants")] ?: true }
+    suspend fun setGroupsFandomVariants(value: Boolean) {
+        dataStore.edit { it[booleanPreferencesKey("browse.fandoms.groupsVariants")] = value }
+    }
+
     val settings: Flow<KudosSettings> = dataStore.data.map(::settingsFromPreferences)
 
     /** iOS account.shortcuts: ordered device-local layout, outside KudosSettings/backup. */

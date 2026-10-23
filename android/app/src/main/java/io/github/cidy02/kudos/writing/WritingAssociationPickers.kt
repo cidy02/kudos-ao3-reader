@@ -210,7 +210,7 @@ internal fun WritingAssociationPicker(
                         WorkFormSection("Source work")
                         SettingsPanel(Modifier.padding(top = 8.dp)) {
                             SubjectTextFieldRow("URL", form.parentWork.url, "https://archiveofourown.org/works/…",
-                                { value -> model.parentWork { it.copy(url = value) } }, autocorrect = false, keyboardType = KeyboardType.Uri)
+                                { value -> model.parentWork { it.copy(url = value) } }, autocorrect = false, multiline = true, keyboardType = KeyboardType.Uri)
                             SubjectRowSeparator()
                             SubjectTextFieldRow("Title", form.parentWork.title, "Optional", { value -> model.parentWork { it.copy(title = value) } })
                             SubjectRowSeparator()

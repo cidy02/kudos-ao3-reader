@@ -1,5 +1,7 @@
 package io.github.cidy02.kudos.comments
 
+import io.github.cidy02.kudos.network.ao3.displayMessage
+
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.datastore.preferences.core.Preferences
@@ -719,6 +721,7 @@ class CommentsViewModelContextTest {
         assertEquals(false, viewModel.chaptersFailed.value)
         gate!!.complete(Unit); gate = null
         until("the failure") { viewModel.chaptersFailed.value }
+        assertEquals(io.github.cidy02.kudos.network.ao3.AO3Error.Network("offline").displayMessage(), viewModel.chaptersFailureMessage.value)
         assertEquals(false, viewModel.chaptersLoading.value)
 
         served = success("<ol class='chapter index group'><li><a href='/works/123/chapters/1001'>1. Chapter</a></li></ol>")
@@ -726,6 +729,7 @@ class CommentsViewModelContextTest {
         viewModel.loadChaptersIfNeeded(chapters)
         until("asking again") { viewModel.chaptersLoading.value }
         assertEquals("asked again: the old failure is not shown beside the spinner", false, viewModel.chaptersFailed.value)
+        assertEquals(null, viewModel.chaptersFailureMessage.value)
         gate = null; held.complete(Unit)
         until("the list") { viewModel.chapters.value.size == 1 }
         assertEquals(false, viewModel.chaptersLoading.value)

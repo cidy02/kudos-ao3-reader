@@ -190,8 +190,8 @@ fun CollectionReorderSheet(
                                     text = work.author,
                                     color = tokens.secondaryInk,
                                     fontSize = 12.sp,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
+                                    maxLines = Int.MAX_VALUE,
+                                    overflow = TextOverflow.Clip
                                 )
                             }
                         }

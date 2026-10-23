@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.writing
 
+import androidx.compose.material.icons.filled.DragHandle
 import io.github.cidy02.kudos.app.DebugShotEffect
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
@@ -156,8 +157,10 @@ internal fun WritingSeriesContent(model: WritingSeriesState, title: String, subt
                             Text(row.displayTitle, color = tokens.primaryInk, fontSize = 14.5.sp, lineHeight = 21.sp,
                                 maxLines = if (isAccessibilityFontScale()) Int.MAX_VALUE else 2)
                             if (row.metadataText.isNotEmpty()) Text(row.metadataText, color = tokens.secondaryInk, fontSize = 11.5.sp, lineHeight = 17.sp)
-                            if (row.isDraft) Text("Draft", color = tokens.secondaryInk, fontSize = 11.5.sp, lineHeight = 17.sp)
                         }
+                        if (row.isDraft) SubjectStateBadge("Draft", tokens.secondaryInk)
+                        if (ordering) Icon(Icons.Filled.DragHandle, contentDescription = null, tint = tokens.tertiaryInk,
+                            modifier = Modifier.testTag("Series reorder handle"))
                         if (removing && currentRows.size > 1) IconButton(onClick = { confirmRemoval = row }, enabled = !state.saving) {
                             Icon(Icons.Filled.RemoveCircle, contentDescription = "Remove ${row.displayTitle} from the series",
                                 tint = SubjectPalette.fromHue(0.0, tokens.theme).accent)

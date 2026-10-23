@@ -69,7 +69,7 @@ fun PronunciationsRow() {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun PronunciationSettingsSheet(store: KokoroPronunciationStore, onDismiss: () -> Unit) {
+internal fun PronunciationSettingsSheet(store: KokoroPronunciationStore, onDismiss: () -> Unit) {
     val tokens = LocalKudosTokens.current
     val scope = rememberCoroutineScope()
     val clipboard = LocalClipboardManager.current
@@ -79,10 +79,14 @@ private fun PronunciationSettingsSheet(store: KokoroPronunciationStore, onDismis
 
     var menuOpen by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
+    var pastedResult by remember { mutableStateOf<String?>(null) }
     suspend fun reload() {
         try {
-            entries = withContext(Dispatchers.IO) { store.load().global.entries.sortedWith(compareBy<Map.Entry<String, String>> {
-                it.key.lowercase(java.util.Locale.ROOT) }.thenBy { it.key }).associate { it.key to it.value } }
+            entries = withContext(Dispatchers.IO) {
+                val order = android.icu.text.Collator.getInstance() as android.icu.text.RuleBasedCollator
+                order.numericCollation = true
+                store.load().global.entries.sortedWith { a, b -> order.compare(a.key, b.key) }.associate { it.key to it.value }
+            }
         } catch (error: CancellationException) { throw error
         } catch (_: Exception) { message = "Could not read corrections. Your saved file has been kept." }
     }
@@ -94,6 +98,11 @@ private fun PronunciationSettingsSheet(store: KokoroPronunciationStore, onDismis
             scope.launch { reload() }
         })
         return
+    }
+    pastedResult?.let { result ->
+        androidx.compose.material3.AlertDialog(onDismissRequest = { pastedResult = null },
+            title = { Text("Pasted Corrections") }, text = { Text(result) },
+            confirmButton = { TextButton(onClick = { pastedResult = null }) { Text("OK") } })
     }
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = tokens.background,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
@@ -108,13 +117,13 @@ private fun PronunciationSettingsSheet(store: KokoroPronunciationStore, onDismis
                             val text = clipboard.getText()?.text.orEmpty()
                             val parsed = KokoroInlinePronunciation.entries(text)
                             if (parsed.isEmpty()) {
-                                message = if (text.isEmpty()) "The clipboard is empty."
+                                pastedResult = if (text.isEmpty()) "The clipboard is empty."
                                     else "No corrections found. The format is [word](/phonemes/)."
                             } else scope.launch {
                                 try {
                                     withContext(Dispatchers.IO) { store.apply(PronunciationCorrections(global = parsed.toMap())) }
                                     reload()
-                                    message = if (parsed.size == 1) "Added 1 correction." else "Added ${parsed.size} corrections."
+                                    pastedResult = if (parsed.size == 1) "Added 1 correction." else "Added ${parsed.size} corrections."
                                 } catch (error: CancellationException) { throw error
                                 } catch (_: Exception) { message = "Could not save corrections. Try again." }
                             }
@@ -122,7 +131,7 @@ private fun PronunciationSettingsSheet(store: KokoroPronunciationStore, onDismis
                         DropdownMenuItem(text = { Text("Copy All") }, enabled = entries.isNotEmpty(), onClick = {
                             menuOpen = false
                             clipboard.setText(AnnotatedString(KokoroInlinePronunciation.text(entries)))
-                            message = if (entries.size == 1) "Copied 1 correction." else "Copied ${entries.size} corrections."
+                            pastedResult = if (entries.size == 1) "Copied 1 correction." else "Copied ${entries.size} corrections."
                         })
                     }
                 }
@@ -179,7 +188,7 @@ fun PronunciationEditor(word: String, ipa: String, store: KokoroPronunciationSto
     ModalBottomSheet(onDismissRequest = { if (!saving) onDismiss() }, containerColor = tokens.background,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         Column(Modifier.fillMaxWidth().imePadding().verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
-            SubjectFormRow(if (word.isEmpty()) "Add Pronunciation" else word)
+            SubjectFormRow(if (editedWord.isEmpty()) "Add Pronunciation" else editedWord)
             SettingsSection(label = "Word", footnote = null) {
                 SubjectTextFieldRow("Word", editedWord, "Word", { editedWord = it }, autocorrect = false, fieldOnly = true)
             }

@@ -30,11 +30,40 @@ import org.robolectric.annotation.GraphicsMode
 @Config(sdk = [34], application = Application::class, qualifiers = "w411dp-h2000dp")
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class AO3TagSetScreenTest {
+    @Test fun titleWashSurvivesOpeningTheTagEditor() {
+        show(title = "Winter Exchange Tags")
+        awaitText("Winter Exchange Tags · 7 tags")
+        val expected = io.github.cidy02.kudos.ui.subject.SubjectPalette.fromHue(
+            io.github.cidy02.kudos.home.HomeFacts.workHue(emptyList(), "Winter Exchange Tags"),
+            io.github.cidy02.kudos.ui.subject.ReaderTheme.Light)
+        compose.runOnIdle { assertEquals(expected, washes.page?.palette) }
+        reach("Fandoms"); compose.onNodeWithText("Fandoms").performClick()
+        awaitText("Add tags")
+        compose.runOnIdle { assertEquals(expected, washes.page?.palette) }
+    }
+
+
+    @Test fun editorUsesUppercaseGroupLabelsAndACenteredFilledSave() {
+        show(title = "Winter Exchange Tags")
+        awaitText("Winter Exchange Tags · 7 tags")
+        reach("Fandoms"); compose.onNodeWithText("Fandoms").performClick()
+        awaitText("Add tags")
+        reach("FANDOM TAGS TO ADD")
+        compose.onNodeWithText("FANDOM TAGS TO ADD").assertExists()
+        compose.onNodeWithText("Fandom tags to add").assertDoesNotExist()
+        reach("Save tags")
+        val button = compose.onNodeWithText("Save tags").fetchSemanticsNode().boundsInRoot
+        val root = compose.onRoot().fetchSemanticsNode().boundsInRoot
+        assertEquals(root.center.x, button.center.x, 2f)
+    }
+
+
     @get:Rule val compose = createComposeRule()
     private lateinit var client: TagSetReadClient
     private lateinit var auth: io.github.cidy02.kudos.auth.AO3AuthRepository
     private val web = mutableListOf<String>()
     private val chrome = PushedShellChrome()
+    private val washes = io.github.cidy02.kudos.ui.subject.ShellWashes()
     private val moderator = mutableStateOf(false)
     private val longTag = "A very long original fictional tag about lantern couriers carrying postcards across the snowy archipelago"
 
@@ -58,7 +87,7 @@ class AO3TagSetScreenTest {
         compose.setContent {
             KudosTheme(themeMode = theme) {
                 val density = LocalDensity.current
-                CompositionLocalProvider(LocalDensity provides Density(density.density, scale), LocalPushedShellChrome provides chrome) {
+                CompositionLocalProvider(LocalDensity provides Density(density.density, scale), LocalPushedShellChrome provides chrome, io.github.cidy02.kudos.ui.subject.LocalShellWashes provides washes) {
                     AO3TagSetScreen(id, title, moderator.value, repository, writes, onOpenWeb = { web += it })
                 }
             }
@@ -68,7 +97,7 @@ class AO3TagSetScreenTest {
     private fun awaitText(text: String) = compose.waitUntil(15_000) {
         compose.onAllNodesWithText(text).fetchSemanticsNodes().isNotEmpty()
     }
-    private fun reach(text: String) { compose.onNode(hasScrollAction()).performScrollToNode(hasText(text)) }
+    private fun reach(text: String) { compose.onNode(hasScrollAction()).performScrollToNode(hasText(text.uppercase()) or hasText(text) or hasContentDescription(text)) }
 
     @Test fun mainScreenShowsAllSectionsCountsFlagsQueueAndOnlyIosBrowserDestinations() {
         show(isModerator = true, title = "Passed title")

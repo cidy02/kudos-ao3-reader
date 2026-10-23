@@ -11,6 +11,7 @@ import okhttp3.HttpUrl.Companion.toHttpUrl
 import java.nio.file.Files
 import java.time.Duration
 import kotlinx.coroutines.test.runTest
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -24,6 +25,8 @@ private fun browseFixture(path: String): String {
 private class FakeAO3Client(
     private val responder: (String) -> AO3Result<AO3HttpResponse>
 ) : AO3Client {
+
+
     val requestedUrls = mutableListOf<String>()
 
     override suspend fun get(url: String, headers: Map<String, String>): AO3Result<AO3HttpResponse> {
@@ -58,6 +61,25 @@ private fun repoWithCache(
 )
 
 class AO3BrowseRepositoryTest {
+    @Test fun explicitRefreshBypassesAFreshCatalogAndReplacesItOnlyAfterSuccess() = runTest {
+        val directory = Files.createTempDirectory("fandom-refresh")
+        try {
+            val cache = FandomCatalogCache(directory)
+            val category = AO3MediaCategory("Anime & Manga", "/media/Anime/fandoms")
+            cache.save(mapOf(category.name to FandomCatalogCache.Entry(listOf(AO3Fandom("Old")), 0)))
+            val client = FakeAO3Client { ok(browseFixture("ao3/browse/fandom_list.html")) }
+            val repository = repoWithCache(client, cache, 0)
+            repository.fandoms(category, bypassCache = true)
+            assertEquals(1, client.requestedUrls.size)
+            assertTrue(cache.load()[category.name]!!.fandoms.none { it.name == "Old" })
+            val failed = repoWithCache(FakeAO3Client { AO3Result.Failure(AO3Error.Forbidden) }, cache, 0)
+            val prior = cache.load()
+            failed.fandoms(category, bypassCache = true)
+            assertEquals(prior, cache.load())
+        } finally { directory.toFile().deleteRecursively() }
+    }
+
+
     @Test
     fun categoriesParseFromMediaIndex() = runTest {
         val client = FakeAO3Client { ok(browseFixture("ao3/browse/categories.html")) }
@@ -179,11 +201,18 @@ class AO3BrowseRepositoryTest {
         assertEquals(4, client.requestedUrls.size)
     }
 
-    @Test fun unresolvedSiblingNeverRunsAPartialSearch() = runTest {
-        val client = FakeAO3Client { ok("<p>No canonical filter ID</p>") }
-        val result = repoWith(client).worksForFandoms(listOf("First", "Second"))
-        assertTrue((result as AO3Result.Failure).error is AO3Error.Parse)
-        assertEquals(1, client.requestedUrls.size)
+    @Test fun unresolvedSiblingFallsBackToAllNamesWithoutCachingAnExactFamilyCount() = runTest {
+        val client = FakeAO3Client { url ->
+            ok(if (url.contains("/works/search")) """<h2 class='heading'>1 - 1 of 12 Works</h2>
+                <ol class='work index group'><li class='work blurb group' id='work_123'>
+                <h4 class='heading'><a href='/works/123'>Found through all names</a></h4></li></ol>"""
+                else "<p>No canonical filter ID</p>")
+        }
+        val repository = repoWith(client)
+        assertTrue(repository.worksForFandoms(listOf("First", "Second")) is AO3Result.Success)
+        assertEquals(2, client.requestedUrls.size)
+        assertEquals("First, Second", client.requestedUrls.last().toHttpUrl().queryParameter("work_search[fandom_names]"))
+        assertNull(repository.exactFamilyCounts.totals.value[io.github.cidy02.kudos.browse.FandomFamily.id(listOf("First", "Second"))])
     }
 
     @Test

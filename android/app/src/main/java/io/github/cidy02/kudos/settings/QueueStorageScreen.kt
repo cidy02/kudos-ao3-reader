@@ -1,7 +1,5 @@
 package io.github.cidy02.kudos.settings
 
-import io.github.cidy02.kudos.ui.components.workDeletionMessage
-
 import android.text.format.Formatter
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -153,7 +151,7 @@ fun QueueStorageScreen(
             show = true,
             title = "Remove from reading queues?",
             text = if (work.isQueueOnlyWork) {
-                workDeletionMessage(listOf(work))
+                "Kudos will remove this work if it isn't in another queue, because you haven't saved or favorited it."
             } else {
                 "Kudos will remove the work from its reading queues. It will stay in your Library."
             },

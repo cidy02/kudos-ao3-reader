@@ -82,6 +82,7 @@ fun AuthorProfileScreen(
     onOpenWork: (AO3WorkSummary) -> Unit,
     onOpenAbout: (AO3AuthorRoute) -> Unit,
     onOpenSeries: (String) -> Unit = {},
+    onOpenSeriesSummary: (AO3AuthorSeriesSummary) -> Unit = { onOpenSeries(it.url) },
     onOpenWeb: (String) -> Unit = {},
     isDashboard: Boolean = false,
     onOpenDashboardList: ((AccountListType) -> Unit)? = null,
@@ -577,7 +578,7 @@ fun AuthorProfileScreen(
             onApply = { showingWorksFilters = false }, onDismiss = { showingWorksFilters = false },
             onClear = { worksFilters = AO3SearchFilters() }, refine = true,
             canReset = worksFilters.activeCountForRefine > 0,
-            refineMatchText = refineMatchText(source.size, visible, 0),
+            refineMatchText = if (source.isEmpty()) null else refineMatchText(source.size, visible, 0),
             localTagSuggestions = LocalTagSuggestions(
                 fandoms = source.flatMap { it.fandoms }.distinct(),
                 characters = source.flatMap { it.characters }.distinct(),
@@ -849,7 +850,7 @@ fun AuthorProfileScreen(
                                     fandoms = s.fandoms,
                                     title = s.title,
                                     meta = seriesTallyParts(listOf(s), isPartial = false).joinToString(" · "),
-                                    onClick = { onOpenSeries(s.url) }
+                                    onClick = { onOpenSeriesSummary(s) }
                                 )
                             }
                         }
@@ -895,7 +896,7 @@ fun AuthorProfileScreen(
                         ErrorStateCard(
                             title = "Couldn't load ${tab.label.lowercase()}",
                             message = tabError!!,
-                            primaryActionLabel = "Retry",
+                            primaryActionLabel = if (tab == AuthorTab.About) "Try Again" else "Retry",
                             onPrimaryAction = { loadTab(tab, page) }
                         )
                     }
@@ -1017,7 +1018,7 @@ fun AuthorProfileScreen(
                                             }
                                         }
                                     }
-                                    AO3SeriesRow(series = s, displayMode = displayMode, onOpenSeries = onOpenSeries,
+                                    AO3SeriesRow(series = s, displayMode = displayMode, onOpenSeries = { onOpenSeriesSummary(s) },
                                         onOpenAuthor = onOpenAuthor,
                                         trailingContent = actions)
                                 }
@@ -1069,7 +1070,7 @@ fun AuthorProfileScreen(
                         AuthorTab.About -> {
                             val a = about
                             if (a == null) {
-                                item { EmptyStateCard("No about", "Profile details unavailable.") }
+                                item { EmptyStateCard("Profile details unavailable", "Kudos could not read this AO3 profile page.") }
                             } else {
                                 // iOS's three sections, each a heading over a panel. They were loose
                                 // lines under a second copy of the profile's title, which the header

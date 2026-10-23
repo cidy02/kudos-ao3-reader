@@ -150,6 +150,7 @@ fun SensitiveWorkRow(
     obscured: Boolean = false,
     selected: Boolean = false,
     selecting: Boolean = false,
+    selectionAllowsDetails: Boolean = false,
     expandAll: Boolean = false,
     showsZeroStats: Boolean = LocalShowsZeroStats.current,
     mutedHistory: Boolean = false,
@@ -206,10 +207,10 @@ fun SensitiveWorkRow(
             else -> onClick()
         }
     }
-    // A fandom or tag inside a blurred or selectable row is part of the row: the tap reveals
-    // or selects. It used to open a search for a fandom the blur was hiding.
+    // Concealed content never opens a tag search. Remote selection keeps iOS's detail actions;
+    // local selection continues to treat the whole row as its selection target.
     val tagSearch: (SearchSubjectField, String) -> Unit = when {
-        obscured || selecting -> { _, _ -> cardTap() }
+        obscured || (selecting && !selectionAllowsDetails) -> { _, _ -> cardTap() }
         onTagSearch != null -> onTagSearch
         else -> { field, tag -> if (onTagClick != null) onTagClick(tag) else defaultTagSearch(field, tag) }
     }
@@ -282,7 +283,7 @@ fun SensitiveWorkRow(
                                 // A bookmark's card has nothing folded away: its note and tags are out.
                                 expandable = expandable && bookmark == null, expanded = expanded,
                                 // Under the blur, or while selecting, the glyph is part of the row.
-                                onToggleExpanded = if (obscured || selecting) cardTap else { { expanded = !expanded } },
+                                onToggleExpanded = if (obscured || (selecting && !selectionAllowsDetails)) cardTap else { { expanded = !expanded } },
                                 palette = palette, tagSearch = tagSearch
                             )
                         } else {
@@ -315,7 +316,7 @@ fun SensitiveWorkRow(
                                     )
                                 }
                                 if (savedCard && expandable) {
-                                    IconButton(onClick = if (obscured || selecting) cardTap else { { expanded = !expanded } }) {
+                                    IconButton(onClick = if (obscured || (selecting && !selectionAllowsDetails)) cardTap else { { expanded = !expanded } }) {
                                         Icon(
                                             imageVector = if (expanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
                                             contentDescription = if (expanded) "Show less" else "Show more",
@@ -706,7 +707,8 @@ fun SensitiveWorkRow(
     footer: (@Composable () -> Unit)? = null,
     figuresIncludePerformance: Boolean = true,
     selecting: Boolean = false,
-    selected: Boolean = false
+    selected: Boolean = false,
+    selectionAllowsDetails: Boolean = false
 ) {
     val environment = LocalWorkRowEnvironment.current
     val row: @Composable (SavedWork?, Boolean, () -> Unit, () -> Unit) -> Unit = { local, obscured, click, longClick ->
@@ -749,6 +751,7 @@ fun SensitiveWorkRow(
                 showsStatusTray = true,
                 figuresIncludePerformance = figuresIncludePerformance,
                 selecting = selecting,
+                selectionAllowsDetails = selectionAllowsDetails,
                 selected = selected,
                 onClick = click,
                 onSelect = { onOpenWork(work) },

@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.account
 
+import androidx.compose.foundation.text.selection.SelectionContainer
 import io.github.cidy02.kudos.app.DebugShotEffect
 import androidx.compose.foundation.layout.Box
 import androidx.compose.material3.Snackbar
@@ -465,7 +466,7 @@ private fun PreferenceHelpButton(
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun PreferenceHelpSheet(
+internal fun PreferenceHelpSheet(
     ref: io.github.cidy02.kudos.network.ao3.preferences.AO3PreferenceHelpRef,
     result: AO3Result<io.github.cidy02.kudos.network.ao3.preferences.AO3PreferenceHelpContent>?,
     onRetry: () -> Unit,
@@ -508,12 +509,12 @@ private fun PreferenceHelpSheet(
                         ) {
                             Text(entry.heading, style = MaterialTheme.typography.titleSmall, color = tokens.primaryInk)
                             if (entry.body.isNotEmpty()) {
-                                Text(entry.body, style = MaterialTheme.typography.bodyMedium, color = tokens.secondaryInk)
+                                SelectionContainer { Text(entry.body, style = MaterialTheme.typography.bodyMedium, color = tokens.secondaryInk) }
                             }
                         }
                     }
                     content.footer?.let {
-                        Text(it, style = MaterialTheme.typography.bodySmall, color = tokens.secondaryInk)
+                        SelectionContainer { Text(it, style = MaterialTheme.typography.bodySmall, color = tokens.secondaryInk) }
                     }
                 }
             }

@@ -1,5 +1,8 @@
 package io.github.cidy02.kudos.browse
 
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.ui.draw.clip
@@ -37,6 +40,11 @@ import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.unit.Velocity
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -56,6 +64,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.foundation.layout.Spacer
+import io.github.cidy02.kudos.ui.subject.compactCount
 import io.github.cidy02.kudos.home.HomeFacts
 import io.github.cidy02.kudos.network.ao3.browse.AO3Fandom
 import io.github.cidy02.kudos.network.ao3.browse.AO3MediaCategory
@@ -86,7 +95,7 @@ private fun DownloadCount(count: Int) {
             modifier = Modifier.size(13.dp)
         )
         Text(
-            text = count.coerceAtMost(99).toString(),
+            text = count.compactCount(),
             color = tint,
             fontSize = 11.5.sp,
             fontFamily = FontFamily.Monospace,
@@ -207,6 +216,7 @@ private fun SingleFandomRow(
     onOpen: () -> Unit
 ) {
     val tokens = LocalKudosTokens.current
+    val large = io.github.cidy02.kudos.ui.subject.isAccessibilityFontScale()
     Row(
         modifier = Modifier
             .fandomCard()
@@ -228,24 +238,29 @@ private fun SingleFandomRow(
                     fontSize = 16.sp,
                     modifier = Modifier.weight(1f, fill = false)
                 )
-                DownloadCount(library.downloadCount(member.originalName))
+                if (!large) DownloadCount(library.downloadCount(member.originalName))
             }
             if (member.displayName.qualifier.isNotBlank()) {
                 Text(text = member.displayName.qualifier, color = tokens.secondaryInk, fontSize = 13.sp)
+            }
+            if (large) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                member.fandom.workCount?.let { Text(groupedCount(it), color = tokens.secondaryInk, fontSize = 13.sp,
+                    modifier = Modifier.semantics { contentDescription = "$it works" }) }
+                DownloadCount(library.downloadCount(member.originalName))
             }
             member.aliases.forEach { alias ->
                 Text(text = alias, color = tokens.secondaryInk, fontSize = 12.sp, fontStyle = aliasStyle(alias))
             }
         }
-        Text(
+        if (!large && member.fandom.workCount != null) Text(
             text = groupedCount(member.workCount),
             color = tokens.secondaryInk,
             fontSize = 13.sp,
             style = TabularFigures,
             textAlign = TextAlign.End,
-            modifier = Modifier.widthIn(min = 52.dp)
+            modifier = Modifier.widthIn(min = 52.dp).semantics { contentDescription = "${member.workCount} works" }
         )
-        WorksGlyph()
+        if (!large && member.fandom.workCount != null) WorksGlyph()
     }
 }
 
@@ -279,6 +294,7 @@ private fun FamilyBlock(
 ) {
     val tokens = LocalKudosTokens.current
     val first = family.members.first()
+    val large = io.github.cidy02.kudos.ui.subject.isAccessibilityFontScale()
     Column(modifier = Modifier.fandomCard().padding(vertical = 4.dp)) {
         Row(
             modifier = Modifier
@@ -294,12 +310,17 @@ private fun FamilyBlock(
                     fontSize = 16.sp,
                     fontWeight = FontWeight.SemiBold
                 )
-                first.aliases.take(2).forEach { alias ->
-                    Text(text = alias, color = tokens.secondaryInk, fontSize = 12.sp, fontStyle = aliasStyle(alias),
-                        maxLines = 1, overflow = TextOverflow.Ellipsis)
+                first.aliases.forEach { alias ->
+                    Text(text = alias, color = tokens.secondaryInk, fontSize = 12.sp, fontStyle = aliasStyle(alias))
+                }
+                if (large) {
+                    if (sort == FandomFamilySort.FamilyTotal) Text(
+                        (if (family.showsApproximateCount) "~" else "") + groupedCount(family.displayedWorkCount),
+                        color = tokens.secondaryInk, fontSize = 13.sp)
+                    Text("All ${family.memberCount} tags", color = palette.accent, fontSize = 11.sp)
                 }
             }
-            Column(horizontalAlignment = Alignment.End) {
+            if (!large) Column(horizontalAlignment = Alignment.End) {
                 if (sort == FandomFamilySort.FamilyTotal) {
                     val figure = if (family.showsApproximateCount) {
                         "~${groupedCount(family.displayedWorkCount)}"
@@ -350,14 +371,15 @@ private fun FamilyBlock(
                     if (library.isFavourited(member.originalName)) {
                         Icon(Icons.Filled.Star, contentDescription = "Favorite", tint = FavoriteGold, modifier = Modifier.size(14.dp))
                     }
-                    Text(
-                        text = member.qualifierDisplay,
-                        color = tokens.primaryInk,
-                        fontSize = 15.sp,
-                        modifier = Modifier.weight(1f)
-                    )
-                    DownloadCount(library.downloadCount(member.originalName))
-                    Text(
+                    Column(Modifier.weight(1f)) {
+                        Text(member.qualifierDisplay, color = tokens.primaryInk, fontSize = 15.sp)
+                        if (large) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            DownloadCount(library.downloadCount(member.originalName))
+                            member.fandom.workCount?.let { Text(groupedCount(it), color = tokens.secondaryInk, fontSize = 12.sp) }
+                        }
+                    }
+                    if (!large) DownloadCount(library.downloadCount(member.originalName))
+                    if (!large && member.fandom.workCount != null) Text(
                         text = groupedCount(member.workCount),
                         color = tokens.secondaryInk,
                         fontSize = 12.sp,
@@ -457,10 +479,18 @@ fun FandomListFilterSheet(
         FandomFamilyFilters.tagCount(FandomFamilyFilters.apply(families, draft, library))
     }
     val tokens = LocalKudosTokens.current
-    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = tokens.theme.cardBackdrop) {
+    val keepSheetInPlace = remember {
+        object : NestedScrollConnection {
+            override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource) = Offset(0f, available.y)
+            override suspend fun onPostFling(consumed: Velocity, available: Velocity) = Velocity(0f, available.y)
+        }
+    }
+    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = tokens.theme.cardBackdrop,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .fillMaxHeight(0.9f)
                 .padding(horizontal = 16.dp)
                 .padding(bottom = 28.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp)
@@ -472,59 +502,61 @@ fun FandomListFilterSheet(
                     enabled = draft.hasActiveFilters
                 ) { Text("Reset") }
             }
-            SheetLabel("Minimum works")
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                MinimumWorks.entries.forEach { choice ->
-                    SubjectChip(
-                        text = choice.title,
-                        style = SubjectChipStyle.Pill(draft.minimumWorks == choice),
-                        palette = palette,
-                        modifier = Modifier.clickable { draft = draft.copy(minimumWorks = choice) }
+            Column(Modifier.weight(1f).nestedScroll(keepSheetInPlace).verticalScroll(rememberScrollState())) {
+                SheetLabel("Minimum works")
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    MinimumWorks.entries.forEach { choice ->
+                        SubjectChip(
+                            text = choice.title,
+                            style = SubjectChipStyle.Pill(draft.minimumWorks == choice),
+                            palette = palette,
+                            modifier = Modifier.clickable { draft = draft.copy(minimumWorks = choice) }
+                        )
+                    }
+                }
+                if (draft.minimumWorks != MinimumWorks.Any) {
+                    val hidden = tallies.tagsBelowMinimumWorks(draft.minimumWorks)
+                    val floor = draft.minimumWorks.title.removeSuffix("+")
+                    Text(
+                        text = "${groupedCount(hidden)} tags will be hidden because they have fewer than $floor works.",
+                        color = tokens.secondaryInk,
+                        fontSize = 11.5.sp
                     )
                 }
+                Spacer(Modifier.height(16.dp))
+                SheetLabel("Tag kinds")
+                FilterToggle("Hide RPF tags", tagCountLabel(tallies.rpfTags), draft.hideRPF, palette.accent) {
+                    draft = draft.copy(hideRPF = it)
+                }
+                FilterToggle("Hide All Media Types umbrellas", tagCountLabel(tallies.allMediaTypesTags), draft.hideAllMediaTypes, palette.accent) {
+                    draft = draft.copy(hideAllMediaTypes = it)
+                }
+                FilterToggle("Hide Related Fandoms groupings", tagCountLabel(tallies.relatedFandomsTags), draft.hideRelatedFandoms, palette.accent) {
+                    draft = draft.copy(hideRelatedFandoms = it)
+                }
+                Spacer(Modifier.height(16.dp))
+                SheetLabel("Yours")
+                FilterToggle("Favourited only", tagCountLabel(tallies.favouritedTags), draft.favouritedOnly, palette.accent) {
+                    draft = draft.copy(favouritedOnly = it)
+                }
+                FilterToggle("I have downloads from", tagCountLabel(tallies.downloadTags), draft.downloadsOnly, palette.accent) {
+                    draft = draft.copy(downloadsOnly = it)
+                }
+                Spacer(Modifier.height(16.dp))
+                SheetLabel("Grouping")
+                FilterToggle(
+                    title = "Only fandoms with more than one tag",
+                    detail = if (groupsVariants) {
+                        val count = tallies.multiTagFamilies
+                        if (count == 1) "1 fandom" else "${groupedCount(count)} fandoms"
+                    } else {
+                        "Turn on Group variants to use this filter"
+                    },
+                    checked = draft.multiTagOnly && groupsVariants,
+                    accent = palette.accent,
+                    enabled = groupsVariants
+                ) { draft = draft.copy(multiTagOnly = it) }
             }
-            if (draft.minimumWorks != MinimumWorks.Any) {
-                val hidden = tallies.tagsBelowMinimumWorks(draft.minimumWorks)
-                val floor = draft.minimumWorks.title.removeSuffix("+")
-                Text(
-                    text = "${groupedCount(hidden)} tags will be hidden because they have fewer than $floor works.",
-                    color = tokens.secondaryInk,
-                    fontSize = 11.5.sp
-                )
-            }
-            Spacer(Modifier.height(16.dp))
-            SheetLabel("Tag kinds")
-            FilterToggle("Hide RPF tags", tagCountLabel(tallies.rpfTags), draft.hideRPF, palette.accent) {
-                draft = draft.copy(hideRPF = it)
-            }
-            FilterToggle("Hide All Media Types umbrellas", tagCountLabel(tallies.allMediaTypesTags), draft.hideAllMediaTypes, palette.accent) {
-                draft = draft.copy(hideAllMediaTypes = it)
-            }
-            FilterToggle("Hide Related Fandoms groupings", tagCountLabel(tallies.relatedFandomsTags), draft.hideRelatedFandoms, palette.accent) {
-                draft = draft.copy(hideRelatedFandoms = it)
-            }
-            Spacer(Modifier.height(16.dp))
-            SheetLabel("Yours")
-            FilterToggle("Favourited only", tagCountLabel(tallies.favouritedTags), draft.favouritedOnly, palette.accent) {
-                draft = draft.copy(favouritedOnly = it)
-            }
-            FilterToggle("I have downloads from", tagCountLabel(tallies.downloadTags), draft.downloadsOnly, palette.accent) {
-                draft = draft.copy(downloadsOnly = it)
-            }
-            Spacer(Modifier.height(16.dp))
-            SheetLabel("Grouping")
-            FilterToggle(
-                title = "Only fandoms with more than one tag",
-                detail = if (groupsVariants) {
-                    val count = tallies.multiTagFamilies
-                    if (count == 1) "1 fandom" else "${groupedCount(count)} fandoms"
-                } else {
-                    "Turn on Group variants to use this filter"
-                },
-                checked = draft.multiTagOnly && groupsVariants,
-                accent = palette.accent,
-                enabled = groupsVariants
-            ) { draft = draft.copy(multiTagOnly = it) }
             TextButton(
                 onClick = { onApply(draft) },
                 modifier = Modifier

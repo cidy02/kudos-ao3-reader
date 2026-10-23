@@ -355,18 +355,55 @@ internal fun AO3SeriesRow(
                 Text(series.dateUpdated, color = tokens.secondaryInk, fontSize = 11.5.sp, maxLines = 1)
             }
         }
-        val creators = series.creatorIdentities.ifEmpty {
-            series.creators.map { io.github.cidy02.kudos.network.ao3.author.AO3SeriesCreator(it, null) }
+        SeriesCreatorByline(series, palette, onOpenAuthor)
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+internal fun SeriesDetailCard(
+    series: AO3AuthorSeriesSummary,
+    onOpenAuthor: (io.github.cidy02.kudos.network.ao3.author.AO3AuthorRoute) -> Unit = {}
+) {
+    val tokens = LocalKudosTokens.current
+    val palette = SubjectPalette.fromHue(HomeFacts.workHue(series.fandoms, series.title), tokens.theme)
+    Column(Modifier.fillMaxWidth().cardRow().padding(horizontal = 18.dp, vertical = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(7.dp)) {
+        Text(series.title, color = tokens.primaryInk, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+        SeriesCreatorByline(series, palette, onOpenAuthor)
+        if (series.fandoms.isNotEmpty()) Text(series.fandoms.joinToString(", "),
+            color = tokens.secondaryInk, fontSize = 12.sp)
+        if (series.summary.isNotBlank()) Text(series.summary, color = tokens.secondaryInk,
+            fontSize = 14.sp, maxLines = 3)
+        androidx.compose.material3.HorizontalDivider(color = tokens.separator)
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(18.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+            series.workCount?.let { Text("$it works", color = tokens.secondaryInk, fontSize = 11.5.sp) }
+            series.words?.let { Text("%,d words".format(it), color = tokens.secondaryInk, fontSize = 11.5.sp) }
+            series.bookmarkCount?.let { Text(if (it == 1) "1 bookmark" else "%,d bookmarks".format(it),
+                color = tokens.secondaryInk, fontSize = 11.5.sp) }
+            if (series.isRestricted) Text("Restricted", color = tokens.secondaryInk, fontSize = 11.5.sp)
+            series.isComplete?.let { Text(if (it) "Complete" else "In progress", color = tokens.secondaryInk, fontSize = 11.5.sp) }
+            if (series.dateUpdated.isNotBlank()) Text(series.dateUpdated, color = tokens.secondaryInk, fontSize = 11.5.sp)
         }
-        if (creators.isNotEmpty()) FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp), itemVerticalAlignment = Alignment.CenterVertically) {
-            Text("by", color = tokens.secondaryInk, fontSize = 12.sp)
-            creators.forEachIndexed { index, creator ->
-                Text(creator.displayName + if (index < creators.lastIndex) "," else "",
-                    color = if (creator.route != null) palette.accent else tokens.secondaryInk, fontSize = 12.sp,
-                    modifier = if (creator.route != null) Modifier.clickable { onOpenAuthor(creator.route) }
-                        .semantics { contentDescription = "Author: ${creator.displayName}" } else Modifier)
-            }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun SeriesCreatorByline(series: AO3AuthorSeriesSummary, palette: SubjectPalette,
+    onOpenAuthor: (io.github.cidy02.kudos.network.ao3.author.AO3AuthorRoute) -> Unit) {
+    val tokens = LocalKudosTokens.current
+    val creators = series.creatorIdentities.ifEmpty {
+        series.creators.map { io.github.cidy02.kudos.network.ao3.author.AO3SeriesCreator(it, null) }
+    }
+    if (creators.isNotEmpty()) FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp), itemVerticalAlignment = Alignment.CenterVertically) {
+        Text("by", color = tokens.secondaryInk, fontSize = 12.sp)
+        creators.forEachIndexed { index, creator ->
+            Text(creator.displayName + if (index < creators.lastIndex) "," else "",
+                color = if (creator.route != null) palette.accent else tokens.secondaryInk, fontSize = 12.sp,
+                modifier = if (creator.route != null) Modifier.clickable { onOpenAuthor(creator.route) }
+                    .semantics { contentDescription = "Author: ${creator.displayName}" } else Modifier)
         }
     }
 }

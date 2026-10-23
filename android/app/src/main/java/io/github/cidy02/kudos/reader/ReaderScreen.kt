@@ -884,9 +884,10 @@ private fun ReaderReading(
                     onDismiss = { showSearchSheet = false },
                     onSelectHit = { hit -> navigatorController.go(hit.locator, animated = true) },
                     onBookmarkHit = { hit ->
-                        val key = ReaderSectionBuilder.hrefKey(hit.locator.href.toString())
+                        val locator = ReadiumProgressAdapter.resolvedPositionLocator(hit.locator, positions.flatten())
+                        val key = ReaderSectionBuilder.hrefKey(locator.href.toString())
                         val section = sections.firstOrNull { ReaderSectionBuilder.hrefKey(it.href) == key }
-                        val progress = ReadiumProgressAdapter.toReaderProgress(publication, hit.locator)
+                        val progress = ReadiumProgressAdapter.toReaderProgress(publication, locator)
                             .copy(spineIndex = section?.spineIndex ?: 0)
                         viewModel.addBookmarkAtProgress(
                             progress = progress,
@@ -1012,7 +1013,6 @@ private fun ReaderReading(
 
             if (settingsSheet == ReaderSettingsSheet.Display) {
                 val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-                val availableVoices by speechController.availableVoices.collectAsState()
                 // The sheet takes the reader's theme, as iOS's does, not the app's.
                 ModalBottomSheet(
                     onDismissRequest = { settingsSheet = null },
@@ -1028,21 +1028,12 @@ private fun ReaderReading(
                             settingsRepository = settingsRepository ?: viewModel.readerSettingsRepository,
                             customFontRepository = customFontRepository,
                             keepScreenAwake = keepScreenAwake,
-                            availableVoices = availableVoices,
-                            voicePackInstalled = io.github.cidy02.kudos.reader.speech.TTSDownloadWorker.isModelDownloaded(context),
-                            voicePackProgress = speechController.downloadProgress.collectAsState().value,
-                            voicePackFailure = speechController.downloadFailure.collectAsState().value,
-                            onCancelVoicePack = speechController::cancelDownload,
-                            onDownloadVoicePack = { confirmVoicePack = true },
                             onDone = { settingsSheet = null },
                             onFontSizeChange = viewModel::setFontSizePercent,
                             onThemeChange = viewModel::setColorTheme,
                             onScrollModeChange = viewModel::setScrollMode,
                             onTwoPageChange = viewModel::setTwoPage,
                             onKeepScreenAwakeChange = viewModel::setKeepScreenAwake,
-                            onSpeechRateChange = viewModel::setSpeechRate,
-                            onSpeechPitchChange = viewModel::setSpeechPitch,
-                            onSpeechVoiceChange = viewModel::setSpeechVoiceIdentifier,
                             onFontFamilyChange = viewModel::setFontFamily
                         )
                     }
@@ -1063,22 +1054,16 @@ internal fun ReaderDisplaySheet(
     settingsRepository: io.github.cidy02.kudos.data.preferences.SettingsRepository,
     customFontRepository: io.github.cidy02.kudos.files.CustomFontRepository? = null,
     keepScreenAwake: Boolean,
-    availableVoices: List<io.github.cidy02.kudos.reader.speech.TTSVoice> = emptyList(),
-    voicePackInstalled: Boolean = true,
-    voicePackProgress: Float? = null,
-    onDownloadVoicePack: () -> Unit = {},
-    voicePackFailure: String? = null,
-    onCancelVoicePack: () -> Unit = {},
     onDone: () -> Unit = {},
     onFontSizeChange: (Int) -> Unit,
     onThemeChange: (ReaderColorTheme) -> Unit,
     onScrollModeChange: (Boolean) -> Unit = {},
     onTwoPageChange: (Boolean) -> Unit = {},
     onKeepScreenAwakeChange: (Boolean) -> Unit = {},
-    onSpeechRateChange: (Float) -> Unit = {},
-    onSpeechPitchChange: (Float) -> Unit = {},
-    onSpeechVoiceChange: (String?) -> Unit = {},
-    onFontFamilyChange: (String?) -> Unit = {}
+    onFontFamilyChange: (String?) -> Unit = {},
+    listeningContent: @Composable (@Composable (@Composable () -> Unit) -> Unit) -> Unit = { frame ->
+        io.github.cidy02.kudos.settings.SettingsListeningContent(settingsRepository, frame)
+    }
 ) {
     var showCustomizeTheme by remember { mutableStateOf(false) }
     if (showCustomizeTheme) {
@@ -1090,185 +1075,122 @@ internal fun ReaderDisplaySheet(
     // it is on, so a phone that has it on can turn it off.
     val wide = LocalConfiguration.current.screenWidthDp >= 600
     val currentFontId = preferences.fontFamily ?: "system"
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .verticalScroll(rememberScrollState())
-            .navigationBarsPadding()
-            .padding(bottom = 24.dp)
-    ) {
-        Row(
+    listeningContent { speechContent ->
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = SubjectMetrics.accountGutter),
-            verticalAlignment = Alignment.CenterVertically
+                .verticalScroll(rememberScrollState())
+                .navigationBarsPadding()
+                .padding(bottom = 24.dp)
         ) {
-            Text(
-                text = "Display & Themes",
-                color = tokens.primaryInk,
-                fontSize = 17.sp,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.weight(1f)
-            )
-            ToolbarCircleButton(onClick = onDone, accessibilityName = "Done") {
-                // The accent that reads on every theme, on all three of the reader's sheets: this
-                // tick was the ink's colour and Find in Work's the raw accent.
-                Icon(Icons.Filled.Check, contentDescription = null, tint = tokens.scopePalette.accent)
-            }
-        }
-
-        SettingsGroupLabel("Appearance", Modifier.padding(top = 14.dp))
-        SettingsPanel {
-            SubjectSegmentedControl(
-                options = ReaderColorTheme.entries,
-                selected = preferences.theme,
-                onSelect = onThemeChange,
-                title = { if (it == ReaderColorTheme.Oled) "OLED" else it.name },
-                contentDescription = "Theme",
-                modifier = Modifier.padding(horizontal = 10.dp, vertical = 10.dp)
-            )
-            SubjectRowSeparator()
-            SettingsActionRow(
-                label = "Customize Theme…",
-                icon = Icons.Outlined.Tune,
-                onClick = { showCustomizeTheme = true }
-            )
-        }
-
-        SettingsGroupLabel("Text Size", Modifier.padding(top = 22.dp))
-        SettingsPanel {
-            TextSizeSlider(
-                value = preferences.fontSizePercent.toFloat(),
-                valueRange = ReaderSettingsMapper.MIN_FONT_PERCENT.toFloat()..
-                    ReaderSettingsMapper.MAX_FONT_PERCENT.toFloat(),
-                steps = 19,
-                unit = "%",
-                onValueChange = { onFontSizeChange(it.toInt()) },
-                onValueChangeFinished = { onFontSizeChange(it.toInt()) }
-            )
-        }
-
-        SettingsSection(
-            label = "Reading",
-            footnote = if (wide) {
-                "On a wide screen, Paged mode can show two pages side by side."
-            } else {
-                "Choose whether you turn pages or scroll while reading."
-            }
-        ) {
-            SubjectSegmentedControl(
-                options = listOf(true, false),
-                selected = preferences.scroll,
-                onSelect = onScrollModeChange,
-                title = { scroll -> if (scroll) "Scrolled" else "Paged" },
-                contentDescription = "Layout",
-                modifier = Modifier.padding(horizontal = 10.dp, vertical = 10.dp)
-            )
-            if (wide || twoPage) {
-                SubjectRowSeparator()
-                SubjectFormRow(
-                    "Two-page spread",
-                    trailing = {
-                        SubjectToggle(
-                            checked = twoPage,
-                            onCheckedChange = onTwoPageChange,
-                            enabled = !preferences.scroll
-                        )
-                    }
-                )
-            }
-            SubjectRowSeparator()
-            SubjectFormRow(
-                "Keep screen awake",
-                trailing = { SubjectToggle(checked = keepScreenAwake, onCheckedChange = onKeepScreenAwakeChange) }
-            )
-        }
-
-        SettingsGroupLabel("Read Aloud", Modifier.padding(top = 22.dp))
-        SettingsPanel {
-            if (availableVoices.isNotEmpty()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = SubjectMetrics.accountGutter),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 Text(
-                    text = "Voice",
+                    text = "Display & Themes",
                     color = tokens.primaryInk,
-                    fontSize = 16.sp,
-                    modifier = Modifier.padding(start = 13.dp, top = 10.dp, end = 13.dp)
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.weight(1f)
                 )
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .horizontalScroll(rememberScrollState())
-                        .padding(horizontal = 13.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    FilterChip(
-                        selected = preferences.speechVoiceIdentifier == null,
-                        onClick = { onSpeechVoiceChange(null) },
-                        label = { Text("Automatic (best available)", lineHeight = 20.sp) }
-                    )
-                    availableVoices.forEach { voice ->
-                        FilterChip(
-                            selected = preferences.speechVoiceIdentifier == voice.id,
-                            onClick = { onSpeechVoiceChange(voice.id) },
-                            label = { Text(voice.name) }
-                        )
-                    }
-                }
-                SubjectRowSeparator()
-            }
-            io.github.cidy02.kudos.settings.PronunciationsRow()
-            SubjectRowSeparator()
-            SubjectSliderRow(
-                label = "Speed",
-                value = preferences.speechRate,
-                valueRange = ReaderSpeechPreferences.RATE_RANGE,
-                steps = ReaderSpeechPreferences.RATE_STEPS,
-                formatValue = { "%.1f×".format(it) },
-                onValueChangeFinished = onSpeechRateChange
-            )
-            SubjectRowSeparator()
-            SubjectSliderRow(
-                label = "Pitch",
-                value = preferences.speechPitch,
-                // Settings › Listening's Pitch: iOS's range, step and label (the shared section).
-                valueRange = ReaderSpeechPreferences.PITCH_RANGE,
-                steps = ReaderSpeechPreferences.PITCH_STEPS,
-                formatValue = { io.github.cidy02.kudos.settings.speechPitchLabel(it) },
-                onValueChangeFinished = onSpeechPitchChange,
-                accessibilityLabel = "Read-aloud pitch"
-            )
-            // Read Aloud uses the device's own voice until then. This was the one way to the pack,
-            // and it showed only when reading was refused for want of it.
-            if (!voicePackInstalled) {
-                SubjectRowSeparator()
-                if (voicePackProgress != null) {
-                    SubjectFormRow("Downloading Kokoro Voice Pack", value = "${(voicePackProgress * 100).toInt()}%")
-                    SettingsActionRow("Cancel Download", onClick = onCancelVoicePack)
-                } else {
-                    voicePackFailure?.let { Text(it, color = tokens.secondaryInk, modifier = Modifier.padding(13.dp)) }
-                    SettingsActionRow(if (voicePackFailure != null) "Retry Download" else "Download Kokoro Voice Pack (about 45 MB)",
-                        onClick = onDownloadVoicePack)
+                ToolbarCircleButton(onClick = onDone, accessibilityName = "Done") {
+                    // The accent that reads on every theme, on all three of the reader's sheets: this
+                    // tick was the ink's colour and Find in Work's the raw accent.
+                    Icon(Icons.Filled.Check, contentDescription = null, tint = tokens.scopePalette.accent)
                 }
             }
-        }
 
-        if (customFontRepository != null) {
-            io.github.cidy02.kudos.settings.ReaderFontSection(currentFontId, customFontRepository) { id ->
-                onFontFamilyChange(if (id == "system") null else id)
-            }
-        } else {
-            SettingsGroupLabel("Font", Modifier.padding(top = 22.dp))
+            SettingsGroupLabel("Appearance", Modifier.padding(top = 14.dp))
             SettingsPanel {
-                ReaderFontCatalog.builtIns.forEachIndexed { index, option ->
-                    if (index > 0) SubjectRowSeparator()
+                SubjectSegmentedControl(
+                    options = ReaderColorTheme.entries,
+                    selected = preferences.theme,
+                    onSelect = onThemeChange,
+                    title = { if (it == ReaderColorTheme.Oled) "OLED" else it.name },
+                    contentDescription = "Theme",
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 10.dp)
+                )
+                SubjectRowSeparator()
+                SettingsActionRow(
+                    label = "Customize Theme…",
+                    icon = Icons.Outlined.Tune,
+                    onClick = { showCustomizeTheme = true }
+                )
+            }
+
+            SettingsGroupLabel("Text Size", Modifier.padding(top = 22.dp))
+            SettingsPanel {
+                TextSizeSlider(
+                    value = preferences.fontSizePercent.toFloat(),
+                    valueRange = ReaderSettingsMapper.MIN_FONT_PERCENT.toFloat()..
+                        ReaderSettingsMapper.MAX_FONT_PERCENT.toFloat(),
+                    steps = 19,
+                    unit = "%",
+                    onValueChange = { onFontSizeChange(it.toInt()) },
+                    onValueChangeFinished = { onFontSizeChange(it.toInt()) }
+                )
+            }
+
+            SettingsSection(
+                label = "Reading",
+                footnote = if (wide) {
+                    "On a wide screen, Paged mode can show two pages side by side."
+                } else {
+                    "Choose whether you turn pages or scroll while reading."
+                }
+            ) {
+                SubjectSegmentedControl(
+                    options = listOf(true, false),
+                    selected = preferences.scroll,
+                    onSelect = onScrollModeChange,
+                    title = { scroll -> if (scroll) "Scrolled" else "Paged" },
+                    contentDescription = "Layout",
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 10.dp)
+                )
+                if (wide || twoPage) {
+                    SubjectRowSeparator()
                     SubjectFormRow(
-                        label = option.name,
-                        onClick = { onFontFamilyChange(if (option.id == "system") null else option.id) },
+                        "Two-page spread",
                         trailing = {
-                            if (currentFontId == option.id) {
-                                Icon(Icons.Filled.Check, contentDescription = "Selected", tint = tokens.accentInk)
-                            }
+                            SubjectToggle(
+                                checked = twoPage,
+                                onCheckedChange = onTwoPageChange,
+                                enabled = !preferences.scroll, contentDescription = "Two-page spread"
+                            )
                         }
                     )
+                }
+                SubjectRowSeparator()
+                SubjectFormRow(
+                    "Keep screen awake",
+                    trailing = { SubjectToggle(checked = keepScreenAwake, onCheckedChange = onKeepScreenAwakeChange, contentDescription = "Keep screen awake") }
+                )
+            }
+
+            speechContent()
+
+            if (customFontRepository != null) {
+                io.github.cidy02.kudos.settings.ReaderFontSection(currentFontId, customFontRepository) { id ->
+                    onFontFamilyChange(if (id == "system") null else id)
+                }
+            } else {
+                SettingsGroupLabel("Font", Modifier.padding(top = 22.dp))
+                SettingsPanel {
+                    ReaderFontCatalog.builtIns.forEachIndexed { index, option ->
+                        if (index > 0) SubjectRowSeparator()
+                        SubjectFormRow(
+                            label = option.name,
+                            onClick = { onFontFamilyChange(if (option.id == "system") null else option.id) },
+                            trailing = {
+                                if (currentFontId == option.id) {
+                                    Icon(Icons.Filled.Check, contentDescription = "Selected", tint = tokens.accentInk)
+                                }
+                            }
+                        )
+                    }
                 }
             }
         }

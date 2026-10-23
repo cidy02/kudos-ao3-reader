@@ -69,6 +69,10 @@ fun FandomListScreen(
     var debouncedQuery by navigationEntryState("fandom-list:${category.name}:debouncedQuery") { "" }
     var sort by navigationEntryState("fandom-list:${category.name}:sort") { FandomFamilySort.FamilyTotal }
     var groupsVariants by navigationEntryState("fandom-list:${category.name}:groupsVariants") { true }
+    val storedGrouping by remember(settingsRepository) {
+        settingsRepository?.groupsFandomVariants ?: flowOf(true)
+    }.collectAsState(initial = true)
+    LaunchedEffect(storedGrouping) { groupsVariants = storedGrouping }
     var options by navigationEntryState("fandom-list:${category.name}:options") { FandomListFilterOptions() }
     var showFilters by remember(category.name) { mutableStateOf(false) }
     DebugShotEffect("fandom-list") { showFilters = true }
@@ -90,11 +94,12 @@ fun FandomListScreen(
             ?: onOpenWebFallback(AO3BrowseUrls.mediaIndexUrl())
     }
 
-    suspend fun loadNow() {
+    suspend fun loadNow(bypassCache: Boolean = false) {
+        val previous = phase as? FandomListPhase.Loaded
         if (phase !is FandomListPhase.Loaded) phase = FandomListPhase.Loading
-        phase = when (val result = repository.fandoms(category)) {
+        phase = when (val result = repository.fandoms(category, bypassCache)) {
             is AO3Result.Success -> FandomListPhase.Loaded(result.value)
-            is AO3Result.Failure -> FandomListPhase.Error(result.error.displayMessage())
+            is AO3Result.Failure -> previous ?: FandomListPhase.Error(result.error.displayMessage())
         }
     }
 
@@ -163,7 +168,7 @@ fun FandomListScreen(
         }
     )
 
-    KudosRefreshBox(onRefresh = { loadNow() }, modifier = Modifier.fillMaxSize()) {
+    KudosRefreshBox(onRefresh = { loadNow(bypassCache = true) }, modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -199,6 +204,7 @@ fun FandomListScreen(
                                 onSort = { sort = it },
                                 onGroupsVariants = { on ->
                                     groupsVariants = on
+                                    scope.launch { settingsRepository?.setGroupsFandomVariants(on) }
                                     options = options.groupsVariantsChanged(on)
                                 }
                             )

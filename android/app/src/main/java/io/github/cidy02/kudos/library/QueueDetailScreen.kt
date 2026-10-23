@@ -14,10 +14,11 @@ fun QueueDetailScreen(
     settingsRepository: SettingsRepository? = null,
     epubBytes: (String) -> Long = { 0L },
     onOpenWork: (String) -> Unit,
-    onShowOnlyTag: (String) -> Unit = {}
+    onShowOnlyTag: (String) -> Unit = {},
+    origin: String = "Library"
 ) {
     QueueSettingsScreen(
-        queueId = queueId,
+        queueId = queueId, origin = origin,
         repository = repository,
         settingsRepository = settingsRepository,
         epubBytes = epubBytes,

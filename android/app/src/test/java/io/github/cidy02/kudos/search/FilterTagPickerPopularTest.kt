@@ -19,6 +19,40 @@ import org.robolectric.annotation.Config
 class FilterTagPickerPopularTest {
     @get:Rule val compose = createComposeRule()
 
+    @Test fun oneCharacterSearchReachesTheAutocompleteClient() {
+        val urls = java.util.concurrent.CopyOnWriteArrayList<String>()
+        val repository = AO3TagAutocompleteRepository(object : AO3Client {
+            override suspend fun get(url: String, headers: Map<String, String>): AO3Result<AO3HttpResponse> {
+                urls += url
+                return AO3Result.Success(AO3HttpResponse(url, 200, emptyMap(), "[]"))
+            }
+        })
+        compose.setContent { KudosTheme(KudosThemeMode.Light) {
+            FilterTagRow("Fandoms", "fandom", "", "", emptyList(), repository, emptyList(), { _, _ -> })
+        } }
+        compose.onNodeWithText("Fandoms").performClick()
+        compose.onNode(hasSetTextAction()).performTextInput("A")
+        compose.waitUntil(5_000) { urls.any { it.contains("term=A") } }
+    }
+
+    @Test fun anOutstandingTagSearchShowsTheSharedPlaceholder() {
+        val pending = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val repository = AO3TagAutocompleteRepository(object : AO3Client {
+            override suspend fun get(url: String, headers: Map<String, String>): AO3Result<AO3HttpResponse> {
+                pending.await()
+                return AO3Result.Success(AO3HttpResponse(url, 200, emptyMap(), "[]"))
+            }
+        })
+        compose.setContent { KudosTheme(KudosThemeMode.Light) {
+            FilterTagRow("Fandoms", "fandom", "", "", emptyList(), repository, emptyList(), { _, _ -> })
+        } }
+        compose.onNodeWithText("Fandoms").performClick()
+        compose.onNode(hasSetTextAction()).performTextInput("Ab")
+        compose.onNodeWithContentDescription("Searching…").assertExists()
+        compose.onNodeWithText("Searching…").assertDoesNotExist()
+        pending.complete(Unit)
+    }
+
     @Test fun emptyFandomQueryKeepsSelectedStatesAndWaitsForTypingToSuggest() {
         var included by mutableStateOf("Doctor Who")
         var excluded by mutableStateOf("Star Wars")

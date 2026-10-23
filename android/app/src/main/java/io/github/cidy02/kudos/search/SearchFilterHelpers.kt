@@ -214,12 +214,11 @@ fun summaryLabels(
             upper.isNotEmpty() -> add("$name ≤ $upper")
         }
     }
-    filters.dateFrom?.let { add("After $it") }
-    filters.dateTo?.let { add("Before $it") }
-
     if (filters.updated != AO3Updated.ANY) {
         add(filters.updated.title)
     }
+    filters.dateFrom?.let { add("After $it") }
+    filters.dateTo?.let { add("Before $it") }
     if (filters.languageId != null) {
         add(filters.languageTitle)
     }

@@ -170,8 +170,6 @@ internal fun WritingTextEditorContent(
     Column(Modifier.fillMaxSize().subjectScreenWash(palette).imePadding().navigationBarsPadding()) {
         Spacer(Modifier.windowInsetsTopHeight(WindowInsets.statusBars))
         Spacer(Modifier.height(76.dp))
-        Text(title, color = tokens.primaryInk, fontSize = 22.sp, lineHeight = 29.sp,
-            fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(horizontal = 16.dp))
         val words = session.wordCount?.let { "${NumberFormat.getIntegerInstance().format(it)} ${if (it == 1) "word" else "words"}" }
         // At accessibility size the figure gets its own line; don't clip the shared header's one-line count.
         val accessibility = isAccessibilityFontScale()

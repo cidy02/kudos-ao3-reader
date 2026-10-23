@@ -34,6 +34,15 @@ val gitCommitSha: String = try {
     ""
 }
 
+val gitBranch: String = try {
+    val result = providers.exec {
+        commandLine("git", "branch", "--show-current")
+        workingDir(rootProject.rootDir)
+        isIgnoreExitValue = true
+    }
+    if (result.result.get().exitValue == 0) result.standardOutput.asText.get().trim() else ""
+} catch (_: Exception) { "" }
+
 android {
     namespace = "io.github.cidy02.kudos"
     compileSdk = 37
@@ -46,6 +55,7 @@ android {
         versionName = "0.2.1"
         // Escaped for a Java string literal inside generated BuildConfig.
         buildConfigField("String", "GIT_COMMIT_SHA", "\"${gitCommitSha.replace("\"", "\\\"")}\"")
+        buildConfigField("String", "GIT_BRANCH", "\"${gitBranch.replace("\\", "\\\\").replace("\"", "\\\"")}\"")
     }
 
     signingConfigs {

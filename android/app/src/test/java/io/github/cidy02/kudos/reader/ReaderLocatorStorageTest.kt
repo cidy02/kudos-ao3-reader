@@ -20,6 +20,19 @@ class ReaderLocatorStorageTest {
         "locations":{"progression":0.25,"totalProgression":0.1},
         "text":{"before":"amber ","highlight":"shadows","after":" across"}}"""
 
+    @Test fun aSearchResultGetsTheNearestPositionInItsOwnResource() {
+        fun place(href: String, progression: Double, position: Int? = null) =
+            org.readium.r2.shared.publication.Locator.fromJSON(org.json.JSONObject(
+                """{"href":"$href","type":"application/xhtml+xml","locations":{"progression":$progression${position?.let { ",\"position\":$it" }.orEmpty()}}}"""))!!
+        val search = place("OEBPS/chapter.xhtml#match", 0.49)
+        val positions = listOf(place("other.xhtml", 0.49, 20), place("chapter.xhtml", 0.0, 3), place("chapter.xhtml", 0.5, 4))
+        val resolved = io.github.cidy02.kudos.reader.readium.ReadiumProgressAdapter.resolvedPositionLocator(search, positions)
+        assertEquals(4, resolved.locations.position)
+        assertEquals(search.href, resolved.href)
+        assertEquals(search.text, resolved.text)
+        assertEquals(0.49, resolved.locations.progression!!, 0.0)
+    }
+
     @Test
     fun aBareLocatorIsStoredInTheFormThePageCanDraw() {
         assertNull(ReadiumNavigatorController.locatorFromJson(bare))

@@ -115,11 +115,11 @@ internal fun FilterTagRow(
             remote = emptyList()
             searching = false
             val term = currentToken
-            if (repository != null && term.length >= 2) {
+            if (repository != null && term.isNotEmpty()) {
                 searching = true
                 try {
                     delay(300)
-                    val result = repository.autocomplete(kind, term)
+                    val result = repository.autocomplete(kind, term, minimumTermLength = 1)
                     currentCoroutineContext().ensureActive()
                     if (result is AO3Result.Success) remote = result.value
                 } finally {
@@ -167,7 +167,13 @@ internal fun FilterTagRow(
                     val waiting = searching || (loadingPopular && showingPopular)
                     if (waiting || matches.isEmpty()) item {
                         Column(Modifier.subjectPanel()) {
-                            if (waiting) FilterNote(if (showingPopular) "Loading…" else "Searching…", Modifier.padding(13.dp))
+                            if (waiting) io.github.cidy02.kudos.ui.subject.SubjectSkeletonLoading(
+                                if (showingPopular) "Loading…" else "Searching…"
+                            ) {
+                                Column(Modifier.fillMaxWidth().padding(13.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    repeat(4) { io.github.cidy02.kudos.ui.subject.SubjectSkeletonBlock() }
+                                }
+                            }
                             if (!waiting && matches.isEmpty()) FilterNote(
                                 if (query.isBlank())
                                     "Type above to search AO3 ${title.lowercase()}."

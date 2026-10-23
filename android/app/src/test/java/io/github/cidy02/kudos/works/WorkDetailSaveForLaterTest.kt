@@ -131,6 +131,18 @@ class WorkDetailSaveForLaterTest {
     private fun members() = runBlocking { queues.listWorks(queues.ensureSavedForLaterQueue().id) }
     @After fun close() { scope.cancel(); storeScope.cancel(); if (::database.isInitialized) database.close() }
 
+    @Test fun aCheckedQueueInWorkDetailCanBeUnchecked() {
+        open(false, 25, hasSeries = false)
+        val queue = runBlocking { queues.createQueue("Parity queue").also { queues.addWork(it.id, anchor.id, enqueueMissingEpub = false) } }
+        compose.waitUntil(15_000) { compose.onAllNodesWithContentDescription("More actions").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithContentDescription("More actions").performClick()
+        compose.onNode(hasText("Add to Queue") or hasText("In 1 Queue")).performClick()
+        compose.waitUntil(5_000) { compose.onAllNodesWithText("Parity queue").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText("Parity queue").performClick()
+        compose.waitUntil(5_000) { runBlocking { queues.listWorks(queue.id).isEmpty() } }
+        assertNotNull(runBlocking { works.getWork(anchor.id) })
+    }
+
     @Test fun removingSourceLessDetailDismissesAfterSoftDeletion() {
         open(false, 25, hasSeries = false, sourceLess = true)
         compose.waitUntil(15_000) { compose.onAllNodesWithContentDescription("More actions").fetchSemanticsNodes().isNotEmpty() }

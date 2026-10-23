@@ -51,6 +51,18 @@ object ReadiumProgressAdapter {
         (locator.locations.progression ?: locator.locations.totalProgression ?: 0.0)
             .coerceIn(0.0, 1.0)
 
+    /** Search locators can omit a position; use the nearest position in the same spine resource, as iOS. */
+    fun resolvedPositionLocator(locator: Locator, positions: List<Locator>): Locator {
+        if (locator.locations.position != null) return locator
+        val progression = locator.locations.progression ?: return locator
+        val key = io.github.cidy02.kudos.reader.ReaderSectionBuilder.hrefKey(locator.href.toString())
+        val nearest = positions.filter {
+            io.github.cidy02.kudos.reader.ReaderSectionBuilder.hrefKey(it.href.toString()) == key
+        }.minByOrNull { kotlin.math.abs((it.locations.progression ?: 0.0) - progression) }
+        val position = nearest?.locations?.position ?: return locator
+        return locator.copy(locations = locator.locations.copy(position = position))
+    }
+
     /** Resolve the initial Readium locator (null = open at the beginning). */
     fun initialLocator(target: ReaderRestoreTarget, publication: Publication): Locator? {
         return when (target) {

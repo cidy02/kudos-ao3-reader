@@ -28,6 +28,18 @@ import org.robolectric.annotation.GraphicsMode
 @Config(sdk = [34], application = Application::class, qualifiers = "w411dp-h2400dp")
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class WritingAssociationScreenTest {
+    @Test fun sourceUrlWrapsInsteadOfClippingTheEndOfTheField() {
+        show(995006L)
+        open("Inspired by", "Inspired by")
+        val url = "https://archiveofourown.org/works/123456789?source=" + "long-source-".repeat(8)
+        compose.onNodeWithContentDescription("URL").performTextReplacement(url)
+        val layouts = mutableListOf<TextLayoutResult>()
+        compose.onNodeWithContentDescription("URL").performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
+        assertTrue(layouts.isNotEmpty())
+        assertTrue(layouts.all { it.lineCount > 1 && !it.didOverflowWidth })
+    }
+
+
     @get:Rule val compose = createComposeRule()
     private lateinit var setup: WorkFormTestSetup
     private lateinit var form: WritingWorkFormState
