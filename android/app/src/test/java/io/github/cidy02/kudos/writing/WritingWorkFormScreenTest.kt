@@ -139,6 +139,36 @@ class WritingWorkFormScreenTest {
         }
         noWrites()
     }
+    @Test fun chapterFormShotDispatchesToAddChapterOfThePostedWork() {
+        val assets = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>().assets
+        io.github.cidy02.kudos.network.ao3.DemoNetwork.activate(assets, signedIn = true)
+        try {
+            val shot = io.github.cidy02.kudos.app.debugShot("chapterform", "queue", "collection", "work", "reader")!!
+            assertEquals(io.github.cidy02.kudos.app.DebugShot(io.github.cidy02.kudos.app.Routes.WritingWorkPostedDemo,
+                listOf("work-form")), shot)
+            io.github.cidy02.kudos.app.DebugShotRequests.open("chapterform", shot)
+            setup = runBlocking { workFormSetup() }
+            setup.client.getBodies["https://archiveofourown.org/works/995006/chapters/new"] = io.github.cidy02.kudos.network.ao3.writing.workFixture("ao3_demo_chapter_995006_new")
+            model = setup.model(995006)
+            runBlocking { model.load() }
+            val workTitle = model.state.value.form!!.title
+            compose.setContent { KudosTheme(KudosThemeMode.Light) {
+                WritingWorkFormContent(model, setup.auth.username().orEmpty(), "Edit work", {})
+            } }
+            awaitText("Add chapter")
+            compose.onNodeWithText("$workTitle · chapter 3").assertExists()
+            compose.onNodeWithText("Edit chapter").assertDoesNotExist()
+            compose.runOnIdle {
+                assertEquals(listOf("https://archiveofourown.org/works/995006/edit",
+                    "https://archiveofourown.org/works/995006/chapters/new"), setup.client.gets)
+                assertEquals(0, setup.client.posts)
+            }
+        } finally {
+            io.github.cidy02.kudos.app.DebugShotRequests.clear()
+            io.github.cidy02.kudos.network.ao3.DemoNetwork.resetForTests()
+        }
+    }
+
     @Test fun newFormHasIosSectionsRowsAndValues() = inventory(null)
     @Test fun draftFormHasIosSectionsRowsAndValues() = inventory(995001L)
     @Test fun postedFormHasIosSectionsRowsAndValues() = inventory(995006L)

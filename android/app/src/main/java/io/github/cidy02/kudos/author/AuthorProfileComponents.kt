@@ -233,6 +233,7 @@ internal fun AO3AuthorWorkCard(
         // A bookmark is iOS's one card in every layout (1q).
         ledger = displayMode != AuthorDisplayMode.Detailed || bookmark != null,
         bookmark = bookmark,
+        neutralCard = bookmark != null,
         footer = if (strip || actions != null) { {
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 if (strip) AO3AuthorPerformanceStrip(work)

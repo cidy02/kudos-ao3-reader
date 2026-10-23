@@ -2672,3 +2672,16 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   details wait for an engine that can supply them (not owner questions). The one real choice,
   duplicate queue and collection names, is owner question 34. About names a non-main branch only
   on a build made with `-Pkudos.branchBuild` (iOS: only its branch build script's builds).
+- **2026-10-23 · A88b's second half (Codex 3ha; reviewed by Claude-CLI as A92).** A series opened
+  directly shows its own card as iOS's: bookmarks, Restricted and the updated date, all parsed from the
+  page Android already fetches as a guest (A90; no new read). Restricted is read only from the series
+  heading's lock (iOS reads the listing's; a listing-carried flag still counts), and a work card's
+  absent comment, kudos, bookmark or hit figure is zero, which is how AO3 omits a zero. Series works and
+  author bookmarks are neutral cards (`neutralCard`, which only drops the wash; A92 kept it apart from
+  History's muted style). Edit settings' subtitle is the collection's title, its slug when it has none
+  (iOS `effectiveTitle`), with "· N sign-ups" only when Challenge Settings' existing read already knows
+  N (owner decision 16: no extra read); Save changes is a pinned filled button. A system-style sheet is
+  white in Light, as iOS's, and the page's ground in the other themes (`sheetGround`: preference help,
+  writing recovery). Unit tests that switch on the demo network turn it off again
+  (`DemoNetwork.resetForTests`): the flag is sticky by design, and 3ha's two tests that left it on made
+  sixteen later account and signed-out tests fail.

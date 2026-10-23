@@ -40,7 +40,7 @@ fun AO3ChallengeSettingsScreen(
     onOpenPrompts: (String, String) -> Unit,
     onOpenSignUps: (String, String) -> Unit = { _, _ -> },
     onOpenAssignments: (String, String, Boolean) -> Unit = { _, _, _ -> },
-    onOpenEditSettings: () -> Unit = {},
+    onOpenEditSettings: (Int?) -> Unit = {},
     challengeKind: AO3ChallengeKind? = null
 ) {
     val auth = repository.authRepository
@@ -62,6 +62,9 @@ fun AO3ChallengeSettingsScreen(
     val kind = state.data?.settings?.kind ?: AO3ChallengeKind.GiftExchange
     val large = isAccessibilityFontScale()
     LaunchedEffect(model) { model.loadOnAppear() }
+    io.github.cidy02.kudos.app.DebugShotEffect("challenge-settings", ready = state.data != null && !state.loading) {
+        onOpenEditSettings(state.data?.signUpTotal)
+    }
     DisposableEffect(model) { onDispose { model.close() } }
     ProvidePushedShellChrome(hasSubjectHeader = true)
     CompositionLocalProvider(LocalKudosTokens provides tokens.copy(accent = palette.accent)) {
@@ -115,7 +118,7 @@ fun AO3ChallengeSettingsScreen(
                             if (viewerIsOwner) item {
                                 SettingsPanel(Modifier.padding(top = 14.dp)) {
                                     SubjectFormRow("Edit settings", showsDisclosure = true,
-                                        onClick = onOpenEditSettings)
+                                        onClick = { onOpenEditSettings(state.data?.signUpTotal) })
                                 }
                             }
                             item {

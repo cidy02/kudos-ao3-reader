@@ -238,13 +238,19 @@ internal fun BulkOptionsScreen(picker: BulkPicker, options: List<AO3FormOption>,
         }
         if (picker.mode == "names") {
             item {
-                Column(Modifier.padding(horizontal = SubjectMetrics.accountGutter).writingSuggestionPanel(true, false)) {
-                    SubjectTextFieldRow("Collection name", entry, "Collection name", { entry = it }, autocorrect = false)
+                Row(Modifier.padding(horizontal = SubjectMetrics.accountGutter).writingSuggestionPanel(true, true)
+                    .padding(end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.weight(1f)) {
+                        SubjectTextFieldRow("Collection name", entry, "Collection name", { entry = it },
+                            autocorrect = false, fieldOnly = true)
+                    }
+                    TextButton(onClick = {
+                        val name = trimWritingTag(entry)
+                        onChange { if (name in it.collectionsToAdd) it else it.copy(collectionsToAdd = it.collectionsToAdd + name) }
+                        entry = ""
+                    }, enabled = trimWritingTag(entry).isNotEmpty()) { Text("Add", color = palette.accent) }
                 }
             }
-            item { BulkRow("Add", "", 1, 2, trimWritingTag(entry).isNotEmpty()) {
-                val name = trimWritingTag(entry); onChange { if (name in it.collectionsToAdd) it else it.copy(collectionsToAdd = it.collectionsToAdd + name) }; entry = ""
-            } }
             item { WorkFormFootnote("Enter the collection name exactly as it appears on AO3. If AO3 doesn't recognize it, you will see that when you save.") }
         }
         if (picker.mode == "tri") item { WorkFormFootnote("Tap an option once to add it to every selected work, twice to remove it, or three times to leave it unchanged.") }

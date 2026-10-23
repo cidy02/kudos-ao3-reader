@@ -27,6 +27,7 @@ class AO3ChallengeSettingsScreenTest {
     @get:Rule val compose = createComposeRule()
     private lateinit var client: ChallengeReadClient
     private var edits = 0
+    private var editCount: Int? = null
     private val browser = mutableListOf<String>()
     private val external = mutableListOf<String>()
     private val native = mutableListOf<String>()
@@ -57,7 +58,7 @@ class AO3ChallengeSettingsScreenTest {
                             opened = true
                         })
                     else AO3ChallengeSettingsScreen("winter_exchange", "Winter Exchange 2026", owner, repository,
-                        onOpenEditSettings = { edits++ },
+                        onOpenEditSettings = { count -> edits++; editCount = count },
                         onOpenWeb = { browser += it }, onOpenExternal = { external += it },
                         onOpenTagSet = { id, title -> native += Routes.ao3TagSet(id, title, isModerator = true) },
                         onOpenPrompts = { slug, title -> native += Routes.ao3PromptMeme(slug, title) },
@@ -75,6 +76,23 @@ class AO3ChallengeSettingsScreenTest {
         compose.onNode(hasScrollAction()).performScrollToNode(hasText(text))
     }
     private fun click(text: String) { reach(text); compose.onNodeWithText(text).performClick() }
+
+    @Test fun editReceivesTheAlreadyReadTotalAndTheShotWaitsForIt() {
+        val assets = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>().assets
+        DemoNetwork.activate(assets, signedIn = true)
+        try {
+            io.github.cidy02.kudos.app.DebugShotRequests.open("chsettingsedit",
+                io.github.cidy02.kudos.app.DebugShot(Routes.ao3ChallengeSettings("winter_exchange", "Winter Exchange", true),
+                    listOf("challenge-settings")))
+            show(hold = true)
+            awaitText("Loading challenge settings…")
+            compose.runOnIdle { assertEquals(0, edits); client.hold = false; client.release.complete(Unit) }
+            compose.waitUntil(15_000) { edits == 1 }
+            compose.runOnIdle { assertEquals(4, editCount); assertEquals(4, client.gets.size) }
+            click("Edit settings")
+            compose.runOnIdle { assertEquals(2, edits); assertEquals(4, editCount); assertEquals(4, client.gets.size) }
+        } finally { io.github.cidy02.kudos.app.DebugShotRequests.clear(); DemoNetwork.resetForTests() }
+    }
 
     @Test fun realManageRowOpensNativeScreenAndEveryGiftDisclosureHasItsExactDestination() {
         show(fromManage = true)

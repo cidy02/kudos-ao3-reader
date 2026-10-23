@@ -471,9 +471,12 @@ internal fun PreferenceHelpSheet(
     result: AO3Result<io.github.cidy02.kudos.network.ao3.preferences.AO3PreferenceHelpContent>?,
     onRetry: () -> Unit,
     onOpenOnAO3: () -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    presentSheet: @Composable (androidx.compose.ui.graphics.Color, @Composable () -> Unit) -> Unit = { ground, content ->
+        androidx.compose.material3.ModalBottomSheet(onDismissRequest = onDismiss, containerColor = ground) { content() }
+    }
 ) {
-    androidx.compose.material3.ModalBottomSheet(onDismissRequest = onDismiss) {
+    presentSheet(LocalKudosTokens.current.sheetGround) {
         PreferenceHelpContent(ref, result, onRetry, onOpenOnAO3)
     }
 }

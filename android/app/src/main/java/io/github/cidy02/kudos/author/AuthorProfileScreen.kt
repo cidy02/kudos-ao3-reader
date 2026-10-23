@@ -1036,6 +1036,7 @@ fun AuthorProfileScreen(
                             }
                         }
                         AuthorTab.Bookmarks -> {
+                            item { SectionRuleHeader(title = "Bookmarks") }
                             val pageData = bookmarks
                             if (pageData == null || pageData.bookmarks.isEmpty()) {
                                 item { EmptyStateCard("No visible bookmarks", "No bookmarks by this author are visible to you on AO3.") }
@@ -1062,7 +1063,8 @@ fun AuthorProfileScreen(
                                         loading = tabLoading,
                                         onNext = { loadTab(AuthorTab.Bookmarks, pageData.currentPage + 1) },
                                         loadMoreError = tabError?.takeIf { page > 1 },
-                                        onRetry = { loadTab(tab, page) }
+                                        onRetry = { loadTab(tab, page) },
+                                        showsCard = true
                                     )
                                 }
                             }

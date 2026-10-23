@@ -111,6 +111,7 @@ internal fun WritingWorkFormContent(model: WritingWorkFormState, account: String
         when (name) {
             "writingpreview" -> model.openPreview()
             "chapters" -> viewingChapters = true
+            "chapterform" -> chapterModel = model.chapterModel(null, null)
             "edittags" -> model.editTagsModel()?.let { onSaving(); editingPostedTags = it }
             "tagseditor" -> writingTags = WritingTagKind.Fandom
             "seriespicker" -> association = WorkAssociation.Series

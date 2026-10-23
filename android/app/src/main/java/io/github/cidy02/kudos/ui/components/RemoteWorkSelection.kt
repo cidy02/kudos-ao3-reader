@@ -305,9 +305,10 @@ fun SelectableRemoteWorkRow(
     selected: Boolean,
     onToggle: () -> Unit,
     modifier: Modifier = Modifier,
-    expandAll: Boolean = false
+    expandAll: Boolean = false,
+    neutralCard: Boolean = false
 ) {
     SensitiveWorkRow(work = work, onOpenWork = { onToggle() }, modifier = modifier,
         ledger = true, selecting = true, selected = selected, selectionAllowsDetails = true,
-        expandAll = expandAll, onLongClick = onToggle)
+        expandAll = expandAll, onLongClick = onToggle, neutralCard = neutralCard)
 }
