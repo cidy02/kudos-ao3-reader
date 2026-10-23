@@ -2633,3 +2633,23 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   the phone was offline (after a timeout the old page showed with no notice) and Android said
   "You're offline" after any network failure. Both now say "You're offline. …" when it is, and
   "AO3 couldn't be reached. These comments are from … and may be out of date." otherwise.
+- **2026-10-22 · A83, a review of the day's commits by a second Claude session (read only).**
+  0 P1, 1 P2, 5 P3; no debug shot code reaches a release build on either app. **P2, both apps:**
+  the editor's recovery copy, drawn a line at a time so a 510,000-character chapter does not stall
+  (T-431; Android's was already a lazy list), could be selected only a line at a time; the sheet
+  now has **Copy text**, the same action on both, beside Restore, Keep and Delete. **P3s fixed:**
+  iOS's Inbox "Chapter Comments" path cleared the kept-copy notice after showing a kept page;
+  Android's shot launch crashed on a demo missing a fixture and re-ran on an Activity recreation;
+  iOS's `readernote` added a highlight on every launch and `revokedevice` touched the trust store
+  outside the demo.
+- **2026-10-22 · Two screens Android lacked (A81 rows 63 and 85; Codex 3gu).** (1) Read Aloud
+  settings from inside the reader, as iOS's `ReaderSpeechSettingsSheet`: a long press on the
+  reader's Read Aloud button opens a "Read Aloud" sheet holding Settings › Listening's own controls
+  (shared, not copied), half height first as iOS's medium detent (A85); voice and speed apply to
+  speech already playing. The Display sheet keeps its Read Aloud group, as iOS's. Android's mini
+  player draws a speaker icon, not iOS's equalizer, so it opens nothing (no new control added).
+  (2) The dashboard's "See all bookmarks" opens the author page on its Bookmarks tab, as iOS;
+  "See all works" and "See all series" are unchanged. **A85** (review of these and the A83
+  fixes): the recovery copy's Copy text shares a long copy as a `.txt` file instead of putting it on
+  the clipboard (over about a megabyte the clipboard's transfer throws and the app would crash on
+  the screen meant to rescue that text).

@@ -129,9 +129,16 @@ fun MainScaffold(
         if (showLibraryRequest > 0) navController.navigateShellRoot(Routes.Library)
     }
     val debugContext = androidx.compose.ui.platform.LocalContext.current
+    // Once per launch: an Activity recreation (rotation, the theme's recreate()) keeps the intent and
+    // would wipe the back stack again (A83).
+    var handledShot by androidx.compose.runtime.saveable.rememberSaveable {
+        androidx.compose.runtime.mutableStateOf<String?>(null)
+    }
     LaunchedEffect(debugShotName, debugRouteRequest) {
-        if (io.github.cidy02.kudos.BuildConfig.DEBUG && debugShotName != null &&
+        val shotKey = "$debugShotName#$debugRouteRequest"
+        if (io.github.cidy02.kudos.BuildConfig.DEBUG && debugShotName != null && handledShot != shotKey &&
             io.github.cidy02.kudos.network.ao3.DemoNetwork.isActive) {
+            handledShot = shotKey
             DebugShotRequests.clear()
             container.authRepository.awaitSavedSession()
             container.authRepository.useDebugDemoSession()
@@ -140,10 +147,13 @@ fun MainScaffold(
                 DemoLibrary.seedShotDevice(container.settingsRepository)
             }
             val works = container.database.workDao().getAll()
-            val queue = container.readingQueueRepository.listQueues().first { it.name == "Neon reread" }
-            val collection = container.workRepository.allCollections().first { it.name == "Comfort reads" }
-            val work = works.first { it.title == "Sodium Lights" }
-            val reader = works.first { it.title == "The Long Way Down" }
+            // A demo that has lost one of these (deleted by hand) skips the shot rather than crash (A83).
+            val queue = container.readingQueueRepository.listQueues().firstOrNull { it.name == "Neon reread" }
+                ?: return@LaunchedEffect
+            val collection = container.workRepository.allCollections().firstOrNull { it.name == "Comfort reads" }
+                ?: return@LaunchedEffect
+            val work = works.firstOrNull { it.title == "Sodium Lights" } ?: return@LaunchedEffect
+            val reader = works.firstOrNull { it.title == "The Long Way Down" } ?: return@LaunchedEffect
             val shot = debugShot(debugShotName, queue.id, collection.id, work.id, reader.id)
                 ?: return@LaunchedEffect
             DebugShotRequests.open(debugShotName, shot)

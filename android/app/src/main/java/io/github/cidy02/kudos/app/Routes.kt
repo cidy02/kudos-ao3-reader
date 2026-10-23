@@ -225,12 +225,18 @@ object Routes {
     const val AuthorAbout = "author-about/{$ARG_AUTHOR_USERNAME}"
     fun authorAbout(route: io.github.cidy02.kudos.network.ao3.author.AO3AuthorRoute): String =
         "author-about/${encode(route.pseud?.let { "${it} (${route.username})" } ?: route.username)}"
-    const val AuthorProfile = "author-profile/{$ARG_AUTHOR_USERNAME}"
-    fun authorProfile(username: String) = "author-profile/${encode(username)}"
+    const val AuthorProfile = "author-profile/{$ARG_AUTHOR_USERNAME}?tab={tab}"
+    fun authorProfile(username: String, initialTab: io.github.cidy02.kudos.author.AuthorTab? = null): String =
+        "author-profile/${encode(username)}" + (initialTab?.let { "?tab=${it.name}" } ?: "")
+
+    fun authorProfileInitialTab(value: String?): io.github.cidy02.kudos.author.AuthorTab? =
+        io.github.cidy02.kudos.author.AuthorTab.entries.firstOrNull { it.name == value }
 
     /** Existing author destinations carry AO3's pseud (account) byline through navigation. */
-    fun authorProfile(route: io.github.cidy02.kudos.network.ao3.author.AO3AuthorRoute): String =
-        authorProfile(route.pseud?.let { "$it (${route.username})" } ?: route.username)
+    fun authorProfile(
+        route: io.github.cidy02.kudos.network.ao3.author.AO3AuthorRoute,
+        initialTab: io.github.cidy02.kudos.author.AuthorTab? = null
+    ): String = authorProfile(route.pseud?.let { "$it (${route.username})" } ?: route.username, initialTab)
 
     private const val ARG_SERIES_URL = "seriesUrl"
     const val SeriesWorks = "series-works/{$ARG_SERIES_URL}"

@@ -7,4 +7,6 @@
     <files-path name="originals" path="originals/" />
     <!-- The shake-time screenshot a bug report shares; only that folder of the cache. -->
     <cache-path name="bug-report" path="bug-report/" />
+    <!-- A recovery copy too long for the clipboard, shared as a text file from the editor. -->
+    <cache-path name="recovery-copy" path="recovery-copy/" />
 </paths>

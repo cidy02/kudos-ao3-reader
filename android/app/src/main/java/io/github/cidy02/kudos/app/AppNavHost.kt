@@ -605,6 +605,7 @@ fun AppNavHost(
             )
             val username = (authState as? AO3AuthState.SignedIn)?.username
             AO3DashboardScreen(
+                onOpenAuthorTab = { author, tab -> navController.navigate(Routes.authorProfile(author, tab)) },
                 onOpenAbout = { navController.navigate(Routes.authorAbout(it)) },
                 authorRepository = container.authorRepository,
                 onOpenWork = { work -> navigateToWorkDetail(WorkDetailSource.RemoteSummary(work)) },
@@ -1304,7 +1305,9 @@ fun AppNavHost(
 
         listOf(Routes.AuthorProfile, Routes.AuthorSeries, Routes.AuthorAbout).forEach { authorRoute -> sharedComposable(
             authorRoute,
-            arguments = listOf(Routes.navArgOf("authorUsername"))
+            arguments = listOf(Routes.navArgOf("authorUsername")) + if (authorRoute == Routes.AuthorProfile) {
+                listOf(navArgument("tab") { type = NavType.StringType; nullable = true; defaultValue = null })
+            } else emptyList()
         ) { backStackEntry ->
             val authorUsername = Routes.routeArg(backStackEntry, "authorUsername")
             if (authorUsername.isNullOrBlank()) {
@@ -1322,7 +1325,7 @@ fun AppNavHost(
                     initialTab = when (authorRoute) {
                         Routes.AuthorSeries -> io.github.cidy02.kudos.author.AuthorTab.Series
                         Routes.AuthorAbout -> io.github.cidy02.kudos.author.AuthorTab.About
-                        else -> null
+                        else -> Routes.authorProfileInitialTab(Routes.routeArg(backStackEntry, "tab"))
                     },
                     authorRepository = container.authorRepository,
                     seriesFormRepository = remember(container) { io.github.cidy02.kudos.network.ao3.writing.AO3SeriesFormRepository(

@@ -45,10 +45,12 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import kotlinx.coroutines.withTimeout
+import kotlin.time.Duration.Companion.seconds
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -71,6 +73,8 @@ import org.robolectric.annotation.Config
 @Config(sdk = [35], qualifiers = "w411dp-h1200dp")
 class ReaderHighlightEditorTest {
     @get:Rule val compose = createComposeRule()
+    // Room resumptions must serialize like real Main, not run on its query threads.
+    private val mainDispatcher = StandardTestDispatcher()
     private lateinit var database: KudosDatabase
     private lateinit var recording: RecordingAnnotations
     private lateinit var settings: SettingsRepository
@@ -87,7 +91,7 @@ class ReaderHighlightEditorTest {
 
     @Before
     fun setUp() = runBlocking {
-        Dispatchers.setMain(UnconfinedTestDispatcher())
+        Dispatchers.setMain(mainDispatcher)
         val context = ApplicationProvider.getApplicationContext<Context>()
         database = Room.inMemoryDatabaseBuilder(context, KudosDatabase::class.java)
             .allowMainThreadQueries().build()
@@ -114,7 +118,9 @@ class ReaderHighlightEditorTest {
 
     @After
     fun tearDown() {
-        runBlocking { model.viewModelScope.coroutineContext[Job]?.cancelAndJoin() }
+        runTest(mainDispatcher, timeout = 5.seconds) {
+            model.viewModelScope.coroutineContext[Job]?.cancelAndJoin()
+        }
         database.close()
         Dispatchers.resetMain()
         directory.deleteRecursively()
@@ -242,6 +248,7 @@ class ReaderHighlightEditorTest {
         val releaseColourRead = CompletableDeferred<Unit>()
         recording.blockNextRead = releaseColourRead
         model.recolorHighlight(annotation.id, "green")
+        mainDispatcher.scheduler.runCurrent() // Suspend Colour's read before Done queues behind it.
         model.updateNote(annotation.id, "Saved immediately after colour")
         assertEquals(listOf(annotation.id), recording.reads)
         releaseColourRead.complete(Unit)
@@ -360,8 +367,14 @@ class ReaderHighlightEditorTest {
 
     private fun reading() = model.state.value as ReaderUiState.Reading
 
-    private suspend fun awaitReading(predicate: (ReaderUiState.Reading) -> Boolean) =
-        withTimeout(5_000) { model.state.filterIsInstance<ReaderUiState.Reading>().first(predicate) }
+    private fun awaitReading(predicate: (ReaderUiState.Reading) -> Boolean): ReaderUiState.Reading {
+        lateinit var reading: ReaderUiState.Reading
+        // Pump Main while Room uses real IO; the bound is wall time, not virtual coroutine time.
+        runTest(mainDispatcher, timeout = 5.seconds) {
+            reading = model.state.filterIsInstance<ReaderUiState.Reading>().first(predicate)
+        }
+        return reading
+    }
 
     private fun event(id: String, group: String = ReadiumNavigatorController.DECORATION_GROUP_HIGHLIGHTS) =
         DecorableNavigator.OnActivatedEvent(

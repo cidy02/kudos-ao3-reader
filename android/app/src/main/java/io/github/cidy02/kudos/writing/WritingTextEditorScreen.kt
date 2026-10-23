@@ -279,6 +279,11 @@ internal fun WritingTextEditorContent(
                     }
                     // Always visible beneath the independently scrolling copy.
                     Column {
+                        // The copy is drawn a line at a time, so selecting it takes a line at a time;
+                        // this copies all of it (A83; iOS has the same action).
+                        val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
+                        val context = androidx.compose.ui.platform.LocalContext.current
+                        EditorSheetAction("Copy text", { copyRecoveryText(context, clipboard, copy.entry.text) })
                         EditorSheetAction("Restore local copy", session::restore)
                         EditorSheetAction("Keep form text", session::keepFormText)
                         EditorSheetAction("Delete this local copy", { session.deleteSelectedCopy() }, destructive = true)
@@ -347,3 +352,30 @@ internal fun WritingPreviewParagraph(block: WritingBufferPreview.Block) {
         }, fontFamily = FontFamily.Default, fontSize = 17.sp, lineHeight = 24.sp)
     }
 }
+
+/**
+ * Copies a recovery copy, or shares it as a text file when it is too long for the clipboard: a
+ * chapter near AO3's limit is about a megabyte, over what the clipboard's transfer carries, and
+ * setPrimaryClip then throws (A85) on the very screen meant to rescue that text.
+ */
+internal fun copyRecoveryText(
+    context: android.content.Context,
+    clipboard: androidx.compose.ui.platform.ClipboardManager,
+    text: String
+) {
+    if (text.length <= RECOVERY_CLIPBOARD_LIMIT &&
+        runCatching { clipboard.setText(androidx.compose.ui.text.AnnotatedString(text)) }.isSuccess) return
+    runCatching {
+        val dir = java.io.File(context.cacheDir, "recovery-copy").apply { mkdirs() }
+        val file = java.io.File(dir, "Recovered text.txt").apply { writeText(text) }
+        val uri = androidx.core.content.FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+        val send = android.content.Intent(android.content.Intent.ACTION_SEND).setType("text/plain")
+            .putExtra(android.content.Intent.EXTRA_STREAM, uri)
+            .addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        context.startActivity(android.content.Intent.createChooser(send, "Recovered text")
+            .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
+    }
+}
+
+/** Characters the clipboard takes safely (UTF-16, well under the ~1 MB transaction limit). */
+internal const val RECOVERY_CLIPBOARD_LIMIT = 200_000

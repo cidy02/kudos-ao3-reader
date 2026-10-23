@@ -46,7 +46,7 @@ internal fun debugShot(
     "languagepicker" -> DebugShot(Routes.Search, listOf("search", "search-filters", "filter-language"))
     "tagpicker" -> DebugShot(Routes.Search, listOf("search", "search-filters", "filter-tags"))
     "pagejump" -> DebugShot("browse-works/Doctor%20Who", listOf("pagination"))
-    "readercontents", "readerfind", "readerdisplay", "readernote" -> DebugShot(Routes.reader(readerId), listOf("reader"))
+    "readercontents", "readerfind", "readerdisplay", "readerspeech", "readernote" -> DebugShot(Routes.reader(readerId), listOf("reader"))
     "pronunciations" -> DebugShot(Routes.Settings, listOf("settings", "listening-page", "pronunciations"))
     "pronunciationedit" -> DebugShot(Routes.Settings, listOf("settings", "listening-page", "pronunciations", "pronunciation-list"))
     "customizetheme" -> DebugShot(Routes.Settings, listOf("settings", "appearance"))
@@ -54,6 +54,7 @@ internal fun debugShot(
     "chapterpicker" -> DebugShot(Routes.comments(12345), listOf("comments"))
     "inboxfilter" -> DebugShot(Routes.AccountInbox, listOf("inbox"))
     "authorabout" -> DebugShot("author-about/AO3_Reader")
+    "authorbookmarks" -> DebugShot(Routes.authorProfile("AO3_Reader", io.github.cidy02.kudos.author.AuthorTab.Bookmarks))
     "seriesdetail" -> DebugShot(Routes.seriesWorks("https://archiveofourown.org/series/321"))
     "seriesedit", "seriesreorder" -> DebugShot(Routes.seriesWorks("https://archiveofourown.org/series/321"), listOf("series"))
     "seriesremove" -> DebugShot(Routes.seriesWorks("https://archiveofourown.org/series/321"), listOf("series", "series-editor"))
@@ -63,7 +64,9 @@ internal fun debugShot(
     "colitems" -> DebugShot(Routes.ao3CollectionItems("winter_exchange", "Winter Exchange"))
     "colsfilter" -> DebugShot(Routes.AO3Collections, listOf("ao3-collections"))
     "chsettingsedit" -> DebugShot(Routes.ao3ChallengeSettings("winter_exchange", "Winter Exchange", true), listOf("challenge-settings"))
-    "chsignupdetail" -> DebugShot(Routes.ao3ChallengeSignUps("winter_exchange", "Winter Exchange", true), listOf("challenge-signups"))
+    // As the collection page opens it: as a maintainer, with the kind it parsed (alone, the list was refused).
+    "chsignupdetail" -> DebugShot(Routes.ao3ChallengeSignUps("winter_exchange", "Winter Exchange", true, true,
+        io.github.cidy02.kudos.network.ao3.account.AO3ChallengeKind.GiftExchange), listOf("challenge-signups"))
     "prompttags" -> DebugShot(Routes.ao3ChallengeSignUp("winter_exchange", "Winter Exchange"), listOf("challenge-signup"))
     "tagset" -> DebugShot(Routes.ao3TagSet(42, "Winter Exchange Tags", true))
     "tagseteditor" -> DebugShot(Routes.ao3TagSet(42, "Winter Exchange Tags", true), listOf("tag-set"))
