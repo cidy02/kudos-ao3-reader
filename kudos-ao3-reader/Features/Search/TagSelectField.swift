@@ -79,9 +79,6 @@ struct TagSelectField: View {
                 .padding(.top, 2)
             }
         }
-        #if DEBUG
-        .task { if DebugLaunchRoute.takeSheet("tagpicker") { showPicker = true } }
-        #endif
         .sheet(isPresented: $showPicker) {
             TagPickerView(
                 title: title,

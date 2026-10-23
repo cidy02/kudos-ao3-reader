@@ -81,6 +81,7 @@ struct BrowseView: View {
                         case let .media(name, fandomsURL):
                             path.append(AO3MediaCategory(name: name, fandoms: [], fandomsURL: fandomsURL))
                         case let .fandom(names, title):
+                            try? await Task.sleep(for: .seconds(1))
                             openFandom(names, title)
                         case let .tag(url, title):
                             if let parsed = URL(string: url) {

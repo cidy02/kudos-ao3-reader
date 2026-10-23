@@ -184,10 +184,13 @@ struct SettingsReadingQueuesPage: View {
             Text(migrationMessage)
         }
         #if DEBUG
-        .task { if DebugLaunchRoute.takePush("queuestorage") { debugStorage = true } }
-        .navigationDestination(isPresented: $debugStorage) {
-            ReadingQueueStorageView()
+        .task {
+            guard DebugLaunchRoute.takePush("queuestorage") else { return }
+            try? await Task.sleep(for: .seconds(1))
+            debugStorage = true
         }
+        // A sheet: a push made from this page, itself pushed by the launch route, never happened.
+        .sheet(isPresented: $debugStorage) { NavigationStack { ReadingQueueStorageView() } }
         #endif
     }
 

@@ -182,10 +182,14 @@ struct ReadingQueueSettingsView: View {
         #if DEBUG
         .task {
             if DebugLaunchRoute.takeSheet("queuetag") { showingTags = true }
-            if DebugLaunchRoute.takePush("queuetags") { debugManageTags = true }
+            if DebugLaunchRoute.takePush("queuetags") {
+                try? await Task.sleep(for: .seconds(1))
+                debugManageTags = true
+            }
         }
-        .navigationDestination(isPresented: $debugManageTags) {
-            QueueTagManagerView(queue: queue, onShowOnlyTag: onShowOnlyTag)
+        // A sheet: a push made from this page, itself pushed by the launch route, never happened.
+        .sheet(isPresented: $debugManageTags) {
+            NavigationStack { QueueTagManagerView(queue: queue, onShowOnlyTag: onShowOnlyTag) }
         }
         #endif
         #if os(macOS)
