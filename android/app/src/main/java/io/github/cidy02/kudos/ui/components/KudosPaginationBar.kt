@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.ui.components
 
+import androidx.compose.foundation.text.TextAutoSize
 import io.github.cidy02.kudos.app.DebugShotEffect
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -218,7 +219,7 @@ private fun PageJumpSheet(
                 OutlinedTextField(
                     value = pageInput, onValueChange = { pageInput = it.filter { char -> char in '0'..'9' } }, singleLine = true,
                     placeholder = { Text("Page") },
-                    trailingIcon = { Text("of $totalPages", Modifier.padding(horizontal = 12.dp)) },
+                    trailingIcon = { Text("of ${"%,d".format(totalPages)}", Modifier.padding(horizontal = 12.dp)) },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Go),
                     keyboardActions = KeyboardActions(onGo = { if (draftPage != currentPage) go() }),
                     modifier = Modifier.fillMaxWidth().semantics { contentDescription = "Page number" }
@@ -249,6 +250,7 @@ private fun PageJumpSheet(
                                         Text(
                                             text = "%,d".format(page),
                                             maxLines = 1,
+                                            autoSize = TextAutoSize.StepBased(minFontSize = 9.sp, maxFontSize = 16.sp),
                                             lineHeight = 20.sp,
                                             fontWeight = FontWeight.SemiBold,
                                             color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer

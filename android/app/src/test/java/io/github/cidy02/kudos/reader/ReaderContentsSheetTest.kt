@@ -2,6 +2,8 @@ package io.github.cidy02.kudos.reader
 
 import android.app.Application
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -56,6 +58,27 @@ class ReaderContentsSheetTest {
         compose.onNodeWithText("Add Note").assertDoesNotExist()
         compose.onNodeWithText("Go").performClick()
         assertEquals(listOf(pending), selected)
+    }
+
+    /** A86: TalkBack can't swipe a row open, so the row offers the same actions in its menu. */
+    @Test fun chapterActionsAreInTalkBacksActionsMenu() {
+        val ready = ReaderTocEntry("Chapter 1: The Arcade", "ch1.xhtml")
+        val pending = ReaderTocEntry("Chapter 2: Nine Minutes", "ch2.xhtml")
+        val bookmarked = mutableListOf<ReaderTocEntry>()
+        compose.setContent {
+            KudosTheme(KudosThemeMode.Light) {
+                ReaderContentsSheet(listOf(ready, pending), emptyList(), emptyList(),
+                    onSelectEntry = {}, onSelectAnnotation = {}, onDeleteAnnotation = {},
+                    onBookmarkEntry = { bookmarked += it }, onAddNoteToEntry = {},
+                    startPercent = { if (it == ready) 0 else null })
+            }
+        }
+        fun actions(title: String) = compose.onNodeWithText(title).fetchSemanticsNode()
+            .config.getOrNull(SemanticsActions.CustomActions).orEmpty()
+        assertEquals(listOf("Go", "Bookmark", "Add Note"), actions(ready.title).map { it.label })
+        assertEquals(listOf("Go"), actions(pending.title).map { it.label })
+        compose.runOnIdle { actions(ready.title).first { it.label == "Bookmark" }.action() }
+        assertEquals(listOf(ready), bookmarked)
     }
 
     @Test fun theSheetHasATitleADoneAndEachChaptersStart() {

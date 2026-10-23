@@ -34,6 +34,7 @@ class PaginationHintTest {
         val loads = mutableListOf<Int>()
         compose.setContent { KudosPaginationBar(1, 5000, { loads += it }) }
         compose.onNodeWithText("Page 1 / 5000").performClick()
+        compose.onNodeWithText("of 5,000").assertExists()
         compose.onNode(hasSetTextAction()).performTextReplacement("2731")
         assertEquals(emptyList<Int>(), loads)
         compose.onNodeWithContentDescription("Go to page 2731").assertIsEnabled()

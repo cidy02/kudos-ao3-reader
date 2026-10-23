@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.reader
 
+import androidx.compose.foundation.text.TextAutoSize
 import android.util.Base64
 import android.webkit.WebView
 import androidx.compose.foundation.background
@@ -191,10 +192,11 @@ internal fun CustomizeThemeSheet(
                                     }
                                     if (selected) Icon(Icons.Filled.Check, contentDescription = null,
                                         tint = tokens.scopePalette.labelOnAccent,
-                                        modifier = Modifier.align(Alignment.TopEnd).size(16.dp).background(tokens.accent, CircleShape))
+                                        modifier = Modifier.align(Alignment.TopEnd).size(16.dp).background(tokens.scopePalette.accent, CircleShape))
                                 }
                                 Text(title, color = if (selected) tokens.primaryInk else tokens.secondaryInk,
                                     fontSize = 11.sp, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                                    maxLines = 1, autoSize = TextAutoSize.StepBased(minFontSize = 6.sp, maxFontSize = 11.sp),
                                     modifier = Modifier.clearAndSetSemantics {})
                             }
                         }

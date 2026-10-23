@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.library
 
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -171,7 +172,9 @@ fun CollectionEditorSheet(
                     modifier = Modifier.weight(1f),
                     color = tokens.primaryInk,
                     fontSize = 17.sp,
-                    fontWeight = FontWeight.SemiBold
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
                 TextButton(
                     onClick = { save(close = true) },
