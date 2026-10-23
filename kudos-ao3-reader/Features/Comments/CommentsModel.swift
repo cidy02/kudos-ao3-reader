@@ -124,6 +124,7 @@ final class CommentsModel {
 
     var scope: Scope = .all
     private(set) var chapters: [AO3ChapterRef] = []
+    private(set) var chaptersLoaded = false
     private(set) var chaptersFailureMessage: String?
     var chaptersFailed: Bool { chaptersFailureMessage != nil }
     var selectedChapter: AO3ChapterRef?
@@ -264,6 +265,7 @@ final class CommentsModel {
         page = nil
         clearRenderedThreads()
         chapters = []
+        chaptersLoaded = false
         chaptersFailureMessage = nil
         scope = .all
         selectedChapter = nil
@@ -911,7 +913,7 @@ final class CommentsModel {
         auth: AO3AuthService, expected: AuthContext
     ) async {
         guard isCurrent(expected, auth) else { return }
-        guard chapters.isEmpty else { return }
+        guard !chaptersLoaded else { return }
         let context = authContext
         if let cached = cache.chapters(
             forWork: workID,
@@ -919,6 +921,7 @@ final class CommentsModel {
             sessionGeneration: context.generation
         ) {
             chapters = cached
+            chaptersLoaded = true
             chaptersFailureMessage = nil
             return
         }
@@ -934,6 +937,7 @@ final class CommentsModel {
                 sessionGeneration: context.generation
             )
             chapters = fetched
+            chaptersLoaded = true
             chaptersFailureMessage = nil
         } catch is CancellationError {
             return
@@ -943,20 +947,6 @@ final class CommentsModel {
             guard isCurrent(expected, auth) else { return }
             chaptersFailureMessage = Self.message(for: error)
         }
-    }
-
-    private func knownTotalPages() -> Int? {
-        // Keyed by the current auth scope/generation only — another authentication
-        // context's cached page count can legitimately differ (AO3 hides some
-        // comments from some viewers), so sizing "newest first" off it would jump
-        // to the wrong last page. A miss just costs the one page-1 fetch `load`
-        // already falls back to.
-        let key = CommentsPageCache.Key(
-            workID: workID, chapterID: chapterForRequests, page: 1,
-            authenticationScope: authContext.cacheScope,
-            sessionGeneration: authContext.generation
-        )
-        return cache.page(for: key)?.totalPages
     }
 
     private static func submitComment(
@@ -1231,6 +1221,22 @@ final class CommentsModel {
     // stays here because it is `private` and called from this file.
     private static func isOfflineError(_ error: Error) -> Bool {
         (error as? URLError)?.code == .notConnectedToInternet
+    }
+}
+
+extension CommentsModel {
+    private func knownTotalPages() -> Int? {
+        // Keyed by the current auth scope/generation only — another authentication
+        // context's cached page count can legitimately differ (AO3 hides some
+        // comments from some viewers), so sizing "newest first" off it would jump
+        // to the wrong last page. A miss just costs the one page-1 fetch `load`
+        // already falls back to.
+        let key = CommentsPageCache.Key(
+            workID: workID, chapterID: chapterForRequests, page: 1,
+            authenticationScope: authContext.cacheScope,
+            sessionGeneration: authContext.generation
+        )
+        return cache.page(for: key)?.totalPages
     }
 }
 

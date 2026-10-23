@@ -226,6 +226,12 @@ private struct RevokeDeviceSheet: View {
     var body: some View {
         NavigationStack {
             Form {
+                Text("Revoke \(device.label.isEmpty ? "This Device" : device.label)")
+                    .font(.title2.bold())
+                    .lineLimit(nil)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityAddTraits(.isHeader)
+                    .appThemedRows()
                 Section("Why are you removing this device?") {
                     // Hidden label: the section already asks, and an inline picker
                     // drew "Reason" as a row of its own inside the card.
@@ -239,8 +245,7 @@ private struct RevokeDeviceSheet: View {
                 .appThemedRows()
             }
             .appThemedScroll()
-            // A device's name is the user's own and often long ("Revoke Demo readi…").
-            .wrappingInlineTitle("Revoke \(device.label.isEmpty ? "This Device" : device.label)")
+            .wrappingInlineTitle("Revoke Device", accessibilityHidden: true)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }

@@ -64,12 +64,38 @@ nonisolated struct KokoroPronunciationStore: Sendable {
         return Self.empty
     }
 
+    /// Editing must distinguish a missing file from an unreadable one, so it never
+    /// reports an empty list or overwrites corrections after a failed read.
+    func loadForEditing() throws -> File {
+        do {
+            return try JSONDecoder().decode(File.self, from: Data(contentsOf: url))
+        } catch CocoaError.fileReadNoSuchFile {
+            guard url == Self.defaultURL() else { return Self.empty }
+        }
+        let file: File
+        do {
+            file = try JSONDecoder().decode(File.self, from: Data(contentsOf: Self.legacyURL()))
+        } catch CocoaError.fileReadNoSuchFile {
+            return Self.empty
+        }
+        try save(file)
+        return file
+    }
+
     func save(_ file: File) throws {
         let folder = url.deletingLastPathComponent()
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         // Deliberately NOT excluded from backup — see `defaultURL()`.
         let data = try JSONEncoder().encode(file)
         try data.write(to: url, options: .atomic)
+    }
+
+    /// Apply a paste, rename or multi-delete in one write, preserving every other layer.
+    func updateGlobal(_ overrides: [String: String] = [:], removing words: [String] = []) throws {
+        var file = try loadForEditing()
+        for word in words { file.global[word] = nil }
+        file.global.merge(overrides) { _, new in new }
+        try save(file)
     }
 
     /// Which layer an override belongs to. Work beats fandom beats global,
@@ -96,7 +122,7 @@ nonisolated struct KokoroPronunciationStore: Sendable {
     /// case-sensitive custom lexicon before the lower-cased one, so `Anna`
     /// and `anna` are deliberately distinct entries rather than folded.
     func setOverride(_ ipa: String, for word: String, in layer: Layer = .global) throws {
-        var file = load()
+        var file = try loadForEditing()
         switch layer {
         case .global: file.global[word] = ipa
         case .fandom(let key): file.fandoms[key, default: [:]][word] = ipa
@@ -108,7 +134,7 @@ nonisolated struct KokoroPronunciationStore: Sendable {
     /// Remove one override, and drop the layer's dictionary when it empties
     /// so the file does not accumulate empty objects per work.
     func removeOverride(for word: String, in layer: Layer = .global) throws {
-        var file = load()
+        var file = try loadForEditing()
         switch layer {
         case .global:
             file.global[word] = nil

@@ -1026,6 +1026,25 @@ struct CommentsView: View {
                         .foregroundStyle(model.scope == .all ? AnyShapeStyle(.tint) : AnyShapeStyle(.primary))
                     }
 
+                    if model.chapters.isEmpty {
+                        if model.chaptersFailed {
+                            ContentUnavailableView(
+                                "Couldn't Load Chapters",
+                                systemImage: "exclamationmark.triangle",
+                                description: Text(
+                                    model.chaptersFailureMessage
+                                        ?? "Check your connection and try again."
+                                )
+                            )
+                        } else if model.chaptersLoaded {
+                            Text("No chapters available.")
+                                .foregroundStyle(.secondary)
+                        } else {
+                            ProgressView().accentFill()
+                                .accessibilityLabel("Loading chapters")
+                        }
+                    }
+
                     ForEach(model.chapters) { chapter in
                         Button {
                             // Chapter first, scope second. Both changes fire their
@@ -1068,22 +1087,6 @@ struct CommentsView: View {
             // the index itself — `loadChaptersIfNeeded` is idempotent and returns
             // immediately once it holds one.
             .task { await model.loadChaptersIfNeeded(auth: auth) }
-            .overlay {
-                if model.chapters.isEmpty {
-                    if model.chaptersFailed {
-                        ContentUnavailableView(
-                            "Couldn't Load Chapters",
-                            systemImage: "exclamationmark.triangle",
-                            description: Text(
-                                model.chaptersFailureMessage
-                                    ?? "Check your connection and try again."
-                            )
-                        )
-                    } else {
-                        ProgressView().accentFill()
-                    }
-                }
-            }
             .navigationTitle("Browse Comments by Chapter")
             #if !os(macOS)
             .navigationBarTitleDisplayMode(.inline)

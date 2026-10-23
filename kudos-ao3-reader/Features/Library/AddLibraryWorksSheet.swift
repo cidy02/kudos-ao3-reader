@@ -11,7 +11,7 @@ import SwiftUI
 /// `ReadingQueueService.appendCandidates`) and what adding does (`onAdd`), so the
 /// search, selection and privacy rules below are written once.
 struct AddLibraryWorksSheet: View {
-    /// The destination's name, for the title — "Add to Shelf".
+    /// The destination's name, for the content heading — "Add to Shelf".
     let destinationName: String
     /// "collection" / "queue", for the empty state.
     let scopeName: String
@@ -63,31 +63,37 @@ struct AddLibraryWorksSheet: View {
         // recomputed by each `candidates`/`filtered` mention.
         let eligible = eligibleWorks
         let matches = filteredWorks(in: eligible)
+        let chosen = Self.selectedWorks(from: eligible, selection: selection)
         // Hide mode can empty the picker on its own; that is not "nothing to add".
         let hiddenOnly = eligible.isEmpty && !candidates(allWorks).isEmpty
         NavigationStack {
-            Group {
-                if hiddenOnly {
-                    ContentUnavailableView {
-                        Label("Mature works are hidden", systemImage: "eye.slash")
-                    } description: {
-                        Text("Hide Mature is hiding every work you can add here.")
-                    } actions: {
-                        MatureRevealToggle()
-                    }
-                } else if eligible.isEmpty {
-                    ContentUnavailableView {
-                        Label("No works to add", systemImage: "square.stack")
-                    } description: {
-                        Text("Your Library has no works you can add to this \(scopeName).")
-                    }
-                } else {
-                    List {
+            List {
+                Text("Add to \(destinationName)")
+                    .font(.title2.bold())
+                    .lineLimit(nil)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityAddTraits(.isHeader)
+                    .appThemedRows()
+                Group {
+                    if hiddenOnly {
+                        ContentUnavailableView {
+                            Label("Mature works are hidden", systemImage: "eye.slash")
+                        } description: {
+                            Text("Hide Mature is hiding every work you can add here.")
+                        } actions: {
+                            MatureRevealToggle()
+                        }
+                    } else if eligible.isEmpty {
+                        ContentUnavailableView {
+                            Label("No works to add", systemImage: "square.stack")
+                        } description: {
+                            Text("Your Library has no works you can add to this \(scopeName).")
+                        }
+                    } else {
                         ForEach(matches) { work in
                             Button { toggle(work) } label: { row(work) }
                                 .buttonStyle(.plain)
                         }
-                        .appThemedRows()
                         if matches.isEmpty {
                             ContentUnavailableView {
                                 Label("No matching works", systemImage: "magnifyingglass")
@@ -96,23 +102,24 @@ struct AddLibraryWorksSheet: View {
                             } actions: {
                                 Button("Clear Search") { query = "" }
                             }
-                            .appThemedRows()
                         }
                     }
-                    .appThemedScroll()
-                    // Default placement — .navigationBarDrawer is iOS-only and would
-                    // break the macOS build.
-                    .searchable(text: $query, prompt: "Search your library")
                 }
+                .appThemedRows()
             }
-            .wrappingInlineTitle("Add to \(destinationName)")
+            .appThemedScroll()
+            .searchable(text: $query, prompt: "Search your library")
+            .wrappingInlineTitle("Add Works", accessibilityHidden: true)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button(Self.confirmationTitle(count: selection.count)) { addSelected(from: eligible) }
-                        .disabled(selection.isEmpty)
+                    Button(Self.confirmationTitle(count: chosen.count)) {
+                        if !chosen.isEmpty { onAdd(chosen) }
+                        dismiss()
+                    }
+                    .disabled(chosen.isEmpty)
                 }
                 // Every works list offers the reveal while Hide Mature is on.
                 if hideMature, !hiddenOnly {
@@ -163,10 +170,8 @@ struct AddLibraryWorksSheet: View {
         }
     }
 
-    private func addSelected(from eligible: [SavedWork]) {
-        let chosen = eligible.filter { selection.contains($0.id) }
-        if !chosen.isEmpty { onAdd(chosen) }
-        dismiss()
+    static func selectedWorks(from eligible: [SavedWork], selection: Set<UUID>) -> [SavedWork] {
+        eligible.filter { selection.contains($0.id) }
     }
 
     static func confirmationTitle(count: Int) -> String {
