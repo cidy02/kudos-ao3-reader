@@ -366,6 +366,15 @@ struct AO3WorkFormParsingTests {
         #expect(rows.map(\.position) == [1, 2, 3])
     }
 
+    /// The demo's series editor lists these three (I10): a broken demo page or parser would
+    /// otherwise first show as "The Dawn Cycle · 0 works" in a screenshot.
+    @Test func parsesTheDemoSeriesManagePage() throws {
+        let rows = try AO3Client.parseSeriesManagePage(from: try fixture("ao3_demo_series_manage"))
+        #expect(rows.map(\.serialWorkID) == [3211, 3212, 3213])
+        #expect(rows.map(\.position) == [1, 2, 3])
+        #expect(rows.map(\.isDraft) == [false, false, true])
+    }
+
     @Test func parsesCollectionRowStateOnTheBlurb() throws {
         let html = """
         <ul>
