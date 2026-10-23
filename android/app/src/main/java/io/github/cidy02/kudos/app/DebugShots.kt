@@ -72,7 +72,7 @@ internal fun debugShot(
     "tagseteditor" -> DebugShot(Routes.ao3TagSet(42, "Winter Exchange Tags", true), listOf("tag-set"))
     "writingpreview", "chapters", "edittags", "tagseditor", "seriespicker", "collectionsgifts", "creatorspicker", "parentpicker" ->
         DebugShot(Routes.WritingWorkPostedDemo, listOf("work-form"))
-    "chapterform" -> DebugShot(Routes.WritingChapterDraftDemo)
+    "chapterform" -> DebugShot(Routes.WritingWorkPostedDemo, listOf("work-form"))
     "texteditor" -> DebugShot(Routes.WritingEditorDemo, listOf("text-editor"))
     "recovery" -> DebugShot(Routes.WritingEditorDemo, listOf("text-editor"))
     "prefhelp" -> DebugShot(Routes.AO3Preferences, listOf("preferences"))

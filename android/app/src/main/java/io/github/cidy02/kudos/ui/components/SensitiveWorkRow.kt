@@ -154,6 +154,8 @@ fun SensitiveWorkRow(
     expandAll: Boolean = false,
     showsZeroStats: Boolean = LocalShowsZeroStats.current,
     mutedHistory: Boolean = false,
+    /** No wash behind the card, its meta unchanged (series works, author bookmarks, as iOS; A92). */
+    neutralCard: Boolean = false,
     /** iOS `AO3WorkRow.Presentation.searchLedger`: see [LedgerBody]. */
     ledger: Boolean = false,
     /** The ledger's closing date, as AO3 printed it. */
@@ -222,7 +224,7 @@ fun SensitiveWorkRow(
                 if (selected) Modifier.background(MaterialTheme.colorScheme.primaryContainer, MaterialTheme.shapes.medium)
                 else Modifier
                     .background(tokens.cardFill, MaterialTheme.shapes.medium)
-                    .then(if (mutedHistory) Modifier else Modifier.background(if (savedWork) palette.rowWash else palette.cardWash, MaterialTheme.shapes.medium))
+                    .then(if (mutedHistory || neutralCard) Modifier else Modifier.background(if (savedWork) palette.rowWash else palette.cardWash, MaterialTheme.shapes.medium))
             )
             .combinedClickable(
                 onClick = cardTap,
@@ -708,14 +710,15 @@ fun SensitiveWorkRow(
     figuresIncludePerformance: Boolean = true,
     selecting: Boolean = false,
     selected: Boolean = false,
-    selectionAllowsDetails: Boolean = false
+    selectionAllowsDetails: Boolean = false,
+    neutralCard: Boolean = false
 ) {
     val environment = LocalWorkRowEnvironment.current
     val row: @Composable (SavedWork?, Boolean, () -> Unit, () -> Unit) -> Unit = { local, obscured, click, longClick ->
         if (local != null) {
             Column {
                 SensitiveWorkRow(work = local, onOpenWork = { click() }, expandAll = expandAll,
-                    ledger = ledger, obscured = obscured, onReveal = click,
+                    ledger = ledger, obscured = obscured, onReveal = click, neutralCard = neutralCard,
                     onLongClick = longClick, onTagClick = onTagClick, onTagSearch = onTagSearch,
                     footer = footer)
                 if (bookmark != null && !obscured) (bookmark.localFootnote ?: bookmark.footnote).invoke()
@@ -746,6 +749,7 @@ fun SensitiveWorkRow(
                 expandAll = expandAll,
                 ledger = ledger,
                 dateText = work.updatedDate,
+                neutralCard = neutralCard,
                 bookmark = bookmark,
                 footer = footer,
                 showsStatusTray = true,
@@ -800,6 +804,7 @@ fun SensitiveWorkRow(
     onLongClick: (() -> Unit)? = null,
     showsZeroStats: Boolean = LocalShowsZeroStats.current,
     mutedHistory: Boolean = false,
+    neutralCard: Boolean = false,
     ledger: Boolean = false,
     footer: (@Composable () -> Unit)? = null,
     downloadFraction: Double? = rememberWorkDownloadFraction(work)
@@ -839,6 +844,7 @@ fun SensitiveWorkRow(
         onLongClick = onLongClick,
         showsZeroStats = showsZeroStats,
         mutedHistory = mutedHistory,
+        neutralCard = neutralCard,
         ledger = ledger,
         footer = footer,
         savedWork = true,

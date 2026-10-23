@@ -128,6 +128,9 @@ data class KudosTokens(
     /** Shared favorite star, as on the existing work cards. */
     val favoriteGold: Color get() = Color(0xFFFFC107)
 
+    /** A system-style sheet's ground: white in Light, as iOS's sheets; the page's own elsewhere (A92). */
+    val sheetGround: Color get() = if (theme == ReaderTheme.Light) cardFill else background
+
     val scopePalette: SubjectPalette
         get() = scopePaletteOverride ?: theme.scopePalette(accent)
 

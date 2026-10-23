@@ -36,7 +36,7 @@ import kotlinx.coroutines.launch
 internal fun AO3ChallengeSettingsEditScreen(slug: String, title: String, viewerIsOwner: Boolean,
     repository: AO3CollectionDetailRepository, writes: AO3WriteRepository,
     onOpenWeb: (String) -> Unit, onOpenTagSet: (Int, String) -> Unit, onOpenCollection: () -> Unit,
-    onBack: () -> Unit, openingKey: Int = 0, kind: AO3ChallengeKind? = null) {
+    onBack: () -> Unit, openingKey: Int = 0, kind: AO3ChallengeKind? = null, knownSignUpTotal: Int? = null) {
     val auth = repository.authRepository
     val generation by auth.generation.collectAsState()
     val authState by auth.state.collectAsState()
@@ -57,7 +57,6 @@ internal fun AO3ChallengeSettingsEditScreen(slug: String, title: String, viewerI
     val form = data?.form
     val collection = data?.collection
     val busy = state.loading || state.saving || state.terminal
-    val effectiveTitle = title.ifEmpty { slug }
     var dateEditing by remember(model) { mutableStateOf<Pair<String, java.time.LocalDateTime>?>(null) }
     var choice by remember(model) { mutableStateOf<ChallengeEditChoice?>(null) }
     LaunchedEffect(model) { model.load() }
@@ -132,7 +131,8 @@ internal fun AO3ChallengeSettingsEditScreen(slug: String, title: String, viewerI
                     Spacer(Modifier.windowInsetsTopHeight(WindowInsets.statusBars))
                     Spacer(Modifier.height(76.dp))
                     SubjectHeaderBlock(kicker = if (form?.kind == AO3ChallengeKind.PromptMeme) "Prompt meme · moderator" else "Gift exchange · moderator",
-                        title = "Challenge settings", subtitle = effectiveTitle + (data?.signUpTotal?.let {
+                        // iOS effectiveTitle: the collection's title, its slug when it has none (A92).
+                        title = "Challenge settings", subtitle = title.ifEmpty { slug } + ((data?.signUpTotal ?: knownSignUpTotal)?.let {
                             " · $it ${if (it == 1) "sign-up" else "sign-ups"}"
                         } ?: ""), palette = palette, gutter = SubjectMetrics.accountGutter)
                 }
@@ -304,9 +304,13 @@ internal fun AO3ChallengeSettingsEditScreen(slug: String, title: String, viewerI
                 }
             }
         }
-        SettingsPanel(Modifier.padding(top = 12.dp, bottom = 26.dp)) {
-            if (state.saving) ChallengeEditLoading("Saving…")
-            SettingsActionRow("Save changes", { scope.launch { model.save() } }, enabled = viewerIsOwner && form != null && !busy)
+        androidx.compose.material3.Button(onClick = { scope.launch { model.save() } },
+            enabled = viewerIsOwner && form != null && !busy,
+            colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = palette.accent,
+                contentColor = palette.labelOnAccent),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = SubjectMetrics.accountGutter)
+                .padding(top = 12.dp, bottom = 26.dp).heightIn(min = 50.dp)) {
+            Text(if (state.saving) "Saving…" else "Save changes", fontSize = 16.sp, lineHeight = 22.sp)
         }
     }
 }

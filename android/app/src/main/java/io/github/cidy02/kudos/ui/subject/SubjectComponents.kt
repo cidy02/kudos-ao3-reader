@@ -338,7 +338,7 @@ fun SubjectHeaderBlock(
             .padding(horizontal = gutter),
         verticalArrangement = Arrangement.spacedBy(9.dp)
     ) {
-        SubjectKicker(
+        if (kicker.isNotBlank()) SubjectKicker(
             text = kicker,
             palette = palette,
             trailingCount = kickerTrailingCount,

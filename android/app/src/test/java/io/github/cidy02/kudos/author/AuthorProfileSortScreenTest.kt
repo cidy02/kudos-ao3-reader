@@ -2,6 +2,11 @@ package io.github.cidy02.kudos.author
 
 import androidx.compose.ui.semantics.getOrNull
 import android.app.Application
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.view.View
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.runtime.*
@@ -75,6 +80,8 @@ class AuthorProfileSortScreenTest {
     private val openedAbout = mutableListOf<AO3AuthorRoute>()
     private val openedWeb = mutableListOf<String>()
     private var theme by mutableStateOf(KudosThemeMode.Light)
+    private lateinit var view: View
+    private lateinit var tokens: KudosTokens
     private val washes = ShellWashes()
     private var expectedPalette: SubjectPalette? = null
     private fun show(initialTab: AuthorTab, dashboard: Boolean, withSubscriptionWrites: Boolean = false) {
@@ -83,7 +90,9 @@ class AuthorProfileSortScreenTest {
             pageCache = AO3PageCache(ttlMillis = 0, staleMillis = 0))
         compose.setContent {
             KudosTheme(theme, accentColorHex = "#7954B3") {
-                expectedPalette = LocalKudosTokens.current.scopePalette
+                view = LocalView.current
+                tokens = LocalKudosTokens.current
+                expectedPalette = tokens.scopePalette
                 CompositionLocalProvider(LocalPushedShellChrome provides chrome, LocalShellWashes provides washes) {
                     Column {
                         Row { chrome.trailingContent?.invoke(this) }
@@ -94,7 +103,37 @@ class AuthorProfileSortScreenTest {
                 }
             }
         }
-        awaitText(when (initialTab) { AuthorTab.Series -> "The Dawn Cycle"; AuthorTab.About -> "Bio"; else -> "Two Voices at Dawn" })
+        awaitText(when (initialTab) { AuthorTab.Series -> "The Dawn Cycle"; AuthorTab.About -> "Bio"; AuthorTab.Bookmarks -> "A Recommended Work"; else -> "Two Voices at Dawn" })
+    }
+
+    @Test fun bookmarksHaveASectionHeadingAndCardLoadMoreThatStillLoadsTheNextPage() {
+        show(AuthorTab.Bookmarks, false)
+        val heading = compose.onNodeWithText("BOOKMARKS", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        val first = compose.onNodeWithText("A Recommended Work", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        assertTrue("Section heading precedes bookmarks", heading.bottom <= first.top)
+        for (mode in listOf(KudosThemeMode.Light, KudosThemeMode.Dark, KudosThemeMode.Sepia, KudosThemeMode.Oled)) {
+            compose.runOnIdle { theme = mode }
+            val card = compose.onNodeWithContentDescription("A Recommended Work, by Book Pseud").fetchSemanticsNode().boundsInRoot
+            assertGround(tokens.cardFill, card.center.x, card.top + 3f)
+            val more = compose.onNode(hasText("Load More") and hasClickAction()).fetchSemanticsNode().boundsInRoot
+            assertGround(tokens.theme.cardSurface, more.center.x, more.top + 3f)
+        }
+        val before = requests.size
+        compose.onNodeWithText("Load More").performClick()
+        awaitText("Page 2 of 4")
+        assertEquals(before + 1, requests.size)
+        assertTrue(requests.last().contains("page=2"))
+    }
+
+    private fun assertGround(expected: Color, x: Float, y: Float) {
+        var actual = Color.Unspecified
+        compose.runOnIdle {
+            val bitmap = Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888)
+            view.draw(Canvas(bitmap)); actual = Color(bitmap.getPixel(x.toInt(), y.toInt())); bitmap.recycle()
+        }
+        assertEquals(expected.red, actual.red, 0.012f)
+        assertEquals(expected.green, actual.green, 0.012f)
+        assertEquals(expected.blue, actual.blue, 0.012f)
     }
 
     @Test fun signedOutSubscribeAsksBeforeAnyRequestAndLoginOpensTheLoginRoute() {

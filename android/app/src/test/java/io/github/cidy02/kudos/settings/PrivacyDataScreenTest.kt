@@ -22,6 +22,10 @@ import io.github.cidy02.kudos.network.ao3.browse.AO3Fandom
 import io.github.cidy02.kudos.network.ao3.browse.FandomCatalogCache
 import io.github.cidy02.kudos.network.ao3.search.AO3SearchFilters
 import io.github.cidy02.kudos.search.SavedSearchRepository
+import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
+import io.github.cidy02.kudos.ui.subject.LocalShellWashes
+import io.github.cidy02.kudos.ui.subject.ShellWashes
+import io.github.cidy02.kudos.ui.subject.SubjectPalette
 import io.github.cidy02.kudos.ui.theme.KudosTheme
 import io.github.cidy02.kudos.ui.theme.KudosThemeMode
 import io.github.cidy02.kudos.works.WorkRepository
@@ -57,6 +61,8 @@ class PrivacyDataScreenTest {
     private val theme = mutableStateOf(KudosThemeMode.Light)
     private val scale = mutableStateOf(1f)
     private val chrome = PushedShellChrome()
+    private val washes = ShellWashes()
+    private lateinit var accountPalette: SubjectPalette
 
     @Before fun setUp() {
         val context = ApplicationProvider.getApplicationContext<Context>()
@@ -75,9 +81,10 @@ class PrivacyDataScreenTest {
     private fun show(settings: KudosSettings = KudosSettings.Defaults) {
         compose.setContent {
             KudosTheme(themeMode = theme.value) {
+                accountPalette = LocalKudosTokens.current.scopePalette
                 val density = LocalDensity.current
                 CompositionLocalProvider(LocalDensity provides Density(density.density, scale.value),
-                    LocalPushedShellChrome provides chrome) {
+                    LocalPushedShellChrome provides chrome, LocalShellWashes provides washes) {
                     PrivacyDataScreen(works, cache, settings, auth, scanner)
                 }
             }
@@ -120,6 +127,14 @@ class PrivacyDataScreenTest {
         store.session = AO3Session("Reader", listOf(AO3StoredCookie(
             name = AO3StoredCookie.SessionCookieName, value = "local-test")))
         auth.restoreSession()
+    }
+
+    @Test fun privacyRegistersTheAccountWashInEveryTheme() {
+        show()
+        for (mode in listOf(KudosThemeMode.Light, KudosThemeMode.Dark, KudosThemeMode.Sepia, KudosThemeMode.Oled)) {
+            compose.runOnIdle { theme.value = mode }
+            compose.runOnIdle { assertEquals(accountPalette, washes.page?.palette) }
+        }
     }
 
     @Test fun emptyStorageHidesOnlyConditionalRowsAndIncludesAllFourSectionsAndVerbatimCopy() {

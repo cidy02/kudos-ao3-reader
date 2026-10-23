@@ -247,47 +247,61 @@ internal fun WritingTextEditorContent(
         dismissButton = { TextButton(onClick = { showLink = false }) { Text("Cancel", color = palette.accent, lineHeight = 20.sp) } })
 
     if (session.recoveries.isNotEmpty()) {
+        WritingRecoverySheet(session)
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun WritingRecoverySheet(
+    session: WritingEditorSession,
+    presentSheet: @Composable (androidx.compose.ui.graphics.Color, @Composable () -> Unit) -> Unit = { ground, content ->
+        val tokens = LocalKudosTokens.current
         val sheet = rememberModalBottomSheetState(skipPartiallyExpanded = true,
             confirmValueChange = { it != SheetValue.Hidden })
-        ModalBottomSheet(onDismissRequest = {}, sheetState = sheet, containerColor = tokens.cardFill,
-            contentColor = tokens.primaryInk, scrimColor = tokens.primaryInk.copy(alpha = 0.32f), dragHandle = null) {
-            Column(Modifier.fillMaxWidth().fillMaxHeight(0.85f).verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                Text("Recover unfinished text?", fontSize = 18.sp, lineHeight = 25.sp, fontWeight = FontWeight.SemiBold)
-                val copy = session.selectedRecovery
-                if (copy != null) {
-                    if (session.recoveries.size > 1) Column {
-                        Text("Local copy", color = tokens.secondaryInk, fontSize = 12.sp, lineHeight = 18.sp)
-                        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            session.recoveries.forEach { item ->
-                                TextButton(onClick = { session.selectRecovery(item) }) {
-                                    Text(recoveryDate(item.entry.savedAt), color = palette.accent, lineHeight = 20.sp,
-                                        fontWeight = if (item == copy) FontWeight.Bold else FontWeight.Normal)
-                                }
+        ModalBottomSheet(onDismissRequest = {}, sheetState = sheet, containerColor = ground,
+            contentColor = tokens.primaryInk, scrimColor = tokens.primaryInk.copy(alpha = 0.32f), dragHandle = null) { content() }
+    }
+) {
+    val tokens = LocalKudosTokens.current
+    val palette = tokens.scopePalette
+    presentSheet(tokens.sheetGround) {
+        Column(Modifier.fillMaxWidth().fillMaxHeight(0.85f).verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            Text("Recover unfinished text?", fontSize = 18.sp, lineHeight = 25.sp, fontWeight = FontWeight.SemiBold)
+            val copy = session.selectedRecovery
+            if (copy != null) {
+                if (session.recoveries.size > 1) Column {
+                    Text("Local copy", color = tokens.secondaryInk, fontSize = 12.sp, lineHeight = 18.sp)
+                    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        session.recoveries.forEach { item ->
+                            TextButton(onClick = { session.selectRecovery(item) }) {
+                                Text(recoveryDate(item.entry.savedAt), color = palette.accent, lineHeight = 20.sp,
+                                    fontWeight = if (item == copy) FontWeight.Bold else FontWeight.Normal)
                             }
                         }
                     }
-                    Text("A recovery copy was saved on this device ${recoveryDate(copy.entry.savedAt)}.", lineHeight = 22.sp)
-                    if (session.recoveryFormChanged) Text(
-                        "The text on the form has changed since this copy began. Review the copy before restoring it.",
-                        color = tokens.secondaryInk, lineHeight = 22.sp)
-                    // A line at a time: one Text holding a whole chapter froze the sheet for seconds.
-                    val lines = remember(copy) { copy.entry.text.lines() }
-                    SelectionContainer {
-                        LazyColumn(Modifier.heightIn(max = 240.dp)) {
-                            items(lines) { Text(it, fontFamily = FontFamily.Monospace, fontSize = 14.sp, lineHeight = 20.sp) }
-                        }
+                }
+                Text("A recovery copy was saved on this device ${recoveryDate(copy.entry.savedAt)}.", lineHeight = 22.sp)
+                if (session.recoveryFormChanged) Text(
+                    "The text on the form has changed since this copy began. Review the copy before restoring it.",
+                    color = tokens.secondaryInk, lineHeight = 22.sp)
+                // A line at a time: one Text holding a whole chapter froze the sheet for seconds.
+                val lines = remember(copy) { copy.entry.text.lines() }
+                SelectionContainer {
+                    LazyColumn(Modifier.heightIn(max = 240.dp)) {
+                        items(lines) { Text(it, fontFamily = FontFamily.Monospace, fontSize = 14.sp, lineHeight = 20.sp) }
                     }
-                    // Always visible beneath the independently scrolling copy.
-                    Column {
-                        // The copy is drawn a line at a time, so selecting it takes a line at a time;
-                        // this copies all of it (A83; iOS has the same action).
-                        val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
-                        val context = androidx.compose.ui.platform.LocalContext.current
-                        EditorSheetAction("Copy text", { copyRecoveryText(context, clipboard, copy.entry.text) })
-                        EditorSheetAction("Restore local copy", session::restore)
-                        EditorSheetAction("Keep form text", session::keepFormText)
-                        EditorSheetAction("Delete this local copy", { session.deleteSelectedCopy() }, destructive = true)
-                    }
+                }
+                // Always visible beneath the independently scrolling copy.
+                Column {
+                    // The copy is drawn a line at a time, so selecting it takes a line at a time;
+                    // this copies all of it (A83; iOS has the same action).
+                    val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
+                    val context = androidx.compose.ui.platform.LocalContext.current
+                    EditorSheetAction("Copy text", { copyRecoveryText(context, clipboard, copy.entry.text) })
+                    EditorSheetAction("Restore local copy", session::restore)
+                    EditorSheetAction("Keep form text", session::keepFormText)
+                    EditorSheetAction("Delete this local copy", { session.deleteSelectedCopy() }, destructive = true)
                 }
             }
         }

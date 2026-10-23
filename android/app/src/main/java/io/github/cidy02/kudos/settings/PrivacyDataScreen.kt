@@ -85,7 +85,7 @@ fun PrivacyDataScreen(
     KudosRefreshBox(onRefresh = { footprint = footprintScanner?.measure() },
         modifier = Modifier.testTag("privacy-refresh")) {
         SettingsPage(formGround = false, title = "Privacy", kicker = "AO3 Account › Settings",
-            subtitle = "Your reading data stays on this device") {
+            subtitle = "Your reading data stays on this device", washPalette = tokens.scopePalette) {
             item {
                 val mint = SubjectPalette.fromHue(SubjectHueSwatches.all.first { it.name == "Mint" }.hue, tokens.theme)
                 val shape = RoundedCornerShape(16.dp)

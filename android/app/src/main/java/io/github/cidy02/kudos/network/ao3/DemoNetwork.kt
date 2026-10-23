@@ -117,6 +117,13 @@ internal object DemoNetwork {
         launchDecision.countDown()
     }
 
+    /** Unit tests share this object across a run; one that activates the demo turns it off again. */
+    fun resetForTests() {
+        isActive = false
+        signedIn = false
+        fixtures = FixtureSource { null }
+    }
+
     /**
      * This launch is not the demo. Does not clear [isActive]: a later file-open
      * intent without the extra must not open the network after a demo start.

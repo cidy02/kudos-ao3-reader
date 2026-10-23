@@ -2,6 +2,7 @@ package io.github.cidy02.kudos.app
 
 import io.github.cidy02.kudos.ui.subject.SubjectSkeletonList
 import android.content.Intent
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -60,7 +61,6 @@ import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
 import io.github.cidy02.kudos.ui.subject.SubjectHeaderBlock
 import io.github.cidy02.kudos.ui.subject.SubjectPalette
 import io.github.cidy02.kudos.ui.subject.ToolbarCircleButton
-import io.github.cidy02.kudos.ui.subject.subjectScreenWash
 import io.github.cidy02.kudos.works.WorkImporter
 import kotlinx.coroutines.launch
 
@@ -213,7 +213,7 @@ fun SeriesWorksScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .subjectScreenWash(palette)
+            .background(tokens.background)
     ) {
         Spacer(Modifier.windowInsetsTopHeight(WindowInsets.statusBars))
         Spacer(Modifier.height(56.dp))
@@ -261,19 +261,8 @@ fun SeriesWorksScreen(
                             )
                         }
                         items(current.page.works, key = { it.id }) { work ->
-                            if (selection.isSelecting) {
-                                SelectableRemoteWorkRow(
-                                    work = work,
-                                    selected = selection.isSelected(work.id),
-                                    onToggle = { selection.toggle(work.id) }
-                                )
-                            } else {
-                                SensitiveWorkRow(
-                                    work = work,
-                                    onOpenWork = onOpenWork,
-                                    expandAll = expandAll
-                                )
-                            }
+                            SeriesWorkRow(work, selection.isSelecting, selection.isSelected(work.id),
+                                { selection.toggle(work.id) }, onOpenWork, expandAll)
                         }
                         item {
                             AuthorLoadMoreRow(
@@ -310,6 +299,17 @@ private sealed interface SeriesWorksState {
     data class Error(val message: String, val page: Int) : SeriesWorksState
 }
 
+/** Shared row content keeps the same ground in browsing and selection. */
+@Composable
+internal fun SeriesWorkRow(work: AO3WorkSummary, selecting: Boolean, selected: Boolean,
+    onToggle: () -> Unit, onOpenWork: (AO3WorkSummary) -> Unit, expandAll: Boolean) {
+    if (selecting) {
+        SelectableRemoteWorkRow(work, selected, onToggle, expandAll = expandAll, neutralCard = true)
+    } else {
+        SensitiveWorkRow(work, onOpenWork, expandAll = expandAll, neutralCard = true)
+    }
+}
+
 /** Only navigation context already read from AO3; never requests another page. */
 internal fun seriesCardFacts(series: io.github.cidy02.kudos.network.ao3.author.AO3AuthorSeriesSummary): String =
     org.json.JSONObject().put("fandoms", org.json.JSONArray(series.fandoms)).put("restricted", series.isRestricted)
@@ -323,7 +323,7 @@ internal fun seriesDetailCard(detail: io.github.cidy02.kudos.network.ao3.series.
     return io.github.cidy02.kudos.network.ao3.author.AO3AuthorSeriesSummary(
         id = Regex("/series/([0-9]+)").find(url)?.groupValues?.get(1)?.toLongOrNull() ?: 0,
         title = detail.title, creators = detail.creators, creatorIdentities = detail.creatorIdentities,
-        fandoms = fandoms, isRestricted = seed?.optBoolean("restricted") ?: false,
+        fandoms = fandoms, isRestricted = detail.isRestricted || seed?.optBoolean("restricted") == true,
         summary = detail.summary, words = detail.words, workCount = detail.workCount,
         dateUpdated = detail.dateUpdated.ifBlank { seed?.optString("updated").orEmpty() },
         isComplete = detail.isComplete, url = url,
