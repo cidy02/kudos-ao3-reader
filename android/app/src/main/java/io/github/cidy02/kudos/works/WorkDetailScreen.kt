@@ -960,9 +960,12 @@ fun WorkDetailScreen(
                 }
             },
             onAdd = { queue ->
-                // Brief data safety: selected queues stay selected; no membership removal.
                 ensureLocalThen(queueOnly = true) { work ->
-                    addToQueue(work, queue)
+                    if (queue.id in selectedQueueIds) {
+                        readingQueueRepository.removeWork(queue.id, work.id)
+                        selectedQueueIds = selectedQueueIds - queue.id
+                        refreshLocal(work.id, state.remote)
+                    } else addToQueue(work, queue)
                 }
             },
             onIncludeSeries = { includeSeriesInQueue = it },

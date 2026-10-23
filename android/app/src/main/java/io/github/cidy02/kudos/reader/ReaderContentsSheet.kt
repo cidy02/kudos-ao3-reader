@@ -248,19 +248,18 @@ private fun BookmarkRow(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.bodyLarge,
-                color = tokens.primaryInk,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-            )
-            Text(
-                text = "$percent%",
-                style = MaterialTheme.typography.labelSmall,
-                fontFamily = FontFamily.Monospace,
-                color = tokens.secondaryInk
-            )
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(title, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge,
+                    color = tokens.primaryInk, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Text("$percent%", style = MaterialTheme.typography.labelSmall,
+                    fontFamily = FontFamily.Monospace, color = tokens.secondaryInk)
+            }
+            if (annotation.selectedText.isNotBlank()) Text(annotation.selectedText,
+                style = MaterialTheme.typography.bodyMedium, color = tokens.primaryInk, maxLines = 3,
+                overflow = TextOverflow.Ellipsis)
+            if (annotation.note.isNotBlank()) Text(annotation.note,
+                style = MaterialTheme.typography.bodySmall, color = tokens.secondaryInk, maxLines = 3,
+                overflow = TextOverflow.Ellipsis)
         }
         TextButton(onClick = onDelete) {
             Text("Delete", color = MaterialTheme.colorScheme.error)
@@ -301,7 +300,7 @@ private fun HighlightRow(
                     text = title,
                     style = MaterialTheme.typography.labelMedium,
                     color = tokens.secondaryInk,
-                    maxLines = 1,
+                    maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f)
                 )
@@ -343,7 +342,7 @@ private fun HighlightRow(
                     text = annotation.note,
                     style = MaterialTheme.typography.bodySmall,
                     color = tokens.secondaryInk,
-                    maxLines = 2,
+                    maxLines = 3,
                     overflow = TextOverflow.Ellipsis
                 )
             }

@@ -218,7 +218,7 @@ fun CollectionEditorSheet(
                     descriptionField()
                 }
 
-                SubjectFieldLabel("Colour", Modifier.padding(top = 10.dp))
+                if (editing) SubjectFieldLabel("Colour", Modifier.padding(top = 10.dp))
                 SubjectHueSwatchRow(
                     hue = hue,
                     colorHex = colorHex,
@@ -230,7 +230,7 @@ fun CollectionEditorSheet(
                 )
                 FormFootnote(
                     if (hue == null && colorHex == null) {
-                        "Kudos picks a colour from the collection name. Renaming it may change the colour."
+                        "Kudos picks a colour from the collection name. Renaming it may change this colour."
                     } else {
                         "Your chosen colour stays the same if you rename the collection."
                     }
@@ -289,7 +289,7 @@ fun CollectionEditorSheet(
                         "Show on Home adds the collection above Recently Updated."
                 )
 
-                FormFootnote(
+                if (!editing) FormFootnote(
                     "This collection stays on this device. AO3 doesn't see it, and it isn't shared with your other devices."
                 )
             }

@@ -60,10 +60,10 @@ fun AO3TagSetScreen(
     DebugShotEffect("tag-set", ready = state.data != null) { editing = true }
 
     val tokens = LocalKudosTokens.current
-    val palette = tokens.scopePalette
     val large = isAccessibilityFontScale()
     val data = state.data
     val effectiveTitle = title.ifEmpty { data?.title?.ifEmpty { "Tag Set $id" } ?: "Tag Set $id" }
+    val palette = SubjectPalette.fromHue(io.github.cidy02.kudos.home.HomeFacts.workHue(emptyList(), effectiveTitle), tokens.theme)
     val total = data?.totalTagCount ?: 0
     LaunchedEffect(model) { model.loadOnAppear() }
     DisposableEffect(model) { onDispose { model.close() } }
@@ -79,7 +79,7 @@ fun AO3TagSetScreen(
         outline = tokens.separator, outlineVariant = tokens.separator, surfaceTint = palette.accent
     )) {
         if (editing) {
-            TagSetEditor(effectiveTitle, state, model, onSave = { scope.launch { model.save() } })
+            TagSetEditor(effectiveTitle, state, model, palette, onSave = { scope.launch { model.save() } })
         } else KudosRefreshBox(onRefresh = { model.load() }, modifier = Modifier.fillMaxSize().subjectScreenWash(palette)) {
             LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
                 item {
@@ -241,9 +241,8 @@ private fun TagSetNominationRow(nomination: AO3TagNomination, large: Boolean, in
 }
 
 @Composable
-private fun TagSetEditor(title: String, state: TagSetUiState, model: AO3TagSetState, onSave: () -> Unit) {
+internal fun TagSetEditor(title: String, state: TagSetUiState, model: AO3TagSetState, palette: SubjectPalette, onSave: () -> Unit) {
     val tokens = LocalKudosTokens.current
-    val palette = tokens.scopePalette
     LazyColumn(Modifier.fillMaxSize().subjectScreenWash(palette).imePadding(), contentPadding = PaddingValues(bottom = 24.dp)) {
         item {
             Spacer(Modifier.windowInsetsTopHeight(WindowInsets.statusBars))
@@ -253,12 +252,13 @@ private fun TagSetEditor(title: String, state: TagSetUiState, model: AO3TagSetSt
         }
         AO3TagSetField.entries.forEachIndexed { index, field -> item {
             SettingsPanel(Modifier.padding(top = if (index == 0) 18.dp else 8.dp)) {
+                SubjectFieldLabel(field.editorLabel, Modifier.padding(horizontal = 13.dp, vertical = 8.dp))
                 SubjectTextFieldRow(field.editorLabel, state.fields[field].orEmpty(), when (field) {
                     AO3TagSetField.Fandom -> "Comma-separated fandom names…"
                     AO3TagSetField.Character -> "Comma-separated character names…"
                     AO3TagSetField.Relationship -> "Comma-separated relationships…"
                     AO3TagSetField.Freeform -> "Comma-separated additional tags…"
-                }, onValueChange = { model.change(field, it) }, multiline = true)
+                }, onValueChange = { model.change(field, it) }, multiline = true, fieldOnly = true)
             }
         } }
         item { ChallengeFootnote("Enter each tag type as its own comma-separated list, as on AO3. If AO3 rejects a tag, " +
@@ -266,10 +266,12 @@ private fun TagSetEditor(title: String, state: TagSetUiState, model: AO3TagSetSt
         state.saveError?.let { message -> item { TagSetFeedback(message, error = true) } }
         state.saveNotice?.let { message -> item { TagSetFeedback(message, error = false) } }
         item {
-            SettingsPanel(Modifier.padding(top = 8.dp)) {
-                if (state.saving) CircularProgressIndicator(color = palette.accent, trackColor = tokens.separator,
-                    modifier = Modifier.padding(horizontal = 13.dp, vertical = 8.dp).size(18.dp), strokeWidth = 2.dp)
-                SettingsActionRow("Save tags", onClick = onSave, enabled = !state.saving)
+            TextButton(onClick = onSave, enabled = !state.saving,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp).fillMaxWidth()
+                    .background(palette.accent, RoundedCornerShape(50))) {
+                if (state.saving) CircularProgressIndicator(color = palette.labelOnAccent,
+                    modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                Text("Save tags", color = palette.labelOnAccent, modifier = Modifier.padding(8.dp))
             }
         }
     }

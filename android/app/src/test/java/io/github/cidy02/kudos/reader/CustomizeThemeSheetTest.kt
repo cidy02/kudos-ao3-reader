@@ -62,6 +62,7 @@ class CustomizeThemeSheetTest {
         compose.setContent {
             CompositionLocalProvider(LocalKudosTokens provides KudosTokens.of(ReaderTheme.Light, Color.Red)) {
                 ReaderDisplaySheet(preferences = ReaderPreferences(), settingsRepository = repository,
+                    listeningContent = { frame -> frame {} },
                     keepScreenAwake = false, onFontSizeChange = {}, onThemeChange = {})
             }
         }

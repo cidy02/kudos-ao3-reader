@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.browse
 
+import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
 import io.github.cidy02.kudos.ui.subject.SubjectSkeletonList
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -126,12 +127,15 @@ fun FandomWorksScreen(
 
     fun load(page: Int = 1) {
         loadedFilters = filters
-        state = FandomWorksState.Loading
+        val previous = state as? FandomWorksState.Loaded
+        if (selection.isSelecting) selection.enter()
+        state = previous?.copy(loading = true, error = null) ?: FandomWorksState.Loading
         val generation = ++loadGeneration
         scope.launch {
             val result = when (val result = fetch(page, filters)) {
                 is AO3Result.Success -> FandomWorksState.Loaded(result.value)
-                is AO3Result.Failure -> FandomWorksState.Error(result.error.displayMessage(), page)
+                is AO3Result.Failure -> previous?.copy(loading = false, error = result.error.displayMessage())
+                    ?: FandomWorksState.Error(result.error.displayMessage(), page)
             }
             if (generation == loadGeneration) state = result
         }
@@ -142,16 +146,23 @@ fun FandomWorksScreen(
      * there until the answer is in. iOS's list of a fandom's works can be pulled; this could not.
      */
     suspend fun refresh() {
-        val page = (state as? FandomWorksState.Loaded)?.page?.currentPage ?: return
+        val previous = state as? FandomWorksState.Loaded ?: return
+        val page = previous.page.currentPage
+        if (selection.isSelecting) selection.enter()
+        state = previous.copy(loading = true, error = null)
         val generation = ++loadGeneration
         val result = when (val result = fetch(page, loadedFilters)) {
             is AO3Result.Success -> FandomWorksState.Loaded(result.value)
-            is AO3Result.Failure -> FandomWorksState.Error(result.error.displayMessage(), page)
+            is AO3Result.Failure -> previous.copy(loading = false, error = result.error.displayMessage())
         }
         if (generation == loadGeneration) state = result
     }
 
-    LaunchedEffect(fandomName) { if (state == FandomWorksState.Loading) load() }
+    LaunchedEffect(fandomName) {
+        val current = state
+        if (current == FandomWorksState.Loading) load()
+        else if (current is FandomWorksState.Loaded && current.loading) load(current.page.currentPage)
+    }
 
     ProvidePushedShellChrome(
         hasSubjectHeader = true,
@@ -226,6 +237,7 @@ fun FandomWorksScreen(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
             )
             is FandomWorksState.Loaded -> {
+                current.error?.let { Text(it, color = LocalKudosTokens.current.secondaryInk, modifier = Modifier.padding(16.dp)) }
                 if (current.page.works.isEmpty()) {
                     EmptyStateCard(
                         title = if (narrowed) "No matching works" else "No works found",
@@ -289,6 +301,7 @@ fun FandomWorksScreen(
                                     currentPage = current.page.currentPage,
                                     totalPages = current.page.totalPages,
                                     onPageChange = { load(it) },
+                                    enabled = !current.loading,
                                     modifier = Modifier.padding(horizontal = 16.dp)
                                 )
                             }
@@ -298,6 +311,7 @@ fun FandomWorksScreen(
                                         work = work,
                                         selected = selection.isSelected(work.id),
                                         onToggle = { selection.toggle(work.id) },
+                                        expandAll = expandAllCards,
                                         modifier = Modifier.padding(horizontal = 16.dp)
                                     )
                                 } else {
@@ -317,6 +331,7 @@ fun FandomWorksScreen(
                                     currentPage = current.page.currentPage,
                                     totalPages = current.page.totalPages,
                                     onPageChange = { load(it) },
+                                    enabled = !current.loading,
                                     modifier = Modifier.padding(horizontal = 16.dp)
                                 )
                             }
@@ -337,7 +352,7 @@ fun FandomWorksScreen(
             fandomContext = if (isTag) AO3SearchFilters.commaSeparatedValues(filters.fandom) else includedFandoms,
             filters = filters,
             allowsRelevanceSort = false,
-            showFandomPicker = false,
+            showFandomPicker = isTag,
             canReset = narrowed,
             onFiltersChange = { filters = it },
             onApply = { showFilterSheet = false; load() },
@@ -367,6 +382,6 @@ private fun LocalIndicatorRow(indicator: BrowseLocalIndicator) {
 
 private sealed interface FandomWorksState {
     data object Loading : FandomWorksState
-    data class Loaded(val page: AO3SearchPage) : FandomWorksState
+    data class Loaded(val page: AO3SearchPage, val loading: Boolean = false, val error: String? = null) : FandomWorksState
     data class Error(val message: String, val page: Int) : FandomWorksState
 }

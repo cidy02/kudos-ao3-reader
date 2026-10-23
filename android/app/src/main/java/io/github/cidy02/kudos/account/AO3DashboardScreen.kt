@@ -28,7 +28,8 @@ fun AO3DashboardScreen(
     /** The session the page is the reader's own in: without it the page did not know it was. */
     authRepository: io.github.cidy02.kudos.auth.AO3AuthRepository? = null,
     onNewWork: (() -> Unit)? = null,
-    onOpenAuthorTab: (io.github.cidy02.kudos.network.ao3.author.AO3AuthorRoute, io.github.cidy02.kudos.author.AuthorTab) -> Unit = { _, _ -> }
+    onOpenAuthorTab: (io.github.cidy02.kudos.network.ao3.author.AO3AuthorRoute, io.github.cidy02.kudos.author.AuthorTab) -> Unit = { _, _ -> },
+    onOpenSeriesSummary: (io.github.cidy02.kudos.network.ao3.author.AO3AuthorSeriesSummary) -> Unit = { onOpenSeries(it.url) }
 ) {
     if (username.isNullOrBlank()) {
         ProvidePushedShellChrome()
@@ -45,6 +46,7 @@ fun AO3DashboardScreen(
         onOpenWork = onOpenWork,
         onOpenAbout = onOpenAbout,
         onOpenSeries = onOpenSeries,
+        onOpenSeriesSummary = onOpenSeriesSummary,
         onOpenWeb = onOpenWeb,
         isDashboard = true,
         onOpenDashboardList = onOpenList,

@@ -34,6 +34,18 @@ val gitCommitSha: String = try {
     ""
 }
 
+// Opt-in, as iOS's Scripts/build-unsigned-ipa.sh writes its branch: About names a non-main branch only
+// on a build made with -Pkudos.branchBuild, never on a plain debug or release build (A89: a release built
+// from a local branch named it to everyone who installed it, and every debug shot gained a difference).
+val gitBranch: String = if (!providers.gradleProperty("kudos.branchBuild").isPresent) "" else try {
+    val result = providers.exec {
+        commandLine("git", "branch", "--show-current")
+        workingDir(rootProject.rootDir)
+        isIgnoreExitValue = true
+    }
+    if (result.result.get().exitValue == 0) result.standardOutput.asText.get().trim() else ""
+} catch (_: Exception) { "" }
+
 android {
     namespace = "io.github.cidy02.kudos"
     compileSdk = 37
@@ -46,6 +58,7 @@ android {
         versionName = "0.2.1"
         // Escaped for a Java string literal inside generated BuildConfig.
         buildConfigField("String", "GIT_COMMIT_SHA", "\"${gitCommitSha.replace("\"", "\\\"")}\"")
+        buildConfigField("String", "GIT_BRANCH", "\"${gitBranch.replace("\\", "\\\\").replace("\"", "\\\"")}\"")
     }
 
     signingConfigs {

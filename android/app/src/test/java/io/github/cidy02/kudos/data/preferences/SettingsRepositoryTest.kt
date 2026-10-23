@@ -32,6 +32,15 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class SettingsRepositoryTest {
+    @Test fun fandomGroupingSurvivesRepositoryRecreationAndStaysOutOfBackupSettings() = runBlocking {
+        val before = repository.snapshot()
+        assertEquals(true, repository.groupsFandomVariants.first())
+        repository.setGroupsFandomVariants(false)
+        assertEquals(false, SettingsRepository(dataStore).groupsFandomVariants.first())
+        assertEquals(before, repository.snapshot())
+    }
+
+
     private val tempDir = Files.createTempDirectory("kudos-settings-test").toFile()
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private val dataStore = PreferenceDataStoreFactory.create(

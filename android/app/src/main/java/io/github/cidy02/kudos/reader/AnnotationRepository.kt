@@ -71,11 +71,10 @@ class AnnotationRepository(
         chapterTitle: String = "",
         selectedText: String = ""
     ): ReadingAnnotation {
-        // iOS addBookmark(at:): a spot that already has a bookmark gives that one back, not a second.
-        // ponytail: matched on the stored locator (the same Find in Work result tapped twice); iOS
-        // matches Readium's position, which also catches the toolbar's bookmark on the same page.
+        val position = readerLocatorPosition(locatorString)
         if (locatorString.isNotEmpty()) observeForWork(workId).first().firstOrNull {
-            it.kindRaw.equals("bookmark", ignoreCase = true) && it.locatorString == locatorString
+            it.kindRaw.equals("bookmark", ignoreCase = true) &&
+                (it.locatorString == locatorString || position != null && readerLocatorPosition(it.locatorString) == position)
         }?.let { return it }
         val annotation = ReadingAnnotation(
             workID = workId,

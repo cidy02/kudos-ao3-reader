@@ -1,5 +1,7 @@
 package io.github.cidy02.kudos.reader
 
+import androidx.compose.ui.semantics.contentDescription
+
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
@@ -173,7 +175,7 @@ fun ReaderSearchSheet(
                         imeAction = ImeAction.Search
                     ),
                     keyboardActions = KeyboardActions(onSearch = { model.search(query, chapterKey, debounce = false) }),
-                    modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 12.dp)
+                    modifier = Modifier.semantics { contentDescription = "Find in Work" }.padding(horizontal = 16.dp).padding(bottom = 12.dp)
                         .fillMaxWidth().focusRequester(focus),
                     decorationBox = { field ->
                         Row(

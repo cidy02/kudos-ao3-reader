@@ -1,12 +1,17 @@
 package io.github.cidy02.kudos.settings
 
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.ui.Alignment
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.Dispatchers
+import androidx.compose.runtime.produceState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Text
@@ -40,22 +45,30 @@ import kotlinx.coroutines.launch
 
 @Composable
 fun SettingsListeningPage(repository: SettingsRepository) {
-    SettingsListeningContent(repository) { content -> SettingsPage(title = "Listening", content = content) }
+    SettingsListeningContent(repository) { content -> SettingsPage(title = "Listening") { item { content() } } }
 }
 
 /** Shared form content; the reader supplies its sheet frame and owns no audition playback. */
 @Composable
 internal fun SettingsListeningContent(
     repository: SettingsRepository,
-    frame: @Composable (LazyListScope.() -> Unit) -> Unit
+    frame: @Composable (@Composable () -> Unit) -> Unit
 ) {
     val context = LocalContext.current.applicationContext
-    val service = remember(context) { AutomaticTTSService(context) }
-    DisposableEffect(service) {
-        onDispose { service.shutdown() }
+    // Made off the UI thread: Kokoro loads its voice model and the device engine binds a service
+    // when made, and the reader's Display sheet hosts this form every time it opens (A89).
+    val service by produceState<TTSService?>(null, context) {
+        val made = withContext(Dispatchers.Default + NonCancellable) { AutomaticTTSService(context) }
+        value = made
+        awaitDispose { made.shutdown() }
     }
     val voicePack = rememberVoicePackUi(context)
-    SettingsListeningContent(repository, service, voicePack.installed, voicePack, frame)
+    val ready = service
+    if (ready != null) {
+        SettingsListeningContent(repository, ready, voicePack.installed, voicePack, frame)
+    } else {
+        frame { Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() } }
+    }
 }
 
 /** The production page accepts the existing engine seam so tests can report real catalog-shaped data. */
@@ -67,7 +80,7 @@ internal fun SettingsListeningPage(
     voicePack: VoicePackUi = VoicePackUi.fixed(packInstalled)
 ) {
     SettingsListeningContent(repository, service, packInstalled, voicePack) { content ->
-        SettingsPage(title = "Listening", content = content)
+        SettingsPage(title = "Listening") { item { content() } }
     }
 }
 
@@ -77,7 +90,7 @@ internal fun SettingsListeningContent(
     service: TTSService,
     packInstalled: Boolean,
     voicePack: VoicePackUi,
-    frame: @Composable (LazyListScope.() -> Unit) -> Unit
+    frame: @Composable (@Composable () -> Unit) -> Unit
 ) {
     val installed = packInstalled || voicePack.installed
     val speech by repository.speechPreferences.collectAsState(initial = ReaderSpeechPreferences())
@@ -108,7 +121,7 @@ internal fun SettingsListeningContent(
     }
 
     frame {
-        item {
+        androidx.compose.foundation.layout.Column {
             SettingsSection(
                 label = "Audition Voice",
                 footnote = "Play a sample to hear your current Read Aloud settings without opening a work."
@@ -149,13 +162,13 @@ internal fun SettingsListeningContent(
                 }
             }
         }
-        item {
+        androidx.compose.foundation.layout.Column {
             ListeningVoicePackSection(
                 voicePack = voicePack,
                 packFailedToOpen = installed && status == SpeechStatus.UNAVAILABLE
             )
         }
-        item {
+        androidx.compose.foundation.layout.Column {
             SettingsSection(
                 label = "Read Aloud",
                 footnote = "Automatic starts with your device's own voice, then uses Kokoro after you install " +

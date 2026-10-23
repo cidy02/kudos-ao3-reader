@@ -84,6 +84,7 @@ class WritingTextEditorScreenTest {
     @Test fun topButtonsTagOrderNotesAndDoneDeliverExactlyTheRawBuffer() {
         show()
         awaitText("CHAPTER 13")
+        compose.onNodeWithText("Chapter text").assertDoesNotExist()
         compose.onNodeWithText("Recovery copy on this device · Save from the work form").assertExists()
         compose.onNodeWithText("AO3 supports only certain formatting. The toolbar adds formatting that AO3 can keep when you post.").assertExists()
         compose.onNodeWithContentDescription("Bold").performClick()

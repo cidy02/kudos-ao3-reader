@@ -67,7 +67,7 @@ fun AboutScreen(onReportBug: () -> Unit) {
                             versionName = BuildConfig.VERSION_NAME,
                             versionCode = BuildConfig.VERSION_CODE,
                             gitCommitSha = BuildConfig.GIT_COMMIT_SHA
-                        ),
+                        ) + aboutBranchSuffix(BuildConfig.GIT_BRANCH),
                         color = tokens.secondaryInk,
                         fontSize = 13.sp
                     )
@@ -190,3 +190,6 @@ private fun openUrl(context: android.content.Context, url: String) {
         context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
     }
 }
+
+internal fun aboutBranchSuffix(branch: String): String =
+    branch.trim().takeIf { it.isNotEmpty() && it != "main" }?.let { " · $it" }.orEmpty()

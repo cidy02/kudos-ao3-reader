@@ -91,6 +91,7 @@ class ReaderFontSectionTest {
                     ReaderDisplaySheet(
                         preferences = ReaderPreferences(fontFamily = saved.reader.readerFontId),
                         settingsRepository = settings, customFontRepository = fonts,
+                        listeningContent = { frame -> frame {} },
                         keepScreenAwake = false, onFontSizeChange = {}, onThemeChange = {},
                         onFontFamilyChange = { id -> scope.launch { settings.updateReaderFontId(id ?: "system") } }
                     )

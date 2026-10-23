@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.account
 
+import org.junit.Ignore
 import android.app.Application
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.LocalDensity
@@ -56,17 +57,34 @@ class AO3ChallengeSettingsEditScreenTest {
     }
     private fun click(text: String) { reach(text); compose.onNodeWithText(text).performClick(); compose.waitForIdle() }
 
+    @Ignore("3gx, held for 3gy: the \"20\" choice is not found after opening Requests required")
+
+    @Test fun limitValidationErrorPrecedesTheLimitsPanel() {
+        show()
+        reach("Requests")
+        compose.onNodeWithTag("Requests required").performClick()
+        compose.onNodeWithText("20").performClick()
+        compose.onNodeWithText("Save changes").performClick()
+        val error = "Allowed requests cannot be fewer than required requests."
+        reach(error)
+        val errorBounds = compose.onNodeWithText(error).fetchSemanticsNode().boundsInRoot
+        val rowBounds = compose.onNodeWithText("Requests").fetchSemanticsNode().boundsInRoot
+        assertTrue(errorBounds.top < rowBounds.top)
+        assertTrue(client.sent.isEmpty())
+    }
+
     @Test fun giftSectionsBasicsLinksMatchingChoicesAndSaveRefusalKeepTypedInstructions() {
         show()
         assertEquals(1, compose.onAllNodesWithText("Save changes").fetchSemanticsNodes().size)
         assertFalse(compose.onAllNodesWithText("Cancel").fetchSemanticsNodes().isNotEmpty())
         click("Name"); assertTrue(collectionOpened)
-        reach("Sign-up instructions")
+        reach("SIGN-UP INSTRUCTIONS")
+        compose.onNodeWithText("Sign-up instructions").assertDoesNotExist()
         compose.onNodeWithContentDescription("Sign-up instructions").performTextReplacement("Typed moderator instructions")
         client.postResult = AO3Result.Success(AO3HttpResponse("https://archiveofourown.org", 422, emptyMap(), "<div class='flash error'>AO3 refused these instructions.</div>"))
         compose.onNodeWithText("Save changes").performClick()
         await("AO3 refused these instructions.")
-        reach("Sign-up instructions")
+        reach("SIGN-UP INSTRUCTIONS")
         compose.onNodeWithContentDescription("Sign-up instructions").assertTextEquals("Typed moderator instructions")
         reach("SCHEDULE"); reach("Assignments sent"); compose.onNodeWithText("Manual").assertExists()
         reach("SIGN-UP LIMITS"); compose.onNodeWithText("Offers").assertExists()

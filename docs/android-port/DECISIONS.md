@@ -2653,3 +2653,22 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   fixes): the recovery copy's Copy text shares a long copy as a `.txt` file instead of putting it on
   the clipboard (over about a megabyte the clipboard's transfer throws and the app would crash on
   the screen meant to rescue that text).
+- **2026-10-23 · A82's second half (Codex 3gx; reviewed by the CLI session as A89).** Two earlier
+  Android rules are reversed to match the iPhone: (1) **renaming a tag to another tag's name is
+  refused** (Save stays off and says which tag it would collide with), where 3fi (2026-10-14)
+  merged colliding renames; the queue's explicit Merge is the way to join tags, as on iOS
+  (`QueueTagManagerView`). The collision is matched without regard to case beyond ASCII and
+  leaves the tag itself out, as iOS's `localizedCaseInsensitiveCompare`. (2) **Work Detail's
+  queue list removes a work from a checked queue** (it was add-only under brief 3bn's safety
+  rule, A62, 3fp), as iOS's `WorkDetailView` toggle does; removing never deletes the work
+  (`removeWork`). Kept as Android's, by the owner's "no lost features or information" (A89's
+  verdicts on 3gx's questions): local works in Browse lists keep their progress and open the
+  reader; multi-work series preservation; typed and library tag suggestions; the reading-order
+  contents when an EPUB has none, and nested entries; a multi-line collection description; the
+  scrollable theme preview; extra slider figures; the tag manager's removal scope; the challenge
+  form's stop after a refused write. Matched to iOS on A89's reading: the series' Works heading
+  counts the works shown (the Load More row keeps "page X of Y"); Refine asks AO3 for tag
+  suggestions as Search does. Pronunciation guesses, chapter scanning, respellings and voice
+  details wait for an engine that can supply them (not owner questions). The one real choice,
+  duplicate queue and collection names, is owner question 34. About names a non-main branch only
+  on a build made with `-Pkudos.branchBuild` (iOS: only its branch build script's builds).

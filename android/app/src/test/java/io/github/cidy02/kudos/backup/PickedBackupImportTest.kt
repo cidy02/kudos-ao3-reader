@@ -103,7 +103,7 @@ class PickedBackupImportTest {
 
     @Test fun pickedBackupMergeRestoresFlagsAndProgressInsteadOfImportingAStandaloneBook() {
         showIncomingBackup()
-        compose.onNodeWithText("Restore from Backup").performScrollTo().performClick()
+        compose.onNodeWithText("Merge").performScrollTo().performClick()
         compose.waitUntil(10_000) {
             compose.onAllNodesWithText("OK").fetchSemanticsNodes().isNotEmpty()
         }

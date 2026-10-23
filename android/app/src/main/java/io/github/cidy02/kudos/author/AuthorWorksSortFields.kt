@@ -61,7 +61,6 @@ internal fun AuthorWorksSortFields(draft: AO3AuthorWorksSort, onChange: (AO3Auth
             }
         }
         SubjectRowSeparator()
-        SubjectFormRow("Direction")
         if (isAccessibilityFontScale()) {
             SortChips(AO3AuthorWorksSortDirection.entries, draft.direction, { it.label }) {
                 onChange(draft.copy(direction = it))

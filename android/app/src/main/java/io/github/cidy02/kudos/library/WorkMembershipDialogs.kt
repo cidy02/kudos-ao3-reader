@@ -107,7 +107,7 @@ internal fun AddToCollectionDialog(
                 }
                 if (collections.isEmpty()) {
                     Text(
-                        "No collections yet. Create one above to start grouping works.",
+                        "You have no collections yet. Create one above to group works together.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -118,7 +118,7 @@ internal fun AddToCollectionDialog(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     collections
-                        .sortedBy { it.name.lowercase() }
+                        .sortedByDescending { it.createdAt ?: it.dateAdded }
                         .forEach { collection ->
                             val isMember = collection.id in memberIds
                             Row(
@@ -163,14 +163,17 @@ internal fun AddToCollectionDialog(
     )
 }
 
-/** Library and bulk selection use the existing queue form; Work Detail remains additive-only. */
+/** Library and Work Detail use the same immediate membership toggles. */
 @Composable
 internal fun QueueMembershipDialog(
     works: List<io.github.cidy02.kudos.core.model.SavedWork>,
     repository: ReadingQueueRepository?,
     importer: io.github.cidy02.kudos.works.WorkImporter? = null,
     onChanged: () -> Unit = {},
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    seriesRepository: io.github.cidy02.kudos.network.ao3.series.AO3SeriesRepository =
+        (androidx.compose.ui.platform.LocalContext.current.applicationContext as? io.github.cidy02.kudos.KudosApplication)
+            ?.container?.seriesRepository ?: remember { io.github.cidy02.kudos.network.ao3.series.AO3SeriesRepository() }
 ) {
     val scope = androidx.compose.runtime.rememberCoroutineScope()
     var queues by remember { mutableStateOf(emptyList<io.github.cidy02.kudos.core.model.ReadingQueue>()) }
@@ -178,11 +181,23 @@ internal fun QueueMembershipDialog(
     var name by remember { mutableStateOf("") }
     var working by remember { mutableStateOf(true) }
     var includeSeries by remember { mutableStateOf(false) }
+    var checkingSeries by remember { mutableStateOf(false) }
+    var seriesPreview by remember { mutableStateOf<SeriesPreservationPrompt?>(null) }
     var preserving by remember { mutableStateOf(false) }
     var result by remember { mutableStateOf<SeriesPreservationResult?>(null) }
     var seriesJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     val series = works.map { it.seriesUrl }.filter { it.isNotBlank() }.distinct()
+    LaunchedEffect(includeSeries, series) {
+        if (includeSeries && works.size == 1 && seriesPreview == null && series.isNotEmpty()) {
+            checkingSeries = true
+            try {
+                val result = seriesRepository.seriesPage(series.single())
+                val page = (result as? io.github.cidy02.kudos.network.ao3.AO3Result.Success)?.value
+                seriesPreview = SeriesPreservationPrompt(page, threshold = 5, previewFailed = page == null)
+            } finally { checkingSeries = false }
+        }
+    }
     suspend fun reload() {
         val repo = repository ?: return
         repo.ensureSavedForLaterQueue()
@@ -201,7 +216,7 @@ internal fun QueueMembershipDialog(
     LaunchedEffect(works.map { it.id }) { change {} }
     io.github.cidy02.kudos.works.detail.WorkDetailQueueForm(
         queues, members, name, working || works.isEmpty() || repository == null, series.isNotEmpty() && importer != null,
-        includeSeries, false, null, preserving, result,
+        includeSeries, checkingSeries, seriesPreview, preserving, result,
         onName = { name = it },
         onCreate = { change {
             val queue = repository!!.createQueue(name.trim())
@@ -222,11 +237,18 @@ internal fun QueueMembershipDialog(
                 preserving = true
                 seriesJob = scope.launch {
                     try {
-                        val seriesRepository = io.github.cidy02.kudos.network.ao3.series.AO3SeriesRepository()
                         for (url in series) {
                             kotlinx.coroutines.currentCoroutineContext().ensureActive()
-                            result = repository.preserveSeries(url, targets, seriesRepository, importer,
-                                progress = { result = it })
+                            // The preview already read the whole series: preserve from it rather than
+                            // reading it again, as iOS and Work Detail do (A89).
+                            val prompt = seriesPreview
+                            result = if (series.size == 1 && prompt?.canUsePreviewForPreservation == true) {
+                                repository.preserveSeries(prompt.preview!!.works, targets, importer,
+                                    progress = { result = it })
+                            } else {
+                                repository.preserveSeries(url, targets, seriesRepository, importer,
+                                    progress = { result = it })
+                            }
                         }
                         reload(); onChanged()
                     } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled } catch (failure: Exception) { error = failure.message ?: "Could not add the series." } finally { preserving = false }

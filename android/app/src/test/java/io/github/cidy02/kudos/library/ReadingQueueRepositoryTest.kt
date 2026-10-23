@@ -427,34 +427,18 @@ class ReadingQueueRepositoryTest {
         assertEquals(second.id, database.readingQueueDao().getMembershipsForWork(work.id).single().queueID)
     }
 
-    /** ReadingQueueTests.collidingTagRenameCollapsesTheTwoTags. */
-    @Test
-    fun collidingTagRenameCollapsesTheTwoTags() = runTest {
+    @Test fun aCollidingRenameNeverMovesAnyWorkOrQueueLinks() = runTest {
         val first = savedWork("first", "First")
-        val second = savedWork("second", "Second")
         database.workDao().upsert(first.toEntity())
-        database.workDao().upsert(second.toEntity())
-        val firstQueue = repository.createQueue("Q", tagNames = listOf("slow burn"))
-        val otherQueue = repository.createQueue("Other", tagNames = listOf("slow burn", "fluff"))
+        val queue = repository.createQueue("Q", tagNames = listOf("slow burn", "fluff"))
         val from = database.tagDao().getByName("slow burn")!!
-        val into = database.tagDao().getByName("fluff")!!
         database.tagDao().addToWork(WorkTagCrossRef(first.id, from.id))
-        database.tagDao().addToWork(WorkTagCrossRef(second.id, into.id))
-        now = now.plusSeconds(1)
         repository.renameUserTag(from.id, "fluff")
-        assertEquals(listOf("fluff"), database.tagDao().getAll().map { it.name })
-        assertEquals(listOf(into.id), database.tagDao().getTagsForWork(first.id).map { it.id })
-        assertEquals(listOf(into.id), database.tagDao().getTagsForWork(second.id).map { it.id })
-        assertEquals(listOf("fluff"), repository.tagsForQueue(firstQueue.id).map { it.name })
-        assertEquals(listOf("fluff"), repository.tagsForQueue(otherQueue.id).map { it.name })
-        assertEquals(now, database.workDao().getById(first.id)!!.lastModifiedAt)
-        assertTrue(database.workDao().getById(first.id)!!.searchText.contains("fluff"))
-
-        repository.replaceQueueTags(firstQueue.id, listOf("Angst", "hurt"))
-        val hurt = database.tagDao().getByName("hurt")!!
-        repository.renameUserTag(hurt.id, "angst")
-        assertEquals(setOf("Angst", "angst", "fluff"), database.tagDao().getAll().map { it.name }.toSet())
-        assertEquals(setOf("Angst", "angst"), repository.tagsForQueue(firstQueue.id).map { it.name }.toSet())
+        assertEquals(setOf("slow burn", "fluff"), database.tagDao().getAll().map { it.name }.toSet())
+        assertEquals(listOf(from.id), database.tagDao().getTagsForWork(first.id).map { it.id })
+        assertEquals(setOf("slow burn", "fluff"), repository.tagsForQueue(queue.id).map { it.name }.toSet())
+        repository.renameUserTag(from.id, "FLUFF")
+        assertEquals("slow burn", database.tagDao().getById(from.id)!!.name)
     }
 
     @Test

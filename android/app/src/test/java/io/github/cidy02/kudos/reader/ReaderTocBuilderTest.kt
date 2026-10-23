@@ -6,6 +6,16 @@ import org.junit.Test
 
 class ReaderTocBuilderTest {
 
+    @Test fun summaryGapAppearsBeforeChapterOneWithoutLosingNestedEntries() {
+        val toc = listOf(ReaderTocBuilder.SourceLink("Preface", "preface.xhtml"),
+            ReaderTocBuilder.SourceLink("Chapter 1", "one.xhtml", listOf(ReaderTocBuilder.SourceLink("Part", "one.xhtml#part"))))
+        val spine = listOf("preface.xhtml", "summary.xhtml", "one.xhtml").map { ReaderTocBuilder.SourceLink(null, it) }
+        val entries = ReaderTocBuilder.build(toc, spine)
+        assertEquals(listOf("Preface", "Summary", "Chapter 1", "Part"), entries.map { it.title })
+        assertEquals("summary.xhtml", entries[1].href)
+        assertEquals(1, entries.last().depth)
+    }
+
     @Test
     fun prefersFlattenedTocOverReadingOrder() {
         val toc = listOf(

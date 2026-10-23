@@ -536,9 +536,10 @@ internal fun ImportBackupChoices(
                 } else {
                     if (!preview.hasReplaceableRecords) {
                         SettingsSection(
-                            footnote = "This library is empty. Restore ${preview.fileWorkCount} work(s) from the selected backup."
+                            footnote = "Merge keeps everything already on this device and adds anything you don't " +
+                                "have from the backup. It removes nothing."
                         ) {
-                            SettingsActionRow(label = "Restore from Backup", onClick = onMerge)
+                            SettingsActionRow(label = "Merge", onClick = onMerge)
                         }
                     } else {
                         SettingsSection(
@@ -547,10 +548,6 @@ internal fun ImportBackupChoices(
                         ) {
                             SettingsActionRow(label = "Merge", onClick = onMerge)
                         }
-                        SettingsFootnote(
-                            "Merge adds works that are not already here. It does not delete local works " +
-                                "or apply unsigned deletion claims from the file."
-                        )
                         SettingsSection(
                             footnote = "Replace makes this device match the backup. Your works, reading positions, " +
                                 "notes, collections, and queues change to match it, and anything missing from " +

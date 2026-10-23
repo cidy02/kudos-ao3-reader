@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -37,7 +36,7 @@ import kotlinx.coroutines.launch
 internal fun ReaderSpeechSettingsSheet(
     repository: SettingsRepository,
     onDismiss: (ReaderSpeechPreferences) -> Unit,
-    listeningContent: @Composable (@Composable (LazyListScope.() -> Unit) -> Unit) -> Unit = { frame ->
+    listeningContent: @Composable (@Composable (@Composable () -> Unit) -> Unit) -> Unit = { frame ->
         SettingsListeningContent(repository, frame)
     }
 ) {
@@ -65,7 +64,7 @@ internal fun ReaderSpeechSettingsSheet(
                     }
                 }
                 listeningContent { content ->
-                    LazyColumn(Modifier.fillMaxWidth().padding(bottom = 24.dp), content = content)
+                    LazyColumn(Modifier.fillMaxWidth().padding(bottom = 24.dp)) { item { content() } }
                 }
             }
         }

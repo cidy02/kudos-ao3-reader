@@ -239,8 +239,10 @@ object Routes {
     ): String = authorProfile(route.pseud?.let { "$it (${route.username})" } ?: route.username, initialTab)
 
     private const val ARG_SERIES_URL = "seriesUrl"
-    const val SeriesWorks = "series-works/{$ARG_SERIES_URL}"
+    const val SeriesWorks = "series-works/{$ARG_SERIES_URL}?facts={facts}"
     fun seriesWorks(seriesUrl: String) = "series-works/${encode(seriesUrl)}"
+    fun seriesWorks(series: io.github.cidy02.kudos.network.ao3.author.AO3AuthorSeriesSummary): String =
+        seriesWorks(series.url) + "?facts=" + encode(seriesCardFacts(series))
 
     private const val ARG_TAG_NAME = "tagName"
     const val TagWorks = "tag-works/{$ARG_TAG_NAME}"

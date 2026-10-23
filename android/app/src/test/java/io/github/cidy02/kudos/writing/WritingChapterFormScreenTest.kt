@@ -108,7 +108,8 @@ class WritingChapterFormScreenTest {
         for (field in ChapterFormText.entries) {
             reach(field.title); compose.onNodeWithText(field.title).performClick()
             awaitText("Recovery copy on this device · Save from the work form")
-            compose.onNodeWithText(field.title).assertExists()
+            // The field is named in the bar, as iOS's inline title (the shell draws chrome.customTitle).
+            assertEquals(field.title, chrome.customTitle)
             assertNotNull(chrome.trailingContent) // The editor restores its own toolbar.
             val original = field.text(model.state.value.form!!)
             compose.onNodeWithContentDescription("Bold").performClick()

@@ -508,7 +508,12 @@ fun QueuePageScreen(
         )
     }
     if (showTag && current != null) {
-        QueueTagSheet(
+        if (selecting && workRepository != null) WorkBulkTagSheet(
+            workRepository = workRepository,
+            workIds = selected.toList(),
+            palette = palette,
+            onDismiss = { showTag = false; reload += 1 }
+        ) else QueueTagSheet(
             repository = repository,
             queues = listOf(current),
             palette = palette,

@@ -298,6 +298,7 @@ fun AppNavHost(
             } else {
                 QueueDetailScreen(
                     queueId = queueId,
+                    origin = if (runCatching { navController.getBackStackEntry(Routes.Library) }.isSuccess) "Library" else "Home",
                     repository = container.readingQueueRepository,
                     settingsRepository = container.settingsRepository,
                     epubBytes = { workId -> epubByteCount(container, workId) },
@@ -610,6 +611,7 @@ fun AppNavHost(
                 authorRepository = container.authorRepository,
                 onOpenWork = { work -> navigateToWorkDetail(WorkDetailSource.RemoteSummary(work)) },
                 onOpenSeries = { seriesUrl -> navController.navigate(Routes.seriesWorks(seriesUrl)) },
+                onOpenSeriesSummary = { navController.navigate(Routes.seriesWorks(it)) },
                 onOpenWeb = { url -> navController.navigate(Routes.webFallback(url)) },
                 username = username,
                 onOpenList = { type ->
@@ -1027,6 +1029,7 @@ fun AppNavHost(
                         readingQueueRepository = container.readingQueueRepository,
                         onOpenWork = { navigateToWorkDetail(WorkDetailSource.RemoteSummary(it)) },
                         onOpenSeries = { navController.navigate(Routes.seriesWorks(it)) },
+                        onOpenSeriesSummary = { navController.navigate(Routes.seriesWorks(it)) },
                         onOpenWeb = { navController.navigate(Routes.webFallback(it)) }
                     )
                 } else AccountWorksListScreen(
@@ -1344,6 +1347,7 @@ fun AppNavHost(
                     onOpenSeries = { seriesUrl ->
                         navController.navigate(Routes.seriesWorks(seriesUrl))
                     },
+                    onOpenSeriesSummary = { navController.navigate(Routes.seriesWorks(it)) },
                     onOpenWeb = { url ->
                         navController.navigate(Routes.webFallback(url))
                     }
@@ -1354,7 +1358,9 @@ fun AppNavHost(
 
         sharedComposable(
             Routes.SeriesWorks,
-            arguments = listOf(Routes.navArgOf("seriesUrl"))
+            arguments = listOf(Routes.navArgOf("seriesUrl"), androidx.navigation.navArgument("facts") {
+                type = androidx.navigation.NavType.StringType; defaultValue = ""
+            })
         ) { backStackEntry ->
             val seriesUrl = Routes.routeArg(backStackEntry, "seriesUrl")
             if (seriesUrl.isNullOrBlank()) {
@@ -1363,6 +1369,7 @@ fun AppNavHost(
                 SeriesWorksScreen(
                     onOpenAuthor = { navController.navigate(Routes.authorProfile(it)) },
                     seriesUrl = seriesUrl,
+                    cardFacts = Routes.routeArg(backStackEntry, "facts").orEmpty(),
                     seriesRepository = container.seriesRepository,
                     formRepository = remember(container) { io.github.cidy02.kudos.network.ao3.writing.AO3SeriesFormRepository(
                         container.authenticatedClient, container.authRepository) },
