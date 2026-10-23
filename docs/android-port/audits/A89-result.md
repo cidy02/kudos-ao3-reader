@@ -154,3 +154,10 @@ Every finding was checked in the code before acting; all are real. Fixed before 
 - **Unconfirmed (series pages read as a guest):** predates 3gx; left as a lead.
 - **Owner questions:** A89's verdicts taken. Q1 and Q6 applied (the Works heading counts the works
   shown; Refine asks AO3 for tags); the kept Android extras are in DECISIONS; Q2 is owner question 34.
+
+**Later (2026-10-23 07:25): the unconfirmed lead is not a fault.** Claude made `seriesPage` read with the
+session; Codex's review (A90) refuted it before it landed: iOS also reads series listings as a guest
+(`AO3Client.swift` `seriesWorks` → `getHTML`, the anonymous fetch), and `docs/AO3_NETWORKING_POLICY.md`
+forbids bulk reads of logged-in pages, which a signed-in whole-series walk would be. The change also let
+members-only works into Download Whole Series (then fetched as a guest) and could mix sessions across
+pages. Reverted; Android's guest read stands, as iOS's.

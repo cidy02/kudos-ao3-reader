@@ -473,49 +473,59 @@ internal fun PreferenceHelpSheet(
     onOpenOnAO3: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    val tokens = LocalKudosTokens.current
     androidx.compose.material3.ModalBottomSheet(onDismissRequest = onDismiss) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp)
-                .padding(bottom = 28.dp)
-                .verticalScroll(androidx.compose.foundation.rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            when (result) {
-                null -> {
-                    Text(ref.title, style = MaterialTheme.typography.titleLarge, color = tokens.primaryInk)
-                    io.github.cidy02.kudos.ui.components.LoadingStateCard("Loading help…")
-                }
-                is AO3Result.Failure -> {
-                    Text(ref.title, style = MaterialTheme.typography.titleLarge, color = tokens.primaryInk)
-                    io.github.cidy02.kudos.ui.components.ErrorStateCard(
-                        title = "Couldn't load help",
-                        message = result.error.displayMessage(),
-                        primaryActionLabel = "Try Again",
-                        onPrimaryAction = onRetry,
-                        secondaryActionLabel = "Open on AO3",
-                        onSecondaryAction = onOpenOnAO3
-                    )
-                }
-                is AO3Result.Success -> {
-                    val content = result.value
-                    Text(content.title, style = MaterialTheme.typography.titleLarge, color = tokens.primaryInk)
-                    content.entries.forEach { entry ->
-                        Column(
-                            modifier = Modifier.fillMaxWidth().subjectPanel().padding(14.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Text(entry.heading, style = MaterialTheme.typography.titleSmall, color = tokens.primaryInk)
-                            if (entry.body.isNotEmpty()) {
-                                SelectionContainer { Text(entry.body, style = MaterialTheme.typography.bodyMedium, color = tokens.secondaryInk) }
-                            }
+        PreferenceHelpContent(ref, result, onRetry, onOpenOnAO3)
+    }
+}
+
+@Composable
+internal fun PreferenceHelpContent(
+    ref: io.github.cidy02.kudos.network.ao3.preferences.AO3PreferenceHelpRef,
+    result: AO3Result<io.github.cidy02.kudos.network.ao3.preferences.AO3PreferenceHelpContent>?,
+    onRetry: () -> Unit,
+    onOpenOnAO3: () -> Unit
+) {
+    val tokens = LocalKudosTokens.current
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp)
+            .padding(bottom = 28.dp)
+            .verticalScroll(androidx.compose.foundation.rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        when (result) {
+            null -> {
+                Text(ref.title, style = MaterialTheme.typography.titleLarge, color = tokens.primaryInk)
+                io.github.cidy02.kudos.ui.components.LoadingStateCard("Loading help…")
+            }
+            is AO3Result.Failure -> {
+                Text(ref.title, style = MaterialTheme.typography.titleLarge, color = tokens.primaryInk)
+                io.github.cidy02.kudos.ui.components.ErrorStateCard(
+                    title = "Couldn't load help",
+                    message = result.error.displayMessage(),
+                    primaryActionLabel = "Try Again",
+                    onPrimaryAction = onRetry,
+                    secondaryActionLabel = "Open on AO3",
+                    onSecondaryAction = onOpenOnAO3
+                )
+            }
+            is AO3Result.Success -> {
+                val content = result.value
+                Text(content.title, style = MaterialTheme.typography.titleLarge, color = tokens.primaryInk)
+                content.entries.forEach { entry ->
+                    Column(
+                        modifier = Modifier.fillMaxWidth().subjectPanel().padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(entry.heading, style = MaterialTheme.typography.titleSmall, color = tokens.primaryInk)
+                        if (entry.body.isNotEmpty()) {
+                            SelectionContainer { Text(entry.body, style = MaterialTheme.typography.bodyMedium, color = tokens.secondaryInk) }
                         }
                     }
-                    content.footer?.let {
-                        SelectionContainer { Text(it, style = MaterialTheme.typography.bodySmall, color = tokens.secondaryInk) }
-                    }
+                }
+                content.footer?.let {
+                    SelectionContainer { Text(it, style = MaterialTheme.typography.bodySmall, color = tokens.secondaryInk) }
                 }
             }
         }

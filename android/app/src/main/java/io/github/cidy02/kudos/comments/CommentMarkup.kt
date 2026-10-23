@@ -43,6 +43,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -249,30 +250,48 @@ fun CommentFormattingTray(
     onDismiss: () -> Unit
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)
-    val columns = CommentFormattingLayout.columnCount(LocalDensity.current.fontScale)
     val tokens = LocalKudosTokens.current
+    val columns = CommentFormattingLayout.columnCount(LocalDensity.current.fontScale)
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
         containerColor = tokens.background
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp)
-                .verticalScroll(rememberScrollState())
-                .padding(bottom = 36.dp),
-            verticalArrangement = Arrangement.spacedBy(20.dp)
-        ) {
+        CommentFormattingContent(value, onValueChange, onDismiss, columns)
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+internal fun CommentFormattingContent(
+    value: TextFieldValue,
+    onValueChange: (TextFieldValue) -> Unit,
+    onDismiss: () -> Unit,
+    // Read where the tray is called: the sheet is its own window, with its own density.
+    columns: Int = CommentFormattingLayout.columnCount(LocalDensity.current.fontScale)
+) {
+    val tokens = LocalKudosTokens.current
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp),
+        verticalArrangement = Arrangement.spacedBy(20.dp)
+    ) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text(
+                modifier = Modifier.weight(1f),
                 text = "Formatting",
                 fontSize = 18.sp,
                 lineHeight = 24.sp,
                 fontWeight = FontWeight.Bold,
                 color = tokens.primaryInk
             )
+            TextButton(onClick = onDismiss) { Text("Done", color = tokens.accentInk) }
+        }
 
+        Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()).padding(bottom = 36.dp),
+            verticalArrangement = Arrangement.spacedBy(20.dp)) {
             for (group in CommentMarkupTag.TagGroup.entries) {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(

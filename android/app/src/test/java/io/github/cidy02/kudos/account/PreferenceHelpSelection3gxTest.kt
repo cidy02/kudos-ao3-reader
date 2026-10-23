@@ -22,12 +22,11 @@ import org.robolectric.annotation.GraphicsMode
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35], application = Application::class, qualifiers = "w411dp-h1200dp")
-@GraphicsMode(GraphicsMode.Mode.NATIVE)
+@GraphicsMode(GraphicsMode.Mode.LEGACY)
 class PreferenceHelpSelection3gxTest {
     @get:Rule val compose = createComposeRule()
 
-    @Ignore("3gx, held for 3gy: NullPointerException in Surface.destroy (Robolectric graphics)")
-
+    @Ignore("3gy, held: a long press opens the selection magnifier, whose Surface Robolectric can't create (NullPointerException in Surface.destroy, also in legacy graphics). Selection is checked on the emulator.")
     @Test fun helpBodyAndFooterOfferCopyAfterSelection() {
         var copy: (() -> Unit)? = null
         val toolbar = object : TextToolbar {
@@ -43,14 +42,14 @@ class PreferenceHelpSelection3gxTest {
         val footer = "Read more in the Preferences FAQ."
         compose.setContent { KudosTheme(KudosThemeMode.Light) {
             CompositionLocalProvider(LocalTextToolbar provides toolbar) {
-                PreferenceHelpSheet(AO3PreferenceHelpRef("Help", "https://archiveofourown.org/help/preferences"),
+                PreferenceHelpContent(AO3PreferenceHelpRef("Help", "https://archiveofourown.org/help/preferences"),
                     AO3Result.Success(AO3PreferenceHelpContent("Help", listOf(AO3PreferenceHelpEntry("Topic", body)), footer, "")),
-                    {}, {}, {})
+                    {}, {})
             }
         } }
-        compose.onNodeWithText(body).performTouchInput { longClick() }
+        compose.onNodeWithText(body).performScrollTo().performTouchInput { longClick() }
         compose.runOnIdle { assertNotNull(copy); toolbar.hide() }
-        compose.onNodeWithText(footer).performTouchInput { longClick() }
+        compose.onNodeWithText(footer).performScrollTo().performTouchInput { longClick() }
         compose.runOnIdle { assertNotNull(copy) }
     }
 }

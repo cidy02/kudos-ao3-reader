@@ -1,6 +1,5 @@
 package io.github.cidy02.kudos.browse
 
-import org.junit.Ignore
 import android.app.Application
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.LocalDensity
@@ -30,16 +29,13 @@ class FandomFilterSheetParityTest {
             FandomListFilterSheet(FandomListFilterOptions(), emptyList(), true, FandomLibraryIndex.empty,
                 LocalKudosTokens.current.scopePalette, onApply = { applied = it }, onDismiss = { closed = true })
         } }
-        compose.onNodeWithText("Favourited only").performScrollTo().performClick()
+        compose.onNodeWithContentDescription("Favourited only").performScrollTo().assertIsOff().performClick().assertIsOn()
         compose.onNode(SemanticsMatcher.keyIsDefined(androidx.compose.ui.semantics.SemanticsActions.Dismiss))
             .performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.Dismiss) { it() }
         compose.runOnIdle { assertTrue(closed); assertNull(applied) }
     }
 
-
     @get:Rule val compose = createComposeRule()
-
-    @Ignore("3gx, held for 3gy: \"Show 0 tags\" is not displayed (on the emulator at 2.0x the pinned button stays after scrolling)")
 
     @Test fun showTagsStaysVisibleAtLargestTextAndAppliesTheChoices() {
         var applied: FandomListFilterOptions? = null
@@ -53,7 +49,8 @@ class FandomFilterSheetParityTest {
             }
         }
         compose.onNodeWithText("Show 1 tags").assertIsDisplayed()
-        compose.onNodeWithText("Favourited only").performScrollTo().performClick()
+        compose.onNodeWithContentDescription("Favourited only").performScrollTo().assertIsOff().performClick().assertIsOn()
+        compose.onNodeWithContentDescription("Only fandoms with more than one tag").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Show 0 tags").assertIsDisplayed().performClick()
         compose.runOnIdle { assertTrue(applied?.favouritedOnly == true) }
     }

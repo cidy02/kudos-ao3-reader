@@ -1,6 +1,5 @@
 package io.github.cidy02.kudos.app
 
-import org.junit.Ignore
 import android.app.Application
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -24,7 +23,7 @@ import io.github.cidy02.kudos.network.ao3.chapters.AO3ChapterRef
 import io.github.cidy02.kudos.network.ao3.search.*
 import io.github.cidy02.kudos.network.ao3.series.AO3SeriesDetailPage
 import io.github.cidy02.kudos.reader.ReaderContentsSheet
-import io.github.cidy02.kudos.search.SaveSearchSheet
+import io.github.cidy02.kudos.search.SaveSearchContent
 import io.github.cidy02.kudos.search.summaryLabels
 import io.github.cidy02.kudos.ui.components.SelectableRemoteWorkRow
 import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
@@ -69,8 +68,6 @@ class Brief3gxParityTest {
         compose.onNodeWithText("The Dawn Cycle").assertExists()
     }
 
-    @Ignore("3gx, held for 3gy: \"123\" is not found")
-
     @Test fun singleFandomKeepsUnknownCountsUnknownAndShowsRealDownloadCounts() {
         val unknown = FandomFamily.ungrouped(listOf(AO3Fandom("Unknown"))).single()
         val known = FandomFamily.ungrouped(listOf(AO3Fandom("Known", 50))).single()
@@ -78,15 +75,14 @@ class Brief3gxParityTest {
             FandomFamilyRow(unknown, FandomFamilySort.FamilyTotal, FandomLibraryIndex.empty,
                 LocalKudosTokens.current.scopePalette, {}, {})
             FandomFamilyRow(known, FandomFamilySort.FamilyTotal,
-                FandomLibraryIndex(emptySet(), mapOf("Known" to 123)), LocalKudosTokens.current.scopePalette, {}, {})
+                FandomLibraryIndex(emptySet(), mapOf("known" to 123)), LocalKudosTokens.current.scopePalette, {}, {})
         } }
         compose.onNodeWithText("0").assertDoesNotExist()
         compose.onNodeWithText("99").assertDoesNotExist()
-        compose.onNodeWithText("123").assertExists()
+        compose.onNodeWithText("123", useUnmergedTree = true).assertExists()
+        compose.onNodeWithContentDescription("123 downloaded").assertExists()
         compose.onNodeWithContentDescription("50 works").assertExists()
     }
-
-    @Ignore("3gx, held for 3gy: a bare AssertionError")
 
     @Test fun fandomAliasesWrapAndLargeTextMovesTheFiguresBelowTheTitle() {
         val aliases = listOf("First original alias repeated across a long title", "Second alias", "Third alias")
@@ -96,14 +92,14 @@ class Brief3gxParityTest {
             FandomFamilyRow(family, FandomFamilySort.FamilyTotal, FandomLibraryIndex.empty,
                 LocalKudosTokens.current.scopePalette, {}, {})
         } }
-        aliases.forEach { compose.onNodeWithText(it).assertExists() }
+        aliases.forEach { compose.onNodeWithText(it, useUnmergedTree = true).assertExists() }
         val layouts = mutableListOf<TextLayoutResult>()
-        compose.onNodeWithText(aliases.first()).performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
-        assertTrue(layouts.single().lineCount > 1)
+        compose.onNodeWithText(aliases.first(), useUnmergedTree = true).performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
+        assertTrue("The long alias wraps", layouts.single().lineCount > 1)
         assertFalse(layouts.single().isLineEllipsized(layouts.single().lineCount - 1))
-        val title = compose.onNodeWithText("Family").fetchSemanticsNode().boundsInRoot
-        val count = compose.onNodeWithText("~600").fetchSemanticsNode().boundsInRoot
-        assertTrue(count.top > title.bottom)
+        val title = compose.onNodeWithText("Family", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        val count = compose.onNodeWithText("~600", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        assertTrue("The family count is below the title", count.top > title.bottom)
     }
 
     @Test fun fullRemoteSelectionKeepsSummaryFandomAndTags() {
@@ -120,27 +116,24 @@ class Brief3gxParityTest {
         compose.runOnIdle { assertTrue(selected) }
     }
 
-    @Ignore("3gx, held for 3gy: \"Fandom 50\" is not displayed")
-
     @Test fun saveSearchNameRemainsLabelledAndLongSummariesScroll() {
         var name by mutableStateOf("A named search")
         val filters = AO3SearchFilters(fandom = (1..50).joinToString(", ") { "Fandom $it" })
         show { CompositionLocalProvider(LocalDensity provides Density(LocalDensity.current.density, 2f)) {
-            SaveSearchSheet(filters, name, { name = it }, {}, {})
+            SaveSearchContent(filters, name, { name = it }, {}, {})
         } }
         compose.onNodeWithContentDescription("Name").assert(hasSetTextAction())
-        compose.onNodeWithText("Fandom 50", substring = true).performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Fandom 50").assertIsNotDisplayed()
+        compose.onNodeWithText("Fandom 50").performScrollTo().assertIsDisplayed()
     }
-
-    @Ignore("3gx, held for 3gy: no node with content description \"Bold\"")
 
     @Test fun formattingCanApplyTwoTilesWithoutClosing() {
         var value by mutableStateOf(TextFieldValue("Words"))
         var dismissed = false
         show { CommentFormattingTray(value, { value = it }, { dismissed = true }) }
-        compose.onNodeWithContentDescription("Bold").performClick()
+        compose.onNodeWithText("Bold").performScrollTo().performClick()
         compose.runOnIdle { assertFalse(dismissed); assertTrue(value.text.contains("<strong>")) }
-        compose.onNodeWithContentDescription("Italic").performClick()
+        compose.onNodeWithText("Italic").performScrollTo().performClick()
         compose.runOnIdle { assertFalse(dismissed); assertTrue(value.text.contains("<em>")) }
     }
 

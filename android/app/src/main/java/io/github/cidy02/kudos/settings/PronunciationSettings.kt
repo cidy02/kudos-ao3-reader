@@ -4,6 +4,11 @@ import io.github.cidy02.kudos.app.DebugShotEffect
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.testTag
+import androidx.compose.material.icons.outlined.ChatBubbleOutline
+import io.github.cidy02.kudos.ui.subject.subjectPanel
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -139,13 +144,8 @@ internal fun PronunciationSettingsSheet(store: KokoroPronunciationStore, onDismi
             })
             LazyColumn(Modifier.weight(1f)) {
                 if (entries.isEmpty()) item {
-                    Column(Modifier.fillMaxWidth().padding(horizontal = 32.dp, vertical = 40.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Text("No corrections yet", color = tokens.primaryInk, textAlign = TextAlign.Center)
-                        Text("Add a word here to fix how Read Aloud says it. Corrections apply to every work.",
-                            color = tokens.secondaryInk, textAlign = TextAlign.Center)
-                    }
+                    PronunciationEmptyState()
+
                 } else item {
                     SettingsSection(label = "Corrections",
                         footnote = "Read Aloud checks these before its own dictionary, so a correction here always wins.") {
@@ -168,6 +168,24 @@ internal fun PronunciationSettingsSheet(store: KokoroPronunciationStore, onDismi
                 message?.let { item { SettingsFootnote(it) } }
             }
         }
+    }
+}
+
+@Composable
+internal fun PronunciationEmptyState() {
+    val tokens = LocalKudosTokens.current
+    Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp).fillMaxWidth().subjectPanel()
+        .testTag("Pronunciation empty card").padding(horizontal = 24.dp, vertical = 32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Box(Modifier.size(48.dp).testTag("Pronunciation speech bubble"), contentAlignment = Alignment.Center) {
+            Icon(Icons.Outlined.ChatBubbleOutline, contentDescription = null, tint = tokens.secondaryInk,
+                modifier = Modifier.size(48.dp).testTag("Pronunciation speech outline"))
+            Text("A", color = tokens.secondaryInk, fontSize = 24.sp,
+                modifier = Modifier.padding(bottom = 5.dp))
+        }
+        Text("No corrections yet", color = tokens.primaryInk, textAlign = TextAlign.Center)
+        Text("Add a word here to fix how Read Aloud says it. Corrections apply to every work.",
+            color = tokens.secondaryInk, textAlign = TextAlign.Center)
     }
 }
 

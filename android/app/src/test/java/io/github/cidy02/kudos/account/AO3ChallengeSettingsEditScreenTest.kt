@@ -1,6 +1,5 @@
 package io.github.cidy02.kudos.account
 
-import org.junit.Ignore
 import android.app.Application
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.LocalDensity
@@ -57,18 +56,19 @@ class AO3ChallengeSettingsEditScreenTest {
     }
     private fun click(text: String) { reach(text); compose.onNodeWithText(text).performClick(); compose.waitForIdle() }
 
-    @Ignore("3gx, held for 3gy: the \"20\" choice is not found after opening Requests required")
-
     @Test fun limitValidationErrorPrecedesTheLimitsPanel() {
         show()
         reach("Requests")
         compose.onNodeWithTag("Requests required").performClick()
+        compose.onNodeWithTag("Challenge settings choices").performScrollToNode(hasText("20"))
         compose.onNodeWithText("20").performClick()
         compose.onNodeWithText("Save changes").performClick()
+        compose.waitForIdle()
         val error = "Allowed requests cannot be fewer than required requests."
         reach(error)
-        val errorBounds = compose.onNodeWithText(error).fetchSemanticsNode().boundsInRoot
-        val rowBounds = compose.onNodeWithText("Requests").fetchSemanticsNode().boundsInRoot
+        compose.onNodeWithText(error).assertIsDisplayed()
+        val errorBounds = compose.onNodeWithText(error, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        val rowBounds = compose.onNodeWithText("Requests", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
         assertTrue(errorBounds.top < rowBounds.top)
         assertTrue(client.sent.isEmpty())
     }
