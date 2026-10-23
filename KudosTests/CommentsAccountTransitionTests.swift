@@ -145,8 +145,10 @@ struct CommentsAccountTransitionTests {
         #expect(model.scope == .all)
         #expect(model.selectedChapter == nil)
         #expect(model.chapters.isEmpty)
+        #expect(!model.chaptersLoaded)
 
         await model.loadChaptersIfNeeded(auth: auth)
+        #expect(model.chaptersLoaded)
         #expect(bobLoadCount == 1)
         #expect(model.chapters == [bobChapter])
         await aliceRelease.fire()
@@ -469,6 +471,67 @@ struct CommentsAccountTransitionTests {
         #expect(isolated.store.draft(for: chapter, identity: "alice").isEmpty)
         #expect(isolated.store.draft(for: all, identity: "alice").isEmpty)
         #expect(workModel.submissionGuard.phase == .succeeded)
+    }
+}
+
+extension CommentsAccountTransitionTests {
+    @Test func anEmptyChapterIndexFinishesLoadingAndIsCached() async {
+        let auth = Self.makeAuth()
+        let cache = CommentsPageCache()
+        var loadCount = 0
+        let model = CommentsModel(
+            workID: 93_020,
+            workContext: Self.workContext,
+            chapterLoader: { _, _ in
+                loadCount += 1
+                return []
+            },
+            pageCache: cache
+        )
+        #expect(!model.chaptersLoaded)
+        await model.loadChaptersIfNeeded(auth: auth)
+        #expect(model.chaptersLoaded)
+        #expect(model.chapters.isEmpty)
+        #expect(!model.chaptersFailed)
+        await model.loadChaptersIfNeeded(auth: auth)
+        #expect(loadCount == 1)
+
+        let cachedModel = CommentsModel(
+            workID: 93_020,
+            workContext: Self.workContext,
+            chapterLoader: { _, _ in
+                loadCount += 1
+                return []
+            },
+            pageCache: cache
+        )
+        await cachedModel.loadChaptersIfNeeded(auth: auth)
+        #expect(cachedModel.chaptersLoaded)
+        #expect(cachedModel.chapters.isEmpty)
+        #expect(loadCount == 1)
+    }
+
+    @Test func aChapterFailureCanRetryToAnEmptyResult() async {
+        let auth = Self.makeAuth()
+        var attempts = 0
+        let model = CommentsModel(
+            workID: 93_021,
+            workContext: Self.workContext,
+            chapterLoader: { _, _ in
+                attempts += 1
+                if attempts == 1 { throw URLError(.notConnectedToInternet) }
+                return []
+            },
+            pageCache: CommentsPageCache()
+        )
+        await model.loadChaptersIfNeeded(auth: auth)
+        #expect(model.chaptersFailed)
+        #expect(!model.chaptersLoaded)
+        await model.loadChaptersIfNeeded(auth: auth)
+        #expect(model.chaptersLoaded)
+        #expect(model.chapters.isEmpty)
+        #expect(!model.chaptersFailed)
+        #expect(attempts == 2)
     }
 }
 
