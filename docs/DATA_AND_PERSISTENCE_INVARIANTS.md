@@ -51,6 +51,7 @@ Rules that protect user data. Breaking any of these is a regression even if test
 - Removing a work from a queue is non-destructive; queue-only works auto-soft-delete (not hard) when leaving their last queue unsaved/unfavorited.
 - Soft-deleted works keep memberships/collection links (restore re-joins) but are **filtered at render time** everywhere (`isPendingDeletion` exclusions in every list `@Query` + relationship-derived listings).
 - Queue-preserved EPUBs (`epubPreservationStatus`) are protected from history-clearing paths.
+- A queue, collection or pronunciation sheet whose save fails stays open, says so and keeps what was typed (iOS T-436; Android's sheets already did). On iOS the sheet rolls its `ModelContext` back, so a retry can't insert a duplicate and a later autosave can't write an edit the reader was told failed. The rollback drops every pending change in that context, but a failed save means none of them reached the store either, so what the app shows matches the disk.
 
 ## Migration / schema safety
 

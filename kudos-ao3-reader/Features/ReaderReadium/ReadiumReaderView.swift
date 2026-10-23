@@ -275,8 +275,9 @@ struct ReadiumReaderView: View {
                     let store = KokoroPronunciationStore()
                     let trimmed = word.trimmingCharacters(in: .whitespacesAndNewlines)
                     let phonemes = ipa.trimmingCharacters(in: .whitespacesAndNewlines)
-                    guard !trimmed.isEmpty, !phonemes.isEmpty else { return }
-                    try? store.setOverride(phonemes, for: trimmed)
+                    guard !trimmed.isEmpty, !phonemes.isEmpty else { return false }
+                    // A failed write keeps the editor open and says so.
+                    return (try? store.setOverride(phonemes, for: trimmed)) != nil
                 }
             }
             #if DEBUG

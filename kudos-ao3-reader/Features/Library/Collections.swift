@@ -114,6 +114,9 @@ struct CollectionDetailView: View {
     @AppStorage("confirmBeforeDelete") private var confirmBeforeDelete = true
     @State private var showingRename = false
     @State private var showingDetails = false
+    /// The details sheet writes on every change; this holds whether the last one stuck.
+    @State private var detailsSaveFailed = false
+    @State private var showingDetailsSaveAlert = false
     @State private var showingReorder = false
     @State private var renameText = ""
     @State private var confirmDelete = false
@@ -192,7 +195,7 @@ struct CollectionDetailView: View {
                         // would make recolouring a collection override a
                         // removal made on another device.
                         collection.markModified()
-                        context.saveBestEffort(reason: "Saving collection colour failed")
+                        saveDetails(reason: "Saving collection colour failed")
                     }
                 ),
                 // The row writes this after `selection`, every time.
@@ -202,7 +205,7 @@ struct CollectionDetailView: View {
                         guard collection.colorHex != newValue else { return }
                         collection.colorHex = newValue
                         collection.markModified()
-                        context.saveBestEffort(reason: "Saving collection colour failed")
+                        saveDetails(reason: "Saving collection colour failed")
                     }
                 )
             )
@@ -225,7 +228,7 @@ struct CollectionDetailView: View {
                     set: { newValue in
                         collection.collectionDescription = newValue
                         collection.markModified()
-                        context.saveBestEffort(reason: "Saving collection description failed")
+                        saveDetails(reason: "Saving collection description failed")
                     }
                 ),
                 axis: .vertical
@@ -245,7 +248,7 @@ struct CollectionDetailView: View {
                     set: { newValue in
                         collection.keepsWorksOffline = newValue
                         collection.markModified()
-                        context.saveBestEffort(reason: "Saving collection behaviour failed")
+                        saveDetails(reason: "Saving collection behaviour failed")
                         // T-276: on fetches the works still missing their EPUB,
                         // through the paced download queue. Only this tap starts it.
                         if newValue {
@@ -262,7 +265,7 @@ struct CollectionDetailView: View {
                     set: { newValue in
                         collection.showsOnHome = newValue
                         collection.markModified()
-                        context.saveBestEffort(reason: "Saving collection behaviour failed")
+                        saveDetails(reason: "Saving collection behaviour failed")
                     }
                 )
             )
@@ -290,13 +293,29 @@ struct CollectionDetailView: View {
             #endif
                 .toolbar {
                     ToolbarItem(placement: .confirmationAction) {
-                        Button("Done") { showingDetails = false }
+                        Button("Done", action: closeDetails)
                     }
                 }
         }
         #if os(iOS)
         .presentationDetents([.medium, .large])
         #endif
+        // Unsaved changes can't be swiped away; Done says what happened.
+        .interactiveDismissDisabled(detailsSaveFailed)
+        .alert("Could not save", isPresented: $showingDetailsSaveAlert) {
+            Button("Try Again", action: closeDetails)
+            Button("Discard Changes", role: .destructive, action: discardDetails)
+        } message: { Text("Your changes to this collection weren't saved. Try again.") }
+    }
+
+    private func saveDetails(reason: StaticString) { detailsSaveFailed = !context.saveBestEffort(reason: reason) }
+    private func discardDetails() { context.rollback(); detailsSaveFailed = false; showingDetails = false }
+
+    /// Done: closes when everything written is saved. After a failed write it tries once
+    /// more, and keeps the sheet open if that fails too.
+    private func closeDetails() {
+        if detailsSaveFailed { saveDetails(reason: "Saving collection details failed") }
+        if detailsSaveFailed { showingDetailsSaveAlert = true } else { showingDetails = false }
     }
 
     var body: some View {
