@@ -690,7 +690,11 @@ struct WorkParentWorkPickerView: View {
             SubjectFormRow(label: "URL", arrangement: .control) {
                 // Wraps rather than scrolling out of sight ("https://archiv…" at the
                 // largest text). A URL has no line breaks: a pasted one loses them, and Return
-                // ends editing, as it did in the one-line field.
+                // ends editing, as it did in the one-line field. On iOS it is never
+                // hyphenated where it wraps (`URLTextField`).
+                #if os(iOS)
+                URLTextField(placeholder: "https://archiveofourown.org/works/…", text: $parentWork.url)
+                #else
                 TextField("https://archiveofourown.org/works/…", text: Binding(
                     get: { parentWork.url },
                     set: { typed in
@@ -700,18 +704,9 @@ struct WorkParentWorkPickerView: View {
                 ), axis: .vertical)
                     .focused($urlFocused)
                     .lineLimit(1...4)
-                    #if os(iOS)
-                    .textInputAutocapitalization(.never)
-                    #endif
                     .autocorrectionDisabled()
                     .multilineTextAlignment(.trailing)
-                    // Wrapped, the field hyphenated it as English ("archiveo- fourown.org"),
-                    // a hyphen that reads as part of the address. "zxx" (no linguistic
-                    // content) has no hyphenation dictionary, so it breaks without one.
-                    .typesettingLanguage(Locale.Language(identifier: "zxx"))
-                    #if os(iOS)
-                        .keyboardType(.URL)
-                    #endif
+                #endif
             }
             SubjectRowSeparator()
             SubjectFormRow(label: "Title", arrangement: .control) {
