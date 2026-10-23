@@ -98,6 +98,7 @@ struct QueueTagManagerView: View {
         #if DEBUG
         .task {
             if DebugLaunchRoute.takePush("queuetagedit") {
+                try? await Task.sleep(for: .seconds(1))
                 editing = queue.tags.min { $0.name < $1.name }
             }
         }

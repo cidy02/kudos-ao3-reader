@@ -90,6 +90,7 @@ struct AO3FilterPanel: View {
     @State private var sortPresentation: WorksSortPresentation
     #if DEBUG
     @State private var debugLanguage = false
+    @State private var debugTagPicker = false
     #endif
 
     init(
@@ -397,9 +398,22 @@ struct AO3FilterPanel: View {
         .formStyle(.grouped)
         .appThemedScroll()
         #if DEBUG
-        .task { if DebugLaunchRoute.takePush("languagepicker") { debugLanguage = true } }
+        .task {
+            if DebugLaunchRoute.takePush("languagepicker") { debugLanguage = true }
+            // From the panel: the tag rows sit below the fold and are not drawn until scrolled to.
+            if DebugLaunchRoute.takeSheet("tagpicker") {
+                try? await Task.sleep(for: .seconds(1))
+                debugTagPicker = true
+            }
+        }
         .navigationDestination(isPresented: $debugLanguage) {
             FilterLanguagePicker(selection: $filters.language)
+        }
+        .sheet(isPresented: $debugTagPicker) {
+            TagPickerView(
+                title: "Fandoms", kind: .fandom,
+                included: debugTagSet($filters.fandom), excluded: debugTagSet($filters.excludedFandoms)
+            )
         }
         #endif
     }
@@ -710,3 +724,18 @@ extension AO3FilterPanel {
         .padding(12)
     }
 }
+
+#if DEBUG
+extension AO3FilterPanel {
+    /// A tag field's comma-separated value as the picker's set, as `TagSelectField` binds it.
+    func debugTagSet(_ value: Binding<String>) -> Binding<Set<String>> {
+        Binding(
+            get: {
+                Set(value.wrappedValue.split(separator: ",")
+                    .map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty })
+            },
+            set: { value.wrappedValue = $0.sorted().joined(separator: ", ") }
+        )
+    }
+}
+#endif

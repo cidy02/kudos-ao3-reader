@@ -426,7 +426,8 @@ enum DebugLaunchRoute {
         var store = WritingTextRecovery()
         let text = "Demo recovery copy for the notes field."
         for account in ["AO3_Reader", ""] {
-            let key = store.fileURL(account: account, target: "work:1001", field: "notes")
+            // The posted fixture form (`ao3_work_edit.html`) is work 424242, whatever the route names.
+            let key = store.fileURL(account: account, target: "work:424242", field: "notes")
             let url = key.deletingPathExtension()
                 .appendingPathExtension("shot-recovery")
                 .appendingPathExtension("json")
@@ -731,6 +732,8 @@ final class DemoNetworkBlock: URLProtocol {
         ("edit_multiple", "ao3_edit_multiple"),
         // Collections and challenges (task 5). Most specific first.
         ("^/series/\\d+/edit", "ao3_series_edit"),
+        // A series's works in order, for Reorder and Remove works (Android's demo serves the same page).
+        ("^/series/\\d+/manage", "ao3_demo_series_manage"),
         ("^/series/\\d+/?$", "ao3_demo_dawn_series"),
         ("^/collections/[^/]+/signups/\\d+", "ao3_challenge_signup"),
         // "Your Sign-up" with none yet asks for the blank form; it got the list, and said
@@ -790,7 +793,7 @@ final class DemoNetworkBlock: URLProtocol {
             client?.urlProtocol(self, didFailWithError: URLError(.notConnectedToInternet))
             return
         }
-        let name = Self.fixture(for: url)
+        let name = Self.isPreview(request) ? "ao3_demo_work_preview" : Self.fixture(for: url)
         let data = name.flatMap { try? Data(contentsOf: directory.appendingPathComponent("\($0).html")) }
         let response = HTTPURLResponse(
             url: url, statusCode: data == nil ? 404 : 200, httpVersion: "HTTP/1.1",
@@ -799,6 +802,27 @@ final class DemoNetworkBlock: URLProtocol {
         if let response { client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed) }
         client?.urlProtocol(self, didLoad: data ?? Data())
         client?.urlProtocolDidFinishLoading(self)
+    }
+
+    /// A form's Preview (`preview_button`) is a POST AO3 answers with the preview page. By its
+    /// path alone it got the work's own page, and the editor said AO3 returned no preview.
+    private static func isPreview(_ request: URLRequest) -> Bool {
+        guard request.httpMethod == "POST" else { return false }
+        let body = request.httpBody ?? request.httpBodyStream.map(readAll) ?? Data()
+        return String(bytes: body, encoding: .utf8)?.contains("preview_button") == true
+    }
+
+    private static func readAll(_ stream: InputStream) -> Data {
+        stream.open()
+        defer { stream.close() }
+        var data = Data()
+        var buffer = [UInt8](repeating: 0, count: 4096)
+        while stream.hasBytesAvailable {
+            let count = stream.read(&buffer, maxLength: buffer.count)
+            if count <= 0 { break }
+            data.append(buffer, count: count)
+        }
+        return data
     }
 
     override func stopLoading() {}
