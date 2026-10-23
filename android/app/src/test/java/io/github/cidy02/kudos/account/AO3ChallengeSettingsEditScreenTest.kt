@@ -6,6 +6,11 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.unit.Density
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.view.View
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.graphics.Color
 import io.github.cidy02.kudos.network.ao3.*
 import io.github.cidy02.kudos.network.ao3.account.*
 import io.github.cidy02.kudos.ui.theme.KudosTheme
@@ -29,16 +34,18 @@ class AO3ChallengeSettingsEditScreenTest {
     private val tags = mutableListOf<Int>()
     private var collectionOpened = false
     private var backed = false
-    private fun show(meme: Boolean = false, theme: KudosThemeMode = KudosThemeMode.Light, scale: Float = 1f) {
+    private lateinit var view: View
+    private fun show(meme: Boolean = false, theme: KudosThemeMode = KudosThemeMode.Light, scale: Float = 1f, knownTotal: Int? = null) {
         val (auth, reads, repository) = runBlocking { challengeEditSetup(meme) }
         client = reads
         compose.setContent {
             KudosTheme(themeMode = theme) {
+                view = LocalView.current
                 val density = LocalDensity.current
                 CompositionLocalProvider(LocalDensity provides Density(density.density, scale)) {
                     AO3ChallengeSettingsEditScreen(client.slug, if (meme) "Summer Prompt Meme" else "Winter Exchange 2026", true,
                         repository, client.writer(auth), onOpenWeb = { web += it }, onOpenTagSet = { id, _ -> tags += id },
-                        onOpenCollection = { collectionOpened = true }, onBack = { backed = true })
+                        onOpenCollection = { collectionOpened = true }, onBack = { backed = true }, knownSignUpTotal = knownTotal)
                 }
             }
         }
@@ -55,6 +62,42 @@ class AO3ChallengeSettingsEditScreenTest {
         await(text)
     }
     private fun click(text: String) { reach(text); compose.onNodeWithText(text).performClick(); compose.waitForIdle() }
+
+    @Test fun slugSubtitleAndFilledSaveStayVisibleWhileScheduleScrolls() {
+        show(scale = 2f)
+        // This fixture is paginated: an unknown total must stay unknown, never become its page size.
+        compose.onNodeWithText(client.slug).assertExists()
+        compose.onNodeWithText("Winter Exchange 2026").assertDoesNotExist()
+        val save = compose.onNodeWithText("Save changes")
+        val before = save.fetchSemanticsNode().boundsInRoot
+        var fill = Color.Unspecified
+        compose.runOnIdle {
+            val image = Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888)
+            view.draw(Canvas(image))
+            fill = Color(image.getPixel((before.left + 20).toInt(), before.center.y.toInt()))
+            image.recycle()
+        }
+        assertTrue("Save has a filled accent background", fill.red > fill.green * 1.3f)
+        reach("Assignments sent")
+        compose.onNodeWithText("Manual").assertExists()
+        val after = save.assertIsDisplayed().fetchSemanticsNode().boundsInRoot
+        assertEquals(before.top, after.top, 1f)
+        reach("SIGN-UP INSTRUCTIONS")
+        compose.onNodeWithContentDescription("Sign-up instructions").performTextReplacement("Updated instructions")
+        save.performClick()
+        compose.waitUntil(20_000) { client.sent.isNotEmpty() }
+    }
+
+    @Test fun paginatedEditorKeepsTheTotalAlreadyReadByTheChallengePageWithoutAnotherRead() {
+        show(knownTotal = 1)
+        compose.onNodeWithText("${client.slug} · 1 sign-up").assertExists()
+        assertEquals(client.openingReads, client.gets)
+    }
+
+    @Test fun knownSignUpTotalUsesTheSlugAndPlural() {
+        show(meme = true, knownTotal = 4)
+        compose.onNodeWithText("${client.slug} · 0 sign-ups").assertExists()
+    }
 
     @Test fun limitValidationErrorPrecedesTheLimitsPanel() {
         show()

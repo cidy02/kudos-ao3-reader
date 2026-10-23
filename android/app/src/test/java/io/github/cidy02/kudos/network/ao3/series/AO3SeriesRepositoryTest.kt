@@ -93,10 +93,15 @@ class AO3SeriesRepositoryParseTest {
             demo.creatorIdentities.single().route)
         assertEquals("Three stories about a difficult sunrise.", demo.summary)
         assertEquals(true, demo.isComplete)
-        assertEquals(null, demo.bookmarkCount); assertEquals("", demo.dateUpdated)
+        assertEquals(62, demo.bookmarkCount); assertEquals("08 Jul 2026", demo.dateUpdated)
+        assertTrue(demo.isRestricted)
+        demo.page.works.forEach { work ->
+            assertEquals(0, work.comments); assertEquals(0, work.kudos)
+            assertEquals(0, work.bookmarks); assertEquals(0, work.hits)
+        }
 
         // AO3's own page labels each figure, and has an updated date, bookmarks and notes.
-        val labelled = html.replace(Regex("<dl class=\"stats\">.*?</dl>"),
+        val labelled = html.replace("<dt>Series Updated:</dt><dd>08 Jul 2026</dd>", "").replace(Regex("<dl class=\"stats\">.*?</dl>"),
             "<dl class=\"stats\"><dt>Words:</dt><dd>45,678</dd><dt>Works:</dt><dd>3</dd><dt>Complete:</dt><dd>No</dd>" +
                 "<dt>Bookmarks:</dt><dd><a href=\"/series/321/bookmarks\">62</a></dd></dl>")
             .replace("<dt>Stats:</dt>", "<dt>Series Updated:</dt><dd>2026-07-08</dd>" +
@@ -107,6 +112,22 @@ class AO3SeriesRepositoryParseTest {
         assertEquals(false, real.isComplete); assertEquals(62, real.bookmarkCount)
         assertEquals("2026-07-08", real.dateUpdated)
         assertEquals("Three stories about a difficult sunrise.", real.summary)
+    }
+
+    @Test fun seriesRestrictionComesOnlyFromItsHeadingAndOnlyMissingCountersBecomeZero() = runTest {
+        val url = "https://archiveofourown.org/series/321"
+        val html = io.github.cidy02.kudos.writing.seriesFixture("ao3_demo_dawn_series")
+            .replace(" <img alt=\"Restricted\" title=\"Restricted\" src=\"/images/lockblue.png\">", "")
+            .replace("<a href=\"/works/32101\">", "<img alt=\"Restricted\" src=\"lockblue.png\"><a href=\"/works/32101\">")
+            .replace("<dd class=\"words\">21,678</dd>", "<dd class=\"words\">21,678</dd><dd class=\"kudos\">17</dd>")
+        val client = FakeSeriesClient(mapOf(url to html))
+        val detail = (AO3SeriesRepository(client, pageCache = io.github.cidy02.kudos.network.ao3.AO3PageCache())
+            .detailPage(url) as AO3Result.Success).value
+        assertEquals(false, detail.isRestricted)
+        assertEquals(listOf(url), client.requestedUrls)
+        val first = detail.page.works.first()
+        assertEquals(0, first.comments); assertEquals(17, first.kudos)
+        assertEquals(0, first.bookmarks); assertEquals(0, first.hits)
     }
 
     @Test fun detailIdentityComesFromSameShowReadAndNeverDisplayedPseudOrWorkByline() = runTest {

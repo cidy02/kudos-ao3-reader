@@ -105,7 +105,11 @@ class AO3SeriesRepository(
                     summary = after("Description")?.text()?.trim().orEmpty(),
                     isComplete = when (figure("complete", "Complete")?.lowercase()) { "yes" -> true; "no" -> false; else -> null },
                     bookmarkCount = stat("bookmarks", "Bookmarks"),
-                    dateUpdated = after("Series Updated")?.text()?.trim().orEmpty()))
+                    dateUpdated = after("Series Updated")?.text()?.trim().orEmpty(),
+                    isRestricted = doc.select(".primary h2.heading img, #main > h2.heading img").any {
+                        it.attr("src").contains("lockblue", true) || it.attr("title").equals("Restricted", true) ||
+                            it.attr("alt").contains("restricted", true)
+                    }))
             }
         }
     }
@@ -119,7 +123,13 @@ class AO3SeriesRepository(
             AO3Result.Success(
                 withContext(Dispatchers.Default) {
                     // Series pages share search's work-blurb markup.
-                    parser.parseSearchPage(html, page)
+                    // Like iOS full blurbs (and our ledger), an absent performance figure is zero.
+                    parser.parseSearchPage(html, page).let { parsed ->
+                        parsed.copy(works = parsed.works.map { work ->
+                            work.copy(comments = work.comments ?: 0, kudos = work.kudos ?: 0,
+                                bookmarks = work.bookmarks ?: 0, hits = work.hits ?: 0)
+                        })
+                    }
                 }
             )
         } catch (error: AO3SearchParseException.Overloaded) {
@@ -138,4 +148,5 @@ data class AO3SeriesDetailPage(val page: AO3SearchPage, val title: String, val c
     /** The series's own facts from its page's header: iOS draws them in a card over the works. */
     val creators: List<String> = emptyList(), val summary: String = "", val isComplete: Boolean? = null,
     val bookmarkCount: Int? = null, val dateUpdated: String = "",
-    val creatorIdentities: List<io.github.cidy02.kudos.network.ao3.author.AO3SeriesCreator> = emptyList())
+    val creatorIdentities: List<io.github.cidy02.kudos.network.ao3.author.AO3SeriesCreator> = emptyList(),
+    val isRestricted: Boolean = false)

@@ -708,14 +708,15 @@ fun SensitiveWorkRow(
     figuresIncludePerformance: Boolean = true,
     selecting: Boolean = false,
     selected: Boolean = false,
-    selectionAllowsDetails: Boolean = false
+    selectionAllowsDetails: Boolean = false,
+    mutedHistory: Boolean = false
 ) {
     val environment = LocalWorkRowEnvironment.current
     val row: @Composable (SavedWork?, Boolean, () -> Unit, () -> Unit) -> Unit = { local, obscured, click, longClick ->
         if (local != null) {
             Column {
                 SensitiveWorkRow(work = local, onOpenWork = { click() }, expandAll = expandAll,
-                    ledger = ledger, obscured = obscured, onReveal = click,
+                    ledger = ledger, obscured = obscured, onReveal = click, mutedHistory = mutedHistory,
                     onLongClick = longClick, onTagClick = onTagClick, onTagSearch = onTagSearch,
                     footer = footer)
                 if (bookmark != null && !obscured) (bookmark.localFootnote ?: bookmark.footnote).invoke()
@@ -746,6 +747,7 @@ fun SensitiveWorkRow(
                 expandAll = expandAll,
                 ledger = ledger,
                 dateText = work.updatedDate,
+                mutedHistory = mutedHistory,
                 bookmark = bookmark,
                 footer = footer,
                 showsStatusTray = true,
