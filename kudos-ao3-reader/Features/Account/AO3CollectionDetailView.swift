@@ -120,6 +120,13 @@ struct AO3CollectionDetailView: View {
         // Rows at their own padding, not the List minimum (L3-FORM-1).
         .environment(\.defaultMinListRowHeight, 0)
         .subjectScreenWash(palette: palette)
+        #if DEBUG
+        // A shot's manage screen opens from the page, not from its row: at the largest
+        // text the row is below the fold, and a `List` never builds a row it hasn't shown.
+        .navigationDestination(isPresented: .constant(debugManageEntry != nil)) {
+            debugManageEntry?.destination()
+        }
+        #endif
         .toolbar {
             // Its works are a works screen too: Show/Hide mature, like every other.
             if hideMature {
@@ -318,99 +325,6 @@ struct AO3CollectionDetailView: View {
                 }
             }
         }
-    }
-
-    // MARK: Manage
-
-    /// Every native screen this collection currently offers, gated exactly on
-    /// what `show` says AO3 offered — never rendered as a disabled row. Built as
-    /// an array (rather than an `@ViewBuilder` `Group`) because each segment
-    /// needs to know how many rows survived gating to round the right corners
-    /// and draw separators only between rows that actually show.
-    ///
-    /// No "Tag Set" row: `TagSetView` takes a `tagSetID`, and nothing on
-    /// `AO3CollectionShow`/`AO3CollectionDashboard`/`AO3ChallengeSettings`
-    /// carries one for this collection to hand it. That wiring waits until
-    /// something in the model surfaces an id.
-    private var manageRows: [AnyView] {
-        // A new session renders before the load task clears `show`; the
-        // previous account's owner rows must not draw for that pass.
-        guard let show, loadedSessionGeneration == auth.sessionGeneration else { return [] }
-        var rows: [AnyView] = []
-
-        if show.isMaintainer {
-            rows.append(AnyView(manageRow("Maintainers") {
-                CollectionMaintainersView(collectionSlug: slug, collectionTitle: title)
-            }))
-            rows.append(AnyView(manageRow("Moderation") {
-                CollectionModerationView(
-                    collectionSlug: slug,
-                    collectionTitle: title,
-                    viewerIsOwner: show.collection.viewerIsOwner
-                )
-            }))
-        }
-        if AO3CollectionOwnerControls.areVisible(viewerIsOwner: show.collection.viewerIsOwner) {
-            rows.append(AnyView(manageRow("Collection Settings") {
-                AO3CollectionFormView(
-                    slug: slug,
-                    onDeleted: { dismiss() }
-                )
-            }))
-        }
-        // 1bz is explicitly the moderator's read, so gate it on maintainer too,
-        // not just signUpsURL's presence.
-        if show.dashboard.signUpsURL != nil, show.isMaintainer {
-            rows.append(AnyView(manageRow("Sign-ups") {
-                ChallengeSignUpsView(
-                    collectionSlug: slug, collectionTitle: title, challengeKind: show.collection.challengeKind
-                )
-            }))
-        }
-        if show.dashboard.assignmentsURL != nil, show.isMaintainer {
-            rows.append(AnyView(manageRow("Assignments") {
-                ChallengeAssignmentsView(
-                    collectionSlug: slug,
-                    collectionTitle: title,
-                    viewerIsOwner: show.collection.viewerIsOwner,
-                    challengeKind: show.collection.challengeKind
-                )
-            }))
-        }
-        // Not maintainer-gated: any participant claims/fills prompts.
-        if show.dashboard.promptsURL != nil {
-            rows.append(AnyView(manageRow("Prompts") {
-                PromptMemeView(
-                    collectionSlug: slug, collectionTitle: title,
-                    viewerIsOwner: show.collection.viewerIsOwner,
-                    challengeKind: show.collection.challengeKind
-                )
-            }))
-        }
-        // A maintainer can also be a participant, so this is independent of
-        // `isMaintainer` above.
-        if show.dashboard.signUpsURL != nil, auth.isLoggedIn {
-            rows.append(AnyView(manageRow("Your Sign-up") {
-                ChallengeSignUpView(collectionSlug: slug, collectionTitle: title)
-            }))
-        }
-        // Owners only (REDESIGN_DECISIONS 1by): AO3 prints the Challenge Settings
-        // link for collection owners alone and refuses its edit page to everyone
-        // else, moderators included (otwarchive Q5), so the link is the owner
-        // signal. The read (1by) pushes the edit form (1cf).
-        if show.dashboard.challengeSettingsURL != nil,
-           AO3CollectionOwnerControls.areVisible(viewerIsOwner: show.collection.viewerIsOwner) {
-            rows.append(AnyView(manageRow("Challenge Settings") {
-                ChallengeSettingsView(
-                    collectionSlug: slug,
-                    collectionTitle: title,
-                    viewerIsOwner: show.collection.viewerIsOwner,
-                    challengeKind: show.collection.challengeKind
-                )
-            }))
-        }
-
-        return rows
     }
 
     // MARK: Chrome
@@ -666,7 +580,112 @@ struct AO3CollectionPersonRow: View {
     }
 }
 
+// MARK: Manage
+
 extension AO3CollectionDetailView {
+    /// Every native screen this collection currently offers, gated exactly on
+    /// what `show` says AO3 offered — never rendered as a disabled row. Built as
+    /// an array (rather than an `@ViewBuilder` `Group`) because each segment
+    /// needs to know how many rows survived gating to round the right corners
+    /// and draw separators only between rows that actually show.
+    ///
+    /// No "Tag Set" row: `TagSetView` takes a `tagSetID`, and nothing on
+    /// `AO3CollectionShow`/`AO3CollectionDashboard`/`AO3ChallengeSettings`
+    /// carries one for this collection to hand it. That wiring waits until
+    /// something in the model surfaces an id.
+    private var manageEntries: [ManageEntry] {
+        // A new session renders before the load task clears `show`; the
+        // previous account's owner rows must not draw for that pass.
+        guard let show, loadedSessionGeneration == auth.sessionGeneration else { return [] }
+        var entries: [ManageEntry] = []
+
+        if show.isMaintainer {
+            entries.append(ManageEntry("Maintainers") {
+                CollectionMaintainersView(collectionSlug: slug, collectionTitle: title)
+            })
+            entries.append(ManageEntry("Moderation") {
+                CollectionModerationView(
+                    collectionSlug: slug,
+                    collectionTitle: title,
+                    viewerIsOwner: show.collection.viewerIsOwner
+                )
+            })
+        }
+        if AO3CollectionOwnerControls.areVisible(viewerIsOwner: show.collection.viewerIsOwner) {
+            entries.append(ManageEntry("Collection Settings") {
+                AO3CollectionFormView(
+                    slug: slug,
+                    onDeleted: { dismiss() }
+                )
+            })
+        }
+        // 1bz is explicitly the moderator's read, so gate it on maintainer too,
+        // not just signUpsURL's presence.
+        if show.dashboard.signUpsURL != nil, show.isMaintainer {
+            entries.append(ManageEntry("Sign-ups") {
+                ChallengeSignUpsView(
+                    collectionSlug: slug, collectionTitle: title, challengeKind: show.collection.challengeKind
+                )
+            })
+        }
+        if show.dashboard.assignmentsURL != nil, show.isMaintainer {
+            entries.append(ManageEntry("Assignments") {
+                ChallengeAssignmentsView(
+                    collectionSlug: slug,
+                    collectionTitle: title,
+                    viewerIsOwner: show.collection.viewerIsOwner,
+                    challengeKind: show.collection.challengeKind
+                )
+            })
+        }
+        // Not maintainer-gated: any participant claims/fills prompts.
+        if show.dashboard.promptsURL != nil {
+            entries.append(ManageEntry("Prompts") {
+                PromptMemeView(
+                    collectionSlug: slug, collectionTitle: title,
+                    viewerIsOwner: show.collection.viewerIsOwner,
+                    challengeKind: show.collection.challengeKind
+                )
+            })
+        }
+        // A maintainer can also be a participant, so this is independent of
+        // `isMaintainer` above.
+        if show.dashboard.signUpsURL != nil, auth.isLoggedIn {
+            entries.append(ManageEntry("Your Sign-up") {
+                ChallengeSignUpView(collectionSlug: slug, collectionTitle: title)
+            })
+        }
+        // Owners only (REDESIGN_DECISIONS 1by): AO3 prints the Challenge Settings
+        // link for collection owners alone and refuses its edit page to everyone
+        // else, moderators included (otwarchive Q5), so the link is the owner
+        // signal. The read (1by) pushes the edit form (1cf).
+        if show.dashboard.challengeSettingsURL != nil,
+           AO3CollectionOwnerControls.areVisible(viewerIsOwner: show.collection.viewerIsOwner) {
+            entries.append(ManageEntry("Challenge Settings") {
+                ChallengeSettingsView(
+                    collectionSlug: slug,
+                    collectionTitle: title,
+                    viewerIsOwner: show.collection.viewerIsOwner,
+                    challengeKind: show.collection.challengeKind
+                )
+            })
+        }
+
+        return entries
+    }
+
+    private var manageRows: [AnyView] {
+        manageEntries.map { entry in AnyView(manageRow(entry.label, destination: entry.destination)) }
+    }
+
+    #if DEBUG
+    /// The manage screen a shot opens (`DebugLaunchRoute.manageRow`).
+    private var debugManageEntry: ManageEntry? {
+        guard let label = DebugLaunchRoute.manageRow else { return nil }
+        return manageEntries.first { $0.label == label }
+    }
+    #endif
+
     /// One pushable row that draws its own chevron, with the link in the
     /// background so `List` adds no second one.
     private func manageRow<Destination: View>(
@@ -675,12 +694,16 @@ extension AO3CollectionDetailView {
     ) -> some View {
         SubjectFormRow(label: label, showsDisclosure: true) { EmptyView() }
             .subjectRowNavigation(accessibilityLabel: label, destination: destination)
-            #if DEBUG
-            .background {
-                if DebugLaunchRoute.manageRow == label {
-                    Color.clear.navigationDestination(isPresented: .constant(true), destination: destination)
-                }
-            }
-            #endif
+    }
+}
+
+/// One manage screen: its row's label and what the row pushes.
+private struct ManageEntry {
+    let label: String
+    let destination: () -> AnyView
+
+    init<Destination: View>(_ label: String, @ViewBuilder destination: @escaping () -> Destination) {
+        self.label = label
+        self.destination = { AnyView(destination()) }
     }
 }
