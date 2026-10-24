@@ -306,7 +306,7 @@ fun SensitiveWorkRow(
                                         overflow = TextOverflow.Ellipsis
                                     )
                                     io.github.cidy02.kudos.works.detail.VerifiedAuthorByline(
-                                        author, authorIdentities, authorNames, includesBy = savedCard
+                                        author, authorIdentities, authorNames, includesBy = true
                                     )
                                 }
                                 if (isFavorite && !selecting) {
