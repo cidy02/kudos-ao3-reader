@@ -10,28 +10,33 @@ struct TabDashboardShell: View {
     var title: String?
     var sectionTitles: [String]
     var showFilterChips: Bool = false
+    var showsResumeHero: Bool = false
 
     init(
         title: String? = nil,
         sectionTitles: [String] = ["Reading Now", "Saved for Later", "Finished"],
-        showFilterChips: Bool = false
+        showFilterChips: Bool = false,
+        showsResumeHero: Bool = false
     ) {
         self.title = title
         self.sectionTitles = sectionTitles
         self.showFilterChips = showFilterChips
+        self.showsResumeHero = showsResumeHero
     }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
-                if showFilterChips {
-                    filterChipRow
+        DashboardRegionHost {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 24) {
+                    if showFilterChips {
+                        filterChipRow
+                    }
+                    ForEach(sectionTitles, id: \.self) { sectionTitle in
+                        skeletonSection(title: sectionTitle)
+                    }
                 }
-                ForEach(sectionTitles, id: \.self) { sectionTitle in
-                    skeletonSection(title: sectionTitle)
-                }
+                .padding(.vertical, 12)
             }
-            .padding(.vertical, 12)
         }
         .modifier(OptionalNavigationTitle(title: title))
         .accessibilityElement(children: .combine)
@@ -71,6 +76,7 @@ struct TabDashboardShell: View {
             .padding(.horizontal, 16)
         }
         .horizontalScrollViewport()
+        .dashboardLeadingRegion()
         .accessibilityHidden(true)
     }
 
@@ -80,16 +86,14 @@ struct TabDashboardShell: View {
                 .font(.title2.bold())
                 .foregroundStyle(.primary)
                 .padding(.horizontal, 16)
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(alignment: .top, spacing: 14) {
-                    ForEach(0 ..< 4, id: \.self) { _ in
-                        WorkCoverCardSkeleton()
-                    }
+                .dashboardLeadingRegion()
+            if showsResumeHero, title == sectionTitles.first {
+                DashboardResumeSkeleton()
+            } else {
+                DashboardCardShelf(compactSpacing: 14) {
+                    ForEach(0 ..< 4, id: \.self) { _ in WorkCoverCardSkeleton() }
                 }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 6)
             }
-            .horizontalScrollViewport(preservesShadows: true, cardGutter: 16)
         }
         .accessibilityHidden(true)
     }
@@ -143,13 +147,33 @@ struct ProgressiveTabContent<Content: View>: View {
                 TabDashboardShell(
                     title: title,
                     sectionTitles: sections,
-                    showFilterChips: showFilterChips
+                    showFilterChips: showFilterChips,
+                    showsResumeHero: title == "Home"
                 )
             }
         case .blank:
             Color.clear
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .accessibilityHidden(true)
+        }
+    }
+}
+
+private struct DashboardResumeSkeleton: View {
+    @Environment(\.dashboardContentRegions) private var regions
+    private var cardSize = ScaledCarouselCardSize()
+
+    var body: some View {
+        if let regions, regions.resumePanes(hasNext: true, cardWidth: cardSize.width(in: nil)) != nil {
+            HomeResumeComposition(hasNext: true) {
+                SkeletonBlock(height: 240, cornerRadius: SubjectMetrics.heroRadius)
+            } next: {
+                ForEach(0 ..< 4, id: \.self) { _ in WorkCoverCardSkeleton() }
+            }
+        } else {
+            DashboardCardShelf(compactSpacing: 14) {
+                ForEach(0 ..< 4, id: \.self) { _ in WorkCoverCardSkeleton() }
+            }
         }
     }
 }

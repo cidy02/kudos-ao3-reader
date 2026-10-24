@@ -309,3 +309,46 @@ private struct UnblurredHomeResumeHero: View {
             )
     }
 }
+
+/// The same hero and next four works, composed only when their measured region
+/// fits. Privacy, navigation and selection remain with the original card views.
+struct HomeResumeComposition<Hero: View, Next: View>: View {
+    let hasNext: Bool
+    @ViewBuilder var hero: () -> Hero
+    @ViewBuilder var next: () -> Next
+    @Environment(\.dashboardContentRegions) private var regions
+    @Environment(\.layoutDirection) private var direction
+    private var cardSize = ScaledCarouselCardSize()
+
+    var body: some View {
+        #if os(iOS)
+        if let regions, let panes = regions.resumePanes(
+            hasNext: hasNext, cardWidth: cardSize.width(in: nil), rightToLeft: direction == .rightToLeft
+        ) {
+            DashboardRegionRow(panes: panes, width: regions.viewport.width) {
+                hero().padding(.horizontal, 16)
+                if hasNext, panes.count > 1 {
+                    DashboardCardShelf(groupsInSinglePane: true) { next() }
+                        .environment(\.dashboardContentRegions, AdaptiveContentRegions(
+                            bounds: CGRect(origin: .zero, size: panes[1].size)
+                        ))
+                }
+            }
+        } else {
+            compactContent
+        }
+        #else
+        compactContent
+        #endif
+    }
+
+    private var compactContent: some View {
+        VStack(alignment: .leading, spacing: 11) {
+            hero().padding(.horizontal, 16)
+            if hasNext {
+                DashboardCardShelf { next() }
+                    .padding(.top, -8)
+            }
+        }
+    }
+}
