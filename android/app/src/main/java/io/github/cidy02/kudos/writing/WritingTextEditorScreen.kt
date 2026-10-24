@@ -325,7 +325,7 @@ private fun EditorSheetAction(text: String, action: () -> Unit, destructive: Boo
     }
 }
 
-internal fun recoveryDate(seconds: Double): String = DateFormat.getDateTimeInstance().format(
+internal fun recoveryDate(seconds: Double): String = DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(
     Date(((seconds + 978_307_200) * 1_000).toLong()))
 
 @Composable

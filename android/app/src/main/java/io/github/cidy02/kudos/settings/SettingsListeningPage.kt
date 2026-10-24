@@ -130,6 +130,8 @@ internal fun SettingsListeningContent(
                     label = "Sample Text",
                     value = sample.label,
                     choices = ListeningSample.entries.map { it.name to it.label },
+                    valueColor = if (io.github.cidy02.kudos.ui.subject.isAccessibilityFontScale()) null
+                        else LocalKudosTokens.current.primaryInk,
                     onSelect = { selected -> sample = ListeningSample.valueOf(selected) }
                 )
                 SubjectRowSeparator()
@@ -226,13 +228,14 @@ internal fun ListeningChoiceRow(
     label: String,
     value: String,
     choices: List<Pair<String, String>>,
+    valueColor: androidx.compose.ui.graphics.Color? = null,
     onSelect: (String) -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
     val tokens = LocalKudosTokens.current
     Box(Modifier.fillMaxWidth()) {
         // iOS draws these as menu pickers: the value in the accent with a chevron (A70b).
-        SubjectFormRow(label, value = value, showsChoice = true, onClick = { expanded = true })
+        SubjectFormRow(label, value = value, showsChoice = true, valueColor = valueColor, onClick = { expanded = true })
         DropdownMenu(
             expanded = expanded,
             onDismissRequest = { expanded = false },
@@ -280,7 +283,7 @@ internal fun ListeningSpeedPresets(rate: Float, onSelect: (Float) -> Unit) {
             val inUse = rate == preset
             Box(
                 Modifier.weight(1f).heightIn(min = 44.dp)
-                    .background(if (inUse) tokens.glassFill(0.05) else tokens.scopePalette.accent.copy(alpha = 0.15f),
+                    .background(if (inUse) tokens.glassFill(0.15) else tokens.scopePalette.accent.copy(alpha = 0.15f),
                         androidx.compose.foundation.shape.RoundedCornerShape(10.dp))
                     .clickable(enabled = !inUse, role = androidx.compose.ui.semantics.Role.Button) { onSelect(preset) }
                     .padding(horizontal = 6.dp, vertical = 8.dp),
@@ -288,7 +291,7 @@ internal fun ListeningSpeedPresets(rate: Float, onSelect: (Float) -> Unit) {
             ) {
                 Text(label, fontSize = 13.sp, lineHeight = 17.sp,
                     textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                    color = if (inUse) tokens.secondaryInk.copy(alpha = 0.45f) else tokens.scopePalette.accent)
+                    color = if (inUse) tokens.primaryInk else tokens.scopePalette.accent)
             }
         }
     }

@@ -33,7 +33,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.SwapVert
-import androidx.compose.material.icons.automirrored.outlined.MenuBook
+import androidx.compose.material.icons.outlined.ImportContacts
 import androidx.compose.material.icons.outlined.ChatBubbleOutline
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.ErrorOutline
@@ -754,7 +754,7 @@ fun CommentsScreen(
     }
 }
 
-internal val chapterPickerBookIcon = Icons.AutoMirrored.Outlined.MenuBook
+internal val chapterPickerBookIcon = Icons.Outlined.ImportContacts
 
 /**
  * Chapter picker sheet matching iOS `chapterPicker` (CommentsView.swift:893).

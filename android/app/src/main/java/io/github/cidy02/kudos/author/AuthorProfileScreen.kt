@@ -460,6 +460,11 @@ fun AuthorProfileScreen(
         hasSubjectHeader = true,
         customTitle = if (selection.isSelecting) "${selection.selectedIn(works?.works.orEmpty()).size} selected" else null,
         trailingContent = {
+            if (!selection.isSelecting && onNewWork != null && isOwnWorks(signedInUsername, route.username) &&
+                (isDashboard || tab == AuthorTab.Works)) {
+                io.github.cidy02.kudos.ui.subject.ToolbarAddButton(onClick = onNewWork, accessibilityName = "New Work",
+                    palette = tokens.scopePalette)
+            }
             if (selection.isSelecting) {
                 val loaded = works?.works.orEmpty()
                 TextButton(onClick = { selection.toggleSelectAll(loaded.map { it.id }) }, enabled = loaded.isNotEmpty()) {
@@ -478,11 +483,6 @@ fun AuthorProfileScreen(
                     badge = activeCount.takeIf { it > 0 }?.toString()) {
                     Icon(Icons.Outlined.FilterList, null)
                 }
-            }
-            if (!selection.isSelecting && onNewWork != null && isOwnWorks(signedInUsername, route.username) &&
-                (isDashboard || tab == AuthorTab.Works)) {
-                io.github.cidy02.kudos.ui.subject.ToolbarAddButton(onClick = onNewWork, accessibilityName = "New Work",
-                    palette = tokens.scopePalette)
             }
             if (!selection.isSelecting && ownWorks && !works?.works.isNullOrEmpty()) {
                 ToolbarCircleButton(onClick = { selection.enter() }, accessibilityName = "Select Works", palette = tokens.scopePalette) {

@@ -79,7 +79,12 @@ class AO3ChallengeSettingsEditScreenTest {
             fill = Color(image.getPixel((before.left + 20).toInt(), before.center.y.toInt()))
             image.recycle()
         }
-        assertTrue("Save has a filled accent background", fill.red > fill.green * 1.3f)
+        val expected = io.github.cidy02.kudos.ui.subject.SubjectPalette.fromHue(
+            io.github.cidy02.kudos.home.HomeFacts.workHue(emptyList(), "Winter Exchange 2026"),
+            io.github.cidy02.kudos.ui.subject.ReaderTheme.Light).accent
+        assertEquals(expected.red, fill.red, 0.012f)
+        assertEquals(expected.green, fill.green, 0.012f)
+        assertEquals(expected.blue, fill.blue, 0.012f)
         reach("Assignments sent")
         compose.onNodeWithText("Manual").assertExists()
         val after = save.assertIsDisplayed().fetchSemanticsNode().boundsInRoot
