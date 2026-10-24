@@ -15,14 +15,14 @@ enum ReadiumReaderStyleMapper {
         theme: ReaderTheme,
         fontFamily: FontFamily?,
         readingMode: ReadingMode,
-        columnCount: ColumnCount?
+        twoPageSpread: Bool
     ) -> EPUBPreferences {
         EPUBPreferences(
             backgroundColor: ReadiumNavigator.Color(hex: theme.backgroundHex),
             // Only set a column count in paged mode. Forcing `.one` in scroll mode makes
             // Readium lay the text out in screen-height columns (page breaks mid-text +
             // dead space top/bottom) instead of one continuous flow.
-            columnCount: readingMode == .scroll ? nil : columnCount,
+            columnCount: readingMode == .scroll ? nil : (twoPageSpread ? .auto : .one),
             fontFamily: fontFamily,
             // Legacy CSS emits the selected point size as px. Readium expects a
             // percentage of its 16 px root, so 18 pt becomes 112.5%.

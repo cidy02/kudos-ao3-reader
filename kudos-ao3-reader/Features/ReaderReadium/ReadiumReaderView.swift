@@ -81,6 +81,8 @@ struct ReadiumReaderView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
 
     @Query(sort: \CustomFont.dateAdded) private var customFonts: [CustomFont]
     /// Every annotation in the store; narrowed to this work by `annotations`.
@@ -1432,8 +1434,8 @@ struct ReadiumReaderView: View {
 /// same file, so the `private` members above stay reachable and nothing
 /// about access levels or behaviour changes.
 extension ReadiumReaderView {
-    private var isPhone: Bool {
-        UIDevice.current.userInterfaceIdiom == .phone
+    private var wideLayoutAvailable: Bool {
+        WideLayout.isAvailable(horizontal: horizontalSizeClass, vertical: verticalSizeClass)
     }
 
     /// The effective typography (layout options collapse to defaults when Customize
@@ -1472,9 +1474,7 @@ extension ReadiumReaderView {
             theme: readerTheme,
             fontFamily: readiumFontFamily,
             readingMode: readingMode,
-            // .auto lets Readium show a two-page spread on wide screens (iPad)
-            // and one column when narrow; iPhone stays single-column.
-            columnCount: (twoPageEnabled && !isPhone) ? .auto : .one
+            twoPageSpread: twoPageEnabled && wideLayoutAvailable
         )
     }
 
@@ -1497,7 +1497,8 @@ extension ReadiumReaderView {
 
     /// Re-submit preferences whenever any mapped setting changes (instant updates).
     private var preferencesToken: String {
-        "\(readingMode.rawValue)|\(readerTheme.rawValue)|\(fontID)|\(twoPageEnabled)|\(textStyle.token)"
+        "\(readingMode.rawValue)|\(readerTheme.rawValue)|\(fontID)|\(twoPageEnabled)|"
+            + "\(wideLayoutAvailable)|\(textStyle.token)"
     }
 
     /// Font declarations are fixed when Readium builds its navigator. Recreate it

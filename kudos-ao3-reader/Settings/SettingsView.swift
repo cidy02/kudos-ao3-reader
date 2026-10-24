@@ -1,9 +1,6 @@
 import SwiftData
 import SwiftUI
 import UniformTypeIdentifiers
-#if canImport(UIKit)
-import UIKit
-#endif
 
 /// The reader's display options — theme, text size, layout, read-aloud and font —
 /// in the reader's options sheet (iOS) and inspector (macOS).
@@ -13,8 +10,7 @@ import UIKit
 /// shared views below, so the two always show the same controls and stay in sync
 /// via `@AppStorage`. App-wide settings live on those pages, not here.
 struct ReaderOptionsForm: View {
-    /// Whether the two-page spread can take effect (the reader passes its window
-    /// width).
+    /// An additional host constraint on spreads (the macOS reader checks its width).
     var twoPageAvailable: Bool = true
 
     @Environment(ThemeManager.self) private var themeManager
@@ -96,19 +92,22 @@ struct ReaderThemePicker: View {
 /// Layout, two-page spread and keep screen awake — the reader's sheet and
 /// Settings › Reader.
 struct ReaderLayoutSection: View {
-    /// Whether the two-page spread can take effect (the reader passes its window
-    /// width; Settings has no window context, so it allows the toggle freely).
+    /// An additional host constraint; iOS availability also follows this view's size classes.
     var twoPageAvailable: Bool = true
+
+    #if os(iOS)
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
+    #endif
 
     @AppStorage("readerMode") private var readingMode: ReadingMode = .scroll
     @AppStorage("readerTwoPage") private var twoPageEnabled = false
     @AppStorage("keepScreenAwake") private var keepScreenAwake = false
 
-    /// Two-page spread is offered on iPad and macOS but never on iPhone. (iPad
-    /// compiles under `os(iOS)`, so this is a runtime idiom check.)
+    /// Offer spreads in a regular/regular iOS layout; macOS keeps its toggle.
     private var twoPageSpreadAvailable: Bool {
         #if os(iOS)
-        return UIDevice.current.userInterfaceIdiom != .phone
+        return WideLayout.isAvailable(horizontal: horizontalSizeClass, vertical: verticalSizeClass)
         #else
         return true
         #endif
@@ -123,8 +122,6 @@ struct ReaderLayoutSection: View {
             .accentFill()
             .labelStyle(.titleOnly)
 
-            // Two-page spread is hidden on iPhone (no practical use); shown on
-            // iPad and macOS.
             if twoPageSpreadAvailable {
                 Toggle("Two-page spread", isOn: $twoPageEnabled)
                     .disabled(readingMode != .paged || !twoPageAvailable)
