@@ -2800,3 +2800,25 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
     every column, the first work's hue, which those rules don't allow. Treated as the iPhone's fault, I20.
     If I20 finds the purple intended, Android follows it and this entry is reversed.
   The paired tiles are in `~/kudos-tools/pairs/tiles-r3/`.
+- **2026-10-24 · The reader keeps Readium's own position handling through a resize (Claude-CLI; the owner gave
+  Claude the iPhone Duo calls, "usability and readability in mind always").** T-449 added a layer that held the
+  reading locator through a size change and restored it itself. Two adversarial reviews (R449, R450) found it
+  undid the reader's own navigation and could save a wrong passage: it fights Readium, whose pending-location
+  scroll, native paging and links bypass it. Decision: remove the layer (iOS Duo5c) and keep the side safe
+  areas, the host-based page box and the page-count remeasure. Readium keeps the place through a rotation or an
+  unfold, as before T-449 and as other Readium readers do. Reversal: a passage-exact restore (a text range at the
+  leading visible line, persisted) as its own project, if a test shows Readium's position drifting noticeably.
+- **2026-10-24 · iPhone Duo: the design direction (Claude-CLI; owner, 11:50: "use your best judgement, keeping
+  usability and readability in mind always").** From Codex's Duo7 plan (`briefs/Duo7-plan.md`):
+  - The root stays the system `TabView` (`.sidebarAdaptable`): the side rail on the cover and the inner display
+    in landscape, the floating bar in portrait. No app-made root sidebar: with section lists it would spend too
+    much of 669 or 951 pt on navigation. Reversal: a root `NavigationSplitView` on regular/regular.
+  - One visible split at a time (Library locations | section; queues | contents; Account | page; Settings
+    categories | page; Inbox | thread); Work Detail two columns only when its own container fits; the reader
+    immersive.
+  - Layout by measured usable space (rail, safe areas, inspector, the fold's reserved region), never by "is a
+    Duo"; the iPad gets the same where it fits; the cover and the iPhone keep theirs. No information or density
+    lost; no smaller type to fit; nothing on the fold in Book pose.
+  - Six rounds in Duo7's order: Home and dashboards; Settings/Files-style navigation; the reader's measure and
+    a fold-aligned spread (after Duo5c); Work Detail and results; Inbox/Comments and Writing; the rail's
+    toolbars.
