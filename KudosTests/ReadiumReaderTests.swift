@@ -429,7 +429,7 @@ struct ReadiumReaderTests {
     }
 
     @Test(arguments: [8, 24], [false, true])
-    func aSameHrefWidthChangeSchedulesRemeasureAndKeepsTheLocator(
+    func aSameHrefWidthChangeSchedulesRemeasure(
         newCount: Int, horizontal: Bool
     ) async throws {
         let book = ReadiumBook()
@@ -446,25 +446,18 @@ struct ReadiumReaderTests {
         book.acceptLayoutPageCount(12, measuredPage: 5, preferHorizontal: true, isFinalAttempt: false)
         book.acceptLayoutPageCount(12, measuredPage: 5, preferHorizontal: true, isFinalAttempt: false)
         #expect(book.pageBarReady)
-        // A real resize must preserve the passage even if a preference/layout
-        // refresh has temporarily hidden the already-established page count.
-        book.clearVisualPageMetrics()
-        var writes = 0
-        book.onLocatorChange = { _ in writes += 1 }
-
+        let generation = book.pageBarMeasureGeneration
         book.updatePageBoxGeometry(size: CGSize(width: 951, height: 678), safeInsets: .zero)
         #expect(book.pageBoxRemeasureTask != nil)
         #expect(!book.pageBarReady)
+        #expect(book.visualPage == nil)
         #expect(book.visualPageCount == nil)
-        // WebKit can report the old pixel offset against the new chapter layout.
-        book.navigator(source, locationDidChange: locator.copy(locations: { $0.progression = 0.1 }))
-        #expect(book.currentLocator == locator)
-        #expect(writes == 0)
         let superseded = try #require(book.pageBoxRemeasureTask)
         book.updatePageBoxGeometry(size: CGSize(width: 951, height: 669), safeInsets: .zero)
         #expect(superseded.isCancelled)
         await book.pageBoxRemeasureTask?.value
         #expect(book.pageBoxRemeasureTask == nil)
+        #expect(book.pageBarMeasureGeneration > generation)
         #expect(book.currentLocator == locator)
         #expect(!book.pageBarReady)
         // The new denominator may grow OR shrink; one sample is not enough.
@@ -475,6 +468,94 @@ struct ReadiumReaderTests {
         #expect(book.visualPageCount == newCount)
         #expect(book.visualPage == 3)
         #expect(book.currentLocator == locator)
+    }
+
+    private static func progression(_ string: String?) -> Double? {
+        string.flatMap { Locator(persistenceString: $0) }?.locations.progression
+    }
+
+    @Test func sameHrefLocationDuringResizeReachesCurrentLocatorAndPersistence() async throws {
+        let book = ReadiumBook()
+        let source = GeometryTestNavigator()
+        book.updatePageBoxGeometry(size: CGSize(width: 466, height: 678), safeInsets: .zero)
+        await book.pageBoxRemeasureTask?.value
+        let href = try #require(AnyURL(string: "OEBPS/chapter1.xhtml"))
+        let initial = Locator(
+            href: href, mediaType: .xhtml,
+            locations: .init(progression: 0.4, totalProgression: 0.42)
+        )
+        book.navigator(source, locationDidChange: initial)
+        book.acceptLayoutPageCount(12, measuredPage: 5, preferHorizontal: true, isFinalAttempt: false)
+        book.acceptLayoutPageCount(12, measuredPage: 5, preferHorizontal: true, isFinalAttempt: false)
+        #expect(book.pageBarReady)
+
+        let persistence = ReadiumProgressPersistence()
+        persistence.seed(persistedLocatorString: try #require(initial.persistenceString))
+        defer { persistence.cancelTrailingWrite() }
+        var writes: [String] = []
+        persistence.onDebouncedWrite = { writes.append($0) }
+        // Same wiring as ReadiumReaderView.openBook, including the real debounce.
+        book.onLocatorChange = { locator in
+            guard let string = locator.persistenceString else { return }
+            persistence.note(locatorString: string, totalProgression: locator.locations.totalProgression)
+        }
+
+        book.updatePageBoxGeometry(size: CGSize(width: 951, height: 678), safeInsets: .zero)
+        #expect(book.pageBoxRemeasureTask != nil)
+        let moved = initial.copy(locations: {
+            $0.progression = 0.6
+            $0.totalProgression = 0.62
+        })
+        book.navigator(source, locationDidChange: moved)
+        #expect(book.currentLocator == moved)
+        // Compare positions, not strings: the stored form can carry the media type.
+        #expect(Self.progression(persistence.latestLocatorString) == 0.6)
+        #expect(writes.map { Self.progression($0) } == [0.6])
+
+        // A second callback inside the write window still reaches a close or
+        // background flush immediately, even though its streamed write waits.
+        let latest = moved.copy(locations: {
+            $0.progression = 0.7
+            $0.totalProgression = 0.72
+        })
+        book.navigator(source, locationDidChange: latest)
+        #expect(book.currentLocator == latest)
+        #expect(Self.progression(persistence.latestLocatorString) == 0.7)
+        #expect(writes.map { Self.progression($0) } == [0.6])
+        #expect(Self.progression(persistence.locatorForFlush()) == 0.7)
+        await book.pageBoxRemeasureTask?.value
+        #expect(book.currentLocator == latest)
+    }
+
+    /// No production navigation seam is needed for a deleted call. Check the
+    /// resize dispatch itself; the delegate-only fake cannot observe SDK calls.
+    @Test func resizeDoesNotIssueARestoreGoTo() throws {
+        let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+        let source = try String(
+            contentsOf: root.appending(path: "kudos-ao3-reader/Features/ReaderReadium/ReadiumBook.swift"),
+            encoding: .utf8
+        )
+        let start = try #require(source.range(of: "func updatePageBoxGeometry("))
+        let end = try #require(source.range(
+            of: "func cancelPageBoxRemeasure()", range: start.upperBound..<source.endIndex
+        ))
+        let resize = source[start.lowerBound..<end.lowerBound]
+        #expect(!resize.contains("go(to:"))
+        #expect(!resize.contains("markFirstPagePresentedIfNeeded"))
+        #expect(!source.contains("pageBoxResizeLocator"))
+    }
+
+    @Test func finalLayoutAttemptKeepsItsFallbackButVerticalShrinkStillNeedsAgreement() {
+        let book = ReadiumBook()
+        book.acceptLayoutPageCount(8, measuredPage: 3, preferHorizontal: false, isFinalAttempt: false)
+        #expect(!book.pageBarReady)
+        book.acceptLayoutPageCount(24, measuredPage: 3, preferHorizontal: false, isFinalAttempt: true)
+        #expect(book.pageBarReady)
+        #expect(book.visualPageCount == 24)
+        book.acceptLayoutPageCount(8, measuredPage: 3, preferHorizontal: false, isFinalAttempt: true)
+        #expect(book.visualPageCount == 24)
+        book.acceptLayoutPageCount(8, measuredPage: 3, preferHorizontal: false, isFinalAttempt: true)
+        #expect(book.visualPageCount == 8)
     }
 
     @Test func aSameSizeInsetChangeSchedulesButStatusBarHideDoesNot() async {

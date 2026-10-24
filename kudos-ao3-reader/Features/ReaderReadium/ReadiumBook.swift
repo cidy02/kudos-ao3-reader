@@ -193,13 +193,10 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
     var pageBoxChromeSafeBottom: CGFloat { pageBoxGeometry.safeInsets.bottom }
 
     @ObservationIgnored private(set) var pageBoxRemeasureTask: Task<Void, Never>?
-    @ObservationIgnored private var pageBoxResizeLocator: Locator?
-    @ObservationIgnored private var hasReceivedNavigatorLocator = false
-    @ObservationIgnored private var hasMeasuredPageBox = false
 
     /// Called by the peel host for layout and safe-area changes, including a
-    /// width-only resize. Keep the original locator across all intermediate
-    /// layouts, then restore it through Readium before measuring the new pages.
+    /// width-only resize. Readium owns the position through reflow; wait for quiet
+    /// before refreshing insets and measuring the new pages.
     func updatePageBoxGeometry(size: CGSize, safeInsets: UIEdgeInsets) {
         let next = pageBoxGeometry.updating(
             size: size, safeInsets: safeInsets,
@@ -207,12 +204,6 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
             preserveStatusBarTop: chromeHidden || Date() < pageBoxChromeTransitionUntil
         )
         guard next != pageBoxGeometry else { return }
-        // During open, Readium still owns its initial locator. Capturing that
-        // seed here can keep its first same-href settles behind a restore hold.
-        if pageBoxGeometry.size != .zero, hasReceivedNavigatorLocator,
-           hasMeasuredPageBox, pageBoxResizeLocator == nil {
-            pageBoxResizeLocator = currentLocator
-        }
         pageBoxGeometry = next
         pageBoxRemeasureTask?.cancel()
         // Invalidate old-layout samples immediately; measure only after quiet.
@@ -225,21 +216,6 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
                 return
             }
             self.forcePageBoxContentInsetRefresh()
-            // Readium rejects jumps while loading/moving. Keep the saved passage
-            // protected until it accepts, or a new resize/close cancels this task.
-            while let locator = self.pageBoxResizeLocator, let navigator = self.navigator {
-                if await navigator.go(to: locator, options: .none) {
-                    self.markFirstPagePresentedIfNeeded()
-                    break
-                }
-                do { try await Task.sleep(nanoseconds: 220_000_000) } catch { return }
-                guard !self.isLocatorIngestionBlocked else {
-                    self.cancelPageBoxRemeasure()
-                    return
-                }
-            }
-            guard !Task.isCancelled else { return }
-            self.pageBoxResizeLocator = nil
             self.pageBoxRemeasureTask = nil
             self.clearVisualPageMetrics()
             self.schedulePageBarRemeasure()
@@ -249,7 +225,6 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
     func cancelPageBoxRemeasure() {
         pageBoxRemeasureTask?.cancel()
         pageBoxRemeasureTask = nil
-        pageBoxResizeLocator = nil
     }
 
     /// Fires on every position change. The view records this for the progress
@@ -392,7 +367,6 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
         visualPage = page
         visualPageCount = pageCount
         pageBarReady = true
-        hasMeasuredPageBox = true
         pendingLayoutPageCount = nil
         pendingLayoutAgrees = 0
     }
@@ -554,8 +528,6 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
         // Drop previous work's locator/metrics so the position card never shows
         // another book's last page while this EPUB is still opening.
         currentLocator = nil
-        hasReceivedNavigatorLocator = false
-        hasMeasuredPageBox = false
         clearVisualPageMetrics()
         isDismissInteractionActive = false
         isDismissExitLatched = false
@@ -727,16 +699,8 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
         // through successful dismiss teardown so a late settle cannot corrupt
         // the flushed resume point.
         guard !isLocatorIngestionBlocked else { return }
-        if let held = pageBoxResizeLocator {
-            // Reflow reports pixel-offset positions before the saved passage has
-            // been restored. A real chapter navigation still wins over the hold.
-            guard ReaderSectionBuilder.hrefKey(held.href.string)
-                != ReaderSectionBuilder.hrefKey(locator.href.string) else { return }
-            pageBoxResizeLocator = nil
-        }
         // First post-open settle: the spread has painted enough for Readium to
         // report a location — lift the skeleton that was covering its spinner.
-        hasReceivedNavigatorLocator = true
         markFirstPagePresentedIfNeeded()
         let previousHref = currentLocator.map { ReaderSectionBuilder.hrefKey($0.href.string) }
         let newHref = ReaderSectionBuilder.hrefKey(locator.href.string)
@@ -1078,7 +1042,6 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
     func navigator(_: any ViewportObservingNavigator, viewportDidChange viewport: NavigatorViewport?) {
         // Same freeze/exit gate as locator — dismiss must not flip completion.
         guard !isLocatorIngestionBlocked else { return }
-        guard pageBoxResizeLocator == nil else { return }
         let atEnd = ReadiumReaderCompletion.isAtEnd(viewport: viewport, readingOrder: readingOrder)
         let wasAtEnd = isAtPublicationEnd
         if atEnd != wasAtEnd {
