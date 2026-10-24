@@ -292,6 +292,7 @@ struct SubjectFilterRail<Chips: View>: View {
             HStack(spacing: 7) { chips() }
                 .padding(.horizontal, 22)
         }
+        .horizontalScrollViewport()
         .dynamicTypeSize(.xSmall ... .accessibility2)
     }
 }

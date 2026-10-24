@@ -469,6 +469,7 @@ struct AO3MarkedForLaterFilterRail: View {
             }
             .padding(.horizontal, 16)
         }
+        .horizontalScrollViewport()
     }
 }
 

@@ -36,7 +36,7 @@ enum CarouselCardMetrics {
     /// out of exact ratio. Every compact card (Work, Reading Queue, Collection)
     /// shares this one proportion via `ScaledCarouselCardSize`, which already
     /// preserves whatever ratio these two constants define through both Dynamic
-    /// Type scaling and the screen-width clamp — so a future layout that mixes
+    /// Type scaling and the container-width clamp — so a future layout that mixes
     /// card types (e.g. a TabView of multiple cards) reads as one consistent
     /// shape instead of several near-but-not-quite-matching proportions.
     static let height: CGFloat = width * CGFloat(2).squareRoot()
@@ -57,8 +57,8 @@ enum CarouselCardMetrics {
 /// carousel card (Work, Reading Queue, Collection) embeds one of these so the
 /// whole card grows together at large accessibility text sizes instead of
 /// only getting taller while staying pinned at 164pt wide, but never past the
-/// screen: at extreme accessibility sizes the proportional scale alone can
-/// exceed the device width, clipping the card's trailing edge (confirmed live
+/// container: at extreme accessibility sizes the proportional scale alone can
+/// exceed the usable width, clipping the card's trailing edge (confirmed live
 /// on iPhone 17 at accessibility-XXXL). `width`/`height` scale from the same
 /// `relativeTo: .body` curve *before* clamping, then both are multiplied by
 /// the identical `clampRatio` — so the sqrt(2):1 ratio holds exactly whether or
@@ -71,15 +71,13 @@ enum CarouselCardMetrics {
 struct ScaledCarouselCardSize: DynamicProperty {
     @ScaledMetric(relativeTo: .body) private var scaledWidth: CGFloat = CarouselCardMetrics.width
     @ScaledMetric(relativeTo: .body) private var scaledHeight: CGFloat = CarouselCardMetrics.height
+    @Environment(\.carouselCardAvailableWidth) private var availableWidth
 
-    /// The widest a card may ever render: the screen/window width minus 16pt
-    /// of padding on each edge (this app's established carousel/grid margin —
-    /// see `WorkCarouselSection`/`LibraryEntityGridView`), so a maximally
-    /// scaled card still leaves visible breathing room rather than touching
-    /// or crossing the screen edge.
+    /// iOS hosts measure after safe areas and gutters. macOS keeps its existing
+    /// window sizing policy; no screen measurement participates in the iOS clamp.
     private var maxWidth: CGFloat {
         #if os(iOS)
-        UIScreen.main.bounds.width - 32
+        availableWidth ?? .infinity
         #elseif os(macOS)
         (NSScreen.main?.frame.width ?? 800) - 32
         #else
@@ -91,14 +89,27 @@ struct ScaledCarouselCardSize: DynamicProperty {
     /// factor that brings it down to `maxWidth` — applied to *both*
     /// dimensions so the aspect ratio survives the clamp too.
     private var clampRatio: CGFloat {
-        min(1, maxWidth / scaledWidth)
+        CarouselCardMetrics.clampRatio(scaledWidth: scaledWidth, availableWidth: maxWidth)
     }
 
     var width: CGFloat { scaledWidth * clampRatio }
     var height: CGFloat { scaledHeight * clampRatio }
+
+    /// A grid computes its columns before supplying this width to its children.
+    func width(in containerWidth: CGFloat?) -> CGFloat {
+        scaledWidth * CarouselCardMetrics.clampRatio(
+            scaledWidth: scaledWidth,
+            availableWidth: containerWidth ?? .infinity
+        )
+    }
 }
 
 extension CarouselCardMetrics {
+    static func clampRatio(scaledWidth: CGFloat, availableWidth: CGFloat) -> CGFloat {
+        guard scaledWidth > 0 else { return 1 }
+        return min(1, max(0, availableWidth) / scaledWidth)
+    }
+
     /// Column layout for a wrapping grid of compact cover cards (Work, Reading
     /// Queue, Collection, Account work/bookmark lists) — column count comes from
     /// the card's actual *scaled* width (see `ScaledCarouselCardSize`) via
@@ -120,7 +131,7 @@ extension CarouselCardMetrics {
     /// forced one enormous card per row when three or four fit comfortably
     /// (owner-reported). Deriving the count purely from the scaled width gets both
     /// ends right on its own, because the width already encodes Dynamic Type: on a
-    /// phone the card grows until `ScaledCarouselCardSize`'s screen clamp pins it
+    /// phone the card grows until `ScaledCarouselCardSize`'s container clamp pins it
     /// near the full width and the grid resolves to one column anyway.
     ///
     /// `tolerance` covers the opposite, sub-pixel case: on a 375pt-wide phone at

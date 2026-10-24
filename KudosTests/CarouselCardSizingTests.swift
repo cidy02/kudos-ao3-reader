@@ -1,0 +1,98 @@
+import SwiftUI
+import Testing
+@testable import Kudos
+
+@MainActor
+@Suite
+struct CarouselCardSizingTests {
+    @Test(arguments: [CGFloat(343), 361, 434, 800])
+    func ordinaryCardsKeepTheirExistingSize(availableWidth: CGFloat) {
+        let ratio = CarouselCardMetrics.clampRatio(
+            scaledWidth: CarouselCardMetrics.width, availableWidth: availableWidth
+        )
+        #expect(ratio == 1)
+        #expect(CarouselCardMetrics.width * ratio == 164)
+        #expect(CarouselCardMetrics.height * ratio == CarouselCardMetrics.height)
+    }
+
+    @Test(arguments: [CGFloat(180), 278, 343, 434])
+    func largeCardsFitTheGivenContainer(availableWidth: CGFloat) {
+        let scaledWidth: CGFloat = 720
+        let scaledHeight = scaledWidth * CGFloat(2).squareRoot()
+        let ratio = CarouselCardMetrics.clampRatio(scaledWidth: scaledWidth, availableWidth: availableWidth)
+        let width = scaledWidth * ratio
+        let height = scaledHeight * ratio
+        #expect(abs(width - availableWidth) < 0.000_001)
+        #expect(abs(height / width - CGFloat(2).squareRoot()) < 0.000_001)
+    }
+
+    @Test func aNarrowContainerCanClampEvenAnUnscaledCard() {
+        let ratio = CarouselCardMetrics.clampRatio(scaledWidth: 164, availableWidth: 120)
+        #expect(abs(164 * ratio - 120) < 0.000_001)
+    }
+
+    @Test func wideningTheContainerRestoresTheScaledSizeWithoutEnlargingIt() {
+        let narrow = CarouselCardMetrics.clampRatio(scaledWidth: 320, availableWidth: 210)
+        let wide = CarouselCardMetrics.clampRatio(scaledWidth: 320, availableWidth: 600)
+        #expect(abs(320 * narrow - 210) < 0.000_001)
+        #expect(wide == 1)
+    }
+
+    @Test(arguments: [CGFloat(0), -20])
+    func noSpaceNeverProducesANegativeSize(availableWidth: CGFloat) {
+        #expect(CarouselCardMetrics.clampRatio(scaledWidth: 164, availableWidth: availableWidth) == 0)
+    }
+
+    #if os(iOS)
+    @Test func theSizeHelperReadsItsContainerWidth() throws {
+        let natural = try renderedSize(in: 10_000)
+        for width in [CGFloat(120), 278, 343] {
+            let actual = try renderedSize(in: width)
+            #expect(abs(actual.width - min(natural.width, width)) < 0.000_001)
+            #expect(abs(actual.height / actual.width - natural.height / natural.width) < 0.000_001)
+        }
+    }
+
+    private func renderedSize(in width: CGFloat) throws -> CGSize {
+        var received: CGSize?
+        let probe = CarouselSizeProbe { received = $0 }
+            .dynamicTypeSize(.accessibility5)
+            .environment(\.carouselCardAvailableWidth, width)
+        let renderer = ImageRenderer(content: probe)
+        _ = renderer.cgImage
+        return try #require(received)
+    }
+    #endif
+
+    @Test func theClipUsesTheAlreadyUsableViewportWidth() {
+        let viewport = CGRect(x: 0, y: 0, width: 380, height: 240)
+        let clip = HorizontalScrollViewportMetrics.clipRect(
+            viewportBounds: viewport, contentHeight: 240, preservesShadows: true
+        )
+        #expect(clip.minX == 0)
+        #expect(clip.maxX == 380)
+        #expect(clip.minY == -32)
+        #expect(clip.maxY == 272)
+    }
+
+    @Test(arguments: [CGFloat(-16), 0, 164, 1000])
+    func theClipFollowsTheViewportInMovingContent(offset: CGFloat) {
+        let viewport = CGRect(x: offset, y: 0, width: 380, height: 240)
+        let clip = HorizontalScrollViewportMetrics.clipRect(
+            viewportBounds: viewport, contentHeight: 240, preservesShadows: false
+        )
+        #expect(clip == viewport)
+    }
+}
+
+#if os(iOS)
+private struct CarouselSizeProbe: View {
+    var cardSize = ScaledCarouselCardSize()
+    let report: (CGSize) -> Void
+
+    var body: some View {
+        report(CGSize(width: cardSize.width, height: cardSize.height))
+        return Color.clear.frame(width: 1, height: 1)
+    }
+}
+#endif

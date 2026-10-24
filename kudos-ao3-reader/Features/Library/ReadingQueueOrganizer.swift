@@ -187,6 +187,7 @@ struct AllReadingQueuesGridView: View {
             }
             .padding(.horizontal, SubjectMetrics.gutter)
         }
+        .horizontalScrollViewport()
     }
 
     private func tagChip(_ title: String, value: String, count: Int) -> some View {
