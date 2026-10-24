@@ -112,6 +112,25 @@ struct BrowseAndWorkDetailRulesTests {
 
     // MARK: Work Details figures
 
+    #if os(iOS)
+    @Test func wideDetailGroupsKeepEveryBlockOnceAndInOrder() {
+        let leading = WorkDetailPresentation.leadingBlocks
+        let trailing = WorkDetailPresentation.trailingBlocks
+        #expect(leading == [.identity, .status, .ao3Actions, .archiveStats, .pageActions])
+        #expect(trailing == [.summary, .tags, .facts, .comments, .series, .myCopy])
+        let all = leading + trailing
+        #expect(Set(all).count == all.count)
+        #expect(Set(all) == Set(WorkDetailPresentation.singleColumnBlocks))
+    }
+
+    @Test func narrowDetailKeepsTheExistingContinuousPageOrder() {
+        #expect(WorkDetailPresentation.singleColumnBlocks == [
+            .identity, .status, .summary, .ao3Actions, .tags, .facts, .archiveStats,
+            .comments, .pageActions, .series, .myCopy
+        ])
+    }
+    #endif
+
     @Test func workDetailPrefersTheFresherRemoteFigure() {
         #expect(WorkDetailFigures.preferred(local: 412, remote: 500) == 500)
         #expect(WorkDetailFigures.preferred(local: 412, remote: nil) == 412)
