@@ -1163,7 +1163,7 @@ internal fun AuthorLoadMoreRow(
     } else if (page < total || loading) {
         TextButton(onClick = onNext, enabled = !loading,
             modifier = Modifier.fillMaxWidth().then(if (showsCard) Modifier.cardRow() else Modifier)) {
-            Text(if (loading) "Loading…" else "Load More")
+            Text(if (loading) "Loading…" else "Load More", color = LocalKudosTokens.current.primaryInk)
             Spacer(Modifier.weight(1f))
             Text("Page $page of $total", color = LocalKudosTokens.current.secondaryInk, fontSize = 13.sp)
         }
