@@ -530,6 +530,7 @@ extension WorkDetailView {
                             }
                         }
                     }
+                    .horizontalScrollViewport()
                 }
             }
             .myCopyRow(bottom: 24)

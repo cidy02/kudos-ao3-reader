@@ -9,12 +9,9 @@ import SwiftUI
 /// own, so a carousel ends up with ragged bottoms and a grid row's cards don't line up.
 /// Height is a property of the *set* of cards on screen, so the set is what resolves it.
 ///
-/// Width deliberately does **not** change. Every grid sizes its columns with
-/// `CarouselCardMetrics.adaptiveCardColumns(minimum: cardSize.width)`, so a card that
-/// grew wider than that constant would overlap its neighbour — the exact bug that
-/// helper's own comment documents. Keeping width fixed makes that impossible by
-/// construction. (If cards should also widen to hold the sqrt(2):1 proportion, the
-/// column math has to be fed the resolved width in the same change.)
+/// Equalizing height does not change width. `CarouselCardGrid` sizes columns
+/// from the same scaled, container-clamped width as its cards, so growing a
+/// card's height cannot make it overlap its neighbour.
 ///
 /// ## Why this needs no hidden measuring copy
 ///
@@ -28,7 +25,7 @@ import SwiftUI
 /// height only ever *rises*: each pass reports `max(natural, resolved)`, the container
 /// takes the max across cards, and that reaches a fixed point in a pass or two instead
 /// of oscillating. The one thing monotonic growth can't do is shrink when content gets
-/// smaller, so the height resets whenever Dynamic Type changes.
+/// smaller, so the height resets whenever Dynamic Type or usable width changes.
 ///
 /// ## In a lazy grid
 ///
@@ -71,6 +68,7 @@ extension View {
 
 private struct UniformWorkCardHeights: ViewModifier {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.carouselCardAvailableWidth) private var availableWidth
     @State private var resolvedHeight: CGFloat = 0
 
     func body(content: Content) -> some View {
@@ -84,5 +82,9 @@ private struct UniformWorkCardHeights: ViewModifier {
             // Content shrinks when text does, and a monotonic height would otherwise
             // keep the taller box forever. Dropping to zero re-measures from the floor.
             .onChange(of: dynamicTypeSize) { _, _ in resolvedHeight = 0 }
+            #if os(iOS)
+            // The first width measurement and later resizes can both shrink cards.
+            .onChange(of: availableWidth) { _, _ in resolvedHeight = 0 }
+            #endif
     }
 }

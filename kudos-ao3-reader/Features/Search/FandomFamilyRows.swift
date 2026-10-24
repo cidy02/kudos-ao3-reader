@@ -268,6 +268,7 @@ struct FandomListSortRail: View {
                     .accessibilityAddTraits(groupsVariants ? .isSelected : [])
                 }
             }
+            .horizontalScrollViewport()
 
         }
     }

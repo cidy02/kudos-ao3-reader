@@ -300,6 +300,7 @@ struct AO3CollectionItemsView: View {
             }
             .padding(.horizontal, 16)
         }
+        .horizontalScrollViewport()
     }
 
     private var paginationBar: some View {

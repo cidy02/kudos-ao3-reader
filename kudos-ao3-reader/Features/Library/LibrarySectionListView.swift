@@ -75,11 +75,6 @@ struct LibrarySectionListView: View {
     /// this one is a small slice of the log rather than all of it.
     @Query(filter: #Predicate<ReadingSession> { $0.didFinish })
     private var finishingSessions: [ReadingSession]
-    /// Mirrors the scaled width `SensitiveWorkCoverCard`/`AO3WorkCoverCard` actually
-    /// render at (see `ScaledCarouselCardSize`), so `compactGrid`'s column count
-    /// tracks a card that's grown wider with Dynamic Type instead of assuming the
-    /// static base width. Not `private` — see `LibraryEntityGridView.cardSize`.
-    var cardSize = ScaledCarouselCardSize()
 
     /// Seeded from the dashboard's own selection so tapping a carousel's "see all"
     /// chevron mid-selection doesn't strand the works you'd already picked — without
@@ -759,14 +754,6 @@ struct LibrarySectionListView: View {
         .subjectScreenWash(palette: scopePalette)
     }
 
-    /// Column count tracks the actual scaled card width at every Dynamic Type step
-    /// (not just an accessibility-size on/off gate — see
-    /// `CarouselCardMetrics.adaptiveCardColumns`), so two columns of scaled-wide
-    /// cards never overlap on screen.
-    private var compactGridColumns: [GridItem] {
-        CarouselCardMetrics.adaptiveCardColumns(minimum: cardSize.width)
-    }
-
     /// Apple Books-style two-up grid — the same cover cards every carousel already
     /// uses, wrapping down the page instead of scrolling horizontally.
     ///
@@ -807,7 +794,7 @@ struct LibrarySectionListView: View {
     }
 
     private func workGrid(_ works: [SavedWork]) -> some View {
-        LazyVGrid(columns: compactGridColumns, spacing: CarouselCardMetrics.compactGridSpacing) {
+        CarouselCardGrid {
             ForEach(works) { work in
                 if isSelecting {
                     SensitiveWorkCoverCard(

@@ -74,7 +74,6 @@ struct ReadingQueueBrowserView: View {
     @State private var pendingCompactOrder: [UUID]?
     @State private var isSelecting = false
     @State private var selection = Set<UUID>()
-    var cardSize = ScaledCarouselCardSize()
 
     /// Saved for Later first, then customs by `sortOrder`.
     var orderedQueues: [ReadingQueue] {
@@ -145,10 +144,6 @@ struct ReadingQueueBrowserView: View {
         guard let pendingCompactOrder else { return displayedWorks }
         let byID = Dictionary(works.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         return pendingCompactOrder.compactMap { byID[$0] }
-    }
-
-    private var compactGridColumns: [GridItem] {
-        CarouselCardMetrics.adaptiveCardColumns(minimum: cardSize.width)
     }
 
     /// Selection acts on what is on screen: Select hides the filter rail, so a
@@ -672,7 +667,7 @@ extension ReadingQueueBrowserView {
     private static let listRuleBottom: CGFloat = afterRule - halfCardGap
 
     private func coverGrid(_ gridWorks: [SavedWork]) -> some View {
-        LazyVGrid(columns: compactGridColumns, spacing: CarouselCardMetrics.compactGridSpacing) {
+        CarouselCardGrid {
             ForEach(gridWorks) { work in
                 compactCard(work)
             }
