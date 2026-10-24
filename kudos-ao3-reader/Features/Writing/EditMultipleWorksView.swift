@@ -13,6 +13,9 @@ struct EditMultipleWorksView: View {
     @State private var changes: AO3BulkEditChanges
     @State private var isSaving = false
     @State private var errorMessage: String?
+    #if DEBUG
+    @State private var debugPresented: DebugPresented?
+    #endif
     /// The group 1bn's Collections / Visibility buttons open on.
     let focus: Focus?
     /// Called once AO3 has confirmed the save, before the form closes. The list the works
@@ -52,7 +55,40 @@ struct EditMultipleWorksView: View {
                 proxy.scrollTo(focus.rawValue, anchor: .top)
             }
         }
+        #if DEBUG
+        .task {
+            if let id = DebugLaunchRoute.takeFirstPush(["bulktagstate", "bulknames"]) {
+                debugPresented = DebugPresented(id: id)
+            }
+        }
+        .navigationDestination(item: $debugPresented) { presented in
+            debugBulkChild(presented.id)
+        }
+        #endif
     }
+
+    #if DEBUG
+    @ViewBuilder
+    private func debugBulkChild(_ id: String) -> some View {
+        switch id {
+        case "bulktagstate":
+            BulkTagStatePicker(
+                title: "Archive warnings",
+                options: form.warningOptions,
+                added: $changes.tagsToAdd.warnings,
+                removed: $changes.tagsToRemove.warnings
+            )
+        case "bulknames":
+            DebugBulkNameEditor(
+                title: "Add to collections",
+                placeholder: "Collection name",
+                names: $changes.collectionsToAdd
+            )
+        default:
+            EmptyView()
+        }
+    }
+    #endif
 
     private var list: some View {
         List {

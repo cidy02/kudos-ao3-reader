@@ -35,6 +35,9 @@ struct ReaderSpeechSettingsSection: View {
     @State private var isShowingCoreMLDownloadConfirmation = false
     @State private var cachedKokoroRuntimeConfiguration: KokoroRuntimeConfiguration?
     @State private var isShowingKokoroDownloadConfirmation = false
+    #if DEBUG
+    @State private var debugPronunciations = false
+    #endif
 
     private var sortedVoices: [TTSVoice] {
         voices.sorted()
@@ -218,6 +221,12 @@ struct ReaderSpeechSettingsSection: View {
             normalizeKokoroConfiguration()
             updateVoices()
         }
+        #if DEBUG
+        .task { if DebugLaunchRoute.takePush("pronunciations") { debugPronunciations = true } }
+        .navigationDestination(isPresented: $debugPronunciations) {
+            ReaderPronunciationSettingsView(onScanChapter: nil)
+        }
+        #endif
     }
 
     /// iOS 27+ runs Kokoro on Core ML; iOS 26.x runs it on Sherpa/ONNX because

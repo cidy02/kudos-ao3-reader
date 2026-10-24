@@ -99,6 +99,9 @@ struct SearchPaginationBar: View {
         // a picker gives, and it fires on the value actually changing rather than
         // on the tap, so a tap on a disabled edge stays silent.
         .sensoryFeedback(.selection, trigger: currentPage)
+        #if DEBUG
+        .task { if DebugLaunchRoute.takeSheet("pagejump") { showingPageSheet = true } }
+        #endif
         .sheet(isPresented: $showingPageSheet) {
             PageJumpSheet(
                 currentPage: currentPage,

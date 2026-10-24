@@ -138,6 +138,9 @@ struct ChallengeSignUpView: View {
                 .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { bottomBarHeight = $0 }
         }
         .task { await loadSignUpIfNeeded() }
+        #if DEBUG
+        .task { await openPromptTagsIfRequested() }
+        #endif
         .refreshable { await loadSignUp() }
         .confirmationDialog(
             "Withdraw this sign-up?",
@@ -161,6 +164,25 @@ struct ChallengeSignUpView: View {
 
     /// A live binding to one prompt, found by id. A prompt that has gone reads
     /// as a blank draft with the same id and writes nowhere.
+    #if DEBUG
+    private func openPromptTagsIfRequested() async {
+        guard DebugLaunchRoute.wantsSheet("prompttags") else { return }
+        for _ in 0..<40 {
+            if phase == .loaded {
+                guard DebugLaunchRoute.takeSheet("prompttags") else { return }
+                if let prompt = liveRequests.first {
+                    editingPrompt = EditingPrompt(promptID: prompt.id, kind: .request, position: 0)
+                } else if let offer = liveOffers.first {
+                    editingPrompt = EditingPrompt(promptID: offer.id, kind: .offer, position: 0)
+                }
+                return
+            }
+            if case .failed = phase { return }
+            try? await Task.sleep(for: .milliseconds(250))
+        }
+    }
+    #endif
+
     func promptBinding(id: Int, kind: AO3ChallengePromptKind) -> Binding<AO3ChallengePrompt> {
         Binding(
             get: { form?.prompt(id: id, kind: kind) ?? AO3ChallengePrompt(id: id, kind: kind) },

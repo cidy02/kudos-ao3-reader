@@ -98,6 +98,14 @@ struct AO3PreferencesView: View {
             helpSheetView(state)
         }
         .task { await load() }
+        #if DEBUG
+        .task {
+            guard DebugLaunchRoute.takeSheet("prefhelp"),
+                  let url = URL(string: "https://archiveofourown.org/help/preferences_privacy")
+            else { return }
+            openHelp(AO3PreferenceHelpRef(title: "Privacy", url: url))
+        }
+        #endif
     }
 
     @ViewBuilder

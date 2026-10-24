@@ -225,6 +225,9 @@ private struct LibraryMultiSelectField: View {
         .sheet(isPresented: $showPicker) {
             LibraryOptionPicker(title: title, options: options, selection: $selection)
         }
+        #if DEBUG
+        .task { if DebugLaunchRoute.takeSheet("libpicker") { showPicker = true } }
+        #endif
     }
 }
 

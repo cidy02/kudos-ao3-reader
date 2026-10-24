@@ -57,6 +57,9 @@ struct SettingsAppearancePage: View {
                     + " Your accent colour appears in Light, Dark, and OLED; Sepia keeps its warm tint.")
             }
         }
+        #if DEBUG
+        .task { if DebugLaunchRoute.takeSheet("customizetheme") { showCustomize = true } }
+        #endif
         #if os(iOS)
         .sheet(isPresented: $showCustomize) {
             CustomizeThemeView()
