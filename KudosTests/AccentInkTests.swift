@@ -60,4 +60,56 @@ struct AccentInkTests {
             }
         }
     }
+
+    #if os(iOS)
+    @MainActor @Test func sectionFiltersChooseAppAccentOverAnInheritedHeroAccent() throws {
+        let defaults = UserDefaults.standard
+        let keys = ["appTheme", "accentColorHex"]
+        let previous = keys.map { defaults.object(forKey: $0) }
+        defer {
+            for (key, value) in zip(keys, previous) { defaults.set(value, forKey: key) }
+        }
+        defaults.removeObject(forKey: "accentColorHex")
+        let manager = ThemeManager()
+        #expect(manager.accentHex == "#990000")
+        let heroTint = Color.purple
+
+        for accent in ["#990000", "#356A72"] {
+            manager.accentHex = accent
+            for theme in ReaderTheme.allCases {
+                manager.appTheme = theme
+                var received: (fill: Color, ink: Color)?
+                let probe = SectionFilterAccentProbe { received = ($0, $1) }
+                    .modifier(LibrarySectionFilterAccent())
+                    .accentTint(heroTint, on: theme)
+                    .environment(manager)
+                let renderer = ImageRenderer(content: probe)
+                _ = renderer.cgImage
+
+                let actual = try #require(received)
+                #expect(actual.fill == manager.effectiveTint)
+                #expect(actual.ink == manager.accentInk)
+                #expect(actual.fill != heroTint)
+                if theme == .sepia {
+                    #expect(actual.fill == theme.appTint)
+                } else {
+                    #expect(actual.fill.hexString == accent)
+                }
+            }
+        }
+    }
+    #endif
 }
+
+#if os(iOS)
+private struct SectionFilterAccentProbe: View {
+    @Environment(\.accentFill) private var fill
+    @Environment(\.accentInk) private var ink
+    let report: (Color, Color) -> Void
+
+    var body: some View {
+        report(fill, ink)
+        return Color.clear.frame(width: 1, height: 1)
+    }
+}
+#endif
