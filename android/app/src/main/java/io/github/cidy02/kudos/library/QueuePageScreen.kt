@@ -466,6 +466,7 @@ fun QueuePageScreen(
 
     if (showFilters) {
         LibraryFilterPanel(
+            palette = palette,
             filters = filters, sort = sort, userTags = index.userTags, collections = index.collections,
             works = works, searchQuery = filterText, onSearchQueryChange = { filterText = it },
             onFiltersChange = { filters = it }, onSortChange = { sort = it },

@@ -8,7 +8,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.MenuBook
+import androidx.compose.material.icons.outlined.ImportContacts
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
@@ -347,7 +347,7 @@ class Brief3hcContentTest {
     }
 
     @Test fun chapterPickerUsesOpenBookIconAndPaletteAccentOnAllRowLabels() {
-        assertEquals(Icons.AutoMirrored.Outlined.MenuBook, chapterPickerBookIcon)
+        assertEquals(Icons.Outlined.ImportContacts, chapterPickerBookIcon)
 
         val chapters = listOf(
             AO3ChapterRef(1L, 1, "1. Arrival"),

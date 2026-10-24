@@ -579,6 +579,7 @@ fun CollectionDetailScreen(
 
     if (showFilterDialog) {
         LibraryFilterPanel(
+            palette = palette,
             filters = filters, sort = sort, userTags = index.userTags, collections = index.collections,
             works = orderedWorks, searchQuery = filterText, onSearchQueryChange = { filterText = it },
             onFiltersChange = { filters = it }, onSortChange = { sort = it },

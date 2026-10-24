@@ -283,12 +283,14 @@ internal fun PageJumpContent(currentPage: Int, totalPages: Int, onSelect: (Int) 
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                TextButton(onClick = { pageInput = "1" }, enabled = draftPage > 1) {
+                TextButton(onClick = { pageInput = "1" }, enabled = draftPage > 1,
+                    colors = androidx.compose.material3.ButtonDefaults.textButtonColors(contentColor = tokens.primaryInk)) {
                     Text("First page", lineHeight = 20.sp)
                 }
                 TextButton(
                     onClick = { pageInput = maxOf(totalPages, 1).toString() },
-                    enabled = draftPage < totalPages
+                    enabled = draftPage < totalPages,
+                    colors = androidx.compose.material3.ButtonDefaults.textButtonColors(contentColor = tokens.primaryInk)
                 ) {
                     Text("Last (${"%,d".format(totalPages)})", lineHeight = 20.sp)
                 }

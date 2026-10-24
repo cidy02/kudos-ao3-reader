@@ -47,7 +47,7 @@ internal fun ProvideCollectionPalette(slug: String, title: String, content: @Com
     val palette = remember(slug, title, tokens.theme) {
         SubjectPalette.fromHue(HomeFacts.workHue(emptyList(), title.ifEmpty { slug }), tokens.theme)
     }
-    CompositionLocalProvider(LocalKudosTokens provides tokens.copy(scopePaletteOverride = palette), content = content)
+    SubjectPaletteTheme(palette, content)
 }
 
 @Composable

@@ -59,6 +59,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.testTag
@@ -495,7 +496,8 @@ internal fun PreferenceHelpContent(
     val tokens = LocalKudosTokens.current
     val title: @Composable (String) -> Unit = { text ->
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text(text, style = MaterialTheme.typography.titleLarge, color = tokens.primaryInk, modifier = Modifier.weight(1f))
+            Text(text, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold,
+                color = tokens.primaryInk, modifier = Modifier.weight(1f))
             if (onDone != null) io.github.cidy02.kudos.ui.subject.ToolbarCircleButton(onClick = onDone, accessibilityName = "Done") {
                 Icon(Icons.Filled.Check, contentDescription = null, tint = tokens.scopePalette.accent)
             }

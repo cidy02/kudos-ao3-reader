@@ -2722,3 +2722,16 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   Dates (Q28), demo routing and 3gx's local-library card rule stay as decided. Reversal: revert
   A96's scoped UI changes and corresponding tests; no stored data or request behavior changes.
   Evidence and per-test regression expectations: `briefs/A96-result.md`.
+- **2026-10-23 · A98 (Codex; gated by Claude-CLI, gate-30).**
+  Follow the real-data branches behind A97's screenshots: challenge hues and subtitles use
+  the title, falling back to the slug (`ChallengeSettingsEditView.swift:76`, `:82`, `:177`);
+  My Works keeps counts/words/kudos when available and the account-name fallback otherwise
+  (`AuthorProfileView.swift:336`, `:354`). Reading Now uses the app scope palette, not a fixed
+  purple (`LibrarySectionListView.swift:298`). Sample Text uses the normal system picker's
+  primary value and retains the custom menu's accent at accessibility sizes
+  (`ReaderSpeechAuditionHarness.swift:45`, `:132`, `:155`). The current speed stays disabled
+  with primary ink on neutral fill; page-jump end labels use primary ink. The chapter picker
+  uses Material's hollow `Outlined.ImportContacts` book: `Outlined.MenuBook` still draws a
+  solid page. Recovery omits seconds and keeps the existing digest-based warning. Evidence,
+  changed paths and expected regression assertions: `briefs/A98-result.md`. Reversal: revert
+  A98's scoped UI changes and test expectations; no stored data or request behavior changed.

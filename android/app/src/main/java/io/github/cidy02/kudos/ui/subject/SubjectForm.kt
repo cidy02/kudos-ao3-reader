@@ -143,12 +143,14 @@ fun SubjectFormRow(
     showsChoice: Boolean = false,
     /** A status row's own colour for its icon and label (iOS: a green "Signed In"). */
     statusInk: Color? = null,
+    /** System picker values can use primary ink while their choice arrow keeps its tint. */
+    valueColor: Color? = null,
     trailing: (@Composable () -> Unit)? = null
 ) {
     val tokens = LocalKudosTokens.current
     val stackValue = isAccessibilityFontScale() && value != null
     val choice = showsChoice && onClick != null
-    val valueInk = if (choice) LocalSubjectPalette.current.accent else tokens.secondaryInk
+    val valueInk = valueColor ?: if (choice) LocalSubjectPalette.current.accent else tokens.secondaryInk
     Row(
         modifier
             .fillMaxWidth()
@@ -219,7 +221,7 @@ fun SubjectFormRow(
             Icon(
                 imageVector = Icons.Filled.ExpandMore,
                 contentDescription = null,
-                tint = valueInk,
+                tint = LocalSubjectPalette.current.accent,
                 modifier = Modifier.size(with(LocalDensity.current) { 18.sp.toDp() })
             )
         }

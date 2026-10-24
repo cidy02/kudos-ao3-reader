@@ -60,6 +60,7 @@ import io.github.cidy02.kudos.ui.subject.SubjectRowSeparator
 import io.github.cidy02.kudos.ui.subject.SubjectToggle
 import io.github.cidy02.kudos.ui.subject.subjectPanel
 import io.github.cidy02.kudos.ui.subject.SubjectPalette
+import io.github.cidy02.kudos.ui.subject.SubjectPaletteTheme
 import io.github.cidy02.kudos.works.WorkSearchIndex
 
 /** Live local filters, in iOS LibraryFilterPanel's order, with Android's extra controls retained. */
@@ -77,8 +78,9 @@ fun LibraryFilterPanel(
     onDismiss: () -> Unit,
     searchQuery: String? = null,
     onSearchQueryChange: (String) -> Unit = {},
-    works: List<SavedWork> = emptyList()
-) {
+    works: List<SavedWork> = emptyList(),
+    palette: SubjectPalette = LocalKudosTokens.current.scopePalette
+) = SubjectPaletteTheme(palette) {
     val tokens = LocalKudosTokens.current
     val languages = remember(works) { works.map { it.language }.filter { it.isNotEmpty() }.distinct().sorted() }
     val canReset = filters.hasActiveFilters || sort != LibrarySort.Natural || !searchQuery.isNullOrBlank()
@@ -249,7 +251,7 @@ private fun <T> LibraryChoiceRow(
 ) {
     var expanded by remember { mutableStateOf(false) }
     Box {
-        SubjectFormRow(title, value = label(selected), showsDisclosure = true, onClick = { expanded = true })
+        SubjectFormRow(title, value = label(selected), showsChoice = true, onClick = { expanded = true })
         DropdownMenu(expanded, onDismissRequest = { expanded = false }) {
             options.forEach { option ->
                 DropdownMenuItem(

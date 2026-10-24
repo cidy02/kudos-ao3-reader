@@ -36,7 +36,17 @@ import kotlinx.coroutines.launch
 internal fun AO3ChallengeSettingsEditScreen(slug: String, title: String, viewerIsOwner: Boolean,
     repository: AO3CollectionDetailRepository, writes: AO3WriteRepository,
     onOpenWeb: (String) -> Unit, onOpenTagSet: (Int, String) -> Unit, onOpenCollection: () -> Unit,
-    onBack: () -> Unit, openingKey: Int = 0, kind: AO3ChallengeKind? = null, knownSignUpTotal: Int? = null) {
+    onBack: () -> Unit, openingKey: Int = 0, kind: AO3ChallengeKind? = null, knownSignUpTotal: Int? = null) =
+    ProvideCollectionPalette(slug, title) {
+        ChallengeSettingsEditContent(slug, title, viewerIsOwner, repository, writes, onOpenWeb, onOpenTagSet,
+            onOpenCollection, onBack, openingKey, kind, knownSignUpTotal)
+    }
+
+@Composable
+private fun ChallengeSettingsEditContent(slug: String, title: String, viewerIsOwner: Boolean,
+    repository: AO3CollectionDetailRepository, writes: AO3WriteRepository,
+    onOpenWeb: (String) -> Unit, onOpenTagSet: (Int, String) -> Unit, onOpenCollection: () -> Unit,
+    onBack: () -> Unit, openingKey: Int, kind: AO3ChallengeKind?, knownSignUpTotal: Int?) {
     val auth = repository.authRepository
     val generation by auth.generation.collectAsState()
     val authState by auth.state.collectAsState()
