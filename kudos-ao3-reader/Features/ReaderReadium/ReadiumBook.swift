@@ -143,7 +143,7 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
     /// measure. Prevents the thrash: position-list (2/13) → visual (6/103).
     private(set) var pageBarReady = false
     /// Cancels in-flight open remeasures when chapter/resource changes.
-    private var pageBarMeasureGeneration = 0
+    private(set) var pageBarMeasureGeneration = 0
     /// Retained WKScriptMessageHandler for live swipe updates after ready.
     private let visualPageBridge = VisualPageMessageBridge()
     /// True while swipe-down dismiss is freezing the page. Freeze mutates scroll
@@ -164,7 +164,14 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
     /// Starts **hidden**: a work opens straight into the page, the way a book does,
     /// and one tap brings the bars back. Nothing resets this per open, so it also
     /// persists for as long as the book object lives.
-    var chromeHidden = true
+    var chromeHidden = true {
+        didSet {
+            if oldValue != chromeHidden {
+                pageBoxChromeTransitionUntil = Date().addingTimeInterval(0.6)
+            }
+        }
+    }
+    @ObservationIgnored private var pageBoxChromeTransitionUntil: Date = .distantPast
 
     /// The body's rendered line height in points — font size × the line-height
     /// multiplier, mirrored from the view's `ReaderTextStyle` whenever
@@ -179,38 +186,70 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
     /// uses frozen window safe area + line-height snap, not this field).
     var renderedPageMarginPoints: Double = ReaderTextStyle.defaultMargin
 
-    /// Frozen window geometry for the page box. Updated on real size changes
-    /// (rotation / multitasking), **not** on chrome show/hide (status bar
-    /// hide would otherwise grow the box and thrash swipe pageCount).
-    private var frozenPageBoxViewHeight: CGFloat = 0
-    private var frozenPageBoxSafeTop: CGFloat = 0
-    private var frozenPageBoxSafeBottom: CGFloat = 0
+    /// The full hosting view, before side-safe padding. Never seeded from a screen
+    /// or another scene's key window. Zero until the host is attached and laid out.
+    private(set) var pageBoxGeometry = ReaderPageBoxGeometry()
+    var pageBoxChromeSafeTop: CGFloat { pageBoxGeometry.safeInsets.top }
+    var pageBoxChromeSafeBottom: CGFloat { pageBoxGeometry.safeInsets.bottom }
 
-    /// Safe-area top used for floating chrome (close / fan). Prefer frozen page-box
-    /// values so chrome and text share one geometry source; fall back to live
-    /// window insets until the first freeze (navigator not ready yet).
-    var pageBoxChromeSafeTop: CGFloat {
-        frozenPageBoxSafeTop > 0 ? frozenPageBoxSafeTop : Self.liveWindowSafeArea.top
-    }
-    var pageBoxChromeSafeBottom: CGFloat {
-        frozenPageBoxSafeBottom > 0 ? frozenPageBoxSafeBottom : Self.liveWindowSafeArea.bottom
-    }
+    @ObservationIgnored private(set) var pageBoxRemeasureTask: Task<Void, Never>?
+    @ObservationIgnored private var pageBoxResizeLocator: Locator?
+    @ObservationIgnored private var hasReceivedNavigatorLocator = false
+    @ObservationIgnored private var hasMeasuredPageBox = false
 
-    /// Seed freeze from the key window before the navigator's first inset query
-    /// (chrome can render while still `.loading`).
-    func seedPageBoxGeometryFromWindowIfNeeded() {
-        let safe = Self.liveWindowSafeArea
-        let height = UIScreen.main.bounds.height
-        refreshFrozenPageBoxGeometry(
-            viewHeight: height, safeTop: safe.top, safeBottom: safe.bottom
+    /// Called by the peel host for layout and safe-area changes, including a
+    /// width-only resize. Keep the original locator across all intermediate
+    /// layouts, then restore it through Readium before measuring the new pages.
+    func updatePageBoxGeometry(size: CGSize, safeInsets: UIEdgeInsets) {
+        let next = pageBoxGeometry.updating(
+            size: size, safeInsets: safeInsets,
+            // Showing chrome can lay out once before UIKit restores the status bar.
+            preserveStatusBarTop: chromeHidden || Date() < pageBoxChromeTransitionUntil
         )
+        guard next != pageBoxGeometry else { return }
+        // During open, Readium still owns its initial locator. Capturing that
+        // seed here can keep its first same-href settles behind a restore hold.
+        if pageBoxGeometry.size != .zero, hasReceivedNavigatorLocator,
+           hasMeasuredPageBox, pageBoxResizeLocator == nil {
+            pageBoxResizeLocator = currentLocator
+        }
+        pageBoxGeometry = next
+        pageBoxRemeasureTask?.cancel()
+        // Invalidate old-layout samples immediately; measure only after quiet.
+        clearVisualPageMetrics()
+        pageBoxRemeasureTask = Task { @MainActor [weak self] in
+            do { try await Task.sleep(nanoseconds: 220_000_000) } catch { return }
+            guard let self else { return }
+            guard !self.isLocatorIngestionBlocked else {
+                self.cancelPageBoxRemeasure()
+                return
+            }
+            self.forcePageBoxContentInsetRefresh()
+            // Readium rejects jumps while loading/moving. Keep the saved passage
+            // protected until it accepts, or a new resize/close cancels this task.
+            while let locator = self.pageBoxResizeLocator, let navigator = self.navigator {
+                if await navigator.go(to: locator, options: .none) {
+                    self.markFirstPagePresentedIfNeeded()
+                    break
+                }
+                do { try await Task.sleep(nanoseconds: 220_000_000) } catch { return }
+                guard !self.isLocatorIngestionBlocked else {
+                    self.cancelPageBoxRemeasure()
+                    return
+                }
+            }
+            guard !Task.isCancelled else { return }
+            self.pageBoxResizeLocator = nil
+            self.pageBoxRemeasureTask = nil
+            self.clearVisualPageMetrics()
+            self.schedulePageBarRemeasure()
+        }
     }
 
-    private static var liveWindowSafeArea: UIEdgeInsets {
-        let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
-        let window = scenes.flatMap(\.windows).first(where: \.isKeyWindow)
-            ?? scenes.flatMap(\.windows).first
-        return window?.safeAreaInsets ?? .zero
+    func cancelPageBoxRemeasure() {
+        pageBoxRemeasureTask?.cancel()
+        pageBoxRemeasureTask = nil
+        pageBoxResizeLocator = nil
     }
 
     /// Fires on every position change. The view records this for the progress
@@ -353,6 +392,7 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
         visualPage = page
         visualPageCount = pageCount
         pageBarReady = true
+        hasMeasuredPageBox = true
         pendingLayoutPageCount = nil
         pendingLayoutAgrees = 0
     }
@@ -502,6 +542,7 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
     /// chapter from the old WKWebView reader). Intra-chapter offset isn't recovered.
     func open(fileURL: URL, initialLocator: Locator?, fallbackSpineIndex: Int? = nil,
               config: EPUBNavigatorViewController.Configuration) async {
+        cancelPageBoxRemeasure()
         ReaderWebIsolation.installReadiumStoreIsolation()
         ReaderWebIsolation.onReadiumOpenExternalURL = { [weak self] url in
             _ = self?.routeWebURLToBrowse(url)
@@ -513,6 +554,8 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
         // Drop previous work's locator/metrics so the position card never shows
         // another book's last page while this EPUB is still opening.
         currentLocator = nil
+        hasReceivedNavigatorLocator = false
+        hasMeasuredPageBox = false
         clearVisualPageMetrics()
         isDismissInteractionActive = false
         isDismissExitLatched = false
@@ -684,8 +727,16 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
         // through successful dismiss teardown so a late settle cannot corrupt
         // the flushed resume point.
         guard !isLocatorIngestionBlocked else { return }
+        if let held = pageBoxResizeLocator {
+            // Reflow reports pixel-offset positions before the saved passage has
+            // been restored. A real chapter navigation still wins over the hold.
+            guard ReaderSectionBuilder.hrefKey(held.href.string)
+                != ReaderSectionBuilder.hrefKey(locator.href.string) else { return }
+            pageBoxResizeLocator = nil
+        }
         // First post-open settle: the spread has painted enough for Readium to
         // report a location — lift the skeleton that was covering its spinner.
+        hasReceivedNavigatorLocator = true
         markFirstPagePresentedIfNeeded()
         let previousHref = currentLocator.map { ReaderSectionBuilder.hrefKey($0.href.string) }
         let newHref = ReaderSectionBuilder.hrefKey(locator.href.string)
@@ -702,6 +753,10 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
             // Skipped mid-scrub: the slider is the source of truth there, and a
             // refresh landing after release is what briefly showed a stale page.
             scheduleSettledPageDigitRefresh()
+        } else if !pageBarReady, !isScrubbing, pageBoxRemeasureTask == nil {
+            // A late first layout can outlive the bounded opening samples. A
+            // real same-chapter settle must recover the bar, not leave it dead.
+            schedulePageBarRemeasure()
         }
         currentLocator = locator
         // Mid-scrub locator settles are transient — the reader is flying past
@@ -738,10 +793,11 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
     /// (0.5 / 1.0 / 1.6s), not sequential sleeps that stacked to ~3.1s and outran
     /// the user-scroll mute. Each tick is independent so a cancelled gen aborts
     /// only that tick's publish. If the fixed schedule still hasn't reached
-    /// dual-agree by the last tick, keep retrying on a slower cadence (bounded)
-    /// rather than ever unmasking an unconfirmed count (C4) — a late-but-correct
-    /// digit beats an early-but-wrong one.
+    /// dual-agree by the last tick, keep retrying on a slower cadence (bounded),
+    /// retaining the final-attempt escape hatch for a measured count that drifts.
     func schedulePageBarRemeasure() {
+        // A recovery replaces older ticks without discarding an agreeing sample.
+        pageBarMeasureGeneration += 1
         let gen = pageBarMeasureGeneration
         // Front-loaded: dual-agree needs two ticks, so the *second* delay is
         // when the bar can first appear — at the old 0.5/1.0/1.6 spacing that
@@ -754,10 +810,9 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
     }
 
     /// `isFinalAttempt` (passed to `acceptLayoutPageCount`) means "last tick of
-    /// the whole bounded sequence" — it still lets a stale single-page hint
-    /// (C5) be overridden on the very last try. It must **not** bypass the
-    /// dual-agree requirement itself (C4); that gate is unconditional in
-    /// `acceptLayoutPageCount` regardless of this flag.
+    /// the whole bounded sequence" — the last try can override the single-page
+    /// hint and first-publish agreement gate. Vertical shrink still needs two
+    /// agreeing samples. Keep the measured-count fallback so seek stays usable.
     private func scheduleRemeasureTicks(generation: Int, delaysMs: [UInt64], continuationsRemaining: Int) {
         for (index, delayMs) in delaysMs.enumerated() {
             let isLastInBatch = index == delaysMs.count - 1
@@ -823,6 +878,7 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
         isFinalAttempt: Bool,
         digitOnly: Bool = false
     ) async {
+        guard pageBoxRemeasureTask == nil else { return }
         guard pageBarMeasureGeneration == generation else { return }
         guard let root = navigator?.view else { return }
         // Readium preloads neighboring spreads as full-size, non-hidden WKWebViews.
@@ -921,7 +977,7 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
     /// Accept a layout-measured swipe pageCount. First-publish digit prefers the
     /// same-webview scroll `measuredPage` (not progression). Later ticks may
     /// refine count but must not reseed the digit from progression.
-    private func acceptLayoutPageCount(
+    func acceptLayoutPageCount(
         _ pageCount: Int,
         measuredPage: Int?,
         preferHorizontal: Bool,
@@ -1022,6 +1078,7 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
     func navigator(_: any ViewportObservingNavigator, viewportDidChange viewport: NavigatorViewport?) {
         // Same freeze/exit gate as locator — dismiss must not flip completion.
         guard !isLocatorIngestionBlocked else { return }
+        guard pageBoxResizeLocator == nil else { return }
         let atEnd = ReadiumReaderCompletion.isAtEnd(viewport: viewport, readingOrder: readingOrder)
         let wasAtEnd = isAtPublicationEnd
         if atEnd != wasAtEnd {
@@ -1091,8 +1148,8 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
             source: overflowSource, injectionTime: .atDocumentStart, forMainFrameOnly: false
         ))
 
-        // Live swipe updates only (touch-armed). Open pageCount comes solely from
-        // Swift `scheduleVisualLayoutRemeasure` — no competing JS settle posts.
+        // Live swipe updates only (touch-armed). Layout counts, including resize,
+        // come from Swift's host observer + scheduled measures, never JS guesses.
         controller.removeScriptMessageHandler(forName: VisualPageMessageBridge.handlerName)
         controller.add(visualPageBridge, name: VisualPageMessageBridge.handlerName)
         // Debounce to scroll settle (not first mid-animation sample). Throttle-on-
@@ -1185,7 +1242,7 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
     /// a whole line for the current text size.
     ///
     /// Geometry rules (C2 — corrected for Readium CSS):
-    /// 1. **One system source** — window safe area, frozen across chrome
+    /// 1. **One system source** — hosting view safe area, frozen across chrome
     ///    show/hide so status-bar hide cannot grow the box mid-read.
     /// 2. **Vertical clearance = full frozen safe area** — first/last ink sit at
     ///    `contentInset` only. Readium `pageMargins` are **horizontal** only
@@ -1202,26 +1259,13 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
     /// Readium's `EPUBReflowableSpreadView`); the navigator is full-screen under
     /// `.ignoresSafeArea()`.
     func navigatorContentInset(_ navigator: VisualNavigator) -> UIEdgeInsets? {
-        let view = (navigator as? UIViewController)?.view
-        let window = view?.window
-        let liveHeight = view?.bounds.height ?? 0
-        // Ignore zero-height pre-layout queries so a good seed is not clobbered.
-        if liveHeight > 1 {
-            let liveTop = window?.safeAreaInsets.top ?? 0
-            let liveBottom = window?.safeAreaInsets.bottom ?? 0
-            refreshFrozenPageBoxGeometry(
-                viewHeight: liveHeight, safeTop: liveTop, safeBottom: liveBottom
-            )
-        }
-        let height = frozenPageBoxViewHeight > 0
-            ? frozenPageBoxViewHeight
-            : max(liveHeight, 0)
+        let liveHeight = (navigator as? UIViewController)?.view.bounds.height ?? 0
+        let height = pageBoxGeometry.size.height > 1
+            ? pageBoxGeometry.size.height : max(liveHeight, 0)
         let insets = Self.pageBoxContentInsets(
             viewHeight: height,
-            safeTop: frozenPageBoxSafeTop > 0 ? frozenPageBoxSafeTop : (window?.safeAreaInsets.top ?? 0),
-            safeBottom: frozenPageBoxSafeBottom > 0
-                ? frozenPageBoxSafeBottom
-                : (window?.safeAreaInsets.bottom ?? 0),
+            safeTop: pageBoxGeometry.safeInsets.top,
+            safeBottom: pageBoxGeometry.safeInsets.bottom,
             lineHeight: CGFloat(renderedLineHeightPoints),
             // The live horizontal gutter, so bottom breathing room tracks the
             // margin the reader is actually rendering with (Customize → Margins).
@@ -1231,28 +1275,9 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
             snapsToLineGrid: UserDefaults.standard.string(forKey: "readerMode")
                 == ReadingMode.paged.rawValue
         )
+        // Paged Readium ignores horizontal contentInset. The full reader surface
+        // is padded to the host's side safe areas before the navigator is laid out.
         return UIEdgeInsets(top: insets.top, left: 0, bottom: insets.bottom, right: 0)
-    }
-
-    /// Accept new safe-area / height only when the navigator's bounds change
-    /// (rotation, split view). Chrome-driven status-bar hide keeps the freeze.
-    /// Never accepts `viewHeight == 0` (pre-layout) as a geometry change.
-    private func refreshFrozenPageBoxGeometry(
-        viewHeight: CGFloat, safeTop: CGFloat, safeBottom: CGFloat
-    ) {
-        guard viewHeight > 1 else { return }
-        let heightChanged = frozenPageBoxViewHeight <= 1
-            || abs(viewHeight - frozenPageBoxViewHeight) > 1
-        if heightChanged {
-            frozenPageBoxViewHeight = viewHeight
-            frozenPageBoxSafeTop = max(0, safeTop)
-            frozenPageBoxSafeBottom = max(0, safeBottom)
-            return
-        }
-        // Same height: keep freeze. Prefer non-zero live values if we froze
-        // before the window was ready (0,0).
-        if frozenPageBoxSafeTop == 0, safeTop > 0 { frozenPageBoxSafeTop = safeTop }
-        if frozenPageBoxSafeBottom == 0, safeBottom > 0 { frozenPageBoxSafeBottom = safeBottom }
     }
 
     /// After typography / preference submit, Readium updates CSS but does not
