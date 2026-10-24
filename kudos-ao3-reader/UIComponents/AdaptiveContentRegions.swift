@@ -144,7 +144,7 @@ struct DashboardRegionHost<Content: View>: View {
             content()
         } else {
             GeometryReader { proxy in
-                let regions = regions(in: proxy)
+                let regions = AdaptiveContentRegions(viewport: proxy)
                 let viewport = regions.viewport
                 content()
                     .environment(\.dashboardContentRegions, regions)
@@ -158,21 +158,23 @@ struct DashboardRegionHost<Content: View>: View {
         content()
         #endif
     }
+}
 
-    #if os(iOS)
-    private func regions(in proxy: GeometryProxy) -> AdaptiveContentRegions {
+#if os(iOS)
+extension AdaptiveContentRegions {
+    @MainActor init(viewport proxy: GeometryProxy) {
         var reservations: [AdaptiveContentRegions.Reservation] = []
         if #available(iOS 27.1, *) {
             reservations = (proxy.reservedRegions(kind: .division, layoutDirectionBehavior: .fixed)
                 + proxy.reservedRegions(kind: .occlusion, layoutDirectionBehavior: .fixed))
                 .map { .init(frame: $0.frame, isActive: $0.isActive) }
         }
-        // This host participates in normal safe-area layout, like T-447's
+        // The consuming host participates in normal safe-area layout, like T-447's
         // viewport: its proposal already excludes navigation/tab chrome.
-        return AdaptiveContentRegions(bounds: CGRect(origin: .zero, size: proxy.size), reservations: reservations)
+        self.init(bounds: CGRect(origin: .zero, size: proxy.size), reservations: reservations)
     }
-    #endif
 }
+#endif
 
 /// Intrinsic height, physical pane coordinates, logical child/VoiceOver order.
 struct DashboardRegionRow: Layout {

@@ -10,11 +10,9 @@ import SwiftUI
 /// whether it's a locally saved work or a remote AO3 summary (Home, Library, Browse,
 /// Search, Bookmarks, AO3 lists, …). There is no separate "compact" remote detail.
 ///
-/// Redesigned as a work-centric hub matching Account / Author Profiles: a hero
-/// identity card, then a four-way segmented control — **Overview** (summary,
-/// quick actions, metadata cards, series), **Tags** (AO3 classification chips),
-/// **Discussion** (native comments entry points), **Library** (personal state:
-/// saved/later/queues/collections/download/progress/My Tags).
+/// Identity, Read/Resume and actions sit beside summary and details when the
+/// iOS container fits two independently scrolling regions; narrow containers
+/// keep the continuous page. Local state lives in the My copy sheet.
 ///
 /// `Read` always opens the reader; it never pushes another detail page. A remote work
 /// is resolved to a local `SavedWork` lazily — only when the reader or a management
@@ -49,6 +47,7 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
     @Environment(\.dismiss) private var dismiss
     @Environment(\.accessibilityReduceMotion) var reduceMotion
     @Environment(\.dynamicTypeSize) var dynamicTypeSize
+    @Environment(\.layoutDirection) var detailLayoutDirection
     @Environment(AppRouter.self) var router
     @Environment(PrivacyGate.self) var gate
     @AppStorage("hideMatureContent") var hideMature = true
@@ -88,6 +87,15 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
     @State var showingAddToCollection = false
     @State var working = false // a download / import is in flight
     @State var loadError: String?
+    #if os(iOS)
+    @State var seriesLoadError: String?
+    #else
+    // macOS retains its existing single status channel.
+    var seriesLoadError: String? {
+        get { loadError }
+        nonmutating set { loadError = newValue }
+    }
+    #endif
     @State private var readerWork: SavedWork? // non-nil → push the reader
     @State var queuingSeries = false
     @State var showingAddToQueue = false
@@ -143,12 +151,7 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
     }
 
     var body: some View {
-        List {
-            heroSection
-            statusSection
-            pageSections
-        }
-        .cardList()
+        detailContent
         // Rows at their own padding, not the List minimum (L3-FORM-1).
         .environment(\.defaultMinListRowHeight, 0)
         // Spec 1a washes the page in the work's own hue and runs it 620pt down,
@@ -245,7 +248,21 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
             .screenTint(workPalette)
     }
 
-    // MARK: - Hero + section control
+    @ViewBuilder
+    private var detailContent: some View {
+        #if os(iOS)
+        adaptiveDetailContent
+        #else
+        List {
+            heroSection
+            statusSection(error: loadError)
+            pageSections
+        }
+        .cardList()
+        #endif
+    }
+
+    // MARK: - Identity and page sections
 
     /// The work's own hue, the way every other work surface in the app derives
     /// it — primary fandom, else the title. A work page is scoped to a work, so
@@ -260,7 +277,7 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
     /// Artboard 1a's identity block: header, figure strip, resume card. Each is
     /// its own row on the wash rather than one card, at the spec's own gutters
     /// (26pt for the header, 22pt for the two panels under it).
-    private var heroSection: some View {
+    var heroSection: some View {
         Section {
             WorkDetailIdentityHeader(
                 title: displayTitle,
@@ -341,15 +358,16 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
         }
     }
 
-    /// Transient feedback (refresh/queue notices, errors, series-preservation
-    /// progress) lives directly under the section control so it stays visible no
-    /// matter which section triggered it.
+    /// Primary-action feedback follows Read/Resume. In two regions, a series
+    /// download error instead follows the series action in the trailing list.
     @ViewBuilder
-    private var statusSection: some View {
-        if loadError != nil || queueNotice != nil || preservingSeries {
+    func statusSection(error: String?, includesQueueStatus: Bool = true) -> some View {
+        let notice = includesQueueStatus ? queueNotice : nil
+        let preserving = includesQueueStatus && preservingSeries
+        if error != nil || notice != nil || preserving {
             Section {
                 VStack(alignment: .leading, spacing: 8) {
-                    if preservingSeries,
+                    if preserving,
                        let progress = seriesPreservationProgress,
                        progress.total > 0 {
                         ProgressView(
@@ -359,23 +377,23 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
                         .accentFill()
                     }
 
-                    if let loadError {
-                        Text(loadError)
+                    if let error {
+                        Text(error)
                             .font(.footnote)
                             .foregroundStyle(.red)
                         // An error names its way back, as every other state does.
-                        if loadError.hasPrefix("Refresh failed") {
+                        if error.hasPrefix("Refresh failed") {
                             Button("Try Again") { Task { await refreshDetails() } }
                                 .font(.footnote.weight(.semibold))
                                 .disabled(working)
                         }
-                    } else if let queueNotice {
-                        Text(queueNotice)
+                    } else if let notice {
+                        Text(notice)
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
 
-                    if preservingSeries {
+                    if preserving {
                         Button(role: .cancel) {
                             cancelSeriesPreservation()
                         } label: {
@@ -751,6 +769,7 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
 
     private func refreshDetails() async {
         loadError = nil
+        seriesLoadError = nil
         queueNotice = nil
         resolveExistingIfNeeded()
         do {
@@ -1134,7 +1153,7 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
     func downloadSeries() async {
         guard let work = localWork, let url = URL(string: work.seriesURL) else { return }
         queuingSeries = true
-        loadError = nil
+        seriesLoadError = nil
         do {
             let works = try await AO3Client.shared.seriesWorks(seriesURL: url)
             let items = works.map {
@@ -1145,9 +1164,9 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
             }
             downloadQueue.enqueue(items, into: context)
         } catch let error as AO3Error {
-            loadError = error.errorDescription
+            seriesLoadError = error.errorDescription
         } catch {
-            loadError = "Couldn't load the series from AO3."
+            seriesLoadError = "Couldn't load the series from AO3."
         }
         queuingSeries = false
     }
