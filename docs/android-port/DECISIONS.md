@@ -2791,3 +2791,12 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   Reversal: port the iPhone's form for any one of the first three if the owner prefers it; the last two are
   demo data, with nothing to reverse. The paired tiles are in `~/kudos-tools/pairs/tiles-r2/`.
   Evidence: `briefs/D8-result.md`.
+- **2026-10-24 · Round 3's accepted difference and its open iPhone item (Claude-CLI).**
+  - `authorbookmarks`: Load More is a Material text button, so its label is Material's medium-weight label
+    style, where the iPhone's is regular body text; both are primary ink since A100.
+    `author/AuthorProfileScreen.kt:1164-1166`. Reversal: give the label the body style.
+  - `libraryfilters`: Android's Library and Home section filter sheets use the app's palette (red; brown in
+    Sepia), as iOS's own rules say (`App/ThemeManager.swift:57-92`, A100). The iPhone's sheet is purple in
+    every column, the first work's hue, which those rules don't allow. Treated as the iPhone's fault, I20.
+    If I20 finds the purple intended, Android follows it and this entry is reversed.
+  The paired tiles are in `~/kudos-tools/pairs/tiles-r3/`.
