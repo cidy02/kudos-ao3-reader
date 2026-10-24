@@ -43,6 +43,9 @@ struct WritingTextEditor: View {
     @State private var showLink = false
     @State private var link = "https://"
     @State private var showDeleteChapter = false
+    #if os(iOS)
+    @State private var showEditorHelp = false
+    #endif
     /// OD1's read-only preview. The text view stays mounted under it, so the
     /// selection and the undo stack survive a round trip.
     @State private var isPreviewing = false
@@ -97,9 +100,13 @@ struct WritingTextEditor: View {
                 } else { ProgressView().accentFill() }
                 if isPreviewing { preview }
             }
-            Text("Recovery copy on this device · Save from the work form")
+            recoveryNotice
                 .font(.caption).foregroundStyle(.secondary)
-                // Whole at the largest text: the editor above gives way, not this line.
+                #if os(iOS)
+                // Leave room to write; the whole status is also in Editor help.
+                .lineLimit(dynamicTypeSize.isAccessibilitySize ? 1 : nil)
+                .accessibilityLabel(recoveryNotice)
+                #endif
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .trailing)
                 .padding(.horizontal)
@@ -107,8 +114,7 @@ struct WritingTextEditor: View {
             // Above the keyboard: the screen avoids it, so the bar rides on top.
             tagBar
             #else
-            Text("AO3 supports only certain formatting. The toolbar adds formatting that AO3 "
-                + "can keep when you post.")
+            formattingNotice
                 .font(.caption2).foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal).padding(.bottom, 6)
@@ -188,6 +194,15 @@ struct WritingTextEditor: View {
         }
     }
 
+    private var recoveryNotice: Text {
+        Text("Recovery copy on this device · Save from the work form")
+    }
+
+    private var formattingNotice: Text {
+        Text("AO3 supports only certain formatting. The toolbar adds formatting that AO3 "
+            + "can keep when you post.")
+    }
+
     /// 1bv's overflow menu, less "Edit tags directly": this buffer is always
     /// the markup (OD1). Preview and Delete are the chapter editor's alone.
     private var moreMenu: some View {
@@ -254,6 +269,7 @@ struct WritingTextEditor: View {
         }
     }
 
+    #if os(iOS)
     /// The tag bar: every AO3-allowed tag, as 1bv draws it (the tag over what it does).
     private var tagBar: some View {
         VStack(alignment: .leading, spacing: 9) {
@@ -264,11 +280,25 @@ struct WritingTextEditor: View {
                     }
                 }
             }
-            Text("AO3 supports only certain formatting. The toolbar adds formatting that AO3 "
-                + "can keep when you post.")
+            .disabled(isPreviewing)
+            if dynamicTypeSize.isAccessibilitySize {
+                Button("Editor help", systemImage: "info.circle") { showEditorHelp = true }
                 .font(.caption2)
+                .lineLimit(1)
+                .buttonStyle(.plain)
                 .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+                .minimumHitTarget()
+                .alert("Editor help", isPresented: $showEditorHelp) {
+                    Button("OK", role: .cancel) {}
+                } message: {
+                    Text("\(recoveryNotice)\n\n\(formattingNotice)")
+                }
+            } else {
+                formattingNotice
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 11)
@@ -287,8 +317,9 @@ struct WritingTextEditor: View {
                 .frame(height: 0.5)
                 .accessibilityHidden(true)
         }
-        .disabled(isPreviewing)
     }
+
+    #endif
 
     #if os(macOS)
     /// The same tags, in the window toolbar.
@@ -330,6 +361,11 @@ struct WritingTextEditor: View {
                     .font(.system(size: tagNameFontSize))
                     .foregroundStyle(.secondary)
             }
+            #if os(iOS)
+            .lineLimit(dynamicTypeSize.isAccessibilitySize ? 1 : nil)
+            .fixedSize(horizontal: dynamicTypeSize.isAccessibilitySize,
+                       vertical: dynamicTypeSize.isAccessibilitySize)
+            #endif
             .padding(.horizontal, 11)
             .padding(.vertical, 7)
             .background(
