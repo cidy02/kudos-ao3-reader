@@ -155,7 +155,11 @@ struct DashboardCardShelf<Content: View>: View {
 
     var body: some View {
         #if os(iOS)
-        if let regions, groupsInSinglePane || regions.viewportPanes.count > 1
+        // One column in a single pane would page one card at a time with no hint
+        // of the next; the compact scroll keeps it in view.
+        if let regions, regions.viewportPanes.count > 1
+            || (groupsInSinglePane && AdaptiveContentRegions.columns(
+                in: regions.viewport.width, cardWidth: cardSize.width(in: nil)) > 1)
             || AdaptiveContentRegions.usesGroupedShelves(in: regions.viewport.size) {
             let panes = direction == .rightToLeft ? Array(regions.viewportPanes.reversed()) : regions.viewportPanes
             let columns = panes.map {
