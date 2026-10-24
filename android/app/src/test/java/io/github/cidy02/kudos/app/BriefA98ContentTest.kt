@@ -172,15 +172,19 @@ class BriefA98ContentTest {
         compose.runOnIdle { assertEquals(listOf(3), picked); assertTrue(dismissed) }
     }
 
-    @Test fun libraryChoicesInheritTheSuppliedPaletteAndStillApplyLive() {
+    @Test fun libraryChoicesUseTheAppPaletteUnlessExplicitlyOverriddenAndStillApplyLive() {
         var filters by mutableStateOf(LibraryFilterState())
         var sort by mutableStateOf(LibrarySort.Natural)
         var applied = false
         var pagePalette by mutableStateOf(false)
         show {
-            LibraryFilterPanel(filters, sort, emptyList(), emptyList(), { filters = it }, { sort = it },
-                { applied = true }, {}, {}, palette = if (pagePalette) SubjectPalette.fromHue(0.47, tokens.theme)
-                    else tokens.scopePalette)
+            val page = SubjectPalette.fromHue(0.47, tokens.theme)
+            SubjectPaletteTheme(page) {
+                if (pagePalette) LibraryFilterPanel(filters, sort, emptyList(), emptyList(),
+                    { filters = it }, { sort = it }, { applied = true }, {}, {}, palette = page)
+                else LibraryFilterPanel(filters, sort, emptyList(), emptyList(),
+                    { filters = it }, { sort = it }, { applied = true }, {}, {})
+            }
         }
         for (custom in listOf(false, true)) for (theme in themes) {
             compose.runOnIdle { mode = theme; pagePalette = custom }

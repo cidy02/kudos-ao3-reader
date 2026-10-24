@@ -52,6 +52,7 @@ import io.github.cidy02.kudos.network.ao3.search.AO3Completion
 import io.github.cidy02.kudos.network.ao3.search.AO3Rating
 import io.github.cidy02.kudos.network.ao3.search.AO3Warning
 import io.github.cidy02.kudos.ui.components.GlassFieldBar
+import io.github.cidy02.kudos.ui.subject.LocalAppPalette
 import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
 import io.github.cidy02.kudos.ui.subject.SubjectFieldLabel
 import io.github.cidy02.kudos.ui.subject.SubjectFormRow
@@ -79,7 +80,7 @@ fun LibraryFilterPanel(
     searchQuery: String? = null,
     onSearchQueryChange: (String) -> Unit = {},
     works: List<SavedWork> = emptyList(),
-    palette: SubjectPalette = LocalKudosTokens.current.scopePalette
+    palette: SubjectPalette = LocalAppPalette.current
 ) = SubjectPaletteTheme(palette) {
     val tokens = LocalKudosTokens.current
     val languages = remember(works) { works.map { it.language }.filter { it.isNotEmpty() }.distinct().sorted() }

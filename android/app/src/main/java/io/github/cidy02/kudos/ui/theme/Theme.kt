@@ -15,6 +15,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 import io.github.cidy02.kudos.ui.subject.KudosTokens
+import io.github.cidy02.kudos.ui.subject.LocalAppPalette
 import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
 import io.github.cidy02.kudos.ui.subject.LocalSubjectPalette
 import io.github.cidy02.kudos.ui.subject.ReaderTheme
@@ -147,6 +148,7 @@ fun KudosTheme(
 
     CompositionLocalProvider(
         LocalKudosTokens provides tokens,
+        LocalAppPalette provides scopePalette,
         LocalSubjectPalette provides scopePalette
     ) {
         MaterialTheme(colorScheme = colorScheme, typography = KudosTypography) {
