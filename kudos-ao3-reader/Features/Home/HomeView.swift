@@ -147,31 +147,34 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
         NavigationStack(path: $path) {
             Group {
                 if hasSectionCache {
-                    ScrollView {
-                        // 1b: 22pt between sections.
-                        VStack(alignment: .leading, spacing: 22) {
-                            resumeSection
-                            readingQueuesCarousel
-                            ForEach(HomeCollectionShelves.shelves(homeCollections)) { collection in
-                                HomeCollectionShelf(
-                                    collection: collection,
-                                    works: HomeCollectionShelves.works(in: collection, visible: passesPrivacy),
-                                    onSeeAll: { path.append(collection) }
-                                )
+                    DashboardRegionHost {
+                        ScrollView {
+                            // 1b: 22pt between sections.
+                            VStack(alignment: .leading, spacing: 22) {
+                                resumeSection
+                                readingQueuesCarousel
+                                ForEach(HomeCollectionShelves.shelves(homeCollections)) { collection in
+                                    HomeCollectionShelf(
+                                        collection: collection,
+                                        works: HomeCollectionShelves.works(in: collection, visible: passesPrivacy),
+                                        onSeeAll: { path.append(collection) }
+                                    )
+                                }
+                                localSection(.recentlyUpdated, works: recentlyUpdated)
+                                subscriptionsSection
                             }
-                            localSection(.recentlyUpdated, works: recentlyUpdated)
-                            subscriptionsSection
+                            .padding(.vertical, 12)
                         }
-                        .padding(.vertical, 12)
+                        .refreshable { await refreshHome() }
+                        .scrollAwayTopChrome()
                     }
-                    .refreshable { await refreshHome() }
-                    .scrollAwayTopChrome()
                 } else {
                     TabDashboardShell(
                         sectionTitles: [
                             "Reading Now", "Reading Queues", "Recently Updated",
                             "Subscriptions"
-                        ]
+                        ],
+                        showsResumeHero: true
                     )
                 }
             }
@@ -335,6 +338,7 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
                     // in the non-empty branch below, so the section doesn't
                     // appear to rename itself depending on whether it has content.
                     SectionRuleHeader(title: "Continue Reading")
+                        .dashboardLeadingRegion()
 
                     SectionEmptyState(
                         message: HomeSectionKind.readingNow.emptyMessage,
@@ -342,6 +346,7 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
                     )
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 16)
+                    .dashboardLeadingRegion()
 
                     HStack(spacing: 12) {
                         Button("Browse AO3") {
@@ -359,6 +364,7 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
                         .accentFill()
                     }
                     .padding(.horizontal, 16)
+                    .dashboardLeadingRegion()
                 }
             } else {
                 // Hero = most recent; strip = next up to 4 (5 visible total).
@@ -388,58 +394,41 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
                             ? { router.showLibrarySection(.readingNow, from: "Home") }
                             : nil
                     )
+                    .dashboardLeadingRegion()
 
-                    HomeResumeHero(
-                        work: heroWork,
-                        isSelecting: isSelecting,
-                        isSelected: selection.contains(heroWork.id),
-                        onToggleSelection: { toggleSelection(heroWork) },
-                        onSelect: selectAction(for: heroWork)
-                    )
-                    .downloadDimmed(heroWork)
-                    .padding(.horizontal, 16)
-
-                    if !stripWorks.isEmpty, !stripCollapsed {
-                        // Negative top inset: the strip belongs to the hero
-                        // above it, and a full 14pt section gap read as two
-                        // separate shelves (spec 1b uses margin-top: -8px).
-                        // Same compact portrait card every other Home carousel uses
-                        // (see localSection below), not the wide book-row strip this
-                        // used to be. SensitiveWorkCoverCard doesn't wrap its own
-                        // NavigationLink/selection handling, so both branches are
-                        // spelled out here, matching localSection's pattern exactly.
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(alignment: .top, spacing: 12) {
-                                ForEach(stripWorks) { work in
-                                    if isSelecting {
-                                        SensitiveWorkCoverCard(
-                                            work: work,
-                                            footer: footer(.readingNow, work),
-                                            progress: progress(.readingNow, work),
-                                            isSelecting: true,
-                                            isSelected: selection.contains(work.id),
-                                            onToggleSelection: { toggleSelection(work) }
-                                        )
-                                        .localWorkContextMenu(work: work, onSelect: selectAction(for: work))
-                                    } else {
-                                        NavigationLink(value: LocalWorkDestination.reader(work)) {
-                                            SensitiveWorkCoverCard(
-                                                work: work,
-                                                footer: footer(.readingNow, work),
-                                                progress: progress(.readingNow, work)
-                                            )
-                                        }
-                                        .buttonStyle(.plain)
-                                        .localWorkContextMenu(work: work, onSelect: selectAction(for: work))
-                                    }
+                    HomeResumeComposition(hasNext: !stripWorks.isEmpty && !stripCollapsed) {
+                        HomeResumeHero(
+                            work: heroWork,
+                            isSelecting: isSelecting,
+                            isSelected: selection.contains(heroWork.id),
+                            onToggleSelection: { toggleSelection(heroWork) },
+                            onSelect: selectAction(for: heroWork)
+                        )
+                        .downloadDimmed(heroWork)
+                    } next: {
+                        ForEach(stripWorks) { work in
+                            if isSelecting {
+                                SensitiveWorkCoverCard(
+                                    work: work,
+                                    footer: footer(.readingNow, work),
+                                    progress: progress(.readingNow, work),
+                                    isSelecting: true,
+                                    isSelected: selection.contains(work.id),
+                                    onToggleSelection: { toggleSelection(work) }
+                                )
+                                .localWorkContextMenu(work: work, onSelect: selectAction(for: work))
+                            } else {
+                                NavigationLink(value: LocalWorkDestination.reader(work)) {
+                                    SensitiveWorkCoverCard(
+                                        work: work,
+                                        footer: footer(.readingNow, work),
+                                        progress: progress(.readingNow, work)
+                                    )
                                 }
+                                .buttonStyle(.plain)
+                                .localWorkContextMenu(work: work, onSelect: selectAction(for: work))
                             }
-                            .uniformWorkCardHeights()
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 6)
                         }
-                        .horizontalScrollViewport(preservesShadows: true, cardGutter: 16)
-                        .padding(.top, -8)
                     }
                 }
             }

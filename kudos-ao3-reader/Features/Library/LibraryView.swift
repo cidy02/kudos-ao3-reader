@@ -128,7 +128,7 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
         NavigationStack(path: $path) {
             Group {
                 if isSelecting && showingSelectionList {
-                    selectList
+                    DashboardRegionHost { selectList.dashboardLeadingRegion(fillsHeight: true) }
                 } else {
                     dashboard
                 }
@@ -327,19 +327,21 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
     }
 
     private var dashboard: some View {
-        Group {
-            if hasSectionCache {
-                realDashboard
-            } else {
-                // First paint inside the progressive tab content — keep showing
-                // skeletons until the section cache is ready (usually one yield).
-                TabDashboardShell(
-                    sectionTitles: [
-                        "Reading Now", "Saved for Later", "Finished",
-                        "Collections", "Downloaded", "Reading History", "Favorites"
-                    ],
-                    showFilterChips: true
-                )
+        DashboardRegionHost {
+            Group {
+                if hasSectionCache {
+                    realDashboard
+                } else {
+                    // First paint inside the progressive tab content — keep showing
+                    // skeletons until the section cache is ready (usually one yield).
+                    TabDashboardShell(
+                        sectionTitles: [
+                            "Reading Now", "Saved for Later", "Finished",
+                            "Collections", "Downloaded", "Reading History", "Favorites"
+                        ],
+                        showFilterChips: true
+                    )
+                }
             }
         }
     }
@@ -347,7 +349,7 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
     @ViewBuilder
     private var realDashboard: some View {
         if dashboardLayout == .ledger {
-            ledgerDashboard
+            ledgerDashboard.dashboardLeadingRegion(fillsHeight: true)
         } else {
             shelvesDashboard
         }
@@ -475,7 +477,7 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
                 localCarousel(.history)
                 localCarousel(.favorites)
                 if recentlyDeletedCount > 0 {
-                    recentlyDeletedRow
+                    recentlyDeletedRow.dashboardLeadingRegion()
                 }
             }
             .padding(.vertical, 12)
@@ -631,6 +633,7 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
                 .padding(.horizontal, 16)
             }
             .horizontalScrollViewport()
+            .dashboardLeadingRegion()
         }
     }
 
