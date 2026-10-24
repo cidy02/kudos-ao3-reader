@@ -250,6 +250,9 @@ struct LibrarySectionListView: View {
             #endif
             .filterPanelPresentation(isPresented: $showingFilters) {
                 LibraryFilterPanel(filters: $filters, works: items, userTagNames: allTags.map(\.name))
+                    #if os(iOS)
+                    .modifier(LibrarySectionFilterAccent())
+                    #endif
                     .inspectorColumnWidth(min: 280, ideal: 320, max: 380)
             }
             .libraryWorkRemovalConfirmations(pendingDelete: $pendingDelete, pendingRemoval: $pendingRemoval)
