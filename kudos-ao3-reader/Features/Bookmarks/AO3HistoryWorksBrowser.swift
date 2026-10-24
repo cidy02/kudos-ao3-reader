@@ -233,6 +233,7 @@ struct AO3HistoryFilterRail: View {
             }
             .padding(.horizontal, 16)
         }
+        .horizontalScrollViewport()
     }
 }
 

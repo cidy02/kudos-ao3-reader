@@ -122,6 +122,7 @@ struct AccessibilityChipRail<Content: View>: View {
                 }
                 .padding(.horizontal, horizontalPadding)
             }
+            .horizontalScrollViewport()
         }
     }
 }
