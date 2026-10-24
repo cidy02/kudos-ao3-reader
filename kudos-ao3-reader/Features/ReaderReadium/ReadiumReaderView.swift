@@ -74,6 +74,7 @@ private struct ReaderPageSkeletonFill: View {
 struct ReadiumReaderView: View {
     @Bindable var work: SavedWork
 
+    @Environment(\.layoutDirection) private var layoutDirection
     @Environment(AppRouter.self) private var router
     @Environment(ThemeManager.self) private var themeManager
     @Environment(AO3AuthService.self) private var auth
@@ -373,11 +374,10 @@ struct ReadiumReaderView: View {
             // Readium's WebView swallows the system edge-swipe; add our own.
             .edgeSwipeToGoBack { dismissReader() }
             .task(id: bookLoadToken) {
-                // Seed page-box inputs before the navigator exists: first
-                // content-inset query runs during setup.
+                // Typography is ready before the navigator's first inset query;
+                // geometry comes from the attached peel host's actual bounds.
                 book.renderedLineHeightPoints = textStyle.fontSizePt * textStyle.lineHeight
                 book.renderedPageMarginPoints = max(0, textStyle.margin)
-                book.seedPageBoxGeometryFromWindowIfNeeded()
                 await openBook()
             }
             .onChange(of: preferencesToken) { _, _ in applyReaderPreferences() }
@@ -421,6 +421,7 @@ struct ReadiumReaderView: View {
                 }
             }
             .onDisappear {
+                book.cancelPageBoxRemeasure()
                 // Safety net: `isScrubbing` gates the debounced progress write,
                 // so a drag that never delivers `onEditingChanged(false)` (view
                 // torn down mid-gesture, slider disabled mid-drag) would leave
@@ -967,7 +968,10 @@ struct ReadiumReaderView: View {
     /// scaled/offset with the card.
     private var dismissableReaderCard: some View {
         // UIKit host owns the peel transform for page + chrome as one unit.
-        ReaderDismissPeelHost(surface: dismissSurface, reduceMotion: reduceMotion) {
+        ReaderDismissPeelHost(
+            surface: dismissSurface, reduceMotion: reduceMotion,
+            onGeometryChange: { book.updatePageBoxGeometry(size: $0, safeInsets: $1) }
+        ) {
             content
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 // Each chrome layer sizes to its own content (no infinite-frame
@@ -977,6 +981,9 @@ struct ReadiumReaderView: View {
                 .overlay(alignment: .bottom) { bottomChromeLayer }
                 .overlay { fanDismissBackdropLayer }
                 .overlay(alignment: .topTrailing) { fanMenuLayer }
+                // Inset text, loading skeleton, and every chrome layer together.
+                // The fill stays full-bleed; paged Readium ignores side insets.
+                .padding(book.pageBoxGeometry.horizontalInsets(in: layoutDirection))
                 .background(readerTheme.backgroundColor)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

@@ -355,6 +355,22 @@ struct DebugPresented: Hashable, Identifiable {
 /// the same page route, plus the sheet or child page named in `DebugShots`.
 @MainActor
 enum DebugLaunchRoute {
+    #if os(iOS)
+    /// `-KudosDebugRotate "8 landscape 16 portrait"`: turns the window at those seconds after launch, so
+    /// a shot can catch a screen after a change of size (the Simulator has no rotate command).
+    @MainActor static func runRotations() async {
+        let steps = (UserDefaults.standard.string(forKey: "KudosDebugRotate") ?? "").split(separator: " ")
+        var elapsed = 0.0
+        for index in stride(from: 0, to: steps.count - 1, by: 2) {
+            guard let seconds = Double(steps[index]) else { return }
+            try? await Task.sleep(for: .seconds(max(0, seconds - elapsed)))
+            elapsed = seconds
+            let mask: UIInterfaceOrientationMask = steps[index + 1] == "portrait" ? .portrait : .landscapeRight
+            ReaderOrientationLock.activeScene?.requestGeometryUpdate(.iOS(interfaceOrientations: mask))
+        }
+    }
+    #endif
+
     static var value: String? { UserDefaults.standard.string(forKey: "KudosDebugRoute") }
     static var opensLogin: Bool { value == "login" }
     /// `-KudosDebugOpenFilters YES`: the routed screen opens its filter panel.
