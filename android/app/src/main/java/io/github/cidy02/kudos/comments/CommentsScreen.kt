@@ -191,6 +191,11 @@ fun CommentsScreen(
     var sortMenuOpen by remember { mutableStateOf(false) }
     var pendingDeleteComment by remember { mutableStateOf<AO3Comment?>(null) }
     var pushedThreadRootId by remember { mutableStateOf<Long?>(null) }
+    // The iPhone's `thread:` shot: the Thread page, opened through the same path as "Continue thread".
+    DebugShotEffect("comments-thread", ready = state is CommentsUiState.Loaded) {
+        val roots = (state as? CommentsUiState.Loaded)?.thread?.comments ?: return@DebugShotEffect
+        pushedThreadRootId = debugShotThreadRootId(roots, expandedRootIds, visibleReplyCounts, collapsedRootIds)
+    }
 
     val swipeTracker = remember { CommentSwipeTracker() }
 
@@ -993,4 +998,21 @@ internal fun CommentsFilterRail(content: @Composable () -> Unit) {
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalArrangement = Arrangement.spacedBy(7.dp)
     ) { content() }
+}
+
+/**
+ * The conversation the `thread` screenshot opens, as the iPhone's `threadRootID(in:)` picks it: the root of the
+ * first "Continue thread" row if the list has one, else the first conversation with replies, else the first.
+ */
+internal fun debugShotThreadRootId(
+    roots: List<AO3Comment>,
+    expandedRootIds: Set<Long>,
+    visibleReplyCounts: Map<Long, Int>,
+    collapsedRootIds: Set<Long>
+): Long? {
+    val repliesByRoot = roots.associate { (it.numericId ?: 0L) to CommentThreadGeometry.flattenedReplies(it) }
+    CommentConversationBuilder.rows(roots, repliesByRoot, expandedRootIds, visibleReplyCounts, collapsedRootIds)
+        .firstNotNullOfOrNull { (it.item as? CommentConversationItem.ContinueThread)?.rootId }
+        ?.let { return it }
+    return (roots.firstOrNull { it.replies.isNotEmpty() } ?: roots.firstOrNull())?.numericId
 }

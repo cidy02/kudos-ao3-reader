@@ -52,6 +52,8 @@ internal fun debugShot(
     "customizetheme" -> DebugShot(Routes.Settings, listOf("settings", "appearance"))
     "formattingtray" -> DebugShot(Routes.comments(12345, composes = true), listOf("comment-composer"))
     "chapterpicker" -> DebugShot(Routes.comments(12345), listOf("comments"))
+    // The iPhone's `thread:Sodium Lights` opens Sodium Lights' comments (its demo id) and pushes a thread.
+    "thread" -> DebugShot(Routes.comments(999_000_005), listOf("comments-thread"))
     "inboxfilter" -> DebugShot(Routes.AccountInbox, listOf("inbox"))
     "authorabout" -> DebugShot("author-about/AO3_Reader")
     "authorbookmarks" -> DebugShot(Routes.authorProfile("AO3_Reader", io.github.cidy02.kudos.author.AuthorTab.Bookmarks))
