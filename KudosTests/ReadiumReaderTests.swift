@@ -26,7 +26,7 @@ struct ReadiumReaderTests {
             theme: .sepia,
             fontFamily: FontFamily(rawValue: "Georgia"),
             readingMode: .paged,
-            columnCount: .one
+            twoPageSpread: false
         )
 
         #expect(preferences.backgroundColor?.rawValue == 0xFBF0D9)
@@ -43,6 +43,31 @@ struct ReadiumReaderTests {
 
         let properties = ReadiumReaderStyleMapper.readingSystemProperties.cssProperties()
         #expect(properties["--RS__pageGutter"] == "1.00000px")
+    }
+
+    @Test func pagedColumnsHonorSpreadDecision() {
+        let spread = ReadiumReaderStyleMapper.preferences(
+            style: ReaderTextStyle(), theme: .light, fontFamily: nil,
+            readingMode: .paged, twoPageSpread: true
+        )
+        let single = ReadiumReaderStyleMapper.preferences(
+            style: ReaderTextStyle(), theme: .light, fontFamily: nil,
+            readingMode: .paged, twoPageSpread: false
+        )
+
+        #expect(spread.columnCount == .auto)
+        #expect(single.columnCount == .one)
+    }
+
+    @Test(arguments: [false, true])
+    func scrollModeNeverForcesColumns(twoPageSpread: Bool) {
+        let preferences = ReadiumReaderStyleMapper.preferences(
+            style: ReaderTextStyle(), theme: .light, fontFamily: nil,
+            readingMode: .scroll, twoPageSpread: twoPageSpread
+        )
+
+        #expect(preferences.columnCount == nil)
+        #expect(preferences.scroll == true)
     }
 
     @Test func builtInFontsKeepFallbacksAndImportedFontsInjectFontFace() throws {
