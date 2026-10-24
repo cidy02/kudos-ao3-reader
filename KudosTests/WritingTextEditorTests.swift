@@ -3,6 +3,7 @@ import Testing
 import SwiftUI
 @testable import Kudos
 
+@Suite(.serialized)
 struct WritingTextEditorTests {
     @Test func recoveryPreservesMarkupAndSeparatesAccountsAndFields() throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
@@ -37,6 +38,51 @@ struct WritingTextEditorTests {
         #expect(link.text == "<a href=\"https://example.com/?a=1&amp;b=2\">site</a>")
         #expect(WritingMarkup.insertion(tag: "br", selected: "keep")?.text == "<br>keep")
     }
+
+    #if os(iOS)
+    /// I19: measure the actual text viewport with the keyboard down on a 402×874 pt iPhone.
+    /// The old wrapping recovery status and formatting note leave only one line at AX5.
+    @Test @MainActor func fiveLinesStayVisibleAtTheLargestTextSize() async throws {
+        let host = UIHostingController(rootView: NavigationStack {
+            WritingTextEditor(
+                text: .constant("One\nTwo\nThree\nFour\nFive\nSix"), title: "Summary",
+                account: "i19-test", target: UUID().uuidString, field: "summary"
+            )
+            .navigationBarTitleDisplayMode(.inline)
+        }
+        .environment(ThemeManager())
+        .environment(\.dynamicTypeSize, .accessibility5))
+        let scene = try #require(UIApplication.shared.connectedScenes.first as? UIWindowScene)
+        let previous = scene.windows.first { $0.isKeyWindow }
+        let window = UIWindow(windowScene: scene)
+        window.frame = CGRect(x: 0, y: 0, width: 402, height: 874)
+        window.rootViewController = host
+        window.makeKeyAndVisible()
+        defer { window.isHidden = true; previous?.makeKey() }
+
+        func editor(in view: UIView) -> UITextView? {
+            if let textView = view as? UITextView { return textView }
+            return view.subviews.lazy.compactMap { editor(in: $0) }.first
+        }
+        // onAppear installs the native buffer, then the checkpoint's word count arrives.
+        for _ in 0..<10 {
+            try await Task.sleep(for: .milliseconds(50))
+            host.view.layoutIfNeeded()
+        }
+        let textView = try #require(editor(in: host.view))
+        #expect(!textView.isFirstResponder, "measure with the keyboard down")
+        let font = try #require(textView.font)
+        #expect(font.pointSize > 30, "the native editor must really be at AX5")
+        let fifthLineStart = ("One\nTwo\nThree\nFour\n" as NSString).length
+        let position = try #require(textView.position(from: textView.beginningOfDocument, offset: fifthLineStart))
+        let fifthLine = textView.caretRect(for: position)
+        #expect(fifthLine.height > 0)
+        #expect(
+            fifthLine.maxY + textView.textContainerInset.bottom <= textView.bounds.height,
+            "five complete body lines fit above the recovery status and formatting tray at AX5"
+        )
+    }
+    #endif
 
     @Test @MainActor func nativeEditorPreservesSourceSelectionUndoAndRecovery() async throws {
         let original = "<p class='keep'>Hello 👩🏽‍💻 &amp; 世界</p>\n<custom>keep</custom>"
