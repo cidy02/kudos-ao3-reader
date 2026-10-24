@@ -2768,3 +2768,26 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
     are not a difference between the apps.
   Reversal: port the iPhone's form for any one of these if the owner prefers it. The paired tiles
   are in `~/kudos-tools/pairs/tiles-a97/`. Evidence: `briefs/D7-result.md`.
+- **2026-10-23 · Round 2's accepted platform differences (Claude-CLI's judgement, recorded by Sonnet D8).**
+  Round 2's re-shot pairs left the five differences below. Each loses nothing and is Android's own idiom or
+  the demo data differing, so none is reported again. Paths are under
+  `android/app/src/main/java/io/github/cidy02/kudos/`.
+  - `pagejump`: First page and Last are plain text buttons on Android, filled pills on the iPhone; both use
+    primary ink since A98. `ui/components/KudosPaginationBar.kt:286-296`.
+  - `chapterpicker`: Android's chapter glyph is Material's open-book outline (`ImportContacts`) and its row
+    titles are semibold accent; the iPhone uses SF Symbols' `book` and regular accent titles. Glyph
+    `comments/CommentsScreen.kt:762` (used at `:526` and `:903`), row title `:909-912`. The comments
+    screen's demo work is "A Test Work" on Android and "Sodium Lights" on the iPhone (demo data):
+    `app/src/debug/assets/fixtures/ao3_comments_page.html:9`, shown at `comments/CommentsScreen.kt:419`.
+  - `recovery`: the saved time is the platform's short date style, "10/22/26 10:57 PM" on Android and
+    "10/22/2026, 8:50 PM" on the iPhone. `writing/WritingTextEditorScreen.kt:328` (drawn at `:280`, `:286`).
+  - `chsettingsedit`: both apps hue the page from the challenge's title, else its slug (A98). The iPhone's
+    demo challenge has no title, so it shows the slug and teal; Android's has one, so it shows the title and
+    its own hue (demo data). `account/AO3ChallengeSignUpsScreen.kt:45-51` (hue),
+    `account/AO3ChallengeSettingsEditScreen.kt:145` (subtitle), route `app/DebugShots.kt:68`.
+  - `thread`: Android's page label is the demo work's title ("A TEST WORK"), the iPhone's "SODIUM LIGHTS"
+    (demo data); the thread itself matches. `comments/CommentThreadScreen.kt:94` (kicker = work title),
+    upper-cased at `ui/subject/SubjectComponents.kt:289`.
+  Reversal: port the iPhone's form for any one of the first three if the owner prefers it; the last two are
+  demo data, with nothing to reverse. The paired tiles are in `~/kudos-tools/pairs/tiles-r2/`.
+  Evidence: `briefs/D8-result.md`.
