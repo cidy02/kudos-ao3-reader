@@ -108,7 +108,9 @@ class AuthorProfileSortScreenTest {
 
     @Test fun bookmarksHaveASectionHeadingAndCardLoadMoreThatStillLoadsTheNextPage() {
         show(AuthorTab.Bookmarks, false)
-        val heading = compose.onNodeWithText("BOOKMARKS", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        val heading = compose.onNode(hasText("Bookmarks") and
+            SemanticsMatcher.keyIsDefined(androidx.compose.ui.semantics.SemanticsProperties.Heading),
+            useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
         val first = compose.onNodeWithText("A Recommended Work", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
         assertTrue("Section heading precedes bookmarks", heading.bottom <= first.top)
         for (mode in listOf(KudosThemeMode.Light, KudosThemeMode.Dark, KudosThemeMode.Sepia, KudosThemeMode.Oled)) {

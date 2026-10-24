@@ -1036,7 +1036,11 @@ fun AuthorProfileScreen(
                             }
                         }
                         AuthorTab.Bookmarks -> {
-                            item { SectionRuleHeader(title = "Bookmarks") }
+                            item {
+                                Text("Bookmarks", color = tokens.secondaryInk, fontSize = 15.sp,
+                                    fontWeight = FontWeight.SemiBold, letterSpacing = 0.sp,
+                                    modifier = Modifier.padding(horizontal = SubjectMetrics.gutter).semantics { heading() })
+                            }
                             val pageData = bookmarks
                             if (pageData == null || pageData.bookmarks.isEmpty()) {
                                 item { EmptyStateCard("No visible bookmarks", "No bookmarks by this author are visible to you on AO3.") }

@@ -2709,3 +2709,16 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   - Add Works' bylines read "by" and tint a linked author, as iOS does. The iPhone's grey was its demo,
     which gives works no author identities.
   - The works pages' card dates stay as each app writes them (owner Q28).
+- **2026-10-23 · A96 (Codex; gated by Claude-CLI, gate-29).**
+  The standard series card adds Material counterparts to iOS's figure and fandom symbols
+  (`Features/Authors/AuthorProfileComponents.swift:400-445`), using the existing `WorkStatLabel`.
+  Its shared creator byline takes the app accent for a parsed route, secondary ink otherwise,
+  as iOS's `AO3AuthorBylineView` (`UIComponents/AO3AuthorNavigation.swift:194-223`). Detailed
+  work cards include the shared byline's "by" prefix; their linked names remain accent, since
+  iOS parses real AO3 author links into identities (`Services/AO3Client.swift:1962-1968`).
+  Unlinked/demo names remain secondary. The author's Bookmarks section uses a mixed-case
+  semibold heading, matching `AuthorProfileContentSections.swift:634-637` and `:666`.
+  This follows iOS code rather than interpreting every screenshot name as an unlinked author.
+  Dates (Q28), demo routing and 3gx's local-library card rule stay as decided. Reversal: revert
+  A96's scoped UI changes and corresponding tests; no stored data or request behavior changes.
+  Evidence and per-test regression expectations: `briefs/A96-result.md`.

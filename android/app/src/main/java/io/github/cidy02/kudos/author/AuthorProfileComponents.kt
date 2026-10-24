@@ -25,6 +25,11 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.LibraryBooks
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.outlined.Event
+import androidx.compose.material.icons.outlined.Layers
+import androidx.compose.material.icons.outlined.Verified
 import androidx.compose.material.icons.outlined.PanTool
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.People
@@ -46,6 +51,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -63,6 +70,9 @@ import io.github.cidy02.kudos.network.ao3.author.AO3AuthorSeriesSummary
 import io.github.cidy02.kudos.network.ao3.author.AO3AuthorWebAction
 import io.github.cidy02.kudos.network.ao3.search.AO3WorkSummary
 import io.github.cidy02.kudos.ui.components.SensitiveWorkRow
+import io.github.cidy02.kudos.ui.components.WorkStatIcons
+import io.github.cidy02.kudos.ui.components.WorkStatItem
+import io.github.cidy02.kudos.ui.components.WorkStatLabel
 import io.github.cidy02.kudos.ui.subject.cardRow
 import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
 import io.github.cidy02.kudos.ui.subject.SubjectChip
@@ -356,7 +366,7 @@ internal fun AO3SeriesRow(
                 Text(series.dateUpdated, color = tokens.secondaryInk, fontSize = 11.5.sp, maxLines = 1)
             }
         }
-        SeriesCreatorByline(series, palette, onOpenAuthor)
+        SeriesCreatorByline(series, onOpenAuthor)
     }
 }
 
@@ -367,31 +377,36 @@ internal fun SeriesDetailCard(
     onOpenAuthor: (io.github.cidy02.kudos.network.ao3.author.AO3AuthorRoute) -> Unit = {}
 ) {
     val tokens = LocalKudosTokens.current
-    val palette = SubjectPalette.fromHue(HomeFacts.workHue(series.fandoms, series.title), tokens.theme)
     Column(Modifier.fillMaxWidth().cardRow().padding(horizontal = 18.dp, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(7.dp)) {
         Text(series.title, color = tokens.primaryInk, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
-        SeriesCreatorByline(series, palette, onOpenAuthor)
-        if (series.fandoms.isNotEmpty()) Text(series.fandoms.joinToString(", "),
-            color = tokens.secondaryInk, fontSize = 12.sp)
+        SeriesCreatorByline(series, onOpenAuthor)
+        if (series.fandoms.isNotEmpty()) Row(horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalAlignment = Alignment.Top) {
+            Icon(Icons.AutoMirrored.Outlined.LibraryBooks, contentDescription = null, tint = tokens.secondaryInk,
+                modifier = Modifier.size(with(LocalDensity.current) { 14.sp.toDp() }).testTag("Series fandom icon"))
+            Text(series.fandoms.joinToString(", "), color = tokens.secondaryInk, fontSize = 12.sp,
+                maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+        }
         if (series.summary.isNotBlank()) Text(series.summary, color = tokens.secondaryInk,
             fontSize = 14.sp, maxLines = 3)
         androidx.compose.material3.HorizontalDivider(color = tokens.separator)
         FlowRow(horizontalArrangement = Arrangement.spacedBy(18.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-            series.workCount?.let { Text("$it works", color = tokens.secondaryInk, fontSize = 11.5.sp) }
-            series.words?.let { Text("%,d words".format(it), color = tokens.secondaryInk, fontSize = 11.5.sp) }
-            series.bookmarkCount?.let { Text(if (it == 1) "1 bookmark" else "%,d bookmarks".format(it),
-                color = tokens.secondaryInk, fontSize = 11.5.sp) }
-            if (series.isRestricted) Text("Restricted", color = tokens.secondaryInk, fontSize = 11.5.sp)
-            series.isComplete?.let { Text(if (it) "Complete" else "In progress", color = tokens.secondaryInk, fontSize = 11.5.sp) }
-            if (series.dateUpdated.isNotBlank()) Text(series.dateUpdated, color = tokens.secondaryInk, fontSize = 11.5.sp)
+            series.workCount?.let { WorkStatLabel(WorkStatItem("$it works", icon = Icons.Outlined.Layers)) }
+            series.words?.let { WorkStatLabel(WorkStatItem("%,d words".format(it), icon = WorkStatIcons.words)) }
+            series.bookmarkCount?.let { WorkStatLabel(WorkStatItem(
+                if (it == 1) "1 bookmark" else "%,d bookmarks".format(it), icon = WorkStatIcons.bookmarks)) }
+            if (series.isRestricted) WorkStatLabel(WorkStatItem("Restricted", icon = Icons.Filled.Lock))
+            series.isComplete?.let { WorkStatLabel(WorkStatItem(if (it) "Complete" else "In progress",
+                icon = if (it) Icons.Outlined.Verified else WorkStatIcons.inProgress)) }
+            if (series.dateUpdated.isNotBlank()) WorkStatLabel(WorkStatItem(series.dateUpdated, icon = Icons.Outlined.Event))
         }
     }
 }
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun SeriesCreatorByline(series: AO3AuthorSeriesSummary, palette: SubjectPalette,
+private fun SeriesCreatorByline(series: AO3AuthorSeriesSummary,
     onOpenAuthor: (io.github.cidy02.kudos.network.ao3.author.AO3AuthorRoute) -> Unit) {
     val tokens = LocalKudosTokens.current
     val creators = series.creatorIdentities.ifEmpty {
@@ -402,7 +417,7 @@ private fun SeriesCreatorByline(series: AO3AuthorSeriesSummary, palette: Subject
         Text("by", color = tokens.secondaryInk, fontSize = 12.sp)
         creators.forEachIndexed { index, creator ->
             Text(creator.displayName + if (index < creators.lastIndex) "," else "",
-                color = if (creator.route != null) palette.accent else tokens.secondaryInk, fontSize = 12.sp,
+                color = if (creator.route != null) tokens.scopePalette.accent else tokens.secondaryInk, fontSize = 12.sp,
                 modifier = if (creator.route != null) Modifier.clickable { onOpenAuthor(creator.route) }
                     .semantics { contentDescription = "Author: ${creator.displayName}" } else Modifier)
         }
