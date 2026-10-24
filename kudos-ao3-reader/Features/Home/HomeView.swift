@@ -438,8 +438,7 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
                             .padding(.horizontal, 16)
                             .padding(.vertical, 6)
                         }
-                        // Shadows fall past the strip rather than ending in a band.
-                        .scrollClipDisabled()
+                        .horizontalScrollViewport(preservesShadows: true, cardGutter: 16)
                         .padding(.top, -8)
                     }
                 }

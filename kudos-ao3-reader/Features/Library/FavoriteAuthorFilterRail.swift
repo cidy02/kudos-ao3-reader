@@ -17,6 +17,7 @@ struct SubjectPillRail<Option: Hashable>: View {
                 }
             }
         }
+        .horizontalScrollViewport()
         .dynamicTypeSize(.xSmall ... .accessibility2)
     }
 
@@ -49,6 +50,7 @@ struct FavoriteAuthorFilterRail: View {
                 }
             }
         }
+        .horizontalScrollViewport()
         .dynamicTypeSize(.xSmall ... .accessibility2)
     }
 

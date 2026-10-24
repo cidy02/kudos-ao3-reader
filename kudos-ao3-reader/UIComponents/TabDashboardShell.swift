@@ -70,6 +70,7 @@ struct TabDashboardShell: View {
             }
             .padding(.horizontal, 16)
         }
+        .horizontalScrollViewport()
         .accessibilityHidden(true)
     }
 
@@ -88,7 +89,7 @@ struct TabDashboardShell: View {
                 .padding(.horizontal, 16)
                 .padding(.vertical, 6)
             }
-            .scrollClipDisabled()
+            .horizontalScrollViewport(preservesShadows: true, cardGutter: 16)
         }
         .accessibilityHidden(true)
     }

@@ -287,8 +287,7 @@ struct MediaBrowserView: View {
                     .padding(.horizontal, CardListMetrics.sideMargin)
                     .padding(.vertical, 6)
                 }
-                // The card shadows fall past the row, as on the Home shelves.
-                .scrollClipDisabled()
+                .horizontalScrollViewport(preservesShadows: true, cardGutter: CardListMetrics.sideMargin)
             }
         }
     }

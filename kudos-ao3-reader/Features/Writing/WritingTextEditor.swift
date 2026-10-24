@@ -280,7 +280,7 @@ struct WritingTextEditor: View {
                     }
                 }
             }
-            .disabled(isPreviewing)
+            .horizontalScrollViewport().disabled(isPreviewing)
             if dynamicTypeSize.isAccessibilitySize {
                 Button("Editor help", systemImage: "info.circle") { showEditorHelp = true }
                 .font(.caption2)

@@ -368,5 +368,6 @@ struct AO3BookmarksFilterRail: View {
             }
             .padding(.horizontal, 16)
         }
+        .horizontalScrollViewport()
     }
 }

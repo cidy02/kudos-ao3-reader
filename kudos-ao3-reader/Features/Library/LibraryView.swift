@@ -630,6 +630,7 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
                 }
                 .padding(.horizontal, 16)
             }
+            .horizontalScrollViewport()
         }
     }
 

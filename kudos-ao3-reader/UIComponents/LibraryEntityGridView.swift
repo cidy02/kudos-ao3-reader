@@ -19,23 +19,6 @@ struct LibraryEntityGridView<Item: Identifiable, Destination: Hashable, Card: Vi
     @ViewBuilder let card: (Item) -> Card
 
     @Environment(ThemeManager.self) private var themeManager
-    /// Mirrors the same scaled width the cards themselves render at (see
-    /// `ScaledCarouselCardSize`), so the grid's minimum column width tracks a
-    /// card that's grown wider with Dynamic Type instead of assuming the
-    /// static 164pt base — otherwise a scaled-wide card could overflow a
-    /// column the grid sized against the unscaled minimum. Not `private` —
-    /// a private stored property forces the compiler's synthesized
-    /// memberwise init down to `private` too, breaking every other
-    /// (needed) caller-supplied parameter.
-    var cardSize = ScaledCarouselCardSize()
-
-    /// Adaptive column count from card width normally; collapses to one column at
-    /// accessibility Dynamic Type sizes, where `.adaptive(minimum:)` alone would
-    /// still fit two cards by raw pixel width even though their scaled text can't
-    /// (see `CarouselCardMetrics.adaptiveCardColumns`).
-    private var columns: [GridItem] {
-        CarouselCardMetrics.adaptiveCardColumns(minimum: cardSize.width)
-    }
 
     private var tally: String {
         "\(items.count) \(items.count == 1 ? "collection" : "collections")"
@@ -46,7 +29,7 @@ struct LibraryEntityGridView<Item: Identifiable, Destination: Hashable, Card: Vi
             // The header every Library page opens with (pass2-17), not a bar title.
             SubjectHeaderBlock(kicker: "Library", title: title, subtitle: tally, palette: themeManager.scopePalette)
                 .padding(.top, 20)
-            LazyVGrid(columns: columns, spacing: CarouselCardMetrics.compactGridSpacing) {
+            CarouselCardGrid(uniformHeights: true) {
                 ForEach(items) { item in
                     NavigationLink(value: destination(item)) { card(item) }
                         .buttonStyle(.plain)
@@ -54,7 +37,6 @@ struct LibraryEntityGridView<Item: Identifiable, Destination: Hashable, Card: Vi
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(16)
-            .uniformWorkCardHeights()
         }
         .subjectScreenWash(palette: themeManager.scopePalette)
         .toolbar {

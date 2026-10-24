@@ -522,25 +522,12 @@ struct AccountShortcutGridTile: View {
 struct AccountWorksCompactGrid<Accessory: View>: View {
     let entries: [CanonicalWork]
 
-    /// Mirrors the scaled width `SensitiveWorkCoverCard`/`AO3WorkCoverCard` actually
-    /// render at (see `ScaledCarouselCardSize`), so the column count tracks a card
-    /// that's grown wider with Dynamic Type instead of assuming the static base
-    /// width. Not `private` — see `LibraryEntityGridView.cardSize`.
-    var cardSize = ScaledCarouselCardSize()
     /// Drawn under each card, outside its link. Marked for Later's Unmark
     /// (1o.4); nothing on every other list.
     @ViewBuilder var accessory: (CanonicalWork) -> Accessory
 
-    /// Column count tracks the actual scaled card width at every Dynamic Type step
-    /// (not just an accessibility-size on/off gate — see
-    /// `CarouselCardMetrics.adaptiveCardColumns`), so two columns of scaled-wide
-    /// cards never overlap on screen.
-    private var columns: [GridItem] {
-        CarouselCardMetrics.adaptiveCardColumns(minimum: cardSize.width)
-    }
-
     var body: some View {
-        LazyVGrid(columns: columns, spacing: CarouselCardMetrics.compactGridSpacing) {
+        CarouselCardGrid(uniformHeights: true) {
             ForEach(entries) { entry in
                 VStack(spacing: 6) {
                     compactCard(for: entry)
@@ -550,7 +537,6 @@ struct AccountWorksCompactGrid<Accessory: View>: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(16)
-        .uniformWorkCardHeights()
     }
 
     @ViewBuilder
@@ -577,22 +563,8 @@ extension AccountWorksCompactGrid where Accessory == EmptyView {
 struct AccountBookmarksCompactGrid: View {
     let bookmarks: [AO3AuthorBookmark]
 
-    /// Mirrors the scaled width `AO3WorkCoverCard` actually renders at (see
-    /// `ScaledCarouselCardSize`), so the column count tracks a card that's grown
-    /// wider with Dynamic Type instead of assuming the static base width. Not
-    /// `private` — see `LibraryEntityGridView.cardSize`.
-    var cardSize = ScaledCarouselCardSize()
-
-    /// Column count tracks the actual scaled card width at every Dynamic Type step
-    /// (not just an accessibility-size on/off gate — see
-    /// `CarouselCardMetrics.adaptiveCardColumns`), so two columns of scaled-wide
-    /// cards never overlap on screen.
-    private var columns: [GridItem] {
-        CarouselCardMetrics.adaptiveCardColumns(minimum: cardSize.width)
-    }
-
     var body: some View {
-        LazyVGrid(columns: columns, spacing: CarouselCardMetrics.compactGridSpacing) {
+        CarouselCardGrid(uniformHeights: true) {
             ForEach(bookmarks) { bookmark in
                 NavigationLink(value: WorkCardTap.destination(for: bookmark.work)) {
                     AO3WorkCoverCard(work: bookmark.work)
@@ -602,7 +574,6 @@ struct AccountBookmarksCompactGrid: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(16)
-        .uniformWorkCardHeights()
     }
 }
 
