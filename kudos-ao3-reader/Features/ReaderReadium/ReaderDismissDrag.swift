@@ -17,7 +17,7 @@ import WebKit
 /// so they are now internal. `ReaderDismissPeelContainerController` had to follow:
 /// it is `ReaderDismissPeelHost`'s `UIViewControllerType`, and Swift requires an
 /// associated type to be at least as visible as the protocol method returning it.
-/// These three visibility widenings are the only non-movement changes in the split.
+/// These three visibility widenings were the only non-movement changes in the split.
 
 #if os(iOS)
 
@@ -162,11 +162,17 @@ final class ReaderDismissPeelContainerController<Content: View>: UIViewControlle
     let host: UIHostingController<Content>
     let surface: ReaderDismissDragSurface
     var reduceMotion: Bool
+    var onGeometryChange: (CGSize, UIEdgeInsets) -> Void
+    private var geometryReportPending = false
 
-    init(content: Content, surface: ReaderDismissDragSurface, reduceMotion: Bool) {
+    init(
+        content: Content, surface: ReaderDismissDragSurface, reduceMotion: Bool,
+        onGeometryChange: @escaping (CGSize, UIEdgeInsets) -> Void
+    ) {
         self.host = UIHostingController(rootView: content)
         self.surface = surface
         self.reduceMotion = reduceMotion
+        self.onGeometryChange = onGeometryChange
         super.init(nibName: nil, bundle: nil)
     }
 
@@ -185,6 +191,38 @@ final class ReaderDismissPeelContainerController<Content: View>: UIViewControlle
         host.didMove(toParent: self)
         // Transform the container, never the hosting child.
         surface.cardView = view
+    }
+
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        reportGeometryAfterLayout()
+    }
+
+    override func viewSafeAreaInsetsDidChange() {
+        super.viewSafeAreaInsetsDidChange()
+        reportGeometryAfterLayout()
+    }
+
+    private func reportGeometryAfterLayout() {
+        guard !geometryReportPending else { return }
+        geometryReportPending = true
+        // Avoid publishing observable geometry inside SwiftUI's layout/update.
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.geometryReportPending = false
+            guard let window = self.view.window else { return }
+            // Convert this window's safe frame into this host, avoiding both a
+            // global key-window lookup and the hosting child's suppressed insets.
+            let safeFrame = self.view.convert(window.safeAreaLayoutGuide.layoutFrame, from: window)
+            let bounds = self.view.bounds
+            let safe = UIEdgeInsets(
+                top: max(0, safeFrame.minY - bounds.minY),
+                left: max(0, safeFrame.minX - bounds.minX),
+                bottom: max(0, bounds.maxY - safeFrame.maxY),
+                right: max(0, bounds.maxX - safeFrame.maxX)
+            )
+            self.onGeometryChange(bounds.size, safe)
+        }
     }
 
     func update(content: Content) {
@@ -206,15 +244,18 @@ final class ReaderDismissPeelContainerController<Content: View>: UIViewControlle
 struct ReaderDismissPeelHost<Content: View>: UIViewControllerRepresentable {
     let surface: ReaderDismissDragSurface
     let reduceMotion: Bool
+    let onGeometryChange: (CGSize, UIEdgeInsets) -> Void
     let content: Content
 
     init(
         surface: ReaderDismissDragSurface,
         reduceMotion: Bool,
+        onGeometryChange: @escaping (CGSize, UIEdgeInsets) -> Void,
         @ViewBuilder content: () -> Content
     ) {
         self.surface = surface
         self.reduceMotion = reduceMotion
+        self.onGeometryChange = onGeometryChange
         self.content = content()
     }
 
@@ -222,7 +263,8 @@ struct ReaderDismissPeelHost<Content: View>: UIViewControllerRepresentable {
         ReaderDismissPeelContainerController(
             content: content,
             surface: surface,
-            reduceMotion: reduceMotion
+            reduceMotion: reduceMotion,
+            onGeometryChange: onGeometryChange
         )
     }
 
@@ -231,6 +273,7 @@ struct ReaderDismissPeelHost<Content: View>: UIViewControllerRepresentable {
         context: Context
     ) {
         container.reduceMotion = reduceMotion
+        container.onGeometryChange = onGeometryChange
         container.update(content: content)
     }
 }

@@ -71,6 +71,9 @@ struct ContentView: View {
             .task { if DebugLaunchRoute.opensLogin { showingDebugLogin = true } }
             // `-KudosDebugRoute bugreport`: the shake-to-report sheet, for side-by-side shots.
             .task { if DebugLaunchRoute.value == "bugreport" { showingBugReport = true } }
+            #if os(iOS)
+            .task { await DebugLaunchRoute.runRotations() }
+            #endif
             #endif
             .environment(router)
             .environment(privacyGate)

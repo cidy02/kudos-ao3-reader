@@ -4,6 +4,7 @@ import Testing
 #if os(iOS)
 import ReadiumNavigator
 import ReadiumShared
+import UIKit
 @testable import Kudos
 #endif
 
@@ -343,5 +344,229 @@ struct ReadiumReaderTests {
         #expect(sections[0].kind == .preface)
         #expect(sections[1].kind == .chapter)
     }
+
+    // MARK: - Duo5 host geometry and same-chapter reflow
+
+    @Test func pageBoxUsesBothDimensionsAndMeaningfulInsetChanges() {
+        let original = ReaderPageBoxGeometry(
+            size: CGSize(width: 466, height: 678),
+            safeInsets: UIEdgeInsets(top: 62, left: 0, bottom: 34, right: 0)
+        )
+        let widthOnly = original.updating(
+            size: CGSize(width: 951, height: 678),
+            safeInsets: original.safeInsets, preserveStatusBarTop: true
+        )
+        #expect(widthOnly.size.width == 951)
+        let heightOnly = original.updating(
+            size: CGSize(width: 466, height: 669),
+            safeInsets: original.safeInsets, preserveStatusBarTop: true
+        )
+        #expect(heightOnly.size.height == 669)
+        // Side exclusions can change without either dimension changing.
+        let safe = UIEdgeInsets(top: 0, left: 62, bottom: 21, right: 48)
+        let insetOnly = widthOnly.updating(
+            size: widthOnly.size, safeInsets: safe, preserveStatusBarTop: false
+        )
+        #expect(insetOnly.safeInsets == safe)
+        #expect(insetOnly.horizontalInsets(in: .leftToRight).leading == 62)
+        #expect(insetOnly.horizontalInsets(in: .leftToRight).trailing == 48)
+        #expect(insetOnly.horizontalInsets(in: .rightToLeft).leading == 48)
+        #expect(insetOnly.horizontalInsets(in: .rightToLeft).trailing == 62)
+        // A valid zero must replace a former inset; never fall back to stale data.
+        #expect(insetOnly.updating(
+            size: insetOnly.size, safeInsets: .zero, preserveStatusBarTop: false
+        ).safeInsets == .zero)
+    }
+
+    @Test func pageBoxKeepsStatusBarClearanceButAcceptsRotationWithChromeHidden() {
+        let portrait = ReaderPageBoxGeometry(
+            size: CGSize(width: 466, height: 678),
+            safeInsets: UIEdgeInsets(top: 62, left: 0, bottom: 34, right: 0)
+        )
+        let hiddenStatus = UIEdgeInsets(top: 0, left: 0, bottom: 34, right: 0)
+        #expect(portrait.updating(
+            size: portrait.size, safeInsets: hiddenStatus, preserveStatusBarTop: true
+        ) == portrait)
+        let landscapeSafe = UIEdgeInsets(top: 0, left: 62, bottom: 21, right: 62)
+        #expect(portrait.updating(
+            size: portrait.size, safeInsets: landscapeSafe, preserveStatusBarTop: true
+        ).safeInsets == landscapeSafe)
+        let landscape = portrait.updating(
+            size: CGSize(width: 951, height: 669),
+            safeInsets: landscapeSafe, preserveStatusBarTop: true
+        )
+        #expect(landscape.size == CGSize(width: 951, height: 669))
+        #expect(landscape.safeInsets == landscapeSafe)
+        let innerPortrait = landscape.updating(
+            size: CGSize(width: 669, height: 951),
+            safeInsets: portrait.safeInsets, preserveStatusBarTop: true
+        )
+        #expect(innerPortrait.size == CGSize(width: 669, height: 951))
+        #expect(innerPortrait.safeInsets == portrait.safeInsets)
+    }
+
+    @Test func pageBoxIgnoresPrelayoutAndOnePointNoise() {
+        let original = ReaderPageBoxGeometry(
+            size: CGSize(width: 466, height: 678),
+            safeInsets: UIEdgeInsets(top: 62, left: 0, bottom: 34, right: 0)
+        )
+        for size in [CGSize.zero, CGSize(width: 466, height: 0), CGSize(width: 0, height: 678)] {
+            #expect(original.updating(size: size, safeInsets: .zero, preserveStatusBarTop: false) == original)
+        }
+        #expect(original.updating(
+            size: CGSize(width: 467, height: 677),
+            safeInsets: UIEdgeInsets(top: 61, left: 1, bottom: 35, right: 1),
+            preserveStatusBarTop: false
+        ) == original)
+        #expect(original.updating(
+            size: CGSize(width: 467.1, height: 678),
+            safeInsets: original.safeInsets, preserveStatusBarTop: false
+        ) != original)
+        let initial = ReaderPageBoxGeometry().updating(
+            size: original.size, safeInsets: original.safeInsets, preserveStatusBarTop: true
+        )
+        #expect(initial == original)
+    }
+
+    @Test(arguments: [8, 24], [false, true])
+    func aSameHrefWidthChangeSchedulesRemeasureAndKeepsTheLocator(
+        newCount: Int, horizontal: Bool
+    ) async throws {
+        let book = ReadiumBook()
+        let source = GeometryTestNavigator()
+        let size = CGSize(width: 466, height: 678)
+        book.updatePageBoxGeometry(size: size, safeInsets: .zero)
+        await book.pageBoxRemeasureTask?.value
+        let href = try #require(AnyURL(string: "OEBPS/chapter1.xhtml"))
+        let locator = Locator(
+            href: href, mediaType: .xhtml,
+            locations: .init(fragments: ["passage"], progression: 0.4, totalProgression: 0.42)
+        )
+        book.navigator(source, locationDidChange: locator)
+        book.acceptLayoutPageCount(12, measuredPage: 5, preferHorizontal: true, isFinalAttempt: false)
+        book.acceptLayoutPageCount(12, measuredPage: 5, preferHorizontal: true, isFinalAttempt: false)
+        #expect(book.pageBarReady)
+        // A real resize must preserve the passage even if a preference/layout
+        // refresh has temporarily hidden the already-established page count.
+        book.clearVisualPageMetrics()
+        var writes = 0
+        book.onLocatorChange = { _ in writes += 1 }
+
+        book.updatePageBoxGeometry(size: CGSize(width: 951, height: 678), safeInsets: .zero)
+        #expect(book.pageBoxRemeasureTask != nil)
+        #expect(!book.pageBarReady)
+        #expect(book.visualPageCount == nil)
+        // WebKit can report the old pixel offset against the new chapter layout.
+        book.navigator(source, locationDidChange: locator.copy(locations: { $0.progression = 0.1 }))
+        #expect(book.currentLocator == locator)
+        #expect(writes == 0)
+        let superseded = try #require(book.pageBoxRemeasureTask)
+        book.updatePageBoxGeometry(size: CGSize(width: 951, height: 669), safeInsets: .zero)
+        #expect(superseded.isCancelled)
+        await book.pageBoxRemeasureTask?.value
+        #expect(book.pageBoxRemeasureTask == nil)
+        #expect(book.currentLocator == locator)
+        #expect(!book.pageBarReady)
+        // The new denominator may grow OR shrink; one sample is not enough.
+        book.acceptLayoutPageCount(newCount, measuredPage: 3, preferHorizontal: horizontal, isFinalAttempt: false)
+        #expect(!book.pageBarReady)
+        book.acceptLayoutPageCount(newCount, measuredPage: 3, preferHorizontal: horizontal, isFinalAttempt: false)
+        #expect(book.pageBarReady)
+        #expect(book.visualPageCount == newCount)
+        #expect(book.visualPage == 3)
+        #expect(book.currentLocator == locator)
+    }
+
+    @Test func aSameSizeInsetChangeSchedulesButStatusBarHideDoesNot() async {
+        let book = ReadiumBook()
+        let size = CGSize(width: 466, height: 678)
+        let safe = UIEdgeInsets(top: 62, left: 0, bottom: 34, right: 0)
+        book.updatePageBoxGeometry(size: size, safeInsets: safe)
+        await book.pageBoxRemeasureTask?.value
+        book.updatePageBoxGeometry(
+            size: size, safeInsets: UIEdgeInsets(top: 0, left: 0, bottom: 34, right: 0)
+        )
+        #expect(book.pageBoxRemeasureTask == nil)
+        #expect(book.pageBoxChromeSafeTop == 62)
+        // The first showing-chrome layout can precede UIKit restoring its inset.
+        book.chromeHidden = false
+        book.updatePageBoxGeometry(
+            size: size, safeInsets: UIEdgeInsets(top: 0, left: 0, bottom: 34, right: 0)
+        )
+        #expect(book.pageBoxRemeasureTask == nil)
+        #expect(book.pageBoxChromeSafeTop == 62)
+        book.updatePageBoxGeometry(
+            size: size, safeInsets: UIEdgeInsets(top: 62, left: 48, bottom: 34, right: 62)
+        )
+        #expect(book.pageBoxRemeasureTask != nil)
+        book.cancelPageBoxRemeasure()
+        #expect(book.pageBoxRemeasureTask == nil)
+    }
+
+    @Test func startupInsetSettlingDoesNotSwallowOrdinaryPageTurns() async throws {
+        let book = ReadiumBook()
+        let source = GeometryTestNavigator()
+        let size = CGSize(width: 402, height: 874)
+        book.updatePageBoxGeometry(size: size, safeInsets: .zero)
+        await book.pageBoxRemeasureTask?.value
+        let href = try #require(AnyURL(string: "OEBPS/chapter1.xhtml"))
+        let initial = Locator(href: href, mediaType: .xhtml, locations: .init(progression: 0.25))
+        book.navigator(source, locationDidChange: initial)
+        #expect(book.hasPresentedFirstPage)
+        #expect(!book.pageBarReady)
+
+        // A later host report supplies the Island/home-bar insets. No rotation
+        // has occurred and the opening viewport has not yet been measured.
+        book.updatePageBoxGeometry(
+            size: size, safeInsets: UIEdgeInsets(top: 62, left: 0, bottom: 34, right: 0)
+        )
+        #expect(book.pageBoxRemeasureTask != nil)
+        var recorded: [Locator] = []
+        book.onLocatorChange = { recorded.append($0) }
+        let thirdPage = initial.copy(locations: { $0.progression = 0.5 })
+        let fourthPage = initial.copy(locations: { $0.progression = 0.75 })
+        book.navigator(source, locationDidChange: thirdPage)
+        book.navigator(source, locationDidChange: fourthPage)
+        #expect(book.currentLocator == fourthPage)
+        #expect(recorded == [thirdPage, fourthPage])
+        await book.pageBoxRemeasureTask?.value
+        #expect(book.pageBoxRemeasureTask == nil)
+
+        // The opening schedule can expire without a usable web-view sample.
+        // The next same-href settle must schedule a full measurement, not take
+        // the ready-only digit path or keep waiting for a chapter change.
+        let generation = book.pageBarMeasureGeneration
+        book.navigator(source, locationDidChange: fourthPage)
+        #expect(book.pageBarMeasureGeneration > generation)
+        #expect(book.currentLocator == fourthPage)
+        book.acceptLayoutPageCount(4, measuredPage: 4, preferHorizontal: true, isFinalAttempt: false)
+        #expect(!book.pageBarReady)
+        // Another settle may replace the retry schedule, but must preserve the
+        // first agreeing sample so continuous navigation can still become ready.
+        book.navigator(source, locationDidChange: fourthPage)
+        book.acceptLayoutPageCount(4, measuredPage: 4, preferHorizontal: true, isFinalAttempt: false)
+        #expect(book.pageBarReady)
+        #expect(book.visualPage == 4)
+        #expect(book.visualPageCount == 4)
+
+        // Once ready, an ordinary turn still uses the existing digit refresh.
+        let readyGeneration = book.pageBarMeasureGeneration
+        book.navigator(source, locationDidChange: thirdPage)
+        #expect(book.currentLocator == thirdPage)
+        #expect(book.pageBarReady)
+        #expect(book.visualPageCount == 4)
+        #expect(book.pageBarMeasureGeneration == readyGeneration)
+    }
+
+}
+
+/// Delegate input only: no web view, publication load, or network request.
+private final class GeometryTestNavigator: @preconcurrency Navigator {
+    let publication = Publication(manifest: Manifest())
+    var currentLocation: Locator? { nil }
+    func go(to locator: Locator, options: NavigatorGoOptions) async -> Bool { false }
+    func go(to link: ReadiumShared.Link, options: NavigatorGoOptions) async -> Bool { false }
+    func goForward(options: NavigatorGoOptions) async -> Bool { false }
+    func goBackward(options: NavigatorGoOptions) async -> Bool { false }
 }
 #endif
