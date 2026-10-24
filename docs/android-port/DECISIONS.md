@@ -2735,3 +2735,36 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   solid page. Recovery omits seconds and keeps the existing digest-based warning. Evidence,
   changed paths and expected regression assertions: `briefs/A98-result.md`. Reversal: revert
   A98's scoped UI changes and test expectations; no stored data or request behavior changed.
+- **2026-10-23 · A97's accepted platform differences (Claude-CLI's judgement, recorded by Sonnet D7).**
+  A97's 38 pairs left the differences below. Each loses no information and is Android's own idiom
+  (Material controls, Android chrome) or the demo data differing, so none is reported again.
+  Paths are under `android/app/src/main/java/io/github/cidy02/kudos/`.
+  - `chapterform`, `chsettingsedit`: a date is one value with a chevron that opens Android's
+    Year/Month/Day picker, where the iPhone shows a pair of date and time pills; the same date is
+    shown either way. Drawn at `writing/WritingChapterFormScreen.kt:148` (row) and `:185` (sheet);
+    `account/AO3ChallengeSettingsEditScreen.kt:189` (row) and `:88` (picker); chevron
+    `ui/subject/SubjectForm.kt:220`.
+  - `bulknames`: Android shows a large page title with its section label ("AO3 ACCOUNT"), the iPhone
+    a small inline bar title; the same title and fields. `writing/WritingBulkEditScreen.kt:179`.
+  - `revokedevice`: Android asks in a dialog over Sync Folder, the iPhone in a sheet; the same
+    question and reasons. `backup/PairingSheet.kt:488`.
+  - `addworks`: Android's sheet is part-height with checkboxes, the iPhone's full-height with
+    circles; the same works to pick. `library/AddLibraryWorksSheet.kt:84` (sheet) and `:182`
+    (checkbox).
+  - `readerdisplay`: Android's sheet is full height over the reader and its text-size slider is
+    Material's stepped slider; the same settings. `reader/ReaderScreen.kt:1016-1018` (sheet),
+    `settings/SettingsPages.kt:263` (slider), `reader/ReaderScreen.kt:1131` (its use).
+  - `collectiondetails`, `newcollection`, `newqueue`: Android's text fields are Material outlined
+    fields with their labels above, and `collectiondetails` is a full-screen page on Android, a
+    sheet on the iPhone; the same fields. `library/CollectionEditorSheet.kt:154` (page) and `:239`
+    (field), `library/QueueEditorSheet.kt:140` (page) and `:181` (field).
+  - `tagworks`, `fandomworks`: at 2.0× Android's pager keeps "Page 1 / 3", the iPhone's AX5 pill
+    shortens to "1 / 3"; both are whole. `ui/components/KudosPaginationBar.kt:174`, used by
+    `browse/FandomWorksScreen.kt:305`.
+  - `pronunciations`: Android opens it as a sheet over the speech settings, the iPhone as a pushed
+    page; its footnote about the voice pack is Android's own, since Android's engines differ.
+    `settings/PronunciationSettings.kt:81` (sheet) and `:208` (footnote).
+  - Demo data that differ between the apps (different works, counts, chosen fandoms, highlight text)
+    are not a difference between the apps.
+  Reversal: port the iPhone's form for any one of these if the owner prefers it. The paired tiles
+  are in `~/kudos-tools/pairs/tiles-a97/`. Evidence: `briefs/D7-result.md`.
