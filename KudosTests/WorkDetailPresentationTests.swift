@@ -6,6 +6,94 @@ import Testing
 /// The Work Details redesign moved the old view's inline label/state logic into
 /// `WorkDetailPresentation`; these tests lock in that moved behavior.
 struct WorkDetailPresentationTests {
+    #if os(iOS)
+    @Test func detailUsesItsOwnUsableWidthAndKeepsPortraitSingle() {
+        for width in [CGFloat(320), 393, 466, 600, 669, 703] {
+            let regions = AdaptiveContentRegions(bounds: CGRect(x: 0, y: 0, width: width, height: 900))
+            let panes = WorkDetailPresentation.contentPanes(in: regions, accessibilitySize: false)
+            #expect(panes == [regions.viewport])
+        }
+        // Width consumed by a rail/safe area must not be counted toward fit.
+        let inset = AdaptiveContentRegions(
+            bounds: CGRect(x: 0, y: 0, width: 760, height: 600),
+            safeAreaInsets: EdgeInsets(top: 0, leading: 20, bottom: 0, trailing: 50)
+        )
+        #expect(WorkDetailPresentation.contentPanes(in: inset, accessibilitySize: false).count == 1)
+    }
+
+    @Test func detailSplitsAtTwoReadableMeasuresWithAGutter() throws {
+        for width in [CGFloat(704), 860, 951, 1_024] {
+            let regions = AdaptiveContentRegions(bounds: CGRect(x: 0, y: 0, width: width, height: 600))
+            let panes = WorkDetailPresentation.contentPanes(in: regions, accessibilitySize: false)
+            try #require(panes.count == 2)
+            #expect(panes.allSatisfy { $0.width >= 340 })
+            #expect(panes.first?.minX == 0)
+            #expect(panes.last?.maxX == width)
+            #expect(panes[1].minX - panes[0].maxX == 24)
+        }
+    }
+
+    @Test func detailKeepsShortPhoneLandscapeAndLargeTypeReadable() {
+        let short = AdaptiveContentRegions(bounds: CGRect(x: 0, y: 0, width: 860, height: 393))
+        #expect(WorkDetailPresentation.contentPanes(in: short, accessibilitySize: false).count == 1)
+        let wide = AdaptiveContentRegions(bounds: CGRect(x: 0, y: 0, width: 900, height: 600))
+        let largeType = WorkDetailPresentation.contentPanes(in: wide, accessibilitySize: true)
+        #expect(largeType == [CGRect(x: 90, y: 0, width: 720, height: 600)])
+        let iPad = AdaptiveContentRegions(bounds: CGRect(x: 0, y: 0, width: 1_200, height: 900))
+        let panes = WorkDetailPresentation.contentPanes(in: iPad, accessibilitySize: true)
+        #expect(panes.count == 2)
+        #expect(panes.allSatisfy { $0.width >= 480 })
+    }
+
+    @Test func detailFollowsTheActualFoldAndLogicalReadingDirection() throws {
+        let regions = AdaptiveContentRegions(
+            bounds: CGRect(x: 0, y: 0, width: 900, height: 600),
+            safeAreaInsets: EdgeInsets(top: 0, leading: 18, bottom: 0, trailing: 72),
+            reservations: [.init(frame: CGRect(x: 430, y: -20, width: 40, height: 640))]
+        )
+        let panes = WorkDetailPresentation.contentPanes(in: regions, accessibilitySize: false)
+        try #require(panes.count == 2)
+        #expect(panes == regions.viewportPanes)
+        #expect(panes == [CGRect(x: 0, y: 0, width: 412, height: 600),
+                          CGRect(x: 452, y: 0, width: 358, height: 600)])
+        #expect(WorkDetailPresentation.contentPanes(
+            in: regions, accessibilitySize: false, rightToLeft: true
+        ) == Array(panes.reversed()))
+        #expect(WorkDetailPresentation.contentPanes(in: regions, accessibilitySize: true) == [panes[0]])
+        #expect(WorkDetailPresentation.contentPanes(
+            in: regions, accessibilitySize: true, rightToLeft: true
+        ) == [panes[1]])
+    }
+
+    @Test func detailNeverSubdividesOrCrossesAnUnusableReservedPane() {
+        let bounds = CGRect(x: 0, y: 0, width: 900, height: 600)
+        // Total width fits, but the trailing physical pane is too narrow.
+        let divided = AdaptiveContentRegions(bounds: bounds, reservations: [
+            .init(frame: CGRect(x: 560, y: 0, width: 40, height: 600))
+        ])
+        #expect(WorkDetailPresentation.contentPanes(
+            in: divided, accessibilitySize: false
+        ) == [CGRect(x: 0, y: 0, width: 560, height: 600)])
+        let horizontal = AdaptiveContentRegions(bounds: bounds, reservations: [
+            .init(frame: CGRect(x: 0, y: 270, width: 900, height: 40))
+        ])
+        #expect(WorkDetailPresentation.contentPanes(
+            in: horizontal, accessibilitySize: false
+        ) == [CGRect(x: 90, y: 0, width: 720, height: 290)])
+        let blocked = AdaptiveContentRegions(bounds: bounds, reservations: [.init(frame: bounds)])
+        #expect(WorkDetailPresentation.contentPanes(in: blocked, accessibilitySize: false).isEmpty)
+    }
+
+    @Test func detailReactsToReservationActivationWithoutAResize() {
+        let bounds = CGRect(x: 0, y: 0, width: 900, height: 600)
+        let frame = CGRect(x: 430, y: 0, width: 40, height: 600)
+        let flat = AdaptiveContentRegions(bounds: bounds, reservations: [.init(frame: frame, isActive: false)])
+        let book = AdaptiveContentRegions(bounds: bounds, reservations: [.init(frame: frame)])
+        #expect(WorkDetailPresentation.contentPanes(in: flat, accessibilitySize: false)
+            != WorkDetailPresentation.contentPanes(in: book, accessibilitySize: false))
+    }
+    #endif
+
     /// Read never mentions downloading (owner, 2026-10-01): the copy it fetches
     /// is not a download.
     @Test func readActionNeverSaysDownload() {
