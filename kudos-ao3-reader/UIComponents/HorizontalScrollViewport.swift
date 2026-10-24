@@ -30,6 +30,7 @@ private struct HorizontalScrollViewport<Content: View>: View {
     let preservesShadows: Bool
     let cardGutter: CGFloat
     @State private var availableWidth: CGFloat?
+    @Environment(\.carouselCardAvailableWidth) private var inheritedWidth
     @Namespace private var viewportSpace
 
     init(scrollView: ScrollView<Content>, preservesShadows: Bool, cardGutter: CGFloat) {
@@ -58,7 +59,7 @@ private struct HorizontalScrollViewport<Content: View>: View {
                         }
                     }
             }
-            .environment(\.carouselCardAvailableWidth, availableWidth)
+            .environment(\.carouselCardAvailableWidth, availableWidth ?? inheritedWidth)
             // SwiftUI adds the safe area; the HStack still owns its design gutter.
             .contentMargins(.horizontal, 0, for: .scrollContent)
             .scrollClipDisabled(preservesShadows)
@@ -86,19 +87,28 @@ enum HorizontalScrollViewportMetrics {
 /// inside the caller's padding, also handles a grid hosted in a narrower pane.
 struct CarouselCardGrid<Content: View>: View {
     let uniformHeights: Bool
+    var columnCount: Int?
+    var containerWidth: CGFloat?
     @ViewBuilder var content: () -> Content
     @State private var availableWidth: CGFloat?
     private var cardSize = ScaledCarouselCardSize()
 
-    init(uniformHeights: Bool = false, @ViewBuilder content: @escaping () -> Content) {
+    init(
+        uniformHeights: Bool = false,
+        columnCount: Int? = nil,
+        containerWidth: CGFloat? = nil,
+        @ViewBuilder content: @escaping () -> Content
+    ) {
         self.uniformHeights = uniformHeights
+        self.columnCount = columnCount
+        self.containerWidth = containerWidth
         self.content = content
     }
 
     var body: some View {
         #if os(iOS)
-        grid(minimum: cardSize.width(in: availableWidth))
-            .environment(\.carouselCardAvailableWidth, availableWidth)
+        grid(minimum: cardSize.width(in: containerWidth ?? availableWidth))
+            .environment(\.carouselCardAvailableWidth, containerWidth ?? availableWidth)
             .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
             .onGeometryChange(for: CGFloat.self) { proxy in
                 proxy.size.width
@@ -120,10 +130,94 @@ struct CarouselCardGrid<Content: View>: View {
 
     private func cells(minimum: CGFloat) -> some View {
         LazyVGrid(
-            columns: CarouselCardMetrics.adaptiveCardColumns(minimum: minimum),
+            columns: columnCount.map { count in
+                Array(repeating: GridItem(.fixed(minimum), spacing: CarouselCardMetrics.compactGridColumnSpacing),
+                      count: count)
+            } ?? CarouselCardMetrics.adaptiveCardColumns(minimum: minimum),
+            alignment: columnCount == nil ? .center : .leading,
             spacing: CarouselCardMetrics.compactGridSpacing
         ) {
             content()
         }
     }
+}
+
+/// Compact shelves keep T-447's scrolling path. Wide shelves page bounded,
+/// row-major two-row grids; a division gives each pane its own complete pages.
+struct DashboardCardShelf<Content: View>: View {
+    var groupsInSinglePane: Bool = false
+    var compactSpacing: CGFloat = 12
+    @ViewBuilder var content: () -> Content
+    @Environment(\.dashboardContentRegions) private var regions
+    @Environment(\.layoutDirection) private var direction
+    private var cardSize = ScaledCarouselCardSize()
+    @State private var visiblePage: Int? = 0
+
+    var body: some View {
+        #if os(iOS)
+        if let regions, groupsInSinglePane || regions.viewportPanes.count > 1
+            || AdaptiveContentRegions.usesGroupedShelves(in: regions.viewport.size) {
+            let panes = direction == .rightToLeft ? Array(regions.viewportPanes.reversed()) : regions.viewportPanes
+            let columns = panes.map {
+                AdaptiveContentRegions.columns(in: $0.width, cardWidth: cardSize.width(in: nil))
+            }
+            Group(subviews: content()) { cards in
+                let pages = AdaptiveContentRegions.shelfPages(count: cards.count, columns: columns)
+                DashboardRegionRow(panes: panes, width: regions.viewport.width) {
+                    ForEach(panes.indices, id: \.self) { pane in
+                        paneShelf(cards: cards, pages: pages, pane: pane,
+                                  columns: columns[pane], width: panes[pane].width)
+                    }
+                }
+                .uniformWorkCardHeights()
+                .environment(\.carouselCardAvailableWidth, max(0, (panes.map(\.width).min() ?? 32) - 32))
+                .onChange(of: pages.count) { _, count in
+                    visiblePage = count > 0 ? min(visiblePage ?? 0, count - 1) : nil
+                }
+            }
+        } else {
+            compactShelf
+        }
+        #else
+        compactShelf
+        #endif
+    }
+
+    private var compactShelf: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(alignment: .top, spacing: compactSpacing) { content() }
+                .uniformWorkCardHeights()
+                .padding(.horizontal, 16)
+                .padding(.vertical, 6)
+        }
+        .horizontalScrollViewport(preservesShadows: true, cardGutter: 16)
+    }
+
+    #if os(iOS)
+    private func paneShelf(
+        cards: SubviewsCollection, pages: [[[Int]]], pane: Int, columns: Int, width: CGFloat
+    ) -> some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(alignment: .top, spacing: 0) {
+                ForEach(pages.indices, id: \.self) { page in
+                    CarouselCardGrid(columnCount: columns, containerWidth: max(0, width - 32)) {
+                        ForEach(pages[page][pane], id: \.self) { index in
+                            cards[index]
+                                .accessibilitySortPriority(Double(cards.count - index))
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 6)
+                    .frame(width: width, alignment: .leading)
+                    .id(page)
+                }
+            }
+            .scrollTargetLayout()
+        }
+        .horizontalScrollViewport(preservesShadows: true, cardGutter: 16)
+        .scrollTargetBehavior(.viewAligned)
+        .scrollPosition(id: $visiblePage, anchor: .leading)
+        .environment(\.carouselCardAvailableWidth, max(0, width - 32))
+    }
+    #endif
 }

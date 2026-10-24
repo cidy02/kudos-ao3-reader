@@ -90,13 +90,7 @@ struct WorkCarouselSection<Cards: View, Empty: View>: View {
                 if hasItems {
                     switch layout {
                     case .shelves:
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(alignment: .top, spacing: 12) { cards() }
-                                .uniformWorkCardHeights()
-                                .padding(.horizontal, 16)
-                                .padding(.vertical, 6)
-                        }
-                        .horizontalScrollViewport(preservesShadows: true, cardGutter: 16)
+                        DashboardCardShelf { cards() }
                     case .ledger:
                         // No `uniformWorkCardHeights` here: that exists to stop a
                         // shelf of side-by-side cards ragging at different heights.
@@ -111,6 +105,7 @@ struct WorkCarouselSection<Cards: View, Empty: View>: View {
                     emptyState()
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.horizontal, 16)
+                        .dashboardLeadingRegion()
                 }
             }
         }
@@ -130,6 +125,7 @@ struct WorkCarouselSection<Cards: View, Empty: View>: View {
             // promise the destination cannot keep.
             onSeeAll: hasItems ? onSeeAll : nil
         )
+        .dashboardLeadingRegion()
     }
 }
 
