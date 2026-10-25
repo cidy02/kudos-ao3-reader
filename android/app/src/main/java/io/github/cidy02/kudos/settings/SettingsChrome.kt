@@ -216,7 +216,7 @@ fun SubjectTextFieldRow(
                 modifier = Modifier.spokenAs(label, byControl = true))
             Box(Modifier.weight(1f)) { input() }
         } else SubjectFormRow(label, labelSpokenByControl = true, trailing = { Box(Modifier.fillMaxWidth(0.55f)) { input() } })
-        if (!error.isNullOrEmpty()) Text(error, color = SubjectPalette.fromHue(0.0, tokens.theme).accent,
+        if (!error.isNullOrEmpty()) Text(error, color = tokens.destructive,
             fontSize = 11.5.sp, lineHeight = 17.sp,
             modifier = Modifier.padding(horizontal = 13.dp).padding(bottom = 8.dp))
     }

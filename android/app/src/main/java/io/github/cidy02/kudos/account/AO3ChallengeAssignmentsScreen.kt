@@ -95,7 +95,7 @@ private fun ChallengeAssignmentsContent(slug: String, title: String, viewerIsOwn
             title = { Text(write.kind.confirmTitle, lineHeight = 28.sp) },
             text = { Text(state.confirmation(write), lineHeight = 22.sp) },
             confirmButton = { TextButton(enabled = !disabled, onClick = { scope.launch { model.perform() } }) {
-                Text(write.kind.confirmButton, color = if (write.kind == AssignmentWrite.Default) SubjectPalette.fromHue(0.0, tokens.theme).accent else palette.accent, lineHeight = 20.sp)
+                Text(write.kind.confirmButton, color = if (write.kind == AssignmentWrite.Default) tokens.destructive else palette.accent, lineHeight = 20.sp)
             } },
             dismissButton = { TextButton(onClick = { model.cancel() }) { Text("Cancel", color = palette.accent, lineHeight = 20.sp) } })
     }
@@ -120,9 +120,9 @@ private fun ChallengeAssignmentsContent(slug: String, title: String, viewerIsOwn
                         state.actionError?.let { message -> item {
                             SettingsPanel(Modifier.padding(top = 8.dp)) {
                                 Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(Icons.Default.Warning, null, tint = SubjectPalette.fromHue(0.0, tokens.theme).accent,
+                                    Icon(Icons.Default.Warning, null, tint = tokens.destructive,
                                         modifier = Modifier.padding(end = 8.dp).size(20.dp))
-                                    Text(message, color = SubjectPalette.fromHue(0.0, tokens.theme).accent, fontSize = 12.5.sp, lineHeight = 18.sp, modifier = Modifier.weight(1f))
+                                    Text(message, color = tokens.destructive, fontSize = 12.5.sp, lineHeight = 18.sp, modifier = Modifier.weight(1f))
                                     IconButton(onClick = { model.dismissError() }) { Icon(Icons.Default.Close, "Dismiss error", tint = tokens.secondaryInk) }
                                 }
                             }

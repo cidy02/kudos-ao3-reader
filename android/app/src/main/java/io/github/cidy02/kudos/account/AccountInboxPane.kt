@@ -32,6 +32,7 @@ import androidx.compose.material.icons.outlined.MarkEmailRead
 import androidx.compose.material.icons.outlined.MarkEmailUnread
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.VisibilityOff
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.DropdownMenu
@@ -585,7 +586,8 @@ private fun InboxBulkActionBar(
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            TextButton(onClick = onBulkDelete, enabled = enabled) {
+            TextButton(onClick = onBulkDelete, enabled = enabled,
+                colors = ButtonDefaults.textButtonColors(contentColor = tokens.destructive)) {
                 Icon(Icons.Outlined.Delete, contentDescription = null)
                 Spacer(Modifier.width(6.dp))
                 Text("Delete")
@@ -1032,6 +1034,7 @@ private fun InboxItemOverflowMenu(
     onMarkUnread: () -> Unit,
     onDelete: () -> Unit
 ) {
+    val tokens = LocalKudosTokens.current
     var expanded by remember { mutableStateOf(false) }
     val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
     Box {
@@ -1087,7 +1090,7 @@ private fun InboxItemOverflowMenu(
             }
             if (canDelete) {
                 DropdownMenuItem(
-                    text = { Text("Delete From Inbox", color = Color(0xFFD32F2F)) },
+                    text = { Text("Delete From Inbox", color = tokens.destructive) },
                     onClick = {
                         expanded = false
                         onDelete()

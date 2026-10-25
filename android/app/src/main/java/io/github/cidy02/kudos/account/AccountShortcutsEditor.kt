@@ -115,7 +115,7 @@ private fun ShortcutEditorRow(shortcut: AccountShortcut, chosen: Boolean,
         .semantics(mergeDescendants = true) { contentDescription = "${if (chosen) "Remove" else "Add"} ${shortcut.title}" }
         .padding(13.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         Icon(if (chosen) Icons.Default.RemoveCircle else Icons.Default.AddCircle, null,
-            tint = SubjectPalette.fromHue(if (chosen) 0.0 else 0.33, tokens.theme).accent)
+            tint = if (chosen) tokens.destructive else SubjectPalette.fromHue(0.33, tokens.theme).accent)
         Icon(shortcut.icon, null, tint = tokens.primaryInk)
         Text(shortcut.title, Modifier.weight(1f), color = tokens.primaryInk, fontSize = 14.5.sp, lineHeight = 20.sp)
         trailing?.invoke()

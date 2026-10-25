@@ -398,6 +398,10 @@ class CommentsViewModelContextTest {
             until("definitive refusal") { session.posts.size == 1 && !model.submitting.value }
             assertEquals(reads + 1, session.urls.size) // CSRF only: no ambiguous verification.
             assertEquals(false, model.canReverify.value)
+            assertEquals(true, model.messageIsError.value)
+            model.clearMessage()
+            assertEquals(false, model.messageIsError.value)
+            assertEquals(null, model.message.value)
             assertEquals("definitive failure $index", drafts.getDraft(workId, username = "alice"))
             assertEquals(null, submissions.entry(CommentSubmissionKey.of(work, null, "definitive failure $index", "alice")))
             model.submitComment()
@@ -532,6 +536,7 @@ class CommentsViewModelContextTest {
         viewModel.updateDraft("a reply, still being typed"); idle()
         session.postGate = null; held.complete(Unit)
         until("the verdict") { !viewModel.submitting.value && loaded(viewModel) && viewModel.message.value != null }
+        assertEquals(false, viewModel.messageIsError.value)
 
         assertEquals(1, session.posts.size)
         // Its own slot is cleared: AO3 has the comment.

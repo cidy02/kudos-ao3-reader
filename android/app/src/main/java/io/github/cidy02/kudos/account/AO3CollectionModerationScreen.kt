@@ -65,7 +65,7 @@ fun AO3CollectionModerationScreen(
     val tokens = LocalKudosTokens.current
     val effectiveTitle = title.ifEmpty { slug }
     val palette = SubjectPalette.fromHue(HomeFacts.workHue(emptyList(), effectiveTitle), tokens.theme)
-    val errorColor = SubjectPalette.fromHue(0.0, tokens.theme).accent
+    val errorColor = tokens.destructive
     val large = isAccessibilityFontScale()
     LaunchedEffect(model) { model.loadOnAppear() }
     DisposableEffect(model) { onDispose { model.close() } }
@@ -85,7 +85,7 @@ fun AO3CollectionModerationScreen(
         surfaceContainerHighest = tokens.cardFill, surfaceContainerLow = tokens.cardFill,
         surfaceContainerLowest = tokens.background, surfaceDim = tokens.background, surfaceBright = tokens.cardFill,
         onSurface = tokens.primaryInk, onSurfaceVariant = tokens.secondaryInk,
-        error = errorColor, onError = tokens.cardFill, errorContainer = tokens.panelFill, onErrorContainer = tokens.primaryInk,
+        error = errorColor, onError = SubjectPalette.label(errorColor), errorContainer = tokens.panelFill, onErrorContainer = tokens.primaryInk,
         background = tokens.background, onBackground = tokens.primaryInk,
         outline = tokens.separator, outlineVariant = tokens.separator, surfaceTint = palette.accent,
         scrim = tokens.primaryInk.copy(alpha = 0.32f)

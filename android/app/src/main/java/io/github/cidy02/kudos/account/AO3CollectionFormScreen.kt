@@ -67,7 +67,7 @@ fun AO3CollectionFormScreen(
     val state by model.state.collectAsState()
     val tokens = LocalKudosTokens.current
     val palette = tokens.scopePalette
-    val red = SubjectPalette.fromHue(0.0, tokens.theme).accent
+    val red = tokens.destructive
     var deleting by remember(model) { mutableStateOf(false) }
     var typed by remember(model) { mutableStateOf("") }
     var challengeMenu by remember(model) { mutableStateOf(false) }

@@ -140,7 +140,7 @@ fun AO3CollectionItemsScreen(
         tertiary = palette.accent, onTertiary = SubjectPalette.label(palette.accent),
         tertiaryContainer = palette.chipFill, onTertiaryContainer = palette.accentOnFill,
         inversePrimary = palette.accent, inverseSurface = tokens.cardFill, inverseOnSurface = tokens.primaryInk,
-        error = SubjectPalette.fromHue(0.0, tokens.theme).accent, onError = tokens.cardFill,
+        error = tokens.destructive, onError = SubjectPalette.label(tokens.destructive),
         errorContainer = tokens.panelFill, onErrorContainer = tokens.primaryInk,
         surfaceTint = palette.accent, surfaceVariant = tokens.cardFill,
         surfaceDim = tokens.background, surfaceBright = tokens.cardFill,
@@ -229,7 +229,7 @@ fun AO3CollectionItemsScreen(
 @Composable
 private fun ItemsMessage(message: String, isError: Boolean = false) {
     val tokens = LocalKudosTokens.current
-    Text(message, color = if (isError) SubjectPalette.fromHue(0.0, tokens.theme).accent else tokens.secondaryInk, fontSize = 12.5.sp, lineHeight = 18.sp,
+    Text(message, color = if (isError) tokens.destructive else tokens.secondaryInk, fontSize = 12.5.sp, lineHeight = 18.sp,
         modifier = Modifier.fillMaxWidth().padding(top = 14.dp).padding(horizontal = SubjectMetrics.accountGutter)
             .subjectPanel().padding(horizontal = 14.dp, vertical = 12.dp))
 }
@@ -305,7 +305,7 @@ private fun CollectionItemPanel(
                 TextButton(onClick = onRemove, enabled = enabled, contentPadding = PaddingValues(0.dp)) {
                     Text(if (draft.remove) "Keep" else "Remove from collection", lineHeight = 17.sp, fontSize = 12.sp,
                         fontWeight = FontWeight.SemiBold, color = if (draft.remove) palette.accent else
-                            SubjectPalette.fromHue(0.0, tokens.theme).accent)
+                            tokens.destructive)
                 }
             }
         }
@@ -348,7 +348,10 @@ private fun ItemApprovalRow(label: String, value: AO3CollectionItemApproval, edi
         AO3CollectionItemApproval.Rejected -> 0.0
     }
     ItemSettingRow(label) {
-        SubjectChip(value.title, style = SubjectChipStyle.Tinted, palette = SubjectPalette.fromHue(hue, tokens.theme),
+        SubjectChip(value.title, style = SubjectChipStyle.Tinted,
+            palette = if (value == AO3CollectionItemApproval.Rejected) SubjectPalette.fromColor(tokens.destructive, tokens.theme)
+                else SubjectPalette.fromHue(hue, tokens.theme),
+            contentColor = if (value == AO3CollectionItemApproval.Rejected) tokens.destructive else null,
             trailingIcon = if (editable) Icons.Filled.ExpandMore else null,
             modifier = Modifier.clickable(enabled = editable) { choosing = true }
                 .semantics { contentDescription = "$label: ${value.title}" })

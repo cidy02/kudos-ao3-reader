@@ -502,12 +502,13 @@ fun SubjectChip(
     fontWeight: FontWeight? = null,
     horizontalPadding: Dp? = null,
     verticalPadding: Dp? = null,
-    maxLines: Int = if (isAccessibilityFontScale()) Int.MAX_VALUE else 1
+    maxLines: Int = if (isAccessibilityFontScale()) Int.MAX_VALUE else 1,
+    contentColor: Color? = null
 ) {
     val tokens = LocalKudosTokens.current
     val pill = style is SubjectChipStyle.Pill
     val shape = if (pill) RoundedCornerShape(percent = 50) else RoundedCornerShape(SubjectMetrics.chipRadius)
-    val foreground = when (style) {
+    val foreground = contentColor ?: when (style) {
         SubjectChipStyle.Neutral -> tokens.primaryInk
         SubjectChipStyle.Tinted -> palette?.accentOnFill ?: tokens.primaryInk
         SubjectChipStyle.Dashed -> tokens.secondaryInk
@@ -1036,7 +1037,7 @@ fun FilterButton(
         }
         DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
             DropdownMenuItem(
-                text = { Text("Clear All Filters") },
+                text = { Text("Clear All Filters", color = tokens.destructive) },
                 onClick = {
                     menuOpen = false
                     onClearFilters?.invoke()

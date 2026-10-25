@@ -429,7 +429,7 @@ fun AO3PreferencesScreen(
             modifier = Modifier.align(Alignment.BottomCenter).padding(16.dp)
                 .semantics { liveRegion = LiveRegionMode.Polite },
             containerColor = LocalKudosTokens.current.cardFill,
-            contentColor = LocalKudosTokens.current.primaryInk,
+            contentColor = if (success) LocalKudosTokens.current.primaryInk else LocalKudosTokens.current.destructive,
             actionOnNewLine = !success,
             action = if (success) null else { {
                 TextButton(onClick = { save() }, enabled = !saving && !loading && hasEdits) { Text("Try Again") }

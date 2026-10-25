@@ -442,7 +442,7 @@ internal fun QueueTagRemovalDialog(tag: Tag, count: Int, onDismiss: () -> Unit, 
                 else -> "Those works keep their other tags. Works outside this queue keep this tag."
             })
         },
-        confirmButton = { TextButton(onClick = onConfirm) { Text("Remove") } },
+        confirmButton = { TextButton(onClick = onConfirm) { Text("Remove", color = LocalKudosTokens.current.destructive) } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
     )
 }
@@ -528,7 +528,7 @@ private fun TagRows(
                 DropdownMenuItem(text = { Text("Show only this tag") }, onClick = { open = false; onAction(tag, TagAction.Show) })
                 DropdownMenuItem(text = { Text("Copy tag to another queue") }, enabled = canCopy, onClick = { open = false; onAction(tag, TagAction.Copy) })
                 DropdownMenuItem(
-                    text = { Text("Remove from $count work${if (count == 1) "" else "s"}") },
+                    text = { Text("Remove from $count work${if (count == 1) "" else "s"}", color = tokens.destructive) },
                     onClick = { open = false; onAction(tag, TagAction.Remove) }
                 )
             }
@@ -688,7 +688,7 @@ internal fun QueueTagEditContent(
                         mergeTarget = null
                         onChanged()
                     }
-                }) { Text("Merge") }
+                }) { Text("Merge", color = LocalKudosTokens.current.destructive) }
             },
             { TextButton(onClick = { mergeTarget = null }) { Text("Cancel") } }
         )

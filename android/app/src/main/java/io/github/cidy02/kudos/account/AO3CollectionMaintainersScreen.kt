@@ -54,7 +54,7 @@ fun AO3CollectionMaintainersScreen(
     val palette = remember(effectiveTitle, tokens.theme) {
         SubjectPalette.fromHue(HomeFacts.workHue(emptyList(), effectiveTitle), tokens.theme)
     }
-    val red = SubjectPalette.fromHue(0.0, tokens.theme).accent
+    val red = tokens.destructive
     var roleMenu by remember(model) { mutableStateOf(false) }
     LaunchedEffect(model) { model.loadOnAppear() }
     LaunchedEffect(model, state.left) { if (state.left && authState.isSignedIn) onLeft() }
@@ -71,7 +71,7 @@ fun AO3CollectionMaintainersScreen(
             tertiary = palette.accent, onTertiary = SubjectPalette.label(palette.accent),
             tertiaryContainer = palette.chipFill, onTertiaryContainer = palette.accentOnFill,
             inversePrimary = palette.accent, inverseSurface = tokens.cardFill, inverseOnSurface = tokens.primaryInk,
-            error = red, onError = tokens.cardFill, errorContainer = tokens.panelFill, onErrorContainer = tokens.primaryInk,
+            error = red, onError = SubjectPalette.label(red), errorContainer = tokens.panelFill, onErrorContainer = tokens.primaryInk,
             surfaceTint = palette.accent, surfaceVariant = tokens.cardFill,
             surfaceDim = tokens.background, surfaceBright = tokens.cardFill,
             surfaceContainerLowest = tokens.background, surfaceContainerLow = tokens.cardFill,

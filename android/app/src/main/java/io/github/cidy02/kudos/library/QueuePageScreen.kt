@@ -26,6 +26,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -537,7 +538,7 @@ fun QueuePageScreen(
                         repository.deleteQueue(current.id)
                         onBackToOrganizer?.invoke()
                     }
-                }) { Text("Delete") }
+                }) { Text("Delete", color = LocalKudosTokens.current.destructive) }
             },
             dismissButton = { TextButton(onClick = { showDelete = false }) { Text("Cancel") } }
         )
@@ -549,7 +550,7 @@ fun QueuePageScreen(
             confirmButton = { TextButton(onClick = {
                 removeOne = null
                 scope.launch { repository.removeWork(queueId, work.id); reload += 1 }
-            }) { Text("Remove") } },
+            }) { Text("Remove", color = LocalKudosTokens.current.destructive) } },
             dismissButton = { TextButton(onClick = { removeOne = null }) { Text("Cancel") } }
         )
     }
@@ -569,7 +570,7 @@ fun QueuePageScreen(
                         selecting = false
                         reload += 1
                     }
-                }) { Text("Remove") }
+                }) { Text("Remove", color = LocalKudosTokens.current.destructive) }
             },
             dismissButton = { TextButton(onClick = { showRemove = false }) { Text("Cancel") } }
         )
@@ -622,7 +623,8 @@ private fun PageToolbarActions(
         TextButton(onClick = onSelectAll) {
             Text(if (selectedCount == total && total > 0) "Deselect All" else "Select All", color = palette.accent)
         }
-        if (showsRemove) TextButton(onClick = onRemove, enabled = selectedCount > 0) { Text("Remove") }
+        if (showsRemove) TextButton(onClick = onRemove, enabled = selectedCount > 0,
+            colors = ButtonDefaults.textButtonColors(contentColor = LocalKudosTokens.current.destructive)) { Text("Remove") }
         TextButton(onClick = onDone) { Text("Done", color = palette.accent) }
     } else {
         // iOS 1h: "an accent-filled + for adding works" (.glassProminent).
@@ -666,7 +668,7 @@ private fun PageToolbarActions(
                 DropdownMenuItem(text = { Text("Queue details") }, onClick = { onDismissMenu(); onDetails() })
                 if (custom) {
                     DropdownMenuItem(text = { Text("Edit Queue") }, onClick = { onDismissMenu(); onEdit() })
-                    DropdownMenuItem(text = { Text("Delete Queue") }, onClick = { onDismissMenu(); onDelete() })
+                    DropdownMenuItem(text = { Text("Delete Queue", color = LocalKudosTokens.current.destructive) }, onClick = { onDismissMenu(); onDelete() })
                 }
             }
         }

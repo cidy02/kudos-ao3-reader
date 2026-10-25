@@ -165,7 +165,7 @@ internal fun WritingAssociationPicker(
                         AssociationPanelRow(index, form.gifts.size, continuation = true) {
                             SubjectFormRow(name, trailing = {
                                 IconButton(onClick = { model.removeGift(name) }) {
-                                    Icon(Icons.Default.RemoveCircle, "Remove $name", tint = SubjectPalette.fromHue(0.0, tokens.theme).accent, modifier = Modifier.size(18.dp))
+                                    Icon(Icons.Default.RemoveCircle, "Remove $name", tint = tokens.destructive, modifier = Modifier.size(18.dp))
                                 }
                             })
                         }

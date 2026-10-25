@@ -40,7 +40,6 @@ import io.github.cidy02.kudos.ui.subject.subjectPanel
 import io.github.cidy02.kudos.ui.subject.subjectScreenWash
 
 private val IncludedGreen = Color(0xFF34C759)
-private val ExcludedRed = Color(0xFFFF3B30)
 
 private enum class SaveChipKind { Included, Excluded, Facet }
 
@@ -192,17 +191,17 @@ private fun SaveSearchSummaryChip(chip: SaveChip) {
     val shape = RoundedCornerShape(percent = 50)
     val foreground = when (chip.kind) {
         SaveChipKind.Included -> IncludedGreen
-        SaveChipKind.Excluded -> ExcludedRed
+        SaveChipKind.Excluded -> tokens.destructive
         SaveChipKind.Facet -> tokens.primaryInk
     }
     val fill = when (chip.kind) {
         SaveChipKind.Included -> IncludedGreen.copy(alpha = 0.15f)
-        SaveChipKind.Excluded -> ExcludedRed.copy(alpha = 0.15f)
+        SaveChipKind.Excluded -> tokens.destructive.copy(alpha = 0.15f)
         SaveChipKind.Facet -> tokens.glassFill(0.10)
     }
     val stroke = when (chip.kind) {
         SaveChipKind.Included -> IncludedGreen.copy(alpha = 0.35f)
-        SaveChipKind.Excluded -> ExcludedRed.copy(alpha = 0.35f)
+        SaveChipKind.Excluded -> tokens.destructive.copy(alpha = 0.35f)
         SaveChipKind.Facet -> tokens.glassStroke(0.16)
     }
     Text(

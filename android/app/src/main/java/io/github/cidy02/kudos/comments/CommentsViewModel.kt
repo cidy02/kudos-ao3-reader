@@ -125,6 +125,13 @@ class CommentsViewModel(
 
     private val _message = MutableStateFlow<String?>(null)
     val message: StateFlow<String?> = _message.asStateFlow()
+    private val _messageIsError = MutableStateFlow(false)
+    val messageIsError: StateFlow<Boolean> = _messageIsError.asStateFlow()
+
+    private fun setMessage(text: String?, isError: Boolean = false) {
+        _messageIsError.value = isError
+        _message.value = text
+    }
 
     private val _currentTarget = MutableStateFlow(initialTarget)
     val currentTarget: StateFlow<AO3CommentTarget?> = _currentTarget.asStateFlow()
@@ -711,7 +718,7 @@ class CommentsViewModel(
         _composerParent.value = comment
         _editTarget.value = null
         _draft.value = ""
-        _message.value = null
+        setMessage(null)
         _composerPresented.value = true
         viewModelScope.launch {
             draftHandoff?.join()
@@ -745,7 +752,7 @@ class CommentsViewModel(
         _replyTarget.value = null
         _composerParent.value = null
         _draft.value = comment.body
-        _message.value = null
+        setMessage(null)
         _composerPresented.value = true
     }
 
@@ -787,10 +794,10 @@ class CommentsViewModel(
                 // The reader changed while AO3 answered: the screen stays the new reader's.
                 if (currentViewer() == asked) when (result) {
                     is AO3Result.Success -> {
-                        _message.value = "Comment deleted."
+                        setMessage("Comment deleted.")
                         reloadPageOnScreen()
                     }
-                    is AO3Result.Failure -> _message.value = result.error.displayMessage()
+                    is AO3Result.Failure -> setMessage(result.error.displayMessage(), isError = true)
                 }
             } finally { _submitting.value = false }
         }
@@ -825,7 +832,7 @@ class CommentsViewModel(
                 val result = repository.verifySubmission(key, entry, sent.viewer.generation)
                 if (currentViewer() != sent.viewer) return@launch
                 if (result is AO3Result.Failure) {
-                    _message.value = commentsReadErrorMessage(result.error)
+                    setMessage(commentsReadErrorMessage(result.error), isError = true)
                     return@launch
                 }
                 val verdict = (result as AO3Result.Success).value
@@ -834,10 +841,10 @@ class CommentsViewModel(
                     CommentVerification.Found -> posted(sent, key)
                     CommentVerification.Absent -> {
                         pendingVerification = null
-                        _message.value = "AO3's comments show no matching post. You can try posting again."
+                        setMessage("AO3's comments show no matching post. You can try posting again.", isError = true)
                     }
-                    CommentVerification.Unknown -> _message.value =
-                        "Couldn't confirm whether the comment posted. Check again before posting this comment again."
+                    CommentVerification.Unknown -> setMessage(
+                        "Couldn't confirm whether the comment posted. Check again before posting this comment again.", isError = true)
                 }
             } finally { _verifying.value = false; _submitting.value = false }
         }
@@ -861,7 +868,7 @@ class CommentsViewModel(
             _composerParent.value = null
             _composerPresented.value = false
         }
-        _message.value = if (sent.edit == null) "Posted." else "Comment updated."
+        setMessage(if (sent.edit == null) "Posted." else "Comment updated.")
         if (sent.replyTo != null || sent.edit != null) reloadPageOnScreen() else reloadStart()
     }
 
@@ -874,7 +881,7 @@ class CommentsViewModel(
         if (key != null && submissions.entry(key) != null) {
             when (submissions.entry(key)?.phase) {
                 CommentSubmissionStore.Phase.Ambiguous -> verify(sent, key)
-                CommentSubmissionStore.Phase.Succeeded -> _message.value = "You just posted this. Reload to see if it appeared."
+                CommentSubmissionStore.Phase.Succeeded -> setMessage("You just posted this. Reload to see if it appeared.")
                 else -> Unit
             }
             return
@@ -889,7 +896,7 @@ class CommentsViewModel(
                     key?.let { submissions.resolve(it, CommentVerification.Absent) }
                     return@launch
                 }
-                _message.value = null
+                setMessage(null)
                 val result = if (sent.edit?.editPath != null) {
                     repository.editComment(sent.edit.editPath, content)
                 } else {
@@ -913,7 +920,7 @@ class CommentsViewModel(
                             }
                         } else {
                             key?.let { submissions.resolve(it, CommentVerification.Absent) }
-                            if (currentViewer() == sent.viewer) _message.value = result.error.displayMessage()
+                            if (currentViewer() == sent.viewer) setMessage(result.error.displayMessage(), isError = true)
                         }
                     }
                 }
@@ -950,7 +957,7 @@ class CommentsViewModel(
     }
 
     fun clearMessage() {
-        _message.value = null
+        setMessage(null)
     }
 
     fun setTarget(target: AO3CommentTarget) {

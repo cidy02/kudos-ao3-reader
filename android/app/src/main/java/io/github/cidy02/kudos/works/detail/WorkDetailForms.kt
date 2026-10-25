@@ -105,7 +105,7 @@ private fun FormToolbarAction(label: String, enabled: Boolean, onClick: () -> Un
 internal fun DetailFormText(text: String, error: Boolean = false, primary: Boolean = false) {
     val tokens = LocalKudosTokens.current
     Text(text, color = when {
-        error -> SubjectPalette.fromHue(0.0, tokens.theme).accent
+        error -> tokens.destructive
         primary -> tokens.primaryInk
         else -> tokens.secondaryInk
     }, fontSize = if (primary) 14.5.sp else 13.sp, lineHeight = if (primary) 20.sp else 18.sp, modifier = Modifier.padding(13.dp))
@@ -160,7 +160,7 @@ internal fun WorkDetailBookmarkForm(
         if (error != null) item { SettingsSection(footnote = null) {
             Row(Modifier.fillMaxWidth().padding(start = 13.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
                 Icon(Icons.Outlined.Warning, contentDescription = null,
-                    tint = SubjectPalette.fromHue(0.0, LocalKudosTokens.current.theme).accent, modifier = Modifier.size(20.dp))
+                    tint = LocalKudosTokens.current.destructive, modifier = Modifier.size(20.dp))
                 Box(Modifier.weight(1f)) { DetailFormText(error, error = true) }
             }
         } }

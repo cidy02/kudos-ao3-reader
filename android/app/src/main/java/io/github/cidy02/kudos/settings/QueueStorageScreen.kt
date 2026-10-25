@@ -265,8 +265,8 @@ internal fun PreservedWorkRow(
                     )
                 }
                 DropdownMenuItem(
-                    text = { Text("Remove from Reading Queues") },
-                    leadingIcon = { Icon(Icons.Outlined.RemoveCircleOutline, contentDescription = null) },
+                    text = { Text("Remove from Reading Queues", color = MaterialTheme.colorScheme.error) },
+                    leadingIcon = { Icon(Icons.Outlined.RemoveCircleOutline, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
                     onClick = {
                         showsMenu = false
                         onRemove()

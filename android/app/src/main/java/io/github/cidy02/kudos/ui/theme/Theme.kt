@@ -20,6 +20,7 @@ import io.github.cidy02.kudos.ui.subject.LocalAppPalette
 import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
 import io.github.cidy02.kudos.ui.subject.LocalSubjectPalette
 import io.github.cidy02.kudos.ui.subject.ReaderTheme
+import io.github.cidy02.kudos.ui.subject.SubjectPalette
 
 enum class KudosThemeMode(val label: String) {
     System("System"),
@@ -40,6 +41,8 @@ enum class KudosThemeMode(val label: String) {
 }
 
 private fun lightScheme(accent: Color) = lightColorScheme(
+    error = ReaderTheme.Light.destructive,
+    onError = SubjectPalette.label(ReaderTheme.Light.destructive),
     primary = accent,
     onPrimary = Paper,
     secondary = AccentBlue,
@@ -53,6 +56,8 @@ private fun lightScheme(accent: Color) = lightColorScheme(
 )
 
 private fun darkScheme(accent: Color) = darkColorScheme(
+    error = ReaderTheme.Dark.destructive,
+    onError = SubjectPalette.label(ReaderTheme.Dark.destructive),
     primary = PaperWarm,
     onPrimary = accent,
     secondary = AccentBlue,
@@ -66,6 +71,8 @@ private fun darkScheme(accent: Color) = darkColorScheme(
 )
 
 private fun oledScheme(accent: Color) = darkColorScheme(
+    error = ReaderTheme.Oled.destructive,
+    onError = SubjectPalette.label(ReaderTheme.Oled.destructive),
     primary = PaperWarm,
     onPrimary = accent,
     secondary = AccentBlue,
@@ -79,6 +86,8 @@ private fun oledScheme(accent: Color) = darkColorScheme(
 )
 
 private val SepiaScheme = lightColorScheme(
+    error = ReaderTheme.Sepia.destructive,
+    onError = SubjectPalette.label(ReaderTheme.Sepia.destructive),
     // Apple suppresses the red accent in Sepia and uses a single warm-brown tint
     // (#9A6732) for controls/links/selection. Match that for parity.
     primary = SepiaTint,

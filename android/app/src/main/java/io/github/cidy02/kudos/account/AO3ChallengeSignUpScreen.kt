@@ -89,7 +89,7 @@ private fun ChallengeSignUpContent(slug: String, title: String, existingID: Int?
         else "$size ${noun.lowercase()}${if (size == 1) "" else "s"}"
     val subtitle = count("Request", requests.size, form?.limits?.requests?.last) + if (takesOffers)
         " · " + count("Offer", offers.size, form?.limits?.offers?.last) else ""
-    val destructive = SubjectPalette.fromHue(0.0, tokens.theme).accent
+    val destructive = tokens.destructive
     if (confirmingWithdraw) AlertDialog(
         onDismissRequest = { confirmingWithdraw = false },
         containerColor = tokens.cardFill, titleContentColor = tokens.primaryInk, textContentColor = tokens.secondaryInk,
@@ -263,7 +263,7 @@ private fun SignUpSmallValue(text: String) {
 private fun SignUpMessage(message: String, error: Boolean = true) {
     val tokens = LocalKudosTokens.current
     SettingsPanel(Modifier.padding(top = 8.dp)) {
-        Text(message, color = if (error) SubjectPalette.fromHue(0.0, tokens.theme).accent else tokens.scopePalette.accent,
+        Text(message, color = if (error) tokens.destructive else tokens.scopePalette.accent,
             fontSize = 12.5.sp, lineHeight = 18.sp, modifier = Modifier.fillMaxWidth().padding(12.dp))
     }
 }

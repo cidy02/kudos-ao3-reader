@@ -51,6 +51,10 @@ enum class ReaderTheme {
     val appTint: Color?
         get() = if (this == Sepia) SepiaTint else null
 
+    /** iOS 26 system red; destructive/error marks ignore the picked accent. */
+    val destructive: Color
+        get() = if (isDarkFamily) Color(0xFFFF4245) else Color(0xFFFF383C)
+
     /** `Color.primary` for this theme's colour scheme. Sepia is a light scheme. */
     val primaryInk: Color
         get() = if (isDarkFamily) Color.White else Color.Black
@@ -103,7 +107,7 @@ enum class ReaderTheme {
 
 /**
  * Semantic colours for the redesign, provided by [io.github.cidy02.kudos.ui.theme.KudosTheme].
- * Material schemes stay as they are; existing screens keep reading those.
+ * Material error colours share the destructive token; existing screens keep reading those.
  */
 data class KudosTokens(
     val theme: ReaderTheme,
@@ -125,6 +129,8 @@ data class KudosTokens(
      */
     val accentInk: Color = accent
 ) {
+    val destructive: Color get() = theme.destructive
+
     /** Shared favorite star, as on the existing work cards. */
     val favoriteGold: Color get() = Color(0xFFFFC107)
 

@@ -194,7 +194,7 @@ fun AO3NativeLoginScreen(
         message?.let { error ->
             SettingsPanel {
                 Row(Modifier.padding(13.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    val errorColor = SubjectPalette.fromHue(0.0, tokens.theme).accent
+                    val errorColor = tokens.destructive
                     Icon(Icons.Outlined.ErrorOutline, contentDescription = null, tint = errorColor)
                     Text(error, color = errorColor, lineHeight = 21.sp)
                 }
