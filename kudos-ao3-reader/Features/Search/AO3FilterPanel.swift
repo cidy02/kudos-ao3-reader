@@ -146,6 +146,9 @@ struct AO3FilterPanel: View {
                 .modifier(WorksFilterSheetGround())
                 .toolbar { actionButtons }
         }
+        #if os(iOS)
+            .modifier(ScopeSurfaceAccent())
+        #endif
         .onAppear { sortPresentation.appear(applied: worksSort) }
     }
 
