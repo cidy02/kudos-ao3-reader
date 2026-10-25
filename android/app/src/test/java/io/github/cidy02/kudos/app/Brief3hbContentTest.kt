@@ -269,9 +269,9 @@ class Brief3hbContentTest {
             { SharedTags(emptyList(), emptyMap()) }, { added += it }, {}) }
         val add = compose.onNodeWithText("Add", useUnmergedTree = true)
         compose.onNodeWithText("Add").assertIsNotEnabled()
-        assertNotEquals(tokens.scopePalette.accent, textColor(add))
+        assertNotEquals(tokens.accentInk, textColor(add))
         compose.onNode(hasSetTextAction()).performTextInput("Comfort")
-        assertEquals(tokens.scopePalette.accent, textColor(add))
+        assertEquals(tokens.accentInk, textColor(add))
         compose.onNodeWithText("Add").performClick()
         compose.waitUntil(5_000) { added == listOf("Comfort") }
     }

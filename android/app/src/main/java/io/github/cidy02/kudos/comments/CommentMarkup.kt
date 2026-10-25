@@ -54,6 +54,8 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
@@ -194,12 +196,7 @@ fun CommentFormatBar(
                     onClick = { onValueChange(CommentMarkup.applyTag(tag, value)) },
                     modifier = Modifier.size(36.dp)
                 ) {
-                    Icon(
-                        imageVector = tag.icon,
-                        contentDescription = tag.label,
-                        tint = tokens.primaryInk,
-                        modifier = Modifier.size(20.dp)
-                    )
+                    CommentFormattingGlyph(tag, description = tag.label, iconSize = 20.dp)
                 }
             }
             Box(
@@ -221,6 +218,33 @@ fun CommentFormatBar(
             }
         }
     }
+}
+
+/** The serif letters iOS uses in both the quick bar and the full tray. */
+@Composable
+private fun CommentFormattingGlyph(
+    tag: CommentMarkupTag, description: String? = null, iconSize: androidx.compose.ui.unit.Dp = 19.dp
+) {
+    val letter = when (tag) {
+        CommentMarkupTag.Bold -> "B"
+        CommentMarkupTag.Italic -> "I"
+        CommentMarkupTag.Underline -> "U"
+        CommentMarkupTag.Strike -> "S"
+        CommentMarkupTag.Small -> "Aa"
+        else -> null
+    }
+    if (letter == null) Icon(tag.icon, contentDescription = description,
+        tint = LocalKudosTokens.current.primaryInk, modifier = Modifier.size(iconSize))
+    // A fixed size, as iOS's `.system(size:)` letters and the icons they replace: they don't grow with the font.
+    else Text(letter, color = LocalKudosTokens.current.primaryInk, fontFamily = FontFamily.Serif,
+        fontSize = with(LocalDensity.current) { (if (tag == CommentMarkupTag.Small) 11.dp else 16.dp).toSp() },
+        fontWeight = if (tag == CommentMarkupTag.Bold) FontWeight.Bold else FontWeight.Normal,
+        fontStyle = if (tag == CommentMarkupTag.Italic) FontStyle.Italic else FontStyle.Normal,
+        textDecoration = when (tag) {
+            CommentMarkupTag.Underline -> TextDecoration.Underline
+            CommentMarkupTag.Strike -> TextDecoration.LineThrough
+            else -> null
+        }, modifier = Modifier.semantics { if (description != null) contentDescription = description })
 }
 
 /** iOS `CommentFormattingLayout`, in dp; >1.3 is this app's accessibility threshold. */
@@ -321,8 +345,7 @@ internal fun CommentFormattingContent(
                                             horizontalAlignment = Alignment.CenterHorizontally,
                                             verticalArrangement = Arrangement.spacedBy(3.dp)
                                         ) {
-                                            Icon(tag.icon, contentDescription = null, tint = tokens.primaryInk,
-                                                modifier = Modifier.size(19.dp))
+                                            CommentFormattingGlyph(tag)
                                             Text(tag.label, fontSize = 11.sp, lineHeight = 16.sp,
                                                 fontWeight = FontWeight.Medium, color = tokens.primaryInk)
                                             Text(tag.tagLabel, fontSize = 11.sp, lineHeight = 16.sp,

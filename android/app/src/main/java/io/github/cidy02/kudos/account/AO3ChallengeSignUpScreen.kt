@@ -19,6 +19,8 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -161,7 +163,7 @@ private fun ChallengeSignUpContent(slug: String, title: String, existingID: Int?
                                 SubjectRowSeparator()
                                 Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                                     SubjectFormRow("Any of these is fine", trailing = {
-                                        SubjectToggle(SignUpTagType.Relationship in request.any, enabled = !busy, accent = palette.accent,
+                                        SubjectToggle(SignUpTagType.Relationship in request.any, enabled = !busy, accent = palette.tint,
                                             contentDescription = "Any of these is fine", onCheckedChange = { checked ->
                                                 model.update(request.copy(any = if (checked) request.any + SignUpTagType.Relationship
                                                     else request.any - SignUpTagType.Relationship))
@@ -174,7 +176,9 @@ private fun ChallengeSignUpContent(slug: String, title: String, existingID: Int?
                             }
                             SettingsPanel(Modifier.padding(top = 8.dp)) {
                                 SubjectTextFieldRow("Prompt", request.description, "Describe what you would love to receive…",
-                                    { model.update(request.copy(description = it)) }, multiline = true, enabled = !busy)
+                                    { model.update(request.copy(description = it)) },
+                                    textStyle = TextStyle(fontFamily = FontFamily.Serif, fontSize = 14.sp),
+                                    multiline = true, enabled = !busy)
                                 Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 8.dp),
                                     horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                     Text("Visible to your recipient only", color = tokens.secondaryInk.copy(alpha = 0.8f),

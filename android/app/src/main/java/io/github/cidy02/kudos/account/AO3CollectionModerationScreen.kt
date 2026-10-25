@@ -71,6 +71,7 @@ fun AO3CollectionModerationScreen(
     DisposableEffect(model) { onDispose { model.close() } }
     ProvidePushedShellChrome(hasSubjectHeader = true)
 
+    SubjectPaletteTheme(palette) {
     MaterialTheme(colorScheme = MaterialTheme.colorScheme.copy(
         primary = palette.accent, onPrimary = SubjectPalette.label(palette.accent),
         primaryContainer = palette.chipFill, onPrimaryContainer = palette.accentOnFill,
@@ -266,6 +267,7 @@ fun AO3CollectionModerationScreen(
                 }
             }
         }
+    }
     }
 }
 

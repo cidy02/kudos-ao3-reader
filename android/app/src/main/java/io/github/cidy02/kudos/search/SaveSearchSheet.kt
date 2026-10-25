@@ -35,6 +35,7 @@ import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
 import io.github.cidy02.kudos.ui.subject.SectionRuleHeader
 import io.github.cidy02.kudos.ui.subject.SubjectMetrics
 import io.github.cidy02.kudos.ui.subject.SubjectPalette
+import io.github.cidy02.kudos.ui.subject.SubjectPaletteTheme
 import io.github.cidy02.kudos.ui.subject.subjectPanel
 import io.github.cidy02.kudos.ui.subject.subjectScreenWash
 
@@ -80,6 +81,7 @@ internal fun SaveSearchContent(
     val tokens = LocalKudosTokens.current
     val palette = SubjectPalette.fromHue(HomeFacts.workHue(emptyList(), name), tokens.theme)
     val chips = saveSearchChips(filters)
+    SubjectPaletteTheme(palette) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -180,6 +182,7 @@ internal fun SaveSearchContent(
                 fontSize = 11.5.sp
             )
         }
+    }
     }
 }
 

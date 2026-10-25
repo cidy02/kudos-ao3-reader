@@ -35,6 +35,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
@@ -222,7 +223,7 @@ fun SubjectFormRow(
                 imageVector = Icons.Filled.ExpandMore,
                 contentDescription = null,
                 tint = LocalSubjectPalette.current.accent,
-                modifier = Modifier.size(with(LocalDensity.current) { 18.sp.toDp() })
+                modifier = Modifier.testTag("Choice indicator").size(with(LocalDensity.current) { 18.sp.toDp() })
             )
         }
     }

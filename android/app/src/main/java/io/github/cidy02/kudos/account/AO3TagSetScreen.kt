@@ -69,6 +69,7 @@ fun AO3TagSetScreen(
     DisposableEffect(model) { onDispose { model.close() } }
     BackHandler(enabled = editing) { editing = false }
     ProvidePushedShellChrome(hasSubjectHeader = true, onBack = if (editing) ({ editing = false }) else null)
+    SubjectPaletteTheme(palette) {
     MaterialTheme(colorScheme = MaterialTheme.colorScheme.copy(
         primary = palette.accent, onPrimary = SubjectPalette.label(palette.accent),
         primaryContainer = palette.chipFill, onPrimaryContainer = palette.accentOnFill,
@@ -204,6 +205,7 @@ fun AO3TagSetScreen(
                 }
             }
         }
+    }
     }
 }
 

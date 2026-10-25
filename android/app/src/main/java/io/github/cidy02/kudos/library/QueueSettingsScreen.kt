@@ -301,7 +301,7 @@ fun QueueSettingsScreen(
                                 reload += 1
                             }
                         },
-                        accent = palette.accent,
+                        accent = palette.tint,
                         contentDescription = "Keep works offline"
                     )
                 }

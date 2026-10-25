@@ -7,6 +7,7 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.Density
 import io.github.cidy02.kudos.app.LocalPushedShellChrome
 import io.github.cidy02.kudos.app.PushedShellChrome
@@ -60,6 +61,28 @@ class AO3ChallengeSignUpScreenTest {
         compose.onAllNodesWithText(text, substring = substring).fetchSemanticsNodes().isNotEmpty()
     }
     private fun reach(text: String) = compose.onNodeWithTag("Challenge sign-up").performScrollToNode(hasText(text))
+
+    @Test fun promptAndPlaceholderUseFourteenSpSerif() {
+        io.github.cidy02.kudos.network.ao3.DemoNetwork.resetForTests()
+        io.github.cidy02.kudos.app.DebugShotRequests.clear()
+        show()
+        await("REQUEST 1")
+        reach("Prompt")
+        val field = compose.onAllNodesWithContentDescription("Prompt").onFirst()
+        field.performTextClearance()
+        compose.waitForIdle()
+        val placeholder = compose.onAllNodesWithText("Describe what you would love to receive…", useUnmergedTree = true).onFirst()
+        val placeholderLayouts = mutableListOf<TextLayoutResult>()
+        placeholder.performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(placeholderLayouts) }
+        field.performTextInput("A lantern prompt")
+        val layouts = mutableListOf<TextLayoutResult>()
+        field.performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
+        for (layout in placeholderLayouts + layouts) {
+            assertEquals(androidx.compose.ui.text.font.FontFamily.Serif, layout.layoutInput.style.fontFamily)
+            assertEquals(14.sp, layout.layoutInput.style.fontSize)
+        }
+        assertTrue(placeholderLayouts.isNotEmpty() && layouts.isNotEmpty())
+    }
 
     @Test fun collectionYourSignUpOpensNativeFormWithOneReadNoPostAndNoWithdrawal() {
         show(entry = "manage")

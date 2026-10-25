@@ -56,6 +56,7 @@ import io.github.cidy02.kudos.ui.subject.SubjectFieldLabel
 import io.github.cidy02.kudos.ui.subject.SubjectHeaderBlock
 import io.github.cidy02.kudos.ui.subject.SubjectRowSeparator
 import io.github.cidy02.kudos.writing.writingSuggestionPanel
+import io.github.cidy02.kudos.ui.subject.SubjectPaletteTheme
 import io.github.cidy02.kudos.ui.subject.subjectScreenWash
 import io.github.cidy02.kudos.works.WorkRepository
 import kotlinx.coroutines.launch
@@ -112,6 +113,7 @@ internal fun CollectionReorderContent(
     var dragged by remember { mutableStateOf<String?>(null) }
     var point by remember { mutableStateOf(Offset.Zero) }
     var displacement by remember { mutableStateOf(Offset.Zero) }
+    SubjectPaletteTheme(palette) {
     Column(
         Modifier
             .fillMaxSize()
@@ -139,7 +141,7 @@ internal fun CollectionReorderContent(
             ) {
                 Text(
                     text = "Done",
-                    color = palette.accent,
+                    color = if (saving) tokens.tertiaryInk else tokens.theme.accentInk(palette.tint),
                     fontWeight = FontWeight.Bold
                 )
             }
@@ -259,5 +261,6 @@ internal fun CollectionReorderContent(
                 Spacer(Modifier.padding(bottom = 24.dp))
             }
         }
+    }
     }
 }

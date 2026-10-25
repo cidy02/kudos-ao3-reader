@@ -5,6 +5,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.Density
 import android.graphics.Bitmap
 import android.graphics.Canvas
@@ -62,6 +63,27 @@ class AO3ChallengeSettingsEditScreenTest {
         await(text)
     }
     private fun click(text: String) { reach(text); compose.onNodeWithText(text).performClick(); compose.waitForIdle() }
+
+    @Test fun instructionsAndPlaceholderUseFourteenSpSerif() {
+        io.github.cidy02.kudos.network.ao3.DemoNetwork.resetForTests()
+        io.github.cidy02.kudos.app.DebugShotRequests.clear()
+        show()
+        reach("SIGN-UP INSTRUCTIONS")
+        val field = compose.onNodeWithContentDescription("Sign-up instructions")
+        field.performTextClearance()
+        compose.waitForIdle()
+        val placeholderLayouts = mutableListOf<androidx.compose.ui.text.TextLayoutResult>()
+        compose.onNodeWithText("Describe the challenge for people signing up…", useUnmergedTree = true)
+            .performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult) { it(placeholderLayouts) }
+        field.performTextInput("Challenge instructions")
+        val layouts = mutableListOf<androidx.compose.ui.text.TextLayoutResult>()
+        field.performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult) { it(layouts) }
+        for (layout in placeholderLayouts + layouts) {
+            assertEquals(androidx.compose.ui.text.font.FontFamily.Serif, layout.layoutInput.style.fontFamily)
+            assertEquals(14.sp, layout.layoutInput.style.fontSize)
+        }
+        assertTrue(placeholderLayouts.isNotEmpty() && layouts.isNotEmpty())
+    }
 
     @Test fun titleSubtitleAndFilledSaveStayVisibleWhileScheduleScrolls() {
         show(scale = 2f)

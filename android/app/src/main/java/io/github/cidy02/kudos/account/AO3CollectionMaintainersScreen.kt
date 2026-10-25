@@ -61,7 +61,7 @@ fun AO3CollectionMaintainersScreen(
     DisposableEffect(model) { onDispose { model.close() } }
     ProvidePushedShellChrome(hasSubjectHeader = true)
 
-    CompositionLocalProvider(LocalKudosTokens provides tokens.copy(accent = palette.accent)) {
+    SubjectPaletteTheme(palette) {
         // The shared refresh/dialog/menu chrome must also use subject tokens on all four themes.
         MaterialTheme(colorScheme = MaterialTheme.colorScheme.copy(
             primary = palette.accent, onPrimary = SubjectPalette.label(palette.accent),

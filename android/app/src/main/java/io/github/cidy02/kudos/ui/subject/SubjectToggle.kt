@@ -33,7 +33,7 @@ fun SubjectToggle(
     onCheckedChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
-    accent: Color = LocalKudosTokens.current.accent,
+    accent: Color = LocalKudosTokens.current.scopePalette.tint,
     contentDescription: String? = null
 ) {
     val tokens = LocalKudosTokens.current
