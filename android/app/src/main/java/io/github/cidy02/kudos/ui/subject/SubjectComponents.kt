@@ -189,6 +189,17 @@ class ShellWashes {
 
 val LocalShellWashes = staticCompositionLocalOf { ShellWashes() }
 
+/** iOS `SubjectCardBackground`: an opaque card surface with the subject's row wash and edge. */
+fun Modifier.subjectCard(
+    palette: SubjectPalette,
+    cornerRadius: Dp = SubjectMetrics.rowRadius
+): Modifier {
+    val shape = RoundedCornerShape(cornerRadius)
+    return background(palette.theme.cardSurface, shape)
+        .background(palette.rowWash, shape)
+        .border(0.5.dp, palette.rowBorder, shape)
+}
+
 /** Glass ground behind a form group or a figure strip. */
 @Composable
 fun Modifier.subjectPanel(

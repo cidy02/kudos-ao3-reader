@@ -34,6 +34,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -61,6 +62,8 @@ import io.github.cidy02.kudos.ui.subject.SectionRuleHeader
 import io.github.cidy02.kudos.ui.subject.SubjectHeaderBlock
 import io.github.cidy02.kudos.ui.subject.SubjectPalette
 import io.github.cidy02.kudos.ui.subject.ToolbarCircleButton
+import io.github.cidy02.kudos.ui.subject.compactCount
+import io.github.cidy02.kudos.ui.subject.subjectCard
 import io.github.cidy02.kudos.ui.subject.subjectPanel
 import io.github.cidy02.kudos.ui.subject.subjectScreenWash
 import java.text.NumberFormat
@@ -235,7 +238,7 @@ fun ReadingStatisticsScreen(
 }
 
 @Composable
-private fun ReadingStatisticsContent(
+internal fun ReadingStatisticsContent(
     state: ReadingStatisticsUiState,
     onRefresh: suspend () -> Unit
 ) {
@@ -330,9 +333,9 @@ private fun ReadingStatisticsContent(
                         modifier = Modifier.padding(top = 6.dp)
                     )
                 }
-                item { PaceCard(state.insights) }
+                item { PaceCard(state.insights, palette) }
             } else {
-                item { NoSessionsNote(state.period) }
+                item { NoSessionsNote(state.period, palette) }
             }
 
             item {
@@ -342,7 +345,7 @@ private fun ReadingStatisticsContent(
                     modifier = Modifier.padding(top = 6.dp)
                 )
             }
-            item { LibraryCard(statistics, state.now) }
+            item { LibraryCard(statistics, state.now, palette) }
 
             val topFandoms = statistics.topFandoms.take(6)
             if (topFandoms.isNotEmpty()) {
@@ -370,7 +373,7 @@ private fun HoursCard(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .subjectPanel()
+            .subjectCard(palette)
             .padding(horizontal = 18.dp, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(13.dp)
     ) {
@@ -497,7 +500,7 @@ private fun FandomHoursCard(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .subjectPanel()
+            .subjectCard(palette)
             .padding(horizontal = 18.dp, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(13.dp)
     ) {
@@ -515,7 +518,7 @@ private fun FandomHoursCard(
 }
 
 @Composable
-private fun PaceCard(insights: ReadingInsights) {
+private fun PaceCard(insights: ReadingInsights, palette: SubjectPalette) {
     val wordsPerHour = insights.wordsPerHour.roundToInt().takeIf { it > 0 }
         ?.let { NumberFormat.getIntegerInstance().format(it) }
         ?: "—"
@@ -530,7 +533,7 @@ private fun PaceCard(insights: ReadingInsights) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .subjectPanel()
+            .subjectCard(palette)
             .padding(horizontal = 18.dp, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(13.dp)
     ) {
@@ -545,12 +548,12 @@ private fun PaceCard(insights: ReadingInsights) {
 }
 
 @Composable
-private fun NoSessionsNote(period: ReadingInsightsPeriod) {
+private fun NoSessionsNote(period: ReadingInsightsPeriod, palette: SubjectPalette) {
     val tokens = LocalKudosTokens.current
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .subjectPanel()
+            .subjectCard(palette)
             .padding(horizontal = 18.dp, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
@@ -570,10 +573,10 @@ private fun NoSessionsNote(period: ReadingInsightsPeriod) {
 }
 
 @Composable
-private fun LibraryCard(statistics: ReadingStatistics, now: Instant) {
+private fun LibraryCard(statistics: ReadingStatistics, now: Instant, palette: SubjectPalette) {
     val metrics = listOf(
         NumberFormat.getIntegerInstance().format(statistics.startedWorks) to "works opened",
-        formatCompactNumber(statistics.wordsRead) to "words read",
+        statistics.wordsRead.compactCount() to "words read",
         NumberFormat.getIntegerInstance().format(statistics.inProgressWorks) to "still in progress",
         NumberFormat.getIntegerInstance().format(statistics.finishedWorks) to
             "finished (${formatPercent(statistics.completionRate)})",
@@ -584,7 +587,8 @@ private fun LibraryCard(statistics: ReadingStatistics, now: Instant) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .subjectPanel()
+            .testTag("insightsLibraryCard")
+            .subjectCard(palette)
             .padding(horizontal = 18.dp, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(13.dp)
     ) {
@@ -609,7 +613,7 @@ private fun MostReadFandomsCard(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .subjectPanel()
+            .subjectCard(palette)
             .padding(horizontal = 18.dp, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(13.dp)
     ) {
@@ -763,27 +767,3 @@ private fun share(value: Double, peak: Double): Float =
     if (peak > 0) (value / peak).toFloat().coerceIn(0f, 1f) else 0f
 
 private fun formatPercent(rate: Double): String = "${(rate * 100.0).roundToInt()}%"
-
-/** Compact notation matching iOS `.number.notation(.compactName)`. */
-internal fun formatCompactNumber(value: Int): String {
-    val magnitude = kotlin.math.abs(value.toLong())
-    val sign = if (value < 0) "-" else ""
-    if (magnitude < 1_000L) return "$sign$magnitude"
-
-    var scaled = magnitude / 1_000.0
-    var suffix = "K"
-    for (nextSuffix in listOf("M", "B")) {
-        if (roundToOneDecimal(scaled) < 1_000.0) break
-        scaled /= 1_000.0
-        suffix = nextSuffix
-    }
-
-    val rounded = roundToOneDecimal(scaled)
-    return if (rounded % 1.0 == 0.0) {
-        "$sign${rounded.toLong()}$suffix"
-    } else {
-        String.format(Locale.US, "%s%.1f%s", sign, rounded, suffix)
-    }
-}
-
-private fun roundToOneDecimal(value: Double): Double = Math.round(value * 10) / 10.0
