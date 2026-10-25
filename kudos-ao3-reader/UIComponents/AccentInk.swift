@@ -65,3 +65,14 @@ extension View {
     /// Opt a filled control back into the exact accent; text inherits readable tint.
     func accentFill() -> some View { modifier(AccentFill()) }
 }
+
+#if os(iOS)
+/// Scope sheets choose the app palette instead of inheriting their presenter's subject colour.
+struct ScopeSurfaceAccent: ViewModifier {
+    @Environment(ThemeManager.self) private var themeManager
+
+    func body(content: Content) -> some View {
+        content.accentTint(themeManager.effectiveTint, on: themeManager.appTheme)
+    }
+}
+#endif

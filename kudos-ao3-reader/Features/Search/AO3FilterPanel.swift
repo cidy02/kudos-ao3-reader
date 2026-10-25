@@ -143,6 +143,7 @@ struct AO3FilterPanel: View {
             #if os(iOS)
                 .navigationBarTitleDisplayMode(.inline)
             #endif
+                .modifier(WorksFilterSheetGround())
                 .toolbar { actionButtons }
         }
         .onAppear { sortPresentation.appear(applied: worksSort) }
@@ -739,3 +740,21 @@ extension AO3FilterPanel {
     }
 }
 #endif
+
+/// The count and navigation bar sit outside the Form's themed scroll background.
+struct WorksFilterSheetGround: ViewModifier {
+    @Environment(ThemeManager.self) private var theme
+
+    func body(content: Content) -> some View {
+        if theme.appTheme == .sepia {
+            content
+                .background(theme.appTheme.cardBackdrop.ignoresSafeArea())
+                #if os(iOS)
+                    .toolbarBackground(theme.appTheme.cardBackdrop, for: .navigationBar)
+                    .toolbarBackground(.visible, for: .navigationBar)
+                #endif
+        } else {
+            content
+        }
+    }
+}

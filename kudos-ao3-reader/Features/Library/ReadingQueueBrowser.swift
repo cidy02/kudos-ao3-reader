@@ -319,7 +319,12 @@ struct ReadingQueueBrowserView: View {
             .sheet(isPresented: $showingQueueTags) {
                 if let selectedQueue { QueueTagSheet(queue: selectedQueue) }
             }
-            .sheet(isPresented: $showingAddWorks) { addWorksSheet }
+            .sheet(isPresented: $showingAddWorks) {
+                addWorksSheet
+                #if os(iOS)
+                    .modifier(ScopeSurfaceAccent())
+                #endif
+            }
             .navigationDestination(isPresented: $showingQueueDetails) {
                 if let selectedQueue {
                     ReadingQueueSettingsView(

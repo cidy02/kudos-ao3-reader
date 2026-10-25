@@ -68,6 +68,9 @@ struct WorkBulkTagSheet: View {
                     }
                 }
         }
+        #if os(iOS)
+            .modifier(ScopeSurfaceAccent())
+        #endif
     }
 
     private func row(for tag: Tag) -> some View {
