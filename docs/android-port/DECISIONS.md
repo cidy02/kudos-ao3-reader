@@ -2822,3 +2822,52 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   - Six rounds in Duo7's order: Home and dashboards; Settings/Files-style navigation; the reader's measure and
     a fold-aligned spread (after Duo5c); Work Detail and results; Inbox/Comments and Writing; the rail's
     toolbars.
+- **2026-10-24 · Paged reading: one restore after a settled size change (Claude-CLI; owner-delegated).** After
+  T-450 removed the resize hold, paged mode returned to the chapter's start on a rotation: Readium's live resize
+  maps the old horizontal offset onto the new width, and its own orientation-triggered reload (which used to
+  restore by progression, losing a page to rounding) can't cover the Duo, whose cover → inner-portrait unfold
+  changes size without changing orientation. Decision (T-451): Readium's fixed-layout `spread` set to `.never`
+  for reflowable books (no reload), plus one `go(to:)` of the position noted at the burst's first size change,
+  after the 220 ms settle, in paged mode only, cancelled by any explicit navigation, a chapter change or close;
+  no callback gating, no held persistence, no retries. Scrolled mode keeps its place by itself. Reversal: drop the
+  restore and the `.never` default (back to Readium's reload behaviour).
+- **2026-10-24 · iPhone Duo rounds 3 and 4: reader fallbacks and Work Detail (Claude-CLI; owner-delegated).**
+  - Round 4 is split: 4a Work Detail now (it needs only round 1's region helper); 4b Search, Browse and results
+    after round 2's navigation host lands, since they build on it.
+  - Reader in Book pose: Scroll mode, spread off and large type sit wholly in the **leading** pane at a readable
+    measure (55–75 characters as the starting target), never a line across the fold; the spread's gutter is
+    centred on the physical fold, not the rail-shifted safe midpoint. Close/title lead; the fan menu and the
+    position/TTS card trail. One navigator, the pinned Readium, no new control. Reversal: centre the single
+    column across both panes and accept the fold through it.
+  - Work Detail when its own container fits: identity, Read/Resume, stats and actions lead; summary, tags,
+    facts, comments, series and My copy trail; each region scrolls on its own so Read/Resume stays in reach
+    (Music's album page). Narrow containers keep today's single column. Reversal: one scroll for both regions.
+  - Round 3 touches reading position, so a fresh adversarial review runs before it lands; 4a does not need one.
+- **2026-10-24 · T-451's restore takes its snapshot only from a reader at rest (Claude-CLI; owner-delegated).**
+  R453 and R454 showed that tracking each pending navigation ("intent": target hrefs, acknowledgement,
+  normalization, supersession, failure delivery) keeps growing races, because Readium publishes a location only
+  after 0.3 s of scroll quiet and some commands never call back. Decision: drop the intent machinery and the app's
+  own internal-link dispatch (Readium's default link handling returns; a link tap is a touch). The one restore
+  snapshots at the first real size change only when the reader is at rest: effectively paged, an established
+  viewport, no navigator scroll view tracking/dragging/decelerating, and its accepted location is fresh (a
+  location callback arrived after the last app navigation command or touch, or that interaction is at least 1 s
+  old). Any command or touch during the burst still cancels; dispatch keeps the presented-resource check, a weak
+  book, one attempt. An app command issued while the restore's `go(to:)` is in flight waits for it, then runs.
+  Failing safe means skipping the restore (the old reset), never overriding a chosen position. Reversal: back to
+  per-command intent tracking (R453's round 3).
+- **2026-10-24 · T-451: approximate passage retention across reflow is accepted (Claude-CLI; owner-delegated).**
+  R455.2: Readium's ordinary locators carry only a progression, so restoring after a reflow lands on the same
+  fraction of the chapter, which can be a few pages off when parts of a chapter reflow unevenly (forced page
+  breaks, illustrations). That is the same approximation Readium's own orientation reload makes, and far better
+  than the chapter-start reset without a restore. Decision: keep progression-based restore; the promise is narrowed
+  to "never override a position the reader chose (a command, a touch, Read Aloud, the slider)", not "exactly the
+  same passage". No whole-paragraph anchor (R450.1). Reversal: skip the restore for locators without a text anchor.
+- **2026-10-24 · iPhone Duo work on its own branch (owner, 22:58: "let's do with work in a branch in case we
+  wish to revert or revise").**
+  - Duo rounds land on `claude/iphone-duo`, created from polish `1e5d3d44` and pushed.
+  - `claude/polish-loop` keeps only non-Duo iOS fixes; `integrate/cloud-redesign` gets no Duo commits until
+    the owner merges the branch.
+  - Each round is its own commit or commits, and each phase is tagged (`duo-phase-N`), so a round or a phase
+    can be reverted or compared alone.
+  - The Duo commits made before this rule (T-447 to T-455, on polish and integrate) stay. Undoing them would
+    take revert commits, never a history rewrite.
