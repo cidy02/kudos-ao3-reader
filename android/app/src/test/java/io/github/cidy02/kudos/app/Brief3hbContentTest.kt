@@ -266,7 +266,7 @@ class Brief3hbContentTest {
     @Test fun bulkTagAddAlsoUsesDisabledInkAndKeepsItsSubmitAction() {
         val added = mutableListOf<String>()
         show { SharedTagContent("Tags", "Footnote", "Empty", "work", tokens.scopePalette, Unit,
-            { SharedTags(emptyList(), emptyMap()) }, { added += it }, {}) }
+            { SharedTags(emptyList(), emptyMap()) }, { added += it }, {}, SharedTagVariant.BulkWork) }
         val add = compose.onNodeWithText("Add", useUnmergedTree = true)
         compose.onNodeWithText("Add").assertIsNotEnabled()
         assertNotEquals(tokens.accentInk, textColor(add))

@@ -60,6 +60,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import io.github.cidy02.kudos.ui.subject.LocalAppPalette
+import io.github.cidy02.kudos.ui.subject.subjectWash
 import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
 import io.github.cidy02.kudos.ui.subject.SubjectChip
 import io.github.cidy02.kudos.ui.subject.SubjectChipStyle
@@ -299,6 +301,7 @@ internal fun CommentFormattingContent(
     Column(
         modifier = Modifier
             .fillMaxWidth()
+            .subjectWash(LocalAppPalette.current, 320.dp)
             .padding(horizontal = 20.dp),
         verticalArrangement = Arrangement.spacedBy(20.dp)
     ) {

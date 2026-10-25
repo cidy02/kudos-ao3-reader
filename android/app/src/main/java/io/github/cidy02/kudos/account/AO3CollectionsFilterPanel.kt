@@ -33,6 +33,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import io.github.cidy02.kudos.ui.subject.LocalAppPalette
+import io.github.cidy02.kudos.ui.subject.SubjectPaletteTheme
+import io.github.cidy02.kudos.ui.subject.subjectWash
 import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
 import io.github.cidy02.kudos.ui.subject.SubjectFieldLabel
 import io.github.cidy02.kudos.ui.subject.SubjectFormRow
@@ -50,6 +53,17 @@ fun AO3CollectionsFilterPanel(
     onFinish: (AO3CollectionsFilter) -> Unit
 ) {
     val tokens = LocalKudosTokens.current
+    ModalBottomSheet(
+        onDismissRequest = { onFinish(initial) },
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        containerColor = tokens.background
+    ) {
+        AO3CollectionsFilterContent(initial, onFinish)
+    }
+}
+
+@Composable
+internal fun AO3CollectionsFilterContent(initial: AO3CollectionsFilter, onFinish: (AO3CollectionsFilter) -> Unit) {
     val editor = remember { AO3CollectionsFilterDraft(initial) }
     var draft by remember { mutableStateOf(editor.draft) }
     var sortMenuOpen by remember { mutableStateOf(false) }
@@ -57,13 +71,11 @@ fun AO3CollectionsFilterPanel(
         editor.draft = draft
         onFinish(editor.resolved(resolution))
     }
-    ModalBottomSheet(
-        onDismissRequest = { finish(AO3CollectionsFilterDraft.Resolution.Cancel) },
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        containerColor = tokens.background
-    ) {
+    val palette = LocalAppPalette.current
+    SubjectPaletteTheme(palette) {
+        val tokens = LocalKudosTokens.current
         Column(
-            Modifier.fillMaxWidth()
+            Modifier.fillMaxWidth().subjectWash(palette, SubjectMetrics.defaultWashHeight)
                 .padding(horizontal = SubjectMetrics.headerGutter).padding(bottom = 28.dp),
             verticalArrangement = Arrangement.spacedBy(18.dp)
         ) {

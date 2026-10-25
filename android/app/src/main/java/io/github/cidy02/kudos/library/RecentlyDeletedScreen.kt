@@ -519,6 +519,7 @@ fun RecentlyDeletedScreen(
                     title = "Recently Deleted",
                     subtitle = "${allEntries.size} item${if (allEntries.size == 1) "" else "s"}",
                     palette = palette,
+                    gutter = 0.dp,
                     modifier = Modifier.padding(bottom = 6.dp)
                 )
             }

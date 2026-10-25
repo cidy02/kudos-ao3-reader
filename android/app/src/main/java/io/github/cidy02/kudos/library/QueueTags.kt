@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.library
 
+import androidx.compose.foundation.background
 import androidx.compose.material3.ButtonDefaults
 import io.github.cidy02.kudos.settings.SubjectTextFieldRow
 import androidx.compose.foundation.text.KeyboardActions
@@ -67,11 +68,15 @@ import io.github.cidy02.kudos.ui.subject.SubjectPaletteTheme
 import io.github.cidy02.kudos.ui.subject.LocalAppPalette
 import io.github.cidy02.kudos.ui.subject.SubjectRowSeparator
 import io.github.cidy02.kudos.ui.subject.subjectPanel
+import io.github.cidy02.kudos.ui.subject.subjectWash
+import io.github.cidy02.kudos.ui.subject.SubjectMetrics
 import io.github.cidy02.kudos.ui.subject.subjectScreenWash
 import kotlinx.coroutines.launch
 
 /** How much of a selection carries a tag (iOS `WorkBulkTagSheet.Coverage`). */
 enum class TagCoverage { All, Some, None }
+
+internal enum class SharedTagVariant { Queue, BulkWork }
 
 /** Every tag there is, and how much of the selection carries each. */
 data class SharedTags(val all: List<Tag>, val coverage: Map<String, TagCoverage>)
@@ -112,6 +117,7 @@ fun QueueTagSheet(
             "A tag you use here is the same tag on your works.",
         emptyNote = "You have no tags yet. Add one above.",
         noun = "queue",
+        variant = SharedTagVariant.Queue,
         palette = palette,
         key = queues.map { it.id },
         load = {
@@ -142,6 +148,7 @@ fun WorkBulkTagSheet(
             else "Your changes apply to all ${workIds.size} selected works.",
         emptyNote = "You have no tags yet. Add one above to organize your Library.",
         noun = "work",
+        variant = SharedTagVariant.BulkWork,
         palette = palette,
         key = workIds,
         load = { BulkTags.coverage(workRepository.allUserTags(), workRepository.userTagIdsByWork(workIds)) },
@@ -161,10 +168,11 @@ private fun SharedTagSheet(
     key: Any,
     load: suspend () -> SharedTags,
     toggle: suspend (String) -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    variant: SharedTagVariant
 ) {
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-        SharedTagContent(title, footnote, emptyNote, noun, palette, key, load, toggle, onDismiss)
+        SharedTagContent(title, footnote, emptyNote, noun, palette, key, load, toggle, onDismiss, variant)
     }
 }
 
@@ -178,9 +186,10 @@ internal fun SharedTagContent(
     key: Any,
     load: suspend () -> SharedTags,
     toggle: suspend (String) -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    variant: SharedTagVariant
 ) {
-    val controls = LocalAppPalette.current
+    val controls = if (variant == SharedTagVariant.Queue) palette else LocalAppPalette.current
     val tokens = LocalKudosTokens.current
     val controlInk = tokens.theme.accentInk(controls.tint)
     val scope = rememberCoroutineScope()
@@ -199,7 +208,8 @@ internal fun SharedTagContent(
         Column(
             Modifier
                 .fillMaxSize()
-                .background(tokens.formSheetGround)
+                .then(if (variant == SharedTagVariant.Queue) Modifier.subjectWash(palette, SubjectMetrics.defaultWashHeight)
+                    else Modifier.background(tokens.formSheetGround))
                 .windowInsetsPadding(WindowInsets.safeDrawing)
         ) {
             Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {

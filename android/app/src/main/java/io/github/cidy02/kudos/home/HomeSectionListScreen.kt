@@ -586,7 +586,7 @@ private fun HomeSectionCompactGrid(
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item(span = { GridItemSpan(maxLineSpan) }) {
-            HomeSectionSubjectHeader(kind, sectionItems, visibleItems, filters, updatePill)
+            HomeSectionSubjectHeader(kind, sectionItems, visibleItems, filters, updatePill, gutter = 0.dp)
         }
         if (kind.hasQuickPills || filters.hasActiveFilters) {
             item(span = { GridItemSpan(maxLineSpan) }) {
@@ -650,7 +650,8 @@ private fun HomeSectionSubjectHeader(
     sectionItems: List<LibraryDisplayItem>,
     visibleItems: List<LibraryDisplayItem>,
     filters: LibraryFilterState,
-    updatePill: HomeUpdatePill
+    updatePill: HomeUpdatePill,
+    gutter: Dp = io.github.cidy02.kudos.ui.subject.SubjectMetrics.headerGutter
 ) {
     val narrowed = filters.hasActiveFilters ||
         (kind == HomeSectionKind.RecentlyUpdated && updatePill != HomeUpdatePill.All)
@@ -665,7 +666,8 @@ private fun HomeSectionSubjectHeader(
         kicker = "Home",
         title = kind.title,
         subtitle = subtitle,
-        palette = LocalKudosTokens.current.scopePalette
+        palette = LocalKudosTokens.current.scopePalette,
+        gutter = gutter
     )
 }
 

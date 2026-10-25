@@ -5,6 +5,7 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.view.View
 import androidx.compose.runtime.*
+import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.SemanticsActions
@@ -40,7 +41,7 @@ class Parity3heSheetsTest {
             val purple = SubjectPalette.fromColor(Color(0xFF733AB5), tokens.theme)
             SubjectPaletteTheme(purple) {
                 SharedTagContent("Tag", "Your changes apply to all 2 selected works.", "No tags", "work",
-                    purple, "selection", { SharedTags(emptyList(), emptyMap()) }, {}, {})
+                    purple, "selection", { SharedTags(emptyList(), emptyMap()) }, {}, {}, SharedTagVariant.BulkWork)
             }
         } }
         for (theme in listOf(KudosThemeMode.Dark, KudosThemeMode.Light, KudosThemeMode.Sepia, KudosThemeMode.Oled)) {
@@ -63,6 +64,36 @@ class Parity3heSheetsTest {
                 abs(ground.green - tokens.formSheetGround.green), abs(ground.blue - tokens.formSheetGround.blue)) < 0.012f)
         }
     }
+    @Test fun queueTagsKeepTheirWashAndDoneInkInEveryTheme() {
+        var mode by mutableStateOf(KudosThemeMode.Dark)
+        lateinit var view: View
+        lateinit var palette: SubjectPalette
+        compose.setContent { KudosTheme(mode) {
+            view = LocalView.current
+            palette = SubjectPalette.fromColor(Color(0xFF733AB5), LocalKudosTokens.current.theme)
+            SharedTagContent("Tags", "Footnote", "No tags", "queue", palette, listOf("queue"),
+                { SharedTags(emptyList(), emptyMap()) }, {}, {}, SharedTagVariant.Queue)
+        } }
+        for (theme in listOf(KudosThemeMode.Dark, KudosThemeMode.Light, KudosThemeMode.Sepia, KudosThemeMode.Oled)) {
+            compose.runOnIdle { mode = theme }
+            compose.waitForIdle()
+            val layouts = mutableListOf<TextLayoutResult>()
+            compose.onNodeWithText("Done", useUnmergedTree = true)
+                .performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
+            assertEquals(palette.theme.accentInk(palette.tint), layouts.single().layoutInput.style.color)
+            lateinit var bitmap: Bitmap
+            compose.runOnIdle {
+                bitmap = Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888)
+                view.draw(Canvas(bitmap))
+            }
+            val expected = palette.washStops.first().color.compositeOver(palette.theme.cardBackdrop)
+            val actual = Color(bitmap.getPixel(2, 2))
+            assertTrue("Queue wash in $theme: $actual", maxOf(abs(actual.red - expected.red),
+                abs(actual.green - expected.green), abs(actual.blue - expected.blue)) < 0.012f)
+            bitmap.recycle()
+        }
+    }
+
     @Test fun reorderAndCollectionEditorHeadersTakeTheSheetsColour() {
         var mode by mutableStateOf(KudosThemeMode.Light)
         var editor by mutableStateOf(false)

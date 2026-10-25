@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.reader
 
+import io.github.cidy02.kudos.ui.theme.SheetSystemBars
 import androidx.compose.ui.semantics.contentDescription
 
 import androidx.compose.animation.core.animateFloatAsState
@@ -144,6 +145,7 @@ fun ReaderSearchSheet(
             )
         }
     ) {
+        SheetSystemBars(tokens)
         ReaderSearchContent(query, { query = it; model.search(it, chapterKey) },
             { model.search(query, chapterKey, debounce = false) }, state, groups, currentSpineIndex, tokens,
             dismiss, onSelectHit, onBookmarkHit, model::loadMoreIfNeeded)

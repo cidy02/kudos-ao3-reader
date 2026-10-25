@@ -159,6 +159,7 @@ internal fun CollectionReorderContent(
                     title = "Reorder",
                     subtitle = collection.name,
                     palette = palette,
+                    gutter = 0.dp,
                     modifier = Modifier.padding(top = 12.dp, bottom = 10.dp)
                 )
             }

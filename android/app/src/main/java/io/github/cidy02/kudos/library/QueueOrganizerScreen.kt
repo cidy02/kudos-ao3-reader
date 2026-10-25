@@ -316,7 +316,7 @@ fun QueueOrganizerScreen(
         QueueTagSheet(
             repository = repository,
             queues = chosen,
-            palette = palette,
+            palette = chosen.singleOrNull()?.let { queuePalette(tokens.theme, it) } ?: palette,
             onDismiss = { tagging = false; reload += 1 }
         )
     }
