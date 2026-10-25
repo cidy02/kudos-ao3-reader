@@ -2871,3 +2871,88 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
     can be reverted or compared alone.
   - The Duo commits made before this rule (T-447 to T-455, on polish and integrate) stay. Undoing them would
     take revert commits, never a history rewrite.
+- **2026-10-25 · Android parity re-verified from fresh pairs before any Duo work (owner, 10-24 21:38; A102).**
+  Every screen was shot again on both phones' current builds: 109 screens, 14 Settings pages and the 20 main
+  screens, in Dark, Light, Sepia, OLED and Sepia at the largest text. Two judges (Claude-Code and Claude-CLI)
+  read every pair independently, measured colours from the raw shots, and traced each difference to code.
+  - **Result:** 93 match, 21 minor, 29 differ, no capture problems left. "Done" (10-24 08:05) had missed real gaps
+    on both apps.
+  - **Fixed:**
+    - Android: 3he–3hj, with the gate's fixes (`ef99bb6b`…`6ca3f311`).
+    - iPhone: I21/T-456 and I22/T-457 on `claude/parity-i21`.
+    - Android 3hk (`cf110a23`) and 3hl (`447ca8e8`): fourteen older differences both judges had passed over, found
+      while judging the post-fix re-shoot (`briefs/3hk-post-fix-misses.md`).
+  - **Checked after the fixes:** every changed screen re-shot in all five columns and judged; after 3hk, every
+    screen shot again in Dark and compared with the build before it (no regressions).
+  - **Tooling:**
+    - An OCR check (`~/kudos-tools/ocr/capture-scan.py`) reads every column for a wrong screen, a blank or
+      "isn't responding". The judges had been checking only Dark.
+    - The shoot retries a shot that catches "isn't responding" (`android7.sh`). On a loaded host a third of a
+      run's shots froze; an A/B on a fresh emulator showed the old and new builds equal, so it was the host.
+  - **Reversal:** revert the fix commits on each branch.
+- **2026-10-25 · A sheet's ground follows iOS sheet by sheet, not one rule (A102, corrected in 3hf).**
+  - **Washed, as on iOS:** the inbox and AO3 Collections filters (app palette), the queue tag sheet (that queue's
+    colour; several queues take the app's), Save Search, New queue, New collection, Reorder works, the comment
+    composer (the comments palette, 320 dp) and the formatting tray (app palette, 320 dp).
+  - **Flat:** Add to Queue, Add to Collection, the bookmark form, the series prompt, bulk Tag, the collection's
+    details, Library filters and the AO3 filter panel.
+  - **Colours:** scope surfaces take the app accent, brown in Sepia (iOS T-446). A coloured sheet's own controls,
+    Cancel included, take its colour. Fills are the exact colour (Q19).
+  - The first rule 3he was given ("iOS keeps sheets flat") was wrong and flattened the queue tag sheet. 3hf
+    restored it.
+  - **Reversal:** `SharedTagVariant` in `library/QueueTags.kt`; the `subjectWash` calls 3hf added.
+- **2026-10-25 · Destructive and error marks use iOS's system red, whatever the accent (A102, 3hh).**
+  - **Colour:** #FF383C in Light and Sepia, #FF4245 in Dark and OLED. These are iOS 26's red, measured on the
+    iPhone. Android had a theme-derived hue-0 red at 33 sites, Material's unset default error at 51, and the app
+    accent on some destructive actions.
+  - **Where:** one source, `ReaderTheme.destructive`, also Material's `colorScheme.error` in all four schemes.
+    iOS's `.red` metadata marks (Explicit, F/F, warnings) follow it.
+  - **Reversal:** the 3hh commit.
+- **2026-10-25 · Subscriptions' Unsubscribe stays a button (iOS: a trailing swipe).** This is the History rule of
+  2026-10-11 (3co, step 2: "Delete stays a button (iOS: a swipe)") applied to the same account works lists. The
+  10-05 entry already describes the flow as "the reader taps Unsubscribe and confirms". Nothing is lost, and the
+  action is easier to find. A102 raised it because no entry named it. **Reversal:** a trailing `SwipeActionRow`
+  action in `account/AccountWorksListScreen.kt`.
+- **2026-10-25 · T-451 is reversed: the reader no longer restores its page after a resize (the stop rule recorded
+  before round 6; R458).** Seven review rounds (R449–R458) each found a P1. Round 6 switched from predicting rest to
+  detecting Readium's reset, and R458 showed that this can't be told apart either. A reader who deliberately opens
+  a chapter's start (Contents, the slider, a link) just before a rotation or unfold publishes exactly the location
+  a reset would, so the restore could undo a chosen place.
+  - **What changes:** the recorded reversal applies. T-451 was never committed (rounds 1–6 are archived as
+    `~/kudos-tools/out/backups/T451r4.patch`, `T451r5.patch` and `T451r6.patch`), so the reader stays as T-450
+    left it: Readium owns the position, with no restore and no `.never` default. Rotation keeps the place
+    approximately through Readium's own reload (a page of rounding, the approximation already accepted in
+    R455.2). Scrolled mode keeps its place.
+  - **Known limitation, for the owner:** in paged mode, a size change without an orientation change (the Duo's
+    cover → inner-portrait unfold, iPad Split View resizes) falls back to the chapter's start. Readium reloads
+    spreads at the current location only when the spread setting changes (`EPUBNavigatorViewController`
+    `viewWillTransition` → `viewSizeWillChange` → `invalidatePaginationView` → `_reloadSpreads()`, at
+    `currentLocation`).
+  - **Recommended fix: let Readium's own reload cover the unfold.** Readium's reload runs at its own
+    `currentLocation` at the moment of the resize, not at an app snapshot, so it has none of T-451's races; the
+    accepted rotation behaviour is exactly this.
+    - **Public route, tried first in the Duo plan's reader phase:** `viewSizeWillChange` only invalidates the layout
+      when the spread changes (`EPUBNavigatorViewModel.updateSpread`). But `submitPreferences` invalidates it when
+      `offsetFirstPage` (among others) changes, and invalidations coalesce on the main queue
+      (`setNeedsInvalidatePagination`). So from the reader container's `viewWillTransition`, on a same-orientation
+      size change in paged mode, the app submits the preferences with `offsetFirstPage` toggled (a no-op for
+      reflowable books) and then the originals. Readium then does one `_reloadSpreads()` at its `currentLocation`,
+      the rotation path. The app adds no restore logic. It relies on Readium 3.9.0's internals, which are pinned,
+      and needs a review and a device check.
+    - **Clean long-term fix:** a small upstream Readium PR so that `viewSizeWillChange` reloads on any paged size
+      change. A pinned fork meanwhile would be an owner decision (it changes a dependency's source).
+  - R456/R458's navigator-ownership and failure P2s belonged to rounds 5–6's own command worker, which doesn't
+    exist in T-450's committed reader, so they aren't carried over.
+  - **Reversal of this reversal:** apply `T451r6.patch` and fix R458.1, which no known rule can.
+- **2026-10-25 · Android's Dark and OLED Material `primary` is the accent's readable ink, not cream (3hk).**
+  A bare Material control (a checkbox, a dialog's buttons, a progress ring) took `primary`, which was `PaperWarm`
+  in the Dark and OLED schemes, so it drew cream where the iPhone tints with the accent. A102 found it three times
+  (Subscribe in 3he, the download-date picker in 3hf, Add to Collection in 3hk); 64 of the app's 69 `AlertDialog`
+  sites sit outside a `SubjectPaletteTheme`. `primary` is now the accent's readable ink, as `SubjectPaletteTheme`
+  already made it inside sheets, with `onPrimary` the label colour that reads on it. Fills that must be the exact
+  accent (Q19) are drawn explicitly, as before. **Reversal:** `primary = PaperWarm, onPrimary = accent` in
+  `ui/theme/Theme.kt`'s `darkScheme` and `oledScheme`.
+- **2026-10-25 · The post-fix check judges every column, and treats a low OCR similarity as a capture suspect.**
+  The judges' A102 pass had missed nine older Android differences (3hk) and several wrong or still-loading shots.
+  `capture-scan.py`'s DIFF value is the column's word similarity to Dark (0–1, lower is more different), not a
+  difference; anything under 0.35 is looked at. **Reversal:** none needed (tooling).

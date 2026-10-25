@@ -1,6 +1,55 @@
 # Kudos Android: owner summary
 
-*Final, 2026-10-24 08:10 (Claude-CLI), for the sprint that began 2026-10-20 12:30. Android parity is done.*
+*Updated 2026-10-25 (Claude-Code): A102 re-verified parity from fresh pairs of every screen, and the gaps it found are
+fixed. First written 2026-10-24 08:10 (Claude-CLI); that text follows unchanged.*
+
+**2026-10-25 · A102, the check you asked for before any iPhone Duo work:**
+- **Every screen, shot again:** 143 pairs on both phones' current builds, in Dark, Light, Sepia, OLED and Sepia at
+  the largest text. That's 109 screens, 14 Settings pages and 20 main screens. Two judges read every pair on their
+  own (Claude-Code and Claude-CLI), measured colours from the raw shots, and traced each difference to code.
+- **What it found:** 93 match, 21 minor, 29 differ. "Done" (10-24) had missed real gaps on both apps.
+- **Fixed:**
+  - **Android 3he–3hj** (`ef99bb6b`…`6ca3f311`):
+    - sheets washed or flat sheet by sheet, as on iOS;
+    - scope controls in the app accent;
+    - destructive marks in iOS's system red;
+    - Reading Insights' tinted cards and compact figures;
+    - bulk edit's choices.
+  - **iPhone I21 and I22** (T-456, T-457):
+    - the purple scope controls;
+    - lightened pill fills;
+    - the Sepia header band;
+    - two missing washes.
+  - **Android 3hk** (`cf110a23`), found while judging the fixes: eleven older differences both judges had passed over.
+    - The root cause of three findings: Dark and OLED drew bare Material controls cream instead of the accent.
+    - Add to Queue's icons and bulk Tag's heading.
+    - The author header's card.
+    - The sign-up PROMPT label and challenge settings' grouped cards.
+    - Picker marks at large text and section headers' inset.
+    - The collections filter's height and the bulk tag-state page.
+  - **Android 3hl:** Add Works' "Show mature" is primary ink while off, as iOS's toggle.
+- **Checked after the fixes:**
+  - Every changed screen was re-shot in all five columns and judged.
+  - Every screen was shot again in Dark after 3hk, to catch side effects of the colour change. It caused none.
+- **Tests:** the gate on 3hk passed 3,491 tests apart from the known `row47` flake. Lint has no new warnings and four
+  fewer. Every new check fails with its fix reverted.
+- **Decided (DECISIONS.md, 2026-10-25):**
+  - washes sheet by sheet;
+  - destructive marks in iOS's system red;
+  - Unsubscribe stays a button;
+  - Dark and OLED Material controls take the accent's ink;
+  - the reader's resize restore (T-451) reversed.
+- **Open for you:**
+  1. **The iPhone's search filter menu values** are primary ink with a red chevron, while the author works filter
+     and Android use red text. Which one?
+  2. **T-451's known limitation:** in paged mode, the Duo's unfold (and an iPad Split View resize) returns the reader
+     to the chapter's start.
+     - The recommended fix is the Duo plan's reader phase: let Readium reload at its own position, through a
+       preference toggle.
+     - Long term, an upstream Readium PR. A pinned fork would be your call.
+  3. **Q9:** Backup's notes and Deletion signing.
+
+*Below: the summary as written 2026-10-24 08:10 (Claude-CLI), for the sprint that began 2026-10-20 12:30.*
 
 **In one paragraph:**
 - **Screens:** Android matches the iPhone on the 67 screens compared by 10-22.
