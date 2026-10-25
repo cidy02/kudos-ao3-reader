@@ -397,7 +397,7 @@ struct CommentFormattingTray: View {
                 .padding(.horizontal, SubjectMetrics.accountGutter)
                 .padding(.vertical, 14)
             }
-            .appThemedScroll()
+            // No `.appThemedScroll()`: its opaque ground hid the wash below the header (A102).
         }
         // `subjectWash`, not `subjectScreenWash`: the latter also hides the
         // floating tab bar and empties the navigation bar, which is right for a

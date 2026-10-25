@@ -62,6 +62,27 @@ struct AccentInkTests {
     }
 
     #if os(iOS)
+    @MainActor @Test func ao3FilterRootKeepsTheScopeAccentOutsideItsNavigationStack() {
+        let panel = AO3FilterPanel(
+            filters: .constant(AO3SearchFilters()), canReset: false,
+            onApply: {}, onReset: {}
+        )
+        // Inspect only the root modifier chain, not the stack's lazy pages.
+        // The rendering test below checks the modifier's ink/fill behavior.
+        var root: Any = panel.body
+        var hasScopeAccent = false
+        while true {
+            let children = Mirror(reflecting: root).children
+            if children.contains(where: { $0.label == "modifier" && $0.value is ScopeSurfaceAccent }) {
+                hasScopeAccent = true
+                break
+            }
+            guard let content = children.first(where: { $0.label == "content" }) else { break }
+            root = content.value
+        }
+        #expect(hasScopeAccent)
+    }
+
     @MainActor @Test func sectionFiltersChooseAppAccentOverAnInheritedHeroAccent() throws {
         let defaults = UserDefaults.standard
         let keys = ["appTheme", "accentColorHex"]
