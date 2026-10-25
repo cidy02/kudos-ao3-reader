@@ -164,7 +164,7 @@ internal fun WritingSeriesContent(model: WritingSeriesState, title: String, subt
                             modifier = Modifier.testTag("Series reorder handle"))
                         if (removing && currentRows.size > 1) IconButton(onClick = { confirmRemoval = row }, enabled = !state.saving) {
                             Icon(Icons.Filled.RemoveCircle, contentDescription = "Remove ${row.displayTitle} from the series",
-                                tint = SubjectPalette.fromHue(0.0, tokens.theme).accent)
+                                tint = tokens.destructive)
                         }
                     }
                     if (index < currentRows.lastIndex) SubjectRowSeparator()
@@ -232,7 +232,7 @@ internal fun WritingSeriesContent(model: WritingSeriesState, title: String, subt
                 WorkFormFootnote("Deleting the series leaves ${worksPhrase(form.works.size)} posted and unlinks them.")
             }
         }
-        state.error?.let { message -> item { Text(message, color = SubjectPalette.fromHue(0.0, tokens.theme).accent, fontSize = 14.sp, lineHeight = 20.sp,
+        state.error?.let { message -> item { Text(message, color = tokens.destructive, fontSize = 14.sp, lineHeight = 20.sp,
             modifier = Modifier.padding(horizontal = SubjectMetrics.accountGutter).padding(top = 12.dp)) } }
         if (!ordering && !removing) state.notice?.let { message -> item { Text(message, color = tokens.secondaryInk, fontSize = 14.sp,
             lineHeight = 20.sp, modifier = Modifier.padding(horizontal = SubjectMetrics.accountGutter).padding(top = 12.dp)) } }
@@ -244,7 +244,7 @@ internal fun WritingSeriesContent(model: WritingSeriesState, title: String, subt
             title = { Text("Remove “${row.displayTitle}” from $title?", lineHeight = 28.sp) },
             text = { Text("The work stays posted on AO3.", lineHeight = 22.sp) },
             confirmButton = { TextButton(onClick = { confirmRemoval = null; scope.launch { model.remove(row) } }) {
-                Text("Remove from series", color = SubjectPalette.fromHue(0.0, tokens.theme).accent, lineHeight = 20.sp) } },
+                Text("Remove from series", color = tokens.destructive, lineHeight = 20.sp) } },
             dismissButton = { TextButton(onClick = { confirmRemoval = null }) { Text("Cancel", color = palette.accent, lineHeight = 20.sp) } })
     }
 }

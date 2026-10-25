@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.ui.components
 
+import io.github.cidy02.kudos.ui.subject.ReaderTheme
 import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
 
 import androidx.compose.foundation.layout.Arrangement
@@ -151,14 +152,14 @@ data class WorkStatItem(
  * Apple's system palette rather than Material's, deliberately: this is product
  * data shared with the iOS client (`WorkStat.ratingColor` / `categoryColor`), not
  * platform styling, and the two apps should agree on what "Explicit" looks like.
- * Every one of these is only ever drawn at low alpha behind [MaterialTheme]'s own
- * `onSurfaceVariant` text, so none of them has to satisfy MD3 contrast on its own.
+ * [forAppearance] resolves system red and readable teen yellow for the current
+ * appearance; the same colours also tint the cover-card status glyphs.
  */
 object AO3StatusTint {
     val green = Color(0xFF34C759)
     val yellow = Color(0xFFFFCC00)
     val orange = Color(0xFFFF9500)
-    val red = Color(0xFFFF3B30)
+    val red = ReaderTheme.Light.destructive
     val pink = Color(0xFFFF2D55)
     val blue = Color(0xFF007AFF)
     val purple = Color(0xFFAF52DE)
@@ -191,7 +192,11 @@ object AO3StatusTint {
      * iOS's dark mustard (about 4.5:1), dark ones keep the yellow (iOS `teenYellow`; A58).
      */
     fun forAppearance(tint: Color, isDark: Boolean): Color =
-        if (tint == yellow && !isDark) Color(0xFF8C6600) else tint
+        when {
+            tint == yellow && !isDark -> Color(0xFF8C6600)
+            tint == red -> if (isDark) ReaderTheme.Dark.destructive else ReaderTheme.Light.destructive
+            else -> tint
+        }
 }
 
 object WorkStatIcons {

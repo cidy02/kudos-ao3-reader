@@ -1108,6 +1108,7 @@ private fun HistoryReadingFootnote(
             SubjectChip(
                 text = "Delete",
                 style = SubjectChipStyle.Neutral,
+                contentColor = tokens.destructive,
                 leadingIcon = Icons.Outlined.Delete,
                 palette = palette,
                 modifier = Modifier.clickable(enabled = deleteEnabled, onClickLabel = "delete from history", onClick = onDelete)
@@ -1541,6 +1542,7 @@ private fun SubscriptionUnsubscribeChip(
     SubjectChip(
         text = if (busyPath == path) "Unsubscribing…" else "Unsubscribe",
         style = SubjectChipStyle.Neutral,
+        contentColor = LocalKudosTokens.current.destructive,
         leadingIcon = Icons.Outlined.NotificationsOff,
         palette = palette,
         modifier = Modifier.clickable(enabled = busyPath == null, onClick = onClick)

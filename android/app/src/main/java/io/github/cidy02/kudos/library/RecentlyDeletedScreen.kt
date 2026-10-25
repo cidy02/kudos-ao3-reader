@@ -51,7 +51,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
@@ -629,9 +628,9 @@ fun RecentlyDeletedScreen(
                             .padding(horizontal = 4.dp),
                         shape = CircleShape,
                         border = ButtonDefaults.outlinedButtonBorder.copy(
-                            brush = androidx.compose.ui.graphics.SolidColor(Color(0xFFE53935).copy(alpha = 0.42f))
+                            brush = androidx.compose.ui.graphics.SolidColor(tokens.destructive.copy(alpha = 0.42f))
                         ),
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFE53935))
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = tokens.destructive)
                     ) {
                         Icon(
                             imageVector = Icons.Filled.Delete,
@@ -691,7 +690,7 @@ fun RecentlyDeletedScreen(
                         onClick = { pendingBulkDelete = chosen },
                         enabled = chosen.isNotEmpty(),
                         colors = ButtonDefaults.textButtonColors(
-                            contentColor = Color(0xFFE53935)
+                            contentColor = tokens.destructive
                         )
                     ) {
                         Icon(
@@ -732,7 +731,7 @@ fun RecentlyDeletedScreen(
                         pendingSingleDelete = null
                         pendingSingleMessage = null
                     },
-                    colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFFE53935))
+                    colors = ButtonDefaults.textButtonColors(contentColor = tokens.destructive)
                 ) {
                     Text(entry.deleteLabel)
                 }
@@ -769,7 +768,7 @@ fun RecentlyDeletedScreen(
                         confirmingDeleteAll = false
                         viewModel.deleteAllPermanently()
                     },
-                    colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFFE53935))
+                    colors = ButtonDefaults.textButtonColors(contentColor = tokens.destructive)
                 ) {
                     Text("Delete All Permanently")
                 }
@@ -799,7 +798,7 @@ fun RecentlyDeletedScreen(
                         pendingBulkDelete = null
                         exitSelectMode()
                     },
-                    colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFFE53935))
+                    colors = ButtonDefaults.textButtonColors(contentColor = tokens.destructive)
                 ) {
                     Text("Delete Permanently")
                 }
@@ -917,8 +916,8 @@ private fun RecentlyDeletedRow(
                     }
                 )
                 DropdownMenuItem(
-                    text = { Text(entry.deleteLabel, color = Color(0xFFE53935)) },
-                    leadingIcon = { Icon(Icons.Outlined.Delete, contentDescription = null, tint = Color(0xFFE53935)) },
+                    text = { Text(entry.deleteLabel, color = tokens.destructive) },
+                    leadingIcon = { Icon(Icons.Outlined.Delete, contentDescription = null, tint = tokens.destructive) },
                     onClick = {
                         menuOpen = false
                         onDeletePermanently()
@@ -937,7 +936,7 @@ private fun RecentlyDeletedRow(
                 SwipeAction(
                     label = if (entry.isHeldCopy) "Remove" else "Delete",
                     icon = Icons.Filled.Delete,
-                    color = Color(0xFFE53935),
+                    color = tokens.destructive,
                     onClick = onDeletePermanently
                 ),
                 SwipeAction(

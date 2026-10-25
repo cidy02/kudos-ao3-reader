@@ -292,8 +292,10 @@ private fun DraftCard(work: AO3WorkSummary, deletion: LocalDate?, today: LocalDa
 
 @Composable
 private fun DraftExpiryBadge(days: Int) {
+    val tokens = LocalKudosTokens.current
+    val tone = DraftExpiry.tone(days)
     SubjectStateBadge(DraftExpiry.chipText(days),
-        SubjectPalette.fromHue(DraftExpiry.tone(days).hue, LocalKudosTokens.current.theme).accent)
+        if (tone == DraftExpiry.Tone.Red) tokens.destructive else SubjectPalette.fromHue(tone.hue, tokens.theme).accent)
 }
 
 /** Reuses the account cards' status mapping and glyphs, in iOS's four-cell tray. */

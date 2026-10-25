@@ -32,6 +32,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -334,7 +335,7 @@ fun QueueOrganizerScreen(
                         selected = selected - doomed.map { it.id }.toSet()
                         reload += 1
                     }
-                }) { Text("Delete") }
+                }) { Text("Delete", color = LocalKudosTokens.current.destructive) }
             },
             dismissButton = { TextButton(onClick = { pendingDelete = emptyList() }) { Text("Cancel") } }
         )
@@ -367,7 +368,8 @@ private fun OrganizerToolbarActions(
         TextButton(onClick = onSelectAll) { Text(if (allSelected) "Deselect All" else "Select All", color = palette.accent) }
         TextButton(onClick = onPin, enabled = canPin) { Text(pinLabel, color = palette.accent) }
         TextButton(onClick = onTag, enabled = selectedCount > 0) { Text("Tag", color = palette.accent) }
-        TextButton(onClick = onDelete, enabled = canDelete) { Text("Delete") }
+        TextButton(onClick = onDelete, enabled = canDelete,
+            colors = ButtonDefaults.textButtonColors(contentColor = LocalKudosTokens.current.destructive)) { Text("Delete") }
         TextButton(onClick = onDone) { Text("Done", color = palette.accent) }
     } else {
         ToolbarCircleButton(

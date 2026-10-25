@@ -398,7 +398,7 @@ fun QueueCardPress(
                 leadingIcon = { androidx.compose.material3.Icon(Icons.Outlined.PushPin, contentDescription = null) },
                 onClick = { menu = false; onPin() }
             )
-            DropdownMenuItem(text = { Text("Delete Queue") }, onClick = { menu = false; confirm = true })
+            DropdownMenuItem(text = { Text("Delete Queue", color = LocalKudosTokens.current.destructive) }, onClick = { menu = false; confirm = true })
         }
     }
     if (confirm) {
@@ -407,7 +407,7 @@ fun QueueCardPress(
             title = { Text(ReadingQueueFacts.deleteTitle(listOf(queue))) },
             text = { Text(ReadingQueueFacts.deleteMessage(1)) },
             confirmButton = {
-                TextButton(onClick = { confirm = false; onDelete() }) { Text("Delete") }
+                TextButton(onClick = { confirm = false; onDelete() }) { Text("Delete", color = LocalKudosTokens.current.destructive) }
             },
             dismissButton = { TextButton(onClick = { confirm = false }) { Text("Cancel") } }
         )
@@ -440,7 +440,7 @@ fun QueueSwipeRow(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 TextButton(onClick = { offset = 0f; onEdit() }) { Text("Edit") }
-                TextButton(onClick = { offset = 0f; onDelete() }) { Text("Delete") }
+                TextButton(onClick = { offset = 0f; onDelete() }) { Text("Delete", color = LocalKudosTokens.current.destructive) }
             }
         }
         Box(

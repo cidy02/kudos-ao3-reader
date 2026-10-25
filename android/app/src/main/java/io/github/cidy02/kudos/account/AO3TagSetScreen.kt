@@ -194,8 +194,8 @@ fun AO3TagSetScreen(
                                 SubjectFormRow("Associate nominations", value = "Opens AO3", showsDisclosure = true,
                                     valueMaxLines = Int.MAX_VALUE, onClick = { onOpenWeb(AO3TagSetUrls.associations(id)) })
                                 SubjectRowSeparator()
-                                val destructive = SubjectPalette.fromHue(0.0, tokens.theme)
-                                CompositionLocalProvider(LocalKudosTokens provides tokens.copy(primaryInk = destructive.accent)) {
+                                val destructive = SubjectPalette.fromColor(tokens.destructive, tokens.theme)
+                                CompositionLocalProvider(LocalKudosTokens provides tokens.copy(primaryInk = destructive.tint)) {
                                     SubjectFormRow("Delete tag set", value = "Opens AO3", showsDisclosure = true,
                                         valueMaxLines = Int.MAX_VALUE, onClick = { onOpenWeb(AO3TagSetUrls.edit(id)) })
                                 }
@@ -220,17 +220,17 @@ private fun TagSetNominationRow(nomination: AO3TagNomination, large: Boolean, in
         when (nomination.state) {
             AO3TagNominationState.Unreviewed -> Row(verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                val red = SubjectPalette.fromHue(0.0, tokens.theme)
-                if (inFlight == nomination.id) CircularProgressIndicator(color = red.accent, trackColor = tokens.separator,
+                val red = SubjectPalette.fromColor(tokens.destructive, tokens.theme)
+                if (inFlight == nomination.id) CircularProgressIndicator(color = red.tint, trackColor = tokens.separator,
                     modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
-                SubjectChip("Reject", style = SubjectChipStyle.Tinted, palette = red,
+                SubjectChip("Reject", style = SubjectChipStyle.Tinted, palette = red, contentColor = tokens.destructive,
                     modifier = Modifier.semantics { contentDescription = "Reject ${nomination.tagName}" }
                         .clickable(enabled = inFlight == null, role = Role.Button, onClick = onReject))
             }
             AO3TagNominationState.Approved -> SubjectChip("Approved", style = SubjectChipStyle.Tinted,
                 palette = SubjectPalette.fromHue(1.0 / 3.0, tokens.theme))
             AO3TagNominationState.Rejected -> SubjectChip("Rejected", style = SubjectChipStyle.Tinted,
-                palette = SubjectPalette.fromHue(0.0, tokens.theme))
+                palette = SubjectPalette.fromColor(tokens.destructive, tokens.theme), contentColor = tokens.destructive)
         }
     }
     if (large) Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp),
@@ -283,7 +283,7 @@ internal fun TagSetEditor(title: String, state: TagSetUiState, model: AO3TagSetS
 private fun TagSetFeedback(message: String, error: Boolean) {
     val tokens = LocalKudosTokens.current
     SettingsPanel(Modifier.padding(top = 8.dp)) {
-        Text(message, color = if (error) SubjectPalette.fromHue(0.0, tokens.theme).accent else tokens.scopePalette.accent,
+        Text(message, color = if (error) tokens.destructive else tokens.scopePalette.accent,
             fontSize = 13.sp, lineHeight = 19.sp, modifier = Modifier.padding(12.dp))
     }
 }

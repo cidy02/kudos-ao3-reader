@@ -219,7 +219,9 @@ fun SettingsAccountPage(authRepository: AO3AuthRepository?, onLogin: () -> Unit)
                         SettingsActionRow(
                             label = "Log Out",
                             icon = Icons.AutoMirrored.Outlined.Logout,
-                            onClick = { confirmingLogOut = true }
+                            onClick = { confirmingLogOut = true },
+                            // iOS `Button(role: .destructive)` (SettingsAccountPages.swift:147).
+                            destructive = true
                         )
                     }
                     AO3AuthState.Restoring, AO3AuthState.SigningIn -> {

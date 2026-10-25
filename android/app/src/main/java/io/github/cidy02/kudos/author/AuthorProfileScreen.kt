@@ -447,7 +447,7 @@ fun AuthorProfileScreen(
             title = { Text(ownWorksDeleteTitle(pending), color = tokens.primaryInk, lineHeight = 28.sp) },
             text = { Text(ownWorksDeleteMessage(pending), color = tokens.secondaryInk, lineHeight = 22.sp) },
             confirmButton = { TextButton(onClick = { scope.launch { deletes?.confirm() } }) {
-                Text("Delete on AO3", color = SubjectPalette.fromHue(0.0, tokens.theme).accent, lineHeight = 20.sp) } },
+                Text("Delete on AO3", color = tokens.destructive, lineHeight = 20.sp) } },
             dismissButton = { TextButton(onClick = { deletes?.cancel(); heldDelete = null }) { Text("Cancel", color = tokens.scopePalette.accent, lineHeight = 20.sp) } })
     }
     deleteState.error?.let { message ->

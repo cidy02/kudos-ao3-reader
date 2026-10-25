@@ -29,6 +29,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.cidy02.kudos.home.HomeFacts
+import io.github.cidy02.kudos.ui.subject.ReaderTheme
 import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
 import io.github.cidy02.kudos.ui.subject.SubjectHeaderBlock
 import io.github.cidy02.kudos.ui.subject.SubjectMetrics
@@ -55,12 +56,11 @@ sealed class WorkWarningStatus {
             is Present -> count.toString()
         }
 
-    val figureColor: Color
-        get() = when (this) {
-            is None -> Color(0xFF35C46A)
-            is Undisclosed -> Color(0xFFFF9500)
-            is Present -> Color(0xFFFF3B30)
-        }
+    fun figureColor(theme: ReaderTheme): Color = when (this) {
+        is None -> Color(0xFF35C46A)
+        is Undisclosed -> Color(0xFFFF9500)
+        is Present -> theme.destructive
+    }
 
     companion object {
         fun from(rawWarnings: List<String>): WorkWarningStatus {
@@ -96,7 +96,7 @@ object WorkStatRating {
             "General Audiences" -> Color(0xFF35C46A)
             "Teen And Up Audiences" -> if (isDark) Color(0xFFFFCC00) else Color(0xFF8C6600)
             "Mature" -> Color(0xFFFF9500)
-            "Explicit" -> Color(0xFFFF3B30)
+            "Explicit" -> if (isDark) ReaderTheme.Dark.destructive else ReaderTheme.Light.destructive
             "Not Rated" -> Color(0xFF8E8E93)
             else -> null
         }
@@ -274,7 +274,7 @@ fun WorkDetailFigureStrip(
     val warningsCell = SubjectStatCell(
         value = warningStatus.figureText,
         label = "Warnings",
-        tint = warningStatus.figureColor
+        tint = warningStatus.figureColor(tokens.theme)
     )
 
     val namedCategories = categories.filter { it.isNotBlank() }

@@ -52,7 +52,7 @@ fun DestructiveConfirmation(
                     TextButton(onClick = onConfirm) {
                         Text(
                             text = confirmText,
-                            color = palette?.accent ?: MaterialTheme.colorScheme.error
+                            color = tokens.destructive
                         )
                     }
                 },

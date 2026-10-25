@@ -162,7 +162,7 @@ class Brief3hbContentTest {
         compose.onNodeWithTag("Writing association picker").performScrollToNode(hasContentDescription("Remove Writer"))
         val icon = compose.onNodeWithContentDescription("Remove Writer", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
         // Inside the filled circle above its minus; an X has no painted pixel here.
-        assertColor(SubjectPalette.fromHue(0.0, tokens.theme).accent,
+        assertColor(tokens.destructive,
             pixel(Offset(icon.center.x, icon.top + with(compose.density) { 4.dp.toPx() })))
         compose.onNodeWithContentDescription("Remove Writer").performClick()
         compose.runOnIdle { assertFalse(model.state.value.form!!.gifts.contains("Writer")); assertTrue(model.state.value.form!!.gifts.contains("Other")) }

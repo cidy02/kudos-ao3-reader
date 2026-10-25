@@ -167,6 +167,7 @@ fun CommentsScreen(
     val verifying by viewModel.verifying.collectAsState()
     val canReverify by viewModel.canReverify.collectAsState()
     val message by viewModel.message.collectAsState()
+    val messageIsError by viewModel.messageIsError.collectAsState()
     val composerPresented by viewModel.composerPresented.collectAsState()
     val composerParent by viewModel.composerParent.collectAsState()
     val editTarget by viewModel.editTarget.collectAsState()
@@ -260,7 +261,7 @@ fun CommentsScreen(
         AlertDialog(
             onDismissRequest = { viewModel.clearMessage() },
             title = { Text("AO3") },
-            text = { Text(message.orEmpty()) },
+            text = { Text(message.orEmpty(), color = if (messageIsError) tokens.destructive else tokens.primaryInk) },
             dismissButton = {
                 if (canReverify) TextButton(onClick = {
                     viewModel.clearMessage()

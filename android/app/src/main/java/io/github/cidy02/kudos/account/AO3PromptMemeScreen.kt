@@ -115,8 +115,7 @@ private fun PromptMemeContent(
                     SettingsPanel(Modifier.padding(top = 8.dp)) {
                         Row(Modifier.fillMaxWidth().padding(12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp),
                             verticalAlignment = Alignment.CenterVertically) {
-                            // The red the tag set screen uses for a refusal; no new token for one sentence.
-                            val refusal = SubjectPalette.fromHue(0.0, tokens.theme).accent
+                            val refusal = tokens.destructive
                             Icon(Icons.Outlined.WarningAmber, null, tint = refusal, modifier = Modifier.size(18.dp))
                             Text(message, color = refusal, fontSize = 12.5.sp, lineHeight = 18.sp,
                                 modifier = Modifier.weight(1f))

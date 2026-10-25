@@ -356,7 +356,7 @@ fun HomeStatusTray(
     val scaledTileSize = tileSize * fontScale
     val ratingTint = AO3StatusTint.forAppearance(AO3StatusTint.rating(rating) ?: AO3StatusTint.gray, tokens.theme.isDarkFamily)
     val category = categories.firstOrNull { AO3StatusTint.category(it) != null }
-    val categoryTint = category?.let { AO3StatusTint.category(it) } ?: AO3StatusTint.gray
+    val categoryTint = AO3StatusTint.forAppearance(category?.let { AO3StatusTint.category(it) } ?: AO3StatusTint.gray, tokens.theme.isDarkFamily)
     val warningTint = if (HomeFacts.hasRealArchiveWarning(warnings)) AO3StatusTint.orange else AO3StatusTint.gray
     val completeTint = if (isComplete == true) AO3StatusTint.green else AO3StatusTint.gray
     val tiles: List<@Composable () -> Unit> = buildList {
@@ -444,6 +444,7 @@ private val CenteredGlyph = TextStyle(
 private fun CategoryMark(categories: List<String>, tint: Color, tileSize: Dp) {
     val named = categories.firstOrNull { AO3StatusTint.category(it) != null }?.trim()
     if (named == "Multi") {
+        val red = LocalKudosTokens.current.destructive
         Canvas(
             Modifier
                 .size(tileSize * 0.55f)
@@ -453,7 +454,7 @@ private fun CategoryMark(categories: List<String>, tint: Color, tileSize: Dp) {
             val h = size.height / 2f
             drawRect(AO3StatusTint.green, Offset.Zero, Size(w, h))
             drawRect(AO3StatusTint.purple, Offset(w, 0f), Size(w, h))
-            drawRect(AO3StatusTint.red, Offset(0f, h), Size(w, h))
+            drawRect(red, Offset(0f, h), Size(w, h))
             drawRect(AO3StatusTint.blue, Offset(w, h), Size(w, h))
         }
         return

@@ -28,7 +28,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -55,7 +54,6 @@ import io.github.cidy02.kudos.settings.SettingsSection
 import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
 import io.github.cidy02.kudos.ui.subject.SubjectMetrics
 import io.github.cidy02.kudos.ui.subject.ToolbarCircleButton
-import io.github.cidy02.kudos.ui.theme.Ao3Red
 
 /** Contents' note editor, also opened by a page highlight (iOS ReaderNoteEditor). */
 @Composable
@@ -127,11 +125,8 @@ internal fun ReaderNoteEditor(
             ReadingAnnotationColorPicker(color, onColorChange)
         }
         SettingsSection(footnote = null) {
-            // Explicit app red, not the ambient Material error colour over a reader page.
-            MaterialTheme(colorScheme = MaterialTheme.colorScheme.copy(error = Ao3Red)) {
-                SettingsActionRow("Delete Highlight", onClick = { finished[0] = true; onDelete() },
-                    icon = Icons.Filled.Delete, destructive = true)
-            }
+            SettingsActionRow("Delete Highlight", onClick = { finished[0] = true; onDelete() },
+                icon = Icons.Filled.Delete, destructive = true)
         }
     }
     }

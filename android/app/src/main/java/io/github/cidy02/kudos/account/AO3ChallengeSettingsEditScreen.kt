@@ -82,7 +82,7 @@ private fun ChallengeSettingsEditContent(slug: String, title: String, viewerIsOw
         text = { Text("Turning off Unrevealed makes every work visible. Turning off Anonymous shows every creator. " +
             "You can't reverse either change in Kudos.", lineHeight = 22.sp) },
         confirmButton = { TextButton(onClick = { scope.launch { model.save(revealConfirmed = true) } }, enabled = !busy) {
-            Text("Save and reveal", color = SubjectPalette.fromHue(0.0, tokens.theme).accent, lineHeight = 20.sp)
+            Text("Save and reveal", color = tokens.destructive, lineHeight = 20.sp)
         } },
         dismissButton = { TextButton(onClick = model::cancelReveal) { Text("Cancel", color = palette.accent, lineHeight = 20.sp) } }
     )
@@ -356,7 +356,7 @@ private data class ChallengeEditChoice(val label: String, val name: String, val 
 @Composable private fun ChallengeEditMessage(message: String, error: Boolean = true) {
     val tokens = LocalKudosTokens.current
     ChallengeEditPanel {
-        Text(message, color = if (error) SubjectPalette.fromHue(0.0, tokens.theme).accent else tokens.scopePalette.accent,
+        Text(message, color = if (error) tokens.destructive else tokens.scopePalette.accent,
             fontSize = 12.5.sp, lineHeight = 18.sp, modifier = Modifier.padding(12.dp))
     }
 }

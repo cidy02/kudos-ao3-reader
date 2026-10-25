@@ -321,7 +321,7 @@ private fun StateCard(
                 text = message,
                 style = MaterialTheme.typography.bodyMedium,
                 color = if (error) {
-                    MaterialTheme.colorScheme.onErrorContainer
+                    MaterialTheme.colorScheme.error
                 } else {
                     MaterialTheme.colorScheme.onSurfaceVariant
                 }

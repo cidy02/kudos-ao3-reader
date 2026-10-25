@@ -56,7 +56,6 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import io.github.cidy02.kudos.app.ProvidePushedShellChrome
 import io.github.cidy02.kudos.network.ao3.writing.recovery.WritingTextRecovery
 import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
-import io.github.cidy02.kudos.ui.subject.SubjectPalette
 import io.github.cidy02.kudos.ui.subject.SectionRuleHeader
 import io.github.cidy02.kudos.ui.subject.ToolbarCircleButton
 import io.github.cidy02.kudos.ui.subject.isAccessibilityFontScale
@@ -141,7 +140,7 @@ internal fun WritingTextEditorContent(
                     DropdownMenuItem(text = { Text("Preview on AO3", color = tokens.primaryInk, lineHeight = 22.sp) },
                         onClick = { more = false; onDone(session.done()); chapterActions.preview() })
                     if (chapterActions.deleteName != null) DropdownMenuItem(
-                        text = { Text("Delete chapter", color = SubjectPalette.fromHue(0.0, tokens.theme).accent, lineHeight = 22.sp) },
+                        text = { Text("Delete chapter", color = tokens.destructive, lineHeight = 22.sp) },
                         onClick = { more = false; showDeleteChapter = true })
                 }
             }
@@ -218,7 +217,7 @@ internal fun WritingTextEditorContent(
         text = { Text("This will delete all comments on the chapter as well and cannot be undone.", lineHeight = 22.sp) },
         confirmButton = { TextButton(onClick = {
             showDeleteChapter = false; onDone(session.done()); chapterActions.delete()
-        }) { Text("Delete on AO3", color = SubjectPalette.fromHue(0.0, tokens.theme).accent, lineHeight = 20.sp) } },
+        }) { Text("Delete on AO3", color = tokens.destructive, lineHeight = 20.sp) } },
         dismissButton = { TextButton(onClick = { showDeleteChapter = false }) { Text("Cancel", color = palette.accent, lineHeight = 20.sp) } })
 
     session.error?.let { message ->
@@ -321,7 +320,7 @@ private fun EditorToolbarButton(name: String, icon: ImageVector, enabled: Boolea
 private fun EditorSheetAction(text: String, action: () -> Unit, destructive: Boolean = false) {
     val tokens = LocalKudosTokens.current
     TextButton(onClick = action) {
-        Text(text, lineHeight = 22.sp, color = if (destructive) SubjectPalette.fromHue(0.0, tokens.theme).accent else tokens.scopePalette.accent)
+        Text(text, lineHeight = 22.sp, color = if (destructive) tokens.destructive else tokens.scopePalette.accent)
     }
 }
 
