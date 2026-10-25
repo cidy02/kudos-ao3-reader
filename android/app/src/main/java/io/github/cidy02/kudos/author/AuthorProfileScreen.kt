@@ -771,7 +771,7 @@ fun AuthorProfileScreen(
                 }
 
                 if (!usesAccountHeader && h.pseuds.size > 1) {
-                    item { AuthorPseudSelector(h.pseuds, route) { route = it } }
+                    item { AuthorPseudSelector(h.pseuds, route, card = true) { route = it } }
                 }
 
                 if (showsTabs) {

@@ -95,10 +95,12 @@ internal enum class AuthorDisplayMode(val label: String) {
 internal fun AuthorPseudSelector(
     pseuds: List<io.github.cidy02.kudos.network.ao3.author.AO3AuthorPseud>,
     route: AO3AuthorRoute,
+    /** Under the author hero iOS draws it as a card row (`pseudSelector(...).cardRow()`), as the hero itself. */
+    card: Boolean = false,
     onSelect: (AO3AuthorRoute) -> Unit
 ) {
     var expanded by remember(route.username) { mutableStateOf(false) }
-    Box(Modifier.fillMaxWidth().subjectPanel()) {
+    Box(Modifier.fillMaxWidth().then(if (card) Modifier.cardRow() else Modifier.subjectPanel())) {
         io.github.cidy02.kudos.ui.subject.SubjectFormRow(
             "Scope", value = route.pseud ?: "All Pseuds", showsChoice = true,
             valueMaxLines = if (io.github.cidy02.kudos.ui.subject.isAccessibilityFontScale()) 2 else 1,
