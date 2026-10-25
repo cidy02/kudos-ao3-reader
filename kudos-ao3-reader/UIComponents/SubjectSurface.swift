@@ -1127,7 +1127,7 @@ struct SubjectChip: View {
             // the page — `onEffectiveTint`'s problem, solved the same way: from
             // the fill's luminance rather than from a per-theme case.
             isSelected
-                ? ThemeManager.label(on: palette?.accent ?? fill)
+                ? ThemeManager.label(on: palette?.tint ?? fill)
                 : .primary
         }
     }
@@ -1158,7 +1158,7 @@ struct SubjectChip: View {
         case .pill(let isSelected):
             Capsule()
                 .fill(isSelected
-                    ? AnyShapeStyle(palette?.accent ?? fill)
+                    ? AnyShapeStyle(palette?.tint ?? fill)
                     : AnyShapeStyle(theme.glassFill()))
         }
     }

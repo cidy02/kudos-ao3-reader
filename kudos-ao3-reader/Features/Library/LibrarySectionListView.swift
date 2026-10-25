@@ -246,7 +246,7 @@ struct LibrarySectionListView: View {
             .filterPanelPresentation(isPresented: $showingFilters) {
                 LibraryFilterPanel(filters: $filters, works: items, userTagNames: allTags.map(\.name))
                     #if os(iOS)
-                    .modifier(LibrarySectionFilterAccent())
+                    .modifier(ScopeSurfaceAccent())
                     #endif
                     .inspectorColumnWidth(min: 280, ideal: 320, max: 380)
             }

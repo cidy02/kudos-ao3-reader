@@ -1,16 +1,5 @@
 import SwiftUI
 
-#if os(iOS)
-/// Section sheets choose the app palette instead of inheriting the dashboard hero's accent.
-struct LibrarySectionFilterAccent: ViewModifier {
-    @Environment(ThemeManager.self) private var themeManager
-
-    func body(content: Content) -> some View {
-        content.accentTint(themeManager.effectiveTint, on: themeManager.appTheme)
-    }
-}
-#endif
-
 /// The Library's filter panel — parity with the Search filters, but the options
 /// are drawn from the user's own saved works and filtering is applied live to the
 /// local collection. Presented as a sheet on iPhone and as an inspector sidebar

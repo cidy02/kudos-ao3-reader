@@ -209,10 +209,20 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
         // macOS — so the unified detail opens the right reader on this branch.
         .navigationDestination(item: $readerWork) { BookReaderView(work: $0) }
         .sheet(isPresented: $showingAddToCollection) {
-            if let work = localWork { AddToCollectionView(work: work) }
+            if let work = localWork {
+                AddToCollectionView(work: work)
+                #if os(iOS)
+                    .modifier(ScopeSurfaceAccent())
+                #endif
+            }
         }
         .sheet(isPresented: $showingAddToQueue) {
-            if let work = localWork { AddToQueueView(work: work) }
+            if let work = localWork {
+                AddToQueueView(work: work)
+                #if os(iOS)
+                    .modifier(ScopeSurfaceAccent())
+                #endif
+            }
         }
         .sheet(isPresented: $showingMyCopy) { myCopySheet }
         .sheet(isPresented: $showingSeriesQueuePrompt) {
@@ -229,6 +239,9 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
                         preserveSeriesForLater()
                     }
                 )
+                #if os(iOS)
+                    .modifier(ScopeSurfaceAccent())
+                #endif
             } else {
                 ProgressView("Checking series size…")
                     .padding()

@@ -25,8 +25,6 @@ struct ChallengeSignUpsView: View { // swiftlint:disable:this type_body_length
     @ScaledMetric(relativeTo: .caption) private var captionSize: CGFloat = 11.5
     @ScaledMetric(relativeTo: .caption) private var summarySize: CGFloat = 11
 
-    /// The floating bottom bar's height, so the list can end clear of it at any text size.
-    @State private var bottomBarHeight: CGFloat = 0
     @State private var pages = AO3LoadMorePages<AO3ChallengeSignUp>()
     @State private var filterSelection: SignUpFilter = .all
     @State private var phase: Phase = .idle
@@ -97,49 +95,33 @@ struct ChallengeSignUpsView: View { // swiftlint:disable:this type_body_length
     }
 
     var body: some View {
-        ZStack(alignment: .bottom) {
-            List {
-                Section {
-                    header.pageBodyRow(top: 20, gutter: selfGuttered)
-                    filterSegment.pageBodyRow(top: 14, gutter: gutter)
-                }
-
-                switch phase {
-                case .loading where signUps.isEmpty:
-                    Section {
-                        loadingRow.pageBodyRow(top: 20, gutter: gutter)
-                    }
-                case let .failed(message) where signUps.isEmpty:
-                    Section {
-                        failureCard(message).pageBodyRow(top: 14, gutter: gutter)
-                    }
-                default:
-                    contentSections
-                }
-
-                // Space for floating bottom action bar
-                Section {
-                    // A real height. This was a `Spacer`, which has none in a list row: the gap was
-                    // never there, and the list ended under the bar at every text size.
-                    Color.clear
-                        .frame(height: max(70, bottomBarHeight - 12))
-                        .listRowInsets(EdgeInsets())
-                        .listRowBackground(Color.clear)
-                        .listRowSeparator(.hidden)
-                }
+        List {
+            Section {
+                header.pageBodyRow(top: 20, gutter: selfGuttered)
+                filterSegment.pageBodyRow(top: 14, gutter: gutter)
             }
-            .cardList()
-            // Rows at their own padding, not the List minimum (L3-FORM-1).
-            .environment(\.defaultMinListRowHeight, 0)
-            #if os(macOS)
-            .navigationTitle("Sign-ups")
-            #endif
-            .subjectScreenWash(palette: palette)
 
-            bottomActionBar
-                // The list ends clear of the bar at any text size (see `bottomBarHeight`).
-                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { bottomBarHeight = $0 }
+            switch phase {
+            case .loading where signUps.isEmpty:
+                Section {
+                    loadingRow.pageBodyRow(top: 20, gutter: gutter)
+                }
+            case let .failed(message) where signUps.isEmpty:
+                Section {
+                    failureCard(message).pageBodyRow(top: 14, gutter: gutter)
+                }
+            default:
+                contentSections
+            }
         }
+        .cardList()
+        // Rows at their own padding, not the List minimum (L3-FORM-1).
+        .environment(\.defaultMinListRowHeight, 0)
+        #if os(macOS)
+        .navigationTitle("Sign-ups")
+        #endif
+        .subjectScreenWash(palette: palette)
+        .safeAreaBar(edge: .bottom, spacing: 0) { bottomActionBar }
         .task { await loadSignUpsIfNeeded() }
         #if DEBUG
         .task {
@@ -418,19 +400,7 @@ struct ChallengeSignUpsView: View { // swiftlint:disable:this type_body_length
             .buttonStyle(.plain)
         }
         .padding(.horizontal, 16)
-        .padding(.top, 12)
-        .padding(.bottom, 26)
-        .background(
-            LinearGradient(
-                colors: [
-                    theme.appTheme.cardBackdrop,
-                    theme.appTheme.cardBackdrop.opacity(0.96),
-                    theme.appTheme.cardBackdrop.opacity(0.0)
-                ],
-                startPoint: .bottom,
-                endPoint: .top
-            )
-        )
+        .padding(.vertical, 12)
     }
 
     // MARK: - State Cards
