@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.writing
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextDecoration
@@ -132,7 +133,7 @@ fun WritingBulkEditScreen(model: WritingBulkEditState, focus: String?, onBack: (
                 val adds = changes.added[entry.second].orEmpty().size; val removes = changes.removed[entry.second].orEmpty().size
                 val value = if (tri) if (adds + removes == 0) "Leave as is" else "+$adds, -$removes"
                     else options.firstOrNull { it.value == changes.scalars[entry.second] }?.title ?: "Leave as is"
-                BulkRow(entry.first, value, index, 4, !state.saving && (!tri || options.isNotEmpty())) {
+                BulkRow(entry.first, value, index, 4, !state.saving && (!tri || options.isNotEmpty()), choice = !tri) {
                     picker = BulkPicker(entry.first, entry.second, if (tri) "tri" else "scalar")
                 }
             }
@@ -150,7 +151,7 @@ fun WritingBulkEditScreen(model: WritingBulkEditState, focus: String?, onBack: (
             for ((index, entry) in listOf("Only show to registered users" to AO3WorkFormField.restricted,
                 "Enable comment moderation" to AO3WorkFormField.moderatedCommenting, "Who can comment" to AO3WorkFormField.commentPermissions).withIndex()) item {
                 BulkRow(entry.first, bulkOptions(form, entry.second).firstOrNull { it.value == changes.scalars[entry.second] }?.title ?: "Leave as is",
-                    index, 3, !state.saving) { picker = BulkPicker(entry.first, entry.second, "scalar") }
+                    index, 3, !state.saving, choice = true) { picker = BulkPicker(entry.first, entry.second, "scalar") }
             }
             item { WorkFormSection("Creators") }
             item {
@@ -180,7 +181,9 @@ private fun BulkHeader(title: String, subtitle: String? = null) {
 }
 
 @Composable
-private fun BulkRow(label: String, value: String, index: Int, total: Int, enabled: Boolean, spokenValue: String? = null, mark: String? = null, click: () -> Unit) {
+private fun BulkRow(label: String, value: String, index: Int, total: Int, enabled: Boolean, spokenValue: String? = null, mark: String? = null,
+    /** iOS draws this row as `WritingChoiceRow`: the value in the accent with its picker mark. */
+    choice: Boolean = false, click: () -> Unit) {
     val tokens = LocalKudosTokens.current
     Column(Modifier.padding(horizontal = SubjectMetrics.accountGutter).writingSuggestionPanel(index == 0, index == total - 1).alpha(if (enabled) 1f else 0.55f)) {
         if (mark != null) Row(
@@ -194,7 +197,8 @@ private fun BulkRow(label: String, value: String, index: Int, total: Int, enable
             Text(label, Modifier.weight(1f), color = tokens.primaryInk, fontSize = 14.5.sp,
                 textDecoration = if (mark == "Remove") TextDecoration.LineThrough else TextDecoration.None)
             Text(value, color = tokens.secondaryInk, fontSize = 13.sp)
-        } else SubjectFormRow(label, showsDisclosure = enabled, onClick = if (enabled) click else null,
+        } else if (choice) SubjectFormRow(label, value = value, showsChoice = true, onClick = if (enabled) click else null)
+        else SubjectFormRow(label, showsDisclosure = enabled, onClick = if (enabled) click else null,
             trailing = { Text(value, color = tokens.secondaryInk, fontSize = 13.sp, lineHeight = 18.sp, modifier = Modifier.widthIn(max = 160.dp)) })
         if (index < total - 1) SubjectRowSeparator()
     }
@@ -207,8 +211,12 @@ internal fun BulkOptionsScreen(picker: BulkPicker, options: List<AO3FormOption>,
     val palette = tokens.scopePalette
     var entry by remember(picker) { mutableStateOf("") }
     BackHandler(onBack = onBack)
-    ProvidePushedShellChrome(hasSubjectHeader = true, hideTabBar = true, onBack = onBack)
-    LazyColumn(Modifier.fillMaxSize().subjectScreenWash(palette), contentPadding = PaddingValues(bottom = 32.dp)) {
+    // iOS's tag-state page (`BulkTagStatePicker`) is a plain list; only its names page washes.
+    val flat = picker.mode == "tri"
+    ProvidePushedShellChrome(hasSubjectHeader = true, hideTabBar = true, onBack = onBack,
+        pageBackground = if (flat) tokens.background else null)
+    LazyColumn(Modifier.fillMaxSize().then(if (flat) Modifier.background(tokens.background) else Modifier.subjectScreenWash(palette)),
+        contentPadding = PaddingValues(bottom = 32.dp)) {
         item { BulkHeader(picker.title) }
         val shown = if (picker.mode == "scalar") listOf(AO3FormOption("", "Leave as is")) + options.filter { it.value.isNotEmpty() }
             else if (picker.mode == "names") changes.collectionsToAdd.map { AO3FormOption(it, it) } else options

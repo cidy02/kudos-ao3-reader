@@ -153,6 +153,20 @@ class Brief3hbContentTest {
         }
         checkScrollingField("Writing association picker")
     }
+    /** iOS's `.control` row gives the field the rest of the row, so its placeholder fits one line (3hj). */
+    @Test fun collectionsSearchPlaceholderFitsItsRowOnOneLine() {
+        val model = runBlocking { workFormSetup().model(null).also { it.load(); it.openCollections() } }
+        // 1.3x is the largest scale before the row stacks its label; there a 55%-capped field wraps.
+        scale = 1.3f
+        show {
+            val state by model.state.collectAsState()
+            WritingAssociationPicker(WorkAssociation.CollectionsGifts, state.form!!, model, null, onBack = {})
+        }
+        val layouts = mutableListOf<androidx.compose.ui.text.TextLayoutResult>()
+        compose.onNodeWithText("Search all collections by name", useUnmergedTree = true)
+            .performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult) { it(layouts) }
+        assertEquals(1, layouts.single().lineCount)
+    }
     @Test fun giftRemovePaintsAFilledMinusCircleAndStillRemovesOnlyThatRecipient() {
         val model = runBlocking { workFormSetup().model(null).also { it.load(); it.addGift("Writer"); it.addGift("Other") } }
         show {
