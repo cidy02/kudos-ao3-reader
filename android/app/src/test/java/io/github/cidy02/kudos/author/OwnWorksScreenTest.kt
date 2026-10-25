@@ -80,6 +80,8 @@ class OwnWorksScreenTest {
         }
         if (initialTab == AuthorTab.Series) {
             compose.waitUntil(15_000) { compose.onAllNodesWithText("The Dawn Cycle").fetchSemanticsNodes().isNotEmpty() }
+        } else if (initialTab == AuthorTab.About) {
+            compose.waitUntil(15_000) { compose.onAllNodesWithText("Bio").fetchSemanticsNodes().isNotEmpty() }
         } else if (signedIn && username == "AO3_Reader") {
             compose.waitUntil(15_000) { compose.onAllNodesWithContentDescription("Select Works").fetchSemanticsNodes().isNotEmpty() }
         } else {
@@ -90,6 +92,19 @@ class OwnWorksScreenTest {
     private fun idleRequests(count: Int) {
         compose.waitForIdle()
         compose.waitUntil(15_000) { requests.size >= count }
+    }
+
+    /** The account header sits on the list's own margin (3he): it doubled its gutter inside the padded list. */
+    @Test fun ownAboutHeaderSharesTheListsMargin() {
+        show(initialTab = AuthorTab.About)
+        compose.waitForIdle()
+        val density = compose.onRoot().fetchSemanticsNode().layoutInfo.density.density
+        val title = compose.onAllNodesWithText("About", useUnmergedTree = true).fetchSemanticsNodes()
+            .minBy { it.boundsInRoot.top }.boundsInRoot
+        val bio = compose.onNodeWithText("Bio", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        // Bio's label has a small inset of its own; the header's default 26dp gutter put it 22dp past Bio.
+        assertTrue("Header ${title.left} starts at or before Bio ${bio.left}", title.left <= bio.left + 1f)
+        assertTrue("Header ${title.left} is within 6dp of Bio ${bio.left}", bio.left - title.left <= 6f * density)
     }
 
     @Test fun ownWorksRetainScopesAndChangingScopeReadsOnlyTheIndex() {

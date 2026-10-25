@@ -15,10 +15,6 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.TextFieldValue
-import androidx.test.espresso.Espresso.onView
-import androidx.test.espresso.matcher.RootMatchers.isDialog
-import androidx.test.espresso.matcher.ViewMatchers.withClassName
-import org.hamcrest.Matchers.endsWith
 import io.github.cidy02.kudos.account.AO3CollectionsFilter
 import io.github.cidy02.kudos.account.AO3CollectionsFilterContent
 import io.github.cidy02.kudos.comments.CommentComposerContent
@@ -134,27 +130,45 @@ class Parity3hfSheetsTest {
             val expectedInk = tokens.theme.accentInk(purple.tint)
             assertEquals(expectedInk, textColor("Save"))
             assertEquals(expectedInk, textColor("Cancel"))
-            val layouts = mutableListOf<TextLayoutResult>()
-            val day = compose.onNodeWithText("10", useUnmergedTree = true)
-            day.performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
-            assertEquals(SubjectPalette.label(purple.tint), layouts.single().layoutInput.style.color)
-            val dayBounds = day.fetchSemanticsNode().boundsInRoot
+            // Material's day cells clear the number's own semantics and speak the date ("…October 10, 2025…").
+            val dayBounds = compose.onNode(hasText("October 10, 2025", substring = true) and hasClickAction(),
+                useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
             // Draw the dialog's Compose root so pixel and semantics coordinates share an origin.
-            onView(withClassName(endsWith("AndroidComposeView"))).inRoot(isDialog()).check { root, failure ->
-                if (failure != null) throw failure
+            compose.runOnIdle {
+                val root = dialogComposeRoot()
                 val bitmap = Bitmap.createBitmap(root.width, root.height, Bitmap.Config.ARGB_8888)
                 root.draw(Canvas(bitmap))
-                val fill = Color(bitmap.getPixel((dayBounds.center.x - 16 * density).toInt(), dayBounds.center.y.toInt()))
+                val label = SubjectPalette.label(purple.tint)
+                var fillPixels = 0
+                var labelPixels = 0
+                for (y in dayBounds.top.toInt() until dayBounds.bottom.toInt()) for (x in dayBounds.left.toInt() until dayBounds.right.toInt()) {
+                    val pixel = Color(bitmap.getPixel(x, y))
+                    if (close(pixel, purple.tint)) fillPixels++
+                    if (close(pixel, label)) labelPixels++
+                }
                 var groundPixels = 0
                 for (y in 0 until bitmap.height) for (x in 0 until bitmap.width) {
-                    val pixel = Color(bitmap.getPixel(x, y))
-                    if (close(pixel, tokens.formSheetGround)) groundPixels++
+                    if (close(Color(bitmap.getPixel(x, y)), tokens.formSheetGround)) groundPixels++
                 }
                 bitmap.recycle()
-                assertTrue("Exact selected-day fill in $theme: $fill", close(fill, purple.tint))
+                assertTrue("Exact selected-day fill in $theme: $fillPixels pixels", fillPixels > 200)
+                assertTrue("The day's number in the fill's label ink in $theme: $labelPixels pixels", labelPixels > 5)
                 assertTrue("Flat sheet ground in $theme", groundPixels > 500)
             }
         }
+    }
+
+    /**
+     * The newest dialog's Compose root, found without Espresso (not a test dependency here):
+     * Robolectric tracks the dialog a test shows, and its window holds the AndroidComposeView.
+     */
+    private fun dialogComposeRoot(): View {
+        val dialog = requireNotNull(org.robolectric.shadows.ShadowDialog.getLatestDialog()) { "No dialog is showing" }
+        fun find(view: View): View? = if (view.javaClass.name.endsWith("AndroidComposeView")) view
+            else (view as? android.view.ViewGroup)?.let { group ->
+                (0 until group.childCount).firstNotNullOfOrNull { find(group.getChildAt(it)) }
+            }
+        return requireNotNull(find(dialog.window!!.decorView)) { "No Compose root in the dialog" }
     }
 
     @Test fun reorderHeaderAlignsWithItsReadingOrderLabel() {
