@@ -88,7 +88,7 @@ class A88dSmallFixesTest {
     /** iOS's help sheet: a ✓ beside the title that closes it, and its topics as cards on the card surface. */
     @Test fun helpHasDoneBesideItsTitleAndItsTopicsAreCards() {
         var done = 0
-        show(ground = { it.sheetGround }) {
+        show(ground = { it.background }) {
             PreferenceHelpContent(AO3PreferenceHelpRef("Help", "https://archiveofourown.org/help/preferences"),
                 AO3Result.Success(AO3PreferenceHelpContent("Privacy Preferences",
                     listOf(AO3PreferenceHelpEntry("Topic", "Instructions")), "Footer", "")),

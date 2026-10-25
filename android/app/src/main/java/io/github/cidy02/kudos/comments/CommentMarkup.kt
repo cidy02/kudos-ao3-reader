@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -222,25 +223,43 @@ fun CommentFormatBar(
     }
 }
 
-/** The serif letters iOS uses in both the quick bar and the full tray. */
+/** The letter glyphs iOS uses in both the quick bar and the full tray. */
 @Composable
 private fun CommentFormattingGlyph(
     tag: CommentMarkupTag, description: String? = null, iconSize: androidx.compose.ui.unit.Dp = 19.dp
 ) {
+    val density = LocalDensity.current
+    val ink = LocalKudosTokens.current.primaryInk
+    if (tag == CommentMarkupTag.Superscript || tag == CommentMarkupTag.Subscript) {
+        Row(Modifier.semantics { contentDescription = description ?: tag.label }) {
+            Text("A", color = ink, fontFamily = FontFamily.Serif,
+                fontSize = with(density) { 15.dp.toSp() }, modifier = Modifier.alignByBaseline())
+            Text("2", color = ink, fontFamily = FontFamily.Serif,
+                fontSize = with(density) { 9.dp.toSp() }, modifier = Modifier.alignByBaseline()
+                    .offset(y = if (tag == CommentMarkupTag.Superscript) (-6).dp else 4.dp))
+        }
+        return
+    }
     val letter = when (tag) {
         CommentMarkupTag.Bold -> "B"
         CommentMarkupTag.Italic -> "I"
         CommentMarkupTag.Underline -> "U"
         CommentMarkupTag.Strike -> "S"
         CommentMarkupTag.Small -> "Aa"
+        CommentMarkupTag.Heading -> "H"
         else -> null
     }
     if (letter == null) Icon(tag.icon, contentDescription = description,
         tint = LocalKudosTokens.current.primaryInk, modifier = Modifier.size(iconSize))
     // A fixed size, as iOS's `.system(size:)` letters and the icons they replace: they don't grow with the font.
-    else Text(letter, color = LocalKudosTokens.current.primaryInk, fontFamily = FontFamily.Serif,
-        fontSize = with(LocalDensity.current) { (if (tag == CommentMarkupTag.Small) 11.dp else 16.dp).toSp() },
-        fontWeight = if (tag == CommentMarkupTag.Bold) FontWeight.Bold else FontWeight.Normal,
+    else Text(letter, color = ink,
+        fontFamily = if (tag == CommentMarkupTag.Heading) FontFamily.Default else FontFamily.Serif,
+        fontSize = with(density) { when (tag) {
+            CommentMarkupTag.Small -> 11.dp
+            CommentMarkupTag.Heading -> 15.dp
+            else -> 16.dp
+        }.toSp() },
+        fontWeight = if (tag == CommentMarkupTag.Bold || tag == CommentMarkupTag.Heading) FontWeight.Bold else FontWeight.Normal,
         fontStyle = if (tag == CommentMarkupTag.Italic) FontStyle.Italic else FontStyle.Normal,
         textDecoration = when (tag) {
             CommentMarkupTag.Underline -> TextDecoration.Underline

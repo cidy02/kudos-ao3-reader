@@ -479,7 +479,7 @@ internal fun PreferenceHelpSheet(
         androidx.compose.material3.ModalBottomSheet(onDismissRequest = onDismiss, containerColor = ground) { content() }
     }
 ) {
-    presentSheet(LocalKudosTokens.current.sheetGround) {
+    presentSheet(LocalKudosTokens.current.background) {
         PreferenceHelpContent(ref, result, onRetry, onOpenOnAO3, onDone = onDismiss)
     }
 }
