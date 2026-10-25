@@ -67,7 +67,7 @@ fun AO3ChallengeSettingsScreen(
     }
     DisposableEffect(model) { onDispose { model.close() } }
     ProvidePushedShellChrome(hasSubjectHeader = true)
-    CompositionLocalProvider(LocalKudosTokens provides tokens.copy(accent = palette.accent)) {
+    SubjectPaletteTheme(palette) {
         // Refresh chrome is the only Material surface; every colour comes from subject tokens.
         MaterialTheme(colorScheme = MaterialTheme.colorScheme.copy(
             primary = palette.accent, onPrimary = SubjectPalette.label(palette.accent),
@@ -231,8 +231,8 @@ fun AO3ChallengeSettingsScreen(
 @Composable internal fun ChallengeReadOnlyToggle(label: String, checked: Boolean, palette: SubjectPalette, large: Boolean) {
     if (large) Column(Modifier.fillMaxWidth().padding(horizontal = 13.dp, vertical = 11.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(label, color = LocalKudosTokens.current.primaryInk, fontSize = 14.5.sp, lineHeight = 20.sp)
-        SubjectToggle(checked, onCheckedChange = {}, enabled = false, accent = palette.accent, contentDescription = label)
+        SubjectToggle(checked, onCheckedChange = {}, enabled = false, accent = palette.tint, contentDescription = label)
     } else SubjectFormRow(label, trailing = {
-        SubjectToggle(checked, onCheckedChange = {}, enabled = false, accent = palette.accent, contentDescription = label)
+        SubjectToggle(checked, onCheckedChange = {}, enabled = false, accent = palette.tint, contentDescription = label)
     })
 }

@@ -374,8 +374,8 @@ private fun ItemFlagRow(label: String, value: Boolean, editable: Boolean, enable
     ItemSettingRow(label) {
         if (editable) Switch(checked = value, onCheckedChange = onChange, enabled = enabled,
             modifier = Modifier.semantics { contentDescription = label }, colors = SwitchDefaults.colors(
-                checkedThumbColor = tokens.cardFill, checkedTrackColor = palette.accent,
-                checkedBorderColor = palette.accent, uncheckedThumbColor = tokens.secondaryInk,
+                checkedThumbColor = tokens.cardFill, checkedTrackColor = palette.tint,
+                checkedBorderColor = palette.tint, uncheckedThumbColor = tokens.secondaryInk,
                 uncheckedTrackColor = tokens.panelFill, uncheckedBorderColor = tokens.separator,
                 disabledCheckedThumbColor = tokens.secondaryInk, disabledCheckedTrackColor = tokens.panelFill,
                 disabledCheckedBorderColor = tokens.separator, disabledUncheckedThumbColor = tokens.tertiaryInk,

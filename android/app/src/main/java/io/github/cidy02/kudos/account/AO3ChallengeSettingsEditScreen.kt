@@ -15,6 +15,8 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -173,7 +175,9 @@ private fun ChallengeSettingsEditContent(slug: String, title: String, viewerIsOw
                             val key = form.field("signup_instructions_general")
                             SubjectFieldLabel("Sign-up instructions", Modifier.padding(horizontal = 13.dp, vertical = 8.dp))
                             SubjectTextFieldRow("Sign-up instructions", form[key], "Describe the challenge for people signing up…",
-                                { model.change(key, it) }, multiline = true, fieldOnly = true, enabled = !busy && form.editable(key))
+                                { model.change(key, it) },
+                                textStyle = TextStyle(fontFamily = FontFamily.Serif, fontSize = 14.sp),
+                                multiline = true, fieldOnly = true, enabled = !busy && form.editable(key))
                         } }
                         item { ChallengeSection("Schedule") }
                         items(challengeDateKeys.mapNotNull { date -> form.dateField(date)?.let { form.fieldErrors[it] } }.distinct()) {
@@ -342,7 +346,7 @@ private data class ChallengeEditChoice(val label: String, val name: String, val 
 @Composable private fun ChallengeEditToggle(label: String, checked: Boolean, enabled: Boolean, change: (Boolean) -> Unit) {
     val tokens = LocalKudosTokens.current
     val toggle: @Composable () -> Unit = {
-        SubjectToggle(checked, onCheckedChange = change, enabled = enabled, accent = tokens.scopePalette.accent, contentDescription = label)
+        SubjectToggle(checked, onCheckedChange = change, enabled = enabled, accent = tokens.scopePalette.tint, contentDescription = label)
     }
     if (isAccessibilityFontScale()) Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 11.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(label, color = tokens.primaryInk, fontSize = 15.sp, lineHeight = 21.sp)

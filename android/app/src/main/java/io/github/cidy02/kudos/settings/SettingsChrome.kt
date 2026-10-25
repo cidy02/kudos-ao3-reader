@@ -155,13 +155,14 @@ fun SubjectTextFieldRow(
     fieldOnly: Boolean = false,
     onSubmit: (() -> Unit)? = null,
     keyboardType: KeyboardType = KeyboardType.Text,
+    textStyle: TextStyle = TextStyle.Default,
     leading: @Composable () -> Unit = {},
     trailing: @Composable () -> Unit = {}
 ) {
     val tokens = LocalKudosTokens.current
     val stacked = multiline || stackedLabel || fieldOnly || isAccessibilityFontScale()
     val style = TextStyle(color = if (enabled) tokens.primaryInk else tokens.secondaryInk,
-        fontSize = 14.5.sp, lineHeight = 20.sp, textAlign = if (stacked) TextAlign.Start else TextAlign.End)
+        fontSize = 14.5.sp, lineHeight = 20.sp, textAlign = if (stacked) TextAlign.Start else TextAlign.End).merge(textStyle)
     val focus = remember { FocusRequester() }
     val measurer = rememberTextMeasurer()
     val density = LocalDensity.current

@@ -93,7 +93,7 @@ fun AO3CollectionsFilterPanel(
                     SubjectFieldLabel("Sort by")
                     Column(Modifier.subjectPanel()) {
                         // The whole row opens the choices, as iOS's picker row does.
-                        SubjectFormRow("Order by", onClick = { sortMenuOpen = true }, trailing = {
+                        SubjectFormRow("Order by", showsChoice = true, onClick = { sortMenuOpen = true }, trailing = {
                             Box {
                                 TextButton(onClick = { sortMenuOpen = true }) {
                                     Text(draft.sort.title, color = tokens.accentInk)

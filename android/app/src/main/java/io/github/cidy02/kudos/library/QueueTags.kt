@@ -63,6 +63,8 @@ import io.github.cidy02.kudos.ui.subject.SubjectFieldLabel
 import io.github.cidy02.kudos.ui.subject.SubjectFormRow
 import io.github.cidy02.kudos.ui.subject.SubjectHeaderBlock
 import io.github.cidy02.kudos.ui.subject.SubjectPalette
+import io.github.cidy02.kudos.ui.subject.SubjectPaletteTheme
+import io.github.cidy02.kudos.ui.subject.LocalAppPalette
 import io.github.cidy02.kudos.ui.subject.SubjectRowSeparator
 import io.github.cidy02.kudos.ui.subject.subjectPanel
 import io.github.cidy02.kudos.ui.subject.subjectScreenWash
@@ -178,7 +180,9 @@ internal fun SharedTagContent(
     toggle: suspend (String) -> Unit,
     onDismiss: () -> Unit
 ) {
+    val controls = LocalAppPalette.current
     val tokens = LocalKudosTokens.current
+    val controlInk = tokens.theme.accentInk(controls.tint)
     val scope = rememberCoroutineScope()
     var all by remember { mutableStateOf<List<Tag>>(emptyList()) }
     var coverage by remember { mutableStateOf<Map<String, TagCoverage>>(emptyMap()) }
@@ -191,10 +195,11 @@ internal fun SharedTagContent(
         coverage = shared.coverage
     }
 
+    SubjectPaletteTheme(controls) {
         Column(
             Modifier
                 .fillMaxSize()
-                .subjectScreenWash(palette)
+                .background(tokens.formSheetGround)
                 .windowInsetsPadding(WindowInsets.safeDrawing)
         ) {
             Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -205,7 +210,7 @@ internal fun SharedTagContent(
                     fontSize = 17.sp,
                     fontWeight = FontWeight.SemiBold
                 )
-                TextButton(onClick = onDismiss) { Text("Done", color = palette.accent) }
+                TextButton(onClick = onDismiss) { Text("Done", color = controlInk) }
             }
             Column(
                 Modifier.verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp),
@@ -216,7 +221,7 @@ internal fun SharedTagContent(
                     Modifier.fillMaxWidth().subjectPanel().padding(horizontal = 12.dp, vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(Icons.Filled.Add, contentDescription = null, tint = palette.accent)
+                    Icon(Icons.Filled.Add, contentDescription = null, tint = controlInk)
                     val addTag: () -> Unit = addTag@ {
                         val name = draft.trim()
                         if (name.isEmpty()) return@addTag
@@ -240,7 +245,7 @@ internal fun SharedTagContent(
                     TextButton(
                         onClick = addTag,
                         enabled = draft.isNotBlank(),
-                        colors = ButtonDefaults.textButtonColors(contentColor = palette.accent)
+                        colors = ButtonDefaults.textButtonColors(contentColor = controlInk)
                     ) { Text("Add") }
                 }
                 FormFootnote(footnote)
@@ -272,7 +277,7 @@ internal fun SharedTagContent(
                                         TagCoverage.None -> Icons.Outlined.Circle
                                     },
                                     contentDescription = null,
-                                    tint = if (state == TagCoverage.None) tokens.secondaryInk else palette.accent,
+                                    tint = if (state == TagCoverage.None) tokens.secondaryInk else controlInk,
                                     modifier = Modifier.testTag("Tag selection mark")
                                 )
                                 Text(tag.name, Modifier.weight(1f), color = tokens.primaryInk, fontSize = 14.5.sp)
@@ -288,11 +293,11 @@ internal fun SharedTagContent(
                                             TagCoverage.Some -> "some"
                                             TagCoverage.None -> ""
                                         },
-                                        color = if (state == TagCoverage.All) palette.accent else tokens.secondaryInk,
+                                        color = if (state == TagCoverage.All) controlInk else tokens.secondaryInk,
                                         fontSize = 13.sp
                                     )
                                     if (state == TagCoverage.All) {
-                                        Icon(Icons.Filled.Check, contentDescription = null, tint = palette.accent)
+                                        Icon(Icons.Filled.Check, contentDescription = null, tint = controlInk)
                                     }
                                 }
                             )
@@ -301,6 +306,7 @@ internal fun SharedTagContent(
                 }
             }
         }
+    }
 }
 
 /** Shared vocabulary for one queue. Counts are works in this queue only. */

@@ -296,6 +296,23 @@ class AO3CollectionMaintainersTest {
 class AO3CollectionMaintainersScreenTest {
     @get:Rule val compose = createComposeRule()
     private var left = 0
+    private lateinit var tokens: io.github.cidy02.kudos.ui.subject.KudosTokens
+
+    @Test fun inviteRoleChoiceUsesTheCollectionPalette() {
+        io.github.cidy02.kudos.network.ao3.DemoNetwork.resetForTests()
+        io.github.cidy02.kudos.app.DebugShotRequests.clear()
+        val client = show(theme = KudosThemeMode.Light)
+        compose.waitForIdle()
+        compose.onNodeWithText("Invite as").performScrollTo()
+        val layouts = mutableListOf<androidx.compose.ui.text.TextLayoutResult>()
+        compose.onNodeWithText("Moderator", useUnmergedTree = true)
+            .performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult) { it(layouts) }
+        val palette = io.github.cidy02.kudos.ui.subject.SubjectPalette.fromHue(
+            io.github.cidy02.kudos.home.HomeFacts.workHue(emptyList(), "Winter Exchange 2026"),
+            tokens.theme)
+        assertEquals(palette.accent, layouts.single().layoutInput.style.color)
+        assertTrue(client.posts.isEmpty())
+    }
 
     @Test fun ownerDialogCancelMakesNoRequestAndConfirmedLeaveClosesOnce() {
         val client = show()
@@ -352,6 +369,7 @@ class AO3CollectionMaintainersScreenTest {
             val density = LocalDensity.current
             CompositionLocalProvider(LocalDensity provides Density(density.density, scale)) {
                 KudosTheme(themeMode = theme) {
+                    tokens = io.github.cidy02.kudos.ui.subject.LocalKudosTokens.current
                     AO3CollectionMaintainersScreen("winter_exchange", "Winter Exchange 2026", repository, writes, onLeft = { ++left })
                 }
             }

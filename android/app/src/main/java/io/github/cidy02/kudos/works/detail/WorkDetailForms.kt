@@ -59,10 +59,11 @@ private fun DetailForm(
     // This form takes Detail's place in the route; it owns the shell row registration.
     if (registerShellChrome) ProvidePushedShellChrome(hasSubjectHeader = true, onBack = onClose)
     BackHandler(onBack = onClose)
+    SubjectPaletteTheme(LocalAppPalette.current) {
     ModalBottomSheet(onDismissRequest = onClose,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true,
             confirmValueChange = { it != SheetValue.Hidden || canDismiss }),
-        containerColor = tokens.background,
+        containerColor = tokens.formSheetGround,
         scrimColor = tokens.primaryInk.copy(alpha = 0.32f),
         contentColor = tokens.primaryInk,
         dragHandle = {
@@ -84,18 +85,18 @@ private fun DetailForm(
                     modifier = Modifier.weight(1f).padding(horizontal = 8.dp))
                 actions()
             }
-            LazyColumn(Modifier.fillMaxWidth().weight(1f).subjectScreenWash(tokens.scopePalette)
+            LazyColumn(Modifier.fillMaxWidth().weight(1f)
                 .testTag("Work detail form"), contentPadding = PaddingValues(bottom = 32.dp), content = content)
         }
+    }
     }
 }
 
 @Composable
 private fun FormToolbarAction(label: String, enabled: Boolean, onClick: () -> Unit) {
     val tokens = LocalKudosTokens.current
-    // The palette's accent, as the wash behind it: the theme's own accent is a deep red that
-    // could barely be read as text on a dark sheet (seen on the emulator).
-    Text(label, color = if (enabled) tokens.scopePalette.accent else tokens.tertiaryInk,
+    // Toolbar labels use readable ink; filled controls keep the exact tint.
+    Text(label, color = if (enabled) tokens.accentInk else tokens.tertiaryInk,
         fontSize = 14.sp, lineHeight = 20.sp,
         modifier = Modifier.clickable(enabled = enabled, onClick = onClick).padding(12.dp))
 }

@@ -131,6 +131,11 @@ data class KudosTokens(
     /** A system-style sheet's ground: white in Light, as iOS's sheets; the page's own elsewhere (A92). */
     val sheetGround: Color get() = if (theme == ReaderTheme.Light) cardFill else background
 
+    /** iOS `.appThemedScroll()` form sheets: appBaseBackground in Dark, one step above its cardBackdrop; the page's
+     *  grouped ground elsewhere (Light's (242,242,247), not [sheetGround]'s white, as measured on the iPhone). */
+    val formSheetGround: Color
+        get() = if (theme == ReaderTheme.Dark) Color(red = 0.086f, green = 0.086f, blue = 0.105f) else background
+
     val scopePalette: SubjectPalette
         get() = scopePaletteOverride ?: theme.scopePalette(accent)
 

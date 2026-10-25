@@ -732,7 +732,8 @@ fun AuthorProfileScreen(
                                         ownWorksLine(route.displayName, works?.summary?.total, stats)
                                     else -> route.displayName
                                 },
-                                palette = palette
+                                palette = palette,
+                                gutter = 0.dp
                             )
                             if (h.pseuds.size > 1) {
                                 Spacer(Modifier.size(8.dp))

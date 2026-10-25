@@ -483,7 +483,7 @@ internal fun WorkFormToggle(
     onChange: (Boolean) -> Unit
 ) {
     WorkFormControlRow(label) {
-        SubjectToggle(checked, onChange, enabled = enabled, accent = LocalKudosTokens.current.scopePalette.accent, contentDescription = spokenLabel)
+        SubjectToggle(checked, onChange, enabled = enabled, accent = LocalKudosTokens.current.scopePalette.tint, contentDescription = spokenLabel)
     }
 }
 

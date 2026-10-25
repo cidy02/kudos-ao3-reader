@@ -37,6 +37,7 @@ import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.NotificationsOff
 import androidx.compose.material.icons.outlined.VolumeOff
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedButton
@@ -176,6 +177,10 @@ internal fun AO3AuthorHero(
                         Button(
                             onClick = { onSubscription(form) },
                             enabled = !subscriptionBusy,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = tokens.scopePalette.tint,
+                                contentColor = SubjectPalette.label(tokens.scopePalette.tint)
+                            ),
                             contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp, vertical = 6.dp),
                             modifier = Modifier.heightIn(min = 32.dp)
                         ) {

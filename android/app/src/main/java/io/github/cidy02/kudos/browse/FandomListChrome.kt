@@ -527,21 +527,21 @@ fun FandomListFilterSheet(
                 }
                 Spacer(Modifier.height(16.dp))
                 SheetLabel("Tag kinds")
-                FilterToggle("Hide RPF tags", tagCountLabel(tallies.rpfTags), draft.hideRPF, palette.accent) {
+                FilterToggle("Hide RPF tags", tagCountLabel(tallies.rpfTags), draft.hideRPF, palette.tint) {
                     draft = draft.copy(hideRPF = it)
                 }
-                FilterToggle("Hide All Media Types umbrellas", tagCountLabel(tallies.allMediaTypesTags), draft.hideAllMediaTypes, palette.accent) {
+                FilterToggle("Hide All Media Types umbrellas", tagCountLabel(tallies.allMediaTypesTags), draft.hideAllMediaTypes, palette.tint) {
                     draft = draft.copy(hideAllMediaTypes = it)
                 }
-                FilterToggle("Hide Related Fandoms groupings", tagCountLabel(tallies.relatedFandomsTags), draft.hideRelatedFandoms, palette.accent) {
+                FilterToggle("Hide Related Fandoms groupings", tagCountLabel(tallies.relatedFandomsTags), draft.hideRelatedFandoms, palette.tint) {
                     draft = draft.copy(hideRelatedFandoms = it)
                 }
                 Spacer(Modifier.height(16.dp))
                 SheetLabel("Yours")
-                FilterToggle("Favourited only", tagCountLabel(tallies.favouritedTags), draft.favouritedOnly, palette.accent) {
+                FilterToggle("Favourited only", tagCountLabel(tallies.favouritedTags), draft.favouritedOnly, palette.tint) {
                     draft = draft.copy(favouritedOnly = it)
                 }
-                FilterToggle("I have downloads from", tagCountLabel(tallies.downloadTags), draft.downloadsOnly, palette.accent) {
+                FilterToggle("I have downloads from", tagCountLabel(tallies.downloadTags), draft.downloadsOnly, palette.tint) {
                     draft = draft.copy(downloadsOnly = it)
                 }
                 Spacer(Modifier.height(16.dp))
@@ -555,7 +555,7 @@ fun FandomListFilterSheet(
                         "Turn on Group variants to use this filter"
                     },
                     checked = draft.multiTagOnly && groupsVariants,
-                    accent = palette.accent,
+                    accent = palette.tint,
                     enabled = groupsVariants
                 ) { draft = draft.copy(multiTagOnly = it) }
             }

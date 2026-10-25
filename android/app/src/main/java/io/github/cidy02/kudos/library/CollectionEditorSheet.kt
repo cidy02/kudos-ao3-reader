@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.library
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -158,7 +159,7 @@ fun CollectionEditorSheet(
         Column(
             Modifier
                 .fillMaxSize()
-                .subjectScreenWash(palette)
+                .then(if (editing) Modifier.background(tokens.formSheetGround) else Modifier.subjectScreenWash(palette))
                 .windowInsetsPadding(WindowInsets.safeDrawing)
                 .windowInsetsPadding(WindowInsets.ime)
         ) {
