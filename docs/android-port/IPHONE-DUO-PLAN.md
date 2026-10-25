@@ -282,7 +282,9 @@ where their files don't overlap.
 - Anything reopened is fixed before Duo work starts.
 
 **Phase 1: land what's built.**
-- **T-451 round 5:** Codex review R456, fixes, gate, then land.
+- **T-451: reversed, not landed (2026-10-25).** R456 → round 6 ("detect the reset") → R458 still found a P1: a
+  chosen chapter start can't be told apart from Readium's reset. The stop rule recorded before round 6 applied
+  (DECISIONS, 2026-10-25). The reader stays as T-450 left it, and Readium owns the position.
 - **Duo9:**
   - Codex fixes the hosted test and tap-checks every inspector caller (root Library filter, collections,
     queue browser, Account works lists, Search and Browse).
@@ -313,9 +315,27 @@ Book pose; the Library, Settings and Account splits collapse and expand without 
 change visible to a reader, and the harness can shoot any screen in C, P, L and B.
 
 **Phase 3: the reader (Duo10).**
-- **It starts only on a landed, reviewed position baseline** (T-451, phase 1), with a review slot reserved.
-  The rule from T-449 and T-450: never override a position the reader chose; elsewhere an approximate
-  restore is fine (one restore, only at rest, and it skips rather than guessing).
+- **It starts on T-450's landed, reviewed baseline** (Readium owns the position), with a review slot reserved.
+  The rule from T-449 and T-450: never override a position the reader chose.
+- **First: the unfold keeps the reader's place through Readium's own reload.** Paged mode falls back to the
+  chapter's start on a same-orientation resize (the Duo's unfold, iPad Split View), because Readium reloads at
+  its `currentLocation` only on a spread change. The public route: from the container's `viewWillTransition`,
+  submit the preferences with `offsetFirstPage` toggled and then the originals. That forces one coalesced
+  `_reloadSpreads()` at Readium's own `currentLocation`, the path rotation takes, with no app restore logic.
+  Review and device check. The upstream PR is the clean long-term fix (DECISIONS, 2026-10-25).
+  **Checks before it's trusted** (Claude-CLI, 2026-10-25):
+  1. **Net no change still reloads.** From source, yes: the coalesced async block calls `invalidatePaginationView`
+     with no diff of its own (`EPUBNavigatorViewModel.setNeedsInvalidatePagination`). A test confirms it.
+  2. **`offsetFirstPage` never takes effect.** From source, the second submit restores it before the async reload
+     lays out, and CSS isn't committed while an invalidation is pending. Still check spread-on at the inner
+     landscape width (951 pt), so the reader can't move a page.
+  3. **Persistence:** the toggled value never reaches the app's preferences store or sync, even if interrupted
+     between the two submits.
+  4. **Timing:** `viewWillTransition` fires before the new size applies. The device check must show the reload
+     lands after the size settles (not at the old size, then mapped back to the start). Split View's live drag
+     must give one reload, not one per frame.
+  5. **A just-chosen place:** `go(to:)` via Contents, then unfold within 300 ms. If Readium reloads at the old
+     place, that's its own rotation behaviour too: parity with rotation, not a new fault. The owner entry says so.
 - One navigator.
 - The spread's gutter is the fold.
 - Chrome sits in one pane.
