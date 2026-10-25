@@ -123,7 +123,8 @@ internal fun WritingAssociationPicker(
                         Column(Modifier.testTag("Writing pinned field")
                             .padding(horizontal = SubjectMetrics.accountGutter).padding(top = 8.dp)
                             .writingSuggestionPanel(first = true, last = false)) {
-                            SubjectTextFieldRow("Search", searchState.query, "Search all collections by name", search::type, autocorrect = false)
+                            SubjectTextFieldRow("Search", searchState.query, "Search all collections by name", search::type, autocorrect = false,
+                                fillsRemainingWidth = true)
                             SubjectRowSeparator()
                         }
                     }

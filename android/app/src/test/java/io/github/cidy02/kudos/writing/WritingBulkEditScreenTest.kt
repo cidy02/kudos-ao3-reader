@@ -117,6 +117,57 @@ class WritingBulkEditScreenTest {
         assertTrue(model.state.value.changes.removed["work[archive_warning_strings][]"].orEmpty().isEmpty())
         assertEquals(2, client.requests.size); assertEquals(1, client.posts.size)
     }
+    /** iOS draws these five as `WritingChoiceRow` (EditMultipleWorksView.swift:251, 271, 326, 332, 338): choices (3hj). */
+    @Test fun scalarRowsAreChoicesAndThreeStateRowsStayDisclosures() {
+        show()
+        fun indicatorBeside(label: String) = compose.onNode(hasTestTag("Choice indicator") and
+            hasParent(hasAnyDescendant(hasText(label))), useUnmergedTree = true)
+        for (label in listOf("Rating", "Language", "Only show to registered users", "Enable comment moderation", "Who can comment")) {
+            scroll(label)
+            indicatorBeside(label).assertExists()
+        }
+        for (label in listOf("Archive warnings", "Categories")) {
+            scroll(label)
+            indicatorBeside(label).assertDoesNotExist()
+        }
+    }
+
+    /** iOS's tag-state page (`BulkTagStatePicker`) is a plain list; its names page keeps the wash (3hj). */
+    @Test fun tagStatePageIsFlatWhileTheNamesPageKeepsItsWash() {
+        var pickerMode by mutableStateOf("tri")
+        lateinit var view: android.view.View
+        var ground = androidx.compose.ui.graphics.Color.Unspecified
+        compose.setContent { KudosTheme(theme) {
+            view = androidx.compose.ui.platform.LocalView.current
+            ground = io.github.cidy02.kudos.ui.subject.LocalKudosTokens.current.background
+            BulkOptionsScreen(BulkPicker("Archive warnings", "warnings", pickerMode),
+                listOf(io.github.cidy02.kudos.network.ao3.writing.AO3FormOption("none", "No warnings")),
+                io.github.cidy02.kudos.network.ao3.writing.AO3BulkEditChanges(workIDs = emptyList()), {}, {})
+        } }
+        fun top(): androidx.compose.ui.graphics.Color {
+            var color = androidx.compose.ui.graphics.Color.Unspecified
+            compose.runOnIdle {
+                val bitmap = android.graphics.Bitmap.createBitmap(view.width, view.height, android.graphics.Bitmap.Config.ARGB_8888)
+                view.draw(android.graphics.Canvas(bitmap))
+                color = androidx.compose.ui.graphics.Color(bitmap.getPixel(view.width / 2, 4))
+                bitmap.recycle()
+            }
+            return color
+        }
+        fun near(a: androidx.compose.ui.graphics.Color, b: androidx.compose.ui.graphics.Color) =
+            maxOf(kotlin.math.abs(a.red - b.red), kotlin.math.abs(a.green - b.green), kotlin.math.abs(a.blue - b.blue)) < 0.012f
+        for (mode in listOf(KudosThemeMode.Light, KudosThemeMode.Sepia, KudosThemeMode.Dark, KudosThemeMode.Oled)) {
+            compose.runOnIdle { theme = mode; pickerMode = "tri" }
+            compose.waitForIdle()
+            assertTrue("Flat tag-state page in $mode", near(top(), ground))
+            if (mode == KudosThemeMode.Dark || mode == KudosThemeMode.Oled) {
+                compose.runOnIdle { pickerMode = "names" }
+                compose.waitForIdle()
+                assertFalse("The names page keeps its wash in $mode", near(top(), ground))
+            }
+        }
+    }
+
     @Test fun cancelledFormSendsOnlyItsInitialRenderingPost() {
         show(); compose.onNodeWithContentDescription("Cancel").performClick()
         compose.waitUntil(15_000) { closed }
