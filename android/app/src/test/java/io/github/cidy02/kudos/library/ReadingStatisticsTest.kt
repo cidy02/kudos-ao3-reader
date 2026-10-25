@@ -2,6 +2,7 @@ package io.github.cidy02.kudos.library
 
 import io.github.cidy02.kudos.core.model.SavedWork
 import io.github.cidy02.kudos.data.local.entity.ReadingSessionEntity
+import io.github.cidy02.kudos.ui.subject.compactCount
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
@@ -309,19 +310,17 @@ class ReadingStatisticsTest {
     }
 
     @Test
-    fun formatCompactNumberUsesKAndMSuffixes() {
-        assertEquals("999", formatCompactNumber(999))
-        assertEquals("1.3K", formatCompactNumber(1_250))
-        assertEquals("12.5K", formatCompactNumber(12_500))
-        assertEquals("1M", formatCompactNumber(1_000_000))
+    fun wordsReadUsesTheSharedCompactCount() {
+        val statistics = ReadingStatistics.from(listOf(work("Finished", isFinished = true, wordCount = 202_600)))
+        assertEquals("203K", statistics.wordsRead.compactCount())
     }
 
     @Test
-    fun formatCompactNumberPromotesUnitWhenRoundingCrossesAThousand() {
-        // 999,950 / 1000 = 999.95, which rounds to "1000.0" at one decimal —
-        // that belongs to the M tier, not a bogus "1000.0K".
-        assertEquals("1M", formatCompactNumber(999_950))
-        assertEquals("1B", formatCompactNumber(999_999_500))
+    fun wordsReadPromotesUnitWhenRoundingCrossesAThousand() {
+        for ((words, label) in listOf(999_950 to "1M", 999_999_500 to "1B")) {
+            val statistics = ReadingStatistics.from(listOf(work("Finished", isFinished = true, wordCount = words)))
+            assertEquals(label, statistics.wordsRead.compactCount())
+        }
     }
 
     private fun fact(

@@ -169,7 +169,8 @@ private fun ChallengeAssignmentsContent(slug: String, title: String, viewerIsOwn
                             }
                             AssignmentSegment.Unmatched -> itemsIndexed(state.unmatched.chunked(2)) { _, pair ->
                                 val names = pair.map { it.recipientDisplay }
-                                SettingsPanel(Modifier.padding(top = 9.dp)) {
+                                Column(Modifier.padding(top = 9.dp).padding(horizontal = SubjectMetrics.accountGutter)
+                                    .fillMaxWidth().subjectCard(palette)) {
                                     Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                                         AssignmentText(if (names.size == 2) "Two sign-ups lost their giver" else "One sign-up lost its giver", true)
                                         AssignmentText((if (names.size == 2) "The givers for ${names[0]} and ${names[1]} defaulted, and no pinch hitter has covered them yet."

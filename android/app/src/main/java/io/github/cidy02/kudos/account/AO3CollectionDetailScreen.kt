@@ -80,6 +80,7 @@ import io.github.cidy02.kudos.ui.subject.SubjectStatCell
 import io.github.cidy02.kudos.ui.subject.SubjectStatStrip
 import io.github.cidy02.kudos.ui.subject.ToolbarCircleButton
 import io.github.cidy02.kudos.ui.subject.subjectPanel
+import io.github.cidy02.kudos.ui.subject.subjectCard
 import io.github.cidy02.kudos.ui.subject.subjectScreenWash
 import kotlinx.coroutines.launch
 
@@ -464,7 +465,7 @@ private fun CollectionPersonRow(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .subjectPanel(cornerRadius = 16.dp)
+            .subjectCard(palette)
             .padding(horizontal = 14.dp, vertical = 12.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalAlignment = Alignment.CenterVertically
