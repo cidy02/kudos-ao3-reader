@@ -164,6 +164,9 @@ private struct AO3WorkActionsModifier: ViewModifier {
         content
             .sheet(isPresented: $actions.showingBookmark) {
                 AO3BookmarkComposer(actions: actions, workID: workID, auth: auth)
+                #if os(iOS)
+                    .modifier(ScopeSurfaceAccent())
+                #endif
             }
             .commentsSheet(
                 isPresented: $actions.showingCommentsScreen,

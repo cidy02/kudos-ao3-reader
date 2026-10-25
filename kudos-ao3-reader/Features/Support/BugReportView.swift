@@ -62,6 +62,7 @@ struct BugReportView: View {
                                 openURL(url)
                             } label: {
                                 Label("Continue on GitHub", systemImage: "ladybug")
+                                    .labelStyle(BugReportContinueLabelStyle())
                             }
                             .disabled(trimmedSummary.isEmpty)
                         }
@@ -188,5 +189,21 @@ struct BugReportView: View {
             guard let value = child.value as? Int8, value != 0 else { return }
             result.append(Character(UnicodeScalar(UInt8(bitPattern: value))))
         }
+    }
+}
+
+/// Keep the grouped-form action's title and icon visibly disabled together.
+struct BugReportContinueLabelStyle: LabelStyle {
+    @Environment(\.isEnabled) private var isEnabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        Label {
+            configuration.title
+                .foregroundStyle(isEnabled ? Color.primary : .secondary)
+        } icon: {
+            configuration.icon
+                .foregroundStyle(isEnabled ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
+        }
+        .labelStyle(.titleAndIcon)
     }
 }
