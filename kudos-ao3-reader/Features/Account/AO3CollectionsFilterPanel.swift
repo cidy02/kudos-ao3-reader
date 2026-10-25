@@ -40,7 +40,8 @@ struct AO3CollectionsFilterPanel: View {
                 .padding(.vertical, 20)
             }
             .safeAreaInset(edge: .bottom) { resetBar }
-            .appThemedScroll()
+            // No `.appThemedScroll()`: its opaque theme ground sat in front of the wash
+            // below, which then showed only in Light (A102). The wash paints the ground.
             .navigationTitle("Sort and filter")
             #if os(iOS)
                 .navigationBarTitleDisplayMode(.inline)
