@@ -19,6 +19,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
@@ -257,7 +258,9 @@ private fun AssociationPickRow(title: String, detail: String?, selected: Boolean
         horizontalArrangement = Arrangement.spacedBy(11.dp)) {
         Icon(when { current -> Icons.Default.CheckCircle; add -> Icons.Default.AddCircleOutline;
             selected -> Icons.Default.CheckCircle; else -> Icons.Default.RadioButtonUnchecked }, null,
-            tint = if (current || selected || add) tokens.scopePalette.accent else tokens.secondaryInk, modifier = Modifier.size(18.dp))
+            tint = if (current || selected || add) tokens.scopePalette.accent else tokens.secondaryInk,
+            // Sized in sp so it grows with the text, as iOS's symbol does (3hk).
+            modifier = Modifier.size(with(LocalDensity.current) { 18.sp.toDp() }))
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
             Text(title, color = tokens.primaryInk, fontSize = 14.5.sp, lineHeight = 20.sp, fontWeight = FontWeight.Medium)
             if (detail != null) Text(detail, color = tokens.secondaryInk, fontSize = 11.5.sp, lineHeight = 17.sp)

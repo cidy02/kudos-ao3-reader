@@ -3,6 +3,7 @@ package io.github.cidy02.kudos.account
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Remove
@@ -168,7 +169,8 @@ private fun ChallengeSettingsEditContent(slug: String, title: String, viewerIsOw
                             "Tagline" to collection[AO3CollectionFields.DESCRIPTION].ifEmpty { "None" },
                             "Introduction" to challengeIntroductionCount(collection[AO3CollectionFields.profile("intro")]),
                             "FAQ" to if (collection[AO3CollectionFields.profile("faq")].isEmpty()) "None" else "Set")
-                        items(basics) { (label, value) -> ChallengeEditPanel {
+                        itemsIndexed(basics) { index, (label, value) -> ChallengeEditPanel(first = index == 0, last = index == basics.lastIndex) {
+                            if (index > 0) SubjectRowSeparator()
                             SubjectFormRow(label, value = value, valueMaxLines = Int.MAX_VALUE, showsDisclosure = true, onClick = onOpenCollection)
                         } }
                         item { ChallengeEditPanel {
@@ -184,11 +186,16 @@ private fun ChallengeSettingsEditContent(slug: String, title: String, viewerIsOw
                             ChallengeEditMessage(it)
                         }
                         val labels = listOf("Sign-ups open", "Sign-ups close", "Works due", "Works revealed", "Creators revealed")
-                        challengeDateKeys.forEachIndexed { index, date ->
-                            if (index == 2) item { ChallengeEditPanel {
+                        // -1 is Assignments sent, which AO3 stamps and the form can't edit.
+                        val schedule = buildList { challengeDateKeys.forEachIndexed { index, date ->
+                            if (index == 2) add(-1 to "")
+                            form.dateField(date)?.let { add(index to it) }
+                        } }
+                        itemsIndexed(schedule) { row, (index, key) -> ChallengeEditPanel(first = row == 0, last = false) {
+                            if (row > 0) SubjectRowSeparator()
+                            if (index == -1) {
                                 SubjectFormRow("Assignments sent", value = challengeSentText(form.value("assignments_sent_at")), valueMaxLines = Int.MAX_VALUE)
-                            } }
-                            form.dateField(date)?.let { key -> item { ChallengeEditPanel {
+                            } else {
                                 val date = challengeWallClock(form[key])
                                 SubjectFormRow(labels[index], value = if (date == null) form[key].ifEmpty { "Not set" }
                                     else challengeSentText(form[key]), valueMaxLines = Int.MAX_VALUE, showsChoice = true,
@@ -196,10 +203,13 @@ private fun ChallengeSettingsEditContent(slug: String, title: String, viewerIsOw
                                 if (form[key].isEmpty() && form.editable(key)) SettingsActionRow("Set", {
                                     dateEditing = key to java.time.LocalDateTime.now(java.time.ZoneOffset.UTC)
                                 }, enabled = !busy)
-                            } } }
-                        }
+                            }
+                        } }
                         item {
-                            ChallengeEditPanel { SubjectFormRow("Time zone", value = form.value("time_zone").ifEmpty { "Unavailable" }, valueMaxLines = Int.MAX_VALUE) }
+                            ChallengeEditPanel(first = schedule.isEmpty()) {
+                                if (schedule.isNotEmpty()) SubjectRowSeparator()
+                                SubjectFormRow("Time zone", value = form.value("time_zone").ifEmpty { "Unavailable" }, valueMaxLines = Int.MAX_VALUE)
+                            }
                             ChallengeFootnote(if (form.scheduleIsEditable) "Dates use the challenge’s time zone shown on AO3. After a reveal happens, you can't move it to an earlier time in Kudos."
                                 else "Kudos couldn't read the challenge's time zone. Dates are view-only and won't be saved.")
                             ChallengeSection("Sign-up limits")
@@ -340,8 +350,10 @@ private data class ChallengeEditChoice(val label: String, val name: String, val 
 @Composable private fun ChallengeEditValue(text: String) {
     Text(text, color = LocalKudosTokens.current.secondaryInk, fontSize = 13.sp, lineHeight = 19.sp)
 }
-@Composable private fun ChallengeEditPanel(content: @Composable ColumnScope.() -> Unit) {
-    Column(Modifier.padding(horizontal = SubjectMetrics.accountGutter).padding(top = 8.dp).writingSuggestionPanel(first = true, last = true), content = content)
+/** A run of panels from [first] to [last] reads as one card, as iOS's one panel per section (3hk). */
+@Composable private fun ChallengeEditPanel(first: Boolean = true, last: Boolean = true, content: @Composable ColumnScope.() -> Unit) {
+    Column(Modifier.padding(horizontal = SubjectMetrics.accountGutter).padding(top = if (first) 8.dp else 0.dp)
+        .writingSuggestionPanel(first = first, last = last), content = content)
 }
 @Composable private fun ChallengeEditToggle(label: String, checked: Boolean, enabled: Boolean, change: (Boolean) -> Unit) {
     val tokens = LocalKudosTokens.current

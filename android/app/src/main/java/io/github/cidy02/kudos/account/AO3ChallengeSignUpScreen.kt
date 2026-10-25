@@ -175,10 +175,12 @@ private fun ChallengeSignUpContent(slug: String, title: String, existingID: Int?
                                 }
                             }
                             SettingsPanel(Modifier.padding(top = 8.dp)) {
+                                // iOS: the card's own small "PROMPT" over the editor (ChallengeSignUpView.swift:328).
+                                SubjectFieldLabel("Prompt", Modifier.padding(horizontal = 13.dp, vertical = 8.dp))
                                 SubjectTextFieldRow("Prompt", request.description, "Describe what you would love to receive…",
                                     { model.update(request.copy(description = it)) },
                                     textStyle = TextStyle(fontFamily = FontFamily.Serif, fontSize = 14.sp),
-                                    multiline = true, enabled = !busy)
+                                    multiline = true, fieldOnly = true, enabled = !busy)
                                 Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 8.dp),
                                     horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                     Text("Visible to your recipient only", color = tokens.secondaryInk.copy(alpha = 0.8f),

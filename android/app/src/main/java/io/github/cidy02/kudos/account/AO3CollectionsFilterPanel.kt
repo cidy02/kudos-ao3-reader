@@ -4,6 +4,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -74,8 +76,9 @@ internal fun AO3CollectionsFilterContent(initial: AO3CollectionsFilter, onFinish
     val palette = LocalAppPalette.current
     SubjectPaletteTheme(palette) {
         val tokens = LocalKudosTokens.current
+        // Full height with Reset at the foot, as iOS's sheet and the account lists' sheets (2026-10-15; 3hk).
         Column(
-            Modifier.fillMaxWidth().subjectWash(palette, SubjectMetrics.defaultWashHeight)
+            Modifier.fillMaxWidth().fillMaxHeight().subjectWash(palette, SubjectMetrics.defaultWashHeight)
                 .padding(horizontal = SubjectMetrics.headerGutter).padding(bottom = 28.dp),
             verticalArrangement = Arrangement.spacedBy(18.dp)
         ) {
@@ -169,6 +172,7 @@ internal fun AO3CollectionsFilterContent(initial: AO3CollectionsFilter, onFinish
                 FilterNote("AO3 doesn't show your role in its collections list, so you can't filter by " +
                     "Maintainer, Member or Invited here.")
             }
+            Spacer(Modifier.weight(1f))
             SubjectRowSeparator(inset = 0.dp)
             OutlinedButton(
                 onClick = { editor.reset(); draft = editor.draft },

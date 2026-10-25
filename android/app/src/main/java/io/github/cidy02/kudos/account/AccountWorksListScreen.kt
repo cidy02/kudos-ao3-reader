@@ -661,7 +661,8 @@ private fun MarkedForLaterBrowser(
                 isUpdated = { it in updatedWorks }, isDownloaded = { it.local?.isDownloaded == true }
             ).forEach { section ->
                 section.title?.let { title ->
-                    item { SectionRuleHeader(title = title, count = section.items.size) }
+                    // The account lists' headers sit at the cards' edge, as the iPhone's (3hk).
+                    item { SectionRuleHeader(title = title, count = section.items.size, gutter = 0.dp) }
                 }
                 if (section.covers) {
                     item {
@@ -1038,7 +1039,7 @@ private fun HistoryBrowser(
             historyVisitGroups(displayedWorks) { readingsByWorkId[it.remote.id]?.lastVisited.orEmpty() }
                 .forEachIndexed { index, group ->
                     item(key = "hist-head-$index") {
-                        SectionRuleHeader(title = group.bucket.title, count = group.items.size)
+                        SectionRuleHeader(title = group.bucket.title, count = group.items.size, gutter = 0.dp)
                     }
                     if (mode == AccountDisplayMode.Compact) {
                         item(key = "hist-covers-$index") { CompactWorkCovers(group.items, onOpenWork) }
@@ -1321,7 +1322,7 @@ internal fun SubscriptionsBrowser(
                     }
                 } else if (filter == "all" && updatedWorks.isNotEmpty()) {
                     item {
-                        SectionRuleHeader(title = "New since you last looked", count = updatedWorks.size)
+                        SectionRuleHeader(title = "New since you last looked", count = updatedWorks.size, gutter = 0.dp)
                     }
                     items(updatedWorks, key = { "sub-up-${it.remote.id}" }) { work ->
                         SubscriptionWorkRow(
@@ -1339,7 +1340,7 @@ internal fun SubscriptionsBrowser(
                     val otherWorks = activeWorks.filter { it !in updatedWorks }
                     if (otherWorks.isNotEmpty()) {
                         item {
-                            SectionRuleHeader(title = "All works", count = otherWorks.size)
+                            SectionRuleHeader(title = "All works", count = otherWorks.size, gutter = 0.dp)
                         }
                         items(otherWorks, key = { "sub-all-${it.remote.id}" }) { work ->
                             SubscriptionWorkRow(

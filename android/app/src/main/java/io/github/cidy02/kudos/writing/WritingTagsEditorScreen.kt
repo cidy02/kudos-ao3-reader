@@ -5,6 +5,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
@@ -288,13 +289,14 @@ internal fun writingChipRows(
 
 /** Lazy rows share one rounded panel, with side strokes and only the outer end caps. */
 @Composable
-internal fun Modifier.writingSuggestionPanel(first: Boolean, last: Boolean): Modifier {
+/** [fill] replaces the glass, e.g. with the theme's card surface on a page drawn as iOS's plain list. */
+internal fun Modifier.writingSuggestionPanel(first: Boolean, last: Boolean, fill: Color? = null): Modifier {
     val tokens = LocalKudosTokens.current
     val radius = SubjectMetrics.panelRadius
     val border = tokens.glassStroke(0.13)
     val shape = RoundedCornerShape(topStart = if (first) radius else 0.dp, topEnd = if (first) radius else 0.dp,
         bottomStart = if (last) radius else 0.dp, bottomEnd = if (last) radius else 0.dp)
-    return background(tokens.glassFill(0.09), shape).drawBehind {
+    return background(fill ?: tokens.glassFill(0.09), shape).drawBehind {
         val r = radius.toPx().coerceAtMost(size.width / 2).coerceAtMost(size.height / 2)
         val path = Path()
         path.moveTo(0f, if (first) r else 0f)

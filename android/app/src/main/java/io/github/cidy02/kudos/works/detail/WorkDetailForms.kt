@@ -234,6 +234,8 @@ internal fun WorkDetailQueueForm(
                 SubjectFormRow(queue.displayName,
                     leadingIcon = if (queue.kindRaw == io.github.cidy02.kudos.core.model.ReadingQueueKind.SAVED_FOR_LATER)
                         WorkActionLabels.savedForLaterIcon else Icons.AutoMirrored.Outlined.ListAlt,
+                    // iOS: the queue's Label is .primary, its icon too (ReadingQueues.swift:482).
+                    statusInk = LocalKudosTokens.current.primaryInk,
                     onClick = { if (!working && !preserving) onAdd(queue) }, trailing = {
                     if (queue.id == workingQueueId) CircularProgressIndicator(color = LocalKudosTokens.current.scopePalette.accent,
                         trackColor = LocalKudosTokens.current.separator, modifier = Modifier.size(20.dp))
