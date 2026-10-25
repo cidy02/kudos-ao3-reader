@@ -463,9 +463,11 @@ class Brief3caScreenTest {
         awaitText("A Recommended Work")
         assertEquals(1, client.gets.size)
         // The body loads before SideEffect publishes the toolbar to the shell's Row.
-        compose.waitUntil(15_000) {
-            compose.onAllNodesWithContentDescription("Filter").fetchSemanticsNodes().size == 1
+        // Under the full run's load it can take longer (failed there twice, never alone); then exactly one.
+        compose.waitUntil(30_000) {
+            compose.onAllNodesWithContentDescription("Filter").fetchSemanticsNodes().isNotEmpty()
         }
+        assertEquals("one Filter button", 1, compose.onAllNodesWithContentDescription("Filter").fetchSemanticsNodes().size)
         compose.onNodeWithContentDescription("Filter").performClick()
         compose.onNodeWithTag("AO3 filter form").performScrollToNode(hasText("Completion"))
         compose.onNodeWithText("Completion").performClick()
