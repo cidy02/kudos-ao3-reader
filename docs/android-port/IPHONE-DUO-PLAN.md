@@ -2,7 +2,8 @@
 
 *Claude-Code, 2026-10-24 23:00, for the owner ("create a thorough plan to restructure the app to fit iPhone
 Duo"). It builds on Codex's screen-by-screen plan (`briefs/Duo7-plan.md`), the Apple research Claude-CLI
-checked (`briefs/Duo2-result.md`), the layout audit (`briefs/Duo3-result.md`), and the rounds already landed.
+checked (`briefs/Duo2-result.md`), the layout audit (`briefs/Duo3-result.md`), the rounds already landed, and
+Claude-CLI's state digest of what those rounds taught (`briefs/Duo-state-digest.md`, 22:47).
 It replaces the round-by-round list as the Duo's plan. The Living Prompt (§0, §10) runs it.*
 
 ## 0. In one page
@@ -38,6 +39,10 @@ still there.
    chrome.
 4. Check Split View and continuity.
 5. A full verification pass, like the one that closed Android parity.
+
+**On its own branch** (owner, 22:58: *"let's do the work in a branch in case we wish to revert or revise"*).
+All Duo work goes on `claude/iphone-duo`. Nothing reaches the iOS polish or integrate branches until you
+choose to merge it. See §12.
 
 **Your part.** Nothing blocks on you. Design calls are mine (owner, 11:50) and recorded in `DECISIONS.md`
 with how to reverse them; new features go to `FEATURE-IDEAS.md` for your yes or no. Screenshots of each
@@ -112,7 +117,10 @@ reader's pages, the editor, and anything drawn with `GeometryReader`.
   categories beside a page, Account destinations beside a page).
   - The filter inspector regression is fixed: the panel draws its own header in an inspector instead of
     nesting a `NavigationStack`.
-  - One hosted test fails (`sectionPushAndDeepLinkRenderInTheDetailAndCompactRowsReturnOnCollapse`).
+  - One hosted test fails (`sectionPushAndDeepLinkRenderInTheDetailAndCompactRowsReturnOnCollapse`, Codex's
+    fixture): 172 tests in 16 suites, 3 issues, all in that test.
+  - Its worktree (`~/kudos-agent-ios`) is based on T-452, so T-454 and T-455 exist only on polish. Its own
+    files match the staged copy byte for byte.
   - The other inspector callers still need tap checks.
 
 **Briefed, not started:** Duo10, round 3 (the reader's measure and a fold-aligned spread).
@@ -125,6 +133,18 @@ reader's pages, the editor, and anything drawn with `GeometryReader`.
 - Split View multitasking; state that survives a scene being rebuilt (the app has no `@SceneStorage`).
 - Onboarding and What's New; the in-app AO3 browser.
 - A Duo verification pass.
+- **From Duo3, owned by no round:**
+  - #12, the root download banner over the tab container (`App/ContentView.swift:60`);
+  - #10, the subject headers and stat strips on Author, Series, Fandom and tag pages and collection detail;
+  - #6, Account's large-text fallback (Duo9 collapses at every accessibility size).
+- **Uncovered screens:** Author profile pages and their works scope and sort; the rich rows of Account's
+  Bookmarks, History and Subscriptions at width.
+- **Each Settings page's own layout:** the 14 pages inside the split, of which only the frame is done.
+- **Presentations near the fold:** alerts, confirmation dialogs and menus anchoring there; the reader's
+  own sheets (Display, Contents, Read Aloud, Find) in Book pose; the keyboard in Book pose.
+- **Chrome over a split:** the system's tab sidebar expanding over a local split, and the portrait
+  floating bar over split content.
+- **The iPad:** T-452's Home and T-455's Work Detail have never been seen on an iPad.
 
 ## 4. The restructure: what every screen shares
 
@@ -157,6 +177,17 @@ safe areas, a shifted fold, an inactive region, a width too small for two panes,
 - **Only one split is visible at a time.** Opening a nested organizer (Settings from Account, Queues from
   Library) replaces the leading list, the way Settings does, so there are never three columns.
 - **Compact width collapses** each host to today's stack, with today's routes.
+- **Host rules learned the hard way** (Duo9; they apply to every screen that moves into a host):
+  - **No nested stack in an inspector.** An inspector never contains a `NavigationStack`,
+    `.navigationTitle` or `.toolbar`: they take over the owner page, and the pushed section pops. It
+    draws its own header row (`filterPanelChrome`). A compact "inspector" is a real `.sheet`.
+  - **Stable presenter bindings.** Presenters take only stable bindings (`$isPresented` or
+    `.constant(false)`). A `Binding(get:set:)` built fresh each render looped forever: the Library root
+    ran at about 100% CPU, and a hosted test hung for 40 minutes.
+  - **No presenters that switch branches** by size class: a branch switch recreates the owner's
+    `NavigationStack` and drops its path. Use one modifier chain for both size classes.
+  - **A hosted test per presenter in each host** (inspector, sheet, confirmation) that opens it and checks
+    the path survives. That would have caught both Duo9 bugs before a simulator run.
 - **`AppRouter` stays the one route model.** Deep links, per-tab paths and the Back history survive
   collapse and expand, and host tests cover all three.
 
@@ -255,12 +286,22 @@ where their files don't overlap.
 - **Duo9:**
   - Codex fixes the hosted test and tap-checks every inspector caller (root Library filter, collections,
     queue browser, Account works lists, Search and Browse).
-  - Then review R457, gate and land.
+  - Then review R457 and the gate.
+  - It lands in three commits (Settings, then Library, then Account) so each can be reverted alone. That's
+    the digest's "smaller rounds": Duo9 changed four areas at once and needed four rounds of fixes.
 
 *Done when:* both have landed on polish and integrate; the reader keeps its page through rotate, unfold and
 Book pose; the Library, Settings and Account splits collapse and expand without losing a path.
 
-**Phase 2: foundations.**
+**Phase 2: foundations, the shot harness first.**
+- **The shot harness, before any more screens** (the digest: two false findings came from the harness, not
+  the app):
+  - routes that apply once (`takeRoute`);
+  - an auto-open flag for each presenter;
+  - the rotate hook;
+  - a launch helper that waits for content;
+  - scripts that make, install on, tap and delete a temporary 27.0 iPad, so every round also sees an iPad
+    and the ordinary iPhone.
 - The layout context (4.1), the split-host pattern written down and tested (4.2), the containers (4.3),
   the presentation policy and sheet audit (4.4), and `@SceneStorage` continuity (4.5).
 - The verification harness:
@@ -272,6 +313,9 @@ Book pose; the Library, Settings and Account splits collapse and expand without 
 change visible to a reader, and the harness can shoot any screen in C, P, L and B.
 
 **Phase 3: the reader (Duo10).**
+- **It starts only on a landed, reviewed position baseline** (T-451, phase 1), with a review slot reserved.
+  The rule from T-449 and T-450: never override a position the reader chose; elsewhere an approximate
+  restore is fine (one restore, only at rest, and it skips rather than guessing).
 - One navigator.
 - The spread's gutter is the fold.
 - Chrome sits in one pane.
@@ -286,6 +330,9 @@ fallback is whole in one pane, and position, speech and selection survive every 
 - Search and Browse results (round 4b).
 - AO3 collections and challenge pages.
 - Reading Insights and Recently Deleted.
+- Author profiles, Series, Fandom and tag pages: their subject headers and stat strips (Duo3 #10).
+- Account's Bookmarks, History and Subscriptions rows at width.
+- Each Settings page's own layout inside the split.
 
 **Phase 5: conversations and writing.**
 - **Inbox and Comments:** a Mail-style list beside the thread, with a passive "select a conversation"
@@ -295,6 +342,11 @@ fallback is whole in one pane, and position, speech and selection survive every 
 **Phase 6: chrome and the rest.**
 - The rail, toolbars and overflow (round 6).
 - Onboarding and What's New, the in-app AO3 browser, and the remaining sheets.
+- The root download banner (Duo3 #12).
+- Alerts, confirmation dialogs and menus near the fold.
+- The reader's own sheets in Book pose.
+- The system tab sidebar over a local split, and the portrait floating bar over split content.
+- Account's large-text fallback (Duo3 #6).
 
 **Phase 7: Split View and continuity.**
 - Kudos beside another app at every system width, on both sides.
@@ -355,7 +407,8 @@ Phase 8 closes the matrix.
 | **Navigation:** paths lost on collapse; nested stacks (the inspector bug); deep links | One split visible at a time; host tests for collapse, expand and deep links |
 | **Performance:** render loops; large lists | Lazy containers; an Instruments pass each round; the Duo9 lesson written into the host pattern |
 | **Lost information or actions** | The before/after inventory each round; the AGENTS.md density rule |
-| **Testing limits:** Device Hub captures simulated touches (quit it for AXe taps); poses come only from our scripts; no physical Duo | Hosted tests plus simulator shots; owner device checks listed at the end |
+| **Testing limits:** Device Hub captures simulated touches, so taps, swipes, the keyboard and drag can't be checked in any Duo pose; poses come only from our scripts; no physical Duo | Geometry and hosted tests stand in for Book-pose interaction; taps checked on a temporary iPad; the owner's device checks are listed |
+| **Shared components ripple to the iPad and iPhone** (the card clamp, the filter chrome, the region helper) | An ordinary iPhone and a temporary iPad in every round's checks |
 | **Disk** (about 26 GB free; idle simulators use about 27 GB) | Delete only temporary simulators we made; the owner's are an open question |
 | **Agents:** Gemini out until about 10-27/10-29, Grok out of balance, Codex has usage windows | Codex implements; Claude-CLI and Claude-Code review and judge |
 
@@ -381,3 +434,23 @@ Phase 8 closes the matrix.
 - Gates green, reviews closed with no open P1 or P2.
 - The owner's screenshot gate passed.
 - `DECISIONS.md` complete, and a short owner summary of the Duo work.
+
+## 12. Branches: everything revertible
+
+Owner, 22:58: *"let's do the work in a branch in case we wish to revert or revise"*.
+
+- **`claude/iphone-duo`** (from polish `1e5d3d44`, pushed): every Duo round lands here. It also carries the
+  staged T-451 round 5 and Duo9, uncommitted until they pass their reviews.
+- **`claude/polish-loop`** takes only non-Duo iOS fixes, such as anything the parity verification finds on
+  the iPhone.
+- **`integrate/cloud-redesign` gets no Duo commits** until the owner merges the Duo branch.
+- **Revertible in steps:**
+  - each round is its own commit or commits, so a round can be reverted alone;
+  - each phase ends with a tag (`duo-phase-1`, …), to compare or roll back to;
+  - Duo9 lands as three commits.
+- **Already on polish** (and integrate): the Duo work before this rule, T-447 to T-455. If the owner
+  wants any of it gone, it is undone with revert commits. History is never rewritten and nothing is
+  force-pushed.
+- **Agents** keep their own branches (`claude/agent-ios-*`) and worktrees. Their work reaches
+  `claude/iphone-duo` only through Claude-Code's landing.
+- **Android** stays on `android/redesign-parity`. `main` is never touched.
