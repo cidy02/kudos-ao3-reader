@@ -24,6 +24,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.sp
 import io.github.cidy02.kudos.app.ProvidePushedShellChrome
 import io.github.cidy02.kudos.data.preferences.SettingsRepository
@@ -197,7 +198,8 @@ private fun BulkRow(label: String, value: String, index: Int, total: Int, enable
             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Icon(when (mark) { "Add" -> Icons.Filled.AddCircle; "Remove" -> Icons.Filled.RemoveCircle; else -> Icons.Outlined.Circle },
-                null, tint = tokens.secondaryInk, modifier = Modifier.testTag("Bulk option mark"))
+                null, tint = tokens.secondaryInk,
+                modifier = Modifier.testTag("Bulk option mark").size(with(LocalDensity.current) { 24.sp.toDp() }))
             Text(label, Modifier.weight(1f), color = tokens.primaryInk, fontSize = 14.5.sp,
                 textDecoration = if (mark == "Remove") TextDecoration.LineThrough else TextDecoration.None)
             Text(value, color = tokens.secondaryInk, fontSize = 13.sp)

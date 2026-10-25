@@ -131,7 +131,12 @@ internal fun AddLibraryWorksContent(
                 maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
             // Every works list offers the reveal while Hide Mature is on.
             if (privacy.hideMatureContent && eligible.isNotEmpty()) {
-                TextButton(onClick = onToggleMature) { Text(if (reveal.revealAll) "Hide mature" else "Show mature") }
+                // iOS's MatureRevealToggle: primary ink while off, the screen's tint while revealing (3hk).
+                TextButton(onClick = onToggleMature, colors = androidx.compose.material3.ButtonDefaults.textButtonColors(
+                    contentColor = if (reveal.revealAll) MaterialTheme.colorScheme.primary
+                        else io.github.cidy02.kudos.ui.subject.LocalKudosTokens.current.primaryInk)) {
+                    Text(if (reveal.revealAll) "Hide mature" else "Show mature")
+                }
             }
         }
         when {
