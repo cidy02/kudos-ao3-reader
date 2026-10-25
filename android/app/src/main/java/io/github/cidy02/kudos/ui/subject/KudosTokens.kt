@@ -160,3 +160,6 @@ data class KudosTokens(
 val LocalKudosTokens = staticCompositionLocalOf { KudosTokens.of(ReaderTheme.Light, Ao3Red) }
 
 val LocalSubjectPalette = staticCompositionLocalOf { ReaderTheme.Light.scopePalette(Ao3Red) }
+
+/** The app's palette, preserved when the shell gives a page its hero's tint. */
+val LocalAppPalette = staticCompositionLocalOf { ReaderTheme.Light.scopePalette(Ao3Red) }

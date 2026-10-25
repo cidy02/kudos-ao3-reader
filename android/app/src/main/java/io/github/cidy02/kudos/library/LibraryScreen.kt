@@ -569,6 +569,7 @@ fun LibraryScreen(
 
     if (showFilters) {
         LibraryFilterPanel(
+            palette = io.github.cidy02.kudos.ui.subject.LocalAppPalette.current,
             filters = state.filters,
             sort = state.sort,
             userTags = state.userTags,

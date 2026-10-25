@@ -522,6 +522,7 @@ fun HomeSectionListScreen(
 
     if (showFilters) {
         LibraryFilterPanel(
+            palette = io.github.cidy02.kudos.ui.subject.LocalAppPalette.current,
             filters = filters,
             sort = sort,
             userTags = snapshot?.userTags.orEmpty(),
