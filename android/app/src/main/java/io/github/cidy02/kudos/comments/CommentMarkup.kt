@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -49,6 +48,7 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.semantics
@@ -236,7 +236,9 @@ private fun CommentFormattingGlyph(
                 fontSize = with(density) { 15.dp.toSp() }, modifier = Modifier.alignByBaseline())
             Text("2", color = ink, fontFamily = FontFamily.Serif,
                 fontSize = with(density) { 9.dp.toSp() }, modifier = Modifier.alignByBaseline()
-                    .offset(y = if (tag == CommentMarkupTag.Superscript) (-6).dp else 4.dp))
+                    // iOS `.baselineOffset(6 / -4)`. Not `offset`: baseline alignment reads an offset
+                    // child's moved baseline and puts it straight back, so the 2 never rose or fell.
+                    .graphicsLayer { translationY = (if (tag == CommentMarkupTag.Superscript) -6 else 4).dp.toPx() })
         }
         return
     }

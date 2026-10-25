@@ -23,8 +23,9 @@ class CollectionsChoice3heTest {
             AO3CollectionsFilterPanel(AO3CollectionsFilter(), {})
         } }
         compose.waitForIdle()
-        compose.onNode(hasTestTag("Choice indicator") and hasAnyAncestor(hasText("Order by")), useUnmergedTree = true)
-            .assertExists()
+        // The indicator is a child of the row whose label is "Order by" (the row's own node has no text).
+        compose.onNode(hasTestTag("Choice indicator") and hasParent(hasAnyDescendant(hasText("Order by"))),
+            useUnmergedTree = true).assertExists()
         compose.onNodeWithText("AO3 order").performClick()
         compose.onNodeWithText("Title").assertIsDisplayed()
     }

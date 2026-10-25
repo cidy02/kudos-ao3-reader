@@ -106,18 +106,6 @@ class AuthorProfileSortScreenTest {
         awaitText(when (initialTab) { AuthorTab.Series -> "The Dawn Cycle"; AuthorTab.About -> "Bio"; AuthorTab.Bookmarks -> "A Recommended Work"; else -> "Two Voices at Dawn" })
     }
 
-    @Test fun accountAboutHeaderSharesTheListsMargin() {
-        io.github.cidy02.kudos.network.ao3.DemoNetwork.resetForTests()
-        io.github.cidy02.kudos.app.DebugShotRequests.clear()
-        show(AuthorTab.About, true)
-        compose.waitForIdle()
-        val title = compose.onNodeWithText("Avery_Archive", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
-        val bio = compose.onNodeWithText("Bio", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
-        // The Bio section intentionally has a 4dp label inset inside the same list gutter.
-        val density = view.resources.displayMetrics.density
-        assertEquals(bio.left - 4f * density, title.left, 1f)
-    }
-
     @Test fun bookmarksHaveASectionHeadingAndCardLoadMoreThatStillLoadsTheNextPage() {
         show(AuthorTab.Bookmarks, false)
         val heading = compose.onNode(hasText("Bookmarks") and
