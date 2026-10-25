@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.reader
 
+import io.github.cidy02.kudos.ui.theme.SheetSystemBars
 import io.github.cidy02.kudos.settings.SettingsGroupLabel
 import androidx.compose.foundation.text.TextAutoSize
 import android.util.Base64
@@ -90,6 +91,7 @@ internal fun CustomizeThemeSheet(repository: SettingsRepository, customFontRepos
     ModalBottomSheet(onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
         containerColor = tokens.background, contentColor = tokens.primaryInk) {
+        SheetSystemBars(tokens)
         CustomizeThemeContent(repository, customFontRepository, onDismiss)
     }
 }

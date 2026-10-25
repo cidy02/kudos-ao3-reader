@@ -25,11 +25,13 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDefaults
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.HorizontalDivider
@@ -68,6 +70,7 @@ import io.github.cidy02.kudos.network.ao3.search.AO3WorkSummary
 import io.github.cidy02.kudos.ui.subject.KudosTokens
 import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
 import io.github.cidy02.kudos.ui.subject.SubjectFieldLabel
+import io.github.cidy02.kudos.ui.subject.SubjectPaletteTheme
 import io.github.cidy02.kudos.ui.subject.SubjectPalette
 import io.github.cidy02.kudos.ui.subject.SubjectStatCell
 import io.github.cidy02.kudos.ui.subject.SubjectStatStrip
@@ -288,6 +291,7 @@ fun WorkDetailMyCopySheet(
     if (showingDownloadedDateEditor && work != null) {
         DownloadedDateEditorDialog(
             initialDate = work.downloadedAt ?: work.dateAdded,
+            palette = palette,
             onDismiss = { showingDownloadedDateEditor = false },
             onSave = {
                 showingDownloadedDateEditor = false
@@ -483,7 +487,8 @@ private fun MyCopyActivitySection(
         MyCopyValueRow(
             title = "Downloaded",
             value = work.downloadedAt?.let(::formatDate) ?: "Not recorded",
-            modifier = Modifier.clickable(onClick = onEditDownloadedAt)
+            modifier = Modifier.clickable(onClick = onEditDownloadedAt),
+            showsDisclosure = true
         )
 
         val lastReadText = work.lastReadDate?.let { formatInstant(it) } ?: "Never"
@@ -527,8 +532,9 @@ private fun MyCopyActivitySection(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun DownloadedDateEditorDialog(
+internal fun DownloadedDateEditorDialog(
     initialDate: Instant,
+    palette: SubjectPalette,
     onDismiss: () -> Unit,
     onSave: (Instant) -> Unit
 ) {
@@ -540,15 +546,38 @@ private fun DownloadedDateEditorDialog(
                 utcTimeMillis <= pickerMillis(now)
         }
     )
-    DatePickerDialog(
-        onDismissRequest = onDismiss,
-        confirmButton = {
-            TextButton(onClick = {
-                state.selectedDateMillis?.let { onSave(pickerInstant(it)) }
-            }) { Text("Save") }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
-    ) { DatePicker(state = state, title = { Text("Downloaded", modifier = Modifier.padding(24.dp)) }) }
+    val tokens = LocalKudosTokens.current
+    val ink = tokens.theme.accentInk(palette.tint)
+    val label = SubjectPalette.label(palette.tint)
+    val colors = DatePickerDefaults.colors(
+        containerColor = tokens.formSheetGround,
+        navigationContentColor = ink,
+        subheadContentColor = ink,
+        yearContentColor = ink,
+        currentYearContentColor = ink,
+        selectedYearContainerColor = palette.tint,
+        selectedYearContentColor = label,
+        selectedDayContainerColor = palette.tint,
+        selectedDayContentColor = label,
+        todayContentColor = ink,
+        todayDateBorderColor = ink
+    )
+    SubjectPaletteTheme(palette) {
+        DatePickerDialog(
+            onDismissRequest = onDismiss,
+            colors = colors,
+            tonalElevation = 0.dp,
+            confirmButton = {
+                TextButton(onClick = {
+                    state.selectedDateMillis?.let { onSave(pickerInstant(it)) }
+                }) { Text("Save") }
+            },
+            dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+        ) {
+            DatePicker(state = state, colors = colors,
+                title = { Text("Downloaded", modifier = Modifier.padding(24.dp)) })
+        }
+    }
 }
 
 @Composable
@@ -872,7 +901,8 @@ private fun MyCopyToggleRow(
 private fun MyCopyValueRow(
     title: String,
     value: String,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    showsDisclosure: Boolean = false
 ) {
     val tokens = LocalKudosTokens.current
     Row(
@@ -897,6 +927,8 @@ private fun MyCopyValueRow(
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
+        if (showsDisclosure) Icon(Icons.Filled.ChevronRight, contentDescription = null,
+            tint = tokens.tertiaryInk, modifier = Modifier.size(14.dp))
     }
 }
 

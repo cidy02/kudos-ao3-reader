@@ -13,6 +13,7 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.window.DialogWindowProvider
 import androidx.core.view.WindowCompat
 import io.github.cidy02.kudos.ui.subject.KudosTokens
 import io.github.cidy02.kudos.ui.subject.LocalAppPalette
@@ -104,6 +105,19 @@ internal fun View.setLightSystemBars(light: Boolean) {
     WindowCompat.getInsetsController(window, this).apply {
         isAppearanceLightStatusBars = light
         isAppearanceLightNavigationBars = light
+    }
+}
+
+/** A sheet owns a dialog window; leave the activity's reading-page bars underneath it. */
+@Composable
+internal fun SheetSystemBars(tokens: KudosTokens) {
+    val view = LocalView.current
+    val window = (view.parent as? DialogWindowProvider)?.window ?: return
+    SideEffect {
+        WindowCompat.getInsetsController(window, view).apply {
+            isAppearanceLightStatusBars = !tokens.theme.isDarkFamily
+            isAppearanceLightNavigationBars = !tokens.theme.isDarkFamily
+        }
     }
 }
 

@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.reader
 
+import io.github.cidy02.kudos.ui.theme.SheetSystemBars
 import io.github.cidy02.kudos.ui.subject.LocalSettingsFormGround
 import io.github.cidy02.kudos.app.DebugShotEffect
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
@@ -915,6 +916,7 @@ private fun ReaderReading(
                     contentColor = tokens.primaryInk,
                     dragHandle = { BottomSheetDefaults.DragHandle(color = tokens.secondaryInk) }
                 ) {
+                    SheetSystemBars(tokens)
                     CompositionLocalProvider(LocalKudosTokens provides tokens) {
                         ReaderNoteEditor(
                             annotation = annotation,
@@ -945,6 +947,7 @@ private fun ReaderReading(
                     contentColor = tokens.primaryInk,
                     dragHandle = { BottomSheetDefaults.DragHandle(color = tokens.secondaryInk) }
                 ) {
+                    SheetSystemBars(tokens)
                     CompositionLocalProvider(LocalKudosTokens provides tokens) {
                         ReaderContentsSheet(
                             entries = tocEntries,
@@ -1020,6 +1023,7 @@ private fun ReaderReading(
                     sheetState = sheetState,
                     containerColor = tokens.background
                 ) {
+                    SheetSystemBars(tokens)
                     CompositionLocalProvider(
                         LocalKudosTokens provides tokens,
                         LocalContentColor provides tokens.primaryInk

@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.settings
 
+import io.github.cidy02.kudos.ui.theme.SheetSystemBars
 import io.github.cidy02.kudos.ui.subject.LocalSettingsFormGround
 import androidx.compose.runtime.CompositionLocalProvider
 import io.github.cidy02.kudos.app.DebugShotEffect
@@ -79,7 +80,10 @@ internal fun PronunciationSettingsSheet(store: KokoroPronunciationStore, onDismi
     val ground = LocalKudosTokens.current.background
     PronunciationSettingsContent(store, onDismiss) { content ->
         ModalBottomSheet(onDismissRequest = onDismiss, containerColor = ground,
-            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) { content() }
+            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
+            SheetSystemBars(LocalKudosTokens.current)
+            content()
+        }
     }
 }
 
@@ -220,6 +224,7 @@ fun PronunciationEditor(word: String, ipa: String, store: KokoroPronunciationSto
     var saving by remember { mutableStateOf(false) }
     ModalBottomSheet(onDismissRequest = { if (!saving) onDismiss() }, containerColor = tokens.background,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
+        SheetSystemBars(tokens)
         Column(Modifier.fillMaxWidth().imePadding().verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
             SubjectFormRow(if (editedWord.isEmpty()) "Add Pronunciation" else editedWord)
             SettingsSection(label = "Word", footnote = null) {

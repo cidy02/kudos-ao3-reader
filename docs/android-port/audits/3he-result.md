@@ -5,6 +5,8 @@ Reference: `/Users/cidy02/kudos-ios-polish`, committed iOS `HEAD` **`1e5d3d44`**
 
 Android production paths below are relative to `android/app/src/main/java/io/github/cidy02/kudos/`; test paths are relative to `android/app/src/test/java/io/github/cidy02/kudos/`. iOS paths are relative to `kudos-ao3-reader/` in that reference checkout.
 
+**3hf correction:** queue tags are washed and use their queue palette (app palette for several), while bulk-work tags stay flat/app-coloured. See [3hf’s correction and caller audit](3hf-result.md). The flat queue-tag description below records 3he’s historical regression.
+
 ## Verification and handoff
 
 - **Passed:** `android/Scripts/check-invariants.sh`; `git diff --check`; Kotlin compiler 2.3.21 PSI syntax parsing of every changed/new Kotlin file, using the cached compiler directly, without Gradle. This checks syntax, **not types or Compose behavior**.

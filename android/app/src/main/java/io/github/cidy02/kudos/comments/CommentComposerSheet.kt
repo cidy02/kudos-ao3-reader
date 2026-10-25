@@ -41,7 +41,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.font.FontWeight
@@ -50,6 +49,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.cidy02.kudos.network.ao3.comments.AO3Comment
 import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
+import io.github.cidy02.kudos.ui.subject.subjectWash
 import io.github.cidy02.kudos.ui.subject.SubjectPalette
 
 private const val AO3_COMMENT_CHARACTER_LIMIT = 10_000
@@ -77,7 +77,32 @@ fun CommentComposerSheet(
     onOpenAuthor: (String) -> Unit,
     verifying: Boolean = false
 ) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val tokens = LocalKudosTokens.current
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        containerColor = tokens.background
+    ) {
+        CommentComposerContent(replyTarget, editTarget, draft, onDraftChange, submitting,
+            currentUsername, isScopeByChapter, palette, onDismiss, onSubmit, onOpenAuthor, verifying)
+    }
+}
+
+@Composable
+internal fun CommentComposerContent(
+    replyTarget: AO3Comment?,
+    editTarget: AO3Comment?,
+    draft: String,
+    onDraftChange: (String) -> Unit,
+    submitting: Boolean,
+    currentUsername: String?,
+    isScopeByChapter: Boolean,
+    palette: SubjectPalette,
+    onDismiss: () -> Unit,
+    onSubmit: () -> Unit,
+    onOpenAuthor: (String) -> Unit,
+    verifying: Boolean = false
+) {
     val textFocus = remember { FocusRequester() }
     val tokens = LocalKudosTokens.current
 
@@ -119,225 +144,219 @@ fun CommentComposerSheet(
 
     val confirmationAction = if (isEdit) "Save" else "Post"
 
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = sheetState,
-        containerColor = tokens.background
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .fillMaxHeight(0.85f)
+            .subjectWash(palette, 320.dp)
     ) {
-        Column(
+        // Header bar: Cancel, Title, Post/Save
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .fillMaxHeight(0.85f)
+                .padding(horizontal = 16.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            // Header bar: Cancel, Title, Post/Save
+            TextButton(
+                onClick = onDismiss,
+                enabled = !submitting
+            ) {
+                Text(
+                    text = "Cancel",
+                    fontSize = 16.sp,
+                    maxLines = 1,
+                    softWrap = false,
+                    color = if (submitting) tokens.secondaryInk else palette.accent
+                )
+            }
+
+            // The title is what gives way. Unweighted, it kept its full width at large text and
+            // the action beside it was broken across two lines ("Pos" / "t").
+            Text(
+                text = title,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = tokens.primaryInk,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.Center,
+                // Whole at the largest text, as iOS's fixed-size sheet title: it sets smaller first.
+                autoSize = TextAutoSize.StepBased(
+                    minFontSize = (10f / LocalDensity.current.fontScale.coerceAtLeast(1f)).sp, maxFontSize = 16.sp),
+                modifier = Modifier.weight(1f)
+            )
+
+            TextButton(
+                onClick = onSubmit,
+                enabled = canPost
+            ) {
+                if (submitting) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(18.dp),
+                        strokeWidth = 2.dp,
+                        color = palette.accent
+                    )
+                } else {
+                    Text(
+                        text = confirmationAction,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        softWrap = false,
+                        color = if (canPost) palette.accent else tokens.secondaryInk
+                    )
+                }
+            }
+        }
+
+        if (replyTarget != null) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
+                    .padding(horizontal = 16.dp, vertical = 6.dp)
+                    .height(androidx.compose.foundation.layout.IntrinsicSize.Min)
+                    .background(tokens.glassFill(0.06), RoundedCornerShape(11.dp))
             ) {
-                TextButton(
-                    onClick = onDismiss,
-                    enabled = !submitting
-                ) {
-                    Text(
-                        text = "Cancel",
-                        fontSize = 16.sp,
-                        maxLines = 1,
-                        softWrap = false,
-                        color = if (submitting) tokens.secondaryInk else palette.accent
-                    )
-                }
-
-                // The title is what gives way. Unweighted, it kept its full width at large text and
-                // the action beside it was broken across two lines ("Pos" / "t").
-                Text(
-                    text = title,
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = tokens.primaryInk,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    textAlign = TextAlign.Center,
-                    // Whole at the largest text, as iOS's fixed-size sheet title: it sets smaller first.
-                    autoSize = TextAutoSize.StepBased(
-                        minFontSize = (10f / LocalDensity.current.fontScale.coerceAtLeast(1f)).sp, maxFontSize = 16.sp),
-                    modifier = Modifier.weight(1f)
+                Box(
+                    Modifier
+                        .width(2.dp)
+                        .fillMaxHeight()
+                        .background(palette.accent)
                 )
-
-                TextButton(
-                    onClick = onSubmit,
-                    enabled = canPost
-                ) {
-                    if (submitting) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(18.dp),
-                            strokeWidth = 2.dp,
-                            color = palette.accent
-                        )
-                    } else {
-                        Text(
-                            text = confirmationAction,
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Bold,
-                            maxLines = 1,
-                            softWrap = false,
-                            color = if (canPost) palette.accent else tokens.secondaryInk
-                        )
-                    }
-                }
-            }
-
-            if (replyTarget != null) {
-                Row(
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 6.dp)
-                        .height(androidx.compose.foundation.layout.IntrinsicSize.Min)
-                        .background(tokens.glassFill(0.06), RoundedCornerShape(11.dp))
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(3.dp)
                 ) {
-                    Box(
-                        Modifier
-                            .width(2.dp)
-                            .fillMaxHeight()
-                            .background(palette.accent)
-                    )
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 12.dp, vertical = 8.dp),
-                        verticalArrangement = Arrangement.spacedBy(3.dp)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            Text(
-                                text = replyTarget.author.name,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = palette.accent,
-                                modifier = Modifier
-                                    .clickable { replyTarget.author.username?.let(onOpenAuthor) }
-                                    .semantics { contentDescription = "View ${replyTarget.author.name}'s profile" }
-                            )
-                            if (replyTarget.chapterLabel != null && replyTarget.chapterLabel.isNotBlank()) {
-                                Text(
-                                    text = "· ${replyTarget.chapterLabel}",
-                                    fontSize = 12.sp,
-                                    color = tokens.secondaryInk
-                                )
-                            }
-                        }
                         Text(
-                            text = replyTarget.body,
-                            fontSize = 12.5.sp,
-                            lineHeight = 17.sp,
-                            color = tokens.secondaryInk,
-                            maxLines = 3
+                            text = replyTarget.author.name,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = palette.accent,
+                            modifier = Modifier
+                                .clickable { replyTarget.author.username?.let(onOpenAuthor) }
+                                .semantics { contentDescription = "View ${replyTarget.author.name}'s profile" }
                         )
+                        if (replyTarget.chapterLabel != null && replyTarget.chapterLabel.isNotBlank()) {
+                            Text(
+                                text = "· ${replyTarget.chapterLabel}",
+                                fontSize = 12.sp,
+                                color = tokens.secondaryInk
+                            )
+                        }
                     }
+                    Text(
+                        text = replyTarget.body,
+                        fontSize = 12.5.sp,
+                        lineHeight = 17.sp,
+                        color = tokens.secondaryInk,
+                        maxLines = 3
+                    )
                 }
             }
+        }
 
-            // Multiline Editor taking remaining room
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp)
-            ) {
-                if (textFieldValue.text.isEmpty()) {
-                    Text(
-                        text = if (isReply) "Write your reply…" else "Share your thoughts…",
-                        fontSize = 15.sp,
-                        lineHeight = 22.sp,
-                        color = tokens.secondaryInk
-                    )
-                }
-
-                BasicTextField(
-                    value = textFieldValue,
-                    onValueChange = send,
-                    // Not while it sends, as iOS: words typed then were erased when the earlier
-                    // text was accepted (A50 F9).
-                    readOnly = submitting,
-                    textStyle = TextStyle(
-                        fontSize = 15.sp,
-                        lineHeight = 22.sp,
-                        color = tokens.primaryInk
-                    ),
-                    cursorBrush = SolidColor(palette.accent),
-                    // The field had no name: a screen reader said only "edit box" (iOS names it).
-                    modifier = Modifier.fillMaxWidth()
-                        .focusRequester(textFocus)
-                        .semantics { contentDescription = if (isEdit) "Edit comment text" else "Comment text" }
-                )
-                // iOS raises the keyboard as the composer opens.
-                LaunchedEffect(Unit) { runCatching { textFocus.requestFocus() } }
-            }
-
-            // Honesty note & identity row & drag taller footer
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 6.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                if (!isReply && !isEdit && isScopeByChapter) {
-                    Text(
-                        text = "New comments post to the whole work. AO3 shows them on its latest chapter.",
-                        fontSize = 11.sp,
-                        color = tokens.secondaryInk
-                    )
-                }
-
-                if (verifying) {
-                    Text("We're checking whether this posted before trying again…",
-                        fontSize = 11.sp, color = tokens.secondaryInk)
-                }
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = currentUsername?.let { "as $it" } ?: "Not signed in",
-                        fontSize = 11.5.sp,
-                        color = tokens.secondaryInk
-                    )
-                    Text(
-                        text = "%,d left".format(remainingCharacters),
-                        fontSize = 11.5.sp,
-                        fontFamily = FontFamily.Monospace,
-                        color = if (remainingCharacters < 0) MaterialTheme.colorScheme.error else tokens.secondaryInk
-                    )
-                }
-
+        // Multiline Editor taking remaining room
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp)
+        ) {
+            if (textFieldValue.text.isEmpty()) {
                 Text(
-                    text = "Drag the sheet taller",
+                    text = if (isReply) "Write your reply…" else "Share your thoughts…",
+                    fontSize = 15.sp,
+                    lineHeight = 22.sp,
+                    color = tokens.secondaryInk
+                )
+            }
+
+            BasicTextField(
+                value = textFieldValue,
+                onValueChange = send,
+                // Not while it sends, as iOS: words typed then were erased when the earlier
+                // text was accepted (A50 F9).
+                readOnly = submitting,
+                textStyle = TextStyle(
+                    fontSize = 15.sp,
+                    lineHeight = 22.sp,
+                    color = tokens.primaryInk
+                ),
+                cursorBrush = SolidColor(palette.accent),
+                // The field had no name: a screen reader said only "edit box" (iOS names it).
+                modifier = Modifier.fillMaxWidth()
+                    .focusRequester(textFocus)
+                    .semantics { contentDescription = if (isEdit) "Edit comment text" else "Comment text" }
+            )
+            // iOS raises the keyboard as the composer opens.
+            LaunchedEffect(Unit) { runCatching { textFocus.requestFocus() } }
+        }
+
+        // Honesty note & identity row & drag taller footer
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 6.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            if (!isReply && !isEdit && isScopeByChapter) {
+                Text(
+                    text = "New comments post to the whole work. AO3 shows them on its latest chapter.",
                     fontSize = 11.sp,
                     color = tokens.secondaryInk
                 )
             }
 
-            // Format bar directly above the bottom inset
-            CommentFormatBar(
-                value = textFieldValue,
-                onValueChange = send,
-                onOpenTray = { showFormattingTray = true }
+            if (verifying) {
+                Text("We're checking whether this posted before trying again…",
+                    fontSize = 11.sp, color = tokens.secondaryInk)
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = currentUsername?.let { "as $it" } ?: "Not signed in",
+                    fontSize = 11.5.sp,
+                    color = tokens.secondaryInk
+                )
+                Text(
+                    text = "%,d left".format(remainingCharacters),
+                    fontSize = 11.5.sp,
+                    color = if (remainingCharacters < 0) MaterialTheme.colorScheme.error else tokens.secondaryInk
+                )
+            }
+
+            Text(
+                text = "Drag the sheet taller",
+                fontSize = 11.sp,
+                color = tokens.secondaryInk
             )
         }
 
-        if (showFormattingTray) {
-            CommentFormattingTray(
-                value = textFieldValue,
-                onValueChange = send,
-                onDismiss = { showFormattingTray = false }
-            )
-        }
+        // Format bar directly above the bottom inset
+        CommentFormatBar(
+            value = textFieldValue,
+            onValueChange = send,
+            onOpenTray = { showFormattingTray = true }
+        )
+    }
+
+    if (showFormattingTray) {
+        CommentFormattingTray(
+            value = textFieldValue,
+            onValueChange = send,
+            onDismiss = { showFormattingTray = false }
+        )
     }
 }
 

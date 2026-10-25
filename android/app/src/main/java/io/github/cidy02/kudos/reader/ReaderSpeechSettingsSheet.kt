@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.reader
 
+import io.github.cidy02.kudos.ui.theme.SheetSystemBars
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -52,6 +53,7 @@ internal fun ReaderSpeechSettingsSheet(
         containerColor = tokens.background,
         contentColor = tokens.primaryInk
     ) {
+        SheetSystemBars(tokens)
         ReaderSpeechSettingsContent(dismiss, listeningContent)
     }
 }
