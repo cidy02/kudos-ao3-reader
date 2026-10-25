@@ -373,55 +373,57 @@ fun QueueTagManager(
             }
         })
 
-    editing?.let { tag ->
-        QueueTagEditDialog(
-            repository = repository,
-            queueId = queue.id,
-            tag = tag,
-            siblings = tags.filter { it.id != tag.id },
-            siblingCounts = counts,
-            count = counts[tag.id] ?: 0,
-            onDismiss = { editing = null },
-            onRemove = { editing = null; pending = tag },
-            onChanged = { editing = null; reload += 1 }
-        )
-    }
-    copying?.let { tag ->
-        AlertDialog(
-            onDismissRequest = { copying = null },
-            title = { Text("Copy tag to another queue") },
-            text = {
-                Column {
-                    if (others.isEmpty()) Text("No other queues.")
-                    others.forEach { destination ->
-                        Text(
-                            text = destination.displayName,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    scope.launch {
-                                        repository.copyTagToQueue(tag.name, destination.id)
-                                        copying = null
+    SubjectPaletteTheme(palette) {
+        editing?.let { tag ->
+            QueueTagEditDialog(
+                repository = repository,
+                queueId = queue.id,
+                tag = tag,
+                siblings = tags.filter { it.id != tag.id },
+                siblingCounts = counts,
+                count = counts[tag.id] ?: 0,
+                onDismiss = { editing = null },
+                onRemove = { editing = null; pending = tag },
+                onChanged = { editing = null; reload += 1 }
+            )
+        }
+        copying?.let { tag ->
+            AlertDialog(
+                onDismissRequest = { copying = null },
+                title = { Text("Copy tag to another queue") },
+                text = {
+                    Column {
+                        if (others.isEmpty()) Text("No other queues.")
+                        others.forEach { destination ->
+                            Text(
+                                text = destination.displayName,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        scope.launch {
+                                            repository.copyTagToQueue(tag.name, destination.id)
+                                            copying = null
+                                        }
                                     }
-                                }
-                                .padding(vertical = 10.dp),
-                            color = tokens.primaryInk
-                        )
+                                    .padding(vertical = 10.dp),
+                                color = tokens.primaryInk
+                            )
+                        }
                     }
+                },
+                confirmButton = { TextButton(onClick = { copying = null }) { Text("Cancel") } }
+            )
+        }
+        pending?.let { tag ->
+            val count = counts[tag.id] ?: 0
+            QueueTagRemovalDialog(tag, count, onDismiss = { pending = null }, onConfirm = {
+                pending = null
+                scope.launch {
+                    repository.stripQueueTag(queue.id, tag.id)
+                    reload += 1
                 }
-            },
-            confirmButton = { TextButton(onClick = { copying = null }) { Text("Cancel") } }
-        )
-    }
-    pending?.let { tag ->
-        val count = counts[tag.id] ?: 0
-        QueueTagRemovalDialog(tag, count, onDismiss = { pending = null }, onConfirm = {
-            pending = null
-            scope.launch {
-                repository.stripQueueTag(queue.id, tag.id)
-                reload += 1
-            }
-        })
+            })
+        }
     }
 }
 

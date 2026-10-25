@@ -56,6 +56,28 @@ class CommentFormattingTrayScreenTest {
             assertEquals(androidx.compose.ui.text.font.FontFamily.Serif, layouts.single().layoutInput.style.fontFamily)
             assertEquals(if (letter == "Aa") 11.sp else 16.sp, layouts.single().layoutInput.style.fontSize)
         }
+        val headingLayouts = mutableListOf<androidx.compose.ui.text.TextLayoutResult>()
+        compose.onNodeWithText("H", useUnmergedTree = true)
+            .performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult) { it(headingLayouts) }
+        val heading = headingLayouts.single().layoutInput.style
+        assertEquals(androidx.compose.ui.text.font.FontFamily.Default, heading.fontFamily)
+        assertEquals(androidx.compose.ui.text.font.FontWeight.Bold, heading.fontWeight)
+        assertEquals(15.sp, heading.fontSize)
+        for (label in listOf("Superscript", "Subscript")) {
+            val glyph = hasAnyAncestor(hasContentDescription(label))
+            for ((letter, size) in listOf("A" to 15.sp, "2" to 9.sp)) {
+                val layouts = mutableListOf<androidx.compose.ui.text.TextLayoutResult>()
+                compose.onNode(hasText(letter) and glyph, useUnmergedTree = true)
+                    .performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult) { it(layouts) }
+                assertEquals(androidx.compose.ui.text.font.FontFamily.Serif, layouts.single().layoutInput.style.fontFamily)
+                assertEquals(size, layouts.single().layoutInput.style.fontSize)
+            }
+            val a = compose.onNode(hasText("A") and glyph, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+            val two = compose.onNode(hasText("2") and glyph, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+            assertTrue("$label scripts the 2 beside A", two.left >= a.right - 1f)
+            assertTrue("$label places the 2 on the correct side of the baseline",
+                if (label == "Superscript") two.bottom < a.bottom else two.bottom > a.bottom)
+        }
     }
 
     @Test fun restingTrayHasFourEqualColumns() = checkColumns(1f, 4)

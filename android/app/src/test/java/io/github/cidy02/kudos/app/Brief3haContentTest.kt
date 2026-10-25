@@ -157,7 +157,7 @@ class Brief3haContentTest {
         }
     }
 
-    @Test fun preferenceHelpPassesTheSheetGroundToItsSheetInEveryTheme() {
+    @Test fun preferenceHelpPassesThePageGroundToItsSheetInEveryTheme() {
         var sheetGround = Color.Unspecified
         show { PreferenceHelpSheet(AO3PreferenceHelpRef("Help", "https://archiveofourown.org/help/preferences"),
             AO3Result.Success(AO3PreferenceHelpContent("Help", listOf(AO3PreferenceHelpEntry("Topic", "Instructions")), "Footer", "")),
@@ -167,11 +167,12 @@ class Brief3haContentTest {
             }) }
         for (theme in themes) {
             compose.runOnIdle { mode = theme }
+            compose.waitForIdle()
             compose.onNodeWithText("Instructions").assertExists()
             compose.onNodeWithText("Footer").assertExists()
-            compose.runOnIdle { assertEquals(tokens.sheetGround, sheetGround) }
+            compose.runOnIdle { assertEquals(tokens.background, sheetGround) }
             val sheet = compose.onNodeWithTag("Sheet").fetchSemanticsNode().boundsInRoot
-            assertPixel(tokens.sheetGround, Offset(sheet.center.x, sheet.top + 2f))
+            assertPixel(tokens.background, Offset(sheet.center.x, sheet.top + 2f))
         }
     }
 

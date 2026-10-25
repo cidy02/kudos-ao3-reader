@@ -98,7 +98,7 @@ internal fun ReaderNoteEditor(
                 fontWeight = FontWeight.SemiBold
             )
             ToolbarCircleButton(onClick = { finished[0] = true; onDone(draft.trim()) }, accessibilityName = "Done") {
-                Icon(Icons.Filled.Check, contentDescription = null)
+                Icon(Icons.Filled.Check, contentDescription = null, tint = tokens.accentInk)
             }
         }
         if (annotation.selectedText.isNotEmpty()) {

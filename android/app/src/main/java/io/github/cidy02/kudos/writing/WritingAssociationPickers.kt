@@ -8,7 +8,6 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AddCircleOutline
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.RemoveCircle
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
@@ -255,9 +254,9 @@ private fun AssociationPickRow(title: String, detail: String?, selected: Boolean
             stateDescription = listOfNotNull(detail, if (add) null else if (current) null else if (selected) selectedText else "Not selected").joinToString(". ")
         }.padding(horizontal = 14.dp, vertical = 11.dp), verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(11.dp)) {
-        Icon(when { current -> Icons.Default.Check; add -> Icons.Default.AddCircleOutline;
+        Icon(when { current -> Icons.Default.CheckCircle; add -> Icons.Default.AddCircleOutline;
             selected -> Icons.Default.CheckCircle; else -> Icons.Default.RadioButtonUnchecked }, null,
-            tint = if (selected || add) tokens.scopePalette.accent else tokens.secondaryInk, modifier = Modifier.size(18.dp))
+            tint = if (current || selected || add) tokens.scopePalette.accent else tokens.secondaryInk, modifier = Modifier.size(18.dp))
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
             Text(title, color = tokens.primaryInk, fontSize = 14.5.sp, lineHeight = 20.sp, fontWeight = FontWeight.Medium)
             if (detail != null) Text(detail, color = tokens.secondaryInk, fontSize = 11.5.sp, lineHeight = 17.sp)

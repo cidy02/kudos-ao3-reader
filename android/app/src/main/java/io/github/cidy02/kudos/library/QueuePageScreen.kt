@@ -396,25 +396,29 @@ fun QueuePageScreen(
                             if (displayMode == QueueDisplayMode.Compact) {
                                 Column(Modifier.padding(horizontal = 12.dp)) {
                                     inLine.chunked(2).forEach { row ->
-                                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                             row.forEach { work ->
                                                 key(work.id) {
-                                                    val downloadFraction = rememberWorkDownloadFraction(work, downloadQueue)
-                                                    QueueWorkItem(
-                                                        work, workActions, selecting || reordering,
-                                                        isObscuredMature(work, shownSettings, reveal),
-                                                        onClick = { activate(work) }, onRemove = { removeOne = work }
-                                                    ) { _ ->
-                                                        SubjectWorkCoverCard(
-                                                            work = work,
-                                                            obscured = isObscuredMature(work, shownSettings, reveal),
-                                                            downloadFraction = downloadFraction,
-                                                            isSelecting = selecting,
-                                                            isSelected = work.id in selected
-                                                        )
+                                                    Box(Modifier.weight(1f)) {
+                                                        val downloadFraction = rememberWorkDownloadFraction(work, downloadQueue)
+                                                        QueueWorkItem(
+                                                            work, workActions, selecting || reordering,
+                                                            isObscuredMature(work, shownSettings, reveal),
+                                                            onClick = { activate(work) }, onRemove = { removeOne = work }
+                                                        ) { _ ->
+                                                            SubjectWorkCoverCard(
+                                                                work = work,
+                                                                modifier = Modifier.fillMaxWidth(),
+                                                                obscured = isObscuredMature(work, shownSettings, reveal),
+                                                                downloadFraction = downloadFraction,
+                                                                isSelecting = selecting,
+                                                                isSelected = work.id in selected
+                                                            )
+                                                        }
                                                     }
                                                 }
                                             }
+                                            if (row.size == 1) Spacer(Modifier.weight(1f))
                                         }
                                     }
                                 }
