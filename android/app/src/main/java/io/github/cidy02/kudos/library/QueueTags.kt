@@ -2,6 +2,7 @@ package io.github.cidy02.kudos.library
 
 import androidx.compose.foundation.background
 import androidx.compose.material3.ButtonDefaults
+import io.github.cidy02.kudos.settings.SettingsGroupLabel
 import io.github.cidy02.kudos.settings.SubjectTextFieldRow
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -231,7 +232,8 @@ internal fun SharedTagContent(
                     Modifier.fillMaxWidth().subjectPanel().padding(horizontal = 12.dp, vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(Icons.Filled.Add, contentDescription = null, tint = controlInk)
+                    // iOS's bulk Tag sheet is a plain list row with no "+" (WorkBulkTagSheet.swift:31).
+                    if (noun != "work") Icon(Icons.Filled.Add, contentDescription = null, tint = controlInk)
                     val addTag: () -> Unit = addTag@ {
                         val name = draft.trim()
                         if (name.isEmpty()) return@addTag
@@ -259,7 +261,11 @@ internal fun SharedTagContent(
                     ) { Text("Add") }
                 }
                 FormFootnote(footnote)
-                if (all.isNotEmpty()) SubjectFieldLabel("Your tags", Modifier.padding(top = 12.dp))
+                // The bulk sheet's heading is a List section's, in sentence case (iOS); the queue sheet's is a group label.
+                if (all.isNotEmpty()) {
+                    if (noun == "work") SettingsGroupLabel("Your tags", Modifier.padding(top = 12.dp))
+                    else SubjectFieldLabel("Your tags", Modifier.padding(top = 12.dp))
+                }
                 if (all.isEmpty()) {
                     FormFootnote(emptyNote)
                 } else {

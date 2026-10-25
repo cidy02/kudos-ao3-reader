@@ -762,7 +762,9 @@ fun AuthorProfileScreen(
                                 moderationBusy = moderationBusy,
                                 onModeration = { action ->
                                     if (seriesWrites == null) onOpenWeb(action.url) else beginModeration(action)
-                                }
+                                },
+                                // iOS: AO3AuthorHero(...).cardRow(), 16 pt inside (AuthorProfileView.swift:231).
+                                modifier = Modifier.cardRow().padding(16.dp)
                             )
                         }
                     }
@@ -995,7 +997,8 @@ fun AuthorProfileScreen(
                                         fontSize = 11.5.sp, lineHeight = 17.sp)
                                 } else item { EmptyStateCard("No series", "No series by this author are visible to you on AO3.") }
                             } else {
-                                item { SectionRuleHeader(title = "Series", count = pageData.series.size) }
+                                // iOS: a List section header, at the cards' edge (AuthorProfileContentSections.swift:560).
+                                item { SectionRuleHeader(title = "Series", count = pageData.series.size, gutter = 0.dp) }
                                 val tally = seriesTallyParts(pageData.series, pageData.totalPages > 1)
                                 if (tally.isNotEmpty()) item {
                                     Text(tally.joinToString(" · "), color = tokens.secondaryInk,

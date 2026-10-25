@@ -67,7 +67,8 @@ class AO3ChallengeSignUpScreenTest {
         io.github.cidy02.kudos.app.DebugShotRequests.clear()
         show()
         await("REQUEST 1")
-        reach("Prompt")
+        // The card's label is iOS's small uppercase PROMPT (3hk); the field keeps "Prompt" as its spoken name.
+        reach("PROMPT")
         val field = compose.onAllNodesWithContentDescription("Prompt").onFirst()
         field.performTextClearance()
         compose.waitForIdle()
@@ -139,7 +140,8 @@ class AO3ChallengeSignUpScreenTest {
 
     @Test fun refusalReasonsKeepTypedPromptAndSuccessShowsOnlyAfterPost() {
         show()
-        await("Prompt")
+        // The card's label is iOS's small uppercase PROMPT (3hk); the field keeps "Prompt" as its spoken name.
+        await("PROMPT")
         compose.onAllNodesWithContentDescription("Prompt").filter(hasSetTextAction()).onFirst().performTextReplacement("Uncharted Lantern & typed 星")
         val refusal = challengeFixture(signUpFixtures[0]).replace("</main>", challengeFixture("ao3_demo_signup_refused") + "</main>")
         compose.runOnIdle { client.postReply = challengeResponse(AO3ChallengeSignUpUrls.form("winter_exchange"), refusal) }
@@ -147,7 +149,7 @@ class AO3ChallengeSignUpScreenTest {
         await("Description contains Uncharted Lantern", true)
         compose.onNodeWithText("Please revise your prompt and submit again.").assertExists()
         compose.onNodeWithText("Sign-up submitted successfully!").assertDoesNotExist()
-        reach("Prompt")
+        reach("PROMPT")
         compose.onNodeWithText("Uncharted Lantern & typed 星").assertExists()
         assertEquals(1, client.posts)
         assertEquals(2, client.gets.size)

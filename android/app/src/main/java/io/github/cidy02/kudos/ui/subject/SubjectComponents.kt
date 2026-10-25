@@ -422,7 +422,9 @@ fun SectionRuleHeader(
     note: String? = null,
     isCollapsed: Boolean = false,
     onToggleCollapse: (() -> Unit)? = null,
-    onSeeAll: (() -> Unit)? = null
+    onSeeAll: (() -> Unit)? = null,
+    /** 0 for iOS's List section header, which sits at the cards' edge rather than inside it. */
+    gutter: Dp = SubjectMetrics.gutter
 ) {
     val tokens = LocalKudosTokens.current
     val labelSize = 11.sp
@@ -430,7 +432,7 @@ fun SectionRuleHeader(
     Row(
         modifier
             .fillMaxWidth()
-            .padding(horizontal = SubjectMetrics.gutter),
+            .padding(horizontal = gutter),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {

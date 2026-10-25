@@ -71,13 +71,14 @@ class AO3ChallengeWithdrawScreenTest {
     @Test fun refusalIsAo3sReasonAloneFormKeepsTypedTextAndWithdrawBecomesAvailableAgain() {
         show("ao3_demo_signup_withdraw_refused", KudosThemeMode.Sepia, 1.8f)
         awaitText("REQUEST 1")
-        reach("Prompt")
+        // The card's label is iOS's small uppercase PROMPT (3hk); the field keeps "Prompt" as its spoken name.
+        reach("PROMPT")
         compose.onAllNodesWithContentDescription("Prompt").filter(hasSetTextAction()).onFirst().performTextReplacement("A writer's unfinished lantern story")
         confirm()
         awaitText("Sign-ups are closed. You cannot delete your sign-up.")
         assertEquals(1, compose.onAllNodesWithText("Sign-ups are closed. You cannot delete your sign-up.").fetchSemanticsNodes().size)
         assertTrue(dismissed.isEmpty())
-        reach("Prompt"); compose.onNodeWithText("A writer's unfinished lantern story").assertExists()
+        reach("PROMPT"); compose.onNodeWithText("A writer's unfinished lantern story").assertExists()
         reach("Withdraw sign-up"); compose.onNodeWithText("Withdraw sign-up").assertIsEnabled()
         val layouts = mutableListOf<TextLayoutResult>()
         compose.onNodeWithText("Withdraw sign-up").performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }

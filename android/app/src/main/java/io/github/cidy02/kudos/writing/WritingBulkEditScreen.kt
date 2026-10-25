@@ -183,9 +183,13 @@ private fun BulkHeader(title: String, subtitle: String? = null) {
 @Composable
 private fun BulkRow(label: String, value: String, index: Int, total: Int, enabled: Boolean, spokenValue: String? = null, mark: String? = null,
     /** iOS draws this row as `WritingChoiceRow`: the value in the accent with its picker mark. */
-    choice: Boolean = false, click: () -> Unit) {
+    choice: Boolean = false,
+    /** On iOS's plain list, the elevated card rather than the glass (3hk). */
+    card: Boolean = false, click: () -> Unit) {
     val tokens = LocalKudosTokens.current
-    Column(Modifier.padding(horizontal = SubjectMetrics.accountGutter).writingSuggestionPanel(index == 0, index == total - 1).alpha(if (enabled) 1f else 0.55f)) {
+    Column(Modifier.padding(horizontal = SubjectMetrics.accountGutter)
+        .writingSuggestionPanel(index == 0, index == total - 1, fill = if (card) tokens.theme.cardSurface else null)
+        .alpha(if (enabled) 1f else 0.55f)) {
         if (mark != null) Row(
             Modifier.fillMaxWidth().clickable(enabled = enabled, onClick = click)
                 .semantics(mergeDescendants = true) { stateDescription = spokenValue ?: value }
@@ -213,9 +217,12 @@ internal fun BulkOptionsScreen(picker: BulkPicker, options: List<AO3FormOption>,
     BackHandler(onBack = onBack)
     // iOS's tag-state page (`BulkTagStatePicker`) is a plain list; only its names page washes.
     val flat = picker.mode == "tri"
+    // A plain list's grouped ground and elevated cards, as the Settings pages draw iOS's (3hk).
+    val ground = if (tokens.theme == io.github.cidy02.kudos.ui.subject.ReaderTheme.Dark) io.github.cidy02.kudos.ui.theme.SurfaceDark
+        else tokens.background
     ProvidePushedShellChrome(hasSubjectHeader = true, hideTabBar = true, onBack = onBack,
-        pageBackground = if (flat) tokens.background else null)
-    LazyColumn(Modifier.fillMaxSize().then(if (flat) Modifier.background(tokens.background) else Modifier.subjectScreenWash(palette)),
+        pageBackground = if (flat) ground else null)
+    LazyColumn(Modifier.fillMaxSize().then(if (flat) Modifier.background(ground) else Modifier.subjectScreenWash(palette)),
         contentPadding = PaddingValues(bottom = 32.dp)) {
         item { BulkHeader(picker.title) }
         val shown = if (picker.mode == "scalar") listOf(AO3FormOption("", "Leave as is")) + options.filter { it.value.isNotEmpty() }
@@ -230,7 +237,7 @@ internal fun BulkOptionsScreen(picker: BulkPicker, options: List<AO3FormOption>,
             }
             BulkRow(option.title, value, index, shown.size, true,
                 spokenValue = if (picker.mode == "tri" && value.isEmpty()) "Unchanged" else null,
-                mark = if (picker.mode == "tri") value else if (picker.mode == "names") "Remove" else null) {
+                mark = if (picker.mode == "tri") value else if (picker.mode == "names") "Remove" else null, card = flat) {
                 onChange { old -> when (picker.mode) {
                     "scalar" -> old.copy(scalars = old.scalars + (picker.field to option.value))
                     "multi" -> old.copy(collectionsToRemove = if (option.value in old.collectionsToRemove) old.collectionsToRemove - option.value else old.collectionsToRemove + option.value)

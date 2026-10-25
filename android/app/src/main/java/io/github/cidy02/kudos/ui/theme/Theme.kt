@@ -58,8 +58,10 @@ private fun lightScheme(accent: Color) = lightColorScheme(
 private fun darkScheme(accent: Color) = darkColorScheme(
     error = ReaderTheme.Dark.destructive,
     onError = SubjectPalette.label(ReaderTheme.Dark.destructive),
-    primary = PaperWarm,
-    onPrimary = accent,
+    // Controls take the accent's readable ink, as SubjectPaletteTheme does and as iOS tints them. A cream
+    // primary left bare Material controls cream here: Add to Collection's checkbox and Done, Subscribe (3hk).
+    primary = ReaderTheme.Dark.accentInk(accent),
+    onPrimary = SubjectPalette.label(ReaderTheme.Dark.accentInk(accent)),
     secondary = AccentBlue,
     onSecondary = Paper,
     background = SurfaceDark,
@@ -73,8 +75,9 @@ private fun darkScheme(accent: Color) = darkColorScheme(
 private fun oledScheme(accent: Color) = darkColorScheme(
     error = ReaderTheme.Oled.destructive,
     onError = SubjectPalette.label(ReaderTheme.Oled.destructive),
-    primary = PaperWarm,
-    onPrimary = accent,
+    // As Dark: the accent's readable ink (3hk).
+    primary = ReaderTheme.Oled.accentInk(accent),
+    onPrimary = SubjectPalette.label(ReaderTheme.Oled.accentInk(accent)),
     secondary = AccentBlue,
     onSecondary = Paper,
     background = SurfaceOled,

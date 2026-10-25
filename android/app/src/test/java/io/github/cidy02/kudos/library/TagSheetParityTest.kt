@@ -167,6 +167,9 @@ class TagSheetParityTest {
             .fetchSemanticsNodes().size == 3 }
         compose.onNode(hasText("Tag") and hasAnyAncestor(isDialog())).assertExists()
         compose.onNodeWithText("Your changes apply to all 2 selected works.").assertExists()
+        // iOS's bulk sheet is a plain list: its heading is a section's sentence case, not the queue sheet's label (3hk).
+        compose.onNodeWithText("Your tags").assertExists()
+        compose.onNodeWithText("YOUR TAGS").assertDoesNotExist()
         compose.onNodeWithText("All").assertDoesNotExist()
         val marks = compose.onAllNodesWithTag("Tag selection mark", useUnmergedTree = true).fetchSemanticsNodes()
         listOf("AllTag", "SomeTag", "UnusedTag").forEachIndexed { index, name ->
