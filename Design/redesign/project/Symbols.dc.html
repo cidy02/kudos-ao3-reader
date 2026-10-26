@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Work symbols</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div role="img" aria-label="{{aria}}" style="display: {{display}}; grid-template-columns: {{cols}}; flex-wrap: wrap; gap: {{gap}}px; align-items: center; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif; color: #1C1C1E">
+  <sc-for list="{{tiles}}" as="t" hint-placeholder-count="4">
+    <div aria-hidden="true" style="display: flex; align-items: center; gap: {{labelGap}}px; padding: {{chipPad}}; border-radius: 999px; background: {{chipBg}}">
+      <div style="width: {{size}}px; height: {{size}}px; flex-shrink: 0; position: relative; overflow: hidden; border-radius: {{radius}}px; background: {{t.bg}}; box-shadow: {{t.shadow}}; display: flex; align-items: center; justify-content: center">
+        <sc-if value="{{t.isText}}" hint-placeholder-val="{{true}}">
+          <span style="color: {{t.fg}}; font-family: {{t.font}}; font-size: {{t.fs}}px; font-weight: {{t.weight}}; line-height: 1">{{t.glyph}}</span>
+        </sc-if>
+        <sc-if value="{{t.isDash}}" hint-placeholder-val="{{false}}">
+          <span style="width: 42%; height: {{dashH}}px; border-radius: {{dashH}}px; background: {{t.fg}}"></span>
+        </sc-if>
+        <sc-if value="{{t.isCheck}}" hint-placeholder-val="{{false}}">
+          <svg width="{{icon}}" height="{{icon}}" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.6 4.6L19.2 7.4"></path></svg>
+        </sc-if>
+        <sc-if value="{{t.isRing}}" hint-placeholder-val="{{false}}">
+          <svg width="{{icon}}" height="{{icon}}" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="8.2" stroke="{{t.fg}}" stroke-width="2.6"></circle><path d="M12 3.8a8.2 8.2 0 0 0 0 16.4z" fill="{{t.fg}}"></path></svg>
+        </sc-if>
+        <sc-if value="{{t.isMulti}}" hint-placeholder-val="{{false}}">
+          <span style="position: absolute; left: 0; top: 0; width: 50%; height: 50%; background: #2F8F3A"></span>
+          <span style="position: absolute; right: 0; top: 0; width: 50%; height: 50%; background: #B3127A"></span>
+          <span style="position: absolute; left: 0; bottom: 0; width: 50%; height: 50%; background: #D2264B"></span>
+          <span style="position: absolute; right: 0; bottom: 0; width: 50%; height: 50%; background: #1E63C8"></span>
+        </sc-if>
+      </div>
+      <sc-if value="{{showLabels}}" hint-placeholder-val="{{false}}">
+        <span style="font-size: {{labelSize}}px; line-height: 1.2; font-weight: 600; white-space: nowrap">{{t.label}}<span style="font-weight: 500; color: #6C6C70">{{t.detail}}</span></span>
+      </sc-if>
+    </div>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"rating":{"editor":"enum","options":["G","T","M","E","NR"],"default":"T"},"category":{"editor":"enum","options":["FF","FM","MM","Gen","Multi","Other","NA"],"default":"FM"},"warnings":{"editor":"enum","options":["none","undisclosed","present"],"default":"none"},"status":{"editor":"enum","options":["complete","wip","unknown"],"default":"wip"},"variant":{"editor":"enum","options":["grid","strip","labeled"],"default":"grid"},"size":{"editor":"int","default":40,"min":10,"max":64},"only":{"editor":"enum","options":["all","rating","category","warnings","status"],"default":"all"},"warningCount":{"editor":null,"default":1},"chapters":{"editor":null,"default":""},"$preview":{"width":84,"height":84}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const s = Math.max(10, Number(this.props.size ?? 40));
+    const variant = this.props.variant ?? 'grid';
+    const count = Number(this.props.warningCount ?? 1);
+    const chapters = this.props.chapters ?? '';
+    const solid = (bg, fg) => ({ bg, fg: fg || '#FFFFFF', shadow: 'none' });
+    const soft = (bg, fg) => ({ bg: bg || '#E6E6EB', fg: fg || '#6C6C70', shadow: 'none' });
+    const dash = (o) => ({ ...o, kind: 'dash' });
+    const sans = "-apple-system, BlinkMacSystemFont, 'SF Pro Rounded', 'SF Pro Text', system-ui, sans-serif";
+    const sym = "'Apple Symbols', 'Segoe UI Symbol', 'Noto Sans Symbols 2', 'DejaVu Sans', sans-serif";
+    const letter = (o, glyph) => ({ ...o, glyph, kind: 'text', font: sans, fs: Math.round(s * 0.6), weight: 800 });
+    const mark = (o, glyph, scale) => ({ ...o, glyph, kind: 'text', font: sym, fs: Math.round(s * scale), weight: 400 });
+
+    const ratings = {
+      G: { ...letter(solid('#2F8F3A'), 'G'), label: 'General', aria: 'General Audiences' },
+      T: { ...letter(solid('#F5C400', '#3A2C00'), 'T'), label: 'Teen', aria: 'Teen And Up Audiences' },
+      M: { ...letter(solid('#E07000'), 'M'), label: 'Mature', aria: 'Mature' },
+      E: { ...letter(solid('#C8102E'), 'E'), label: 'Explicit', aria: 'Explicit' },
+      NR: { ...letter(soft(), '?'), label: 'Not rated', aria: 'Not Rated' }
+    };
+    const categories = {
+      FF: { ...mark(solid('#D2264B'), '⚢', 0.8), label: 'F/F' },
+      FM: { ...mark(solid('#B3127A'), '⚤', 0.8), label: 'F/M' },
+      MM: { ...mark(solid('#1E63C8'), '⚣', 0.8), label: 'M/M' },
+      Gen: { ...mark(solid('#2F8F3A'), '☉', 0.84), label: 'Gen' },
+      Multi: { kind: 'multi', bg: '#FFFFFF', fg: '#FFFFFF', shadow: 'none', label: 'Multi' },
+      Other: { ...mark(solid('#1C1C1E'), '♅', 0.78), label: 'Other' },
+      NA: { ...dash(soft()), label: 'No category' }
+    };
+    const warnings = {
+      none: { ...dash(soft()), label: 'No warnings', aria: 'No archive warnings' },
+      undisclosed: { ...letter(solid('#E07000'), '?'), label: 'Not disclosed', aria: 'Warnings not disclosed' },
+      present: { ...letter(solid('#C8102E'), '!'), label: count === 1 ? '1 warning' : count + ' warnings', aria: count === 1 ? '1 archive warning' : count + ' archive warnings' }
+    };
+    const statuses = {
+      complete: { ...solid('#2F8F3A'), kind: 'check', label: 'Complete' },
+      wip: { ...soft('#FFE6C2', '#B35A00'), kind: 'ring', label: 'In progress' },
+      unknown: { ...letter(soft(), '?'), label: 'Status unknown' }
+    };
+
+    const rating = ratings[this.props.rating ?? 'T'] || ratings.NR;
+    const category = categories[this.props.category ?? 'FM'] || categories.NA;
+    const warning = warnings[this.props.warnings ?? 'none'] || warnings.none;
+    const status = statuses[this.props.status ?? 'wip'] || statuses.unknown;
+    const showLabels = variant === 'labeled';
+    const tiles = [rating, category, warning, { ...status, detail: chapters ? ' ' + chapters : '' }].map((t) => ({
+      ...t,
+      detail: t.detail || '',
+      glyph: t.glyph || '',
+      font: t.font || sans,
+      fs: t.fs || 0,
+      weight: t.weight || 400,
+      isText: t.kind === 'text',
+      isCheck: t.kind === 'check',
+      isRing: t.kind === 'ring',
+      isDash: t.kind === 'dash',
+      isMulti: t.kind === 'multi'
+    }));
+    const only = { rating: 0, category: 1, warnings: 2, status: 3 }[this.props.only ?? 'all'];
+    const gap = showLabels ? 8 : Math.max(2, Math.round(s * 0.12));
+    return {
+      tiles: only === undefined ? tiles : [tiles[only]],
+      size: s,
+      radius: Math.round(s * 0.24),
+      icon: Math.round(s * 0.68),
+      dashH: Math.max(2, Math.round(s * 0.11)),
+      gap,
+      showLabels,
+      labelGap: showLabels ? 7 : 0,
+      chipPad: showLabels ? '3px 11px 3px 3px' : '0',
+      chipBg: showLabels ? '#F2F2F7' : 'transparent',
+      labelSize: Math.max(12, Math.round(s * 0.62)),
+      display: variant === 'labeled' ? 'flex' : 'inline-grid',
+      cols: variant === 'strip' ? 'repeat(4, minmax(0, 1fr))' : 'repeat(2, minmax(0, 1fr))',
+      aria: 'Rating: ' + (rating.aria || rating.label) + '. Category: ' + category.label + '. ' + (warning.aria || warning.label) + '. ' + status.label + (chapters ? ', ' + chapters + ' chapters' : '') + '.'
+    };
+  }
+}
+</script>
+</body>
+</html>

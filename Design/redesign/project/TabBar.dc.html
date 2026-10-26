@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Tab bar</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+</style>
+</helmet>
+<nav aria-label="Tabs" style="width: 358px; display: flex; align-items: center; gap: 10px; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; color: #1C1C1E">
+  <sc-if value="{{isFull}}" hint-placeholder-val="{{true}}">
+    <div style="flex: 1; height: 62px; border-radius: 31px; padding: 4px; box-sizing: border-box; display: flex; align-items: center; background: rgba(255,255,255,0.74); backdrop-filter: blur(24px) saturate(180%); -webkit-backdrop-filter: blur(24px) saturate(180%); box-shadow: 0 8px 28px rgba(0,0,0,0.12), 0 0 0 0.5px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.9)">
+      <sc-for list="{{tabs}}" as="t" hint-placeholder-count="4">
+        <button aria-current="{{t.current}}" style="flex: 1; height: 54px; border: none; border-radius: 27px; background: {{t.bg}}; color: {{t.fg}}; font-family: inherit; font-size: 10px; font-weight: 600; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; cursor: pointer">
+          <svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="{{t.d}}"></path></svg>
+          {{t.label}}
+        </button>
+      </sc-for>
+    </div>
+    <button aria-label="Search" style="width: 62px; height: 62px; flex-shrink: 0; border: none; border-radius: 31px; color: #1C1C1E; display: flex; align-items: center; justify-content: center; cursor: pointer; background: rgba(255,255,255,0.74); backdrop-filter: blur(24px) saturate(180%); -webkit-backdrop-filter: blur(24px) saturate(180%); box-shadow: 0 8px 28px rgba(0,0,0,0.12), 0 0 0 0.5px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.9)">
+      <svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="10.5" cy="10.5" r="6.5"></circle><path d="m15.5 15.5 5 5"></path></svg>
+    </button>
+  </sc-if>
+  <sc-if value="{{isMini}}" hint-placeholder-val="{{false}}">
+    <button aria-label="{{current.label}}" aria-current="page" style="width: 54px; height: 54px; flex-shrink: 0; border: none; border-radius: 27px; color: {{accent}}; display: flex; align-items: center; justify-content: center; cursor: pointer; background: rgba(255,255,255,0.74); backdrop-filter: blur(24px) saturate(180%); -webkit-backdrop-filter: blur(24px) saturate(180%); box-shadow: 0 8px 28px rgba(0,0,0,0.12), 0 0 0 0.5px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.9)">
+      <svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="{{current.d}}"></path></svg>
+    </button>
+    <div style="flex: 1; min-width: 0; height: 54px; border-radius: 27px; padding: 0 6px 0 11px; box-sizing: border-box; display: flex; align-items: center; gap: 10px; background: rgba(255,255,255,0.74); backdrop-filter: blur(24px) saturate(180%); -webkit-backdrop-filter: blur(24px) saturate(180%); box-shadow: 0 8px 28px rgba(0,0,0,0.12), 0 0 0 0.5px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.9)">
+      <div aria-hidden="true" style="width: 28px; height: 38px; flex-shrink: 0; border-radius: 4px; background: {{accessoryCover}}"></div>
+      <div style="flex: 1; min-width: 0; display: flex; flex-direction: column">
+        <span style="font-size: 14px; line-height: 18px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{accessoryTitle}}</span>
+        <span style="font-size: 12px; line-height: 16px; color: #6C6C70; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{accessorySubtitle}}</span>
+      </div>
+      <button aria-label="Pause Read Aloud" style="width: 42px; height: 42px; flex-shrink: 0; border: none; border-radius: 21px; background: transparent; color: #1C1C1E; display: flex; align-items: center; justify-content: center; cursor: pointer">
+        <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24"><rect x="6" y="4.5" width="4" height="15" rx="1.2" fill="currentColor"></rect><rect x="14" y="4.5" width="4" height="15" rx="1.2" fill="currentColor"></rect></svg>
+      </button>
+    </div>
+    <button aria-label="Search" style="width: 54px; height: 54px; flex-shrink: 0; border: none; border-radius: 27px; color: #1C1C1E; display: flex; align-items: center; justify-content: center; cursor: pointer; background: rgba(255,255,255,0.74); backdrop-filter: blur(24px) saturate(180%); -webkit-backdrop-filter: blur(24px) saturate(180%); box-shadow: 0 8px 28px rgba(0,0,0,0.12), 0 0 0 0.5px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.9)">
+      <svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="10.5" cy="10.5" r="6.5"></circle><path d="m15.5 15.5 5 5"></path></svg>
+    </button>
+  </sc-if>
+</nav>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"selected":{"editor":"enum","options":["home","library","browse","account"],"default":"home"},"variant":{"editor":"enum","options":["full","minimized"],"default":"full"},"accent":{"editor":"color","default":"#990000","options":["#990000","#B3261E","#7A1F2B","#1F4E5F"]},"accessoryTitle":{"editor":null,"default":"Salt & Starlight"},"accessorySubtitle":{"editor":null,"default":"Read Aloud · Ch 15 · 12 min left"},"accessoryCover":{"editor":null,"default":"#2E5339"},"$preview":{"width":358,"height":62}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const accent = this.props.accent ?? '#990000';
+    const hex = accent.replace('#', '');
+    const tint = 'rgba(' + parseInt(hex.slice(0, 2), 16) + ',' + parseInt(hex.slice(2, 4), 16) + ',' + parseInt(hex.slice(4, 6), 16) + ',0.10)';
+    const selected = this.props.selected ?? 'home';
+    const all = [
+      { id: 'home', label: 'Home', d: 'M3.5 10.5 12 3.5l8.5 7M5.5 9v11h5v-6h3v6h5V9' },
+      { id: 'library', label: 'Library', d: 'M3.5 4h4v16h-4zM9.5 4h4v16h-4zM15.6 5.4l3.4-.9 3 15.2-3.4.9z' },
+      { id: 'browse', label: 'Browse', d: 'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z' },
+      { id: 'account', label: 'Account', d: 'M12 4a4 4 0 1 1 0 8 4 4 0 0 1 0-8zM4.5 20c1.4-3.8 4.2-5.8 7.5-5.8s6.1 2 7.5 5.8' }
+    ];
+    const tabs = all.map((t) => ({
+      ...t,
+      current: t.id === selected ? 'page' : 'false',
+      bg: t.id === selected ? tint : 'transparent',
+      fg: t.id === selected ? accent : '#1C1C1E'
+    }));
+    const variant = this.props.variant ?? 'full';
+    return {
+      accent,
+      tabs,
+      current: tabs.find((t) => t.id === selected) || tabs[0],
+      isFull: variant === 'full',
+      isMini: variant === 'minimized',
+      accessoryTitle: this.props.accessoryTitle ?? 'Salt & Starlight',
+      accessorySubtitle: this.props.accessorySubtitle ?? 'Read Aloud · Ch 15 · 12 min left',
+      accessoryCover: this.props.accessoryCover ?? '#2E5339'
+    };
+  }
+}
+</script>
+</body>
+</html>

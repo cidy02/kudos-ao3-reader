@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Comments</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+button{cursor:pointer}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; position: relative; overflow: hidden; background: #F2F2F7; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; box-sizing: border-box">
+  <div style="position: absolute; left: 16px; right: 16px; top: 54px; display: flex; justify-content: space-between">
+    <button aria-label="Back" style="width: 44px; height: 44px; border: none; border-radius: 22px; color: #1C1C1E; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.74); box-shadow: 0 6px 20px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.06)">
+      <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 5-7 7 7 7"></path></svg>
+    </button>
+    <button style="height: 44px; padding: 0 16px; border: none; border-radius: 22px; font-family: inherit; font-size: 16px; color: #1C1C1E; background: rgba(255,255,255,0.74); box-shadow: 0 6px 20px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.06); display: flex; align-items: center; gap: 6px">Newest First
+      <svg aria-hidden="true" width="10" height="14" viewBox="0 0 12 16" fill="none" stroke="#8E8E93" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 6 6 2.5 9.5 6M2.5 10 6 13.5 9.5 10"></path></svg>
+    </button>
+  </div>
+  <main style="padding: 106px 16px 0; display: flex; flex-direction: column; gap: 12px">
+    <header style="padding: 0 4px; display: flex; flex-direction: column; gap: 2px">
+      <h1 style="margin: 0; font-size: 34px; line-height: 41px; font-weight: 700; letter-spacing: 0.4px">Comments</h1>
+      <p style="margin: 0; font-size: 15px; line-height: 20px; color: #6C6C70">The Cartographer's Daughter · 286</p>
+    </header>
+    <div role="radiogroup" aria-label="Scope" style="height: 34px; border-radius: 17px; background: rgba(118,118,128,0.12); padding: 2px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr))">
+      <button role="radio" aria-checked="false" style="border: none; border-radius: 15px; background: transparent; font-family: inherit; font-size: 14px">All Comments</button>
+      <button role="radio" aria-checked="true" style="border: none; border-radius: 15px; background: #FFFFFF; box-shadow: 0 2px 6px rgba(0,0,0,0.12); font-family: inherit; font-size: 14px; font-weight: 600">Chapter 7 ▾</button>
+    </div>
+    <sc-for list="{{comments}}" as="c" hint-placeholder-count="3">
+      <article style="background: #FFFFFF; border-radius: 16px; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; margin-left: {{c.indent}}px">
+        <div style="display: flex; align-items: center; gap: 10px">
+          <span aria-hidden="true" style="width: 32px; height: 32px; border-radius: 16px; background: {{c.bg}}; color: #FFFFFF; font-size: 14px; font-weight: 600; display: flex; align-items: center; justify-content: center">{{c.initial}}</span>
+          <div style="flex: 1; display: flex; flex-direction: column">
+            <button style="align-self: flex-start; border: none; background: none; padding: 0; font-family: inherit; font-size: 15px; font-weight: 600; color: {{accent}}">{{c.author}}</button>
+            <span style="font-size: 12px; color: #6C6C70">{{c.meta}}</span>
+          </div>
+          <button aria-label="More actions for this comment: copy link, edit, delete" style="width: 32px; height: 32px; border: none; border-radius: 16px; background: transparent; color: #6C6C70; display: flex; align-items: center; justify-content: center">
+            <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24"><circle cx="5.5" cy="12" r="1.6" fill="currentColor"></circle><circle cx="12" cy="12" r="1.6" fill="currentColor"></circle><circle cx="18.5" cy="12" r="1.6" fill="currentColor"></circle></svg>
+          </button>
+        </div>
+        <p style="margin: 0; font-size: 15px; line-height: 21px">{{c.body}}</p>
+        <div style="display: flex; gap: 18px">
+          <button style="border: none; background: none; padding: 0; font-family: inherit; font-size: 14px; font-weight: 600; color: {{accent}}">Reply</button>
+          <sc-if value="{{c.hasThread}}" hint-placeholder-val="{{false}}">
+            <button style="border: none; background: none; padding: 0; font-family: inherit; font-size: 14px; color: #3A3A3C">{{c.thread}} ›</button>
+          </sc-if>
+        </div>
+      </article>
+    </sc-for>
+    <nav aria-label="Pages" style="display: flex; align-items: center; justify-content: space-between; padding: 4px">
+      <button style="border: none; background: none; font-family: inherit; font-size: 15px; color: #AEAEB2">‹ Previous</button>
+      <span style="font-size: 14px; color: #6C6C70">Page 1 of 4</span>
+      <button style="border: none; background: none; font-family: inherit; font-size: 15px; color: {{accent}}">Next ›</button>
+    </nav>
+  </main>
+  <div aria-hidden="true" style="position: absolute; left: 0; right: 0; bottom: 0; height: 140px; background: linear-gradient(to bottom, rgba(242,242,247,0), rgba(242,242,247,0.94) 70%); pointer-events: none"></div>
+  <button style="position: absolute; left: 16px; right: 16px; bottom: 28px; height: 52px; border: none; border-radius: 26px; padding: 0 8px 0 18px; display: flex; align-items: center; gap: 10px; font-family: inherit; font-size: 16px; color: #6C6C70; text-align: left; background: rgba(255,255,255,0.78); backdrop-filter: blur(24px) saturate(180%); -webkit-backdrop-filter: blur(24px) saturate(180%); box-shadow: 0 8px 28px rgba(0,0,0,0.12), 0 0 0 0.5px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.9)">
+    <span style="flex: 1">Comment on Chapter 7…</span>
+    <span aria-hidden="true" style="width: 38px; height: 38px; border-radius: 19px; background: {{accent}}; color: #FFFFFF; display: flex; align-items: center; justify-content: center">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M6 11l6-6 6 6"></path></svg>
+    </span>
+  </button>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#990000","options":["#990000","#B3261E","#7A1F2B","#1F4E5F"]},"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      accent: this.props.accent ?? '#990000',
+      comments: [
+        { author: 'saltwindow', initial: 'S', bg: '#23506B', meta: 'Chapter 7 · 2 days ago', body: 'The single unbroken line across the vellum. I had to put my phone down for a minute.', thread: '3 replies', hasThread: true, indent: 0 },
+        { author: 'inkwell_moth', initial: 'I', bg: '#1F4E5F', meta: 'Creator · 1 day ago', body: 'That line is the whole story, honestly. Thank you for reading so closely!', thread: '', hasThread: false, indent: 20 },
+        { author: 'marginalia', initial: 'M', bg: '#2F3A4A', meta: 'Chapter 7 · 4 days ago', body: 'Tomas not laughing at the end is going to live in my head for weeks.', thread: '', hasThread: false, indent: 0 }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

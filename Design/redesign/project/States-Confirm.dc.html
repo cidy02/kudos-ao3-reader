@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Confirmations and Face ID</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+button{cursor:pointer}
+</style>
+</helmet>
+<div style="width: 1290px; height: 960px; box-sizing: border-box; padding: 24px 30px; background: #FFFFFF; color: #1C1C1E; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; display: flex; flex-direction: column; gap: 16px">
+  <header style="display: flex; align-items: baseline; gap: 16px">
+    <h1 style="margin: 0; font-size: 28px; font-weight: 700">Confirmations</h1>
+    <p style="margin: 0; font-size: 15px; color: #3A3A3C">Ask only before something can't be undone or goes public. Destructive choices grow out of the button you tapped; public actions get a short alert.</p>
+  </header>
+  <div style="display: flex; gap: 40px">
+    <figure style="margin: 0; display: flex; flex-direction: column; gap: 8px">
+      <figcaption style="font-size: 13px; font-weight: 600; color: #6C6C70">Delete permanently, anchored to the button</figcaption>
+      <div style="width: 390px; height: 844px; border-radius: 48px; overflow: hidden; position: relative; background: #F2F2F7; box-shadow: 0 0 0 1px #D1D1D6">
+        <div style="padding: 106px 16px 0; display: flex; flex-direction: column; gap: 12px">
+          <span style="font-size: 34px; font-weight: 700; padding: 0 4px">Recently Deleted</span>
+          <div style="background: #FFFFFF; border-radius: 16px; overflow: hidden">
+            <dc-import name="WorkRow" work="{{w1}}" selecting="{{true}}" selected="{{true}}" divider="{{true}}" accent="{{accent}}" hint-size="100%,100px"></dc-import>
+            <dc-import name="WorkRow" work="{{w2}}" selecting="{{true}}" selected="{{false}}" accent="{{accent}}" hint-size="100%,100px"></dc-import>
+          </div>
+        </div>
+        <div aria-hidden="true" style="position: absolute; inset: 0; background: rgba(0,0,0,0.12)"></div>
+        <div role="dialog" aria-label="Delete permanently" style="position: absolute; right: 26px; bottom: 100px; width: 270px; border-radius: 22px; padding: 14px 0 6px; background: rgba(250,250,252,0.92); backdrop-filter: blur(30px); -webkit-backdrop-filter: blur(30px); box-shadow: 0 18px 50px rgba(0,0,0,0.22)">
+          <p style="margin: 0 16px 10px; font-size: 13px; line-height: 18px; color: #6C6C70; text-align: center">Delete 1 work and its offline copy? This can't be undone.</p>
+          <button style="width: 100%; height: 44px; border: none; border-top: 0.5px solid rgba(60,60,67,0.18); background: transparent; font-family: inherit; font-size: 16px; font-weight: 600; color: #D70015">Delete Permanently</button>
+        </div>
+        <div style="position: absolute; left: 16px; right: 16px; bottom: 28px; height: 62px; border-radius: 31px; padding: 4px; box-sizing: border-box; display: flex; align-items: center; gap: 4px; background: rgba(255,255,255,0.78); box-shadow: 0 8px 28px rgba(0,0,0,0.12), 0 0 0 0.5px rgba(0,0,0,0.06)">
+          <span style="flex: 1; text-align: center; font-size: 16px; font-weight: 600; color: {{accent}}">Restore</span>
+          <span style="flex: 1; height: 54px; border-radius: 27px; background: rgba(215,0,21,0.10); display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 600; color: #D70015">Delete Permanently</span>
+        </div>
+      </div>
+    </figure>
+    <figure style="margin: 0; display: flex; flex-direction: column; gap: 8px">
+      <figcaption style="font-size: 13px; font-weight: 600; color: #6C6C70">Revealing a hidden mature work</figcaption>
+      <div style="width: 390px; height: 844px; border-radius: 48px; overflow: hidden; position: relative; background: #F2F2F7; box-shadow: 0 0 0 1px #D1D1D6">
+        <div style="padding: 106px 16px 0; display: flex; flex-direction: column; gap: 12px">
+          <span style="font-size: 34px; font-weight: 700; padding: 0 4px">Reading Now</span>
+          <div style="background: #FFFFFF; border-radius: 16px; overflow: hidden">
+            <dc-import name="WorkRow" work="{{hidden}}" divider="{{true}}" accent="{{accent}}" hint-size="100%,72px"></dc-import>
+            <dc-import name="WorkRow" work="{{w2}}" accent="{{accent}}" hint-size="100%,100px"></dc-import>
+          </div>
+        </div>
+        <div role="img" aria-label="Face ID" style="position: absolute; left: 50%; top: 330px; transform: translateX(-50%); width: 150px; height: 150px; border-radius: 34px; background: rgba(240,240,244,0.92); backdrop-filter: blur(30px); -webkit-backdrop-filter: blur(30px); box-shadow: 0 18px 50px rgba(0,0,0,0.18); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px">
+          <svg aria-hidden="true" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="#1C1C1E" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2M9 9v1.5M15 9v1.5M12 9v4h-1M9.5 15.5c1.4 1 3.6 1 5 0"></path></svg>
+          <span style="font-size: 15px; font-weight: 600">Face ID</span>
+        </div>
+      </div>
+    </figure>
+    <figure style="margin: 0; display: flex; flex-direction: column; gap: 8px">
+      <figcaption style="font-size: 13px; font-weight: 600; color: #6C6C70">Before something goes public on AO3</figcaption>
+      <div style="width: 390px; height: 844px; border-radius: 48px; overflow: hidden; position: relative; background: #F2F2F7; box-shadow: 0 0 0 1px #D1D1D6">
+        <div aria-hidden="true" style="padding: 106px 20px 0; display: flex; flex-direction: column; gap: 14px">
+          <span style="font-size: 34px; font-weight: 700">New Work</span>
+          <span style="height: 160px; border-radius: 14px; background: #FFFFFF"></span>
+          <span style="height: 120px; border-radius: 14px; background: #FFFFFF"></span>
+          <span style="height: 200px; border-radius: 14px; background: #FFFFFF"></span>
+        </div>
+        <div aria-hidden="true" style="position: absolute; inset: 0; background: rgba(0,0,0,0.2)"></div>
+        <div role="alertdialog" aria-label="Post this work?" style="position: absolute; left: 45px; right: 45px; top: 300px; border-radius: 30px; padding: 22px 18px 16px; background: rgba(250,250,252,0.94); backdrop-filter: blur(30px); -webkit-backdrop-filter: blur(30px); box-shadow: 0 20px 60px rgba(0,0,0,0.25); display: flex; flex-direction: column; gap: 8px; text-align: center">
+          <h2 style="margin: 0; font-size: 17px; font-weight: 600">Post this work?</h2>
+          <p style="margin: 0; font-size: 14px; line-height: 19px; color: #3A3A3C">“What the Tide Keeps” will appear on AO3 as saltwindow, visible to registered users.</p>
+          <div style="display: flex; gap: 8px; margin-top: 10px">
+            <button style="flex: 1; height: 44px; border: none; border-radius: 22px; background: rgba(118,118,128,0.14); font-family: inherit; font-size: 16px">Cancel</button>
+            <button style="flex: 1; height: 44px; border: none; border-radius: 22px; background: {{accent}}; color: #FFFFFF; font-family: inherit; font-size: 16px; font-weight: 600">Post</button>
+          </div>
+        </div>
+      </div>
+    </figure>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#990000","options":["#990000","#B3261E","#7A1F2B","#1F4E5F"]},"$preview":{"width":1290,"height":960}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      accent: this.props.accent ?? '#990000',
+      w1: { title: 'Watson’s Notebook', author: 'fogandlamplight', fandom: 'Sherlock Holmes', rating: 'T', category: 'Gen', warnings: 'none', status: 'complete', words: '15,200', chapters: '6/6', updated: '82 days left' },
+      w2: { title: 'Letters Never Sent', author: 'marginalia', fandom: 'Persuasion', rating: 'T', category: 'FM', warnings: 'none', status: 'complete', words: '21,880', chapters: '4/4', updated: '61 days left' },
+      hidden: { hidden: true }
+    };
+  }
+}
+</script>
+</body>
+</html>

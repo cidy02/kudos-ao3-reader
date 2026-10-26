@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>AO3 website fallback</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+button{cursor:pointer}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; position: relative; overflow: hidden; background: #FFFFFF; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; box-sizing: border-box">
+  <div aria-label="Web page" style="position: absolute; inset: 0; padding: 112px 20px 0; display: flex; flex-direction: column; gap: 14px">
+    <div style="height: 22px; width: 62%; border-radius: 6px; background: #E5E5EA"></div>
+    <div style="height: 14px; width: 92%; border-radius: 5px; background: #F2F2F7"></div>
+    <div style="height: 14px; width: 84%; border-radius: 5px; background: #F2F2F7"></div>
+    <div style="height: 120px; border-radius: 10px; background: #F2F2F7"></div>
+    <div style="height: 14px; width: 88%; border-radius: 5px; background: #F2F2F7"></div>
+    <div style="height: 14px; width: 70%; border-radius: 5px; background: #F2F2F7"></div>
+    <div style="height: 120px; border-radius: 10px; background: #F2F2F7"></div>
+    <div style="height: 14px; width: 80%; border-radius: 5px; background: #F2F2F7"></div>
+    <p style="margin: 8px 0 0; padding: 12px 14px; border-radius: 12px; background: #F2F2F7; font-size: 13px; line-height: 18px; color: #3A3A3C">Pages Kudos has no native screen for open here, signed in with your AO3 session. Everything else stays native.</p>
+  </div>
+
+  <div style="position: absolute; left: 16px; right: 16px; top: 54px; display: flex; gap: 10px; align-items: center">
+    <button style="height: 44px; padding: 0 18px; border: none; border-radius: 22px; font-family: inherit; font-size: 16px; font-weight: 600; color: #1C1C1E; background: rgba(255,255,255,0.78); backdrop-filter: blur(24px) saturate(180%); -webkit-backdrop-filter: blur(24px) saturate(180%); box-shadow: 0 6px 20px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.06)">Done</button>
+    <div style="flex: 1; min-width: 0; height: 44px; border-radius: 22px; padding: 0 14px; display: flex; align-items: center; justify-content: center; gap: 6px; background: rgba(255,255,255,0.78); backdrop-filter: blur(24px) saturate(180%); -webkit-backdrop-filter: blur(24px) saturate(180%); box-shadow: 0 6px 20px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.06); font-size: 14px; color: #3A3A3C">
+      <svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="10.5" width="14" height="10" rx="2.5"></rect><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3"></path></svg>
+      <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis">archiveofourown.org/invitations</span>
+    </div>
+  </div>
+
+  <div role="toolbar" aria-label="Web navigation" style="position: absolute; left: 16px; right: 16px; bottom: 28px; height: 56px; border-radius: 28px; padding: 0 6px; box-sizing: border-box; display: flex; align-items: center; justify-content: space-between; background: rgba(255,255,255,0.78); backdrop-filter: blur(24px) saturate(180%); -webkit-backdrop-filter: blur(24px) saturate(180%); box-shadow: 0 8px 28px rgba(0,0,0,0.12), 0 0 0 0.5px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.9)">
+    <sc-for list="{{tools}}" as="t" hint-placeholder-count="5">
+      <button aria-label="{{t.label}}" style="width: 52px; height: 48px; border: none; border-radius: 24px; background: transparent; color: {{t.color}}; display: flex; align-items: center; justify-content: center">
+        <svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="{{t.d}}"></path></svg>
+      </button>
+    </sc-for>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#990000","options":["#990000","#B3261E","#7A1F2B","#1F4E5F"]},"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      tools: [
+        { label: 'Back', d: 'm15 5-7 7 7 7', color: '#1C1C1E' },
+        { label: 'Forward', d: 'm9 5 7 7-7 7', color: '#AEAEB2' },
+        { label: 'Reload', d: 'M19 12a7 7 0 1 1-2.1-5M19 4v4h-4', color: '#1C1C1E' },
+        { label: 'Add Bookmark', d: 'M7 4h10v16l-5-4-5 4z', color: '#1C1C1E' },
+        { label: 'Open in Safari', d: 'M12 3.5a8.5 8.5 0 1 1 0 17 8.5 8.5 0 0 1 0-17zM15.5 8.5l-2 5-5 2 2-5z', color: '#1C1C1E' }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

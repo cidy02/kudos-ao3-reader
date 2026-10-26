@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Loading states</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 1290px; height: 960px; box-sizing: border-box; padding: 24px 30px; background: #FFFFFF; color: #1C1C1E; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; display: flex; flex-direction: column; gap: 16px">
+  <header style="display: flex; align-items: baseline; gap: 16px">
+    <h1 style="margin: 0; font-size: 28px; font-weight: 700">Loading</h1>
+    <p style="margin: 0; font-size: 15px; color: #3A3A3C">Skeletons keep the real layout, so nothing jumps when content lands. No spinners on full screens; the title and chrome are real from the first frame.</p>
+  </header>
+  <div style="display: flex; gap: 40px">
+    <figure style="margin: 0; display: flex; flex-direction: column; gap: 8px">
+      <figcaption style="font-size: 13px; font-weight: 600; color: #6C6C70">Home, first launch of the day</figcaption>
+      <div style="width: 390px; height: 844px; border-radius: 48px; overflow: hidden; position: relative; background: #F2F2F7; box-shadow: 0 0 0 1px #D1D1D6">
+        <div style="padding: 106px 20px 0; display: flex; flex-direction: column; gap: 22px">
+          <span style="font-size: 34px; font-weight: 700">Home</span>
+          <span style="width: 150px; height: 22px; border-radius: 6px; background: #E3E3E8"></span>
+          <div style="height: 220px; border-radius: 22px; background: #FFFFFF; padding: 14px; box-sizing: border-box; display: flex; gap: 14px">
+            <span style="width: 88px; height: 130px; border-radius: 6px; background: linear-gradient(100deg, #ECECF0 30%, #F6F6F8 50%, #ECECF0 70%)"></span>
+            <div style="flex: 1; display: flex; flex-direction: column; gap: 10px">
+              <span style="width: 60%; height: 12px; border-radius: 4px; background: #ECECF0"></span>
+              <span style="width: 90%; height: 18px; border-radius: 5px; background: #ECECF0"></span>
+              <span style="width: 50%; height: 14px; border-radius: 4px; background: #ECECF0"></span>
+            </div>
+          </div>
+          <span style="width: 120px; height: 22px; border-radius: 6px; background: #E3E3E8"></span>
+          <div style="display: flex; gap: 12px">
+            <span style="width: 104px; height: 200px; border-radius: 10px; background: #ECECF0"></span>
+            <span style="width: 104px; height: 200px; border-radius: 10px; background: #ECECF0"></span>
+            <span style="width: 104px; height: 200px; border-radius: 10px; background: #ECECF0"></span>
+          </div>
+        </div>
+        <div style="position: absolute; left: 16px; bottom: 28px">
+          <dc-import name="TabBar" selected="home" accent="{{accent}}" hint-size="358px,62px"></dc-import>
+        </div>
+      </div>
+    </figure>
+    <figure style="margin: 0; display: flex; flex-direction: column; gap: 8px">
+      <figcaption style="font-size: 13px; font-weight: 600; color: #6C6C70">Reader, opening a work</figcaption>
+      <div style="width: 390px; height: 844px; border-radius: 48px; overflow: hidden; position: relative; background: #FAF7F0; box-shadow: 0 0 0 1px #D1D1D6">
+        <div style="padding: 124px 30px 0; display: flex; flex-direction: column; gap: 14px">
+          <span style="width: 70px; height: 10px; border-radius: 4px; background: #ECE5D6"></span>
+          <span style="width: 60%; height: 22px; border-radius: 6px; background: #ECE5D6"></span>
+          <sc-for list="{{lines}}" as="l" hint-placeholder-count="12">
+            <span style="width: {{l}}; height: 13px; border-radius: 4px; background: #EFE9DC"></span>
+          </sc-for>
+        </div>
+        <div style="position: absolute; left: 16px; right: 16px; bottom: 28px; height: 76px; border-radius: 30px; background: rgba(255,253,248,0.82); box-shadow: 0 8px 28px rgba(60,40,10,0.12), 0 0 0 0.5px rgba(60,40,10,0.08); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px">
+          <span style="font-size: 14px; font-weight: 600">The Cartographer's Daughter</span>
+          <span style="width: 70%; height: 4px; border-radius: 2px; background: rgba(31,27,22,0.10)"></span>
+        </div>
+      </div>
+    </figure>
+    <figure style="margin: 0; display: flex; flex-direction: column; gap: 8px">
+      <figcaption style="font-size: 13px; font-weight: 600; color: #6C6C70">Comments, fetching from AO3</figcaption>
+      <div style="width: 390px; height: 844px; border-radius: 48px; overflow: hidden; position: relative; background: #F2F2F7; box-shadow: 0 0 0 1px #D1D1D6">
+        <div style="padding: 106px 16px 0; display: flex; flex-direction: column; gap: 12px">
+          <span style="font-size: 34px; font-weight: 700; padding: 0 4px">Comments</span>
+          <sc-for list="{{comments}}" as="c" hint-placeholder-count="4">
+            <div style="background: #FFFFFF; border-radius: 16px; padding: 14px; display: flex; flex-direction: column; gap: 10px">
+              <div style="display: flex; gap: 10px; align-items: center"><span style="width: 32px; height: 32px; border-radius: 16px; background: #ECECF0"></span><span style="width: 110px; height: 12px; border-radius: 4px; background: #ECECF0"></span></div>
+              <span style="width: 100%; height: 12px; border-radius: 4px; background: #F0F0F3"></span>
+              <span style="width: {{c}}; height: 12px; border-radius: 4px; background: #F0F0F3"></span>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </figure>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#990000","options":["#990000","#B3261E","#7A1F2B","#1F4E5F"]},"$preview":{"width":1290,"height":960}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      accent: this.props.accent ?? '#990000',
+      lines: ['100%', '96%', '100%', '88%', '100%', '93%', '70%', '100%', '97%', '100%', '84%', '60%'],
+      comments: ['70%', '55%', '80%', '62%']
+    };
+  }
+}
+</script>
+</body>
+</html>

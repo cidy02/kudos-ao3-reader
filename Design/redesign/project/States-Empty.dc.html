@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Empty states</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+button{cursor:pointer}
+</style>
+</helmet>
+<div style="width: 1290px; height: 960px; box-sizing: border-box; padding: 24px 30px; background: #FFFFFF; color: #1C1C1E; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; display: flex; flex-direction: column; gap: 16px">
+  <header style="display: flex; align-items: baseline; gap: 16px">
+    <h1 style="margin: 0; font-size: 28px; font-weight: 700">Empty</h1>
+    <p style="margin: 0; font-size: 15px; color: #3A3A3C">One pattern everywhere (SwiftUI ContentUnavailableView, M3 empty state): a symbol, a plain sentence, and the one action that fills the space.</p>
+  </header>
+  <div style="display: flex; gap: 40px">
+    <sc-for list="{{phones}}" as="p" hint-placeholder-count="3">
+      <figure style="margin: 0; display: flex; flex-direction: column; gap: 8px">
+        <figcaption style="font-size: 13px; font-weight: 600; color: #6C6C70">{{p.caption}}</figcaption>
+        <div style="width: 390px; height: 844px; border-radius: 48px; overflow: hidden; position: relative; background: #F2F2F7; box-shadow: 0 0 0 1px #D1D1D6">
+          <div style="padding: 106px 20px 0; display: flex; flex-direction: column; gap: 10px">
+            <span style="font-size: 34px; font-weight: 700">{{p.screen}}</span>
+            <sc-if value="{{p.hasChips}}" hint-placeholder-val="{{false}}">
+              <div style="display: flex; gap: 8px">
+                <span style="height: 32px; padding: 0 12px; border-radius: 16px; background: {{accent}}; color: #FFFFFF; font-size: 14px; font-weight: 600; display: flex; align-items: center">Complete ✕</span>
+                <span style="height: 32px; padding: 0 12px; border-radius: 16px; background: {{accent}}; color: #FFFFFF; font-size: 14px; font-weight: 600; display: flex; align-items: center">Explicit ✕</span>
+              </div>
+            </sc-if>
+          </div>
+          <div style="position: absolute; left: 32px; right: 32px; top: 300px; display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center">
+            <svg aria-hidden="true" width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="#8E8E93" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="{{p.d}}"></path></svg>
+            <h2 style="margin: 6px 0 0; font-size: 22px; line-height: 28px; font-weight: 700">{{p.title}}</h2>
+            <p style="margin: 0; font-size: 15px; line-height: 21px; color: #6C6C70">{{p.body}}</p>
+            <button style="margin-top: 10px; height: 44px; padding: 0 22px; border: none; border-radius: 22px; background: {{accent}}; color: #FFFFFF; font-family: inherit; font-size: 16px; font-weight: 600">{{p.primary}}</button>
+            <sc-if value="{{p.hasSecondary}}" hint-placeholder-val="{{false}}">
+              <button style="border: none; background: none; font-family: inherit; font-size: 15px; color: {{accent}}">{{p.secondary}}</button>
+            </sc-if>
+          </div>
+          <div style="position: absolute; left: 16px; bottom: 28px">
+            <dc-import name="TabBar" selected="{{p.tab}}" accent="{{accent}}" hint-size="358px,62px"></dc-import>
+          </div>
+        </div>
+      </figure>
+    </sc-for>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#990000","options":["#990000","#B3261E","#7A1F2B","#1F4E5F"]},"$preview":{"width":1290,"height":960}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      accent: this.props.accent ?? '#990000',
+      phones: [
+        { caption: 'Library on first launch', screen: 'Library', tab: 'library', hasChips: false, d: 'M3.5 4h4v16h-4zM9.5 4h4v16h-4zM15.6 5.4l3.4-.9 3 15.2-3.4.9z', title: 'Your library is empty', body: 'Works you download from AO3 or import from Files appear here, ready to read offline.', primary: 'Browse AO3', secondary: 'Import Files', hasSecondary: true },
+        { caption: 'Filters with no matches', screen: 'Reading Now', tab: 'library', hasChips: true, d: 'M4 7h16M7 12h10M10 17h4', title: 'No matching works', body: 'Nothing in Reading Now is both complete and rated Explicit.', primary: 'Clear Filters', secondary: '', hasSecondary: false },
+        { caption: 'An empty queue', screen: 'Autumn Rereads', tab: 'library', hasChips: false, d: 'M4 6h12M4 11h12M4 16h7M17 14v6M14 17h6', title: 'Nothing queued yet', body: 'Add works from your library, or from any AO3 page with Add to Queue.', primary: 'Add Works', secondary: '', hasSecondary: false }
+      ].map((p) => ({ ...p }))
+    };
+  }
+}
+</script>
+</body>
+</html>

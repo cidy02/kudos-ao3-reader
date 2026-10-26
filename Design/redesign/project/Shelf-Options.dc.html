@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Shelf cards with and without covers</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 920px; height: 640px; box-sizing: border-box; padding: 36px 40px; background: #FFFFFF; color: #1C1C1E; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; display: flex; flex-direction: column; gap: 22px">
+  <header style="display: flex; flex-direction: column; gap: 4px">
+    <h1 style="margin: 0; font-size: 28px; line-height: 34px; font-weight: 700">Shelf cards: generated cover or no cover</h1>
+    <p style="margin: 0; font-size: 15px; line-height: 21px; color: #3A3A3C">Same three works, same width, same height. Switch every shelf with one setting on the Cover card component (Tweaks › variant).</p>
+  </header>
+  <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; flex: 1">
+    <sc-for list="{{options}}" as="o" hint-placeholder-count="2">
+      <section style="border-radius: 20px; background: #F2F2F7; padding: 18px; display: flex; flex-direction: column; gap: 12px">
+        <div style="display: flex; align-items: baseline; gap: 8px">
+          <span style="font-size: 13px; font-weight: 700; color: {{accent}}">{{o.letter}}</span>
+          <h2 style="margin: 0; font-size: 17px; font-weight: 600">{{o.title}}</h2>
+        </div>
+        <span style="font-size: 20px; line-height: 25px; font-weight: 700">Recently Updated</span>
+        <div style="display: flex; gap: 12px">
+          <sc-for list="{{works}}" as="w" hint-placeholder-count="3">
+            <dc-import name="CoverCard" work="{{w}}" variant="{{o.variant}}" width="120" accent="{{accent}}" hint-size="120px,280px"></dc-import>
+          </sc-for>
+        </div>
+        <p style="margin: 0; font-size: 13px; line-height: 18px; color: #3A3A3C">{{o.note}}</p>
+      </section>
+    </sc-for>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#990000","options":["#990000","#B3261E","#7A1F2B","#1F4E5F"]},"$preview":{"width":920,"height":640}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      accent: this.props.accent ?? '#990000',
+      options: [
+        { letter: 'A', title: 'Generated cover (today)', variant: 'cover', note: 'Colour and type make a shelf easy to scan by shape, and art from an EPUB slots straight in. The cover itself repeats the title and author.' },
+        { letter: 'B', title: 'Text card, no cover', variant: 'text', note: 'Nothing pretends to be art. More of each work fits on the card (fandom, full title), and the four tags lead. Shelves look calmer and more alike.' }
+      ],
+      works: [
+        { title: 'Salt & Starlight', author: 'wrenfield', fandom: 'Original Work', cover: '#2E5339', rating: 'M', category: 'Gen', warnings: 'undisclosed', status: 'wip', words: '118k', chapters: '15/30', badge: '+3', progress: 40 },
+        { title: 'The Hound, Revisited', author: 'fogandlamplight', fandom: 'Sherlock Holmes - Arthur Conan Doyle', cover: '#3D4A2F', rating: 'T', category: 'MM', warnings: 'present', status: 'wip', words: '30k', chapters: '5/?', badge: '+1' },
+        { title: 'Five Times Elizabeth Laughed', author: 'quietharbor', fandom: 'Pride and Prejudice - Jane Austen', cover: '#7B3F61', rating: 'G', category: 'Multi', warnings: 'none', status: 'complete', words: '6.7k', chapters: '1/1', progress: 100 }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

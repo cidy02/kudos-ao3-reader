@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Author profile</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+button{cursor:pointer}
+</style>
+</helmet>
+<div style="width: 390px; height: 1240px; position: relative; overflow: hidden; background: #F2F2F7; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; box-sizing: border-box">
+  <div style="position: absolute; left: 16px; right: 16px; top: 54px; display: flex; justify-content: space-between">
+    <button aria-label="Back" style="width: 44px; height: 44px; border: none; border-radius: 22px; color: #1C1C1E; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.74); box-shadow: 0 6px 20px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.06)">
+      <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 5-7 7 7 7"></path></svg>
+    </button>
+    <div style="height: 44px; border-radius: 22px; display: flex; align-items: center; background: rgba(255,255,255,0.74); box-shadow: 0 6px 20px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.06)">
+      <button aria-label="Share profile" style="width: 46px; height: 44px; border: none; background: transparent; color: #1C1C1E; display: flex; align-items: center; justify-content: center">
+        <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V4M8 8l4-4 4 4M5 12v8h14v-8"></path></svg>
+      </button>
+      <button aria-label="More: Open on AO3" style="width: 46px; height: 44px; border: none; background: transparent; color: #1C1C1E; display: flex; align-items: center; justify-content: center">
+        <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24"><circle cx="5.5" cy="12" r="1.7" fill="currentColor"></circle><circle cx="12" cy="12" r="1.7" fill="currentColor"></circle><circle cx="18.5" cy="12" r="1.7" fill="currentColor"></circle></svg>
+      </button>
+    </div>
+  </div>
+  <main style="padding: 110px 16px 0; display: flex; flex-direction: column; gap: 14px">
+    <header style="display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center">
+      <span aria-hidden="true" style="width: 84px; height: 84px; border-radius: 42px; background: #8A5A12; color: #FFFFFF; font-size: 34px; font-weight: 600; display: flex; align-items: center; justify-content: center">F</span>
+      <h1 style="margin: 4px 0 0; font-size: 26px; line-height: 32px; font-weight: 700">fogandlamplight</h1>
+      <button style="height: 30px; padding: 0 12px; border: none; border-radius: 15px; background: #FFFFFF; font-family: inherit; font-size: 14px; display: flex; align-items: center; gap: 4px">All pseuds
+        <svg aria-hidden="true" width="10" height="14" viewBox="0 0 12 16" fill="none" stroke="#8E8E93" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 6 6 2.5 9.5 6M2.5 10 6 13.5 9.5 10"></path></svg>
+      </button>
+      <p style="margin: 0; font-size: 14px; color: #6C6C70">Joined March 2014 · 42 works · 6 series</p>
+      <button style="margin-top: 4px; height: 40px; padding: 0 22px; border: none; border-radius: 20px; background: {{accent}}; color: #FFFFFF; font-family: inherit; font-size: 16px; font-weight: 600">Subscribe</button>
+    </header>
+    <div role="tablist" aria-label="Profile sections" style="height: 34px; border-radius: 17px; background: rgba(118,118,128,0.12); padding: 2px; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr))">
+      <sc-for list="{{tabs}}" as="t" hint-placeholder-count="4">
+        <button role="tab" aria-selected="{{t.selected}}" style="border: none; border-radius: 15px; background: {{t.bg}}; box-shadow: {{t.shadow}}; font-family: inherit; font-size: 14px; font-weight: {{t.weight}}; color: #000000">{{t.label}}</button>
+      </sc-for>
+    </div>
+    <div style="display: flex; align-items: center; justify-content: space-between; padding: 0 4px">
+      <span style="font-size: 15px; color: #6C6C70">42 works · newest first</span>
+      <button style="border: none; background: none; padding: 0; font-family: inherit; font-size: 15px; color: {{accent}}">Sort and filter</button>
+    </div>
+    <div style="background: #FFFFFF; border-radius: 16px; overflow: hidden">
+      <sc-for list="{{works}}" as="w" hint-placeholder-count="5">
+        <dc-import name="WorkRow" work="{{w}}" show-summary="{{true}}" divider="{{w.divider}}" accent="{{accent}}" hint-size="100%,140px"></dc-import>
+      </sc-for>
+    </div>
+  </main>
+  <div aria-hidden="true" style="position: absolute; left: 0; right: 0; bottom: 0; height: 150px; background: linear-gradient(to bottom, rgba(242,242,247,0), rgba(242,242,247,0.94) 72%); pointer-events: none"></div>
+  <div style="position: absolute; left: 16px; bottom: 28px">
+    <dc-import name="TabBar" selected="browse" accent="{{accent}}" hint-size="358px,62px"></dc-import>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#990000","options":["#990000","#B3261E","#7A1F2B","#1F4E5F"]},"$preview":{"width":390,"height":1240}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const works = [
+      { title: 'The Hound, Revisited', author: 'fogandlamplight', fandom: 'Sherlock Holmes', rating: 'T', category: 'MM', warnings: 'present', status: 'wip', words: '30,600', chapters: '5/?', kudos: '760', hits: '9.3k', updated: 'Oct 23', summary: 'Baskerville, twenty years on. The hound is gone; the moor is not.' },
+      { title: 'Watson’s Notebook', author: 'fogandlamplight', fandom: 'Sherlock Holmes', rating: 'T', category: 'Gen', warnings: 'none', status: 'complete', words: '15,200', chapters: '6/6', kudos: '1,990', hits: '17.1k', updated: 'Aug 2', summary: 'Cases he never wrote up, and the reasons why.' },
+      { title: 'The Baker Street Irregular', author: 'fogandlamplight', fandom: 'Sherlock Holmes', rating: 'G', category: 'Gen', warnings: 'none', status: 'complete', words: '9,140', chapters: '1/1', kudos: '2,045', hits: '19.8k', updated: 'May 14', summary: 'Wiggins grows up and takes a case of his own.' },
+      { title: 'Fog Season', author: 'fogandlamplight', fandom: 'Original Work', rating: 'M', category: 'FF', warnings: 'undisclosed', status: 'complete', words: '48,000', chapters: '12/12', kudos: '1,320', hits: '15.0k', updated: 'Jan 9', summary: 'A lamplighter, a forger, and the longest night of the year.' }
+    ];
+    return {
+      accent: this.props.accent ?? '#990000',
+      tabs: ['Works', 'Series', 'Bookmarks', 'About'].map((label, i) => ({ label, selected: i === 0 ? 'true' : 'false', bg: i === 0 ? '#FFFFFF' : 'transparent', shadow: i === 0 ? '0 2px 6px rgba(0,0,0,0.12)' : 'none', weight: i === 0 ? 600 : 400 })),
+      works: works.map((w, i) => ({ ...w, divider: i < works.length - 1 }))
+    };
+  }
+}
+</script>
+</body>
+</html>

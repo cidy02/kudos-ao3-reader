@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Protect your library</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+button{cursor:pointer}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; position: relative; overflow: hidden; background: rgba(0,0,0,0.3); color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; box-sizing: border-box">
+  <section role="dialog" aria-label="Protect your library" style="position: absolute; left: 0; right: 0; top: 54px; bottom: 0; border-radius: 38px 38px 0 0; background: #FFFFFF; padding: 44px 32px 36px; box-sizing: border-box; display: flex; flex-direction: column">
+    <div aria-hidden="true" style="width: 64px; height: 64px; border-radius: 16px; background: #E5F1FF; color: #007AFF; display: flex; align-items: center; justify-content: center; align-self: center">
+      <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 18a4 4 0 0 1-.5-8 5.5 5.5 0 0 1 10.6-1.5A4 4 0 0 1 17 18zM12 10v6M9.5 13.5 12 16l2.5-2.5"></path></svg>
+    </div>
+    <h1 style="margin: 18px 0 0; text-align: center; font-size: 30px; line-height: 36px; font-weight: 800">Protect Your Library</h1>
+    <p style="margin: 6px 0 0; text-align: center; font-size: 15px; line-height: 20px; color: #6C6C70">Optional. You can set this up any time in Settings.</p>
+    <div style="margin-top: 30px; display: flex; flex-direction: column; gap: 22px">
+      <sc-for list="{{rows}}" as="r" hint-placeholder-count="4">
+        <div style="display: flex; gap: 14px; align-items: flex-start">
+          <svg aria-hidden="true" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#007AFF" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0"><path d="{{r.d}}"></path></svg>
+          <div style="display: flex; flex-direction: column; gap: 2px">
+            <span style="font-size: 16px; line-height: 21px; font-weight: 600">{{r.title}}</span>
+            <span style="font-size: 14px; line-height: 19px; color: #6C6C70">{{r.body}}</span>
+          </div>
+        </div>
+      </sc-for>
+    </div>
+    <div style="margin-top: auto; display: flex; flex-direction: column; align-items: center; gap: 12px">
+      <button style="width: 100%; height: 52px; border: none; border-radius: 26px; background: {{accent}}; color: #FFFFFF; font-family: inherit; font-size: 17px; font-weight: 600">Choose Sync Folder</button>
+      <button style="border: none; background: none; font-family: inherit; font-size: 16px; color: {{accent}}">Not Now</button>
+      <button style="border: none; background: none; font-family: inherit; font-size: 13px; color: #6C6C70">Don't remind me again</button>
+    </div>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#990000","options":["#990000","#B3261E","#7A1F2B","#1F4E5F"]},"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      accent: this.props.accent ?? '#990000',
+      rows: [
+        { title: 'Choose a folder', body: 'Kudos keeps a second copy of your library there. In iCloud Drive, Apple keeps it on your other devices too.', d: 'M3 7h6l2 2h10v10H3z' },
+        { title: 'Works fully offline', body: 'Skip this and Kudos still works; nothing needs the internet.', d: 'M5 12.5a10 10 0 0 1 14 0M8 15.5a6 6 0 0 1 8 0M12 19h.01M3 3l18 18' },
+        { title: 'Changes take a moment', body: 'Kudos saves the same file as a backup. Updates are not instant.', d: 'M12 4a8 8 0 1 1 0 16 8 8 0 0 1 0-16zM12 8v4l3 2' },
+        { title: 'More than one device?', body: 'Point each one at the same folder, then pair them in Settings.', d: 'M8 3h8a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zM11 18h2' }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

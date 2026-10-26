@@ -1,0 +1,332 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Feature coverage</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+a{color:#990000}a:hover{color:#6E0000}
+</style>
+</helmet>
+<div style="box-sizing: border-box; padding: 48px clamp(16px, 5vw, 64px) 80px; background: #F2F2F7; color: #1C1C1E; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif">
+  <div style="max-width: 1152px; margin: 0 auto; display: flex; flex-direction: column; gap: 22px">
+    <header style="display: flex; flex-direction: column; gap: 8px">
+      <p style="margin: 0; font-size: 13px; line-height: 18px; font-weight: 600; letter-spacing: 0.6px; text-transform: uppercase; color: #990000">Nothing gets left behind</p>
+      <h1 style="margin: 0; font-size: clamp(32px, 5vw, 44px); line-height: 1.15; font-weight: 700">Feature coverage</h1>
+      <p style="margin: 0; max-width: 760px; font-size: 17px; line-height: 24px; color: #3A3A3C">Every feature in today's iOS app, and the redesigned screen that carries it. Where several features share one pattern, the row names the screen that shows that pattern. Missing something? Leave a comment on its area.</p>
+      <div style="display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px">
+        <span style="padding: 6px 12px; border-radius: 999px; background: #FFFFFF; font-size: 15px; font-weight: 600">{{featureCount}} features</span>
+        <span style="padding: 6px 12px; border-radius: 999px; background: #FFFFFF; font-size: 15px; font-weight: 600">{{areaCount}} areas</span>
+        <span style="padding: 6px 12px; border-radius: 999px; background: #FFFFFF; font-size: 15px; font-weight: 600">{{screenCount}} screens</span>
+      </div>
+    </header>
+
+    <sc-for list="{{areas}}" as="area" hint-placeholder-count="4">
+      <section style="background: #FFFFFF; border-radius: 18px; padding: 16px 20px 8px; display: flex; flex-direction: column">
+        <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding-bottom: 8px">
+          <h2 style="margin: 0; font-size: 22px; line-height: 28px; font-weight: 700">{{area.name}}</h2>
+          <span style="font-size: 13px; color: #6C6C70; white-space: nowrap">{{area.count}}</span>
+        </div>
+        <sc-for list="{{area.rows}}" as="r" hint-placeholder-count="4">
+          <div style="display: flex; flex-wrap: wrap; gap: 2px 18px; padding: 10px 0; border-top: 0.5px solid #E5E5EA">
+            <span style="flex: 1 1 200px; font-size: 15px; line-height: 21px; font-weight: 600">{{r.feature}}</span>
+            <span style="flex: 3 1 340px; min-width: 0; font-size: 15px; line-height: 21px; color: #3A3A3C">{{r.detail}}</span>
+            <span style="flex: 0 1 230px; font-size: 15px; line-height: 21px">
+              <sc-if value="{{r.hasBoard}}" hint-placeholder-val="{{true}}">
+                <a href="{{r.href}}" style="text-decoration: none; font-weight: 600">{{r.screen}} ›</a>
+              </sc-if>
+              <sc-if value="{{r.noBoard}}" hint-placeholder-val="{{false}}">
+                <span style="color: #6C6C70">{{r.screen}}</span>
+              </sc-if>
+            </span>
+          </div>
+        </sc-for>
+      </section>
+    </sc-for>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":8000}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const S = {
+      home: ['Main.dc.html', 'Home'],
+      library: ['Library.dc.html', 'Library'],
+      section: ['Library-Section.dc.html', 'Library · Reading History'],
+      select: ['Library-Select.dc.html', 'Library · select mode'],
+      libFilters: ['Library-Filters.dc.html', 'Library · filters'],
+      queue: ['Queue.dc.html', 'Reading Queue'],
+      queues: ['Queues.dc.html', 'Queues · organizer'],
+      collection: ['Collection.dc.html', 'Collection'],
+      insights: ['Insights.dc.html', 'Reading Insights'],
+      deleted: ['Recently-Deleted.dc.html', 'Recently Deleted'],
+      search: ['Search.dc.html', 'Search'],
+      searchFilters: ['Search-Filters.dc.html', 'Search · AO3 filters'],
+      browse: ['Browse.dc.html', 'Browse'],
+      fandoms: ['Fandoms.dc.html', 'Browse · fandom index'],
+      fandomWorks: ['Fandom-Works.dc.html', 'Browse · fandom works'],
+      web: ['AO3-Web.dc.html', 'AO3 website'],
+      detail: ['iPhone-WorkDetail.dc.html', 'Work Detail'],
+      actions: ['Work-Actions.dc.html', 'Work Detail · actions'],
+      comments: ['Comments.dc.html', 'Comments'],
+      thread: ['Comment-Thread.dc.html', 'Comments · thread'],
+      author: ['Author.dc.html', 'Author profile'],
+      series: ['Series.dc.html', 'Series'],
+      reader: ['iPhone-Reader.dc.html', 'Reader'],
+      readerMenu: ['Reader-Menu.dc.html', 'Reader · menu'],
+      contents: ['Reader-Contents.dc.html', 'Reader · contents'],
+      find: ['Reader-Find.dc.html', 'Reader · find'],
+      highlight: ['Reader-Highlight.dc.html', 'Reader · highlight'],
+      readerSettings: ['Reader-Settings.dc.html', 'Reader · themes'],
+      readAloud: ['Reader-ReadAloud.dc.html', 'Read Aloud playing'],
+      readAloudSettings: ['Read-Aloud-Settings.dc.html', 'Read Aloud settings'],
+      account: ['Account.dc.html', 'Account'],
+      signedOut: ['Account-SignedOut.dc.html', 'Account · signed out'],
+      login: ['Login.dc.html', 'Log in to AO3'],
+      lists: ['AO3-Lists.dc.html', 'Marked for Later · History'],
+      subs: ['Subscriptions.dc.html', 'Subscriptions'],
+      inbox: ['Inbox.dc.html', 'Inbox'],
+      myWorks: ['My-Works.dc.html', 'Works · Series · Drafts'],
+      editor: ['Work-Editor.dc.html', 'Post or edit a work'],
+      text: ['Text-Editor.dc.html', 'Chapter text editor'],
+      ao3Collections: ['AO3-Collections.dc.html', 'AO3 collections'],
+      challenge: ['Challenge.dc.html', 'Challenge'],
+      settings: ['Settings.dc.html', 'Settings'],
+      appearance: ['Settings-Appearance.dc.html', 'Settings · appearance'],
+      backup: ['Settings-Backup-Sync.dc.html', 'Settings · backup and sync'],
+      storage: ['Settings-Storage.dc.html', 'Settings · storage'],
+      privacy: ['Privacy.dc.html', 'Privacy and local data'],
+      welcome: ['Onboarding.dc.html', 'Welcome'],
+      syncOnboarding: ['Sync-Onboarding.dc.html', 'Protect your library'],
+      bug: ['Bug-Report.dc.html', 'Report a bug'],
+      about: ['About.dc.html', "About · What's New"],
+      tabBar: ['TabBar.dc.html', 'Tab bar'],
+      symbols: ['Symbols-Key.dc.html', 'Symbols key'],
+      duoCover: ['Duo-Cover-Home.dc.html', 'Duo · cover'],
+      duoLibrary: ['Duo-Open-Library.dc.html', 'Duo · open Library'],
+      duoBook: ['Duo-Book-Reader.dc.html', 'Duo · Book pose reader'],
+      duoCoverReader: ['Duo-Cover-Reader.dc.html', 'Duo · cover reader'],
+      duoHome: ['Duo-Open-Home.dc.html', 'Duo · open Home'],
+      duoSearch: ['Duo-Open-Search.dc.html', 'Duo · open Search, filters'],
+      duoDetail: ['Duo-Open-WorkDetail.dc.html', 'Duo · open Work Detail'],
+      duoAccount: ['Duo-Open-Account.dc.html', 'Duo · open Account, Inbox'],
+      duoSettings: ['Duo-Open-Settings.dc.html', 'Duo · open Settings'],
+      duoReader: ['Duo-Open-Reader.dc.html', 'Duo · two-page reader'],
+      duoComments: ['Duo-Book-Comments.dc.html', 'Duo · reader and comments'],
+      duoBookHome: ['Duo-Book-Home.dc.html', 'Duo · Book pose Home'],
+      duoBrowse: ['Duo-Portrait-Browse.dc.html', 'Duo · portrait Browse'],
+      shelfOptions: ['Shelf-Options.dc.html', 'Shelf cards · cover or text'],
+      flowFind: ['Flow-Find.dc.html', 'Flow · find and read'],
+      flowResume: ['Flow-Resume.dc.html', 'Flow · resume and listen'],
+      flowOrganise: ['Flow-Organise.dc.html', 'Flow · organise'],
+      flowKudos: ['Flow-Kudos.dc.html', 'Flow · kudos and comments'],
+      flowWrite: ['Flow-Write.dc.html', 'Flow · write and post'],
+      flowFirst: ['Flow-FirstLaunch.dc.html', 'Flow · first launch'],
+      flowDuo: ['Flow-Duo.dc.html', 'Flow · Duo unfolding'],
+      loading: ['States-Loading.dc.html', 'States · loading'],
+      empty: ['States-Empty.dc.html', 'States · empty'],
+      error: ['States-Error.dc.html', 'States · errors, offline'],
+      feedback: ['States-Feedback.dc.html', 'States · feedback'],
+      confirm: ['States-Confirm.dc.html', 'States · confirmations'],
+      surfaces: ['System-Surfaces.dc.html', 'Proposed system surfaces'],
+      end: ['Reader-End.dc.html', 'Reader · end of the work'],
+      ia: ['IA-Map.dc.html', 'Where things live'],
+      accountNew: ['Account-Regrouped.dc.html', 'Account · regrouped']
+    };
+    const areas = [
+      ['App shell and navigation', [
+        ['Tabs', 'Home, Library, Browse and Account, with Search as its own button', 'tabBar'],
+        ['Search from anywhere', 'One global Search, reachable from every tab', 'search'],
+        ['Symbols on every work', 'Rating, Category, Warnings and Status in the same place on every card, row and detail page', 'symbols'],
+        ['Author and tag links', 'Any byline opens the native author profile; any tag opens a search', 'author'],
+        ['Wide layouts', 'Sidebar tabs; Library, Account and Settings show list and detail side by side', 'duoLibrary'],
+        ['Mac app', 'Keeps its current reader and layout in this pass', null]
+      ]],
+      ['Home', [
+        ['Reading Now', 'Resume card with chapter, progress and symbols; tap to reveal a hidden mature work', 'home'],
+        ['Reading Queues', 'Queue cards with colour, count and covers', 'home'],
+        ['Collection shelves', 'Collections set to Show on Home get their own shelf', 'home'],
+        ['Recently Updated', 'Saved works with new chapters', 'home'],
+        ['Subscriptions', 'New works and chapters from your AO3 subscriptions', 'home'],
+        ['See all', 'Every shelf opens its full list, with Select and Delete', 'select'],
+        ['Refresh', 'Pull to refresh updates and subscriptions', 'home'],
+        ['Empty Home', 'Browse AO3 and Open Library prompts when nothing is saved yet', 'home']
+      ]],
+      ['Library', [
+        ['Shelves', 'Reading Now, Saved for Later, Finished, Collections, Downloaded, Reading History, Favorites', 'library'],
+        ['Layout', 'Shelf or list layout', 'library'],
+        ['Quick filters', 'Completion pills, favourites filter, favourite-author rail', 'library'],
+        ['Filters and sort', 'Sort; rating, warnings, categories, completion, word count, language, tags; reset', 'libFilters'],
+        ['Select', 'Add to Queue, Add to Collection, Delete for many works at once', 'select'],
+        ['Swipe actions', 'Remove from a list, Delete', 'section'],
+        ['Work menu', 'Read, Select, Favourite, Save for Later, Add to Queue, Mark as Finished, Add to Collection, Work Details, Comments, Rebuild from Original, Delete', 'actions'],
+        ['Favourites', 'Star a work from its menu or Work Detail; Favorites shelf and filter', 'library'],
+        ['Mark as Finished', 'From the work menu or Work Detail; moves the work to Finished', 'actions'],
+        ['Library locations', 'Library, Collections, All Collections, New Collection', 'library'],
+        ['Collections', 'Create (keep downloads, show on Home), rename, reorder, add and remove works, delete', 'collection'],
+        ['Add works sheet', 'Search your library to add works to a collection or queue', 'collection'],
+        ['Reading Queue', 'Add works; move up, down, to top or bottom; remove; details and storage; edit; delete', 'queue'],
+        ['Queue organizer', 'Search and filter queues by tag; select; new queue with name, colour, tags, offline, start from', 'queues'],
+        ['Queue tags', 'Rename, merge, copy to another queue, show only this tag', 'queues'],
+        ['Reading History', 'Grouped by day; move a work back to In progress', 'section'],
+        ['Reading Insights', 'Statistics by period, history facts, favourite authors and fandoms', 'insights'],
+        ['Recently Deleted', 'Restore, delete permanently, delete all; kept for 90 days', 'deleted'],
+        ['Mature privacy', 'Blur or hide Mature and Explicit works; tap or Face ID to reveal', 'library']
+      ]],
+      ['Search', [
+        ['Global search', 'In your library, your tags, collections, fandoms here and on AO3, then Search AO3', 'search'],
+        ['AO3 results', 'Rows with symbols, summary, expandable tags, stats and updated date; sort', 'search'],
+        ['Pages', 'First, last and nearby pages; jump to a page', 'search'],
+        ['AO3 filters', 'Rating and not rated, warnings, categories, completion, crossovers; word, hit, kudos, comment, bookmark and chapter ranges; updated; language', 'searchFilters'],
+        ['Tags', 'Include and exclude tags, with popular tags in the fandom', 'searchFilters'],
+        ['Title and creator', 'Search within title and creator fields', 'searchFilters'],
+        ['Save Search', 'Name and keep a filter set', 'searchFilters']
+      ]],
+      ['Browse', [
+        ['Categories', 'AO3 media categories, with Jump Back In', 'browse'],
+        ['Fandom index', 'Search, grouping, minimum works, tag kinds, yours; favourite fandoms; downloaded counts', 'fandoms'],
+        ['Fandom works', 'AO3 works for a fandom, with filters', 'fandomWorks'],
+        ['Select results', 'Select several works for batch actions', 'fandomWorks'],
+        ['AO3 website', 'In-app AO3 for pages without a native screen: back, forward, reload, bookmark', 'web']
+      ]],
+      ['Work Detail', [
+        ['Identity', 'Cover, title, tappable authors, fandoms, symbols', 'detail'],
+        ['Read and download', 'Read or Resume, download or update the EPUB, Read Aloud', 'detail'],
+        ['Stats', 'Words, chapters, kudos, hits, comments, bookmarks, published, updated, language', 'detail'],
+        ['Summary, notes, tags', 'Relationships, characters and additional tags; tap a tag to search', 'detail'],
+        ['AO3 actions', 'Give Kudos; Bookmark or edit bookmark with notes and tags; Subscribe; Mark for Later; Open on AO3; Share', 'actions'],
+        ['Add to Queue or Collection', 'Including the rest of the AO3 series', 'actions'],
+        ['Series', 'Part N of the series; view the series; preserve all of it or only this work', 'detail'],
+        ['My copy', 'Private to this device: progress, downloaded date, your tags, collections, queues, retry preservation', 'detail'],
+        ['Provenance', 'Converted from an original file; rebuild with the current converter', 'detail'],
+        ['Comments entry', 'Comments load only when you open them', 'detail']
+      ]],
+      ['Comments', [
+        ['Browse comments', 'All comments or by chapter; newest or oldest first; pages', 'comments'],
+        ['Threads', 'Nested replies; continue a thread; jump to the parent', 'thread'],
+        ['Write', 'Reply, edit, delete, copy link; formatting toolbar; full-screen composer; log in to reply', 'thread'],
+        ['Profiles', 'Commenter names open their profiles', 'comments']
+      ]],
+      ['Authors and series', [
+        ['Author profile', 'Pseud scope; Works, Series, Bookmarks, About; sort and filter; subscribe; share; open on AO3', 'author'],
+        ['Your own works', 'Edit, reorder, select; bulk collections, visibility, delete on AO3', 'myWorks'],
+        ['Series', 'Works in order; share; open on AO3; owners edit, reorder and remove works', 'series']
+      ]],
+      ['Reader', [
+        ['Reading', 'Paged or scrolled; floating glass controls; swipe down to close', 'reader'],
+        ['Position', 'Page N of M, time left in the chapter, chapter slider', 'reader'],
+        ['Reader menu', 'Contents with %, Bookmarks & Highlights, Find in Work, Comments, Rebuild from Original, Themes & Settings, Share, Read Aloud', 'readerMenu'],
+        ['Contents', 'Chapters, bookmarks and notes; go to; delete', 'contents'],
+        ['Find in Work', 'This chapter or the whole work; results by chapter; copy, bookmark, go', 'find'],
+        ['Highlights and notes', 'Colours, notes, delete a highlight', 'highlight'],
+        ['Themes and settings', 'Light, Sepia, Dark, OLED; fonts; size, spacing, justify, margins, bold; paged or scrolled; two-page spread; keep screen awake; customise theme', 'readerSettings'],
+        ['Finished', 'A complete work is marked finished at its true end; the end card offers Kudos, Comment, Bookmark and the next work in the queue', 'end']
+      ]],
+      ['Read Aloud', [
+        ['Playback', 'Mini player; play, pause, previous and next chapter, stop; lock screen and Now Playing; keeps playing in the background', 'readAloud'],
+        ['Voices', 'Engine (Automatic, System, Kokoro), voice, installed voices, speed, pitch, author notes, reset', 'readAloudSettings'],
+        ['Kokoro pack', 'Download after consent, progress, cancel, retry', 'readAloudSettings'],
+        ['Pronunciations', 'Add corrections, scan this chapter, words it guessed, copy and paste all', 'readAloudSettings'],
+        ['Developer settings', 'Speech tuning and audition tools, hidden by default', 'readAloudSettings']
+      ]],
+      ['Account', [
+        ['Account hub', 'Profile, posting-as pseud, shortcuts grid (customise, reset), Reading, Writing, Activity and Account groups', 'account'],
+        ['Account, regrouped (proposal)', 'Profile with counts; Edit to pin and reorder rows replaces the shortcuts grid; AO3 things named as AO3', 'accountNew'],
+        ['Signed out', 'Preview of every row, with Log In', 'signedOut'],
+        ['Log in', "AO3's own form in the app; forgot password; create an account; alternative login", 'login'],
+        ['Marked for Later, Bookmarks, History', 'Filters; unmark; delete from history; clear history; flagged to skip', 'lists'],
+        ['Subscriptions', 'Works, series and users; unsubscribe; mark all as seen', 'subs'],
+        ['Inbox', 'Unread and replied filters; reply; mark read or unread; delete; copy link; open chapter comments; select', 'inbox'],
+        ['Preferences', 'AO3 site preferences in a native form, with help', 'account'],
+        ['More on AO3', 'Dashboard, claims, co-creator requests, gifts, invitations, import, FAQs, content policy, donate', 'account'],
+        ['Offline', 'Cached AO3 data shown with a notice', 'account']
+      ]],
+      ['Writing and collections', [
+        ['Works, Series, Drafts', 'Your AO3 works, series and drafts; New Work', 'myWorks'],
+        ['Post or edit a work', 'Required tags, fandoms, relationships, characters, tags with suggestions, summary, notes, language, series, collections and gifts, co-creators, inspired by, date, complete, chapter total, moderation, registered users only, preview, post', 'editor'],
+        ['Chapters', 'Chapter list; add a chapter with position and date', 'editor'],
+        ['Text editor', 'HTML with a tag toolbar, undo and redo, paste as plain text, local recovery copy, preview on AO3, delete chapter', 'text'],
+        ['Bulk edits', 'Edit tags; edit several works; edit a series', 'myWorks'],
+        ['AO3 collections', 'My collections; sort and filter; new or edit with name check; manage items; delete', 'ao3Collections'],
+        ['Challenges', 'Settings, sign-ups, your sign-up and withdraw, assignments, prompts, tag sets, maintainers, moderation', 'challenge']
+      ]],
+      ['Settings', [
+        ['Settings hub', 'Reading; Downloads & Storage; Library & Sync; Account & Privacy; About', 'settings'],
+        ['Appearance and fonts', 'Theme, accent colour with reset to AO3 red, match app and reader, customise theme, add fonts', 'appearance'],
+        ['Downloads and storage', 'Download on subscribe, keep works you read, auto-preserve series, queue storage, show zero counts, Saved for Later, confirm before deleting, check availability', 'storage'],
+        ['Backup', 'Export a .kudosbackup; import by merge, or replace with a preview and an undo copy', 'backup'],
+        ['Sync folder', 'Choose, change, disconnect; auto sync; sync now; status details; pause on this device', 'backup'],
+        ['Device pairing', 'Copy key, scan QR code, trust, rename, revoke with a reason', 'backup'],
+        ['Import files', 'Add EPUBs and other files to the Library', 'backup'],
+        ['Privacy and local data', 'Hide or blur mature works, Face ID, clear cache, history and positions, free downloads', 'privacy'],
+        ['About', 'Version, licence, source, disclaimer, open-source components, legal notices', 'about']
+      ]],
+      ['Onboarding and support', [
+        ['Welcome', 'First launch', 'welcome'],
+        ['Protect your library', 'Choose a sync folder, not now, do not remind me', 'syncOnboarding'],
+        ['Report a bug', 'Shake or Settings; screenshot; what went wrong; system info; continue on GitHub; browse issues', 'bug'],
+        ["What's New", 'Release notes after an update', 'about']
+      ]],
+      ['States and feedback', [
+        ['Loading', 'Skeletons that keep the layout: Home, lists, covers, comments, the reader page and its position card', 'loading'],
+        ['Empty', 'Nothing here yet; no matching works with Clear Filters; empty queue; favourite-author empty card', 'empty'],
+        ['Errors and offline', "Reader can't open a book (now with Close, Download Again, Rebuild); offline with saved results and Retry; AO3 refused a post or save", 'error'],
+        ['Feedback', 'Notices with Undo ("Removed from Saved for Later…", "Marked for later"); download queue progress; file import result', 'feedback'],
+        ['Confirmations', 'Delete permanently, reveal with Face ID, post to AO3, delete a comment, remove anonymity', 'confirm']
+      ]],
+      ['Proposed additions (new, not in today’s app)', [
+        ['Widgets', 'Continue Reading and queue widgets; Lock Screen progress', 'surfaces'],
+        ['Spotlight and Siri', 'Your library in Spotlight; App Shortcuts such as "Resume reading in Kudos"', 'surfaces'],
+        ['Share and Control Center', 'Download to Kudos from Safari; a Read Aloud control', 'surfaces']
+      ]],
+      ['iPhone Duo', [
+        ['Cover display', 'Same screens as iPhone, with the tab rail on the right', 'duoCover'],
+        ['Reading on the cover', 'One page at a time, with the same controls as iPhone', 'duoCoverReader'],
+        ['Open Home', 'Sidebar tabs; resume hero beside the next work; shelves as grids', 'duoHome'],
+        ['Open Library', 'Sidebar, list and detail side by side', 'duoLibrary'],
+        ['Open Search', 'Results beside an inspector with every AO3 filter', 'duoSearch'],
+        ['Open Work Detail', 'Two regions, like an album page: cover, tags and stats beside summary and chapters', 'duoDetail'],
+        ['Open Account', 'Account list beside the selected item, such as the Inbox', 'duoAccount'],
+        ['Open Settings', 'Categories beside the selected pane, like the iPad Settings app', 'duoSettings'],
+        ['Two-page reader', 'Unfolded flat, the book opens to a spread', 'duoReader'],
+        ['Book pose reader', 'One page each side of the fold; nothing crosses it', 'duoBook'],
+        ['Book pose comments', "Read on one side, the chapter's comments on the other", 'duoComments'],
+        ['Book pose Home', 'Resume on one side, the next work on the other; shelves page whole cards', 'duoBookHome'],
+        ['Open portrait', 'Browse with the tab bar at the bottom and two-column grids', 'duoBrowse'],
+        ['Shelf cards without covers', 'Generated cover or text card; the owner picks', 'shelfOptions']
+      ]],
+      ['Key journeys (storyboards)', [
+        ['Find and read', 'Search → Work Detail → Reader → The End → Home', 'flowFind'],
+        ['Resume and listen', 'Home → Reader → Read Aloud → voices → mini player', 'flowResume'],
+        ['Organise with queues', 'Add to Queue → queues → select many → the queue → next at The End', 'flowOrganise'],
+        ['Thank the author', 'Kudos and bookmark → The End → comments → reply → Inbox', 'flowKudos'],
+        ['Write and post', 'Account → Your Writing → posting form → chapter editor', 'flowWrite'],
+        ['First launch', 'Welcome → sync folder → Home → log in → Backup & Sync', 'flowFirst'],
+        ['iPhone Duo', 'Cover → cover reader → two-page spread → Book pose with comments', 'flowDuo']
+      ]]
+    ];
+    const screens = new Set();
+    let featureCount = 0;
+    const mapped = areas.map(([name, rows]) => {
+      featureCount += rows.length;
+      return {
+        name,
+        count: rows.length + (rows.length === 1 ? ' feature' : ' features'),
+        rows: rows.map(([feature, detail, key]) => {
+          const s = key ? S[key] : null;
+          if (s) screens.add(s[0]);
+          return { feature, detail, href: s ? s[0] : '', screen: s ? s[1] : 'Not in this pass', hasBoard: !!s, noBoard: !s };
+        })
+      };
+    });
+    return { areas: mapped, featureCount, areaCount: areas.length, screenCount: screens.size };
+  }
+}
+</script>
+</body>
+</html>

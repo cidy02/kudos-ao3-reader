@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Read Aloud settings</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+button{cursor:pointer}
+</style>
+</helmet>
+<div style="width: 390px; height: 1100px; position: relative; overflow: hidden; background: #F2F2F7; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; box-sizing: border-box">
+  <div style="position: absolute; left: 16px; right: 16px; top: 54px; display: flex; justify-content: space-between">
+    <button aria-label="Back" style="width: 44px; height: 44px; border: none; border-radius: 22px; color: #1C1C1E; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.74); box-shadow: 0 6px 20px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.06)">
+      <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 5-7 7 7 7"></path></svg>
+    </button>
+    <button style="height: 44px; padding: 0 16px; border: none; border-radius: 22px; font-family: inherit; font-size: 16px; color: #1C1C1E; background: rgba(255,255,255,0.74); box-shadow: 0 6px 20px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.06); display: flex; align-items: center; gap: 6px">
+      <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24"><path d="M7 4.5v15l12-7.5z" fill="currentColor"></path></svg>Preview voice</button>
+  </div>
+  <main style="padding: 106px 16px 0; display: flex; flex-direction: column; gap: 16px">
+    <h1 style="margin: 0 4px; font-size: 34px; line-height: 41px; font-weight: 700; letter-spacing: 0.4px">Read Aloud</h1>
+
+    <section style="display: flex; flex-direction: column; gap: 6px">
+      <h2 style="margin: 0 16px; font-size: 13px; font-weight: 600; letter-spacing: 0.3px; text-transform: uppercase; color: #6C6C70">Voice</h2>
+      <div style="background: #FFFFFF; border-radius: 14px; overflow: hidden">
+        <div style="padding: 10px 12px; border-bottom: 0.5px solid #E5E5EA">
+          <div role="radiogroup" aria-label="Engine" style="height: 32px; border-radius: 9px; background: rgba(118,118,128,0.12); padding: 2px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr))">
+            <button role="radio" aria-checked="false" style="border: none; border-radius: 7px; background: transparent; font-family: inherit; font-size: 14px">Automatic</button>
+            <button role="radio" aria-checked="false" style="border: none; border-radius: 7px; background: transparent; font-family: inherit; font-size: 14px">System</button>
+            <button role="radio" aria-checked="true" style="border: none; border-radius: 7px; background: #FFFFFF; box-shadow: 0 2px 5px rgba(0,0,0,0.12); font-family: inherit; font-size: 14px; font-weight: 600">Kokoro</button>
+          </div>
+        </div>
+        <sc-for list="{{voiceRows}}" as="r" hint-placeholder-count="2">
+          <div style="display: flex; align-items: center; height: 46px; padding: 0 16px; gap: 8px; border-top: {{r.sep}}">
+            <span style="flex: 1; font-size: 16px">{{r.label}}</span><span style="font-size: 16px; color: #6C6C70">{{r.value}}</span>
+            <svg aria-hidden="true" width="8" height="14" viewBox="0 0 8 14" fill="none" stroke="#C7C7CC" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m1.5 1.5 5 5.5-5 5.5"></path></svg>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+
+    <section style="display: flex; flex-direction: column; gap: 6px">
+      <h2 style="margin: 0 16px; font-size: 13px; font-weight: 600; letter-spacing: 0.3px; text-transform: uppercase; color: #6C6C70">Delivery</h2>
+      <div style="background: #FFFFFF; border-radius: 14px; overflow: hidden">
+        <sc-for list="{{sliders}}" as="s" hint-placeholder-count="2">
+          <div style="padding: 10px 16px; display: flex; flex-direction: column; gap: 10px; border-top: {{s.sep}}">
+            <div style="display: flex; justify-content: space-between; font-size: 16px"><span>{{s.label}}</span><span style="color: #6C6C70">{{s.value}}</span></div>
+            <div role="slider" aria-label="{{s.label}}" style="position: relative; height: 4px; border-radius: 2px; background: #E5E5EA">
+              <div style="width: {{s.pct}}; height: 4px; border-radius: 2px; background: {{accent}}"></div>
+              <span style="position: absolute; left: {{s.pct}}; top: -10px; width: 24px; height: 24px; margin-left: -12px; border-radius: 12px; background: #FFFFFF; box-shadow: 0 1px 4px rgba(0,0,0,0.3)"></span>
+            </div>
+          </div>
+        </sc-for>
+        <div style="display: flex; align-items: center; height: 46px; padding: 0 16px; border-top: 0.5px solid #E5E5EA">
+          <span style="flex: 1; font-size: 16px">Read author's notes</span>
+          <span role="switch" aria-checked="false" aria-label="Read author's notes" style="width: 51px; height: 31px; border-radius: 16px; background: #E9E9EB; position: relative"><span style="position: absolute; left: 2px; top: 2px; width: 27px; height: 27px; border-radius: 14px; background: #FFFFFF; box-shadow: 0 2px 4px rgba(0,0,0,0.2)"></span></span>
+        </div>
+      </div>
+    </section>
+
+    <section style="display: flex; flex-direction: column; gap: 6px">
+      <h2 style="margin: 0 16px; font-size: 13px; font-weight: 600; letter-spacing: 0.3px; text-transform: uppercase; color: #6C6C70">Kokoro voice pack</h2>
+      <div style="background: #FFFFFF; border-radius: 14px; padding: 12px 16px; display: flex; flex-direction: column; gap: 10px">
+        <div style="display: flex; justify-content: space-between; font-size: 16px"><span>Downloading · 64%</span><span style="color: #6C6C70">201 of 314 MB</span></div>
+        <div role="progressbar" aria-label="Voice pack download" aria-valuenow="64" aria-valuemin="0" aria-valuemax="100" style="height: 6px; border-radius: 3px; background: #E5E5EA"><div style="width: 64%; height: 6px; border-radius: 3px; background: {{accent}}"></div></div>
+        <div style="display: flex; justify-content: space-between; align-items: center">
+          <span style="font-size: 13px; color: #6C6C70">Runs on the Neural Engine, fully offline.</span>
+          <button style="border: none; background: none; font-family: inherit; font-size: 15px; color: #D70015">Cancel</button>
+        </div>
+      </div>
+    </section>
+
+    <section style="display: flex; flex-direction: column; gap: 6px">
+      <h2 style="margin: 0 16px; font-size: 13px; font-weight: 600; letter-spacing: 0.3px; text-transform: uppercase; color: #6C6C70">Pronunciation</h2>
+      <div style="background: #FFFFFF; border-radius: 14px; overflow: hidden">
+        <sc-for list="{{pronRows}}" as="r" hint-placeholder-count="3">
+          <div style="display: flex; align-items: center; height: 46px; padding: 0 16px; gap: 8px; border-top: {{r.sep}}">
+            <span style="flex: 1; font-size: 16px; color: {{r.color}}">{{r.label}}</span><span style="font-size: 16px; color: #6C6C70">{{r.value}}</span>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+
+    <button style="height: 46px; border: none; border-radius: 14px; background: #FFFFFF; font-family: inherit; font-size: 16px; color: #D70015">Reset Read Aloud</button>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#990000","options":["#990000","#B3261E","#7A1F2B","#1F4E5F"]},"$preview":{"width":390,"height":1100}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const sep = (i) => (i ? '0.5px solid #E5E5EA' : 'none');
+    return {
+      accent: this.props.accent ?? '#990000',
+      voiceRows: [['Voice', 'Bella'], ['Installed voices', '3']].map(([label, value], i) => ({ label, value, sep: sep(i) })),
+      sliders: [['Speed', '1.1×', '55%'], ['Pitch', 'Normal', '50%']].map(([label, value, pct], i) => ({ label, value, pct, sep: sep(i) })),
+      pronRows: [['Corrections', '12', '#000000'], ['Words it guessed at', '4', '#000000'], ['Scan this chapter', '', this.props.accent ?? '#990000']].map(([label, value, color], i) => ({ label, value, color, sep: sep(i) }))
+    };
+  }
+}
+</script>
+</body>
+</html>

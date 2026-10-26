@@ -1,0 +1,273 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Comments in Book pose</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+button{cursor:pointer}
+</style>
+</helmet>
+<div style="width: 951px; height: 669px; position: relative; overflow: hidden; background: #FAF7F0; color: #1F1B16; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; box-sizing: border-box; display: flex">
+
+  <article aria-label="Page 113" style="width: 455px; height: 669px; flex-shrink: 0; position: relative; padding: 70px 40px 0 44px; box-sizing: border-box; overflow: hidden">
+    <div aria-hidden="true" style="position: absolute; right: 0; top: 0; bottom: 0; width: 36px; background: linear-gradient(to left, rgba(60,40,10,0.07), rgba(60,40,10,0)); pointer-events: none"></div>
+    <p style="position: absolute; left: 0; right: 0; top: 26px; margin: 0; text-align: center; font-size: 11px; line-height: 14px; font-weight: 600; letter-spacing: 1.4px; text-transform: uppercase; color: #6B645A">Chapter 7 · The Salt Road</p>
+    <div style="font-family: 'New York', 'Iowan Old Style', Georgia, serif; font-size: {{textSize}}px; line-height: 1.58; hyphens: auto">
+      <p style="margin: 0">They walked until the light went copper. Somewhere behind them the dunes had folded themselves away, and ahead there was nothing but the white ground and the long blue shadow each of them threw.</p>
+      <p style="margin: 0; text-indent: 1.3em">“How will you know where to stop?” Tomas asked.</p>
+      <p style="margin: 0; text-indent: 1.3em">Elinor checked the compass. The needle was steady, which was its own kind of answer. “When the map runs out,” she said, “I'll know I've arrived.”</p>
+      <p style="margin: 0; text-indent: 1.3em">He looked at the vellum, at the single unbroken line crossing it, and then at her, and for once he didn't laugh.</p>
+      <p style="margin: 0; text-indent: 1.3em">They made camp where the crust was thickest. Tomas built the fire small, out of an old habit, and Elinor sat with the vellum across her knees and did not draw anything at all.</p>
+    </div>
+    <p style="position: absolute; left: 0; right: 0; bottom: 22px; margin: 0; text-align: center; font-size: 12px; line-height: 16px; color: #6B645A">113</p>
+  </article>
+
+  <div aria-hidden="true" style="width: 40px; height: 669px; flex-shrink: 0; background: linear-gradient(to right, #EEE8DC, #E8E7EA); display: flex; justify-content: center">
+    <div style="width: 1px; height: 669px; background: rgba(60,40,10,0.14)"></div>
+  </div>
+
+  <section aria-label="Comments" style="width: 456px; height: 669px; flex-shrink: 0; position: relative; overflow: hidden; background: #F2F2F7; color: #000000">
+
+    <sc-if value="{{isList}}" hint-placeholder-val="{{true}}">
+      <div style="position: absolute; left: 0; right: 0; top: 0; bottom: 0">
+        <header style="position: absolute; left: 16px; right: 16px; top: 14px; display: flex; align-items: flex-start; justify-content: space-between; gap: 12px">
+          <div style="min-width: 0; display: flex; flex-direction: column; gap: 1px">
+            <h1 style="margin: 0; font-size: 28px; line-height: 34px; font-weight: 700; letter-spacing: 0.35px">Comments</h1>
+            <p style="margin: 0; font-size: 13px; line-height: 18px; color: #6C6C70">The Cartographer's Daughter · 286</p>
+          </div>
+          <div style="height: 44px; flex-shrink: 0; border-radius: 22px; display: flex; align-items: center; background: rgba(255,255,255,0.74); backdrop-filter: blur(24px) saturate(180%); -webkit-backdrop-filter: blur(24px) saturate(180%); box-shadow: 0 6px 20px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.9)">
+            <button aria-haspopup="menu" aria-label="Sort: Newest First" style="height: 44px; padding: 0 8px 0 16px; border: none; background: transparent; color: #1C1C1E; font-family: inherit; font-size: 15px; display: flex; align-items: center; gap: 6px">Newest First
+              <svg aria-hidden="true" width="10" height="14" viewBox="0 0 12 16" fill="none" stroke="#6C6C70" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 6 6 2.5 9.5 6M2.5 10 6 13.5 9.5 10"></path></svg>
+            </button>
+            <button aria-label="Close Comments" style="width: 44px; height: 44px; border: none; background: transparent; color: #1C1C1E; display: flex; align-items: center; justify-content: center">
+              <svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"></path></svg>
+            </button>
+          </div>
+        </header>
+
+        <div role="radiogroup" aria-label="Scope" style="position: absolute; left: 16px; right: 16px; top: 76px; height: 34px; border-radius: 17px; background: rgba(118,118,128,0.12); padding: 2px; box-sizing: border-box; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr))">
+          <button role="radio" aria-checked="{{segAll.checked}}" onClick="{{pickAll}}" style="border: none; border-radius: 15px; background: {{segAll.bg}}; box-shadow: {{segAll.shadow}}; font-family: inherit; font-size: 14px; font-weight: {{segAll.weight}}; color: #000000">All Comments</button>
+          <button role="radio" aria-checked="{{segCh.checked}}" aria-haspopup="menu" onClick="{{pickChapter}}" style="border: none; border-radius: 15px; background: {{segCh.bg}}; box-shadow: {{segCh.shadow}}; font-family: inherit; font-size: 14px; font-weight: {{segCh.weight}}; color: #000000; display: flex; align-items: center; justify-content: center; gap: 5px">Chapter 7
+            <svg aria-hidden="true" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"></path></svg>
+          </button>
+        </div>
+
+        <div style="position: absolute; left: 0; right: 0; top: 122px; bottom: 0; padding: 0 16px; box-sizing: border-box; overflow: hidden; display: flex; flex-direction: column; gap: 8px">
+          <sc-for list="{{comments}}" as="c" hint-placeholder-count="3">
+            <article style="margin-left: {{c.indent}}px; background: #FFFFFF; border-radius: 16px; padding: 12px 6px 0 14px; display: flex; flex-direction: column; gap: 6px">
+              <div style="height: 32px; display: flex; align-items: center; gap: 10px">
+                <span aria-hidden="true" style="width: 32px; height: 32px; flex-shrink: 0; border-radius: 16px; background: {{c.bg}}; color: #FFFFFF; font-size: 14px; font-weight: 600; display: flex; align-items: center; justify-content: center">{{c.initial}}</span>
+                <div style="flex: 1; min-width: 0; display: flex; flex-direction: column">
+                  <div style="display: flex; align-items: center; gap: 6px">
+                    <button style="border: none; background: none; padding: 0; font-family: inherit; font-size: 15px; line-height: 18px; font-weight: 600; color: {{accent}}">{{c.author}}</button>
+                    <sc-if value="{{c.isCreator}}" hint-placeholder-val="{{false}}">
+                      <span style="padding: 1px 6px; border-radius: 6px; background: {{accentTint}}; color: {{accent}}; font-size: 11px; line-height: 14px; font-weight: 600">Creator</span>
+                    </sc-if>
+                  </div>
+                  <span style="font-size: 12px; line-height: 14px; color: #6C6C70">{{c.meta}}</span>
+                </div>
+                <button aria-label="More actions for this comment" aria-haspopup="menu" aria-expanded="{{c.menuOpen}}" onClick="{{c.toggleMenu}}" style="width: 44px; height: 44px; flex-shrink: 0; border: none; border-radius: 22px; background: transparent; color: #6C6C70; display: flex; align-items: center; justify-content: center">
+                  <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24"><circle cx="5.5" cy="12" r="1.6" fill="currentColor"></circle><circle cx="12" cy="12" r="1.6" fill="currentColor"></circle><circle cx="18.5" cy="12" r="1.6" fill="currentColor"></circle></svg>
+                </button>
+              </div>
+              <p style="margin: 0; padding-right: 8px; font-size: 15px; line-height: 20px">{{c.body}}</p>
+              <div style="height: 44px; margin-left: -8px; display: flex; align-items: center; gap: 6px">
+                <button onClick="{{c.reply}}" style="height: 44px; padding: 0 8px; border: none; background: none; font-family: inherit; font-size: 14px; font-weight: 600; color: {{accent}}">Reply</button>
+                <sc-if value="{{c.hasThread}}" hint-placeholder-val="{{false}}">
+                  <button onClick="{{openThread}}" style="height: 44px; padding: 0 8px; border: none; background: none; font-family: inherit; font-size: 14px; color: #3A3A3C">{{c.thread}} ›</button>
+                </sc-if>
+              </div>
+            </article>
+          </sc-for>
+        </div>
+
+        <div aria-hidden="true" style="position: absolute; left: 0; right: 0; bottom: 0; height: 140px; background: linear-gradient(to bottom, rgba(242,242,247,0), rgba(242,242,247,0.96) 45%); pointer-events: none"></div>
+
+        <nav aria-label="Pages" style="position: absolute; left: 16px; right: 16px; bottom: 78px; height: 44px; display: flex; align-items: center; justify-content: space-between">
+          <button aria-disabled="true" style="height: 44px; padding: 0 4px; border: none; background: none; font-family: inherit; font-size: 15px; color: #AEAEB2">‹ Previous</button>
+          <span style="font-size: 14px; color: #6C6C70">Page 1 of 4</span>
+          <button style="height: 44px; padding: 0 4px; border: none; background: none; font-family: inherit; font-size: 15px; color: {{accent}}">Next ›</button>
+        </nav>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{isThread}}" hint-placeholder-val="{{false}}">
+      <div style="position: absolute; left: 0; right: 0; top: 0; bottom: 0">
+        <div style="position: absolute; left: 16px; right: 16px; top: 14px; display: flex; align-items: center; justify-content: space-between">
+          <button aria-label="Back to Comments" onClick="{{closeThread}}" style="width: 44px; height: 44px; border: none; border-radius: 22px; color: #1C1C1E; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.74); backdrop-filter: blur(24px) saturate(180%); -webkit-backdrop-filter: blur(24px) saturate(180%); box-shadow: 0 6px 20px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.9)">
+            <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 5-7 7 7 7"></path></svg>
+          </button>
+          <h1 style="margin: 0; font-size: 17px; line-height: 22px; font-weight: 600">Thread</h1>
+          <button style="height: 44px; padding: 0 14px; border: none; border-radius: 22px; font-family: inherit; font-size: 15px; color: #1C1C1E; background: rgba(255,255,255,0.74); backdrop-filter: blur(24px) saturate(180%); -webkit-backdrop-filter: blur(24px) saturate(180%); box-shadow: 0 6px 20px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.9)">Parent Thread</button>
+        </div>
+        <div style="position: absolute; left: 0; right: 0; top: 72px; bottom: 0; padding: 0 16px; box-sizing: border-box; overflow: hidden; display: flex; flex-direction: column; gap: 8px">
+          <sc-for list="{{thread}}" as="c" hint-placeholder-count="4">
+            <div style="display: flex; margin-left: {{c.indent}}px">
+              <sc-if value="{{c.isReply}}" hint-placeholder-val="{{false}}">
+                <span aria-hidden="true" style="width: 2px; flex-shrink: 0; margin-right: 10px; border-radius: 1px; background: #D1D1D6"></span>
+              </sc-if>
+              <article style="flex: 1; min-width: 0; background: #FFFFFF; border-radius: 16px; padding: 12px 14px 0; display: flex; flex-direction: column; gap: 6px">
+                <div style="display: flex; align-items: center; gap: 8px">
+                  <button style="border: none; background: none; padding: 0; font-family: inherit; font-size: 15px; line-height: 20px; font-weight: 600; color: {{accent}}">{{c.author}}</button>
+                  <sc-if value="{{c.isCreator}}" hint-placeholder-val="{{false}}">
+                    <span style="padding: 1px 6px; border-radius: 6px; background: {{accentTint}}; color: {{accent}}; font-size: 11px; line-height: 14px; font-weight: 600">Creator</span>
+                  </sc-if>
+                  <span style="font-size: 12px; color: #6C6C70">{{c.meta}}</span>
+                </div>
+                <p style="margin: 0; font-size: 15px; line-height: 20px">{{c.body}}</p>
+                <div style="height: 44px; margin-left: -8px; display: flex; align-items: center">
+                  <button onClick="{{c.reply}}" style="height: 44px; padding: 0 8px; border: none; background: none; font-family: inherit; font-size: 14px; font-weight: 600; color: {{accent}}">Reply</button>
+                </div>
+              </article>
+            </div>
+          </sc-for>
+        </div>
+        <div aria-hidden="true" style="position: absolute; left: 0; right: 0; bottom: 0; height: 110px; background: linear-gradient(to bottom, rgba(242,242,247,0), rgba(242,242,247,0.96) 55%); pointer-events: none"></div>
+      </div>
+    </sc-if>
+
+    <button onClick="{{openComposer}}" style="position: absolute; left: 16px; right: 16px; bottom: 20px; height: 52px; border: none; border-radius: 26px; padding: 0 8px 0 18px; display: flex; align-items: center; gap: 10px; font-family: inherit; font-size: 16px; color: #6C6C70; text-align: left; background: rgba(255,255,255,0.78); backdrop-filter: blur(24px) saturate(180%); -webkit-backdrop-filter: blur(24px) saturate(180%); box-shadow: 0 8px 28px rgba(0,0,0,0.12), 0 0 0 0.5px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.9)">
+      <span style="flex: 1">{{composerLabel}}</span>
+      <span aria-hidden="true" style="width: 38px; height: 38px; border-radius: 19px; background: {{accent}}; color: #FFFFFF; display: flex; align-items: center; justify-content: center">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M6 11l6-6 6 6"></path></svg>
+      </span>
+    </button>
+
+    <sc-if value="{{menuOpen}}" hint-placeholder-val="{{false}}">
+      <div role="menu" aria-label="Comment actions" style="position: absolute; right: 22px; top: {{menuTop}}px; width: 250px; border-radius: 22px; padding: 6px 0; background: rgba(250,250,252,0.88); backdrop-filter: blur(30px) saturate(180%); -webkit-backdrop-filter: blur(30px) saturate(180%); box-shadow: 0 18px 50px rgba(0,0,0,0.22), 0 0 0 0.5px rgba(0,0,0,0.06)">
+        <sc-for list="{{menuItems}}" as="m" hint-placeholder-count="3">
+          <button role="menuitem" onClick="{{closeMenu}}" style="width: 100%; height: 44px; border: none; border-top: {{m.sep}}; background: transparent; padding: 0 16px; display: flex; align-items: center; gap: 12px; font-family: inherit; font-size: 16px; color: {{m.color}}; text-align: left">
+            <span style="flex: 1">{{m.label}}</span>
+            <svg aria-hidden="true" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="{{m.d}}"></path></svg>
+          </button>
+        </sc-for>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{sheetOpen}}" hint-placeholder-val="{{false}}">
+      <div style="position: absolute; left: 0; right: 0; top: 0; bottom: 0">
+        <div aria-hidden="true" onClick="{{closeSheet}}" style="position: absolute; left: 0; right: 0; top: 0; bottom: 0; background: rgba(0,0,0,0.14)"></div>
+        <section role="dialog" aria-label="{{sheetTitle}}" style="position: absolute; left: 0; right: 0; bottom: 0; top: {{sheetTop}}px; border-radius: 38px 38px 0 0; background: #FFFFFF; box-shadow: 0 -8px 30px rgba(0,0,0,0.14); padding: 8px 16px 20px; box-sizing: border-box; display: flex; flex-direction: column; gap: 10px">
+          <div aria-hidden="true" style="width: 36px; height: 5px; flex-shrink: 0; border-radius: 3px; background: #C7C7CC; margin: 0 auto"></div>
+          <div style="display: flex; align-items: center; gap: 10px">
+            <button aria-label="Cancel" onClick="{{closeSheet}}" style="width: 44px; height: 44px; flex-shrink: 0; border: none; border-radius: 22px; background: rgba(118,118,128,0.14); color: #1C1C1E; display: flex; align-items: center; justify-content: center">
+              <svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"></path></svg>
+            </button>
+            <h2 style="flex: 1; min-width: 0; margin: 0; font-size: 17px; line-height: 22px; font-weight: 600">{{sheetTitle}}</h2>
+            <button aria-label="{{expandLabel}}" onClick="{{toggleExpand}}" style="width: 44px; height: 44px; flex-shrink: 0; border: none; border-radius: 22px; background: rgba(118,118,128,0.14); color: #1C1C1E; display: flex; align-items: center; justify-content: center">
+              <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4h6v6M20 4l-7 7M10 20H4v-6M4 20l7-7"></path></svg>
+            </button>
+            <button onClick="{{closeSheet}}" style="height: 44px; flex-shrink: 0; padding: 0 18px; border: none; border-radius: 22px; background: {{accent}}; color: #FFFFFF; font-family: inherit; font-size: 16px; font-weight: 600">Post</button>
+          </div>
+          <label style="flex: 1; min-height: 0; display: flex">
+            <sc-if value="{{hasDraft}}" hint-placeholder-val="{{true}}">
+              <textarea aria-label="Comment text" style="flex: 1; resize: none; border: none; border-radius: 14px; background: #F2F2F7; padding: 12px; font-family: inherit; font-size: 16px; line-height: 22px; color: #000000; outline: none">Same! The way the &lt;i&gt;map runs out&lt;/i&gt; line pays off the prologue</textarea>
+            </sc-if>
+            <sc-if value="{{noDraft}}" hint-placeholder-val="{{false}}">
+              <textarea aria-label="Comment text" placeholder="Comment on Chapter 7" style="flex: 1; resize: none; border: none; border-radius: 14px; background: #F2F2F7; padding: 12px; font-family: inherit; font-size: 16px; line-height: 22px; color: #000000; outline: none"></textarea>
+            </sc-if>
+          </label>
+          <div role="toolbar" aria-label="Formatting" style="display: flex; gap: 6px">
+            <sc-for list="{{tools}}" as="t" hint-placeholder-count="7">
+              <button aria-label="{{t.label}}" style="flex: 1; min-width: 0; height: 44px; border: none; border-radius: 10px; background: #F2F2F7; font-family: {{t.font}}; font-size: 16px; font-weight: {{t.weight}}; font-style: {{t.style}}; text-decoration: {{t.deco}}; color: #1C1C1E">{{t.glyph}}</button>
+            </sc-for>
+          </div>
+        </section>
+      </div>
+    </sc-if>
+
+    <div aria-hidden="true" style="position: absolute; left: 0; top: 0; bottom: 0; width: 24px; background: linear-gradient(to right, rgba(0,0,0,0.05), rgba(0,0,0,0)); pointer-events: none"></div>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#990000","options":["#990000","#B3261E","#7A1F2B","#1F4E5F"]},"textSize":{"editor":"range","default":18,"min":15,"max":24,"step":1,"unit":"px"},"$preview":{"width":951,"height":669}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const s = this.state || {};
+    const accent = this.props.accent ?? '#990000';
+    const n = parseInt(accent.slice(1), 16);
+    const accentTint = 'rgba(' + ((n >> 16) & 255) + ',' + ((n >> 8) & 255) + ',' + (n & 255) + ',0.1)';
+    const set = (o) => () => this.setState(o);
+    const reply = (who) => set({ sheet: 'Reply to ' + who, menu: null, expanded: false });
+    const seg = (on) => ({ checked: on ? 'true' : 'false', bg: on ? '#FFFFFF' : 'transparent', shadow: on ? '0 2px 6px rgba(0,0,0,0.12)' : 'none', weight: on ? 600 : 400 });
+    const chapter = s.scope !== 'all';
+    const isThread = s.view === 'thread';
+    const menuIndex = typeof s.menu === 'number' ? s.menu : -1;
+    const sep = '0.5px solid rgba(60,60,67,0.18)';
+    const icons = {
+      link: 'M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1',
+      edit: 'M4 20h4L19 9l-4-4L4 16zM13.5 6.5l4 4',
+      trash: 'M4 7h16M9 7V4.5h6V7M6.5 7l1 13h9l1-13M10 11v6M14 11v6'
+    };
+    const copy = { label: 'Copy Link', d: icons.link, color: '#1C1C1E', sep: 'none' };
+    // Only saltwindow's own comment (index 0) can be edited or deleted.
+    const menuItems = menuIndex === 0
+      ? [copy, { label: 'Edit Comment', d: icons.edit, color: '#1C1C1E', sep: 'none' }, { label: 'Delete Comment', d: icons.trash, color: '#D70015', sep }]
+      : [copy];
+    const comments = [
+      { author: 'saltwindow', initial: 'S', bg: '#23506B', meta: 'Chapter 7 · 2 days ago', body: 'The single unbroken line across the vellum. I had to put my phone down for a minute.', thread: '3 replies', hasThread: true, isCreator: false, indent: 0 },
+      { author: 'inkwell_moth', initial: 'I', bg: '#1F4E5F', meta: 'Chapter 7 · 1 day ago', body: 'That line is the whole story, honestly. Thank you for reading so closely!', thread: '', hasThread: false, isCreator: true, indent: 20 },
+      { author: 'marginalia', initial: 'M', bg: '#2F3A4A', meta: 'Chapter 7 · 4 days ago', body: 'Tomas not laughing at the end is going to live in my head for weeks.', thread: '', hasThread: false, isCreator: false, indent: 0 }
+    ].map((c, i) => ({
+      ...c,
+      reply: reply(c.author),
+      menuOpen: menuIndex === i ? 'true' : 'false',
+      toggleMenu: set({ menu: menuIndex === i ? null : i })
+    }));
+    const thread = [
+      { author: 'saltwindow', meta: 'Chapter 7 · 2 days ago', body: 'The single unbroken line across the vellum. I had to put my phone down for a minute.', indent: 0, isReply: false, isCreator: false },
+      { author: 'inkwell_moth', meta: '1 day ago', body: 'That line is the whole story, honestly. Thank you for reading so closely!', indent: 0, isReply: true, isCreator: true },
+      { author: 'tidewright', meta: 'in reply to saltwindow · 20 h ago', body: 'And it echoes her mother’s map in chapter 2.', indent: 12, isReply: true, isCreator: false },
+      { author: 'quietharbor', meta: '2 h ago', body: 'Rereading chapter 2 right now because of this thread.', indent: 0, isReply: true, isCreator: false }
+    ].map((c) => ({ ...c, reply: reply(c.author) }));
+    const sans = '-apple-system, system-ui, sans-serif';
+    const t = (label, glyph, o) => ({ label, glyph, font: sans, weight: 500, style: 'normal', deco: 'none', ...o });
+    return {
+      accent,
+      accentTint,
+      textSize: this.props.textSize ?? 18,
+      isList: !isThread,
+      isThread,
+      segAll: seg(!chapter),
+      segCh: seg(chapter),
+      pickAll: set({ scope: 'all', menu: null }),
+      pickChapter: set({ scope: 'chapter', menu: null }),
+      comments,
+      thread,
+      openThread: set({ view: 'thread', menu: null }),
+      closeThread: set({ view: 'list' }),
+      composerLabel: isThread ? 'Reply to saltwindow…' : 'Comment on Chapter 7…',
+      openComposer: isThread ? reply('saltwindow') : set({ sheet: 'Comment on Chapter 7', menu: null, expanded: false }),
+      menuOpen: menuIndex >= 0,
+      menuTop: 176 + menuIndex * 142,
+      menuItems,
+      closeMenu: set({ menu: null }),
+      sheetOpen: !!s.sheet,
+      sheetTitle: s.sheet || '',
+      sheetTop: s.expanded ? 12 : 300,
+      expandLabel: s.expanded ? 'Collapse to half height' : 'Expand to full screen',
+      toggleExpand: set({ expanded: !s.expanded }),
+      closeSheet: set({ sheet: null, expanded: false }),
+      hasDraft: s.sheet !== 'Comment on Chapter 7',
+      noDraft: s.sheet === 'Comment on Chapter 7',
+      tools: [
+        t('Bold', 'B', { weight: 800 }),
+        t('Italic', 'I', { style: 'italic', font: 'Georgia, serif' }),
+        t('Underline', 'U', { deco: 'underline' }),
+        t('Strikethrough', 'S', { deco: 'line-through' }),
+        t('Link', 'Link', {}),
+        t('Quote', '“”', {}),
+        t('More formatting', '•••', {})
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

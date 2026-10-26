@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Native mapping</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 1280px; height: 1560px; box-sizing: border-box; padding: 52px 64px; background: #FFFFFF; color: #1C1C1E; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; display: flex; flex-direction: column; gap: 26px">
+  <header style="display: flex; flex-direction: column; gap: 6px; max-width: 960px">
+    <p style="margin: 0; font-size: 13px; line-height: 18px; font-weight: 600; letter-spacing: 0.6px; text-transform: uppercase; color: {{accent}}">Native toolkits only</p>
+    <h1 style="margin: 0; font-size: 44px; line-height: 52px; font-weight: 700">Native mapping</h1>
+    <p style="margin: 0; font-size: 17px; line-height: 24px; color: #3A3A3C">These boards are drawings, not code. Every element is a stock SwiftUI control on iOS 26 and later, where the system draws Liquid Glass, and has a Material 3 counterpart in Jetpack Compose. Apple sets behaviour and hierarchy; Android expresses the same meaning in its own idiom.</p>
+  </header>
+
+  <div role="list" style="display: flex; flex-direction: column; border-radius: 16px; overflow: hidden; box-shadow: 0 0 0 0.5px #D1D1D6">
+    <div style="display: grid; grid-template-columns: 220px minmax(0, 1fr) minmax(0, 1fr); gap: 20px; padding: 12px 18px; background: #F2F2F7; font-size: 12px; line-height: 16px; font-weight: 600; letter-spacing: 0.5px; text-transform: uppercase; color: #6C6C70">
+      <span>On the canvas</span><span>iOS · SwiftUI, Liquid Glass</span><span>Android · Jetpack Compose, Material 3</span>
+    </div>
+    <sc-for list="{{rows}}" as="r" hint-placeholder-count="12">
+      <div role="listitem" style="display: grid; grid-template-columns: 220px minmax(0, 1fr) minmax(0, 1fr); gap: 20px; padding: 11px 18px; border-top: 0.5px solid #E5E5EA; font-size: 14px; line-height: 20px">
+        <span style="font-weight: 600">{{r.element}}</span>
+        <span style="font-family: 'SF Mono', ui-monospace, Menlo, monospace; font-size: 13px; color: #1C1C1E">{{r.ios}}</span>
+        <span style="font-family: 'SF Mono', ui-monospace, Menlo, monospace; font-size: 13px; color: #1C1C1E">{{r.android}}</span>
+      </div>
+    </sc-for>
+  </div>
+
+  <section style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px">
+    <div style="padding: 16px 18px; border-radius: 16px; background: #F2F2F7; display: flex; flex-direction: column; gap: 6px">
+      <h2 style="margin: 0; font-size: 17px; line-height: 22px; font-weight: 600">Glass is for navigation</h2>
+      <p style="margin: 0; font-size: 14px; line-height: 20px; color: #3A3A3C">Tab bar, toolbars, the bottom accessory and the reader's floating controls. Content (cards, rows, pages) stays on plain grouped surfaces. On Android those layers are tonal surfaces, not blur.</p>
+    </div>
+    <div style="padding: 16px 18px; border-radius: 16px; background: #F2F2F7; display: flex; flex-direction: column; gap: 6px">
+      <h2 style="margin: 0; font-size: 17px; line-height: 22px; font-weight: 600">No custom chrome</h2>
+      <p style="margin: 0; font-size: 14px; line-height: 20px; color: #3A3A3C">Where the system has a control, use it as is. The only custom views are content: generated covers, the Symbols block, the work row and the reader page.</p>
+    </div>
+    <div style="padding: 16px 18px; border-radius: 16px; background: #F2F2F7; display: flex; flex-direction: column; gap: 6px">
+      <h2 style="margin: 0; font-size: 17px; line-height: 22px; font-weight: 600">Sizes come from the system</h2>
+      <p style="margin: 0; font-size: 14px; line-height: 20px; color: #3A3A3C">Text uses Dynamic Type styles and M3 type roles, so it scales with the reader's settings. Targets stay at least 44 pt on iOS and 48 dp on Android.</p>
+    </div>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#990000","options":["#990000","#B3261E","#7A1F2B","#1F4E5F"]},"$preview":{"width":1280,"height":1560}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const rows = [
+      ['Tabs and Search', 'TabView { Tab(…) ×4; Tab(role: .search) }', 'NavigationSuiteScaffold (bar on phones, rail when wider); Search as a top app bar action'],
+      ['Tab bar shrinks on scroll', '.tabBarMinimizeBehavior(.onScrollDown)', 'BottomAppBarScrollBehavior / hide NavigationBar on scroll'],
+      ['Read Aloud mini player', '.tabViewBottomAccessory { NowPlayingBar() }', 'Mini player row above NavigationBar in Scaffold(bottomBar)'],
+      ['Large title and toolbar', '.navigationTitle + .toolbar { ToolbarItemGroup }, ToolbarSpacer', 'LargeTopAppBar + actions, exitUntilCollapsedScrollBehavior'],
+      ['Floating reader controls', 'GlassEffectContainer { … .glassEffect(.regular.interactive()) }', 'Surface(tonalElevation) in AnimatedVisibility'],
+      ['Grouped sections', 'List(.insetGrouped), Form, Section', 'LazyColumn of ListItem inside Card groups'],
+      ['Shelves', 'ScrollView(.horizontal) { LazyHStack }, .scrollTargetBehavior(.viewAligned)', 'LazyRow, or HorizontalMultiBrowseCarousel'],
+      ['Work row, cover card', 'WorkRow, WorkCoverCard (existing)', 'Existing Compose work cards'],
+      ['Symbols', 'WorkStatusIconGrid: grid, strip; labelled = WorkTopStatsRow', 'One WorkSymbols composable: same order, colours, glyphs'],
+      ['Menus', 'Menu, .contextMenu { } preview: { }, ShareLink', 'DropdownMenu, long-press DropdownMenu, share Intent'],
+      ['Swipe actions', '.swipeActions(edge:)', 'SwipeToDismissBox'],
+      ['Select mode', 'EditMode + List(selection:), bottom toolbar', 'Selection state + BottomAppBar actions'],
+      ['Sheets', '.sheet + .presentationDetents([.medium, .large])', 'ModalBottomSheet'],
+      ['Search field and filters', '.searchable, .searchScopes; filters in a sheet; .inspector when wide', 'SearchBar / DockedSearchBar; ModalBottomSheet; side sheet when wide'],
+      ['Segments, toggles, sliders', 'Picker(.segmented), Toggle, Slider, Stepper', 'SingleChoiceSegmentedButtonRow, Switch, Slider, IconButton ±'],
+      ['Confirmations', '.confirmationDialog, .alert', 'AlertDialog'],
+      ['Wide layouts', '.tabViewStyle(.sidebarAdaptable), NavigationSplitView, .inspector', 'NavigationRail, ListDetailPaneScaffold, SupportingPaneScaffold'],
+      ['The fold', 'AdaptiveContentRegions reads the fold’s reserved region (iOS 27.1)', 'WindowInfoTracker → FoldingFeature (Jetpack WindowManager)'],
+      ['Reader page', 'Readium navigator (UIKit) in UIViewControllerRepresentable', 'Readium Kotlin navigator in AndroidView / Fragment'],
+      ['Text editor', 'WritingNativeTextView (UITextView) + keyboard toolbar', 'BasicTextField(TextFieldState) + formatting row above the IME'],
+      ['AO3 web fallback', 'WKWebView (WebBrowser)', 'AndroidView { WebView }'],
+      ['Type and colour', 'Dynamic Type styles; systemGroupedBackground; .tint(AO3 red)', 'M3 type scale; dynamic colour off; primary = AO3 red; dark theme']
+    ];
+    return {
+      accent: this.props.accent ?? '#990000',
+      rows: rows.map(([element, ios, android]) => ({ element, ios, android }))
+    };
+  }
+}
+</script>
+</body>
+</html>

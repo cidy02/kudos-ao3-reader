@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Proposed system surfaces</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+button{cursor:pointer}
+</style>
+</helmet>
+<div style="width: 1290px; height: 960px; box-sizing: border-box; padding: 24px 30px; background: #FFFFFF; color: #1C1C1E; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; display: flex; flex-direction: column; gap: 16px">
+  <header style="display: flex; flex-direction: column; gap: 4px">
+    <div style="display: flex; align-items: baseline; gap: 12px">
+      <h1 style="margin: 0; font-size: 28px; font-weight: 700">System surfaces</h1>
+      <span style="padding: 3px 10px; border-radius: 10px; background: #FFF3D6; color: #8A5A00; font-size: 13px; font-weight: 700">Proposed · not in today's app</span>
+    </div>
+    <p style="margin: 0; font-size: 15px; color: #3A3A3C">Apple's own reading apps reach outside the app. These use the same data Kudos already keeps: progress, queues, Read Aloud. Android equivalents: Glance widgets, Quick Settings tile, App Search, share target.</p>
+  </header>
+  <div style="flex: 1; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px">
+    <section style="border-radius: 24px; padding: 18px; background: linear-gradient(160deg, #3A4A6B, #6B4A6B); display: flex; flex-direction: column; gap: 14px">
+      <h2 style="margin: 0; font-size: 15px; font-weight: 600; color: #FFFFFF">Home Screen widgets</h2>
+      <div style="display: flex; gap: 14px">
+        <div aria-label="Small widget: Continue Reading" style="width: 158px; height: 158px; border-radius: 26px; background: #FFFFFF; padding: 12px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: space-between">
+          <dc-import name="Symbols" variant="strip" rating="T" category="FM" warnings="none" status="wip" size="16" hint-size="74px,16px"></dc-import>
+          <span style="font-family: 'New York', Georgia, serif; font-size: 15px; line-height: 18px; font-weight: 600">The Cartographer's Daughter</span>
+          <div style="display: flex; flex-direction: column; gap: 4px">
+            <span style="font-size: 11px; color: #6C6C70">Ch 7 · 12 min left</span>
+            <span style="height: 4px; border-radius: 2px; background: #E5E5EA"><span style="display: block; width: 58%; height: 4px; border-radius: 2px; background: {{accent}}"></span></span>
+          </div>
+        </div>
+        <div aria-label="Small widget: Up Next queue" style="width: 158px; height: 158px; border-radius: 26px; background: rgba(255,255,255,0.22); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); padding: 12px; box-sizing: border-box; display: flex; flex-direction: column; gap: 6px; color: #FFFFFF">
+          <span style="font-size: 11px; font-weight: 700; letter-spacing: 0.4px; text-transform: uppercase; opacity: 0.85">Summer Reading</span>
+          <span style="font-size: 14px; font-weight: 600">1 · Five Times Elizabeth Laughed</span>
+          <span style="font-size: 13px; opacity: 0.85">2 · Small Gods of the Kitchen</span>
+          <span style="font-size: 13px; opacity: 0.85">3 · The Baker Street Irregular</span>
+        </div>
+      </div>
+      <div aria-label="Lock Screen widgets" style="display: flex; gap: 12px; align-items: center; color: #FFFFFF">
+        <svg aria-hidden="true" width="58" height="58" viewBox="0 0 36 36"><circle cx="18" cy="18" r="15" fill="rgba(255,255,255,0.18)"></circle><circle cx="18" cy="18" r="13" fill="none" stroke="rgba(255,255,255,0.35)" stroke-width="3"></circle><circle cx="18" cy="18" r="13" fill="none" stroke="#FFFFFF" stroke-width="3" stroke-dasharray="47 82" stroke-linecap="round" transform="rotate(-90 18 18)"></circle><text x="18" y="21.5" text-anchor="middle" font-size="9" font-weight="700" fill="#FFFFFF" font-family="-apple-system, system-ui">58%</text></svg>
+        <div style="display: flex; flex-direction: column"><span style="font-size: 13px; font-weight: 600">Kudos · Ch 7</span><span style="font-size: 12px; opacity: 0.85">3 new chapters waiting</span></div>
+      </div>
+    </section>
+
+    <section style="border-radius: 24px; padding: 18px; background: #F2F2F7; display: flex; flex-direction: column; gap: 14px">
+      <h2 style="margin: 0; font-size: 15px; font-weight: 600">Spotlight and Siri</h2>
+      <div style="border-radius: 18px; background: #FFFFFF; padding: 10px 12px; display: flex; flex-direction: column; gap: 10px">
+        <div style="height: 34px; border-radius: 17px; background: rgba(118,118,128,0.12); display: flex; align-items: center; padding: 0 12px; font-size: 15px">cartographer</div>
+        <span style="font-size: 12px; font-weight: 600; color: #6C6C70; text-transform: uppercase">Kudos</span>
+        <div style="display: flex; gap: 10px; align-items: center">
+          <dc-import name="Symbols" rating="T" category="FM" warnings="none" status="wip" size="17" hint-size="36px,36px"></dc-import>
+          <div style="flex: 1; display: flex; flex-direction: column"><span style="font-size: 15px; font-weight: 600">The Cartographer's Daughter</span><span style="font-size: 12px; color: #6C6C70">inkwell_moth · Ch 7 of 20</span></div>
+          <span style="height: 30px; padding: 0 12px; border-radius: 15px; background: {{accent}}; color: #FFFFFF; font-size: 13px; font-weight: 600; display: flex; align-items: center">Resume</span>
+        </div>
+      </div>
+      <div style="border-radius: 18px; background: #FFFFFF; padding: 12px; display: flex; flex-direction: column; gap: 6px">
+        <span style="font-size: 12px; font-weight: 600; color: #6C6C70; text-transform: uppercase">App Shortcuts</span>
+        <span style="font-size: 15px">“Resume reading in Kudos”</span>
+        <span style="font-size: 15px">“Read aloud my next chapter”</span>
+        <span style="font-size: 15px">“Add this to Summer Reading”</span>
+      </div>
+    </section>
+
+    <section style="border-radius: 24px; padding: 18px; background: #F2F2F7; display: flex; flex-direction: column; gap: 14px">
+      <h2 style="margin: 0; font-size: 15px; font-weight: 600">Share from Safari, Control Center</h2>
+      <div style="border-radius: 22px; background: #FFFFFF; padding: 14px; display: flex; flex-direction: column; gap: 12px; box-shadow: 0 6px 20px rgba(0,0,0,0.06)">
+        <span style="font-size: 13px; color: #6C6C70">archiveofourown.org/works/…</span>
+        <div style="display: flex; gap: 14px">
+          <div style="display: flex; flex-direction: column; align-items: center; gap: 4px"><span aria-hidden="true" style="width: 56px; height: 56px; border-radius: 14px; background: {{accent}}; color: #FFFFFF; font-family: 'New York', Georgia, serif; font-size: 28px; font-weight: 700; display: flex; align-items: center; justify-content: center">K</span><span style="font-size: 11px">Kudos</span></div>
+          <div style="display: flex; flex-direction: column; align-items: center; gap: 4px"><span aria-hidden="true" style="width: 56px; height: 56px; border-radius: 14px; background: #34C759"></span><span style="font-size: 11px">Messages</span></div>
+          <div style="display: flex; flex-direction: column; align-items: center; gap: 4px"><span aria-hidden="true" style="width: 56px; height: 56px; border-radius: 14px; background: #FFCC00"></span><span style="font-size: 11px">Notes</span></div>
+        </div>
+        <div style="border-radius: 12px; background: #F2F2F7; overflow: hidden">
+          <div style="height: 44px; display: flex; align-items: center; padding: 0 14px; font-size: 15px">Download to Kudos</div>
+          <div style="height: 44px; display: flex; align-items: center; padding: 0 14px; font-size: 15px; border-top: 0.5px solid #E5E5EA">Add to Queue in Kudos</div>
+        </div>
+      </div>
+      <div style="display: flex; gap: 12px; align-items: center">
+        <span aria-label="Control Center: Read Aloud" style="width: 72px; height: 72px; border-radius: 36px; background: {{accent}}; color: #FFFFFF; display: flex; align-items: center; justify-content: center">
+          <svg aria-hidden="true" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4zM15.5 9a4.5 4.5 0 0 1 0 6M18 6.5a8 8 0 0 1 0 11"></path></svg>
+        </span>
+        <span style="font-size: 13px; line-height: 18px; color: #3A3A3C">Read Aloud control: one tap resumes the current chapter out loud, from Control Center or the Action button.</span>
+      </div>
+    </section>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#990000","options":["#990000","#B3261E","#7A1F2B","#1F4E5F"]},"$preview":{"width":1290,"height":960}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return { accent: this.props.accent ?? '#990000' };
+  }
+}
+</script>
+</body>
+</html>

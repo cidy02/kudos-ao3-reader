@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Themes and settings</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+button{cursor:pointer}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; position: relative; overflow: hidden; background: #FAF7F0; color: #1F1B16; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; box-sizing: border-box">
+  <article aria-hidden="true" style="padding: 70px 30px 0; font-family: 'New York', 'Iowan Old Style', Georgia, serif; font-size: 19px; line-height: 1.56">
+    <p style="margin: 0">He laughed, and the gulls went up again, white against a sky the colour of old pewter.</p>
+  </article>
+  <section role="dialog" aria-label="Themes and settings" style="position: absolute; left: 0; right: 0; top: 196px; bottom: 0; border-radius: 38px 38px 0 0; background: #F2F2F7; box-shadow: 0 -8px 30px rgba(40,30,10,0.18); display: flex; flex-direction: column">
+    <div aria-hidden="true" style="width: 36px; height: 5px; border-radius: 3px; background: #C7C7CC; margin: 7px auto 0"></div>
+    <div style="display: flex; align-items: center; justify-content: space-between; padding: 8px 16px 6px">
+      <button style="height: 40px; padding: 0 14px; border: none; border-radius: 20px; background: rgba(118,118,128,0.14); font-family: inherit; font-size: 15px">Customize…</button>
+      <h2 style="margin: 0; font-size: 17px; font-weight: 600">Themes &amp; Settings</h2>
+      <button aria-label="Done" style="width: 40px; height: 40px; border: none; border-radius: 20px; background: {{accent}}; color: #FFFFFF; display: flex; align-items: center; justify-content: center">
+        <svg aria-hidden="true" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.6 4.6L19.2 7.4"></path></svg>
+      </button>
+    </div>
+    <div style="padding: 0 16px; display: flex; flex-direction: column; gap: 12px">
+      <div role="radiogroup" aria-label="Theme" style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px">
+        <sc-for list="{{themes}}" as="t" hint-placeholder-count="4">
+          <button role="radio" aria-checked="{{t.checked}}" style="border: none; padding: 0; background: transparent; font-family: inherit; display: flex; flex-direction: column; align-items: center; gap: 6px">
+            <span aria-hidden="true" style="width: 100%; height: 64px; border-radius: 14px; background: {{t.bg}}; color: {{t.fg}}; box-shadow: {{t.ring}}; font-family: 'New York', Georgia, serif; font-size: 22px; display: flex; align-items: center; justify-content: center">Aa</span>
+            <span style="font-size: 13px; font-weight: {{t.weight}}; color: #1C1C1E">{{t.name}}</span>
+          </button>
+        </sc-for>
+      </div>
+      <div style="background: #FFFFFF; border-radius: 14px; padding: 10px 16px; display: flex; align-items: center; gap: 12px">
+        <span aria-hidden="true" style="font-size: 14px; font-weight: 600">A</span>
+        <div role="slider" aria-label="Text size" aria-valuenow="19" style="flex: 1; position: relative; height: 4px; border-radius: 2px; background: #E5E5EA">
+          <div style="width: 45%; height: 4px; border-radius: 2px; background: {{accent}}"></div>
+          <span style="position: absolute; left: 45%; top: -10px; width: 24px; height: 24px; margin-left: -12px; border-radius: 12px; background: #FFFFFF; box-shadow: 0 1px 4px rgba(0,0,0,0.3)"></span>
+        </div>
+        <span aria-hidden="true" style="font-size: 22px; font-weight: 600">A</span>
+      </div>
+      <div style="background: #FFFFFF; border-radius: 14px; overflow: hidden">
+        <div style="display: flex; align-items: center; height: 46px; padding: 0 16px; gap: 8px; border-bottom: 0.5px solid #E5E5EA">
+          <span style="flex: 1; font-size: 16px">Font</span><span style="font-family: 'New York', Georgia, serif; font-size: 16px; color: #6C6C70">New York</span>
+          <svg aria-hidden="true" width="8" height="14" viewBox="0 0 8 14" fill="none" stroke="#C7C7CC" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m1.5 1.5 5 5.5-5 5.5"></path></svg>
+        </div>
+        <div style="display: flex; align-items: center; height: 46px; padding: 0 16px; gap: 10px; border-bottom: 0.5px solid #E5E5EA">
+          <span style="flex: 1; font-size: 16px">Layout</span>
+          <div role="radiogroup" aria-label="Layout" style="width: 170px; height: 30px; border-radius: 9px; background: rgba(118,118,128,0.12); padding: 2px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr))">
+            <button role="radio" aria-checked="true" style="border: none; border-radius: 7px; background: #FFFFFF; box-shadow: 0 2px 5px rgba(0,0,0,0.12); font-family: inherit; font-size: 13px; font-weight: 600">Pages</button>
+            <button role="radio" aria-checked="false" style="border: none; border-radius: 7px; background: transparent; font-family: inherit; font-size: 13px">Scroll</button>
+          </div>
+        </div>
+        <div style="display: flex; align-items: center; height: 46px; padding: 0 16px; gap: 8px; border-bottom: 0.5px solid #E5E5EA">
+          <span style="flex: 1; font-size: 16px">Spacing · Margins</span><span style="font-size: 16px; color: #6C6C70">Normal · Wide</span>
+          <svg aria-hidden="true" width="8" height="14" viewBox="0 0 8 14" fill="none" stroke="#C7C7CC" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m1.5 1.5 5 5.5-5 5.5"></path></svg>
+        </div>
+        <sc-for list="{{toggles}}" as="g" hint-placeholder-count="3">
+          <div style="display: flex; align-items: center; height: 46px; padding: 0 16px; border-top: {{g.sep}}">
+            <span style="flex: 1; font-size: 16px">{{g.label}}</span>
+            <span role="switch" aria-checked="{{g.on}}" aria-label="{{g.label}}" style="width: 51px; height: 31px; border-radius: 16px; background: {{g.track}}; position: relative"><span style="position: absolute; left: {{g.knob}}px; top: 2px; width: 27px; height: 27px; border-radius: 14px; background: #FFFFFF; box-shadow: 0 2px 4px rgba(0,0,0,0.2)"></span></span>
+          </div>
+        </sc-for>
+      </div>
+      <p style="margin: 0 16px; font-size: 13px; line-height: 18px; color: #6C6C70">Two-page spread appears here when the screen is wide enough: iPad, or iPhone Duo open.</p>
+    </div>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#990000","options":["#990000","#B3261E","#7A1F2B","#1F4E5F"]},"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const accent = this.props.accent ?? '#990000';
+    const themes = [['Light', '#FFFFFF', '#000000'], ['Sepia', '#F4ECD8', '#3B2F1E'], ['Dark', '#1C1C1E', '#E5E5EA'], ['OLED', '#000000', '#C7C7CC']];
+    const toggles = [['Justify text', true], ['Bold text', false], ['Keep screen awake', true]];
+    return {
+      accent,
+      themes: themes.map(([name, bg, fg], i) => ({ name, bg, fg, checked: i === 1 ? 'true' : 'false', weight: i === 1 ? 600 : 400, ring: i === 1 ? '0 0 0 2.5px ' + accent : '0 0 0 0.5px #D1D1D6' })),
+      toggles: toggles.map(([label, on], i) => ({ label, on: on ? 'true' : 'false', track: on ? '#34C759' : '#E9E9EB', knob: on ? 22 : 2, sep: i ? '0.5px solid #E5E5EA' : 'none' }))
+    };
+  }
+}
+</script>
+</body>
+</html>

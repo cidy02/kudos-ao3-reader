@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Reader with Read Aloud playing</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+button{cursor:pointer}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; position: relative; overflow: hidden; background: #FAF7F0; color: #1F1B16; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; box-sizing: border-box">
+  <article style="padding: 124px 30px 0; font-family: 'New York', 'Iowan Old Style', Georgia, serif; font-size: 19px; line-height: 1.56">
+    <p style="margin: 0">They walked until the light went copper. <span style="background: {{accentTint}}; box-shadow: 0 0 0 2px {{accentTint}}; border-radius: 3px">Somewhere behind them the dunes had folded themselves away, and ahead there was nothing but the white ground and the long blue shadow each of them threw.</span></p>
+    <p style="margin: 0; text-indent: 1.3em">“How will you know where to stop?” Tomas asked.</p>
+    <p style="margin: 0; text-indent: 1.3em">Elinor checked the compass. The needle was steady, which was its own kind of answer.</p>
+  </article>
+  <div aria-hidden="true" style="position: absolute; left: 0; right: 0; bottom: 0; height: 220px; background: linear-gradient(to bottom, rgba(250,247,240,0), rgba(250,247,240,0.95) 55%); pointer-events: none"></div>
+
+  <section aria-label="Read Aloud" style="position: absolute; left: 16px; right: 16px; bottom: 28px; border-radius: 30px; padding: 12px 12px 10px; box-sizing: border-box; display: flex; flex-direction: column; gap: 8px; background: rgba(255,253,248,0.82); backdrop-filter: blur(24px) saturate(160%); -webkit-backdrop-filter: blur(24px) saturate(160%); box-shadow: 0 8px 28px rgba(60,40,10,0.14), 0 0 0 0.5px rgba(60,40,10,0.08), inset 0 1px 0 rgba(255,255,255,0.9)">
+    <div style="display: flex; align-items: baseline; justify-content: center; gap: 6px">
+      <span style="font-size: 14px; font-weight: 600">The Cartographer's Daughter</span>
+      <span style="font-size: 13px; color: #6B645A">Ch 8 of 20</span>
+    </div>
+    <div style="display: flex; align-items: center; gap: 10px; padding: 0 6px">
+      <span style="font-size: 11px; color: #6B645A">Page 2 of 17</span>
+      <div style="flex: 1; height: 4px; border-radius: 2px; background: rgba(31,27,22,0.14)"><div style="width: 12%; height: 4px; border-radius: 2px; background: {{accent}}"></div></div>
+      <span style="font-size: 11px; color: #6B645A">18 min</span>
+    </div>
+    <div style="display: flex; align-items: center; justify-content: space-between; padding: 0 4px">
+      <button aria-label="Read Aloud settings" style="height: 36px; padding: 0 10px; border: none; border-radius: 18px; background: rgba(60,40,10,0.06); font-family: inherit; font-size: 13px; font-weight: 600; color: #1F1B16">1.1× · Kokoro</button>
+      <div style="display: flex; align-items: center; gap: 6px">
+        <button aria-label="Previous chapter" style="width: 44px; height: 44px; border: none; border-radius: 22px; background: transparent; color: #1F1B16; display: flex; align-items: center; justify-content: center">
+          <svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24"><path d="M11.5 6v12L3 12zM20.5 6v12L12 12z" fill="currentColor"></path></svg>
+        </button>
+        <button aria-label="Pause" style="width: 54px; height: 54px; border: none; border-radius: 27px; background: {{accent}}; color: #FFFFFF; display: flex; align-items: center; justify-content: center">
+          <svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24"><rect x="6" y="4.5" width="4" height="15" rx="1.2" fill="currentColor"></rect><rect x="14" y="4.5" width="4" height="15" rx="1.2" fill="currentColor"></rect></svg>
+        </button>
+        <button aria-label="Next chapter" style="width: 44px; height: 44px; border: none; border-radius: 22px; background: transparent; color: #1F1B16; display: flex; align-items: center; justify-content: center">
+          <svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24"><path d="M12.5 6v12L21 12zM3.5 6v12L12 12z" fill="currentColor"></path></svg>
+        </button>
+      </div>
+      <button aria-label="Stop Read Aloud" style="width: 36px; height: 36px; border: none; border-radius: 18px; background: rgba(60,40,10,0.06); color: #1F1B16; display: flex; align-items: center; justify-content: center">
+        <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="14" rx="2.5" fill="currentColor"></rect></svg>
+      </button>
+    </div>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#990000","options":["#990000","#B3261E","#7A1F2B","#1F4E5F"]},"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const accent = this.props.accent ?? '#990000';
+    const hex = accent.replace('#', '');
+    return {
+      accent,
+      accentTint: 'rgba(' + parseInt(hex.slice(0, 2), 16) + ',' + parseInt(hex.slice(2, 4), 16) + ',' + parseInt(hex.slice(4, 6), 16) + ',0.14)'
+    };
+  }
+}
+</script>
+</body>
+</html>

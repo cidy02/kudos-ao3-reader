@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Information architecture, today and proposed</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 1290px; height: 1100px; box-sizing: border-box; padding: 32px 40px; background: #FFFFFF; color: #1C1C1E; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; display: flex; flex-direction: column; gap: 20px">
+  <header style="display: flex; flex-direction: column; gap: 6px">
+    <h1 style="margin: 0; font-size: 32px; font-weight: 700">Where things live</h1>
+    <p style="margin: 0; font-size: 15px; line-height: 21px; color: #3A3A3C; max-width: 1000px">Same four tabs and global Search. The change is names and grouping: things on this iPhone keep plain names, things on AO3 say so, and nothing appears twice under one name. Every feature keeps a home.</p>
+  </header>
+  <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 32px; flex: 1">
+    <sc-for list="{{columns}}" as="c" hint-placeholder-count="2">
+      <section style="display: flex; flex-direction: column; gap: 12px">
+        <h2 style="margin: 0; font-size: 20px; font-weight: 700">{{c.title}}</h2>
+        <sc-for list="{{c.tabs}}" as="t" hint-placeholder-count="4">
+          <div style="border-radius: 16px; background: #F2F2F7; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px">
+            <div style="display: flex; align-items: center; gap: 8px">
+              <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="{{accent}}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="{{t.d}}"></path></svg>
+              <span style="font-size: 17px; font-weight: 700">{{t.name}}</span>
+              <span style="font-size: 13px; color: #6C6C70">{{t.job}}</span>
+            </div>
+            <div style="display: flex; flex-wrap: wrap; gap: 6px">
+              <sc-for list="{{t.items}}" as="i" hint-placeholder-count="5">
+                <span style="padding: 4px 10px; border-radius: 12px; background: {{i.bg}}; color: {{i.fg}}; font-size: 13px; line-height: 18px; font-weight: {{i.weight}}; text-decoration: {{i.deco}}">{{i.label}}</span>
+              </sc-for>
+            </div>
+          </div>
+        </sc-for>
+      </section>
+    </sc-for>
+  </div>
+  <footer style="display: flex; gap: 22px; font-size: 13px; color: #3A3A3C">
+    <span style="display: flex; align-items: center; gap: 6px"><span style="width: 14px; height: 14px; border-radius: 4px; background: #FDE2E2"></span>Name clash today</span>
+    <span style="display: flex; align-items: center; gap: 6px"><span style="width: 14px; height: 14px; border-radius: 4px; background: {{accentTint}}"></span>Renamed or moved</span>
+    <span style="display: flex; align-items: center; gap: 6px"><span style="width: 14px; height: 14px; border-radius: 4px; background: #FFFFFF; box-shadow: 0 0 0 1px #D1D1D6"></span>Unchanged</span>
+  </footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#990000","options":["#990000","#B3261E","#7A1F2B","#1F4E5F"]},"$preview":{"width":1290,"height":1100}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const accent = this.props.accent ?? '#990000';
+    const hex = accent.replace('#', '');
+    const tint = 'rgba(' + parseInt(hex.slice(0, 2), 16) + ',' + parseInt(hex.slice(2, 4), 16) + ',' + parseInt(hex.slice(4, 6), 16) + ',0.12)';
+    const same = (label) => ({ label, bg: '#FFFFFF', fg: '#1C1C1E', weight: 400, deco: 'none' });
+    const clash = (label) => ({ label, bg: '#FDE2E2', fg: '#8E0E1C', weight: 600, deco: 'none' });
+    const moved = (label) => ({ label, bg: tint, fg: accent, weight: 600, deco: 'none' });
+    const gone = (label) => ({ label, bg: '#F2F2F7', fg: '#8E8E93', weight: 400, deco: 'line-through' });
+    const D = {
+      home: 'M3.5 10.5 12 3.5l8.5 7M5.5 9v11h5v-6h3v6h5V9',
+      library: 'M3.5 4h4v16h-4zM9.5 4h4v16h-4zM15.6 5.4l3.4-.9 3 15.2-3.4.9z',
+      browse: 'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z',
+      account: 'M12 4a4 4 0 1 1 0 8 4 4 0 0 1 0-8zM4.5 20c1.4-3.8 4.2-5.8 7.5-5.8s6.1 2 7.5 5.8'
+    };
+    const columns = [
+      { title: 'Today', tabs: [
+        { name: 'Home', job: 'what to read', d: D.home, items: [same('Reading Now'), same('Reading Queues'), same('Collection shelves'), same('Recently Updated'), same('Subscriptions')] },
+        { name: 'Library', job: 'on this iPhone', d: D.library, items: [same('Reading Now'), clash('Saved for Later'), same('Finished'), clash('Collections'), same('Downloaded'), clash('Reading History'), same('Favorites'), same('Queues'), same('Insights (under Locations)'), same('Recently Deleted')] },
+        { name: 'Browse', job: 'AO3 by fandom', d: D.browse, items: [same('Categories'), same('Fandoms'), same('Fandom works'), same('AO3 website')] },
+        { name: 'Account', job: 'AO3 account', d: D.account, items: [clash('Shortcuts grid (repeats rows)'), clash('Marked for Later'), same('Bookmarks'), clash('Collections'), same('Subscriptions'), same('Works'), same('Series'), same('Drafts'), clash('History'), same('Inbox'), same('Preferences'), same('More on AO3'), same('Settings')] }
+      ] },
+      { title: 'Proposed', tabs: [
+        { name: 'Home', job: 'what to read next', d: D.home, items: [same('Reading Now'), moved('New Chapters (right after Reading Now)'), moved('Up Next from your queues'), same('Collection shelves'), moved('This week: reading stats → Insights')] },
+        { name: 'Library', job: 'everything on this iPhone', d: D.library, items: [same('Reading Now'), moved('Want to Read (was Saved for Later)'), same('Finished'), same('Collections'), same('Downloaded'), same('Reading History'), same('Favorites'), same('Queues'), moved('Insights (own row)'), same('Recently Deleted')] },
+        { name: 'Browse', job: 'AO3 by fandom', d: D.browse, items: [same('Categories'), same('Fandoms'), same('Fandom works'), same('AO3 website')] },
+        { name: 'Account', job: 'you on AO3', d: D.account, items: [moved('Profile with counts'), gone('Shortcuts grid'), moved('Edit to pin and reorder rows'), same('Marked for Later'), same('Bookmarks'), same('Subscriptions'), moved('AO3 History'), same('Works'), same('Series'), same('Drafts'), same('Inbox'), moved('AO3 Collections & Challenges'), same('Preferences'), same('More on AO3'), moved('Settings (toolbar gear)')] }
+      ] }
+    ];
+    return { accent, accentTint: tint, columns };
+  }
+}
+</script>
+</body>
+</html>

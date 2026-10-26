@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Search</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+button{cursor:pointer}
+</style>
+</helmet>
+<div style="width: 390px; height: 1240px; position: relative; overflow: hidden; background: #F2F2F7; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; box-sizing: border-box">
+  <main style="padding: 64px 16px 0; display: flex; flex-direction: column; gap: 18px">
+    <h1 style="margin: 0 4px; font-size: 34px; line-height: 41px; font-weight: 700; letter-spacing: 0.4px">Search</h1>
+
+    <section aria-label="In your library" style="display: flex; flex-direction: column; gap: 6px">
+      <h2 style="margin: 0 4px; font-size: 13px; line-height: 18px; font-weight: 600; letter-spacing: 0.3px; text-transform: uppercase; color: #6C6C70">In your library · 2</h2>
+      <div style="background: #FFFFFF; border-radius: 16px; overflow: hidden">
+        <dc-import name="WorkRow" work="{{local1}}" divider="{{true}}" accent="{{accent}}" hint-size="100%,96px"></dc-import>
+        <dc-import name="WorkRow" work="{{local2}}" accent="{{accent}}" hint-size="100%,96px"></dc-import>
+      </div>
+    </section>
+
+    <section aria-label="Your tags and fandoms" style="display: flex; flex-direction: column; gap: 6px">
+      <h2 style="margin: 0 4px; font-size: 13px; line-height: 18px; font-weight: 600; letter-spacing: 0.3px; text-transform: uppercase; color: #6C6C70">Your tags, collections, fandoms</h2>
+      <div style="display: flex; flex-wrap: wrap; gap: 8px">
+        <sc-for list="{{chips}}" as="c" hint-placeholder-count="5">
+          <button style="height: 32px; padding: 0 12px; border: none; border-radius: 16px; background: #FFFFFF; font-family: inherit; font-size: 14px; color: #000000; display: flex; align-items: center; gap: 6px">
+            <span style="font-size: 11px; font-weight: 600; letter-spacing: 0.3px; text-transform: uppercase; color: #6C6C70">{{c.kind}}</span>{{c.label}}<span style="color: #6C6C70">{{c.count}}</span>
+          </button>
+        </sc-for>
+      </div>
+    </section>
+
+    <section aria-label="Fandoms on AO3" style="display: flex; flex-direction: column; gap: 6px">
+      <h2 style="margin: 0 4px; font-size: 13px; line-height: 18px; font-weight: 600; letter-spacing: 0.3px; text-transform: uppercase; color: #6C6C70">Fandoms on AO3</h2>
+      <div style="background: #FFFFFF; border-radius: 16px; overflow: hidden">
+        <sc-for list="{{fandoms}}" as="f" hint-placeholder-count="2">
+          <div style="display: flex; align-items: center; height: 48px; padding: 0 16px; gap: 8px; border-top: {{f.sep}}">
+            <span style="flex: 1; font-size: 16px">{{f.name}}</span>
+            <span style="font-size: 14px; color: #6C6C70">{{f.count}}</span>
+            <svg aria-hidden="true" width="8" height="14" viewBox="0 0 8 14" fill="none" stroke="#C7C7CC" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m1.5 1.5 5 5.5-5 5.5"></path></svg>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+
+    <section aria-label="AO3 results" style="display: flex; flex-direction: column; gap: 8px">
+      <div style="padding: 0 4px; display: flex; align-items: center; gap: 8px">
+        <h2 style="margin: 0; flex: 1; font-size: 22px; line-height: 28px; font-weight: 700">On AO3 <span style="font-size: 15px; font-weight: 400; color: #6C6C70">1,284 works</span></h2>
+        <button style="height: 32px; padding: 0 12px; border: none; border-radius: 16px; background: #FFFFFF; font-family: inherit; font-size: 14px; display: flex; align-items: center; gap: 4px">Best match
+          <svg aria-hidden="true" width="10" height="14" viewBox="0 0 12 16" fill="none" stroke="#8E8E93" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 6 6 2.5 9.5 6M2.5 10 6 13.5 9.5 10"></path></svg>
+        </button>
+        <button aria-label="Filters, 2 active" style="height: 32px; padding: 0 12px; border: none; border-radius: 16px; background: {{accent}}; color: #FFFFFF; font-family: inherit; font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 5px">
+          <svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 7h16M7 12h10M10 17h4"></path></svg>2
+        </button>
+      </div>
+      <div style="background: #FFFFFF; border-radius: 16px; overflow: hidden">
+        <dc-import name="WorkRow" work="{{r1}}" show-summary="{{true}}" divider="{{true}}" accent="{{accent}}" hint-size="100%,140px"></dc-import>
+        <dc-import name="WorkRow" work="{{r2}}" show-summary="{{true}}" accent="{{accent}}" hint-size="100%,140px"></dc-import>
+      </div>
+      <nav aria-label="Pages" style="display: flex; align-items: center; justify-content: center; gap: 6px; padding: 6px 0">
+        <sc-for list="{{pages}}" as="p" hint-placeholder-count="7">
+          <button aria-current="{{p.current}}" style="min-width: 36px; height: 36px; padding: 0 8px; border: none; border-radius: 18px; background: {{p.bg}}; color: {{p.fg}}; font-family: inherit; font-size: 15px; font-weight: 600">{{p.label}}</button>
+        </sc-for>
+      </nav>
+    </section>
+  </main>
+
+  <div aria-hidden="true" style="position: absolute; left: 0; right: 0; bottom: 0; height: 150px; background: linear-gradient(to bottom, rgba(242,242,247,0), rgba(242,242,247,0.94) 72%); pointer-events: none"></div>
+  <div style="position: absolute; left: 16px; right: 16px; bottom: 28px; display: flex; gap: 10px; align-items: center">
+    <button aria-label="Back to Browse" style="width: 54px; height: 54px; flex-shrink: 0; border: none; border-radius: 27px; color: #1C1C1E; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.74); backdrop-filter: blur(24px) saturate(180%); -webkit-backdrop-filter: blur(24px) saturate(180%); box-shadow: 0 8px 28px rgba(0,0,0,0.12), 0 0 0 0.5px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.9)">
+      <svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z"></path></svg>
+    </button>
+    <label style="flex: 1; height: 54px; border-radius: 27px; padding: 0 8px 0 16px; box-sizing: border-box; display: flex; align-items: center; gap: 8px; color: #6C6C70; background: rgba(255,255,255,0.74); backdrop-filter: blur(24px) saturate(180%); -webkit-backdrop-filter: blur(24px) saturate(180%); box-shadow: 0 8px 28px rgba(0,0,0,0.12), 0 0 0 0.5px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.9)">
+      <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="10.5" cy="10.5" r="6.5"></circle><path d="m15.5 15.5 5 5"></path></svg>
+      <input type="search" aria-label="Search Kudos and AO3" value="lighthouse" style="flex: 1; min-width: 0; border: none; background: transparent; font-family: inherit; font-size: 17px; color: #000000; outline: none">
+      <button aria-label="Clear search" style="width: 36px; height: 36px; border: none; border-radius: 18px; background: transparent; color: #8E8E93; display: flex; align-items: center; justify-content: center">
+        <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="currentColor"></circle><path d="M9 9l6 6M15 9l-6 6" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round"></path></svg>
+      </button>
+    </label>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#990000","options":["#990000","#B3261E","#7A1F2B","#1F4E5F"]},"$preview":{"width":390,"height":1240}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const accent = this.props.accent ?? '#990000';
+    const pages = ['‹', '1', '2', '3', '…', '65', '›'];
+    return {
+      accent,
+      local1: { title: 'The Lighthouse Keepers', author: 'tidewright', fandom: 'Original Work', rating: 'T', category: 'FF', warnings: 'none', status: 'complete', words: '40,900', chapters: '10/10', kudos: '3,050', updated: 'Downloaded' },
+      local2: { title: 'Salt & Starlight', author: 'wrenfield', fandom: 'Original Work', rating: 'M', category: 'Gen', warnings: 'undisclosed', status: 'wip', words: '118,402', chapters: '15/30', kudos: '5,870', updated: 'Tag: lighthouses' },
+      chips: [
+        { kind: 'Tag', label: 'lighthouses', count: '4' },
+        { kind: 'Collection', label: 'Comfort Reads', count: '1' },
+        { kind: 'Fandom', label: 'Original Work', count: '3' }
+      ],
+      fandoms: [
+        { name: 'To the Lighthouse - Virginia Woolf', count: '312' },
+        { name: 'The Lamp at Skerry Head (Novel)', count: '48' }
+      ].map((f, i) => ({ ...f, sep: i ? '0.5px solid #E5E5EA' : 'none' })),
+      r1: { title: 'Keeper of the Northern Light', author: 'saltwindow', fandom: 'Original Work', rating: 'T', category: 'FF', warnings: 'none', status: 'complete', words: '22,410', chapters: '7/7', kudos: '1,804', hits: '19.2k', updated: 'Oct 12', summary: 'Two keepers, one winter, and a logbook that keeps writing itself after midnight.' },
+      r2: { title: 'What the Lamp Saw', author: 'quietharbor', fandom: 'To the Lighthouse', rating: 'G', category: 'Gen', warnings: 'none', status: 'wip', words: '5,060', chapters: '2/5', kudos: '312', hits: '2.9k', updated: 'Oct 20', summary: 'The Ramsays’ summer, told by the one thing that watched it all.' },
+      pages: pages.map((label) => ({ label, current: label === '1' ? 'page' : 'false', bg: label === '1' ? accent : '#FFFFFF', fg: label === '1' ? '#FFFFFF' : '#1C1C1E' }))
+    };
+  }
+}
+</script>
+</body>
+</html>

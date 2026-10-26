@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Feedback: undo, progress, import</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+button{cursor:pointer}
+</style>
+</helmet>
+<div style="width: 1290px; height: 960px; box-sizing: border-box; padding: 24px 30px; background: #FFFFFF; color: #1C1C1E; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; display: flex; flex-direction: column; gap: 16px">
+  <header style="display: flex; align-items: baseline; gap: 16px">
+    <h1 style="margin: 0; font-size: 28px; font-weight: 700">Feedback</h1>
+    <p style="margin: 0; font-size: 15px; color: #3A3A3C">Quiet confirmations sit just above the tab bar and offer Undo, like Mail. Long tasks live in the bottom accessory, like Music's mini player.</p>
+  </header>
+  <div style="display: flex; gap: 40px">
+    <figure style="margin: 0; display: flex; flex-direction: column; gap: 8px">
+      <figcaption style="font-size: 13px; font-weight: 600; color: #6C6C70">After removing a work: Undo</figcaption>
+      <div style="width: 390px; height: 844px; border-radius: 48px; overflow: hidden; position: relative; background: #F2F2F7; box-shadow: 0 0 0 1px #D1D1D6">
+        <div style="padding: 106px 16px 0; display: flex; flex-direction: column; gap: 12px">
+          <span style="font-size: 34px; font-weight: 700; padding: 0 4px">Saved for Later</span>
+          <div style="background: #FFFFFF; border-radius: 16px; overflow: hidden">
+            <dc-import name="WorkRow" work="{{w1}}" divider="{{true}}" accent="{{accent}}" hint-size="100%,100px"></dc-import>
+            <dc-import name="WorkRow" work="{{w2}}" accent="{{accent}}" hint-size="100%,100px"></dc-import>
+          </div>
+        </div>
+        <div role="status" style="position: absolute; left: 16px; right: 16px; bottom: 104px; min-height: 52px; border-radius: 26px; padding: 8px 8px 8px 18px; box-sizing: border-box; display: flex; align-items: center; gap: 10px; background: rgba(40,40,44,0.86); backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px); color: #FFFFFF; box-shadow: 0 10px 30px rgba(0,0,0,0.2)">
+          <span style="flex: 1; font-size: 14px; line-height: 19px">Removed from Saved for Later. The offline copy is in Recently Deleted.</span>
+          <button style="height: 36px; padding: 0 14px; border: none; border-radius: 18px; background: rgba(255,255,255,0.18); color: #FFFFFF; font-family: inherit; font-size: 15px; font-weight: 600">Undo</button>
+        </div>
+        <div style="position: absolute; left: 16px; bottom: 28px">
+          <dc-import name="TabBar" selected="library" accent="{{accent}}" hint-size="358px,62px"></dc-import>
+        </div>
+      </div>
+    </figure>
+    <figure style="margin: 0; display: flex; flex-direction: column; gap: 8px">
+      <figcaption style="font-size: 13px; font-weight: 600; color: #6C6C70">Downloads in the bottom accessory</figcaption>
+      <div style="width: 390px; height: 844px; border-radius: 48px; overflow: hidden; position: relative; background: #F2F2F7; box-shadow: 0 0 0 1px #D1D1D6">
+        <div style="padding: 106px 16px 0; display: flex; flex-direction: column; gap: 12px">
+          <span style="font-size: 34px; font-weight: 700; padding: 0 4px">Sherlock Holmes</span>
+          <div style="background: #FFFFFF; border-radius: 16px; overflow: hidden">
+            <dc-import name="WorkRow" work="{{w3}}" divider="{{true}}" accent="{{accent}}" hint-size="100%,100px"></dc-import>
+            <dc-import name="WorkRow" work="{{w4}}" accent="{{accent}}" hint-size="100%,100px"></dc-import>
+          </div>
+        </div>
+        <div style="position: absolute; left: 16px; right: 16px; bottom: 28px; display: flex; gap: 10px; align-items: center">
+          <span aria-hidden="true" style="width: 54px; height: 54px; flex-shrink: 0; border-radius: 27px; background: rgba(255,255,255,0.78); box-shadow: 0 8px 28px rgba(0,0,0,0.12), 0 0 0 0.5px rgba(0,0,0,0.06); color: {{accent}}; display: flex; align-items: center; justify-content: center">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z"></path></svg>
+          </span>
+          <div role="status" aria-label="Downloading 3 of 7" style="flex: 1; height: 54px; border-radius: 27px; padding: 0 6px 0 10px; box-sizing: border-box; display: flex; align-items: center; gap: 10px; background: rgba(255,255,255,0.78); box-shadow: 0 8px 28px rgba(0,0,0,0.12), 0 0 0 0.5px rgba(0,0,0,0.06)">
+            <svg aria-hidden="true" width="30" height="30" viewBox="0 0 36 36"><circle cx="18" cy="18" r="14" fill="none" stroke="#E5E5EA" stroke-width="4"></circle><circle cx="18" cy="18" r="14" fill="none" stroke="{{accent}}" stroke-width="4" stroke-dasharray="38 88" stroke-linecap="round" transform="rotate(-90 18 18)"></circle></svg>
+            <div style="flex: 1; min-width: 0; display: flex; flex-direction: column">
+              <span style="font-size: 14px; font-weight: 600">Downloading 3 of 7</span>
+              <span style="font-size: 12px; color: #6C6C70; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Watson's Notebook · paced for AO3</span>
+            </div>
+            <button style="height: 36px; padding: 0 12px; border: none; border-radius: 18px; background: transparent; font-family: inherit; font-size: 14px; color: {{accent}}">Cancel</button>
+          </div>
+          <span aria-hidden="true" style="width: 54px; height: 54px; flex-shrink: 0; border-radius: 27px; background: rgba(255,255,255,0.78); box-shadow: 0 8px 28px rgba(0,0,0,0.12), 0 0 0 0.5px rgba(0,0,0,0.06); display: flex; align-items: center; justify-content: center">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#1C1C1E" stroke-width="2" stroke-linecap="round"><circle cx="10.5" cy="10.5" r="6.5"></circle><path d="m15.5 15.5 5 5"></path></svg>
+          </span>
+        </div>
+      </div>
+    </figure>
+    <figure style="margin: 0; display: flex; flex-direction: column; gap: 8px">
+      <figcaption style="font-size: 13px; font-weight: 600; color: #6C6C70">Opened an EPUB from Files or Safari</figcaption>
+      <div style="width: 390px; height: 844px; border-radius: 48px; overflow: hidden; position: relative; background: rgba(0,0,0,0.3); box-shadow: 0 0 0 1px #D1D1D6">
+        <section role="dialog" aria-label="Added to your library" style="position: absolute; left: 0; right: 0; bottom: 0; height: 430px; border-radius: 38px 38px 0 0; background: #F2F2F7; padding: 10px 16px 30px; box-sizing: border-box; display: flex; flex-direction: column; gap: 12px">
+          <div aria-hidden="true" style="width: 36px; height: 5px; border-radius: 3px; background: #C7C7CC; margin: 0 auto"></div>
+          <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; text-align: center; padding-top: 6px">
+            <svg aria-hidden="true" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#2F8F3A" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><path d="M8 12.5l2.8 2.8L16.5 9.5"></path></svg>
+            <h2 style="margin: 4px 0 0; font-size: 20px; font-weight: 700">Added to Your Library</h2>
+            <p style="margin: 0; font-size: 14px; color: #6C6C70">Converted from HTML. Already have it? Kudos says so and keeps one copy.</p>
+          </div>
+          <div style="background: #FFFFFF; border-radius: 16px; overflow: hidden">
+            <dc-import name="WorkRow" work="{{w5}}" accent="{{accent}}" hint-size="100%,100px"></dc-import>
+          </div>
+          <div style="display: flex; gap: 10px; margin-top: auto">
+            <button style="flex: 1; height: 50px; border: none; border-radius: 25px; background: rgba(118,118,128,0.14); font-family: inherit; font-size: 16px">Done</button>
+            <button style="flex: 1; height: 50px; border: none; border-radius: 25px; background: {{accent}}; color: #FFFFFF; font-family: inherit; font-size: 16px; font-weight: 600">Read Now</button>
+          </div>
+        </section>
+      </div>
+    </figure>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#990000","options":["#990000","#B3261E","#7A1F2B","#1F4E5F"]},"$preview":{"width":1290,"height":960}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      accent: this.props.accent ?? '#990000',
+      w1: { title: 'A Map of Small Hours', author: 'quietharbor', fandom: 'Pride and Prejudice', rating: 'G', category: 'FM', warnings: 'none', status: 'complete', words: '32,050', chapters: '9/9', kudos: '1,212' },
+      w2: { title: 'The Lighthouse Keepers', author: 'tidewright', fandom: 'Original Work', rating: 'T', category: 'FF', warnings: 'none', status: 'complete', words: '40,900', chapters: '10/10', kudos: '3,050' },
+      w3: { title: 'Watson’s Notebook', author: 'fogandlamplight', fandom: 'Sherlock Holmes', rating: 'T', category: 'Gen', warnings: 'none', status: 'complete', words: '15,200', chapters: '6/6', kudos: '1,990', updated: 'Downloading…' },
+      w4: { title: 'A Study in Lamplight', author: 'gaslightgirl', fandom: 'Sherlock Holmes', rating: 'T', category: 'FF', warnings: 'none', status: 'complete', words: '33,400', chapters: '9/9', kudos: '1,422', updated: 'Waiting' },
+      w5: { title: 'Half Agony, Half Hope', author: 'anne_at_lyme', fandom: 'Persuasion', rating: 'G', category: 'FM', warnings: 'none', status: 'complete', words: '8,300', chapters: '1/1' }
+    };
+  }
+}
+</script>
+</body>
+</html>

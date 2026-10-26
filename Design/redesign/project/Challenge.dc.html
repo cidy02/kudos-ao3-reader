@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Challenge, maintainer view</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+button{cursor:pointer}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; position: relative; overflow: hidden; background: #F2F2F7; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; box-sizing: border-box">
+  <div style="position: absolute; left: 16px; right: 16px; top: 54px; display: flex; justify-content: space-between">
+    <button aria-label="Back to Collections" style="width: 44px; height: 44px; border: none; border-radius: 22px; color: #1C1C1E; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.74); box-shadow: 0 6px 20px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.06)">
+      <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 5-7 7 7 7"></path></svg>
+    </button>
+    <button aria-label="More: Collection settings, Delete on AO3, Open on AO3" style="width: 44px; height: 44px; border: none; border-radius: 22px; color: #1C1C1E; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.74); box-shadow: 0 6px 20px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.06)">
+      <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24"><circle cx="5.5" cy="12" r="1.7" fill="currentColor"></circle><circle cx="12" cy="12" r="1.7" fill="currentColor"></circle><circle cx="18.5" cy="12" r="1.7" fill="currentColor"></circle></svg>
+    </button>
+  </div>
+  <main style="padding: 106px 16px 0; display: flex; flex-direction: column; gap: 14px">
+    <header style="padding: 0 4px; display: flex; flex-direction: column; gap: 4px">
+      <p style="margin: 0; font-size: 13px; font-weight: 600; letter-spacing: 0.3px; text-transform: uppercase; color: #6C6C70">Gift exchange</p>
+      <h1 style="margin: 0; font-size: 30px; line-height: 36px; font-weight: 700">Winter Lighthouse Exchange</h1>
+      <p style="margin: 0; font-size: 15px; line-height: 20px; color: #3A3A3C">Sign-ups open until Nov 15 · 64 signed up · moderated</p>
+    </header>
+    <div style="background: #FFFFFF; border-radius: 16px; padding: 12px 14px; display: flex; flex-direction: column; gap: 10px">
+      <div style="display: flex; align-items: baseline; justify-content: space-between">
+        <h2 style="margin: 0; font-size: 17px; font-weight: 600">Waiting for approval</h2>
+        <span style="font-size: 15px; color: #6C6C70">3</span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 10px">
+        <dc-import name="Symbols" rating="T" category="FF" warnings="none" status="complete" size="18" hint-size="38px,38px"></dc-import>
+        <div style="flex: 1; min-width: 0; display: flex; flex-direction: column"><span style="font-size: 15px; font-weight: 600">The Second Lamp</span><span style="font-size: 13px; color: #6C6C70">tidewright · 4,800 words</span></div>
+      </div>
+      <div style="display: flex; gap: 8px">
+        <button style="flex: 1; height: 40px; border: none; border-radius: 20px; background: {{accent}}; color: #FFFFFF; font-family: inherit; font-size: 15px; font-weight: 600">Approve</button>
+        <button style="flex: 1; height: 40px; border: none; border-radius: 20px; background: #F2F2F7; font-family: inherit; font-size: 15px; color: #D70015">Reject</button>
+      </div>
+    </div>
+    <div style="background: #FFFFFF; border-radius: 16px; overflow: hidden">
+      <sc-for list="{{rows}}" as="r" hint-placeholder-count="7">
+        <div style="display: flex; align-items: center; height: 48px; padding: 0 16px; gap: 12px; border-top: {{r.sep}}">
+          <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="{{accent}}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="{{r.d}}"></path></svg>
+          <span style="flex: 1; font-size: 16px">{{r.label}}</span>
+          <span style="font-size: 15px; color: #6C6C70">{{r.value}}</span>
+          <svg aria-hidden="true" width="8" height="14" viewBox="0 0 8 14" fill="none" stroke="#C7C7CC" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m1.5 1.5 5 5.5-5 5.5"></path></svg>
+        </div>
+      </sc-for>
+    </div>
+  </main>
+  <div aria-hidden="true" style="position: absolute; left: 0; right: 0; bottom: 0; height: 150px; background: linear-gradient(to bottom, rgba(242,242,247,0), rgba(242,242,247,0.94) 72%); pointer-events: none"></div>
+  <div style="position: absolute; left: 16px; bottom: 28px">
+    <dc-import name="TabBar" selected="account" accent="{{accent}}" hint-size="358px,62px"></dc-import>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#990000","options":["#990000","#B3261E","#7A1F2B","#1F4E5F"]},"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const rows = [
+      ['Items', '42', 'M4 5h16v14H4zM8 9h8M8 13h5'],
+      ['Sign-ups', '64', 'M12 4a4 4 0 1 1 0 8 4 4 0 0 1 0-8zM4.5 20c1.4-3.8 4.2-5.8 7.5-5.8s6.1 2 7.5 5.8'],
+      ['Assignments', 'Not sent', 'M4 6h16v12H4zM4 7l8 6 8-6'],
+      ['Prompts and tag set', '210 tags', 'M4 12V5h7l9 9-7 7z'],
+      ['Moderation', 'Anonymous until reveal', 'M12 3l7 3v6c0 4-3 7-7 9-4-2-7-5-7-9V6z'],
+      ['Maintainers', '2', 'M8 11a3 3 0 1 1 0-6 3 3 0 0 1 0 6zM16 11a3 3 0 1 1 0-6 3 3 0 0 1 0 6zM2.5 19c1-3 3-4.5 5.5-4.5s4.5 1.5 5.5 4.5M13 15c.9-.3 1.9-.5 3-.5 2.5 0 4.5 1.5 5.5 4.5'],
+      ['Challenge settings', '', 'M4 7h10M18 7h2M4 17h4M12 17h8M14 4v6M8 14v6']
+    ];
+    return {
+      accent: this.props.accent ?? '#990000',
+      rows: rows.map(([label, value, d], i) => ({ label, value, d, sep: i ? '0.5px solid #E5E5EA' : 'none' }))
+    };
+  }
+}
+</script>
+</body>
+</html>

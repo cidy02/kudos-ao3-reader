@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>About Kudos</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+button{cursor:pointer}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; position: relative; overflow: hidden; background: #F2F2F7; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; box-sizing: border-box">
+  <div style="position: absolute; left: 16px; top: 54px">
+    <button aria-label="Back to Settings" style="width: 44px; height: 44px; border: none; border-radius: 22px; color: #1C1C1E; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.74); box-shadow: 0 6px 20px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.06)">
+      <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 5-7 7 7 7"></path></svg>
+    </button>
+  </div>
+  <main style="padding: 110px 16px 0; display: flex; flex-direction: column; gap: 16px">
+    <header style="display: flex; flex-direction: column; align-items: center; gap: 6px">
+      <span aria-hidden="true" style="width: 84px; height: 84px; border-radius: 19px; background: {{accent}}; color: #FFFFFF; font-family: 'New York', Georgia, serif; font-size: 44px; font-weight: 700; display: flex; align-items: center; justify-content: center; box-shadow: 0 8px 20px rgba(0,0,0,0.18)">K</span>
+      <h1 style="margin: 6px 0 0; font-size: 24px; font-weight: 700">Kudos</h1>
+      <p style="margin: 0; font-size: 15px; color: #6C6C70">Version 1.6 (412)</p>
+    </header>
+    <section style="background: #FFFFFF; border-radius: 14px; padding: 12px 16px; display: flex; flex-direction: column; gap: 8px">
+      <h2 style="margin: 0; font-size: 17px; font-weight: 600">What's New</h2>
+      <sc-for list="{{news}}" as="n" hint-placeholder-count="3">
+        <div style="display: flex; gap: 10px; align-items: flex-start">
+          <span aria-hidden="true" style="width: 6px; height: 6px; margin-top: 8px; border-radius: 3px; background: {{accent}}; flex-shrink: 0"></span>
+          <span style="font-size: 15px; line-height: 21px; color: #3A3A3C">{{n}}</span>
+        </div>
+      </sc-for>
+    </section>
+    <div style="background: #FFFFFF; border-radius: 14px; overflow: hidden">
+      <sc-for list="{{rows}}" as="r" hint-placeholder-count="6">
+        <div style="display: flex; align-items: center; height: 46px; padding: 0 16px; gap: 8px; border-top: {{r.sep}}">
+          <span style="flex: 1; font-size: 16px">{{r.label}}</span>
+          <span style="font-size: 16px; color: #6C6C70">{{r.value}}</span>
+          <svg aria-hidden="true" width="8" height="14" viewBox="0 0 8 14" fill="none" stroke="#C7C7CC" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m1.5 1.5 5 5.5-5 5.5"></path></svg>
+        </div>
+      </sc-for>
+    </div>
+    <p style="margin: 0 12px; font-size: 13px; line-height: 18px; color: #6C6C70; text-align: center">Kudos is a fan-made, open-source app. It is not affiliated with the Organization for Transformative Works or Archive of Our Own.</p>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#990000","options":["#990000","#B3261E","#7A1F2B","#1F4E5F"]},"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const rows = [['Help & Feedback', ''], ['Report a Bug', ''], ['Source on GitHub', ''], ['Licence', 'AGPL-3.0'], ['Open-Source Components', ''], ['Legal Notices', '']];
+    return {
+      accent: this.props.accent ?? '#990000',
+      news: ['Read Aloud with natural voices that run on your iPhone.', 'iPhone Duo: two-page reading when open, one page each side in Book pose.', 'Reading Queues remember where you left off in every work.'],
+      rows: rows.map(([label, value], i) => ({ label, value, sep: i ? '0.5px solid #E5E5EA' : 'none' }))
+    };
+  }
+}
+</script>
+</body>
+</html>

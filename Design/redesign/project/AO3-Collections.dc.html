@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>AO3 collections</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+button{cursor:pointer}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; position: relative; overflow: hidden; background: #F2F2F7; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; box-sizing: border-box">
+  <div style="position: absolute; left: 16px; right: 16px; top: 54px; display: flex; justify-content: space-between">
+    <button aria-label="Back to Account" style="width: 44px; height: 44px; border: none; border-radius: 22px; color: #1C1C1E; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.74); box-shadow: 0 6px 20px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.06)">
+      <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 5-7 7 7 7"></path></svg>
+    </button>
+    <div style="height: 44px; border-radius: 22px; display: flex; align-items: center; background: rgba(255,255,255,0.74); box-shadow: 0 6px 20px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.06)">
+      <button aria-label="Sort and filter" style="width: 46px; height: 44px; border: none; background: transparent; color: #1C1C1E; display: flex; align-items: center; justify-content: center">
+        <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M7 12h10M10 17h4"></path></svg>
+      </button>
+      <button aria-label="New Collection" style="width: 46px; height: 44px; border: none; background: transparent; color: #1C1C1E; display: flex; align-items: center; justify-content: center">
+        <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg>
+      </button>
+    </div>
+  </div>
+  <main style="padding: 106px 16px 0; display: flex; flex-direction: column; gap: 16px">
+    <header style="padding: 0 4px; display: flex; flex-direction: column; gap: 2px">
+      <h1 style="margin: 0; font-size: 34px; line-height: 41px; font-weight: 700; letter-spacing: 0.4px">Collections</h1>
+      <p style="margin: 0; font-size: 15px; line-height: 20px; color: #6C6C70">On AO3 · your collections and challenges</p>
+    </header>
+    <sc-for list="{{groups}}" as="g" hint-placeholder-count="2">
+      <section style="display: flex; flex-direction: column; gap: 6px">
+        <h2 style="margin: 0 16px; font-size: 13px; line-height: 18px; font-weight: 600; letter-spacing: 0.3px; text-transform: uppercase; color: #6C6C70">{{g.title}}</h2>
+        <div style="background: #FFFFFF; border-radius: 16px; overflow: hidden">
+          <sc-for list="{{g.rows}}" as="c" hint-placeholder-count="2">
+            <div style="display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-top: {{c.sep}}">
+              <span aria-hidden="true" style="width: 40px; height: 40px; flex-shrink: 0; border-radius: 10px; background: {{c.bg}}; color: #FFFFFF; font-size: 17px; font-weight: 700; display: flex; align-items: center; justify-content: center">{{c.initial}}</span>
+              <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px">
+                <span style="font-size: 16px; line-height: 21px; font-weight: 600">{{c.name}}</span>
+                <span style="font-size: 13px; line-height: 17px; color: #6C6C70">{{c.detail}}</span>
+              </div>
+              <sc-if value="{{c.hasBadge}}" hint-placeholder-val="{{false}}"><span style="padding: 1px 8px; border-radius: 10px; background: {{accent}}; color: #FFFFFF; font-size: 12px; font-weight: 700">{{c.badge}}</span></sc-if>
+              <svg aria-hidden="true" width="8" height="14" viewBox="0 0 8 14" fill="none" stroke="#C7C7CC" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m1.5 1.5 5 5.5-5 5.5"></path></svg>
+            </div>
+          </sc-for>
+        </div>
+      </section>
+    </sc-for>
+    <p style="margin: 0 4px; font-size: 13px; line-height: 18px; color: #6C6C70">Open a collection to manage items, edit its settings, or run its challenge: sign-ups, assignments, prompts, tag sets and moderation.</p>
+  </main>
+  <div aria-hidden="true" style="position: absolute; left: 0; right: 0; bottom: 0; height: 150px; background: linear-gradient(to bottom, rgba(242,242,247,0), rgba(242,242,247,0.94) 72%); pointer-events: none"></div>
+  <div style="position: absolute; left: 16px; bottom: 28px">
+    <dc-import name="TabBar" selected="account" accent="{{accent}}" hint-size="358px,62px"></dc-import>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#990000","options":["#990000","#B3261E","#7A1F2B","#1F4E5F"]},"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const row = (name, detail, bg, badge) => ({ name, detail, bg, initial: name[0], badge: badge || '', hasBadge: !!badge });
+    const groups = [
+      { title: 'You maintain', rows: [row('Winter Lighthouse Exchange', 'Gift exchange · sign-ups open · 42 items', '#23506B', '3 to approve'), row('Small Weathers Drabbles', 'Prompt meme · moderated · 118 items', '#7A4E2D')] },
+      { title: 'You are in', rows: [row('Austen Rarepair Week', 'Challenge · your assignment is due Nov 30', '#5B2A4E'), row('Fog & Lamplight Fest', 'Collection · 9 of your works', '#3D4A2F')] }
+    ].map((g) => ({ ...g, rows: g.rows.map((r, i) => ({ ...r, sep: i ? '0.5px solid #E5E5EA' : 'none' })) }));
+    return { accent: this.props.accent ?? '#990000', groups };
+  }
+}
+</script>
+</body>
+</html>

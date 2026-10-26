@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Report a bug</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+button{cursor:pointer}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; position: relative; overflow: hidden; background: rgba(0,0,0,0.3); color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; box-sizing: border-box">
+  <section role="dialog" aria-label="Report a bug" style="position: absolute; left: 0; right: 0; top: 54px; bottom: 0; border-radius: 38px 38px 0 0; background: #F2F2F7; display: flex; flex-direction: column">
+    <div aria-hidden="true" style="width: 36px; height: 5px; border-radius: 3px; background: #C7C7CC; margin: 7px auto 0"></div>
+    <div style="display: flex; align-items: center; justify-content: space-between; padding: 8px 16px">
+      <button aria-label="Cancel" style="width: 44px; height: 44px; border: none; border-radius: 22px; background: rgba(118,118,128,0.14); color: #1C1C1E; display: flex; align-items: center; justify-content: center">
+        <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"></path></svg>
+      </button>
+      <h2 style="margin: 0; font-size: 17px; font-weight: 600">Report a Bug</h2>
+      <span style="width: 44px"></span>
+    </div>
+    <div style="padding: 4px 16px 0; display: flex; flex-direction: column; gap: 14px">
+      <p style="margin: 0 4px; font-size: 14px; line-height: 19px; color: #3A3A3C">You shook your iPhone. Tell us what went wrong and we'll open a GitHub issue with the details filled in.</p>
+      <label style="display: flex; flex-direction: column; gap: 6px">
+        <span style="margin: 0 12px; font-size: 13px; font-weight: 600; letter-spacing: 0.3px; text-transform: uppercase; color: #6C6C70">What went wrong?</span>
+        <textarea aria-label="What went wrong" style="height: 120px; resize: none; border: none; border-radius: 14px; background: #FFFFFF; padding: 12px; font-family: inherit; font-size: 16px; line-height: 22px; outline: none">The reader opened to a blank page after I rotated the phone in chapter 3.</textarea>
+      </label>
+      <div style="background: #FFFFFF; border-radius: 14px; overflow: hidden">
+        <div style="display: flex; align-items: center; gap: 12px; padding: 10px 16px">
+          <span aria-label="Attached screenshot preview" style="width: 46px; height: 92px; flex-shrink: 0; border-radius: 8px; background: #FAF7F0; box-shadow: 0 0 0 0.5px #D1D1D6"></span>
+          <span style="flex: 1; font-size: 16px">Include a screenshot</span>
+          <span role="switch" aria-checked="true" aria-label="Include a screenshot" style="width: 51px; height: 31px; border-radius: 16px; background: #34C759; position: relative"><span style="position: absolute; right: 2px; top: 2px; width: 27px; height: 27px; border-radius: 14px; background: #FFFFFF; box-shadow: 0 2px 4px rgba(0,0,0,0.2)"></span></span>
+        </div>
+      </div>
+      <section style="display: flex; flex-direction: column; gap: 6px">
+        <h3 style="margin: 0 12px; font-size: 13px; font-weight: 600; letter-spacing: 0.3px; text-transform: uppercase; color: #6C6C70">Included with your report</h3>
+        <div style="background: #FFFFFF; border-radius: 14px; overflow: hidden">
+          <div style="display: flex; height: 44px; align-items: center; padding: 0 16px"><span style="flex: 1; font-size: 16px">App version</span><span style="font-size: 16px; color: #6C6C70">1.6 (412)</span></div>
+          <div style="display: flex; height: 44px; align-items: center; padding: 0 16px; border-top: 0.5px solid #E5E5EA"><span style="flex: 1; font-size: 16px">System</span><span style="font-size: 16px; color: #6C6C70">iOS 27.0 · iPhone</span></div>
+        </div>
+        <p style="margin: 0 12px; font-size: 13px; line-height: 18px; color: #6C6C70">No account details or reading history are sent.</p>
+      </section>
+      <button style="height: 52px; border: none; border-radius: 26px; background: {{accent}}; color: #FFFFFF; font-family: inherit; font-size: 17px; font-weight: 600">Continue on GitHub</button>
+      <div style="display: flex; justify-content: center; gap: 24px">
+        <button style="border: none; background: none; font-family: inherit; font-size: 15px; color: {{accent}}">Browse existing issues</button>
+        <button style="border: none; background: none; font-family: inherit; font-size: 15px; color: {{accent}}">Save Screenshot</button>
+      </div>
+    </div>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#990000","options":["#990000","#B3261E","#7A1F2B","#1F4E5F"]},"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return { accent: this.props.accent ?? '#990000' };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Flow: organise with queues</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 1290px; height: 620px; box-sizing: border-box; padding: 26px 34px; background: #FFFFFF; color: #1C1C1E; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; display: flex; flex-direction: column; gap: 18px">
+  <header style="display: flex; align-items: baseline; gap: 14px">
+    <h1 style="margin: 0; font-size: 26px; font-weight: 700">Plan what to read next</h1>
+    <p style="margin: 0; font-size: 15px; color: #3A3A3C">Queues are ordered piles that download themselves and surface on Home.</p>
+  </header>
+  <div style="display: flex; align-items: flex-start; gap: 14px">
+    <figure style="margin: 0; display: flex; flex-direction: column; gap: 10px; width: 195px">
+      <div style="width: 195px; height: 422px; overflow: hidden; border-radius: 26px; box-shadow: 0 0 0 1px #D1D1D6"><div style="width: 390px; height: 844px; transform: scale(0.5); transform-origin: 0 0"><dc-import name="Work-Actions" hint-size="390px,844px"></dc-import></div></div>
+      <figcaption style="font-size: 13px; line-height: 18px"><b>1</b> Add to Queue from any work's menu, in the library or on AO3.</figcaption>
+    </figure>
+    <span aria-hidden="true" style="align-self: center; margin-top: -60px; font-size: 26px; color: #C7C7CC">→</span>
+    <figure style="margin: 0; display: flex; flex-direction: column; gap: 10px; width: 195px">
+      <div style="width: 195px; height: 422px; overflow: hidden; border-radius: 26px; box-shadow: 0 0 0 1px #D1D1D6"><div style="width: 390px; height: 844px; transform: scale(0.5); transform-origin: 0 0"><dc-import name="Queues" hint-size="390px,844px"></dc-import></div></div>
+      <figcaption style="font-size: 13px; line-height: 18px"><b>2</b> Pick a queue or make one: name, colour, tags, keep offline.</figcaption>
+    </figure>
+    <span aria-hidden="true" style="align-self: center; margin-top: -60px; font-size: 26px; color: #C7C7CC">→</span>
+    <figure style="margin: 0; display: flex; flex-direction: column; gap: 10px; width: 195px">
+      <div style="width: 195px; height: 422px; overflow: hidden; border-radius: 26px; box-shadow: 0 0 0 1px #D1D1D6"><div style="width: 390px; height: 844px; transform: scale(0.5); transform-origin: 0 0"><dc-import name="Library-Select" hint-size="390px,844px"></dc-import></div></div>
+      <figcaption style="font-size: 13px; line-height: 18px"><b>3</b> Or select several works and add them at once.</figcaption>
+    </figure>
+    <span aria-hidden="true" style="align-self: center; margin-top: -60px; font-size: 26px; color: #C7C7CC">→</span>
+    <figure style="margin: 0; display: flex; flex-direction: column; gap: 10px; width: 195px">
+      <div style="width: 195px; height: 422px; overflow: hidden; border-radius: 26px; box-shadow: 0 0 0 1px #D1D1D6"><div style="width: 390px; height: 844px; transform: scale(0.5); transform-origin: 0 0"><dc-import name="Queue" hint-size="390px,844px"></dc-import></div></div>
+      <figcaption style="font-size: 13px; line-height: 18px"><b>4</b> The queue: reading time, Up next with Start, reorder from the menu.</figcaption>
+    </figure>
+    <span aria-hidden="true" style="align-self: center; margin-top: -60px; font-size: 26px; color: #C7C7CC">→</span>
+    <figure style="margin: 0; display: flex; flex-direction: column; gap: 10px; width: 195px">
+      <div style="width: 195px; height: 422px; overflow: hidden; border-radius: 26px; box-shadow: 0 0 0 1px #D1D1D6"><div style="width: 390px; height: 844px; transform: scale(0.5); transform-origin: 0 0"><dc-import name="Reader-End" hint-size="390px,844px"></dc-import></div></div>
+      <figcaption style="font-size: 13px; line-height: 18px"><b>5</b> Finishing a work offers the next one in the queue.</figcaption>
+    </figure>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1290,"height":620}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>
