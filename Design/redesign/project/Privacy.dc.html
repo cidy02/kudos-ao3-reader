@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Privacy and local data</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+button{cursor:pointer}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; position: relative; overflow: hidden; background: #F2F2F7; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; box-sizing: border-box">
+  <div style="position: absolute; left: 16px; top: 54px">
+    <button aria-label="Back to Settings" style="width: 44px; height: 44px; border: none; border-radius: 22px; color: #1C1C1E; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.74); box-shadow: 0 6px 20px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.06)">
+      <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 5-7 7 7 7"></path></svg>
+    </button>
+  </div>
+  <main style="padding: 106px 16px 0; display: flex; flex-direction: column; gap: 14px">
+    <h1 style="margin: 0 4px; font-size: 34px; line-height: 41px; font-weight: 700; letter-spacing: 0.4px">Privacy</h1>
+    <section style="display: flex; flex-direction: column; gap: 6px">
+      <h2 style="margin: 0 16px; font-size: 13px; font-weight: 600; letter-spacing: 0.3px; text-transform: uppercase; color: #6C6C70">Mature and Explicit works</h2>
+      <div style="background: #FFFFFF; border-radius: 14px; overflow: hidden">
+        <div style="display: flex; align-items: center; height: 46px; padding: 0 16px; gap: 10px">
+          <dc-import name="Symbols" only="rating" rating="E" size="22" hint-size="22px,22px"></dc-import>
+          <span style="flex: 1; font-size: 16px">Hide mature content</span>
+          <span role="switch" aria-checked="true" aria-label="Hide mature content" style="width: 51px; height: 31px; border-radius: 16px; background: #34C759; position: relative"><span style="position: absolute; right: 2px; top: 2px; width: 27px; height: 27px; border-radius: 14px; background: #FFFFFF; box-shadow: 0 2px 4px rgba(0,0,0,0.2)"></span></span>
+        </div>
+        <div style="padding: 8px 12px; border-top: 0.5px solid #E5E5EA">
+          <div role="radiogroup" aria-label="How to hide" style="height: 32px; border-radius: 9px; background: rgba(118,118,128,0.12); padding: 2px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr))">
+            <button role="radio" aria-checked="true" style="border: none; border-radius: 7px; background: #FFFFFF; box-shadow: 0 2px 5px rgba(0,0,0,0.12); font-family: inherit; font-size: 14px; font-weight: 600">Blur</button>
+            <button role="radio" aria-checked="false" style="border: none; border-radius: 7px; background: transparent; font-family: inherit; font-size: 14px">Hide completely</button>
+          </div>
+        </div>
+        <div style="display: flex; align-items: center; height: 46px; padding: 0 16px; border-top: 0.5px solid #E5E5EA">
+          <span style="flex: 1; font-size: 16px">Require Face ID to reveal</span>
+          <span role="switch" aria-checked="true" aria-label="Require Face ID to reveal" style="width: 51px; height: 31px; border-radius: 16px; background: #34C759; position: relative"><span style="position: absolute; right: 2px; top: 2px; width: 27px; height: 27px; border-radius: 14px; background: #FFFFFF; box-shadow: 0 2px 4px rgba(0,0,0,0.2)"></span></span>
+        </div>
+      </div>
+      <p style="margin: 0 16px; font-size: 13px; line-height: 18px; color: #6C6C70">Applies to your Library, Home and history. Revealed works hide again when Kudos locks.</p>
+    </section>
+    <section style="display: flex; flex-direction: column; gap: 6px">
+      <h2 style="margin: 0 16px; font-size: 13px; font-weight: 600; letter-spacing: 0.3px; text-transform: uppercase; color: #6C6C70">Data on this iPhone</h2>
+      <div style="background: #FFFFFF; border-radius: 14px; overflow: hidden">
+        <sc-for list="{{rows}}" as="r" hint-placeholder-count="4">
+          <div style="display: flex; align-items: center; height: 52px; padding: 0 16px; gap: 8px; border-top: {{r.sep}}">
+            <div style="flex: 1; display: flex; flex-direction: column"><span style="font-size: 16px">{{r.label}}</span><span style="font-size: 13px; color: #6C6C70">{{r.detail}}</span></div>
+            <button style="height: 32px; padding: 0 12px; border: none; border-radius: 16px; background: #F2F2F7; font-family: inherit; font-size: 14px; font-weight: 600; color: {{r.color}}">{{r.action}}</button>
+          </div>
+        </sc-for>
+      </div>
+      <p style="margin: 0 16px; font-size: 13px; line-height: 18px; color: #6C6C70">Kudos keeps your reading on this device. Your AO3 sign-in stays in the Keychain and is never in a backup.</p>
+    </section>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#990000","options":["#990000","#B3261E","#7A1F2B","#1F4E5F"]},"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const accent = this.props.accent ?? '#990000';
+    const rows = [
+      ['AO3 page cache', '118 MB', 'Clear', accent],
+      ['Reading history', '412 works', 'Clear…', '#D70015'],
+      ['Reading positions', '214 works', 'Clear…', '#D70015'],
+      ['Downloads of finished works', '74 works · 1.2 GB', 'Free…', accent]
+    ];
+    return {
+      accent,
+      rows: rows.map(([label, detail, action, color], i) => ({ label, detail, action, color, sep: i ? '0.5px solid #E5E5EA' : 'none' }))
+    };
+  }
+}
+</script>
+</body>
+</html>

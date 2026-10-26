@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Post a new work</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+button{cursor:pointer}
+</style>
+</helmet>
+<div style="width: 390px; height: 1500px; position: relative; overflow: hidden; background: #F2F2F7; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; box-sizing: border-box">
+  <div style="position: absolute; left: 16px; right: 16px; top: 54px; display: flex; align-items: center; justify-content: space-between; z-index: 1">
+    <button aria-label="Cancel" style="width: 44px; height: 44px; border: none; border-radius: 22px; color: #1C1C1E; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.74); box-shadow: 0 6px 20px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.06)">
+      <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"></path></svg>
+    </button>
+    <div style="display: flex; gap: 10px">
+      <button style="height: 44px; padding: 0 16px; border: none; border-radius: 22px; font-family: inherit; font-size: 16px; color: #1C1C1E; background: rgba(255,255,255,0.74); box-shadow: 0 6px 20px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.06)">Preview</button>
+      <button style="height: 44px; padding: 0 18px; border: none; border-radius: 22px; font-family: inherit; font-size: 16px; font-weight: 600; color: #FFFFFF; background: {{accent}}">Post</button>
+    </div>
+  </div>
+  <main style="padding: 106px 16px 40px; display: flex; flex-direction: column; gap: 18px">
+    <header style="padding: 0 4px; display: flex; flex-direction: column; gap: 2px">
+      <h1 style="margin: 0; font-size: 34px; line-height: 41px; font-weight: 700; letter-spacing: 0.4px">New Work</h1>
+      <p style="margin: 0; font-size: 15px; line-height: 20px; color: #6C6C70">Saved as you type · recovery copy on this device</p>
+    </header>
+
+    <sc-for list="{{sections}}" as="s" hint-placeholder-count="5">
+      <section style="display: flex; flex-direction: column; gap: 6px">
+        <h2 style="margin: 0 16px; font-size: 13px; line-height: 18px; font-weight: 600; letter-spacing: 0.3px; text-transform: uppercase; color: #6C6C70">{{s.title}}</h2>
+        <div style="background: #FFFFFF; border-radius: 14px; overflow: hidden">
+          <sc-for list="{{s.rows}}" as="r" hint-placeholder-count="3">
+            <div style="display: flex; align-items: center; min-height: 46px; padding: 7px 16px; gap: 10px; border-top: {{r.sep}}; flex-wrap: wrap">
+              <sc-if value="{{r.hasSymbol}}" hint-placeholder-val="{{false}}">
+                <dc-import name="Symbols" variant="grid" only="{{r.only}}" rating="{{r.rating}}" category="{{r.category}}" warnings="{{r.warnings}}" status="{{r.status}}" size="22" hint-size="22px,22px"></dc-import>
+              </sc-if>
+              <span style="font-size: 16px; color: {{r.labelColor}}; flex: {{r.labelFlex}}">{{r.label}}</span>
+              <sc-if value="{{r.isValue}}" hint-placeholder-val="{{true}}">
+                <span style="font-size: 16px; color: {{r.valueColor}}; text-align: right">{{r.value}}</span>
+              </sc-if>
+              <sc-if value="{{r.isChips}}" hint-placeholder-val="{{false}}">
+                <div style="display: flex; flex-wrap: wrap; gap: 6px; width: 100%">
+                  <sc-for list="{{r.chips}}" as="c" hint-placeholder-count="2">
+                    <span style="padding: 4px 10px; border-radius: 13px; background: #EFEFF4; font-size: 14px">{{c}}</span>
+                  </sc-for>
+                  <span style="padding: 4px 6px; font-size: 14px; color: {{accent}}">Add…</span>
+                </div>
+              </sc-if>
+              <sc-if value="{{r.isToggle}}" hint-placeholder-val="{{false}}">
+                <span role="switch" aria-checked="{{r.on}}" aria-label="{{r.label}}" style="width: 51px; height: 31px; border-radius: 16px; background: {{r.track}}; position: relative"><span style="position: absolute; left: {{r.knob}}px; top: 2px; width: 27px; height: 27px; border-radius: 14px; background: #FFFFFF; box-shadow: 0 2px 4px rgba(0,0,0,0.2)"></span></span>
+              </sc-if>
+              <sc-if value="{{r.isText}}" hint-placeholder-val="{{false}}">
+                <p style="margin: 0; width: 100%; font-size: 15px; line-height: 21px; color: #3A3A3C">{{r.text}}</p>
+              </sc-if>
+              <sc-if value="{{r.chevron}}" hint-placeholder-val="{{false}}">
+                <svg aria-hidden="true" width="8" height="14" viewBox="0 0 8 14" fill="none" stroke="#C7C7CC" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m1.5 1.5 5 5.5-5 5.5"></path></svg>
+              </sc-if>
+            </div>
+          </sc-for>
+        </div>
+        <sc-if value="{{s.hasFooter}}" hint-placeholder-val="{{false}}">
+          <p style="margin: 0 16px; font-size: 13px; line-height: 18px; color: {{s.footerColor}}">{{s.footer}}</p>
+        </sc-if>
+      </section>
+    </sc-for>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#990000","options":["#990000","#B3261E","#7A1F2B","#1F4E5F"]},"$preview":{"width":390,"height":1500}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const accent = this.props.accent ?? '#990000';
+    const base = { hasSymbol: false, only: 'all', rating: 'T', category: 'FF', warnings: 'none', status: 'wip', isValue: false, isChips: false, isToggle: false, isText: false, chevron: false, chips: [], value: '', text: '', on: 'false', track: '#E9E9EB', knob: 2, labelColor: '#000000', valueColor: '#6C6C70', labelFlex: '1' };
+    const value = (label, v, o) => ({ ...base, label, value: v, isValue: true, chevron: true, ...o });
+    const chips = (label, list) => ({ ...base, label, chips: list, isChips: true, labelFlex: '0 0 100%' });
+    const toggle = (label, on) => ({ ...base, label, isToggle: true, on: on ? 'true' : 'false', track: on ? '#34C759' : '#E9E9EB', knob: on ? 22 : 2 });
+    const text = (label, t) => ({ ...base, label, text: t, isText: true, labelFlex: '0 0 100%' });
+    const sections = [
+      { title: 'Required tags', rows: [
+        value('Rating', 'Teen And Up', { hasSymbol: true, only: 'rating' }),
+        value('Archive warnings', 'None apply', { hasSymbol: true, only: 'warnings' }),
+        value('Category', 'F/F', { hasSymbol: true, only: 'category' }),
+        chips('Fandoms', ['Original Work'])
+      ] },
+      { title: 'Tags', rows: [
+        chips('Relationships', ['Ines Calder/Wren Halloway']),
+        chips('Characters', ['Ines Calder', 'Wren Halloway']),
+        chips('Additional tags', ['Lighthouses', 'Slow Burn', 'Winter'])
+      ], footer: 'Suggestions come from AO3 as you type.' },
+      { title: 'Preface', rows: [
+        value('Title', 'What the Tide Keeps', { chevron: false, valueColor: '#000000' }),
+        value('Co-creators', 'None'),
+        text('Summary', 'Two keepers, one winter, and a logbook that keeps writing itself after midnight.'),
+        value('Notes', 'Beginning and end')
+      ] },
+      { title: 'Associations', rows: [
+        value('Series', 'None'), value('Collections and gifts', 'None'), value('Inspired by', 'None'), value('Language', 'English')
+      ] },
+      { title: 'Chapters and publishing', rows: [
+        value('Chapter 1 text', '4,120 words', { valueColor: accent }),
+        value('Chapters', '1 of 8'),
+        toggle('Work is complete', false),
+        toggle('Set a different publication date', false),
+        toggle('Only show to registered users', true),
+        toggle('Enable comment moderation', false)
+      ], footer: 'Chapter 1 still needs a title before you post.', footerColor: '#D70015' }
+    ];
+    return {
+      accent,
+      sections: sections.map((s) => ({
+        ...s,
+        hasFooter: !!s.footer,
+        footer: s.footer || '',
+        footerColor: s.footerColor || '#6C6C70',
+        rows: s.rows.map((r, i) => ({ ...r, sep: i ? '0.5px solid #E5E5EA' : 'none' }))
+      }))
+    };
+  }
+}
+</script>
+</body>
+</html>

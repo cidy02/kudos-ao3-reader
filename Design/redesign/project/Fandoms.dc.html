@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Fandom index</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+button{cursor:pointer}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; position: relative; overflow: hidden; background: #F2F2F7; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; box-sizing: border-box">
+  <div style="position: absolute; left: 16px; right: 16px; top: 54px; display: flex; justify-content: space-between">
+    <button aria-label="Back to Browse" style="width: 44px; height: 44px; border: none; border-radius: 22px; color: #1C1C1E; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.74); box-shadow: 0 6px 20px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.06)">
+      <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 5-7 7 7 7"></path></svg>
+    </button>
+    <button aria-label="Filter: grouping, minimum works, tag kinds, yours" style="width: 44px; height: 44px; border: none; border-radius: 22px; color: #FFFFFF; display: flex; align-items: center; justify-content: center; background: {{accent}}">
+      <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M7 12h10M10 17h4"></path></svg>
+    </button>
+  </div>
+  <main style="padding: 106px 30px 0 16px; display: flex; flex-direction: column; gap: 12px">
+    <h1 style="margin: 0 4px; font-size: 34px; line-height: 41px; font-weight: 700; letter-spacing: 0.4px">Books &amp; Literature</h1>
+    <label style="height: 38px; border-radius: 19px; background: rgba(118,118,128,0.12); display: flex; align-items: center; gap: 6px; padding: 0 12px; color: #6C6C70">
+      <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="10.5" cy="10.5" r="6.5"></circle><path d="m15.5 15.5 5 5"></path></svg>
+      <input type="search" aria-label="Search fandoms" placeholder="Search fandoms" style="flex: 1; border: none; background: transparent; font-family: inherit; font-size: 16px; outline: none">
+    </label>
+    <p style="margin: 0 4px; font-size: 13px; color: #6C6C70">Grouped by family · at least 50 works · <span style="color: {{accent}}">Reset</span></p>
+    <sc-for list="{{sections}}" as="s" hint-placeholder-count="3">
+      <section style="display: flex; flex-direction: column; gap: 6px">
+        <h2 style="margin: 0 4px; font-size: 13px; line-height: 18px; font-weight: 600; letter-spacing: 0.3px; text-transform: uppercase; color: #6C6C70">{{s.title}}</h2>
+        <div style="background: #FFFFFF; border-radius: 16px; overflow: hidden">
+          <sc-for list="{{s.rows}}" as="f" hint-placeholder-count="2">
+            <div style="display: flex; align-items: center; min-height: 56px; padding: 6px 12px 6px 16px; gap: 10px; border-top: {{f.sep}}">
+              <div style="flex: 1; min-width: 0; display: flex; flex-direction: column">
+                <span style="font-size: 16px; line-height: 21px">{{f.name}}</span>
+                <span style="font-size: 13px; line-height: 17px; color: #6C6C70">{{f.detail}}</span>
+              </div>
+              <button aria-label="{{f.starLabel}}" aria-pressed="{{f.fav}}" style="width: 36px; height: 36px; border: none; border-radius: 18px; background: transparent; color: {{f.starColor}}; display: flex; align-items: center; justify-content: center">
+                <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="{{f.starFill}}" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="m12 3.8 2.5 5.2 5.6.8-4.1 3.9 1 5.6-5-2.7-5 2.7 1-5.6-4.1-3.9 5.6-.8z"></path></svg>
+              </button>
+            </div>
+          </sc-for>
+        </div>
+      </section>
+    </sc-for>
+  </main>
+  <nav aria-label="Section index" style="position: absolute; right: 4px; top: 250px; display: flex; flex-direction: column; align-items: center; gap: 1px">
+    <sc-for list="{{letters}}" as="l" hint-placeholder-count="26">
+      <span style="font-size: 11px; line-height: 15px; font-weight: 600; color: {{accent}}">{{l}}</span>
+    </sc-for>
+  </nav>
+  <div aria-hidden="true" style="position: absolute; left: 0; right: 0; bottom: 0; height: 150px; background: linear-gradient(to bottom, rgba(242,242,247,0), rgba(242,242,247,0.94) 72%); pointer-events: none"></div>
+  <div style="position: absolute; left: 16px; bottom: 28px">
+    <dc-import name="TabBar" selected="browse" accent="{{accent}}" hint-size="358px,62px"></dc-import>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#990000","options":["#990000","#B3261E","#7A1F2B","#1F4E5F"]},"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const accent = this.props.accent ?? '#990000';
+    const row = (name, detail, fav) => ({ name, detail, fav: fav ? 'true' : 'false', starLabel: fav ? 'Remove from favourite fandoms' : 'Add to favourite fandoms', starColor: fav ? '#E2A100' : '#AEAEB2', starFill: fav ? '#F5C400' : 'none' });
+    const sections = [
+      { title: 'Favourites', rows: [row('Pride and Prejudice & related', '6 fandoms · about 9k works · 14 downloaded', true), row('Sherlock Holmes & related', '11 fandoms · about 30k works · 9 downloaded', true)] },
+      { title: 'J', rows: [row('Jane Eyre - Charlotte Brontë', 'about 1.1k works · 2 downloaded'), row('Jane Austen - Works', 'about 600 works')] },
+      { title: 'N', rows: [row('Northanger Abbey - Jane Austen', 'about 500 works · 1 downloaded')] }
+    ].map((s) => ({ ...s, rows: s.rows.map((r, i) => ({ ...r, sep: i ? '0.5px solid #E5E5EA' : 'none' })) }));
+    return { accent, sections, letters: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('') };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Reading Insights</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+button{cursor:pointer}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; position: relative; overflow: hidden; background: #F2F2F7; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; box-sizing: border-box">
+  <div style="position: absolute; left: 16px; top: 54px">
+    <button aria-label="Back" style="width: 44px; height: 44px; border: none; border-radius: 22px; color: #1C1C1E; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.74); box-shadow: 0 6px 20px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.06)">
+      <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 5-7 7 7 7"></path></svg>
+    </button>
+  </div>
+  <main style="padding: 106px 16px 0; display: flex; flex-direction: column; gap: 14px">
+    <h1 style="margin: 0 4px; font-size: 34px; line-height: 41px; font-weight: 700; letter-spacing: 0.4px">Reading Insights</h1>
+    <div role="radiogroup" aria-label="Period" style="height: 34px; border-radius: 17px; background: rgba(118,118,128,0.12); padding: 2px; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr))">
+      <sc-for list="{{periods}}" as="p" hint-placeholder-count="4">
+        <button role="radio" aria-checked="{{p.checked}}" style="border: none; border-radius: 15px; background: {{p.bg}}; box-shadow: {{p.shadow}}; font-family: inherit; font-size: 14px; font-weight: {{p.weight}}; color: #000000">{{p.label}}</button>
+      </sc-for>
+    </div>
+    <dl style="margin: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px">
+      <sc-for list="{{stats}}" as="s" hint-placeholder-count="4">
+        <div style="background: #FFFFFF; border-radius: 16px; padding: 12px 14px; display: flex; flex-direction: column; gap: 2px">
+          <dt style="font-size: 13px; line-height: 18px; color: #6C6C70">{{s.label}}</dt>
+          <dd style="margin: 0; font-size: 24px; line-height: 30px; font-weight: 700">{{s.value}}</dd>
+        </div>
+      </sc-for>
+    </dl>
+    <figure style="margin: 0; background: #FFFFFF; border-radius: 16px; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px">
+      <figcaption style="display: flex; justify-content: space-between; font-size: 15px; font-weight: 600"><span>Minutes per day</span><span style="font-weight: 400; color: #6C6C70">avg 28</span></figcaption>
+      <div role="img" aria-label="Bar chart of minutes read per day this month, peaking at 95 minutes" style="height: 96px; display: flex; align-items: flex-end; gap: 3px">
+        <sc-for list="{{bars}}" as="b" hint-placeholder-count="20">
+          <span style="flex: 1; height: {{b.h}}px; border-radius: 3px; background: {{b.color}}"></span>
+        </sc-for>
+      </div>
+      <div style="display: flex; justify-content: space-between; font-size: 11px; color: #6C6C70"><span>Oct 1</span><span>Oct 15</span><span>Oct 25</span></div>
+    </figure>
+    <section aria-label="Favourite authors" style="display: flex; flex-direction: column; gap: 6px">
+      <h2 style="margin: 0 4px; font-size: 13px; line-height: 18px; font-weight: 600; letter-spacing: 0.3px; text-transform: uppercase; color: #6C6C70">Favourite authors</h2>
+      <div style="background: #FFFFFF; border-radius: 16px; overflow: hidden">
+        <sc-for list="{{authors}}" as="a" hint-placeholder-count="3">
+          <button style="width: 100%; border: none; background: transparent; padding: 0 16px; height: 56px; display: flex; align-items: center; gap: 12px; font-family: inherit; text-align: left; border-top: {{a.sep}}">
+            <span aria-hidden="true" style="width: 34px; height: 34px; border-radius: 17px; background: {{a.bg}}; color: #FFFFFF; font-size: 15px; font-weight: 600; display: flex; align-items: center; justify-content: center">{{a.initial}}</span>
+            <span style="flex: 1; display: flex; flex-direction: column"><span style="font-size: 16px; line-height: 21px; color: #000000">{{a.name}}</span><span style="font-size: 13px; line-height: 17px; color: #6C6C70">{{a.detail}}</span></span>
+            <svg aria-hidden="true" width="8" height="14" viewBox="0 0 8 14" fill="none" stroke="#C7C7CC" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m1.5 1.5 5 5.5-5 5.5"></path></svg>
+          </button>
+        </sc-for>
+      </div>
+    </section>
+  </main>
+  <div aria-hidden="true" style="position: absolute; left: 0; right: 0; bottom: 0; height: 150px; background: linear-gradient(to bottom, rgba(242,242,247,0), rgba(242,242,247,0.94) 72%); pointer-events: none"></div>
+  <div style="position: absolute; left: 16px; bottom: 28px">
+    <dc-import name="TabBar" selected="library" accent="{{accent}}" hint-size="358px,62px"></dc-import>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#990000","options":["#990000","#B3261E","#7A1F2B","#1F4E5F"]},"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const accent = this.props.accent ?? '#990000';
+    const minutes = [12, 30, 0, 45, 22, 18, 60, 95, 40, 10, 0, 25, 33, 28, 50, 14, 0, 38, 41, 70, 22, 15, 30, 48, 36];
+    const max = Math.max(...minutes);
+    return {
+      accent,
+      periods: ['Week', 'Month', 'Year', 'All'].map((label, i) => ({
+        label, checked: i === 1 ? 'true' : 'false', bg: i === 1 ? '#FFFFFF' : 'transparent',
+        shadow: i === 1 ? '0 2px 6px rgba(0,0,0,0.12)' : 'none', weight: i === 1 ? 600 : 400
+      })),
+      stats: [
+        { label: 'Time reading', value: '11 h 40 m' },
+        { label: 'Words read', value: '312k' },
+        { label: 'Works finished', value: '6' },
+        { label: 'Days with reading', value: '22 of 25' }
+      ],
+      bars: minutes.map((m) => ({ h: Math.max(3, Math.round((m / max) * 96)), color: m ? accent : '#E5E5EA' })),
+      authors: [
+        { name: 'quietharbor', detail: '5 works · 212k words', initial: 'Q', bg: '#5B2A4E' },
+        { name: 'wrenfield', detail: '3 works · 140k words', initial: 'W', bg: '#2E5339' },
+        { name: 'fogandlamplight', detail: '4 works · 61k words', initial: 'F', bg: '#8A5A12' }
+      ].map((a, i) => ({ ...a, sep: i ? '0.5px solid #E5E5EA' : 'none' }))
+    };
+  }
+}
+</script>
+</body>
+</html>

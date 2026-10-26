@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Collection with Add Works sheet</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+button{cursor:pointer}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; position: relative; overflow: hidden; background: #F2F2F7; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; box-sizing: border-box">
+  <div style="position: absolute; left: 16px; right: 16px; top: 54px; display: flex; justify-content: space-between">
+    <button aria-label="Back" style="width: 44px; height: 44px; border: none; border-radius: 22px; color: #1C1C1E; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.74); box-shadow: 0 6px 20px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.06)">
+      <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 5-7 7 7 7"></path></svg>
+    </button>
+    <button aria-label="More: Rename, Reorder Works, Delete Collection" style="width: 44px; height: 44px; border: none; border-radius: 22px; color: #1C1C1E; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.74); box-shadow: 0 6px 20px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.06)">
+      <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24"><circle cx="5.5" cy="12" r="1.7" fill="currentColor"></circle><circle cx="12" cy="12" r="1.7" fill="currentColor"></circle><circle cx="18.5" cy="12" r="1.7" fill="currentColor"></circle></svg>
+    </button>
+  </div>
+  <main style="padding: 106px 16px 0; display: flex; flex-direction: column; gap: 12px">
+    <header style="padding: 0 4px; display: flex; flex-direction: column; gap: 2px">
+      <h1 style="margin: 0; font-size: 34px; line-height: 41px; font-weight: 700; letter-spacing: 0.4px">Austen Variations</h1>
+      <p style="margin: 0; font-size: 15px; line-height: 20px; color: #6C6C70">12 works · custom order</p>
+    </header>
+    <div style="background: #FFFFFF; border-radius: 14px; overflow: hidden">
+      <div style="display: flex; align-items: center; height: 46px; padding: 0 16px; border-bottom: 0.5px solid #E5E5EA">
+        <span style="flex: 1; font-size: 16px">Show on Home</span>
+        <span role="switch" aria-checked="true" aria-label="Show on Home" style="width: 51px; height: 31px; border-radius: 16px; background: #34C759; position: relative"><span style="position: absolute; right: 2px; top: 2px; width: 27px; height: 27px; border-radius: 14px; background: #FFFFFF; box-shadow: 0 2px 4px rgba(0,0,0,0.2)"></span></span>
+      </div>
+      <div style="display: flex; align-items: center; height: 46px; padding: 0 16px">
+        <span style="flex: 1; font-size: 16px">Keep downloads</span>
+        <span role="switch" aria-checked="false" aria-label="Keep downloads" style="width: 51px; height: 31px; border-radius: 16px; background: #E9E9EB; position: relative"><span style="position: absolute; left: 2px; top: 2px; width: 27px; height: 27px; border-radius: 14px; background: #FFFFFF; box-shadow: 0 2px 4px rgba(0,0,0,0.2)"></span></span>
+      </div>
+    </div>
+    <div style="background: #FFFFFF; border-radius: 16px; overflow: hidden">
+      <dc-import name="WorkRow" work="{{a}}" divider="{{true}}" accent="{{accent}}" hint-size="100%,100px"></dc-import>
+      <dc-import name="WorkRow" work="{{b}}" accent="{{accent}}" hint-size="100%,100px"></dc-import>
+    </div>
+  </main>
+
+  <div aria-hidden="true" style="position: absolute; inset: 0; background: rgba(0,0,0,0.24)"></div>
+  <section role="dialog" aria-label="Add Works" style="position: absolute; left: 0; right: 0; top: 420px; bottom: 0; border-radius: 38px 38px 0 0; background: #F2F2F7; box-shadow: 0 -8px 30px rgba(0,0,0,0.18); display: flex; flex-direction: column">
+    <div aria-hidden="true" style="width: 36px; height: 5px; border-radius: 3px; background: #C7C7CC; margin: 7px auto 0"></div>
+    <div style="display: flex; align-items: center; justify-content: space-between; padding: 8px 16px">
+      <button aria-label="Cancel" style="width: 44px; height: 44px; border: none; border-radius: 22px; background: rgba(118,118,128,0.14); color: #1C1C1E; display: flex; align-items: center; justify-content: center">
+        <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"></path></svg>
+      </button>
+      <h2 style="margin: 0; font-size: 17px; font-weight: 600">Add Works · 2 selected</h2>
+      <button style="height: 44px; padding: 0 18px; border: none; border-radius: 22px; background: {{accent}}; color: #FFFFFF; font-family: inherit; font-size: 16px; font-weight: 600">Add</button>
+    </div>
+    <div style="padding: 0 16px; display: flex; flex-direction: column; gap: 10px">
+      <label style="height: 38px; border-radius: 19px; background: rgba(118,118,128,0.12); display: flex; align-items: center; gap: 6px; padding: 0 12px; color: #6C6C70">
+        <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="10.5" cy="10.5" r="6.5"></circle><path d="m15.5 15.5 5 5"></path></svg>
+        <input type="search" aria-label="Search your library" value="persuasion" style="flex: 1; border: none; background: transparent; font-family: inherit; font-size: 16px; color: #000000; outline: none">
+      </label>
+      <div style="background: #FFFFFF; border-radius: 16px; overflow: hidden">
+        <dc-import name="WorkRow" work="{{c}}" selecting="{{true}}" selected="{{true}}" divider="{{true}}" accent="{{accent}}" hint-size="100%,100px"></dc-import>
+        <dc-import name="WorkRow" work="{{d}}" selecting="{{true}}" selected="{{true}}" divider="{{true}}" accent="{{accent}}" hint-size="100%,100px"></dc-import>
+        <dc-import name="WorkRow" work="{{e}}" selecting="{{true}}" selected="{{false}}" accent="{{accent}}" hint-size="100%,100px"></dc-import>
+      </div>
+    </div>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#990000","options":["#990000","#B3261E","#7A1F2B","#1F4E5F"]},"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      accent: this.props.accent ?? '#990000',
+      a: { title: 'A Map of Small Hours', author: 'quietharbor', fandom: 'Pride and Prejudice', rating: 'G', category: 'FM', warnings: 'none', status: 'complete', words: '32,050', chapters: '9/9', kudos: '1,212' },
+      b: { title: 'Northanger Nights', author: 'gothicnovelist', fandom: 'Northanger Abbey', rating: 'T', category: 'FM', warnings: 'none', status: 'wip', words: '47,300', chapters: '9/12', kudos: '980' },
+      c: { title: 'Letters Never Sent', author: 'marginalia', fandom: 'Persuasion', rating: 'T', category: 'FM', warnings: 'none', status: 'complete', words: '21,880', chapters: '4/4', kudos: '1,530' },
+      d: { title: 'Half Agony, Half Hope', author: 'anne_at_lyme', fandom: 'Persuasion', rating: 'G', category: 'FM', warnings: 'none', status: 'complete', words: '8,300', chapters: '1/1', kudos: '640' },
+      e: { title: 'The Navy List', author: 'captainharville', fandom: 'Persuasion', rating: 'T', category: 'Gen', warnings: 'none', status: 'wip', words: '14,900', chapters: '4/?', kudos: '210' }
+    };
+  }
+}
+</script>
+</body>
+</html>

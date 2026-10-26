@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Fandom works, selecting</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+button{cursor:pointer}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; position: relative; overflow: hidden; background: #F2F2F7; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; box-sizing: border-box">
+  <div style="position: absolute; left: 16px; right: 16px; top: 54px; display: flex; justify-content: space-between">
+    <button style="height: 44px; padding: 0 16px; border: none; border-radius: 22px; font-family: inherit; font-size: 16px; color: #1C1C1E; background: rgba(255,255,255,0.74); box-shadow: 0 6px 20px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.06)">Select All</button>
+    <button style="height: 44px; padding: 0 20px; border: none; border-radius: 22px; font-family: inherit; font-size: 16px; font-weight: 600; color: #FFFFFF; background: {{accent}}">Done</button>
+  </div>
+  <main style="padding: 106px 16px 0; display: flex; flex-direction: column; gap: 12px">
+    <header style="padding: 0 4px; display: flex; flex-direction: column; gap: 2px">
+      <h1 style="margin: 0; font-size: 28px; line-height: 34px; font-weight: 700">Sherlock Holmes - Arthur Conan Doyle</h1>
+      <p style="margin: 0; font-size: 15px; line-height: 20px; color: #6C6C70">2 selected · sorted by kudos · filters: Complete</p>
+    </header>
+    <div style="background: #FFFFFF; border-radius: 16px; overflow: hidden">
+      <sc-for list="{{works}}" as="w" hint-placeholder-count="5">
+        <dc-import name="WorkRow" work="{{w}}" selecting="{{true}}" selected="{{w.selected}}" divider="{{w.divider}}" accent="{{accent}}" hint-size="100%,100px"></dc-import>
+      </sc-for>
+    </div>
+  </main>
+  <div aria-hidden="true" style="position: absolute; left: 0; right: 0; bottom: 0; height: 150px; background: linear-gradient(to bottom, rgba(242,242,247,0), rgba(242,242,247,0.94) 72%); pointer-events: none"></div>
+  <div role="toolbar" aria-label="Actions for 2 selected works" style="position: absolute; left: 16px; right: 16px; bottom: 28px; height: 62px; border-radius: 31px; padding: 4px; box-sizing: border-box; display: flex; align-items: center; background: rgba(255,255,255,0.74); backdrop-filter: blur(24px) saturate(180%); -webkit-backdrop-filter: blur(24px) saturate(180%); box-shadow: 0 8px 28px rgba(0,0,0,0.12), 0 0 0 0.5px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.9)">
+    <sc-for list="{{actions}}" as="a" hint-placeholder-count="3">
+      <button style="flex: 1; height: 54px; border: none; border-radius: 27px; background: transparent; color: #1C1C1E; font-family: inherit; font-size: 11px; font-weight: 600; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px">
+        <svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="{{a.d}}"></path></svg>
+        {{a.label}}
+      </button>
+    </sc-for>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#990000","options":["#990000","#B3261E","#7A1F2B","#1F4E5F"]},"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const works = [
+      { title: 'Whatever Remains', author: 'deductive_reasoning', fandom: 'Sherlock Holmes', rating: 'E', category: 'MM', warnings: 'present', warningCount: 2, status: 'complete', words: '61,000', chapters: '14/14', kudos: '7,402', hits: '120k', selected: true },
+      { title: 'The Baker Street Irregular', author: 'fogandlamplight', fandom: 'Sherlock Holmes', rating: 'G', category: 'Gen', warnings: 'none', status: 'complete', words: '9,140', chapters: '1/1', kudos: '2,045', hits: '19.8k', updated: 'In your library' },
+      { title: 'Watson’s Notebook', author: 'fogandlamplight', fandom: 'Sherlock Holmes', rating: 'T', category: 'Gen', warnings: 'none', status: 'complete', words: '15,200', chapters: '6/6', kudos: '1,990', hits: '17.1k', selected: true },
+      { title: 'A Study in Lamplight', author: 'gaslightgirl', fandom: 'Sherlock Holmes', rating: 'T', category: 'FF', warnings: 'none', status: 'complete', words: '33,400', chapters: '9/9', kudos: '1,422', hits: '14.4k' },
+      { title: 'Five Orange Pips and a Kettle', author: 'mrshudsonsays', fandom: 'Sherlock Holmes', rating: 'G', category: 'Gen', warnings: 'none', status: 'complete', words: '2,100', chapters: '1/1', kudos: '1,010', hits: '8.0k' }
+    ];
+    return {
+      accent: this.props.accent ?? '#990000',
+      works: works.map((w, i) => ({ ...w, selected: !!w.selected, divider: i < works.length - 1 })),
+      actions: [
+        { label: 'Download', d: 'M12 4v11M7 10.5l5 5 5-5M5 20h14' },
+        { label: 'Add to Queue', d: 'M4 6h12M4 11h12M4 16h7M17 14v6M14 17h6' },
+        { label: 'Add to Collection', d: 'M6 8h12v12H6zM8 5h8' }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

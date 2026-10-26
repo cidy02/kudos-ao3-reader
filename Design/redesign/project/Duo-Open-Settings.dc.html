@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Settings on the open Duo</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+button{cursor:pointer}
+</style>
+</helmet>
+<div style="width: 951px; height: 669px; position: relative; overflow: hidden; background: #F2F2F7; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; box-sizing: border-box">
+
+  <nav aria-label="Settings categories" style="position: absolute; left: 0; top: 0; width: 330px; height: 669px; background: #F2F2F7; border-right: 0.5px solid #D1D1D6; box-sizing: border-box; overflow: hidden">
+    <button aria-label="Back to Account" style="position: absolute; left: 16px; top: 14px; z-index: 2; height: 44px; padding: 0 16px 0 10px; border: none; border-radius: 22px; display: flex; align-items: center; gap: 4px; color: #1C1C1E; font-family: inherit; font-size: 16px; background: rgba(255,255,255,0.74); backdrop-filter: blur(24px) saturate(180%); -webkit-backdrop-filter: blur(24px) saturate(180%); box-shadow: 0 6px 20px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.9)">
+      <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 5-7 7 7 7"></path></svg>
+      <span>Account</span>
+    </button>
+    <div style="position: absolute; left: 16px; right: 16px; top: 64px; display: flex; flex-direction: column">
+      <h1 style="margin: 0; font-size: 28px; line-height: 34px; font-weight: 700; letter-spacing: 0.35px">Settings</h1>
+      <label style="margin: 8px 0 10px; height: 38px; border-radius: 19px; background: rgba(118,118,128,0.12); display: flex; align-items: center; gap: 6px; padding: 0 12px; color: #6C6C70">
+        <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="10.5" cy="10.5" r="6.5"></circle><path d="m15.5 15.5 5 5"></path></svg>
+        <input type="search" aria-label="Search settings" placeholder="Search" style="flex: 1; min-width: 0; border: none; background: transparent; font-family: inherit; font-size: 16px; color: #000000; outline: none">
+      </label>
+      <sc-for list="{{groups}}" as="g" hint-placeholder-count="5">
+        <section style="display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px">
+          <h2 style="margin: 0 0 0 12px; font-size: 13px; line-height: 18px; font-weight: 600; color: #6C6C70">{{g.title}}</h2>
+          <div style="background: #FFFFFF; border-radius: 14px; overflow: hidden">
+            <sc-for list="{{g.rows}}" as="r" hint-placeholder-count="3">
+              <button aria-current="{{r.current}}" style="width: 100%; height: 44px; border: none; padding: 0 0 0 12px; display: flex; align-items: center; gap: 12px; background: {{r.rowBg}}; color: {{r.fg}}; font-family: inherit; text-align: left">
+                <span aria-hidden="true" style="width: 29px; height: 29px; flex-shrink: 0; border-radius: 7px; background: {{r.bg}}; color: #FFFFFF; display: flex; align-items: center; justify-content: center">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="{{r.d}}"></path></svg>
+                </span>
+                <span style="flex: 1; min-width: 0; height: 44px; display: flex; align-items: center; gap: 8px; padding-right: 12px; border-top: {{r.sep}}">
+                  <span style="flex-shrink: 0; font-size: 15px; font-weight: {{r.weight}}">{{r.label}}</span>
+                  <span style="flex: 1; min-width: 0; text-align: right; font-size: 15px; color: {{r.valueColor}}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{r.value}}</span>
+                </span>
+              </button>
+            </sc-for>
+          </div>
+        </section>
+      </sc-for>
+    </div>
+  </nav>
+
+  <main aria-label="Backup and Sync" style="position: absolute; left: 330px; top: 0; right: 0; height: 669px; overflow: hidden">
+    <h2 style="position: absolute; left: 0; right: 0; top: 14px; margin: 0; text-align: center; font-size: 17px; line-height: 44px; font-weight: 600">Backup &amp; Sync</h2>
+    <div style="padding: 66px 16px 24px; display: flex; flex-direction: column; gap: 24px">
+
+      <section style="display: flex; flex-direction: column; gap: 8px">
+        <h3 style="margin: 0 4px; font-size: 20px; line-height: 25px; font-weight: 700">Sync folder</h3>
+        <div style="background: #FFFFFF; border-radius: 14px; overflow: hidden">
+          <div style="display: flex; align-items: center; gap: 12px; padding: 12px 16px">
+            <span aria-hidden="true" style="width: 40px; height: 40px; flex-shrink: 0; border-radius: 10px; background: #E5F1FF; color: #007AFF; display: flex; align-items: center; justify-content: center">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M7 18a4 4 0 0 1-.5-8 5.5 5.5 0 0 1 10.6-1.5A4 4 0 0 1 17 18z"></path></svg>
+            </span>
+            <div style="flex: 1; display: flex; flex-direction: column">
+              <span style="font-size: 16px; line-height: 21px; font-weight: 600">iCloud Drive › Kudos</span>
+              <span style="font-size: 13px; line-height: 18px; color: #1E7B34">Up to date · synced 2 min ago</span>
+            </div>
+          </div>
+          <sc-for list="{{syncRows}}" as="r" hint-placeholder-count="6">
+            <sc-if value="{{r.isToggle}}" hint-placeholder-val="{{false}}">
+              <div style="margin-left: 16px; height: 46px; padding-right: 16px; display: flex; align-items: center; gap: 8px; border-top: 0.5px solid #E5E5EA">
+                <span style="flex: 1; font-size: 16px">{{r.label}}</span>
+                <button role="switch" aria-checked="{{r.on}}" aria-label="{{r.label}}" onClick="{{r.toggle}}" style="width: 51px; height: 31px; flex-shrink: 0; padding: 0; border: none; border-radius: 16px; background: {{r.track}}; position: relative">
+                  <span style="position: absolute; left: {{r.knob}}px; top: 2px; width: 27px; height: 27px; border-radius: 14px; background: #FFFFFF; box-shadow: 0 2px 4px rgba(0,0,0,0.2)"></span>
+                </button>
+              </div>
+            </sc-if>
+            <sc-if value="{{r.isNav}}" hint-placeholder-val="{{false}}">
+              <button style="width: 100%; height: 46px; border: none; background: transparent; padding: 0 0 0 16px; font-family: inherit; text-align: left; display: flex">
+                <span style="flex: 1; height: 46px; display: flex; align-items: center; gap: 8px; padding-right: 16px; border-top: 0.5px solid #E5E5EA">
+                  <span style="flex: 1; font-size: 16px; color: #000000">{{r.label}}</span>
+                  <span style="font-size: 16px; color: #6C6C70">{{r.value}}</span>
+                  <svg aria-hidden="true" width="8" height="14" viewBox="0 0 8 14" fill="none" stroke="#C7C7CC" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m1.5 1.5 5 5.5-5 5.5"></path></svg>
+                </span>
+              </button>
+            </sc-if>
+            <sc-if value="{{r.isAction}}" hint-placeholder-val="{{false}}">
+              <button style="width: 100%; height: 46px; border: none; background: transparent; padding: 0 0 0 16px; font-family: inherit; text-align: left; display: flex">
+                <span style="flex: 1; height: 46px; display: flex; align-items: center; border-top: 0.5px solid #E5E5EA; font-size: 16px; color: {{r.color}}">{{r.label}}</span>
+              </button>
+            </sc-if>
+          </sc-for>
+        </div>
+        <p style="margin: 0 16px; font-size: 13px; line-height: 18px; color: #6C6C70">Kudos keeps a copy of your library in this folder. Other devices that use the same folder stay in step.</p>
+      </section>
+
+      <section style="display: flex; flex-direction: column; gap: 8px">
+        <h3 style="margin: 0 4px; font-size: 20px; line-height: 25px; font-weight: 700">Devices</h3>
+        <div style="background: #FFFFFF; border-radius: 14px; overflow: hidden">
+          <sc-for list="{{devices}}" as="d" hint-placeholder-count="2">
+            <div style="display: flex; align-items: center; height: 52px; padding-left: 16px; gap: 12px">
+              <svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#6C6C70" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="{{d.d}}"></path></svg>
+              <div style="flex: 1; height: 52px; display: flex; flex-direction: column; justify-content: center; border-top: {{d.sep}}"><span style="font-size: 16px; line-height: 21px">{{d.name}}</span><span style="font-size: 13px; line-height: 18px; color: #6C6C70">{{d.detail}}</span></div>
+            </div>
+          </sc-for>
+          <button style="width: 100%; height: 46px; border: none; background: transparent; padding: 0 0 0 16px; font-family: inherit; text-align: left; display: flex">
+            <span style="flex: 1; height: 46px; display: flex; align-items: center; border-top: 0.5px solid #E5E5EA; font-size: 16px; color: {{accent}}">Pair a Device…</span>
+          </button>
+        </div>
+      </section>
+
+      <section style="display: flex; flex-direction: column; gap: 8px">
+        <h3 style="margin: 0 4px; font-size: 20px; line-height: 25px; font-weight: 700">Backup file</h3>
+        <div style="background: #FFFFFF; border-radius: 14px; overflow: hidden">
+          <div style="display: flex; align-items: center; height: 46px; padding: 0 16px"><span style="flex: 1; font-size: 16px">Last backup</span><span style="font-size: 16px; color: #6C6C70">Oct 24 · 2.1 GB</span></div>
+          <button style="width: 100%; height: 46px; border: none; background: transparent; padding: 0 0 0 16px; font-family: inherit; text-align: left; display: flex">
+            <span style="flex: 1; height: 46px; display: flex; align-items: center; border-top: 0.5px solid #E5E5EA; font-size: 16px; color: {{accent}}">Export Backup…</span>
+          </button>
+          <button style="width: 100%; height: 46px; border: none; background: transparent; padding: 0 0 0 16px; font-family: inherit; text-align: left; display: flex">
+            <span style="flex: 1; height: 46px; display: flex; align-items: center; border-top: 0.5px solid #E5E5EA; font-size: 16px; color: {{accent}}">Import Backup…</span>
+          </button>
+        </div>
+        <p style="margin: 0 16px; font-size: 13px; line-height: 18px; color: #6C6C70">A .kudosbackup holds your works, progress, tags, queues, collections and fonts. Importing merges by default; you can replace your library instead, after a preview and an undo copy. Your AO3 sign-in is never included.</p>
+      </section>
+
+      <section style="display: flex; flex-direction: column; gap: 8px">
+        <h3 style="margin: 0 4px; font-size: 20px; line-height: 25px; font-weight: 700">Import</h3>
+        <div style="background: #FFFFFF; border-radius: 14px; overflow: hidden">
+          <button style="width: 100%; height: 46px; border: none; background: transparent; padding: 0 16px; font-family: inherit; text-align: left; font-size: 16px; color: {{accent}}">Import Files…</button>
+        </div>
+        <p style="margin: 0 16px; font-size: 13px; line-height: 18px; color: #6C6C70">Add EPUBs and other books from Files. They join your library like any work.</p>
+      </section>
+
+    </div>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#990000","options":["#990000","#B3261E","#7A1F2B","#1F4E5F"]},"$preview":{"width":951,"height":669}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const accent = this.props.accent ?? '#990000';
+    const s = this.state || {};
+    const autoSync = s.autoSync ?? true;
+    const paused = s.paused ?? false;
+    const r = (label, value, bg, d, selected) => ({ label, value, bg, d, selected: !!selected });
+    const groups = [
+      { title: 'Reading', rows: [
+        r('Appearance', 'Sepia', '#5856D6', 'M12 3a9 9 0 1 0 0 18V3z'),
+        r('Font', 'New York', '#8E8E93', 'M4 19 9 5l5 14M6 14h6M15 19l3-8 3 8M16 16.5h4'),
+        r('Reader', 'Pages', '#FF9500', 'M3 5.5c3-1 6-1 9 1 3-2 6-2 9-1v13c-3-1-6-1-9 1-3-2-6-2-9-1zM12 6.5v13'),
+        r('Listening', 'Kokoro · Bella', '#FF2D55', 'M4 9.5h3.5L12 5.5v13l-4.5-4H4zM15.5 9a4.5 4.5 0 0 1 0 6')
+      ] },
+      { title: 'Downloads & storage', rows: [
+        r('Downloads', 'Keep what you read', '#34C759', 'M12 4v11M7 10.5l5 5 5-5M5 20h14'),
+        r('Preservation', 'Auto up to 10 works', '#30B0C7', 'M12 3l7 3v6c0 4-3 7-7 9-4-2-7-5-7-9V6z'),
+        r('Reading Queues', '412 MB', '#007AFF', 'M4 6h12M4 11h12M4 16h7M17 14v6M14 17h6')
+      ] },
+      { title: 'Library & sync', rows: [
+        r('Library', '', '#A2845E', 'M3.5 4h4v16h-4zM9.5 4h4v16h-4zM15.6 5.4l3.4-.9 3 15.2-3.4.9z'),
+        r('Backup', 'Oct 24', '#64D2FF', 'M12 20V9M7 13.5l5-5 5 5M6 4h12', true),
+        r('Sync Folder', 'On', '#007AFF', 'M7 18a4 4 0 0 1-.5-8 5.5 5.5 0 0 1 10.6-1.5A4 4 0 0 1 17 18z'),
+        r('Import', '', '#AF52DE', 'M14 3H6v18h12V7zM14 3v4h4M12 11v6M9 14l3 3 3-3')
+      ] },
+      { title: 'Account & privacy', rows: [
+        r('AO3 Account', 'saltwindow', accent, 'M12 4a4 4 0 1 1 0 8 4 4 0 0 1 0-8zM4.5 20c1.4-3.8 4.2-5.8 7.5-5.8s6.1 2 7.5 5.8'),
+        r('Privacy', 'Blur mature works', '#3A3A3C', 'M5 12s3-6 7-6 7 6 7 6-3 6-7 6-7-6-7-6zM12 10a2 2 0 1 1 0 4 2 2 0 0 1 0-4z')
+      ] },
+      { title: 'About', rows: [
+        r('About Kudos', 'Version 1.6', '#8E8E93', 'M12 3.5a8.5 8.5 0 1 1 0 17 8.5 8.5 0 0 1 0-17zM12 11v5.5M12 7.8v.1'),
+        r('Report a Bug', '', '#FF3B30', 'M8 8a4 4 0 0 1 8 0v6a4 4 0 0 1-8 0zM4 12h4M16 12h4M5 7l3 2M19 7l-3 2M5 18l3-2M19 18l-3-2')
+      ] }
+    ].map((g) => ({
+      ...g,
+      rows: g.rows.map((x, i) => ({
+        ...x,
+        current: x.selected ? 'page' : 'false',
+        rowBg: x.selected ? accent : 'transparent',
+        fg: x.selected ? '#FFFFFF' : '#000000',
+        valueColor: x.selected ? 'rgba(255,255,255,0.85)' : '#6C6C70',
+        weight: x.selected ? 600 : 400,
+        sep: i === 0 || x.selected || (g.rows[i - 1] && g.rows[i - 1].selected) ? 'none' : '0.5px solid #E5E5EA'
+      }))
+    }));
+    const toggle = (label, on, key) => ({ label, isToggle: true, isNav: false, isAction: false, on: on ? 'true' : 'false', track: on ? '#34C759' : '#E9E9EB', knob: on ? 22 : 2, toggle: () => this.setState({ [key]: !on }), value: '', color: '#000000' });
+    const nav = (label, value) => ({ label, isToggle: false, isNav: true, isAction: false, value: value || '', color: '#000000' });
+    const action = (label, color) => ({ label, isToggle: false, isNav: false, isAction: true, value: '', color });
+    return {
+      accent,
+      groups,
+      syncRows: [
+        toggle('Auto Sync', autoSync, 'autoSync'),
+        action('Sync Now', accent),
+        nav('Sync Details', '0 pending'),
+        toggle('Pause on this iPhone', paused, 'paused'),
+        nav('Change Folder', ''),
+        action('Disconnect', '#D70015')
+      ],
+      devices: [
+        { name: 'This iPhone', detail: 'Signs deletions with its own key', d: 'M8 3h8a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zM11 18h2' },
+        { name: 'Reading tablet', detail: 'Trusted since Sep 2', d: 'M5 3h14a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zM11 18h2' }
+      ].map((x, i) => ({ ...x, sep: i ? '0.5px solid #E5E5EA' : 'none' }))
+    };
+  }
+}
+</script>
+</body>
+</html>

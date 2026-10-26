@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Comment thread with reply composer</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+button{cursor:pointer}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; position: relative; overflow: hidden; background: #F2F2F7; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; box-sizing: border-box">
+  <div style="position: absolute; left: 16px; right: 16px; top: 54px; display: flex; justify-content: space-between; align-items: center">
+    <button aria-label="Back" style="width: 44px; height: 44px; border: none; border-radius: 22px; color: #1C1C1E; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.74); box-shadow: 0 6px 20px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.06)">
+      <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 5-7 7 7 7"></path></svg>
+    </button>
+    <span style="font-size: 17px; font-weight: 600">Thread</span>
+    <button style="height: 44px; padding: 0 14px; border: none; border-radius: 22px; font-family: inherit; font-size: 15px; color: #1C1C1E; background: rgba(255,255,255,0.74); box-shadow: 0 6px 20px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.06)">Parent Thread</button>
+  </div>
+  <main style="padding: 112px 16px 0; display: flex; flex-direction: column; gap: 8px">
+    <sc-for list="{{comments}}" as="c" hint-placeholder-count="3">
+      <div style="display: flex; gap: 0; margin-left: {{c.indent}}px">
+        <sc-if value="{{c.isReply}}" hint-placeholder-val="{{false}}"><span aria-hidden="true" style="width: 2px; margin-right: 10px; border-radius: 1px; background: #D1D1D6"></span></sc-if>
+        <article style="flex: 1; background: #FFFFFF; border-radius: 16px; padding: 12px 14px; display: flex; flex-direction: column; gap: 6px">
+          <div style="display: flex; align-items: baseline; gap: 8px">
+            <button style="border: none; background: none; padding: 0; font-family: inherit; font-size: 15px; font-weight: 600; color: {{accent}}">{{c.author}}</button>
+            <span style="font-size: 12px; color: #6C6C70">{{c.meta}}</span>
+          </div>
+          <p style="margin: 0; font-size: 15px; line-height: 21px">{{c.body}}</p>
+        </article>
+      </div>
+    </sc-for>
+  </main>
+  <section role="dialog" aria-label="Reply to saltwindow" style="position: absolute; left: 0; right: 0; bottom: 0; height: 330px; border-radius: 32px 32px 0 0; background: #FFFFFF; box-shadow: 0 -8px 30px rgba(0,0,0,0.14); padding: 8px 16px 28px; box-sizing: border-box; display: flex; flex-direction: column; gap: 10px">
+    <div aria-hidden="true" style="width: 36px; height: 5px; border-radius: 3px; background: #C7C7CC; margin: 0 auto"></div>
+    <div style="display: flex; align-items: center; gap: 10px">
+      <button aria-label="Cancel" style="width: 40px; height: 40px; border: none; border-radius: 20px; background: rgba(118,118,128,0.14); color: #1C1C1E; display: flex; align-items: center; justify-content: center">
+        <svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"></path></svg>
+      </button>
+      <span style="flex: 1; font-size: 16px; font-weight: 600">Reply to saltwindow</span>
+      <button aria-label="Expand to full screen" style="width: 40px; height: 40px; border: none; border-radius: 20px; background: rgba(118,118,128,0.14); color: #1C1C1E; display: flex; align-items: center; justify-content: center">
+        <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4h6v6M20 4l-7 7M10 20H4v-6M4 20l7-7"></path></svg>
+      </button>
+      <button style="height: 40px; padding: 0 16px; border: none; border-radius: 20px; background: {{accent}}; color: #FFFFFF; font-family: inherit; font-size: 15px; font-weight: 600">Post</button>
+    </div>
+    <label style="flex: 1; display: flex">
+      <textarea aria-label="Comment text" style="flex: 1; resize: none; border: none; border-radius: 14px; background: #F2F2F7; padding: 12px; font-family: inherit; font-size: 16px; line-height: 22px; color: #000000; outline: none">Same! The way the &lt;i&gt;map runs out&lt;/i&gt; line pays off the prologue</textarea>
+    </label>
+    <div role="toolbar" aria-label="Formatting" style="display: flex; gap: 6px">
+      <sc-for list="{{tools}}" as="t" hint-placeholder-count="7">
+        <button aria-label="{{t.label}}" style="flex: 1; height: 38px; border: none; border-radius: 10px; background: #F2F2F7; font-family: {{t.font}}; font-size: 16px; font-weight: {{t.weight}}; font-style: {{t.style}}; text-decoration: {{t.deco}}; color: #1C1C1E">{{t.glyph}}</button>
+      </sc-for>
+    </div>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#990000","options":["#990000","#B3261E","#7A1F2B","#1F4E5F"]},"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const sans = '-apple-system, system-ui, sans-serif';
+    const t = (label, glyph, o) => ({ label, glyph, font: sans, weight: 500, style: 'normal', deco: 'none', ...o });
+    return {
+      accent: this.props.accent ?? '#990000',
+      comments: [
+        { author: 'saltwindow', meta: 'Chapter 7 · 2 days ago', body: 'The single unbroken line across the vellum. I had to put my phone down for a minute.', indent: 0, isReply: false },
+        { author: 'inkwell_moth', meta: 'Creator · 1 day ago', body: 'That line is the whole story, honestly. Thank you for reading so closely!', indent: 0, isReply: true },
+        { author: 'tidewright', meta: 'in reply to saltwindow · 20 h ago', body: 'And it echoes her mother’s map in chapter 2.', indent: 12, isReply: true }
+      ],
+      tools: [
+        t('Bold', 'B', { weight: 800 }),
+        t('Italic', 'I', { style: 'italic', font: 'Georgia, serif' }),
+        t('Underline', 'U', { deco: 'underline' }),
+        t('Strikethrough', 'S', { deco: 'line-through' }),
+        t('Link', 'Link', {}),
+        t('Quote', '“”', {}),
+        t('More formatting', '•••', {})
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Series</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+button{cursor:pointer}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; position: relative; overflow: hidden; background: #F2F2F7; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; box-sizing: border-box">
+  <div style="position: absolute; left: 16px; right: 16px; top: 54px; display: flex; justify-content: space-between">
+    <button aria-label="Back" style="width: 44px; height: 44px; border: none; border-radius: 22px; color: #1C1C1E; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.74); box-shadow: 0 6px 20px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.06)">
+      <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 5-7 7 7 7"></path></svg>
+    </button>
+    <div style="height: 44px; border-radius: 22px; display: flex; align-items: center; background: rgba(255,255,255,0.74); box-shadow: 0 6px 20px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.06)">
+      <button aria-label="Share series" style="width: 46px; height: 44px; border: none; background: transparent; color: #1C1C1E; display: flex; align-items: center; justify-content: center">
+        <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V4M8 8l4-4 4 4M5 12v8h14v-8"></path></svg>
+      </button>
+      <button aria-label="More: Open on AO3; for your own series: Edit series, Reorder, Remove works" style="width: 46px; height: 44px; border: none; background: transparent; color: #1C1C1E; display: flex; align-items: center; justify-content: center">
+        <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24"><circle cx="5.5" cy="12" r="1.7" fill="currentColor"></circle><circle cx="12" cy="12" r="1.7" fill="currentColor"></circle><circle cx="18.5" cy="12" r="1.7" fill="currentColor"></circle></svg>
+      </button>
+    </div>
+  </div>
+  <main style="padding: 106px 16px 0; display: flex; flex-direction: column; gap: 12px">
+    <header style="padding: 0 4px; display: flex; flex-direction: column; gap: 4px">
+      <p style="margin: 0; font-size: 13px; font-weight: 600; letter-spacing: 0.3px; text-transform: uppercase; color: #6C6C70">Series</p>
+      <h1 style="margin: 0; font-size: 34px; line-height: 41px; font-weight: 700; letter-spacing: 0.4px">The Coast Road</h1>
+      <p style="margin: 0; font-size: 15px; line-height: 20px"><span style="color: {{accent}}">inkwell_moth</span> <span style="color: #6C6C70">· 3 works · 141k words · in progress</span></p>
+      <p style="margin: 4px 0 0; font-size: 15px; line-height: 21px; color: #3A3A3C">Three generations of Vane women and the maps they would not finish.</p>
+    </header>
+    <div style="display: flex; gap: 10px">
+      <button style="flex: 1; height: 44px; border: none; border-radius: 22px; background: {{accent}}; color: #FFFFFF; font-family: inherit; font-size: 15px; font-weight: 600">Subscribe</button>
+      <button style="flex: 1; height: 44px; border: none; border-radius: 22px; background: #FFFFFF; color: {{accent}}; font-family: inherit; font-size: 15px; font-weight: 600">Preserve all 3</button>
+    </div>
+    <div style="background: #FFFFFF; border-radius: 16px; overflow: hidden">
+      <sc-for list="{{works}}" as="w" hint-placeholder-count="3">
+        <div style="display: flex">
+          <span style="width: 26px; flex-shrink: 0; padding-top: 14px; text-align: right; font-size: 15px; font-weight: 600; color: #6C6C70">{{w.n}}</span>
+          <div style="flex: 1; min-width: 0">
+            <dc-import name="WorkRow" work="{{w}}" divider="{{w.divider}}" accent="{{accent}}" hint-size="100%,100px"></dc-import>
+          </div>
+        </div>
+      </sc-for>
+    </div>
+  </main>
+  <div aria-hidden="true" style="position: absolute; left: 0; right: 0; bottom: 0; height: 150px; background: linear-gradient(to bottom, rgba(242,242,247,0), rgba(242,242,247,0.94) 72%); pointer-events: none"></div>
+  <div style="position: absolute; left: 16px; bottom: 28px">
+    <dc-import name="TabBar" selected="library" accent="{{accent}}" hint-size="358px,62px"></dc-import>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#990000","options":["#990000","#B3261E","#7A1F2B","#1F4E5F"]},"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const works = [
+      { title: 'The Surveyor’s Wife', author: 'inkwell_moth', fandom: 'Original Work', rating: 'G', category: 'FM', warnings: 'none', status: 'complete', words: '18,400', chapters: '5/5', kudos: '1,402', updated: 'In your library' },
+      { title: "The Cartographer's Daughter", author: 'inkwell_moth', fandom: 'Original Work', rating: 'T', category: 'FM', warnings: 'none', status: 'wip', words: '84,210', chapters: '12/20', kudos: '3,104', progress: 58, progressLabel: 'Ch 7 · 58%' },
+      { title: 'Blank Vellum', author: 'inkwell_moth', fandom: 'Original Work', rating: 'T', category: 'FF', warnings: 'undisclosed', status: 'wip', words: '38,900', chapters: '6/?', kudos: '880' }
+    ];
+    return {
+      accent: this.props.accent ?? '#990000',
+      works: works.map((w, i) => ({ ...w, n: i + 1, divider: i < works.length - 1 }))
+    };
+  }
+}
+</script>
+</body>
+</html>

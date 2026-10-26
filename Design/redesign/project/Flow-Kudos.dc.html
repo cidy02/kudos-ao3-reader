@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Flow: kudos and comments</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 1290px; height: 620px; box-sizing: border-box; padding: 26px 34px; background: #FFFFFF; color: #1C1C1E; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; display: flex; flex-direction: column; gap: 18px">
+  <header style="display: flex; align-items: baseline; gap: 14px">
+    <h1 style="margin: 0; font-size: 26px; font-weight: 700">Thank the author</h1>
+    <p style="margin: 0; font-size: 15px; color: #3A3A3C">Kudos, bookmarks and comments go to AO3 natively. Kudos you've given stay filled in.</p>
+  </header>
+  <div style="display: flex; align-items: flex-start; gap: 14px">
+    <figure style="margin: 0; display: flex; flex-direction: column; gap: 10px; width: 195px">
+      <div style="width: 195px; height: 422px; overflow: hidden; border-radius: 26px; box-shadow: 0 0 0 1px #D1D1D6"><div style="width: 390px; height: 844px; transform: scale(0.5); transform-origin: 0 0"><dc-import name="Work-Actions" hint-size="390px,844px"></dc-import></div></div>
+      <figcaption style="font-size: 13px; line-height: 18px"><b>1</b> From Work Detail: Give Kudos, Bookmark, Mark for Later, Subscribe, all under "On AO3".</figcaption>
+    </figure>
+    <span aria-hidden="true" style="align-self: center; margin-top: -60px; font-size: 26px; color: #C7C7CC">→</span>
+    <figure style="margin: 0; display: flex; flex-direction: column; gap: 10px; width: 195px">
+      <div style="width: 195px; height: 422px; overflow: hidden; border-radius: 26px; box-shadow: 0 0 0 1px #D1D1D6"><div style="width: 390px; height: 844px; transform: scale(0.5); transform-origin: 0 0"><dc-import name="Reader-End" hint-size="390px,844px"></dc-import></div></div>
+      <figcaption style="font-size: 13px; line-height: 18px"><b>2</b> Or at the end of the work, when the feeling is fresh.</figcaption>
+    </figure>
+    <span aria-hidden="true" style="align-self: center; margin-top: -60px; font-size: 26px; color: #C7C7CC">→</span>
+    <figure style="margin: 0; display: flex; flex-direction: column; gap: 10px; width: 195px">
+      <div style="width: 195px; height: 422px; overflow: hidden; border-radius: 26px; box-shadow: 0 0 0 1px #D1D1D6"><div style="width: 390px; height: 844px; transform: scale(0.5); transform-origin: 0 0"><dc-import name="Comments" hint-size="390px,844px"></dc-import></div></div>
+      <figcaption style="font-size: 13px; line-height: 18px"><b>3</b> Comments by chapter, with the composer pinned to the bottom.</figcaption>
+    </figure>
+    <span aria-hidden="true" style="align-self: center; margin-top: -60px; font-size: 26px; color: #C7C7CC">→</span>
+    <figure style="margin: 0; display: flex; flex-direction: column; gap: 10px; width: 195px">
+      <div style="width: 195px; height: 422px; overflow: hidden; border-radius: 26px; box-shadow: 0 0 0 1px #D1D1D6"><div style="width: 390px; height: 844px; transform: scale(0.5); transform-origin: 0 0"><dc-import name="Comment-Thread" hint-size="390px,844px"></dc-import></div></div>
+      <figcaption style="font-size: 13px; line-height: 18px"><b>4</b> Open a thread and reply; AO3's formatting sits above the keyboard.</figcaption>
+    </figure>
+    <span aria-hidden="true" style="align-self: center; margin-top: -60px; font-size: 26px; color: #C7C7CC">→</span>
+    <figure style="margin: 0; display: flex; flex-direction: column; gap: 10px; width: 195px">
+      <div style="width: 195px; height: 422px; overflow: hidden; border-radius: 26px; box-shadow: 0 0 0 1px #D1D1D6"><div style="width: 390px; height: 844px; transform: scale(0.5); transform-origin: 0 0"><dc-import name="Inbox" hint-size="390px,844px"></dc-import></div></div>
+      <figcaption style="font-size: 13px; line-height: 18px"><b>5</b> Replies land in the Inbox under Account, read like Mail.</figcaption>
+    </figure>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1290,"height":620}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

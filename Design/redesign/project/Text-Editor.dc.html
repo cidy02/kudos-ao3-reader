@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Chapter text editor</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+button{cursor:pointer}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; position: relative; overflow: hidden; background: #FFFFFF; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; box-sizing: border-box">
+  <div style="position: absolute; left: 16px; right: 16px; top: 54px; display: flex; align-items: center; justify-content: space-between; gap: 8px">
+    <button aria-label="Back" style="width: 44px; height: 44px; border: none; border-radius: 22px; color: #1C1C1E; display: flex; align-items: center; justify-content: center; background: rgba(242,242,247,0.9); box-shadow: 0 0 0 0.5px rgba(0,0,0,0.06)">
+      <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 5-7 7 7 7"></path></svg>
+    </button>
+    <div style="height: 44px; border-radius: 22px; display: flex; align-items: center; background: rgba(242,242,247,0.9); box-shadow: 0 0 0 0.5px rgba(0,0,0,0.06)">
+      <button aria-label="Undo" style="width: 44px; height: 44px; border: none; background: transparent; color: #1C1C1E; display: flex; align-items: center; justify-content: center">
+        <svg aria-hidden="true" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 7 4 12l5 5M4 12h10a6 6 0 0 1 0 12"></path></svg>
+      </button>
+      <button aria-label="Redo" style="width: 44px; height: 44px; border: none; background: transparent; color: #AEAEB2; display: flex; align-items: center; justify-content: center">
+        <svg aria-hidden="true" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 7l5 5-5 5M20 12H10a6 6 0 0 0 0 12"></path></svg>
+      </button>
+      <button aria-label="More: Preview on AO3, Copy text, Paste as plain text, Restore local copy, Delete chapter, Editor help" style="width: 44px; height: 44px; border: none; background: transparent; color: #1C1C1E; display: flex; align-items: center; justify-content: center">
+        <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24"><circle cx="5.5" cy="12" r="1.7" fill="currentColor"></circle><circle cx="12" cy="12" r="1.7" fill="currentColor"></circle><circle cx="18.5" cy="12" r="1.7" fill="currentColor"></circle></svg>
+      </button>
+    </div>
+    <button style="height: 44px; padding: 0 18px; border: none; border-radius: 22px; font-family: inherit; font-size: 16px; font-weight: 600; color: #FFFFFF; background: {{accent}}">Done</button>
+  </div>
+
+  <main style="padding: 112px 22px 0; display: flex; flex-direction: column; gap: 10px">
+    <p style="margin: 0; font-size: 13px; font-weight: 600; letter-spacing: 0.3px; text-transform: uppercase; color: #6C6C70">Chapter 1 · What the Tide Keeps</p>
+    <label style="display: flex; flex-direction: column; gap: 4px">
+      <span style="font-size: 13px; color: #6C6C70">Chapter title</span>
+      <input type="text" value="The Logbook" style="border: none; border-bottom: 0.5px solid #D1D1D6; padding: 4px 0 8px; font-family: inherit; font-size: 22px; font-weight: 600; outline: none">
+    </label>
+    <div role="textbox" aria-multiline="true" aria-label="Chapter text, HTML" style="font-family: 'SF Mono', ui-monospace, Menlo, monospace; font-size: 14px; line-height: 22px; color: #1C1C1E; white-space: pre-wrap">&lt;p&gt;The lamp had to be lit by four. Ines lit it at three, because the logbook said she would.&lt;/p&gt;
+
+&lt;p&gt;She had not written that line. Nobody had. It was there in the morning in a hand that was nearly hers, the way a <span style="background: rgba(10,132,255,0.18)">&lt;em&gt;</span>reflection<span style="background: rgba(10,132,255,0.18)">&lt;/em&gt;</span> is nearly you.&lt;/p&gt;
+
+&lt;p&gt;“You're early,” Wren said from the stair.&lt;/p&gt;</div>
+  </main>
+
+  <div style="position: absolute; left: 0; right: 0; bottom: 0; height: 300px; background: #D1D3D9"></div>
+  <div style="position: absolute; left: 0; right: 0; bottom: 300px; padding: 6px 10px; background: rgba(247,247,248,0.96); border-top: 0.5px solid #C7C7CC; display: flex; align-items: center; gap: 4px">
+    <sc-for list="{{tools}}" as="t" hint-placeholder-count="8">
+      <button aria-label="{{t.label}}" style="min-width: 36px; height: 36px; padding: 0 6px; border: none; border-radius: 8px; background: {{t.bg}}; font-family: {{t.font}}; font-size: 16px; font-weight: {{t.weight}}; font-style: {{t.style}}; text-decoration: {{t.deco}}; color: #1C1C1E">{{t.glyph}}</button>
+    </sc-for>
+    <span style="margin-left: auto; font-size: 12px; color: #6C6C70">4,120 words</span>
+  </div>
+  <p aria-hidden="true" style="position: absolute; left: 0; right: 0; bottom: 140px; margin: 0; text-align: center; font-size: 13px; color: #6C6C70">Keyboard</p>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#990000","options":["#990000","#B3261E","#7A1F2B","#1F4E5F"]},"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const sans = '-apple-system, system-ui, sans-serif';
+    const t = (label, glyph, o) => ({ label, glyph, font: sans, weight: 500, style: 'normal', deco: 'none', bg: 'transparent', ...o });
+    return {
+      accent: this.props.accent ?? '#990000',
+      tools: [
+        t('Bold', 'B', { weight: 800 }),
+        t('Italic', 'I', { style: 'italic', font: 'Georgia, serif', bg: 'rgba(10,132,255,0.14)' }),
+        t('Underline', 'U', { deco: 'underline' }),
+        t('Strikethrough', 'S', { deco: 'line-through' }),
+        t('Link', 'Link'),
+        t('Quote', '“”'),
+        t('Insert tag', '‹›')
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

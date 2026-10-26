@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Library filters sheet</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+button{cursor:pointer}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; position: relative; overflow: hidden; background: #F2F2F7; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; box-sizing: border-box">
+  <div aria-hidden="true" style="padding: 18px 20px 0">
+    <span style="font-size: 34px; line-height: 41px; font-weight: 700; color: #000000">Library</span>
+  </div>
+  <div aria-hidden="true" style="position: absolute; inset: 0; background: rgba(0,0,0,0.28)"></div>
+
+  <section role="dialog" aria-label="Filter" style="position: absolute; left: 0; right: 0; top: 62px; bottom: 0; border-radius: 38px 38px 0 0; background: #F2F2F7; box-shadow: 0 -8px 30px rgba(0,0,0,0.18); overflow: hidden; display: flex; flex-direction: column">
+    <div aria-hidden="true" style="width: 36px; height: 5px; border-radius: 3px; background: #C7C7CC; margin: 7px auto 0"></div>
+    <div style="display: flex; align-items: center; justify-content: space-between; padding: 8px 16px 6px">
+      <button aria-label="Cancel" style="width: 44px; height: 44px; border: none; border-radius: 22px; background: rgba(118,118,128,0.14); color: #1C1C1E; display: flex; align-items: center; justify-content: center">
+        <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"></path></svg>
+      </button>
+      <h2 style="margin: 0; font-size: 17px; font-weight: 600">Filter · 42 works</h2>
+      <button aria-label="Apply" style="width: 44px; height: 44px; border: none; border-radius: 22px; background: {{accent}}; color: #FFFFFF; display: flex; align-items: center; justify-content: center">
+        <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.6 4.6L19.2 7.4"></path></svg>
+      </button>
+    </div>
+
+    <div style="padding: 4px 16px 0; display: flex; flex-direction: column; gap: 14px">
+      <div style="background: #FFFFFF; border-radius: 14px; padding: 0 16px; display: flex; align-items: center; height: 46px; gap: 8px">
+        <span style="flex: 1; font-size: 16px">Sort by</span>
+        <span style="font-size: 16px; color: #6C6C70">Recently read</span>
+        <svg aria-hidden="true" width="12" height="16" viewBox="0 0 12 16" fill="none" stroke="#8E8E93" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 6 6 2.5 9.5 6M2.5 10 6 13.5 9.5 10"></path></svg>
+      </div>
+
+      <sc-for list="{{groups}}" as="g" hint-placeholder-count="3">
+        <fieldset style="margin: 0; padding: 0; border: none; display: flex; flex-direction: column; gap: 6px">
+          <legend style="padding: 0 4px 6px; font-size: 13px; line-height: 18px; font-weight: 600; letter-spacing: 0.3px; text-transform: uppercase; color: #6C6C70">{{g.title}}</legend>
+          <div style="background: #FFFFFF; border-radius: 14px; padding: 10px 12px; display: flex; flex-wrap: wrap; gap: 8px">
+            <sc-for list="{{g.chips}}" as="c" hint-placeholder-count="4">
+              <button aria-pressed="{{c.pressed}}" style="border: none; padding: 2px; border-radius: 999px; background: transparent; box-shadow: {{c.ring}}; display: flex">
+                <dc-import name="Symbols" variant="labeled" only="{{g.kind}}" rating="{{c.rating}}" category="{{c.category}}" warnings="{{c.warnings}}" status="{{c.status}}" size="22" hint-size="90px,28px"></dc-import>
+              </button>
+            </sc-for>
+          </div>
+        </fieldset>
+      </sc-for>
+
+      <div style="background: #FFFFFF; border-radius: 14px; padding: 12px 16px; display: flex; flex-direction: column; gap: 10px">
+        <div style="display: flex; justify-content: space-between; font-size: 16px"><span>Word count</span><span style="color: #6C6C70">10k – 150k</span></div>
+        <div role="group" aria-label="Word count range" style="position: relative; height: 22px">
+          <div style="position: absolute; left: 0; right: 0; top: 9px; height: 4px; border-radius: 2px; background: #E5E5EA"></div>
+          <div style="position: absolute; left: 12%; right: 30%; top: 9px; height: 4px; border-radius: 2px; background: {{accent}}"></div>
+          <span style="position: absolute; left: 12%; top: 0; width: 22px; height: 22px; margin-left: -11px; border-radius: 11px; background: #FFFFFF; box-shadow: 0 1px 4px rgba(0,0,0,0.3)"></span>
+          <span style="position: absolute; left: 70%; top: 0; width: 22px; height: 22px; margin-left: -11px; border-radius: 11px; background: #FFFFFF; box-shadow: 0 1px 4px rgba(0,0,0,0.3)"></span>
+        </div>
+      </div>
+
+      <div style="background: #FFFFFF; border-radius: 14px; overflow: hidden">
+        <div style="display: flex; align-items: center; height: 46px; padding: 0 16px; gap: 8px; border-bottom: 0.5px solid #E5E5EA">
+          <span style="flex: 1; font-size: 16px">Language</span><span style="font-size: 16px; color: #6C6C70">Any</span>
+          <svg aria-hidden="true" width="8" height="14" viewBox="0 0 8 14" fill="none" stroke="#C7C7CC" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m1.5 1.5 5 5.5-5 5.5"></path></svg>
+        </div>
+        <div style="display: flex; align-items: center; min-height: 46px; padding: 6px 16px; gap: 8px; flex-wrap: wrap">
+          <span style="font-size: 16px; margin-right: 4px">Tags</span>
+          <span style="padding: 4px 6px 4px 10px; border-radius: 13px; background: {{accentTint}}; color: {{accent}}; font-size: 14px; display: flex; align-items: center; gap: 4px">Slow Burn <svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"></path></svg></span>
+          <button style="border: none; background: none; padding: 4px 6px; font-family: inherit; font-size: 14px; color: {{accent}}">Add tag…</button>
+        </div>
+      </div>
+
+      <button style="height: 46px; border: none; border-radius: 14px; background: #FFFFFF; font-family: inherit; font-size: 16px; color: #D70015">Reset filters</button>
+    </div>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#990000","options":["#990000","#B3261E","#7A1F2B","#1F4E5F"]},"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const accent = this.props.accent ?? '#990000';
+    const hex = accent.replace('#', '');
+    const tint = 'rgba(' + parseInt(hex.slice(0, 2), 16) + ',' + parseInt(hex.slice(2, 4), 16) + ',' + parseInt(hex.slice(4, 6), 16) + ',0.10)';
+    const chip = (o, on) => ({ rating: 'T', category: 'FM', warnings: 'none', status: 'wip', ...o, pressed: on ? 'true' : 'false', ring: on ? 'inset 0 0 0 2px ' + accent : 'none' });
+    return {
+      accent,
+      accentTint: tint,
+      groups: [
+        { title: 'Rating', kind: 'rating', chips: [chip({ rating: 'G' }, true), chip({ rating: 'T' }, true), chip({ rating: 'M' }), chip({ rating: 'E' }), chip({ rating: 'NR' })] },
+        { title: 'Warnings', kind: 'warnings', chips: [chip({ warnings: 'none' }, true), chip({ warnings: 'undisclosed' }), chip({ warnings: 'present' })] },
+        { title: 'Categories', kind: 'category', chips: [chip({ category: 'FF' }), chip({ category: 'FM' }, true), chip({ category: 'MM' }), chip({ category: 'Gen' }, true), chip({ category: 'Multi' }), chip({ category: 'Other' })] },
+        { title: 'Completion', kind: 'status', chips: [chip({ status: 'complete' }), chip({ status: 'wip' })] }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>
