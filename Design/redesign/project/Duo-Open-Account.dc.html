@@ -15,36 +15,15 @@ button{cursor:pointer}
 </helmet>
 <div style="width: 951px; height: 669px; position: relative; overflow: hidden; background: #F2F2F7; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; box-sizing: border-box">
 
-  <nav aria-label="Sidebar" style="position: absolute; left: 10px; top: 10px; bottom: 10px; width: 232px; border-radius: 26px; padding: 14px 10px; box-sizing: border-box; display: flex; flex-direction: column; gap: 2px; background: rgba(255,255,255,0.78); backdrop-filter: blur(24px) saturate(180%); -webkit-backdrop-filter: blur(24px) saturate(180%); box-shadow: 0 10px 32px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.9); z-index: 2">
-    <label style="display: flex; align-items: center; gap: 6px; height: 36px; padding: 0 10px; margin-bottom: 10px; border-radius: 18px; background: rgba(118,118,128,0.12); color: #6C6C70; font-size: 15px">
-      <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="10.5" cy="10.5" r="6.5"></circle><path d="m15.5 15.5 5 5"></path></svg>
-      <input type="search" placeholder="Search AO3 and Library" aria-label="Search" style="flex: 1; min-width: 0; border: none; background: transparent; font-family: inherit; font-size: 15px; color: #000000; outline: none">
-    </label>
-    <sc-for list="{{sidebar}}" as="i" hint-placeholder-count="10">
-      <button aria-current="{{i.current}}" style="height: 36px; border: none; border-radius: 12px; padding: 0 10px 0 {{i.pad}}px; display: flex; align-items: center; gap: 10px; background: {{i.bg}}; color: {{i.fg}}; font-family: inherit; font-size: 15px; font-weight: {{i.weight}}; text-align: left">
-        <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="{{i.iconColor}}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="{{i.d}}"></path></svg>
-        <span style="flex: 1">{{i.label}}</span>
-        <span style="font-size: 13px; color: {{i.countColor}}">{{i.count}}</span>
-        <sc-if value="{{i.chev}}" hint-placeholder-val="{{false}}">
-          <svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="{{i.countColor}}" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"></path></svg>
-        </sc-if>
-      </button>
-    </sc-for>
-    <h2 style="margin: 16px 10px 4px; font-size: 13px; line-height: 18px; font-weight: 600; color: #6C6C70">Reading Queues</h2>
-    <sc-for list="{{queues}}" as="q" hint-placeholder-count="3">
-      <button style="height: 34px; border: none; border-radius: 12px; padding: 0 10px; display: flex; align-items: center; gap: 10px; background: transparent; color: #000000; font-family: inherit; font-size: 15px; text-align: left">
-        <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="{{accent}}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9h16v11H4zM6 6h12M8 3h8"></path></svg>
-        <span style="flex: 1">{{q.label}}</span>
-        <span style="font-size: 13px; color: #6C6C70">{{q.count}}</span>
-      </button>
-    </sc-for>
-  </nav>
+  <div style="position: absolute; left: 10px; top: 10px; z-index: 2">
+    <dc-import name="DuoSidebar" selected="account" accent="{{accent}}" hint-size="232px,649px"></dc-import>
+  </div>
 
   <section aria-label="Account" style="position: absolute; left: 252px; top: 0; width: 368px; height: 669px; display: flex; flex-direction: column; box-sizing: border-box">
     <header style="flex-shrink: 0; padding: 14px 16px 8px; display: flex; align-items: center; justify-content: space-between; gap: 10px">
       <h1 style="margin: 0; font-size: 28px; line-height: 34px; font-weight: 700; letter-spacing: 0.35px">Account</h1>
       <div style="height: 40px; border-radius: 20px; display: flex; align-items: center; background: rgba(255,255,255,0.78); backdrop-filter: blur(24px) saturate(180%); -webkit-backdrop-filter: blur(24px) saturate(180%); box-shadow: 0 6px 20px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.9)">
-        <button style="height: 40px; padding: 0 14px; border: none; background: transparent; font-family: inherit; font-size: 16px; color: #1C1C1E">Edit</button>
+        <button style="height: 40px; padding: 0 14px; border: none; background: transparent; font-family: inherit; font-size: 17px; color: #1C1C1E">Edit</button>
         <button aria-label="Settings" style="width: 44px; height: 40px; border: none; background: transparent; color: #1C1C1E; display: flex; align-items: center; justify-content: center">
           <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="3"></circle><path d="M12 2.8v2.4M12 18.8v2.4M2.8 12h2.4M18.8 12h2.4M5.5 5.5l1.7 1.7M16.8 16.8l1.7 1.7M5.5 18.5l1.7-1.7M16.8 7.2l1.7-1.7"></path></svg>
         </button>
@@ -52,7 +31,7 @@ button{cursor:pointer}
     </header>
 
     <div style="flex: 1; min-height: 0; overflow-y: auto; scrollbar-width: none; padding: 0 16px 28px; box-sizing: border-box; display: flex; flex-direction: column; gap: 12px">
-      <section aria-label="Profile" style="flex-shrink: 0; background: #FFFFFF; border-radius: 20px; padding: 12px 16px; display: flex; flex-direction: column; gap: 10px">
+      <section aria-label="Profile" style="flex-shrink: 0; background: #FFFFFF; border-radius: 16px; padding: 12px 16px; display: flex; flex-direction: column; gap: 10px">
         <div style="display: flex; align-items: center; gap: 12px">
           <span aria-hidden="true" style="width: 52px; height: 52px; flex-shrink: 0; border-radius: 26px; background: #23506B; color: #FFFFFF; font-size: 22px; font-weight: 600; display: flex; align-items: center; justify-content: center">S</span>
           <div style="flex: 1; min-width: 0; display: flex; flex-direction: column">
