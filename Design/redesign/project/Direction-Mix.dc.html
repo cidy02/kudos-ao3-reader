@@ -1,0 +1,412 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Your mix</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+button{cursor:pointer}
+a{color:#990000}a:hover{color:#6E0000}
+</style>
+</helmet>
+<div style="width: 1500px; height: 1640px; box-sizing: border-box; padding: 64px; background: #FFFFFF; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; display: flex; gap: 48px; align-items: flex-start">
+
+  <div style="display: flex; gap: 24px">
+    <!-- Mix · Home -->
+    <div style="display: flex; flex-direction: column; gap: 10px">
+      <span style="font-size: 15px; line-height: 20px; font-weight: 600; color: #6C6C70">Home</span>
+      <div style="position: relative; width: 390px; height: 1240px; border-radius: 48px; overflow: hidden; background: #FFFFFF; box-shadow: 0 0 0 1px rgba(0,0,0,0.10), 0 24px 60px rgba(0,0,0,0.10)">
+        <div style="position: absolute; right: 16px; top: 54px">
+          <button style="height: 44px; padding: 0 18px; border: none; border-radius: 22px; font-family: inherit; font-size: 17px; color: #1C1C1E; background: rgba(255,255,255,0.74); backdrop-filter: blur(24px) saturate(180%); -webkit-backdrop-filter: blur(24px) saturate(180%); box-shadow: 0 6px 20px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.9)">Select</button>
+        </div>
+        <main style="position: relative; padding: 106px 16px 0; display: flex; flex-direction: column; gap: 22px">
+          <header style="display: flex; flex-direction: column; gap: 2px">
+            <h1 style="margin: 0; font-size: 34px; line-height: 41px; font-weight: 700; letter-spacing: 0.4px">Home</h1>
+            <a href="Insights.dc.html" style="align-self: flex-start; text-decoration: none; font-size: 15px; line-height: 20px; color: #6C6C70; display: flex; align-items: center; gap: 4px"><span><span style="font-weight: 600; color: #3A3A3C">4 h 10 m</span> this week · <span style="font-weight: 600; color: #3A3A3C">2</span> finished · <span style="font-weight: 600; color: #3A3A3C">9-day</span> streak</span><svg aria-hidden="true" width="7" height="12" viewBox="0 0 8 14" fill="none" stroke="#AEAEB2" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m1.5 1.5 5 5.5-5 5.5"></path></svg></a>
+          </header>
+
+          <section aria-label="Continue reading" style="position: relative; overflow: hidden; border-radius: 16px; padding: 16px; background: linear-gradient(155deg, hsl(188, 46%, 27%), hsl(210, 50%, 41%)); color: #FFFFFF; display: flex; flex-direction: column; gap: 14px; box-shadow: 0 10px 28px rgba(20,60,70,0.22)">
+            <span aria-hidden="true" style="position: absolute; right: -10px; bottom: -58px; font-family: 'New York', 'Iowan Old Style', Georgia, serif; font-size: 250px; line-height: 1; font-weight: 600; color: rgba(255,255,255,0.08)">C</span>
+            <div style="position: relative; display: flex; gap: 14px; align-items: center">
+              <div style="position: relative; width: 96px; height: 96px; flex-shrink: 0">
+                <svg role="img" aria-label="58 percent read" width="96" height="96" viewBox="0 0 96 96"><circle cx="48" cy="48" r="41" fill="none" stroke="rgba(255,255,255,0.24)" stroke-width="10"></circle><circle cx="48" cy="48" r="41" fill="none" stroke="#FFFFFF" stroke-width="10" stroke-linecap="round" stroke-dasharray="149 258" transform="rotate(-90 48 48)"></circle></svg>
+                <div aria-hidden="true" style="position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center">
+                  <span style="font-family: 'SF Pro Rounded', -apple-system, system-ui, sans-serif; font-size: 22px; line-height: 26px; font-weight: 700">58%</span>
+                  <span style="font-size: 10px; line-height: 12px; font-weight: 600; letter-spacing: 0.6px; text-transform: uppercase; color: rgba(255,255,255,0.85)">Read</span>
+                </div>
+              </div>
+              <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px">
+                <span style="font-size: 12px; line-height: 16px; font-weight: 600; letter-spacing: 0.8px; text-transform: uppercase; color: rgba(255,255,255,0.9)">Original Work</span>
+                <span aria-hidden="true" style="width: 14px; height: 2px; border-radius: 1px; background: rgba(255,255,255,0.9); margin: 2px 0 3px"></span>
+                <span style="font-size: 20px; line-height: 25px; font-weight: 700">The Cartographer’s Daughter</span>
+                <a href="Author.dc.html" style="align-self: flex-start; font-size: 15px; line-height: 20px; text-decoration: none; color: #FFFFFF">inkwell_moth</a>
+                <span style="font-size: 13px; line-height: 18px; color: rgba(255,255,255,0.85)">84,210 words · ♥ 3,104</span>
+              </div>
+            </div>
+            <div style="position: relative; display: flex; flex-direction: column; gap: 6px">
+              <div role="img" aria-label="Chapters: 6 read, reading chapter 7, 5 more posted, 8 not posted yet" style="height: 52px; display: flex; align-items: flex-end; gap: 3px">
+                <sc-for list="{{heroBarsLight}}" as="b" hint-placeholder-count="20">
+                  <span style="flex: 1; min-width: 0; box-sizing: border-box; border-radius: 3px; height: {{b.h}}; background: {{b.bg}}; border: {{b.bd}}"></span>
+                </sc-for>
+              </div>
+              <div style="display: flex; justify-content: space-between; font-size: 12px; line-height: 16px; color: rgba(255,255,255,0.85)"><span>Ch 7, The Salt Road · 12 of 20 posted</span><span>Updated Oct 21</span></div>
+            </div>
+            <div style="position: relative; display: flex; align-items: center; gap: 10px">
+              <dc-import name="Symbols" variant="strip" rating="T" category="FM" warnings="none" status="wip" size="22" hint-size="96px,22px"></dc-import>
+              <span style="flex: 1"></span>
+              <button aria-label="Read aloud" style="width: 44px; height: 44px; border: none; border-radius: 22px; background: rgba(255,255,255,0.18); color: #FFFFFF; display: flex; align-items: center; justify-content: center">
+                <svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"></path><path d="M15.5 9a4.5 4.5 0 0 1 0 6"></path><path d="M18 6.5a8 8 0 0 1 0 11"></path></svg>
+              </button>
+              <button style="height: 44px; padding: 0 22px; border: none; border-radius: 22px; background: #FFFFFF; color: #990000; font-family: inherit; font-size: 17px; font-weight: 600; display: flex; align-items: center; gap: 8px">
+                <svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24"><path d="M7 4.5v15l12-7.5z" fill="currentColor"></path></svg>Resume
+              </button>
+            </div>
+          </section>
+
+          <section aria-label="Reading Now" style="display: flex; flex-direction: column; gap: 10px">
+            <div style="display: flex; align-items: baseline; justify-content: space-between">
+              <h2 style="margin: 0; font-size: 20px; line-height: 25px; font-weight: 700">Reading Now</h2>
+              <a href="Library-Section.dc.html" style="font-size: 17px; text-decoration: none">See All</a>
+            </div>
+            <div style="display: flex; gap: 12px; margin-right: -16px; overflow: hidden">
+              <sc-for list="{{shelf}}" as="w" hint-placeholder-count="3">
+                <div style="width: 120px; flex-shrink: 0; display: flex; flex-direction: column; gap: 6px">
+                  <sc-if value="{{w.hidden}}" hint-placeholder-val="{{false}}">
+                    <div style="position: relative; width: 120px; height: 170px; border-radius: 16px; overflow: hidden; background: {{w.artBg}}">
+                      <div aria-hidden="true" style="position: absolute; inset: 0; padding: 14px 12px; filter: blur(7px); display: flex; flex-direction: column; justify-content: flex-end; gap: 8px">
+                        <span style="height: 14px; width: 86%; border-radius: 4px; background: rgba(255,255,255,0.6)"></span>
+                        <span style="height: 14px; width: 60%; border-radius: 4px; background: rgba(255,255,255,0.6)"></span>
+                      </div>
+                      <button style="position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); height: 30px; padding: 0 10px; border: none; border-radius: 15px; background: rgba(255,255,255,0.88); color: #3A3A3C; font-family: inherit; font-size: 13px; display: flex; align-items: center; gap: 5px; white-space: nowrap">
+                        <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3l18 18"></path><path d="M10.6 6.1A9.8 9.8 0 0 1 12 6c5 0 8.5 4.5 9.5 6-.4.7-1.3 1.9-2.6 3.1"></path><path d="M6.6 7.6C4.6 8.9 3.2 10.8 2.5 12c1 1.5 4.5 6 9.5 6 1.6 0 3-.4 4.3-1.1"></path></svg>Tap to reveal
+                      </button>
+                    </div>
+                    <span style="font-size: 12px; line-height: 16px; color: #6C6C70">Hidden mature work</span>
+                  </sc-if>
+                  <sc-if value="{{w.shown}}" hint-placeholder-val="{{true}}">
+                    <div style="position: relative; width: 120px; height: 170px; box-sizing: border-box; padding: 12px; border-radius: 16px; overflow: hidden; background: {{w.artBg}}; color: #FFFFFF; box-shadow: 0 4px 12px rgba(0,0,0,0.14); display: flex; flex-direction: column">
+                      <sc-if value="{{w.v0}}" hint-placeholder-val="{{true}}">
+                        <span aria-hidden="true" style="position: absolute; right: -6px; top: -20px; font-family: 'New York', 'Iowan Old Style', Georgia, serif; font-size: 120px; line-height: 1; font-weight: 600; color: rgba(255,255,255,0.15)">{{w.initial}}</span>
+                        <span style="position: relative; font-size: 9px; line-height: 11px; font-weight: 600; letter-spacing: 0.8px; text-transform: uppercase; color: rgba(255,255,255,0.88)">{{w.fandom}}</span>
+                        <span style="position: relative; margin-top: auto; font-family: 'New York', 'Iowan Old Style', Georgia, serif; font-size: 16px; line-height: 19px; font-weight: 600">{{w.title}}</span>
+                        <span style="position: relative; margin-top: 4px; font-size: 11px; line-height: 13px; font-style: italic; color: rgba(255,255,255,0.88)">{{w.author}}</span>
+                      </sc-if>
+                      <sc-if value="{{w.v1}}" hint-placeholder-val="{{false}}">
+                        <span aria-hidden="true" style="position: absolute; right: -12px; bottom: -36px; font-family: 'New York', 'Iowan Old Style', Georgia, serif; font-size: 130px; line-height: 1; font-weight: 600; color: rgba(255,255,255,0.15)">{{w.initial}}</span>
+                        <span style="position: relative; font-family: 'New York', 'Iowan Old Style', Georgia, serif; font-size: 16px; line-height: 19px; font-weight: 600">{{w.title}}</span>
+                        <span style="position: relative; margin-top: 4px; font-size: 11px; line-height: 13px; font-style: italic; color: rgba(255,255,255,0.88)">{{w.author}}</span>
+                        <span style="position: relative; margin-top: auto; font-size: 9px; line-height: 11px; font-weight: 600; letter-spacing: 0.8px; text-transform: uppercase; color: rgba(255,255,255,0.88)">{{w.fandom}}</span>
+                      </sc-if>
+                      <sc-if value="{{w.v2}}" hint-placeholder-val="{{false}}">
+                        <span aria-hidden="true" style="position: absolute; left: -8px; bottom: -34px; font-family: 'New York', 'Iowan Old Style', Georgia, serif; font-size: 130px; line-height: 1; font-weight: 600; color: rgba(255,255,255,0.15)">{{w.initial}}</span>
+                        <span style="position: relative; font-size: 9px; line-height: 11px; font-weight: 600; letter-spacing: 0.8px; text-transform: uppercase; color: rgba(255,255,255,0.88)">{{w.fandom}}</span>
+                        <span style="position: relative; margin-top: 10px; text-align: right; font-family: 'New York', 'Iowan Old Style', Georgia, serif; font-size: 16px; line-height: 19px; font-weight: 600">{{w.title}}</span>
+                        <span style="position: relative; margin-top: 4px; text-align: right; font-size: 11px; line-height: 13px; font-style: italic; color: rgba(255,255,255,0.88)">{{w.author}}</span>
+                      </sc-if>
+                    </div>
+                    <div role="progressbar" aria-label="Reading progress" aria-valuenow="{{w.pctNum}}" aria-valuemin="0" aria-valuemax="100" style="height: 3px; border-radius: 2px; background: #E5E5EA"><div style="width: {{w.pct}}; height: 3px; border-radius: 2px; background: #990000"></div></div>
+                    <dc-import name="Symbols" variant="strip" rating="{{w.rating}}" category="{{w.category}}" warnings="{{w.warnings}}" status="{{w.status}}" warning-count="{{w.wc}}" size="26" hint-size="113px,26px"></dc-import>
+                    <div style="display: flex; align-items: center; gap: 6px">
+                      <span style="flex: 1; min-width: 0; font-size: 12px; line-height: 16px; color: #6C6C70; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{w.meta}}</span>
+                      <sc-if value="{{w.hasBadge}}" hint-placeholder-val="{{false}}">
+                        <span style="padding: 0 6px; border-radius: 8px; background: #990000; color: #FFFFFF; font-size: 11px; line-height: 16px; font-weight: 700">{{w.badge}}</span>
+                      </sc-if>
+                    </div>
+                  </sc-if>
+                </div>
+              </sc-for>
+            </div>
+          </section>
+
+          <section aria-label="New Chapters" style="display: flex; flex-direction: column; gap: 4px">
+            <div style="display: flex; align-items: baseline; justify-content: space-between">
+              <h2 style="margin: 0; font-size: 20px; line-height: 25px; font-weight: 700">New Chapters</h2>
+              <a href="Subscriptions.dc.html" style="font-size: 17px; text-decoration: none">See All</a>
+            </div>
+            <div style="margin: 0 -16px; display: flex; flex-direction: column">
+              <sc-for list="{{newWorks}}" as="w" hint-placeholder-count="3">
+                <sc-if value="{{w.sep}}" hint-placeholder-val="{{false}}"><div aria-hidden="true" style="margin-left: 79px; height: 0.5px; background: #E5E5EA"></div></sc-if>
+                <div style="display: flex; align-items: center; gap: 12px; padding: 11px 16px">
+                  <dc-import name="Symbols" variant="grid" rating="{{w.rating}}" category="{{w.category}}" warnings="{{w.warnings}}" status="{{w.status}}" warning-count="{{w.wc}}" size="24" hint-size="51px,51px"></dc-import>
+                  <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px">
+                    <span style="font-size: 17px; line-height: 22px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{w.title}}</span>
+                    <div role="img" aria-label="{{w.update}}" style="height: 16px; display: flex; align-items: flex-end; gap: 2px; max-width: {{w.newBarsW}}">
+                      <sc-for list="{{w.shapeNew}}" as="b" hint-placeholder-count="12">
+                        <span style="flex: 1; min-width: 0; box-sizing: border-box; border-radius: 2px; height: {{b.h}}; background: {{b.bg}}; border: {{b.bd}}"></span>
+                      </sc-for>
+                    </div>
+                    <span style="font-size: 13px; line-height: 18px; color: #6C6C70; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{w.author}} · {{w.fandom}} · {{w.update}}</span>
+                  </div>
+                  <span style="padding: 0 7px; border-radius: 9px; background: #990000; color: #FFFFFF; font-size: 12px; line-height: 18px; font-weight: 700">{{w.badge}}</span>
+                </div>
+              </sc-for>
+            </div>
+          </section>
+
+          <section aria-label="Reading Queues" style="display: flex; flex-direction: column; gap: 10px">
+            <div style="display: flex; align-items: baseline; justify-content: space-between">
+              <h2 style="margin: 0; font-size: 20px; line-height: 25px; font-weight: 700">Reading Queues</h2>
+              <a href="Queues.dc.html" style="font-size: 17px; text-decoration: none">All Queues</a>
+            </div>
+            <div style="display: flex; gap: 16px; margin-right: -16px; overflow: hidden">
+              <sc-for list="{{queues}}" as="q" hint-placeholder-count="2">
+                <a href="Queue.dc.html" style="width: 300px; flex-shrink: 0; text-decoration: none; color: #000000; display: flex; align-items: center; gap: 12px">
+                  <div aria-hidden="true" style="width: 72px; height: 72px; flex-shrink: 0; border-radius: 16px; overflow: hidden; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2px">
+                    <sc-for list="{{q.tiles}}" as="t" hint-placeholder-count="4"><span style="background: {{t}}"></span></sc-for>
+                  </div>
+                  <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px">
+                    <span style="font-size: 17px; line-height: 22px; font-weight: 600">{{q.name}}</span>
+                    <span style="font-size: 13px; line-height: 18px; color: #6C6C70">{{q.detail}}</span>
+                    <div role="img" aria-label="{{q.progressLabel}}" style="margin-top: 3px; display: flex; gap: 3px">
+                      <sc-for list="{{q.segs}}" as="s" hint-placeholder-count="8">
+                        <span style="flex: 1; height: 4px; border-radius: 2px; background: {{s.track}}; overflow: hidden"><span style="display: block; width: {{s.w}}; height: 4px; background: {{s.c}}"></span></span>
+                      </sc-for>
+                    </div>
+                  </div>
+                </a>
+              </sc-for>
+            </div>
+          </section>
+        </main>
+        <div aria-hidden="true" style="position: absolute; left: 0; right: 0; bottom: 0; height: 150px; background: linear-gradient(to bottom, rgba(255,255,255,0), rgba(255,255,255,0.94) 72%); pointer-events: none"></div>
+        <div style="position: absolute; left: 16px; bottom: 28px">
+          <dc-import name="TabBar" selected="home" accent="#990000" hint-size="358px,62px"></dc-import>
+        </div>
+      </div>
+    </div>
+
+    <!-- Mix · Work Detail -->
+    <div style="display: flex; flex-direction: column; gap: 10px">
+      <span style="font-size: 15px; line-height: 20px; font-weight: 600; color: #6C6C70">Work Detail</span>
+      <div style="position: relative; width: 390px; height: 1240px; border-radius: 48px; overflow: hidden; background: #FFFFFF; box-shadow: 0 0 0 1px rgba(0,0,0,0.10), 0 24px 60px rgba(0,0,0,0.10)">
+        <div aria-hidden="true" style="position: absolute; left: 0; right: 0; top: 0; height: 380px; background: linear-gradient(to bottom, rgba(37,119,132,0.20), rgba(37,119,132,0.12) 35%, rgba(37,119,132,0.05) 65%, rgba(37,119,132,0))"></div>
+        <main style="position: relative; padding: 108px 16px 0; display: flex; flex-direction: column; gap: 14px">
+          <div style="display: flex; flex-direction: column; gap: 6px">
+            <span style="font-size: 13px; line-height: 18px; font-weight: 600; letter-spacing: 0.8px; text-transform: uppercase; color: hsl(188, 56%, 33%)">Original Work</span>
+            <span aria-hidden="true" style="width: 16px; height: 2px; border-radius: 1px; background: hsl(188, 56%, 33%)"></span>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 2px">
+            <h1 style="margin: 0; font-size: 34px; line-height: 41px; font-weight: 700; letter-spacing: 0.4px">The Cartographer’s Daughter</h1>
+            <a href="Author.dc.html" style="align-self: flex-start; font-size: 17px; line-height: 22px; text-decoration: none">inkwell_moth</a>
+          </div>
+          <dc-import name="Symbols" variant="labeled" rating="T" category="FM" warnings="none" status="wip" chapters="12/20" size="22" hint-size="358px,64px"></dc-import>
+          <div style="display: flex; gap: 10px">
+            <button style="flex: 1; height: 50px; border: none; border-radius: 25px; background: #990000; color: #FFFFFF; font-family: inherit; font-size: 17px; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 8px">
+              <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24"><path d="M7 4.5v15l12-7.5z" fill="currentColor"></path></svg>Resume Chapter 7
+            </button>
+            <button aria-label="Read aloud" style="width: 50px; height: 50px; border: none; border-radius: 25px; background: rgba(153,0,0,0.10); color: #990000; display: flex; align-items: center; justify-content: center">
+              <svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"></path><path d="M15.5 9a4.5 4.5 0 0 1 0 6"></path><path d="M18 6.5a8 8 0 0 1 0 11"></path></svg>
+            </button>
+            <button aria-label="Update download: 2 new chapters" style="position: relative; width: 50px; height: 50px; border: none; border-radius: 25px; background: rgba(153,0,0,0.10); color: #990000; display: flex; align-items: center; justify-content: center">
+              <svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11"></path><path d="m7 10.5 5 5 5-5"></path><path d="M5 20h14"></path></svg>
+              <span style="position: absolute; top: 2px; right: 2px; min-width: 18px; height: 18px; border-radius: 9px; background: #990000; color: #FFFFFF; font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center">2</span>
+            </button>
+          </div>
+          <section aria-label="Chapters" style="background: hsla(188, 56%, 33%, 0.08); border-radius: 16px; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px">
+            <div style="display: flex; align-items: baseline; justify-content: space-between">
+              <h2 style="margin: 0; font-size: 17px; line-height: 22px; font-weight: 600">Chapters</h2>
+              <a href="Reader-Contents.dc.html" style="font-size: 15px; line-height: 20px; text-decoration: none">12 of 20 posted</a>
+            </div>
+            <div role="img" aria-label="Chapter lengths: 6 read, reading chapter 7, 5 more posted, 8 not posted yet" style="height: 76px; display: flex; align-items: flex-end; gap: 4px">
+              <sc-for list="{{heroBars}}" as="b" hint-placeholder-count="20">
+                <span style="flex: 1; min-width: 0; box-sizing: border-box; border-radius: 3px; height: {{b.h}}; background: {{b.bg}}; border: {{b.bd}}"></span>
+              </sc-for>
+            </div>
+            <div aria-hidden="true" style="display: flex; justify-content: space-between; font-size: 11px; line-height: 13px; color: #6C6C70"><span>1</span><span>Ch 7 · 22%</span><span>12</span><span>20</span></div>
+            <div style="display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 13px; line-height: 18px; color: #3A3A3C">
+              <span style="display: flex; align-items: center; gap: 5px"><span aria-hidden="true" style="width: 10px; height: 10px; border-radius: 2px; background: hsl(188, 56%, 33%)"></span>Read</span>
+              <span style="display: flex; align-items: center; gap: 5px"><span aria-hidden="true" style="width: 10px; height: 10px; border-radius: 2px; background: hsla(188, 56%, 33%, 0.22)"></span>Posted, unread</span>
+              <span style="display: flex; align-items: center; gap: 5px"><span aria-hidden="true" style="width: 10px; height: 10px; box-sizing: border-box; border-radius: 2px; border: 1.5px dashed #C7C7CC"></span>Not posted yet</span>
+            </div>
+            <span style="font-size: 13px; line-height: 18px; color: #6C6C70">Bar height is chapter length. Published Mar 3 · updated Oct 21.</span>
+          </section>
+          <dl style="margin: 0; background: #F2F2F7; border-radius: 16px; padding: 14px 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); row-gap: 14px">
+            <sc-for list="{{stats}}" as="s" hint-placeholder-count="9">
+              <div style="display: flex; flex-direction: column; align-items: center; gap: 2px; border-right: {{s.border}}">
+                <dt style="font-size: 11px; line-height: 13px; font-weight: 600; letter-spacing: 0.4px; text-transform: uppercase; color: #6C6C70">{{s.label}}</dt>
+                <dd style="margin: 0; font-family: 'SF Pro Rounded', -apple-system, system-ui, sans-serif; font-size: 17px; line-height: 22px; font-weight: 700">{{s.value}}</dd>
+              </div>
+            </sc-for>
+          </dl>
+          <section aria-label="Summary" style="display: flex; flex-direction: column; gap: 6px">
+            <h2 style="margin: 0; font-size: 20px; line-height: 25px; font-weight: 700">Summary</h2>
+            <p style="margin: 0; font-size: 17px; line-height: 22px">Elinor Vane inherits her mother’s instruments and none of her maps. To finish the last chart she must walk the coast road nobody has drawn in forty years, with the one person who remembers why.</p>
+            <a href="#notes" style="align-self: flex-start; font-size: 17px; line-height: 22px; text-decoration: none">Notes</a>
+          </section>
+          <div style="display: flex; flex-wrap: wrap; gap: 6px">
+            <sc-for list="{{tags}}" as="t" hint-placeholder-count="6">
+              <button style="height: 32px; padding: 0 12px; border: none; border-radius: 16px; background: #EFEFF4; color: #000000; font-family: inherit; font-size: 15px">{{t}}</button>
+            </sc-for>
+          </div>
+          <div style="background: #F2F2F7; border-radius: 16px; overflow: hidden">
+            <sc-for list="{{rows}}" as="r" hint-placeholder-count="3">
+              <sc-if value="{{r.sep}}" hint-placeholder-val="{{false}}"><div aria-hidden="true" style="margin-left: 16px; height: 0.5px; background: #D1D1D6"></div></sc-if>
+              <a href="{{r.href}}" style="min-height: 48px; padding: 0 16px; display: flex; align-items: center; gap: 8px; text-decoration: none; color: #000000">
+                <span style="flex: 1; font-size: 17px">{{r.label}}</span>
+                <span style="font-size: 17px; color: #6C6C70">{{r.value}}</span>
+                <svg aria-hidden="true" width="8" height="14" viewBox="0 0 8 14" fill="none" stroke="#C7C7CC" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m1.5 1.5 5 5.5-5 5.5"></path></svg>
+              </a>
+            </sc-for>
+          </div>
+        </main>
+        <div style="position: absolute; left: 16px; right: 16px; top: 54px; display: flex; justify-content: space-between">
+          <button aria-label="Back" style="width: 44px; height: 44px; border: none; border-radius: 22px; color: #1C1C1E; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.74); backdrop-filter: blur(24px) saturate(180%); -webkit-backdrop-filter: blur(24px) saturate(180%); box-shadow: 0 6px 20px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.9)">
+            <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 5-7 7 7 7"></path></svg>
+          </button>
+          <div style="height: 44px; border-radius: 22px; display: flex; align-items: center; background: rgba(255,255,255,0.74); backdrop-filter: blur(24px) saturate(180%); -webkit-backdrop-filter: blur(24px) saturate(180%); box-shadow: 0 6px 20px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.9)">
+            <button aria-label="Kudos given" aria-pressed="true" style="width: 46px; height: 44px; border: none; background: transparent; color: #990000; display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="21" height="21" viewBox="0 0 24 24" fill="currentColor"><path d="M12 20s-7.5-4.6-7.5-10.2A4.2 4.2 0 0 1 12 7.2a4.2 4.2 0 0 1 7.5 2.6C19.5 15.4 12 20 12 20z"></path></svg></button>
+            <button aria-label="Bookmark on AO3" style="width: 46px; height: 44px; border: none; background: transparent; color: #1C1C1E; display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><path d="M7 4h10v16l-5-4-5 4z"></path></svg></button>
+            <button aria-label="More actions" style="width: 46px; height: 44px; border: none; background: transparent; color: #1C1C1E; display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24"><circle cx="5.5" cy="12" r="1.7" fill="currentColor"></circle><circle cx="12" cy="12" r="1.7" fill="currentColor"></circle><circle cx="18.5" cy="12" r="1.7" fill="currentColor"></circle></svg></button>
+          </div>
+        </div>
+        <div aria-hidden="true" style="position: absolute; left: 0; right: 0; bottom: 0; height: 140px; background: linear-gradient(to bottom, rgba(255,255,255,0), rgba(255,255,255,0.94) 70%); pointer-events: none"></div>
+        <div style="position: absolute; left: 16px; bottom: 28px">
+          <dc-import name="TabBar" selected="library" variant="minimized" accent="#990000" hint-size="358px,54px"></dc-import>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <aside style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 22px; padding-top: 30px">
+    <div style="display: flex; flex-direction: column; gap: 8px">
+      <h2 style="margin: 0; font-size: 36px; line-height: 43px; font-weight: 700">Your mix</h2>
+      <p style="margin: 0; font-size: 17px; line-height: 24px; color: #3A3A3C">The parts you picked from A, B and C, put together. Once you confirm it, these rules go onto every board, the Duo boards included.</p>
+    </div>
+    <dl style="margin: 0; display: grid; grid-template-columns: 76px minmax(0, 1fr); column-gap: 14px; row-gap: 10px; font-size: 15px; line-height: 21px">
+      <dt style="font-weight: 600">From A</dt><dd style="margin: 0; color: #3A3A3C">The large background letter on covers. The four tags as a strip under every cover.</dd>
+      <dt style="font-weight: 600">From B</dt><dd style="margin: 0; color: #3A3A3C">The Resume card on Home (ring, chapter bars, Resume). Work Detail, with the chapter-shape card.</dd>
+      <dt style="font-weight: 600">From C</dt><dd style="margin: 0; color: #3A3A3C">Gradient backgrounds on covers and cards. The hero card’s gradient, now behind B’s Resume card. Queue rows with the segmented bar.</dd>
+      <dt style="font-weight: 600">Dropped</dt><dd style="margin: 0; color: #3A3A3C">C’s chapter track list: most fics name chapters “Chapter 1, 2, 3”. The chapter bars show the same shape without names, and titled chapters still show in the reader’s Contents.</dd>
+    </dl>
+
+    <div style="display: flex; flex-direction: column; gap: 8px">
+      <div style="position: relative; width: 390px; height: 150px; border-radius: 28px; overflow: hidden; background: #FFFFFF; box-shadow: 0 0 0 1px rgba(0,0,0,0.10), 0 12px 30px rgba(0,0,0,0.08)">
+        <div aria-hidden="true" style="position: absolute; left: 16px; right: 16px; top: 52px; height: 120px; background: hsla(188, 56%, 33%, 0.08); border-radius: 16px; padding: 14px 16px; box-sizing: border-box; display: flex; flex-direction: column; gap: 10px">
+          <div style="display: flex; justify-content: space-between"><span style="font-size: 17px; line-height: 22px; font-weight: 600">Chapters</span><span style="font-size: 15px; color: #990000">12 of 20 posted</span></div>
+          <div style="height: 50px; display: flex; align-items: flex-end; gap: 4px">
+            <sc-for list="{{heroBars}}" as="b" hint-placeholder-count="20">
+              <span style="flex: 1; min-width: 0; box-sizing: border-box; border-radius: 3px; height: {{b.h}}; background: {{b.bg}}; border: {{b.bd}}"></span>
+            </sc-for>
+          </div>
+        </div>
+        <div aria-hidden="true" style="position: absolute; left: 0; right: 0; top: 0; height: 96px; background: linear-gradient(to bottom, rgba(255,255,255,0.97) 45%, rgba(255,255,255,0)); backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px)"></div>
+        <div style="position: absolute; left: 16px; right: 16px; top: 14px; height: 44px; display: flex; align-items: center; justify-content: space-between">
+          <button aria-label="Back" style="width: 44px; height: 44px; border: none; border-radius: 22px; color: #1C1C1E; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.74); box-shadow: 0 6px 20px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.9)"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 5-7 7 7 7"></path></svg></button>
+          <span style="flex: 1; min-width: 0; padding: 0 10px; text-align: center; font-size: 17px; line-height: 22px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">The Cartographer’s Daughter</span>
+          <div aria-hidden="true" style="width: 138px; height: 44px; flex-shrink: 0; border-radius: 22px; display: flex; align-items: center; justify-content: space-around; background: rgba(255,255,255,0.74); box-shadow: 0 6px 20px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.9)">
+            <svg width="21" height="21" viewBox="0 0 24 24" fill="#990000"><path d="M12 20s-7.5-4.6-7.5-10.2A4.2 4.2 0 0 1 12 7.2a4.2 4.2 0 0 1 7.5 2.6C19.5 15.4 12 20 12 20z"></path></svg>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1C1C1E" stroke-width="1.9" stroke-linejoin="round"><path d="M7 4h10v16l-5-4-5 4z"></path></svg>
+            <svg width="20" height="20" viewBox="0 0 24 24"><circle cx="5.5" cy="12" r="1.7" fill="#1C1C1E"></circle><circle cx="12" cy="12" r="1.7" fill="#1C1C1E"></circle><circle cx="18.5" cy="12" r="1.7" fill="#1C1C1E"></circle></svg>
+          </div>
+        </div>
+      </div>
+      <p style="margin: 0; font-size: 13px; line-height: 18px; color: #6C6C70; max-width: 390px">Work Detail scrolled: the wash fades, and the title shrinks into the bar (system navigation title and scroll edge).</p>
+    </div>
+
+    <dl style="margin: 0; display: grid; grid-template-columns: 110px minmax(0, 1fr); column-gap: 14px; row-gap: 10px; font-size: 15px; line-height: 21px; border-top: 1px solid #E5E5EA; padding-top: 16px">
+      <dt style="font-weight: 600">Containers</dt><dd style="margin: 0; color: #3A3A3C">Two: the card and the capsule chip. A card about one work takes that work’s gradient or a pale tint of its fandom; every other card is system grey. Lists are plain rows.</dd>
+      <dt style="font-weight: 600">Covers</dt><dd style="margin: 0; color: #3A3A3C">Generated for every work: a gradient in the fandom’s colour family, the title in New York, and a large background letter. The title picks the shade and where the letter and title sit, so two works never match and a work always looks the same. The four tags sit under the cover.</dd>
+      <dt style="font-weight: 600">Corners</dt><dd style="margin: 0; color: #3A3A3C">16 pt everywhere (the app’s work-cover radius today), capsules fully round.</dd>
+      <dt style="font-weight: 600">Edge</dt><dd style="margin: 0; color: #3A3A3C">16 pt on every screen.</dd>
+      <dt style="font-weight: 600">Type</dt><dd style="margin: 0; color: #3A3A3C">Large Title, Title 3 bold for sections, Headline, Body, Footnote. New York on covers; figures in SF Pro Rounded.</dd>
+      <dt style="font-weight: 600">Capitals</dt><dd style="margin: 0; color: #3A3A3C">The fandom label above a title, and stat captions.</dd>
+      <dt style="font-weight: 600">Colour</dt><dd style="margin: 0; color: #3A3A3C">Fandom colour: cover and card gradients, the fandom label, a work’s chapter bars, and the wash on its page. App red: every button (on a gradient, a white capsule with a red label), the tab bar, toolbars, links, and states about you (progress, kudos given, new chapters).</dd>
+      <dt style="font-weight: 600">Background</dt><dd style="margin: 0; color: #3A3A3C">Plain for Home and Work Detail, grouped for lists, settings and forms. The wash only on a work’s or fandom’s page, fading as you scroll.</dd>
+    </dl>
+  </aside>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1500,"height":1640}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const seedOf = (s) => { let h = 7; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0; return h; };
+    const rng = (seed) => { let x = seed || 1; return () => { x ^= x << 13; x >>>= 0; x ^= x >>> 17; x ^= x << 5; x >>>= 0; return (x % 1000) / 1000; }; };
+    const FAN = { 'Original Work': 188, 'Persuasion': 335, 'Sherlock Holmes': 32, 'Jane Eyre': 262, 'Northanger Abbey': 290 };
+    const hueOf = (w) => ((FAN[w.fandom] !== undefined ? FAN[w.fandom] : 200) + (seedOf(w.title) % 25) - 12 + 360) % 360;
+    const idc = (h) => 'hsl(' + h + ', 56%, 33%)';
+    const idcA = (h, a) => 'hsla(' + h + ', 56%, 33%, ' + a + ')';
+    const art = (h) => 'linear-gradient(155deg, hsl(' + h + ', 46%, 27%), hsl(' + ((h + 22) % 360) + ', 50%, 41%))';
+    const bars = (w, paint) => {
+      const r = rng(seedOf(w.title + ' chapters'));
+      const out = [];
+      for (let i = 0; i < w.planned; i++) {
+        const height = Math.round(42 + r() * 58);
+        if (i >= w.posted) out.push({ h: '46%', bg: 'transparent', bd: '1.5px dashed ' + paint.dash });
+        else out.push({ h: height + '%', bg: paint.fill(i), bd: 'none' });
+      }
+      return out;
+    };
+    const progressPaint = (w, solid, tint) => ({
+      dash: '#C7C7CC',
+      fill: (i) => i < w.read ? solid : (i === w.read && w.cur ? 'linear-gradient(to top, ' + solid + ' ' + w.cur + '%, ' + tint + ' ' + w.cur + '%)' : tint)
+    });
+    const mk = (w, i) => {
+      const h = hueOf(w);
+      const v = seedOf(w.title) % 3;
+      const pctNum = w.pctNum || 0;
+      return {
+        ...w,
+        v0: v === 0, v1: v === 1, v2: v === 2,
+        hidden: !!w.hidden, shown: !w.hidden,
+        initial: w.title.charAt(0),
+        artBg: art(h),
+        hasBadge: !!w.badge, badge: w.badge || '',
+        wc: w.wc || 1,
+        pct: pctNum + '%', pctNum,
+        shapeNew: bars(w, { dash: '#C7C7CC', fill: (j) => j >= w.posted - (w.newCount || 0) ? '#990000' : '#D1D1D6' }),
+        newBarsW: Math.min(100, w.planned * 9) + '%',
+        sep: i > 0
+      };
+    };
+
+    const salt = { title: 'Salt & Starlight', author: 'wrenfield', fandom: 'Original Work', rating: 'M', category: 'Gen', warnings: 'undisclosed', status: 'wip', planned: 30, posted: 15, read: 11, cur: 60, pctNum: 40, meta: 'Ch 12 of 30 · 40%', badge: '+3', newCount: 3, update: '2 h ago' };
+    const hidden = { title: 'Whatever Remains', author: 'fogandlamplight', fandom: 'Sherlock Holmes', rating: 'E', category: 'MM', warnings: 'present', wc: 2, status: 'complete', planned: 9, posted: 9, read: 3, pctNum: 38, hidden: true };
+    const letters = { title: 'Letters Never Sent', author: 'marginalia', fandom: 'Persuasion', rating: 'T', category: 'FM', warnings: 'none', status: 'complete', planned: 4, posted: 4, read: 2, pctNum: 50, meta: 'Ch 3 of 4 · 50%' };
+    const moor = { title: 'Moor and Mist', author: 'brontebird', fandom: 'Jane Eyre', rating: 'M', category: 'FM', warnings: 'undisclosed', status: 'complete', planned: 18, posted: 18, read: 10, pctNum: 61, meta: 'Ch 11 of 18 · 61%' };
+    const hound = { title: 'The Hound, Revisited', author: 'fogandlamplight', fandom: 'Sherlock Holmes', rating: 'T', category: 'MM', warnings: 'present', wc: 1, status: 'wip', planned: 6, posted: 5, read: 4, badge: '+1', newCount: 1, update: 'yesterday' };
+    const north = { title: 'Northanger Nights', author: 'gothicnovelist', fandom: 'Northanger Abbey', rating: 'T', category: 'FM', warnings: 'none', status: 'wip', planned: 12, posted: 9, read: 8, badge: '+1', newCount: 1, update: 'Oct 24' };
+
+    const hero = { title: "The Cartographer's Daughter", planned: 20, posted: 12, read: 6, cur: 22 };
+    const heroBars = bars(hero, progressPaint(hero, idc(188), idcA(188, 0.22)));
+    const heroBarsLight = bars(hero, { ...progressPaint(hero, '#FFFFFF', 'rgba(255,255,255,0.30)'), dash: 'rgba(255,255,255,0.5)' });
+
+    const statList = [
+      ['Words', '84,210'], ['Chapters', '12/20'], ['Kudos', '♥ 3,104'],
+      ['Hits', '41.2k'], ['Comments', '286'], ['Bookmarks', '512'],
+      ['Published', 'Mar 3'], ['Updated', 'Oct 21'], ['Language', 'English']
+    ];
+    const rowList = [
+      ['Series', 'Part 2 of 3', 'Series.dc.html'],
+      ['Comments', '286', 'Comments.dc.html'],
+      ['My copy', 'Oct 21 · 1 queue', '#mycopy']
+    ];
+    const rgba = (hex, a) => { const x = hex.replace('#', ''); return 'rgba(' + parseInt(x.slice(0, 2), 16) + ',' + parseInt(x.slice(2, 4), 16) + ',' + parseInt(x.slice(4, 6), 16) + ',' + a + ')'; };
+    const queue = (name, detail, colour, hues, fills, label) => ({
+      name, detail, progressLabel: label,
+      tiles: hues.map(art),
+      segs: fills.map((f) => ({ w: f + '%', c: colour, track: rgba(colour, 0.2) }))
+    });
+
+    return {
+      heroBars,
+      heroBarsLight,
+      shelf: [salt, hidden, letters, moor].map((w, i) => mk(w, i)),
+      newWorks: [salt, hound, north].map((w, i) => mk(w, i)),
+      stats: statList.map(([label, value], i) => ({ label, value, border: i % 3 === 2 ? 'none' : '0.5px solid #D1D1D6' })),
+      rows: rowList.map(([label, value, href], i) => ({ label, value, href, sep: i > 0 })),
+      tags: ['Elinor Vane/Tomas Reyes', 'Elinor Vane', 'Tomas Reyes', 'Slow Burn', 'Found Family', 'Maps & Mapmaking'],
+      queues: [
+        queue('Summer Reading', '8 works · about 9 h 40 min · 6 offline', '#C25E00', [181, 340, 28, 266], [100, 100, 60, 0, 0, 0, 0, 0], '2 of 8 finished, 1 in progress'),
+        queue('Re-reads', '5 works · about 4 h 5 min · all offline', '#1E63C8', [262, 290, 196, 330], [100, 100, 100, 30, 0], '3 of 5 finished, 1 in progress')
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>
