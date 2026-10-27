@@ -71,10 +71,15 @@ class Component extends DCLogic {
   renderVals() {
     const accent = this.props.accent ?? '#990000';
     const C = (author, depth, time, body, extra) => ({ kind: 'c', author, depth, time, body, ...extra });
+    // AO3 icons as images where the commenter has one; tinted initials where not.
+    const icon = {
+      salt: 'radial-gradient(circle at 30% 28%, #BFE3E0 0 18%, transparent 19%), linear-gradient(150deg, #2E7D8C, #1D4E63)',
+      moth: 'radial-gradient(circle at 62% 38%, #F6D7A7 0 22%, transparent 23%), linear-gradient(160deg, #6E2E52, #3A1830)'
+    };
     const list = [
-      C('saltwindow', 0, '2d', 'The single unbroken line across the vellum. I had to put my phone down for a minute.', { chapter: 'Ch 7' }),
-      C('inkwell_moth', 1, '1d', 'That line is the whole story, honestly. Thank you for reading so closely!', { role: 'Author' }),
-      C('saltwindow', 2, '1d', 'Then I’m glad I put it down. Thank you for writing it.', { role: 'Me' }),
+      C('saltwindow', 0, '2d', ['The single unbroken line across the vellum. I had to put my phone down for a minute.', 'Also, Tomas not laughing at the end? Who allowed this.'], { chapter: 'Ch 7', icon: icon.salt, quote: 'She drew the first line of the flats as a single stroke, left to right, without lifting the pen.' }),
+      C('inkwell_moth', 1, '1d', 'That line is the whole story, honestly. Thank you for reading so closely!', { role: 'Author', icon: icon.moth }),
+      C('saltwindow', 2, '1d', 'Then I’m glad I put it down. Thank you for writing it.', { role: 'Me', icon: icon.salt }),
       C('marginalia', 1, '20h', 'Same. I read that paragraph three times before I could go on.', {}),
       { kind: 'gap' },
       C('Guest', 0, '4d', 'Tomas not laughing at the end is going to live in my head for weeks.', { chapter: 'Ch 7', guest: true }),
